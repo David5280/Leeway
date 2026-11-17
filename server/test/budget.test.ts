@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest'
+import { computeBudget } from '../src/domain/budget.js'
+import type { Category } from '../src/domain/categories.js'
+import { settingsSchema } from '../src/domain/settings.js'
+import { periodContaining } from '../src/lib/periods.js'
+
+function category(id: string, fields: Partial<Category> = {}): Category {
+  return {
+    id,
+    name: id,
+    color: '#000000',
+    icon: null,
+    kind: 'expense',
+    budgetCents: null,
+    budgetCadence: 'month',
+    warnAtPercent: null,
+    providerCategories: [],
+    position: 0,
+    ...fields,
+  }
+}
+
+const settings = settingsSchema.parse({})
+const period = periodContaining('2026-11-15', { kind: 'monthly', startDay: 1 })
+
+describe('computeBudget', () => {
+  // Nov 15 is day 15 of 30, so half the month has passed.
+  const summary = computeBudget({
+    settings,
+    period,
+    offset: 0,
+    today: '2026-11-15',
+    categories: [
+      category('groceries', { budgetCents: 60000 }),
+      category('dining', { budgetCents: 20000 }),
+      category('fun', { budgetCents: 10000 }),
+      category('gifts'),
+      category('pay', { kind: 'income', budgetCents: 500000 }),
+      category('transfers', { kind: 'transfer' }),
+    ],
+    totals: [
+      { categoryId: 'groceries', amountCents: 25000, count: 5 },
+      { categoryId: 'dining', amountCents: 24000, count: 6 },
+      { categoryId: 'fun', amountCents: 8500, count: 2 },
+      { categoryId: 'gifts', amountCents: 3000, count: 1 },
+      { categoryId: 'pay', amountCents: -250000, count: 1 },
+      { categoryId: null, amountCents: 1500, count: 1 },
+    ],
+  })
+  const row = (id: string) => summary.categories.find((c) => c.categoryId === id)!
+
+  it('reports spending, what is left and status per category', () => {
+    expect(row('groceries')).toMatchObject({
+      budgetCents: 60000,
+      spentCents: 25000,
+      leftCents: 35000,
+      percentUsed: 42,
+      status: 'ok',
+      expectedByNowCents: 30000,
+      pace: 'under',
+      projectedCents: 50000,
+    })
+    expect(row('dining')).toMatchObject({ status: 'over', leftCents: -4000, pace: 'over' })
+    expect(row('fun')).toMatchObject({ status: 'warning', percentUsed: 85 })
+    expect(row('gifts')).toMatchObject({ status: 'no_budget', budgetCents: null, leftCents: null })
+  })
+
+  it('shows income as money received and leaves transfers out', () => {
+    expect(row('pay')).toMatchObject({ kind: 'income', spentCents: 250000 })
+    expect(summary.categories.some((c) => c.categoryId === 'transfers')).toBe(false)
+    expect(summary.totals.incomeCents).toBe(250000)
+  })
+
+  it('totals budgets, all spending and safe to spend per day', () => {
+    expect(summary.totals).toMatchObject({
+      budgetedCents: 90000,
+      budgetedSpentCents: 57500,
+      spentCents: 25000 + 24000 + 8500 + 3000 + 1500,
+      leftCents: 32500,
+      uncategorizedCents: 1500,
+      uncategorizedCount: 1,
+      // 16 days left counting today: floor(32500 / 16).
+      safePerDayCents: 2031,
+    })
+    expect(summary.period).toMatchObject({
+      start: '2026-11-01',
+      end: '2026-11-30',
+      daysElapsed: 15,
+      daysLeft: 15,
+    })
+  })
+
+  it('raises alerts, worst first, with plain messages', () => {
+    expect(summary.alerts.map((a) => [a.categoryId, a.level])).toEqual([
+      ['dining', 'over'],
+      ['fun', 'warning'],
+    ])
+    expect(summary.alerts[0]!.message).toBe('dining is over budget by $40 ($240 of $200).')
+  })
+
+  it('treats a past period as complete', () => {
+    const past = computeBudget({
+      settings,
+      period,
+      offset: -1,
+      today: '2026-12-10',
+      categories: [category('groceries', { budgetCents: 60000 })],
+      totals: [{ categoryId: 'groceries', amountCents: 50000, count: 3 }],
+    })
+    expect(past.period).toMatchObject({ daysElapsed: 30, daysLeft: 0 })
+    expect(past.totals.safePerDayCents).toBeNull()
+    expect(past.categories[0]).toMatchObject({ projectedCents: 50000, pace: 'under' })
+  })
+
+  it('converts a weekly budget into a monthly period', () => {
+    const result = computeBudget({
+      settings,
+      period,
+      offset: 0,
+      today: '2026-11-15',
+      categories: [category('coffee', { budgetCents: 2500, budgetCadence: 'week' })],
+      totals: [],
+    })
+    expect(result.categories[0]!.budgetCents).toBe(10871)
+  })
+})
