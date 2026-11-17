@@ -1,0 +1,35 @@
+# Leeway and its database on one machine.
+#   cp .env.example .env    then set ENCRYPTION_KEY (openssl rand -hex 32)
+#   docker compose up -d    then open http://localhost:3000
+
+services:
+  leeway:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # The database below, reached by its service name.
+      DATABASE_URL: postgres://leeway:leeway@db:5432/leeway
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: leeway
+      POSTGRES_PASSWORD: leeway
+      POSTGRES_DB: leeway
+    volumes:
+      - leeway-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U leeway']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  leeway-data:

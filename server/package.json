@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/src/index.js",
+    "start": "node --env-file-if-exists=../.env dist/src/index.js",
     "migrate": "tsx --env-file-if-exists=../.env src/db/migrate-cli.ts",
     "reset-password": "node --env-file-if-exists=../.env dist/src/cli/reset-password.js",
     "typecheck": "tsc --noEmit",

@@ -48,3 +48,34 @@ Server tests need Postgres. By default they use
 `postgres://postgres@localhost:5432/leeway_test`; set `TEST_DATABASE_URL` to
 use another database. The test run drops and recreates that database's
 schema, so never point it at real data.
+
+A quick way to get one is Docker:
+
+```sh
+docker run -d --name leeway-test-db -p 5432:5432 \
+  -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine
+docker exec leeway-test-db createdb -U postgres leeway_test
+```
+
+CI (`.github/workflows/ci.yml`) runs `npm run check`, a production build and
+the Docker image build on every push and pull request.
+
+## Database changes
+
+Add a new numbered file to `server/migrations`, like `004_something.sql`.
+Never edit a migration that has shipped: installs that already ran it will
+not run it again. Migrations run automatically when the server starts.
+
+## The Railway template
+
+A one-click "Deploy on Railway" button needs a template made from this repository.
+To publish or update it in Railway: create a template with a PostgreSQL
+database and a service from this repository (it builds from `Dockerfile`, as
+`railway.json` says), give the service a public domain, and set its variables
+to:
+
+- `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
+- `ENCRYPTION_KEY`: `${{secret(64, "abcdef0123456789")}}`
+- `PLAID_CLIENT_ID`, `PLAID_SECRET`: left for the person deploying to fill in,
+  marked optional
+- `PLAID_ENV`: `sandbox`
