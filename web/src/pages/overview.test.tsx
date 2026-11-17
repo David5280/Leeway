@@ -11,6 +11,7 @@ import {
   budgetFor,
   category,
   fakeServer,
+  forgetWidgets,
   renderSignedIn,
   settings,
   type Handlers,
@@ -180,6 +181,7 @@ describe('Overview widgets', () => {
   })
 
   it('skips widgets this app cannot draw yet', async () => {
+    forgetWidgets('bills', 'net-worth')
     const future = layout([{ type: 'bills' }, { type: 'leeway' }, { type: 'net-worth' }])
     serve(future)
     renderOverview(future)
@@ -397,6 +399,7 @@ describe('Overview edit mode', () => {
   })
 
   it('keeps widgets this app cannot draw yet when saving a change', async () => {
+    forgetWidgets('bills')
     const future = layout([{ type: 'leeway' }, { type: 'bills' }, { type: 'glance' }])
     const server = serve(future)
     renderOverview(future)

@@ -5,6 +5,7 @@ import type { Category, Input } from '../api/client'
 import { useApp } from '../lib/app'
 import { parseMoney } from '../lib/format'
 import { CATEGORY_COLORS } from '../lib/theme'
+import { ColorPicker } from './ColorPicker'
 import { PercentInput } from './PercentInput'
 import { ErrorNote, Segmented, Setting, Switch } from './ui'
 
@@ -200,20 +201,7 @@ export function CategoryForm({
         </>
       )}
       <Setting label="Color">
-        <div className="row wrap" role="radiogroup" aria-label="Color">
-          {CATEGORY_COLORS.map(([name, hex]) => (
-            <button
-              key={hex}
-              type="button"
-              role="radio"
-              className="swatch"
-              aria-label={name}
-              aria-checked={fields.color.toLowerCase() === hex.toLowerCase()}
-              style={{ background: hex }}
-              onClick={() => set({ color: hex })}
-            />
-          ))}
-        </div>
+        <ColorPicker value={fields.color} onChange={(color) => set({ color })} />
       </Setting>
       <div className="stack-sm">
         <span className="setting-label">

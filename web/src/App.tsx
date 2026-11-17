@@ -12,6 +12,7 @@ import { CategoryPage } from './pages/Category'
 import { Customize } from './pages/Customize'
 import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
+import { Plan } from './pages/Plan'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
 
@@ -60,6 +61,8 @@ export function App() {
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/budgets/:id" element={<CategoryPage />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/plan/:section" element={<Plan />} />
           <Route path="/customize" element={<Customize />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

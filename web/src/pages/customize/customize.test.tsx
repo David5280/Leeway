@@ -14,7 +14,8 @@ import { useAction } from '../../api/hooks'
 import { SETTINGS_KEY } from '../../api/settings'
 import { AppProvider } from '../../lib/app'
 import { themeVariables } from '../../lib/theme'
-import { fakeServer, renderSignedIn, settings, status } from '../../test/fake'
+import { fakeServer, forgetWidgets, renderSignedIn, settings, status } from '../../test/fake'
+import { WIDGET_LIBRARY } from '../../widgets/library'
 import { Customize } from '../Customize'
 import { AccountSection } from './Accounts'
 import { AgentSection } from './Agent'
@@ -357,17 +358,7 @@ describe('Dashboard layout', () => {
   it('offers nothing to add once every widget is on the dashboard', () => {
     const everything = settingsWith({
       dashboard: {
-        widgets: [
-          'leeway',
-          'glance',
-          'alerts',
-          'categories',
-          'pace',
-          'recent',
-          'accounts',
-          'merchants',
-          'trends',
-        ].map((type) => ({ type })),
+        widgets: Object.keys(WIDGET_LIBRARY).map((type) => ({ type })),
       },
     })
     fakeServer(settingsHandlers(everything))
@@ -376,6 +367,7 @@ describe('Dashboard layout', () => {
   })
 
   it('leaves out widgets this app cannot draw yet', () => {
+    forgetWidgets('bills')
     const future = settingsWith({
       dashboard: { widgets: [{ type: 'bills' }, { type: 'leeway' }] },
     })
@@ -387,6 +379,7 @@ describe('Dashboard layout', () => {
   })
 
   it('keeps widgets this app cannot draw when saving a change', async () => {
+    forgetWidgets('bills')
     const future = settingsWith({
       dashboard: { widgets: [{ type: 'bills' }, { type: 'leeway' }] },
     })

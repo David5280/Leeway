@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { vi } from 'vitest'
+import { onTestFinished, vi } from 'vitest'
 import { computeBudget } from '../../../server/src/domain/budget'
 import type { Category } from '../../../server/src/domain/categories'
 import type { Transaction } from '../../../server/src/domain/transactions'
@@ -11,6 +11,7 @@ import { periodContaining } from '../../../server/src/lib/periods'
 import type { Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { AppProvider } from '../lib/app'
+import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
 
 /** A stand-in for the Leeway server: action handlers by name, plus the auth routes. */
 export type Handlers = Record<string, (input: Record<string, unknown>) => unknown>
@@ -163,4 +164,16 @@ export function holdRequest(path: string): () => void {
 /** A reply the real server gives when something fails, with its reason. */
 export function failure(message: string, status = 400): () => Response {
   return () => Response.json({ error: 'bad_request', message }, { status })
+}
+
+/**
+ * Takes widget types out of the library for one test, as if this build of the
+ * app were older than the server and did not know them. Put back afterwards.
+ */
+export function forgetWidgets(...types: WidgetType[]) {
+  const saved = types.map((type) => [type, WIDGET_LIBRARY[type]] as const)
+  for (const type of types) delete WIDGET_LIBRARY[type]
+  onTestFinished(() => {
+    for (const [type, entry] of saved) WIDGET_LIBRARY[type] = entry
+  })
 }

@@ -74,7 +74,15 @@ describe('changeWidget', () => {
 
 describe('addableTypes', () => {
   it('lists library widgets not on the dashboard, in library order', () => {
-    expect(addableTypes(DEFAULT_LAYOUT)).toEqual(['merchants', 'trends'])
+    expect(addableTypes(DEFAULT_LAYOUT)).toEqual([
+      'merchants',
+      'trends',
+      'cash-flow',
+      'bills',
+      'goals',
+      'debts',
+      'net-worth',
+    ])
   })
 
   it('offers everything for an empty dashboard', () => {

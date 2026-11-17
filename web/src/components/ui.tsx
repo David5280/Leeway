@@ -35,6 +35,12 @@ const ICONS = {
       <path d="M12 4v8l6 4" />
     </>
   ),
+  plan: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M9 3v4M15 3v4" />
+    </>
+  ),
   customize: (
     <>
       <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" />

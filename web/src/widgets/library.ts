@@ -8,6 +8,7 @@ import { CategoriesWidget } from './Categories'
 import { GlanceWidget } from './Glance'
 import { LeewayWidget } from './Leeway'
 import { PaceWidget } from './Pace'
+import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
 import { TrendsWidget } from './Trends'
 import type { WidgetProps } from './types'
 
@@ -31,6 +32,11 @@ export const WIDGET_LIBRARY: Partial<
   accounts: { name: 'Accounts', component: AccountsWidget },
   merchants: { name: 'Top merchants', component: MerchantsWidget },
   trends: { name: 'Spending over time', component: TrendsWidget },
+  'cash-flow': { name: 'Until payday', component: CashFlowWidget },
+  bills: { name: 'Bills', component: BillsWidget },
+  goals: { name: 'Goals', component: GoalsWidget },
+  debts: { name: 'Debt payoff', component: DebtsWidget },
+  'net-worth': { name: 'Net worth', component: NetWorthWidget },
 }
 
 export const DEFAULT_LAYOUT: Widget[] = [

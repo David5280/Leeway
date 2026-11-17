@@ -19,6 +19,12 @@ export type Transaction = Output<'list_transactions'>['transactions'][number]
 export type Account = Output<'list_accounts'>[number]
 export type Connection = Output<'list_connections'>[number]
 export type SpendingPace = Output<'get_spending_pace'>
+export type Bill = Output<'list_bills'>['bills'][number]
+export type RecurringSeries = Output<'find_recurring'>[number]
+export type Goal = Output<'list_goals'>[number]
+export type DebtPlans = Output<'plan_debt_payoff'>
+export type NetWorth = Output<'get_net_worth'>
+export type CashFlow = Output<'get_cash_flow'>
 
 export class ApiError extends Error {
   constructor(

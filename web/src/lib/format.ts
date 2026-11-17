@@ -104,3 +104,12 @@ export function periodBarLabel(start: string, kind: string, locale = 'en-US'): s
   if (kind !== 'monthly') return shortDate(start, locale)
   return asDate(start).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' })
 }
+
+/** "Mar 2028", for dates that only matter to the month, like a debt-free date. */
+export function monthYear(iso: string, locale = 'en-US'): string {
+  return asDate(iso).toLocaleDateString(locale, {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
