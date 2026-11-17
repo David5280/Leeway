@@ -977,6 +977,7 @@ describe('AI assistant', () => {
     serve()
     renderSignedIn(<AgentSection />)
     expect(agent()).toHaveTextContent('https://leeway.example.com/mcp')
+    expect(agent()).toHaveTextContent('ask it for a money check-in')
   })
 
   it('falls back to this page address when no public URL is set', () => {

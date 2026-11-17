@@ -4,6 +4,7 @@ import type { AppContext } from '../src/context.js'
 import { resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
+import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
 import { createTestContext, resetData } from './helpers.js'
 
@@ -173,6 +174,42 @@ describe('MCP endpoint', () => {
 
     const bad = await rpc(token, 'tools/call', { name: 'create_category', arguments: {} })
     expect(bad.json().result).toMatchObject({ isError: true })
+  })
+
+  it('offers coaching prompts, filled in with their arguments', async () => {
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const list = await rpc(token, 'prompts/list')
+    const prompts = list.json().result.prompts as { name: string; arguments?: unknown[] }[]
+    expect(prompts.map((p) => p.name)).toEqual(COACH_PROMPTS.map((p) => p.name))
+    expect(prompts.find((p) => p.name === 'afford')!.arguments).toHaveLength(2)
+    // The text builder stays on the server.
+    expect(prompts.every((p) => !('text' in p))).toBe(true)
+
+    const afford = await rpc(token, 'prompts/get', {
+      name: 'afford',
+      arguments: { item: 'new headphones', amount: '249.99' },
+    })
+    const message = afford.json().result.messages[0]
+    expect(message.role).toBe('user')
+    expect(message.content.text).toMatch(/^I'm thinking of buying new headphones for 249.99\./)
+    expect(message.content.text).toContain('can_i_afford')
+
+    const checkin = await rpc(token, 'prompts/get', { name: 'checkin' })
+    expect(checkin.json().result.messages[0].content.text).toContain('get_checkin')
+  })
+
+  it('refuses an unknown prompt or a missing argument', async () => {
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const missing = await rpc(token, 'prompts/get', {
+      name: 'afford',
+      arguments: { item: 'a bike', amount: '  ' },
+    })
+    expect(missing.json().error).toMatchObject({
+      code: -32602,
+      message: expect.stringContaining('The amount argument is required'),
+    })
+    const unknown = await rpc(token, 'prompts/get', { name: 'nope' })
+    expect(unknown.json().error.message).toContain('Unknown prompt nope')
   })
 })
 

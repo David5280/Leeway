@@ -81,6 +81,10 @@ export function AgentSection() {
         </button>
       </form>
       <span className="small muted">Neither kind of key can ever move money.</span>
+      <span className="small muted">
+        Then ask it for a money check-in, or whether you can afford something. Many assistants also
+        list Leeway&apos;s ready-made prompts, like reviewing subscriptions or planning debt payoff.
+      </span>
       <ErrorNote error={tokens.error ?? create.error ?? remove.error} />
     </Section>
   )

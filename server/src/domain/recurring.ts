@@ -4,6 +4,7 @@
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
+import { listBills } from './bills.js'
 
 /** One past transaction, as detection needs it. Amounts are positive for money out. */
 export interface PastTransaction {
@@ -182,5 +183,24 @@ export async function dismissRecurring(db: Db, key: string): Promise<void> {
   await db.query(
     'INSERT INTO dismissed_recurring (merchant_key) VALUES ($1) ON CONFLICT DO NOTHING',
     [key],
+  )
+}
+
+/**
+ * Series still repeating that are neither dismissed nor tracked yet. A series
+ * is tracked when a bill's pattern, read the same way as merchant names, is
+ * part of its key.
+ */
+export async function untrackedRecurring(db: Db, today: IsoDate): Promise<RecurringSeries[]> {
+  const [history, dismissed, bills] = await Promise.all([
+    recentHistory(db, today),
+    dismissedKeys(db),
+    listBills(db, today),
+  ])
+  const patterns = bills.flatMap((b) =>
+    b.matchPattern ? [merchantKey({ merchantName: b.matchPattern, name: '' })] : [],
+  )
+  return detectRecurring(history, today).filter(
+    (s) => !dismissed.has(s.key) && !patterns.some((p) => s.key.includes(p)),
   )
 }

@@ -14,6 +14,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
+import { canIAffordAction, getCheckinAction } from './coach.js'
 import {
   createCategoryAction,
   deleteCategoryAction,
@@ -73,6 +74,8 @@ import {
  * from this list, which is what keeps the app and an agent at parity.
  */
 export const actionList = [
+  getCheckinAction,
+  canIAffordAction,
   getBudgetAction,
   getTrendsAction,
   getSpendingPaceAction,

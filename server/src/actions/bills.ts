@@ -9,13 +9,7 @@ import {
   listBills,
   updateBill,
 } from '../domain/bills.js'
-import {
-  detectRecurring,
-  dismissedKeys,
-  dismissRecurring,
-  merchantKey,
-  recentHistory,
-} from '../domain/recurring.js'
+import { dismissRecurring, untrackedRecurring } from '../domain/recurring.js'
 import { defineAction } from './action.js'
 import { today } from './today.js'
 
@@ -82,21 +76,7 @@ export const findRecurringAction = defineAction({
   input: z.object({}),
   scope: 'read',
   surface: 'all',
-  run: async (ctx) => {
-    const date = await today(ctx)
-    const [history, dismissed, bills] = await Promise.all([
-      recentHistory(ctx.db, date),
-      dismissedKeys(ctx.db),
-      listBills(ctx.db, date),
-    ])
-    // A series is already tracked when a bill's pattern, read the same way, is in its key.
-    const patterns = bills.flatMap((b) =>
-      b.matchPattern ? [merchantKey({ merchantName: b.matchPattern, name: '' })] : [],
-    )
-    return detectRecurring(history, date).filter(
-      (s) => !dismissed.has(s.key) && !patterns.some((p) => s.key.includes(p)),
-    )
-  },
+  run: async (ctx) => untrackedRecurring(ctx.db, await today(ctx)),
 })
 
 export const dismissRecurringAction = defineAction({

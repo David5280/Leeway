@@ -3,7 +3,11 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListToolsRequestSchema,
+  McpError,
+  ErrorCode,
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
@@ -11,13 +15,17 @@ import { runAction, type AnyAction } from '../actions/action.js'
 import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
 import { AppError } from '../errors.js'
+import { getPrompt, listPrompts } from './prompts.js'
 
-export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts and bank sync.
+export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
+- Start with get_checkin. It lists what needs attention, most urgent first, with the numbers.
+- For "can I afford this?", use can_i_afford.
+- Coach plainly: lead with what matters, use real numbers, and suggest one next step. Never shame; spending choices are the owner's.
+- Ask before changing a budget, category, rule or goal the owner set. Fixing what they asked you to fix, like a transaction's category, needs no extra ask.
 - Money is always in integer cents. Transaction amounts are positive for money out and negative for money in.
 - Dates are YYYY-MM-DD in the owner's time zone.
-- Start with get_budget for how the current period is going; it includes alerts.
 - A category picked by hand sticks; to categorize future transactions too, create a rule.
-- Bank access is read-only. Nothing here can move money.`
+- Bank access is read-only. Nothing here can move money, pay a bill or cancel a subscription; tell the owner where to do it.`
 
 /** The tools an agent can see: every action meant for agents that its token allows. */
 export function agentTools(scope: 'read' | 'write'): AnyAction[] {
@@ -47,7 +55,7 @@ export function createMcpServer(
 ): Server {
   const server = new Server(
     { name: 'leeway', title: 'Leeway', version },
-    { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS },
+    { capabilities: { tools: {}, prompts: {} }, instructions: MCP_INSTRUCTIONS },
   )
   const tools = agentTools(scope)
   const byName = new Map(tools.map((tool) => [tool.name, tool]))
@@ -88,6 +96,16 @@ export function createMcpServer(
       if (error instanceof AppError) return errorResult(error.message)
       onError(error)
       return errorResult(UNEXPECTED_TOOL_ERROR)
+    }
+  })
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listPrompts() }))
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    try {
+      return getPrompt(request.params.name, request.params.arguments)
+    } catch (error) {
+      // A prompt that does not exist or lacks an argument is the caller's mistake.
+      throw new McpError(ErrorCode.InvalidParams, (error as Error).message)
     }
   })
 
