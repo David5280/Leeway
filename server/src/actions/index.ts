@@ -14,6 +14,12 @@ import {
   updateCategoryAction,
 } from './categories.js'
 import {
+  getSpendingPaceAction,
+  getTrendsAction,
+  suggestBudgetsAction,
+  topMerchantsAction,
+} from './insights.js'
+import {
   createRuleAction,
   deleteRuleAction,
   listRulesAction,
@@ -51,6 +57,10 @@ import {
  */
 export const actionList = [
   getBudgetAction,
+  getTrendsAction,
+  getSpendingPaceAction,
+  topMerchantsAction,
+  suggestBudgetsAction,
   getSettingsAction,
   updateSettingsAction,
   listCategoriesAction,

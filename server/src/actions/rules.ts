@@ -103,17 +103,13 @@ export const previewRuleAction = defineAction({
   name: 'preview_rule',
   title: 'Preview a rule',
   description:
-    'See which recent transactions a rule would match before saving it. Returns the match count among the last 500 transactions and up to 10 examples.',
-  input: ruleFieldsSchema.omit({ categoryId: true }),
+    'See which recent transactions a rule would match before saving it. Returns the match count among the last 500 transactions, up to 10 examples, and (given a category) how many would move there. Transactions categorized by hand never move.',
+  input: ruleFieldsSchema.omit({ categoryId: true }).extend({ categoryId: z.uuid().nullish() }),
   scope: 'read',
   surface: 'all',
   run: async (ctx, input) => {
-    const rule: Rule = {
-      id: 'preview',
-      position: 0,
-      ...input,
-      categoryId: 'preview',
-    }
+    const { categoryId: target, ...fields } = input
+    const rule: Rule = { id: 'preview', position: 0, ...fields, categoryId: 'preview' }
     const { transactions } = await listTransactions(ctx.db, {
       limit: 500,
       offset: 0,
@@ -127,6 +123,16 @@ export const previewRuleAction = defineAction({
           [],
         ) !== null,
     )
-    return { matchCount: matches.length, examples: matches.slice(0, 10) }
+    const moving = target
+      ? matches.filter((tx) => tx.categorySource !== 'manual' && tx.categoryId !== target)
+      : []
+    const from = new Map<string | null, number>()
+    for (const tx of moving) from.set(tx.categoryId, (from.get(tx.categoryId) ?? 0) + 1)
+    return {
+      matchCount: matches.length,
+      examples: matches.slice(0, 10),
+      wouldMove: moving.length,
+      movingFrom: [...from].map(([categoryId, count]) => ({ categoryId, count })),
+    }
   },
 })

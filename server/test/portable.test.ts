@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { createCategory, listCategories } from '../src/domain/categories.js'
+import { categoryInputSchema, createCategory, listCategories } from '../src/domain/categories.js'
 import { exportConfig, importConfig, portableConfigSchema } from '../src/domain/portable.js'
 import { createRule, listRules } from '../src/domain/rules.js'
 import { getSettings, mergeSettings, saveSettings } from '../src/domain/settings.js'
@@ -19,16 +19,19 @@ beforeEach(async () => {
 })
 
 async function seed() {
-  const coffee = await createCategory(ctx.db, {
-    name: 'Coffee',
-    color: '#aa7744',
-    icon: 'cup',
-    kind: 'expense',
-    budgetCents: 4000,
-    budgetCadence: 'month',
-    warnAtPercent: 75,
-    providerCategories: [],
-  })
+  const coffee = await createCategory(
+    ctx.db,
+    categoryInputSchema.parse({
+      name: 'Coffee',
+      color: '#aa7744',
+      icon: 'cup',
+      kind: 'expense',
+      budgetCents: 4000,
+      budgetCadence: 'month',
+      warnAtPercent: 75,
+      providerCategories: [],
+    }),
+  )
   await createRule(ctx.db, {
     field: 'merchant',
     matchType: 'contains',

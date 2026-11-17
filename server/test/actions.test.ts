@@ -55,9 +55,13 @@ describe('settings', () => {
     await call('update_settings', { appearance: { theme: 'neon' } })
     const updated = await call('update_settings', {
       period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-27' },
-      appearance: { radius: 4 },
+      appearance: { corners: 'square', accent: '#ff8800' },
     })
-    expect(updated.appearance).toMatchObject({ theme: 'neon', radius: 4 })
+    expect(updated.appearance).toMatchObject({
+      theme: 'neon',
+      corners: 'square',
+      accent: '#ff8800',
+    })
     expect(updated.period).toEqual({
       kind: 'paycheck',
       frequency: 'biweekly',
@@ -71,6 +75,17 @@ describe('settings', () => {
     expect(error.code).toBe('invalid_input')
     expect(error.message).toContain('Unknown time zone')
     expect((await callError('update_settings', { colour: 'red' })).code).toBe('invalid_input')
+    const twice = { type: 'recent', size: 'wide', visible: true }
+    const duplicate = await callError('update_settings', { dashboard: { widgets: [twice, twice] } })
+    expect(duplicate.message).toContain('only appear once')
+  })
+
+  it('keeps valid appearance options when a stored one no longer exists', async () => {
+    await ctx.db.query(
+      `UPDATE settings SET data = '{"appearance": {"theme": "harbor", "font": "comic-sans"}}'`,
+    )
+    const settings = await call('get_settings')
+    expect(settings.appearance).toMatchObject({ theme: 'harbor', font: 'theme' })
   })
 })
 

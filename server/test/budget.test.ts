@@ -14,13 +14,15 @@ function category(id: string, fields: Partial<Category> = {}): Category {
     budgetCents: null,
     budgetCadence: 'month',
     warnAtPercent: null,
+    trackPace: true,
     providerCategories: [],
     position: 0,
     ...fields,
   }
 }
 
-const settings = settingsSchema.parse({})
+// A strict pace margin (5% of the budget) keeps the pace cases below clear-cut.
+const settings = settingsSchema.parse({ paceTolerancePercent: 5 })
 const period = periodContaining('2026-11-15', { kind: 'monthly', startDay: 1 })
 
 describe('computeBudget', () => {
@@ -122,5 +124,38 @@ describe('computeBudget', () => {
       totals: [],
     })
     expect(result.categories[0]!.budgetCents).toBe(10871)
+  })
+})
+
+describe('pace settings', () => {
+  const base = {
+    period,
+    offset: 0,
+    today: '2026-11-15',
+    totals: [{ categoryId: 'rent', amountCents: 150000, count: 1 }],
+  }
+
+  it('skips pace for categories that do not track it', () => {
+    const summary = computeBudget({
+      ...base,
+      settings,
+      categories: [category('rent', { budgetCents: 160000, trackPace: false })],
+    })
+    expect(summary.categories[0]).toMatchObject({ pace: null, status: 'warning' })
+    expect(summary.alerts.map((a) => a.level)).toEqual(['warning'])
+  })
+
+  it('uses the pace sensitivity from settings', () => {
+    const groceries = { categoryId: 'groceries', amountCents: 25000, count: 5 }
+    const run = (paceTolerancePercent: number) =>
+      computeBudget({
+        ...base,
+        totals: [groceries],
+        settings: settingsSchema.parse({ paceTolerancePercent }),
+        categories: [category('groceries', { budgetCents: 60000 })],
+      }).categories[0]!.pace
+    // $250 spent against $300 expected by now on a $600 budget.
+    expect(run(5)).toBe('under')
+    expect(run(10)).toBe('on')
   })
 })

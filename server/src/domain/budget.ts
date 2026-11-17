@@ -77,17 +77,15 @@ export interface CategoryTotal {
   count: number
 }
 
-/** A margin so spending a few dollars early in the period does not read as "over pace". */
-const PACE_TOLERANCE = 0.05
-
 function daysElapsedIn(period: Period, today: IsoDate): number {
   if (today < period.start) return 0
   if (today >= period.end) return period.days
   return daysBetween(period.start, today) + 1
 }
 
-function paceOf(spent: number, expected: number, budget: number): Pace {
-  const margin = budget * PACE_TOLERANCE
+/** The margin (a share of the budget) keeps a few dollars early on from reading as "over pace". */
+function paceOf(spent: number, expected: number, budget: number, tolerance: number): Pace {
+  const margin = budget * tolerance
   if (spent > expected + margin) return 'over'
   if (spent < expected - margin) return 'under'
   return 'on'
@@ -136,7 +134,9 @@ export function computeBudget(input: {
       if (category.kind === 'expense') {
         status =
           spent > budget ? 'over' : spent >= (budget * warnAt) / 100 && spent > 0 ? 'warning' : 'ok'
-        pace = paceOf(spent, expected, budget)
+        if (category.trackPace) {
+          pace = paceOf(spent, expected, budget, settings.paceTolerancePercent / 100)
+        }
       } else {
         status = 'ok'
       }
@@ -278,4 +278,51 @@ export async function budgetSummary(
     categoryTotals(db, period.start, period.end, settings.includePending),
   ])
   return computeBudget({ categories, totals, period, offset, today, settings })
+}
+
+/** Spending (expense categories plus uncategorized) and income in a set of totals. */
+export function sumTotals(
+  categories: Category[],
+  totals: CategoryTotal[],
+): { spentCents: number; incomeCents: number } {
+  const kinds = new Map(categories.map((c) => [c.id, c.kind]))
+  let spentCents = 0
+  let incomeCents = 0
+  for (const total of totals) {
+    const kind = total.categoryId === null ? 'expense' : kinds.get(total.categoryId)
+    if (kind === 'expense') spentCents += total.amountCents
+    if (kind === 'income') incomeCents -= total.amountCents
+  }
+  return { spentCents, incomeCents }
+}
+
+export interface BudgetReport extends BudgetSummary {
+  /** The period before, for "more than this point last month" comparisons. */
+  previous: { spentCents: number; spentToDateCents: number }
+}
+
+/** The budget plus how the previous period looked at the same point. */
+export async function budgetReport(
+  db: Db,
+  settings: Settings,
+  now: Date,
+  offset = 0,
+): Promise<BudgetReport> {
+  const summary = await budgetSummary(db, settings, now, offset)
+  const config = periodConfig(settings)
+  const { period } = currentPeriod(settings, now, offset)
+  const previous = shiftPeriod(period, -1, config)
+  const toDateEnd = addDays(previous.start, Math.min(summary.period.daysElapsed, previous.days))
+  const [categories, full, toDate] = await Promise.all([
+    listCategories(db),
+    categoryTotals(db, previous.start, previous.end, settings.includePending),
+    categoryTotals(db, previous.start, toDateEnd, settings.includePending),
+  ])
+  return {
+    ...summary,
+    previous: {
+      spentCents: sumTotals(categories, full).spentCents,
+      spentToDateCents: sumTotals(categories, toDate).spentCents,
+    },
+  }
 }

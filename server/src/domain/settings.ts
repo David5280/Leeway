@@ -26,12 +26,17 @@ export const periodSchema = z.discriminatedUnion('kind', [
 ])
 
 export const THEMES = ['night', 'harbor', 'neon'] as const
-export const FONTS = ['inter', 'geist', 'ibm-plex', 'system'] as const
+export const ACCENTS = ['blue', 'teal', 'violet', 'orange', 'pink', 'mint'] as const
+export const FONTS = ['geist', 'space-grotesk', 'ibm-plex', 'system'] as const
 export const WIDGETS = [
-  'left-to-spend',
+  'leeway',
+  'glance',
+  'alerts',
   'categories',
   'pace',
   'recent',
+  'accounts',
+  'merchants',
   'bills',
   'cash-flow',
   'net-worth',
@@ -39,40 +44,54 @@ export const WIDGETS = [
   'debts',
   'trends',
 ] as const
+export const WIDGET_SIZES = ['half', 'wide', 'full'] as const
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #4f8cff')
 
-const appearanceFields = {
+/** Each appearance option; 'theme' means "whatever the theme does". */
+export const appearanceFields = {
   theme: z.enum(THEMES),
-  /** Overrides the theme's accent color. */
-  accent: hexColor.nullable(),
-  font: z.enum(FONTS),
+  /** Light or dark. Every theme has both; 'theme' uses the one it is known for. */
+  mode: z.enum(['theme', 'system', 'light', 'dark']),
+  /** A named accent, a custom hex color, or the theme's own. */
+  accent: z.union([z.literal('theme'), z.enum(ACCENTS), hexColor]),
+  font: z.enum(['theme', ...FONTS]),
   density: z.enum(['comfortable', 'compact']),
-  /** Corner roundness, from square (0) to soft (16). */
-  radius: z.number().int().min(0).max(16),
+  corners: z.enum(['theme', 'round', 'soft', 'square']),
 }
 
 export const appearanceSchema = z.object({
   theme: appearanceFields.theme.default('night'),
-  accent: appearanceFields.accent.default(null),
-  font: appearanceFields.font.default('inter'),
+  mode: appearanceFields.mode.default('theme'),
+  accent: appearanceFields.accent.default('theme'),
+  font: appearanceFields.font.default('theme'),
   density: appearanceFields.density.default('comfortable'),
-  radius: appearanceFields.radius.default(10),
+  corners: appearanceFields.corners.default('theme'),
 })
 
 export const widgetSchema = z.object({
   type: z.enum(WIDGETS),
-  size: z.enum(['small', 'medium', 'large']).default('medium'),
+  size: z.enum(WIDGET_SIZES).default('wide'),
+  visible: z.boolean().default(true),
 })
 
-const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
-  { type: 'left-to-spend', size: 'large' },
-  { type: 'categories', size: 'large' },
-  { type: 'pace', size: 'medium' },
-  { type: 'bills', size: 'medium' },
-  { type: 'recent', size: 'medium' },
-  { type: 'net-worth', size: 'small' },
+export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
+  { type: 'leeway', size: 'wide', visible: true },
+  { type: 'glance', size: 'half', visible: true },
+  { type: 'alerts', size: 'full', visible: true },
+  { type: 'categories', size: 'wide', visible: true },
+  { type: 'pace', size: 'half', visible: true },
+  { type: 'recent', size: 'wide', visible: true },
+  { type: 'accounts', size: 'half', visible: true },
 ]
+
+const widgetsSchema = z
+  .array(widgetSchema)
+  .max(30)
+  .refine(
+    (widgets) => new Set(widgets.map((w) => w.type)).size === widgets.length,
+    'Each widget can only appear once',
+  )
 
 /**
  * Every preference in one validated document. Defaults fill anything missing,
@@ -88,12 +107,12 @@ export const settingsSchema = z.object({
   locale: z.string().default('en-US'),
   /** Warn when a category passes this share of its budget, unless the category says otherwise. */
   defaultWarnAtPercent: z.number().int().min(1).max(100).default(80),
+  /** How far ahead of steady spending (as a share of the budget) counts as "ahead of pace". */
+  paceTolerancePercent: z.number().int().min(1).max(50).default(10),
   /** Count pending transactions toward budgets. */
   includePending: z.boolean().default(true),
   appearance: appearanceSchema.default(appearanceSchema.parse({})),
-  dashboard: z.object({ widgets: z.array(widgetSchema).max(20) }).default({
-    widgets: DEFAULT_WIDGETS,
-  }),
+  dashboard: z.object({ widgets: widgetsSchema }).default({ widgets: DEFAULT_WIDGETS }),
 })
 
 export type Settings = z.infer<typeof settingsSchema>
@@ -106,10 +125,11 @@ export const settingsPatchSchema = z
     currency: settingsSchema.shape.currency.unwrap(),
     locale: z.string(),
     defaultWarnAtPercent: z.number().int().min(1).max(100),
+    paceTolerancePercent: z.number().int().min(1).max(50),
     includePending: z.boolean(),
     // No defaults here: a partial patch must not reset the fields it leaves out.
     appearance: z.object(appearanceFields).partial(),
-    dashboard: z.object({ widgets: z.array(widgetSchema).max(20) }),
+    dashboard: z.object({ widgets: widgetsSchema }),
   })
   .partial()
   .strict()
@@ -126,11 +146,19 @@ export async function getSettings(db: Db): Promise<Settings> {
 
 function repair(data: unknown): Settings {
   const result = settingsSchema.parse({})
-  if (data && typeof data === 'object') {
-    for (const [key, value] of Object.entries(data)) {
-      const field = settingsSchema.shape[key as keyof Settings]
+  if (!data || typeof data !== 'object') return result
+  for (const [key, value] of Object.entries(data)) {
+    const field = settingsSchema.shape[key as keyof Settings]
+    const parsed = field?.safeParse(value)
+    if (parsed?.success) Object.assign(result, { [key]: parsed.data })
+  }
+  // Keep the appearance options that are still valid, one by one.
+  const appearance = (data as { appearance?: unknown }).appearance
+  if (appearance && typeof appearance === 'object') {
+    for (const [key, value] of Object.entries(appearance)) {
+      const field = appearanceFields[key as keyof typeof appearanceFields]
       const parsed = field?.safeParse(value)
-      if (parsed?.success) Object.assign(result, { [key]: parsed.data })
+      if (parsed?.success) Object.assign(result.appearance, { [key]: parsed.data })
     }
   }
   return result

@@ -13,6 +13,8 @@ export interface Category {
   budgetCents: number | null
   budgetCadence: (typeof CADENCES)[number]
   warnAtPercent: number | null
+  /** Off for bills paid once a period, so they never read as "ahead of pace". */
+  trackPace: boolean
   providerCategories: string[]
   position: number
 }
@@ -28,6 +30,7 @@ export const categoryInputSchema = z.object({
   budgetCents: z.number().int().min(0).nullable().default(null),
   budgetCadence: z.enum(CADENCES).default('month'),
   warnAtPercent: z.number().int().min(1).max(100).nullable().default(null),
+  trackPace: z.boolean().default(true),
   providerCategories: z.array(z.string().min(1)).default([]),
 })
 
@@ -36,7 +39,7 @@ export type CategoryInput = z.infer<typeof categoryInputSchema>
 const COLUMNS = `
   id, name, color, icon, kind,
   budget_cents AS "budgetCents", budget_cadence AS "budgetCadence",
-  warn_at_percent AS "warnAtPercent", provider_categories AS "providerCategories", position`
+  warn_at_percent AS "warnAtPercent", track_pace AS "trackPace", provider_categories AS "providerCategories", position`
 
 export async function listCategories(db: Db): Promise<Category[]> {
   const { rows } = await db.query<Category>(
@@ -62,8 +65,9 @@ export async function createCategory(db: Db, input: CategoryInput): Promise<Cate
   try {
     const { rows } = await db.query<Category>(
       `INSERT INTO categories
-         (name, color, icon, kind, budget_cents, budget_cadence, warn_at_percent, provider_categories, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+         (name, color, icon, kind, budget_cents, budget_cadence, warn_at_percent, provider_categories,
+          track_pace, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
          (SELECT coalesce(max(position) + 1, 0) FROM categories))
        RETURNING ${COLUMNS}`,
       [
@@ -75,6 +79,7 @@ export async function createCategory(db: Db, input: CategoryInput): Promise<Cate
         input.budgetCadence,
         input.warnAtPercent,
         input.providerCategories,
+        input.trackPace,
       ],
     )
     return rows[0]!
@@ -93,7 +98,7 @@ export async function updateCategory(
     const { rows } = await db.query<Category>(
       `UPDATE categories SET
          name = $2, color = $3, icon = $4, kind = $5, budget_cents = $6, budget_cadence = $7,
-         warn_at_percent = $8, provider_categories = $9
+         warn_at_percent = $8, provider_categories = $9, track_pace = $10
        WHERE id = $1
        RETURNING ${COLUMNS}`,
       [
@@ -106,6 +111,7 @@ export async function updateCategory(
         next.budgetCadence,
         next.warnAtPercent,
         next.providerCategories,
+        next.trackPace,
       ],
     )
     return rows[0]!

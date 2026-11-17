@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { BankError } from '../src/bank/provider.js'
 import type { AppContext } from '../src/context.js'
-import { createCategory } from '../src/domain/categories.js'
+import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
 import {
   handleBankWebhook,
   linkBank,
@@ -33,16 +33,19 @@ const all = async () =>
 
 describe('bank sync', () => {
   it('links a bank, stores the token encrypted, and pulls accounts and history', async () => {
-    const groceries = await createCategory(ctx.db, {
-      name: 'Groceries',
-      color: '#00aa00',
-      icon: null,
-      kind: 'expense',
-      budgetCents: 50000,
-      budgetCadence: 'month',
-      warnAtPercent: null,
-      providerCategories: ['FOOD_AND_DRINK_GROCERIES'],
-    })
+    const groceries = await createCategory(
+      ctx.db,
+      categoryInputSchema.parse({
+        name: 'Groceries',
+        color: '#00aa00',
+        icon: null,
+        kind: 'expense',
+        budgetCents: 50000,
+        budgetCadence: 'month',
+        warnAtPercent: null,
+        providerCategories: ['FOOD_AND_DRINK_GROCERIES'],
+      }),
+    )
     bank.accounts.push(account('acc-card', 'Sapphire', 'credit', 120000))
     bank.pages = [
       page({
@@ -100,16 +103,19 @@ describe('bank sync', () => {
   })
 
   it('carries a manual category and note from a pending charge to the posted one', async () => {
-    const dining = await createCategory(ctx.db, {
-      name: 'Dining',
-      color: '#ff0000',
-      icon: null,
-      kind: 'expense',
-      budgetCents: null,
-      budgetCadence: 'month',
-      warnAtPercent: null,
-      providerCategories: [],
-    })
+    const dining = await createCategory(
+      ctx.db,
+      categoryInputSchema.parse({
+        name: 'Dining',
+        color: '#ff0000',
+        icon: null,
+        kind: 'expense',
+        budgetCents: null,
+        budgetCadence: 'month',
+        warnAtPercent: null,
+        providerCategories: [],
+      }),
+    )
     const pending = bankTx({ name: 'Bistro', amountCents: 3000, pending: true })
     bank.pages = [page({ added: [pending] })]
     const { connectionId } = await linkBank(ctx, 'public-3')
