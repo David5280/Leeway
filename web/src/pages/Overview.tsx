@@ -1,5 +1,6 @@
-import { useState, type ComponentType } from 'react'
-import type { Settings } from '../api/client'
+// The Overview dashboard: widgets the owner arranges, sizes and hides.
+
+import { useState } from 'react'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { Shell } from '../components/Shell'
@@ -7,49 +8,16 @@ import { ErrorNote, Icon, Loading, Segmented } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
 import {
-  AccountsWidget,
-  AlertsWidget,
-  CategoriesWidget,
-  GlanceWidget,
-  LeewayWidget,
-  MerchantsWidget,
-  PaceWidget,
-  RecentWidget,
-  TrendsWidget,
-  type WidgetProps,
-} from '../widgets/widgets'
-
-type Widget = Settings['dashboard']['widgets'][number]
-type WidgetType = Widget['type']
-
-/** The widgets that exist so far, in the order the library lists them. */
-export const WIDGET_LIBRARY: Partial<
-  Record<WidgetType, { name: string; component: ComponentType<WidgetProps> }>
-> = {
-  leeway: { name: 'Your leeway', component: LeewayWidget },
-  glance: { name: 'At a glance', component: GlanceWidget },
-  alerts: { name: 'Heads up', component: AlertsWidget },
-  categories: { name: 'Categories', component: CategoriesWidget },
-  pace: { name: 'Spending pace', component: PaceWidget },
-  recent: { name: 'Recent', component: RecentWidget },
-  accounts: { name: 'Accounts', component: AccountsWidget },
-  merchants: { name: 'Top merchants', component: MerchantsWidget },
-  trends: { name: 'Spending over time', component: TrendsWidget },
-}
-
-const SIZES = [
-  { value: 'half', label: 'Half' },
-  { value: 'wide', label: 'Wide' },
-  { value: 'full', label: 'Full' },
-] as const
-
-export function moveWidget(widgets: Widget[], index: number, by: -1 | 1): Widget[] {
-  const target = index + by
-  if (target < 0 || target >= widgets.length) return widgets
-  const next = [...widgets]
-  ;[next[index], next[target]] = [next[target]!, next[index]!]
-  return next
-}
+  addableTypes,
+  canMove,
+  changeWidget,
+  DEFAULT_LAYOUT,
+  drawable,
+  moveWidget,
+  SIZES,
+  WIDGET_LIBRARY,
+  type Widget,
+} from '../widgets/library'
 
 export function Overview() {
   const { settings } = useApp()
@@ -57,12 +25,12 @@ export function Overview() {
   const [editing, setEditing] = useState(false)
   const budget = useAction('get_budget', { offset })
   const update = useUpdateSettings()
-  const widgets = settings.dashboard.widgets.filter((w) => WIDGET_LIBRARY[w.type])
-  const saveWidgets = (next: Widget[]) => update.mutate({ dashboard: { widgets: next } })
+  // Every change is made to the full saved list, so widgets this build cannot
+  // draw (from a newer Leeway or an agent) are kept, just not shown.
   const all = settings.dashboard.widgets
-  const addable = (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter(
-    (type) => !all.some((w) => w.type === type),
-  )
+  const widgets = drawable(all)
+  const saveWidgets = (next: Widget[]) => update.mutate({ dashboard: { widgets: next } })
+  const addable = addableTypes(all)
 
   return (
     <Shell
@@ -127,6 +95,7 @@ export function Overview() {
         </div>
       </section>
 
+      <ErrorNote error={update.error} />
       {budget.error && <ErrorNote error={budget.error} />}
       {!budget.data ? (
         <Loading />
@@ -150,14 +119,13 @@ export function Overview() {
                       label={`${entry.name} size`}
                       value={widget.size}
                       options={SIZES}
-                      onChange={(size) =>
-                        saveWidgets(all.map((w) => (w === widget ? { ...w, size } : w)))
-                      }
+                      onChange={(size) => saveWidgets(changeWidget(all, widget.type, { size }))}
                     />
                     <button
                       type="button"
                       className="iconbtn"
                       aria-label={`Move ${entry.name} up`}
+                      disabled={!canMove(all, index, -1)}
                       onClick={() => saveWidgets(moveWidget(all, index, -1))}
                     >
                       <Icon name="up" />
@@ -166,6 +134,7 @@ export function Overview() {
                       type="button"
                       className="iconbtn"
                       aria-label={`Move ${entry.name} down`}
+                      disabled={!canMove(all, index, 1)}
                       onClick={() => saveWidgets(moveWidget(all, index, 1))}
                     >
                       <Icon name="down" />
@@ -174,9 +143,7 @@ export function Overview() {
                       type="button"
                       className="btn small"
                       onClick={() =>
-                        saveWidgets(
-                          all.map((w) => (w === widget ? { ...w, visible: !w.visible } : w)),
-                        )
+                        saveWidgets(changeWidget(all, widget.type, { visible: !widget.visible }))
                       }
                     >
                       {widget.visible ? 'Hide' : 'Show'}
@@ -216,13 +183,3 @@ export function Overview() {
     </Shell>
   )
 }
-
-export const DEFAULT_LAYOUT: Widget[] = [
-  { type: 'leeway', size: 'wide', visible: true },
-  { type: 'glance', size: 'half', visible: true },
-  { type: 'alerts', size: 'full', visible: true },
-  { type: 'categories', size: 'wide', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'recent', size: 'wide', visible: true },
-  { type: 'accounts', size: 'half', visible: true },
-]

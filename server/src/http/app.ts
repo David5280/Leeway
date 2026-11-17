@@ -1,3 +1,5 @@
+// The HTTP server: sign-in, the action API, the MCP endpoint, bank webhooks and the web app.
+
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -208,7 +210,9 @@ export async function buildApp(
         .header('WWW-Authenticate', 'Bearer realm="leeway"')
         .send({ error: 'unauthorized', message: 'Use a token from Leeway: Settings > AI agents' })
     }
-    const server = createMcpServer(ctx, scope, VERSION)
+    const server = createMcpServer(ctx, scope, VERSION, (err) =>
+      request.log.error({ err }, 'Agent tool failed'),
+    )
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

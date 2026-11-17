@@ -1,3 +1,5 @@
+// npm run reset-password: a new temporary password for a forgotten one.
+
 import { loadConfig } from '../config.js'
 import { createPool } from '../db/pool.js'
 import { resetPassword } from '../domain/owner.js'

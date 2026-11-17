@@ -9,7 +9,7 @@ import {
   type IsoDate,
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
-import { categoryTotals, currentPeriod, sumTotals } from './budget.js'
+import { categoryTotals, currentPeriod, sumTotals } from './budgetReport.js'
 import { chooseCategory, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -162,8 +162,13 @@ export async function suggestForPlannedCategories(
 
 /** Rounds up to $5 under $100, $10 under $1,000, and $50 above that. */
 export function roundUpTidy(cents: number): number {
-  const step = cents < 10_000 ? 500 : cents < 100_000 ? 1_000 : 5_000
-  return Math.ceil(cents / step) * step
+  return Math.ceil(cents / tidyStep(cents)) * tidyStep(cents)
+}
+
+function tidyStep(cents: number): number {
+  if (cents < 10_000) return 500
+  if (cents < 100_000) return 1_000
+  return 5_000
 }
 
 export interface MerchantTotal {

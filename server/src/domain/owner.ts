@@ -1,3 +1,5 @@
+// The owner account, password sign-in and sessions. One person per install.
+
 import type { Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { hashToken, randomToken } from '../lib/crypto.js'

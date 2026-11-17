@@ -14,5 +14,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      // The entry point only mounts the app; test helpers are not app code.
+      exclude: ['src/main.tsx', 'src/test/**', 'src/**/*.test.{ts,tsx}'],
+      // These only ever go up (CONTRIBUTING.md).
+      // Floors at the measured coverage; raise them as tests are added, never lower them.
+      thresholds: { statements: 93, branches: 91, functions: 92, lines: 94 },
+    },
   },
 })

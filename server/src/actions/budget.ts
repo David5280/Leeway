@@ -1,5 +1,7 @@
+// The budget for a period, with alerts and a comparison to the period before.
+
 import { z } from 'zod'
-import { budgetReport } from '../domain/budget.js'
+import { budgetReport } from '../domain/budgetReport.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
 

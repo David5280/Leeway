@@ -1,3 +1,5 @@
+// Small shared building blocks: icons, switches, progress bars, notices.
+
 import type { CSSProperties, ReactNode } from 'react'
 
 export function Logo({ size = 28 }: { size?: number }) {

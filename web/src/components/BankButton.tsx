@@ -1,3 +1,5 @@
+// Connecting or repairing a bank through Plaid's own window.
+
 import { useEffect, useState } from 'react'
 import { usePlaidLink } from 'react-plaid-link'
 import { call } from '../api/client'
@@ -16,7 +18,8 @@ function PlaidWindow({
 }) {
   const { open, ready } = usePlaidLink({
     token,
-    onSuccess: (publicToken) => publicToken && onSuccess(publicToken),
+    // Plaid can finish without a token; treat that like closing the window so the button frees up.
+    onSuccess: (publicToken) => (publicToken ? onSuccess(publicToken) : onExit()),
     onExit: () => onExit(),
   })
   useEffect(() => {

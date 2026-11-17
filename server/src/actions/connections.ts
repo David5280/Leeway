@@ -1,3 +1,5 @@
+// Actions for linking, syncing, repairing and removing banks. Never moves money.
+
 import { z } from 'zod'
 import {
   createLinkToken,

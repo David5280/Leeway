@@ -1,3 +1,5 @@
+// Actions to search, categorize, annotate and add transactions.
+
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import {

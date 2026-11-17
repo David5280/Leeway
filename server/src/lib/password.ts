@@ -1,3 +1,5 @@
+// Password hashing with scrypt, compared in constant time.
+
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 

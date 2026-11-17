@@ -1,3 +1,5 @@
+// Starts Leeway: migrates the database, serves the app and syncs banks on a timer.
+
 import { PlaidProvider } from './bank/plaid.js'
 import { loadConfig } from './config.js'
 import type { AppContext } from './context.js'

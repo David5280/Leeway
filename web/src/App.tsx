@@ -1,3 +1,5 @@
+// Decides what to show: first-run setup, sign-in, or the app and its screens.
+
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'

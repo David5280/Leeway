@@ -1,6 +1,9 @@
+// Categories and their budgets, plus the starter set offered at setup.
+
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, isUniqueViolation, notFound } from '../errors.js'
+import { patchOf } from '../lib/schemas.js'
 
 export const CADENCES = ['week', 'biweek', 'semimonth', 'month', 'year'] as const
 
@@ -35,6 +38,9 @@ export const categoryInputSchema = z.object({
 })
 
 export type CategoryInput = z.infer<typeof categoryInputSchema>
+
+/** What update_category may change: any subset, and only the fields given. */
+export const categoryPatchSchema = patchOf(categoryInputSchema)
 
 const COLUMNS = `
   id, name, color, icon, kind,

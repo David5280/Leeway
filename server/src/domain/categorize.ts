@@ -1,3 +1,5 @@
+// Decides each transaction's category: by hand, then rules, then the bank's category.
+
 import type { Db } from '../db/pool.js'
 import { listCategories, type Category } from './categories.js'
 import { listRules, type Rule } from './rules.js'

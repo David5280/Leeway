@@ -1,6 +1,9 @@
+// Settings, stored as one validated document with defaults for every field.
+
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { isIsoDate, isValidTimeZone } from '../lib/dates.js'
+import { isValidLocale } from '../lib/locale.js'
 import type { PeriodConfig } from '../lib/periods.js'
 
 const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
@@ -104,7 +107,7 @@ export const settingsSchema = z.object({
     .string()
     .regex(/^[A-Z]{3}$/)
     .default('USD'),
-  locale: z.string().default('en-US'),
+  locale: z.string().refine(isValidLocale, 'Use a language tag like en-US').default('en-US'),
   /** Warn when a category passes this share of its budget, unless the category says otherwise. */
   defaultWarnAtPercent: z.number().int().min(1).max(100).default(80),
   /** How far ahead of steady spending (as a share of the budget) counts as "ahead of pace". */
@@ -123,7 +126,7 @@ export const settingsPatchSchema = z
     period: periodSchema,
     timeZone: settingsSchema.shape.timeZone.unwrap(),
     currency: settingsSchema.shape.currency.unwrap(),
-    locale: z.string(),
+    locale: settingsSchema.shape.locale.unwrap(),
     defaultWarnAtPercent: z.number().int().min(1).max(100),
     paceTolerancePercent: z.number().int().min(1).max(50),
     includePending: z.boolean(),

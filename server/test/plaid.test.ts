@@ -30,6 +30,53 @@ function fakeFetch(answers: Record<string, { status?: number; body: unknown }>) 
   return { calls, fetchImpl }
 }
 
+/** A Plaid account as the API sends it, with fields overridable per test. */
+function plaidAccount(
+  fields: Record<string, unknown> = {},
+  balances: Record<string, unknown> = {},
+) {
+  return {
+    account_id: 'a1',
+    name: 'Checking',
+    official_name: null,
+    mask: '0000',
+    type: 'depository',
+    subtype: 'checking',
+    balances: {
+      current: 10,
+      available: 10,
+      limit: null,
+      iso_currency_code: 'USD',
+      unofficial_currency_code: null,
+      ...balances,
+    },
+    ...fields,
+  }
+}
+
+/** A Plaid transaction as the API sends it, with fields overridable per test. */
+function plaidTransaction(fields: Record<string, unknown> = {}) {
+  return {
+    transaction_id: 't1',
+    pending_transaction_id: null,
+    account_id: 'a1',
+    date: '2026-11-10',
+    name: 'Coffee',
+    merchant_name: null,
+    amount: 4.5,
+    iso_currency_code: 'USD',
+    unofficial_currency_code: null,
+    pending: false,
+    personal_finance_category: null,
+    ...fields,
+  }
+}
+
+/** A fetch whose every call answers with this status and raw body text. */
+function rawFetch(status: number, body: string): typeof fetch {
+  return (async () => new Response(body, { status })) as typeof fetch
+}
+
 describe('Plaid provider', () => {
   it('asks for read-only transactions access and sends credentials with every call', async () => {
     const { calls, fetchImpl } = fakeFetch({
@@ -131,6 +178,183 @@ describe('Plaid provider', () => {
     })
   })
 
+  describe('errors', () => {
+    const accountsFailingWith = (status: number, body: unknown) =>
+      new PlaidProvider(config, fakeFetch({ '/accounts/get': { status, body } }).fetchImpl)
+        .getAccounts('x')
+        .catch((error: unknown) => error)
+
+    it('explains when Plaid cannot be reached at all', async () => {
+      const offline = (async () => {
+        throw new Error('getaddrinfo ENOTFOUND sandbox.plaid.com')
+      }) as typeof fetch
+      const error = await new PlaidProvider(config, offline).getAccounts('x').catch((e) => e)
+      expect(error).toBeInstanceOf(BankError)
+      expect(error).toMatchObject({
+        needsReauth: false,
+        message: 'Could not reach Plaid: getaddrinfo ENOTFOUND sandbox.plaid.com',
+      })
+    })
+
+    it('falls back to the developer message when there is no message for people', async () => {
+      const error = await accountsFailingWith(400, {
+        error_code: 'INVALID_FIELD',
+        error_message: 'count must be at most 500',
+      })
+      expect(error).toMatchObject({
+        needsReauth: false,
+        message: 'count must be at most 500 (INVALID_FIELD)',
+      })
+    })
+
+    it('uses the HTTP status when the error body is not JSON', async () => {
+      const plaid = new PlaidProvider(config, rawFetch(502, '<html>Bad gateway</html>'))
+      const error = await plaid.getAccounts('x').catch((e) => e)
+      expect(error).toMatchObject({ needsReauth: false, message: 'Plaid request failed (502)' })
+    })
+
+    it.each(['PENDING_EXPIRATION', 'ACCESS_NOT_GRANTED', 'INVALID_CREDENTIALS'])(
+      'asks for re-login on %s',
+      async (code) => {
+        const error = await accountsFailingWith(400, { error_code: code, display_message: 'x' })
+        expect(error).toMatchObject({ needsReauth: true })
+      },
+    )
+  })
+
+  describe('linking', () => {
+    it('sends the redirect URI when one is configured, and no webhook when none is given', async () => {
+      const { calls, fetchImpl } = fakeFetch({
+        '/link/token/create': { body: { link_token: 'lt-1' } },
+      })
+      const plaid = new PlaidProvider(
+        { ...config, redirectUri: 'https://me.example/oauth' },
+        fetchImpl,
+      )
+      await plaid.createLinkToken({ webhookUrl: null })
+      expect(calls[0]!.body).toMatchObject({ redirect_uri: 'https://me.example/oauth' })
+      expect(calls[0]!.body).not.toHaveProperty('webhook')
+    })
+
+    it('exchanges a public token and looks up the bank it belongs to', async () => {
+      const { calls, fetchImpl } = fakeFetch({
+        '/item/public_token/exchange': { body: { access_token: 'access-1', item_id: 'item-1' } },
+        '/item/get': { body: { item: { institution_id: 'ins_3', institution_name: 'Chase' } } },
+      })
+      const item = await new PlaidProvider(config, fetchImpl).exchangePublicToken('public-1')
+      expect(item).toEqual({
+        accessToken: 'access-1',
+        itemId: 'item-1',
+        institutionId: 'ins_3',
+        institutionName: 'Chase',
+      })
+      expect(calls.map((c) => c.body)).toEqual([
+        expect.objectContaining({ public_token: 'public-1' }),
+        expect.objectContaining({ access_token: 'access-1' }),
+      ])
+    })
+
+    it('leaves the bank name empty when Plaid does not know it', async () => {
+      const { fetchImpl } = fakeFetch({
+        '/item/public_token/exchange': { body: { access_token: 'access-1', item_id: 'item-1' } },
+        '/item/get': { body: { item: { institution_id: null } } },
+      })
+      const item = await new PlaidProvider(config, fetchImpl).exchangePublicToken('public-1')
+      expect(item).toMatchObject({ institutionId: null, institutionName: null })
+    })
+
+    it('tells Plaid to forget a removed bank', async () => {
+      const { calls, fetchImpl } = fakeFetch({ '/item/remove': { body: {} } })
+      await new PlaidProvider(config, fetchImpl).removeItem('access-1')
+      expect(calls[0]).toMatchObject({
+        url: 'https://sandbox.plaid.com/item/remove',
+        body: { access_token: 'access-1' },
+      })
+    })
+  })
+
+  describe('data mapping', () => {
+    it('maps account types, keeping unknown ones as other', async () => {
+      const types = ['depository', 'credit', 'loan', 'investment', 'brokerage', 'crypto']
+      const { fetchImpl } = fakeFetch({
+        '/accounts/get': { body: { accounts: types.map((type) => plaidAccount({ type })) } },
+      })
+      const accounts = await new PlaidProvider(config, fetchImpl).getAccounts('x')
+      expect(accounts.map((a) => a.type)).toEqual([
+        'depository',
+        'credit',
+        'loan',
+        'investment',
+        'investment',
+        'other',
+      ])
+    })
+
+    it('uses the unofficial currency when there is no ISO one, then US dollars', async () => {
+      const { fetchImpl } = fakeFetch({
+        '/accounts/get': {
+          body: {
+            accounts: [
+              plaidAccount({}, { iso_currency_code: null, unofficial_currency_code: 'BTC' }),
+              plaidAccount({}, { iso_currency_code: null }),
+            ],
+          },
+        },
+      })
+      const accounts = await new PlaidProvider(config, fetchImpl).getAccounts('x')
+      expect(accounts.map((a) => a.currency)).toEqual(['BTC', 'USD'])
+    })
+
+    it('reads a credit limit in cents', async () => {
+      const { fetchImpl } = fakeFetch({
+        '/accounts/get': {
+          body: { accounts: [plaidAccount({ type: 'credit' }, { current: 250.5, limit: 5000 })] },
+        },
+      })
+      const [card] = await new PlaidProvider(config, fetchImpl).getAccounts('x')
+      expect(card).toMatchObject({ balanceCents: 25050, creditLimitCents: 500000 })
+    })
+
+    it('reads a first sync with no cursor, and passes along modified and pending changes', async () => {
+      const { calls, fetchImpl } = fakeFetch({
+        '/transactions/sync': {
+          body: {
+            added: [],
+            modified: [
+              plaidTransaction({
+                transaction_id: 't2',
+                pending_transaction_id: 't1',
+                merchant_name: 'Blue Bottle',
+                iso_currency_code: null,
+                unofficial_currency_code: 'CAD',
+              }),
+              plaidTransaction({ transaction_id: 't3', iso_currency_code: null, pending: true }),
+            ],
+            removed: [],
+            next_cursor: 'c1',
+            has_more: true,
+          },
+        },
+      })
+      const page = await new PlaidProvider(config, fetchImpl).syncTransactions('x', null)
+
+      expect(calls[0]!.body).not.toHaveProperty('cursor')
+      expect(page).toMatchObject({ nextCursor: 'c1', hasMore: true, added: [], removed: [] })
+      expect(page.modified).toEqual([
+        expect.objectContaining({
+          providerTransactionId: 't2',
+          pendingProviderTransactionId: 't1',
+          merchantName: 'Blue Bottle',
+          amountCents: 450,
+          currency: 'CAD',
+          categoryPrimary: null,
+          categoryDetailed: null,
+        }),
+        expect.objectContaining({ providerTransactionId: 't3', currency: 'USD', pending: true }),
+      ])
+    })
+  })
+
   describe('webhooks', async () => {
     const { privateKey, publicKey } = await generateKeyPair('ES256')
     const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'ES256' }
@@ -166,6 +390,71 @@ describe('Plaid provider', () => {
       ).rejects.toThrow(/does not match/)
       const old = await sign(body, Math.floor(Date.now() / 1000) - 600)
       await expect(plaid.parseWebhook(body, { 'plaid-verification': old })).rejects.toThrow()
+    })
+
+    it('rejects a signature that is not one ES256 token with a key id', async () => {
+      const plaid = provider()
+      const hmac = await new SignJWT({})
+        .setProtectedHeader({ alg: 'HS256', kid: 'key-1' })
+        .sign(new TextEncoder().encode('a shared secret anyone could guess'))
+      const noKeyId = await new SignJWT({}).setProtectedHeader({ alg: 'ES256' }).sign(privateKey)
+      const headers = (token: string | string[]) => ({ 'plaid-verification': token })
+
+      await expect(plaid.parseWebhook(body, headers(hmac))).rejects.toThrow(/Unexpected/)
+      await expect(plaid.parseWebhook(body, headers(noKeyId))).rejects.toThrow(/Unexpected/)
+      await expect(plaid.parseWebhook(body, headers([hmac, hmac]))).rejects.toThrow(/Missing/)
+    })
+
+    it('rejects a signature that carries no body hash', async () => {
+      const unhashed = await new SignJWT({})
+        .setProtectedHeader({ alg: 'ES256', kid: 'key-1' })
+        .setIssuedAt()
+        .sign(privateKey)
+      await expect(
+        provider().parseWebhook(body, { 'plaid-verification': unhashed }),
+      ).rejects.toThrow(/does not match/)
+    })
+
+    it('fetches each verification key from Plaid only once', async () => {
+      const { calls, fetchImpl } = fakeFetch({
+        '/webhook_verification_key/get': { body: { key: jwk } },
+      })
+      const plaid = new PlaidProvider(config, fetchImpl)
+      await plaid.parseWebhook(body, { 'plaid-verification': await sign(body) })
+      await plaid.parseWebhook(body, { 'plaid-verification': await sign(body) })
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.body).toMatchObject({ key_id: 'key-1' })
+    })
+
+    it.each([
+      [{ webhook_type: 'ITEM', webhook_code: 'LOGIN_REPAIRED' }, 'repaired'],
+      [{ webhook_type: 'ITEM', webhook_code: 'PENDING_EXPIRATION' }, 'needs_reauth'],
+      [{ webhook_type: 'ITEM', webhook_code: 'PENDING_DISCONNECT' }, 'needs_reauth'],
+      [
+        {
+          webhook_type: 'ITEM',
+          webhook_code: 'ERROR',
+          error: { error_code: 'ITEM_LOGIN_REQUIRED' },
+        },
+        'needs_reauth',
+      ],
+      [
+        { webhook_type: 'ITEM', webhook_code: 'ERROR', error: { error_code: 'INTERNAL_ERROR' } },
+        'ignored',
+      ],
+      [{ webhook_type: 'ITEM', webhook_code: 'ERROR', error: null }, 'ignored'],
+      [{ webhook_type: 'TRANSACTIONS', webhook_code: 'DEFAULT_UPDATE' }, 'ignored'],
+      [{ webhook_type: 'AUTH', webhook_code: 'AUTOMATICALLY_VERIFIED' }, 'ignored'],
+    ])('reads %j as %s', async (fields, event) => {
+      const raw = JSON.stringify({ ...fields, item_id: 'item-9' })
+      const webhook = await provider().parseWebhook(raw, { 'plaid-verification': await sign(raw) })
+      expect(webhook).toEqual({ itemId: 'item-9', event })
+    })
+
+    it('reports an empty item id when the webhook names none', async () => {
+      const raw = JSON.stringify({ webhook_type: 'TRANSACTIONS' })
+      const webhook = await provider().parseWebhook(raw, { 'plaid-verification': await sign(raw) })
+      expect(webhook).toEqual({ itemId: '', event: 'ignored' })
     })
   })
 })

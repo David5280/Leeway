@@ -87,3 +87,20 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
 export function percent(value: number): string {
   return `${Math.round(value)}%`
 }
+
+const PERIOD_WORDS: Record<string, string> = {
+  monthly: 'month',
+  weekly: 'week',
+  paycheck: 'paycheck',
+}
+
+/** The everyday word for a budget period kind: "month", "week" or "paycheck". */
+export function periodWord(kind: string): string {
+  return PERIOD_WORDS[kind] ?? 'period'
+}
+
+/** A short label for a period's bar in a chart: "Mar" for months, "Mar 4" otherwise. */
+export function periodBarLabel(start: string, kind: string, locale = 'en-US'): string {
+  if (kind !== 'monthly') return shortDate(start, locale)
+  return asDate(start).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' })
+}

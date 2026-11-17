@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { dayLabel, money, parseMoney, periodLabel, signedAmount, timeAgo } from './format'
+import {
+  dayLabel,
+  money,
+  parseMoney,
+  periodBarLabel,
+  periodLabel,
+  periodWord,
+  signedAmount,
+  timeAgo,
+} from './format'
 
 const usd = { currency: 'USD', locale: 'en-US' }
 
@@ -35,5 +44,17 @@ describe('format', () => {
     expect(timeAgo(null)).toBe('never')
     expect(timeAgo('2026-11-17T11:50:00Z', now)).toBe('10 min ago')
     expect(timeAgo('2026-11-17T09:00:00Z', now)).toBe('3 h ago')
+  })
+
+  it('names a period kind in everyday words', () => {
+    expect(periodWord('monthly')).toBe('month')
+    expect(periodWord('weekly')).toBe('week')
+    expect(periodWord('paycheck')).toBe('paycheck')
+    expect(periodWord('fortnightly')).toBe('period')
+  })
+
+  it('labels chart bars by month for monthly budgets and by start day otherwise', () => {
+    expect(periodBarLabel('2026-11-01', 'monthly')).toBe('Nov')
+    expect(periodBarLabel('2026-11-14', 'paycheck')).toBe('Nov 14')
   })
 })

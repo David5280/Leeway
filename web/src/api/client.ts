@@ -18,6 +18,7 @@ export type Rule = Output<'list_rules'>[number]
 export type Transaction = Output<'list_transactions'>['transactions'][number]
 export type Account = Output<'list_accounts'>[number]
 export type Connection = Output<'list_connections'>[number]
+export type SpendingPace = Output<'get_spending_pace'>
 
 export class ApiError extends Error {
   constructor(

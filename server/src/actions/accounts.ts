@@ -1,3 +1,5 @@
+// Actions for bank and manual accounts: list, add by hand, rename, hide, delete.
+
 import { z } from 'zod'
 import {
   accountPatchSchema,

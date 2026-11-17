@@ -1,3 +1,5 @@
+// Picking how budgets are counted: monthly, per paycheck or weekly.
+
 import type { Settings } from '../api/client'
 import { Segmented, Setting } from './ui'
 

@@ -75,6 +75,9 @@ describe('settings', () => {
     expect(error.code).toBe('invalid_input')
     expect(error.message).toContain('Unknown time zone')
     expect((await callError('update_settings', { colour: 'red' })).code).toBe('invalid_input')
+    // A malformed locale would make every money and date formatter in the app throw.
+    const locale = await callError('update_settings', { locale: 'not a locale' })
+    expect(locale.message).toContain('Use a language tag like en-US')
     const twice = { type: 'recent', size: 'wide', visible: true }
     const duplicate = await callError('update_settings', { dashboard: { widgets: [twice, twice] } })
     expect(duplicate.message).toContain('only appear once')

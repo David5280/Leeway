@@ -1,3 +1,5 @@
+// Transactions: searching, editing, and adding them by hand.
+
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'

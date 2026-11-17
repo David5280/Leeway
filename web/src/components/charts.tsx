@@ -1,3 +1,5 @@
+// Small SVG charts: the spending pace line and per-period bars.
+
 import type { Output } from '../api/client'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
@@ -25,6 +27,8 @@ function compact(cents: number, currency: string, locale: string): string {
  */
 export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
   const { settings, money } = useApp()
+  // The SVG is drawn on a fixed 640 by 230 canvas and scales to fit; the
+  // plot area sits inside it, leaving room for the axis labels.
   const W = 640
   const H = 230
   const left = 44
@@ -32,6 +36,7 @@ export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
   const top = 20
   const bottom = 190
   const spent = pace.cumulative.at(-1)?.cents ?? 0
+  // 5% headroom so the highest line never touches the top edge.
   const max = niceMax(Math.max(pace.budgetCents, pace.projectedCents, spent) * 1.05)
   const x = (day: number) => left + ((right - left) * day) / Math.max(1, pace.days - 1)
   const y = (cents: number) => bottom - ((bottom - top) * cents) / max
@@ -39,9 +44,10 @@ export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
     (point, i) => `${x(i).toFixed(1)} ${y(point.cents).toFixed(1)}`,
   )
   const lastIndex = pace.cumulative.length - 1
+  // Data that stops before the last day means the period is still running.
   const isCurrent = lastIndex < pace.days - 1
   const grid = [0, 0.25, 0.5, 0.75, 1].map((share) => share * max)
-  const summary = `Flexible spending: ${money(spent)} by ${shortDate(pace.cumulative.at(-1)?.date ?? pace.start)} against a ${money(pace.budgetCents)} budget, on track for ${money(pace.projectedCents)}.`
+  const summary = `Flexible spending: ${money(spent)} by ${shortDate(pace.cumulative.at(-1)?.date ?? pace.start, settings.locale)} against a ${money(pace.budgetCents)} budget, on track for ${money(pace.projectedCents)}.`
 
   return (
     <svg
@@ -66,6 +72,7 @@ export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
         <text x={left} y={H - 20}>
           {shortDate(pace.start, settings.locale)}
         </text>
+        {/* "Today" only where it cannot run into the start or end date. */}
         {isCurrent && lastIndex > 2 && lastIndex < pace.days - 3 && (
           <text x={x(lastIndex)} y={H - 20}>
             Today
@@ -163,7 +170,9 @@ export function PeriodBars({
   const top = 24
   const bottom = 170
   const max = niceMax(Math.max(budgetCents ?? 0, ...bars.map((b) => b.cents), 1) * 1.1)
+  // A period with net refunds draws as an empty bar rather than below the axis.
   const y = (cents: number) => bottom - ((bottom - top) * Math.max(0, cents)) / max
+  // Each bar gets an equal slot and fills at most 60% of it.
   const slot = (right - left) / Math.max(1, bars.length)
   const width = Math.min(48, slot * 0.6)
   const description = `${label}: ${bars.map((b) => `${b.label} ${money(b.cents)}`).join(', ')}${budgetCents !== null ? `. Budget ${money(budgetCents)}.` : ''}`
@@ -203,6 +212,7 @@ export function PeriodBars({
               height={bottom - y(bar.cents)}
               rx="4"
               fill={color}
+              // The current period is still filling up, so it is drawn lighter.
               fillOpacity={bar.current ? 0.5 : 1}
             />
             {bar.current && (

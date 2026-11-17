@@ -1,0 +1,116 @@
+// Four quick numbers: spent, income, what needs a category, and bank sync.
+
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import type { Budget } from '../api/client'
+import { useAction } from '../api/hooks'
+import { Dot } from '../components/ui'
+import { useApp } from '../lib/app'
+import { periodWord, timeAgo } from '../lib/format'
+import type { WidgetProps } from './types'
+
+export function GlanceWidget({ budget }: WidgetProps) {
+  const { money, settings } = useApp()
+  const word = periodWord(settings.period.kind)
+  return (
+    <section
+      aria-label="This period at a glance"
+      className="glance grid"
+      style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
+    >
+      <SpentCard budget={budget} word={word} />
+      <GlanceCard title="Income">
+        <span className="num mid-number">{money(budget.totals.incomeCents)}</span>
+        <span className="small muted">Money in this {word}</span>
+      </GlanceCard>
+      <UncategorizedCard budget={budget} />
+      <BankSyncCard />
+    </section>
+  )
+}
+
+function GlanceCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="card stack-sm" style={{ gridColumn: 'span 1' }}>
+      <p className="eyebrow">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+/** Spending so far, compared with the same point in the last period. */
+function SpentCard({ budget, word }: { budget: Budget; word: string }) {
+  const { money } = useApp()
+  const { totals, previous } = budget
+  const diff = totals.spentCents - previous.spentToDateCents
+  const nothingYet = previous.spentToDateCents === 0 && diff === 0
+  return (
+    <GlanceCard title="Spent">
+      <span className="num mid-number">{money(totals.spentCents)}</span>
+      <span className="small muted">
+        {nothingYet
+          ? 'Nothing yet'
+          : `${money(Math.abs(diff))} ${diff >= 0 ? 'more' : 'less'} than this point last ${word}`}
+      </span>
+    </GlanceCard>
+  )
+}
+
+function UncategorizedCard({ budget }: { budget: Budget }) {
+  const { money } = useApp()
+  const { uncategorizedCount, uncategorizedCents } = budget.totals
+  return (
+    <GlanceCard title="Needs a category">
+      <span className="num mid-number">{uncategorizedCount}</span>
+      {uncategorizedCount > 0 ? (
+        <Link to="/transactions?category=uncategorized" className="linkbtn small">
+          Sort {money(uncategorizedCents)} of spending
+        </Link>
+      ) : (
+        <span className="small muted">All sorted</span>
+      )}
+    </GlanceCard>
+  )
+}
+
+/** Whether every bank is syncing, and when the latest sync was. */
+function BankSyncCard() {
+  const { data: connections, error } = useAction('list_connections')
+  // Never claim "up to date" before the banks have been read.
+  if (!connections) {
+    return (
+      <GlanceCard title="Bank sync">
+        <span className="small muted">{error ? 'Could not check your banks' : 'Checking'}</span>
+      </GlanceCard>
+    )
+  }
+  if (connections.length === 0) {
+    return (
+      <GlanceCard title="Bank sync">
+        <span style={{ fontSize: 18, fontWeight: 600 }}>No banks yet</span>
+        <Link to="/customize#banks" className="linkbtn small">
+          Connect a bank
+        </Link>
+      </GlanceCard>
+    )
+  }
+  const count = connections.length
+  const needsYou = connections.some((c) => c.status !== 'active')
+  // ISO timestamps sort as text, so the last one is the newest.
+  const lastSync = connections
+    .map((c) => c.lastSyncedAt)
+    .filter((at): at is string => at !== null)
+    .sort()
+    .at(-1)
+  return (
+    <GlanceCard title="Bank sync">
+      <span className="row" style={{ fontSize: 18, fontWeight: 600, gap: 8 }}>
+        <Dot color={needsYou ? 'var(--warn)' : 'var(--good)'} />
+        {needsYou ? 'Needs you' : 'Up to date'}
+      </span>
+      <span className="small muted">
+        {count} {count === 1 ? 'bank' : 'banks'}, synced {timeAgo(lastSync ?? null)}
+      </span>
+    </GlanceCard>
+  )
+}

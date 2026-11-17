@@ -1,3 +1,5 @@
+// Sign-in for the owner.
+
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { auth } from '../api/client'

@@ -1,3 +1,5 @@
+// The Budgets screen: every category this period, new categories and suggestions.
+
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAction, useActionMutation } from '../api/hooks'
@@ -6,7 +8,7 @@ import { Shell } from '../components/Shell'
 import { Card, Dot, ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
-import { CategoryRow } from '../widgets/widgets'
+import { CategoryRow } from '../widgets/Categories'
 
 export function Budgets() {
   const { money, settings } = useApp()

@@ -14,54 +14,13 @@ import {
 } from '../test/fake'
 import { Budgets } from './Budgets'
 import { Customize } from './Customize'
-import { moveWidget } from './Overview'
-import { starterRows } from './Setup'
-import { groupByDay, Transactions } from './Transactions'
+import { Transactions } from './Transactions'
 
 afterEach(() => vi.unstubAllGlobals())
 
 const groceries = category('Groceries', { budgetCents: 60000, color: '#2E9E3A' })
 const dining = category('Dining out', { budgetCents: 20000 })
 const categories = [groceries, dining]
-
-describe('helpers', () => {
-  it('groups transactions by day, newest first', () => {
-    const txs = [
-      transaction({ id: 'a', date: '2026-11-17', name: 'A' }),
-      transaction({ id: 'b', date: '2026-11-17', name: 'B' }),
-      transaction({ id: 'c', date: '2026-11-15', name: 'C' }),
-    ]
-    expect(groupByDay(txs).map(([day, items]) => [day, items.length])).toEqual([
-      ['2026-11-17', 2],
-      ['2026-11-15', 1],
-    ])
-  })
-
-  it('moves dashboard widgets and stops at the ends', () => {
-    const widgets = settings.dashboard.widgets
-    expect(
-      moveWidget(widgets, 0, 1)
-        .slice(0, 2)
-        .map((w) => w.type),
-    ).toEqual(['glance', 'leeway'])
-    expect(moveWidget(widgets, 0, -1)).toBe(widgets)
-  })
-
-  it('fills starter budgets from spending, keeping the owner edits', () => {
-    const rows = starterRows(
-      [
-        { ...groceries, budgetCents: 60000 },
-        { ...dining, budgetCents: 30000 },
-      ],
-      [{ name: 'Groceries', averageMonthlyCents: 41234, suggestedMonthlyCents: 42000 }],
-      { 'Dining out': { include: false } },
-    )
-    expect(rows.map((r) => [r.category.name, r.amount, r.include, r.averageCents])).toEqual([
-      ['Groceries', '420', true, 41234],
-      ['Dining out', '300', false, null],
-    ])
-  })
-})
 
 describe('app shell', () => {
   it('starts setup when nobody owns this install', async () => {
@@ -170,6 +129,148 @@ describe('transactions', () => {
       pattern: 'Costco',
       categoryId: groceries.id,
     })
+  })
+})
+
+describe('transactions filters and editing', () => {
+  const costco = transaction({
+    id: 't1',
+    date: '2026-11-17',
+    name: 'COSTCO #12',
+    merchantName: 'Costco',
+    amountCents: 8450,
+    categoryId: groceries.id,
+    categorySource: 'manual',
+    bankCategory: 'FOOD_AND_DRINK_GROCERIES',
+  })
+  const cash = transaction({ id: 't2', date: '2026-11-16', name: 'Farmers market', manual: true })
+
+  function serve(list: Record<string, unknown> = {}) {
+    return fakeServer({
+      get_budget: () => budgetFor(categories, []),
+      list_categories: () => categories,
+      list_rules: () => [],
+      list_accounts: () => [{ id: 'acct', name: 'Checking' }],
+      list_transactions: () => ({ transactions: [costco, cash], total: 2, ...list }),
+      update_transaction: (input) => ({ ...costco, ...input }),
+      delete_transaction: () => null,
+      create_transaction: (input) => ({ ...cash, ...input }),
+    })
+  }
+
+  it('filters by the category in the address, so other screens can link to it', async () => {
+    const server = serve()
+    renderSignedIn(<Transactions />, { route: '/transactions?category=uncategorized' })
+    await screen.findByText('Costco')
+    expect(
+      server.actions('list_transactions').filter((input) => {
+        const { categoryId, limit } = input as { categoryId?: string; limit: number }
+        return categoryId === 'uncategorized' && limit > 1
+      }),
+    ).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: '2 need a category' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('searches and widens the date range', async () => {
+    const server = serve()
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await screen.findByText('Costco')
+    await user.click(screen.getByRole('button', { name: 'All' }))
+    await user.type(screen.getByLabelText('Search transactions'), 'costco')
+    await waitFor(() =>
+      expect(server.actions('list_transactions').at(-1)).toEqual({ search: 'costco', limit: 100 }),
+    )
+  })
+
+  it('says nothing matches when a filter finds nothing', async () => {
+    serve({ transactions: [], total: 0 })
+    renderSignedIn(<Transactions />)
+    expect(await screen.findByText('Nothing matches.')).toBeInTheDocument()
+  })
+
+  it('offers more when there are more, up to the newest 500', async () => {
+    const server = serve({ total: 900 })
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await screen.findByText('Costco')
+    for (let shown = 100; shown < 500; shown += 100) {
+      await user.click(screen.getByRole('button', { name: 'Show more' }))
+    }
+    expect(await screen.findByText(/Showing the newest 500/)).toBeInTheDocument()
+    expect(server.actions('list_transactions').at(-1)).toMatchObject({ limit: 500 })
+  })
+
+  it('opens a transaction to add a note, leave it out, or hand it back to rules', async () => {
+    const server = serve()
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /Costco/ }))
+    expect(screen.getByText('Your bank calls this food and drink groceries.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Note'), 'Party food')
+    await user.tab()
+    await user.click(screen.getByRole('switch', { name: 'Leave out of totals' }))
+    await user.click(screen.getByRole('button', { name: 'Let rules decide again' }))
+    await waitFor(() =>
+      expect(server.actions('update_transaction')).toEqual([
+        { id: 't1', note: 'Party food' },
+        { id: 't1', excluded: true },
+        { id: 't1', categoryId: null },
+      ]),
+    )
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('deletes only transactions added by hand', async () => {
+    const server = serve()
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /Farmers market/ }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(server.actions('delete_transaction')).toEqual([{ id: 't2' }]))
+  })
+
+  it('adds money received by hand as money in', async () => {
+    const server = serve()
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Add by hand' }))
+    const form = screen.getByRole('form', { name: 'Add a transaction' })
+    await user.clear(within(form).getByLabelText('Date'))
+    await user.type(within(form).getByLabelText('Date'), '2026-11-15')
+    await user.type(within(form).getByLabelText('Description'), 'Sold a chair')
+    await user.type(within(form).getByLabelText('Amount'), '40')
+    await user.click(within(form).getByRole('button', { name: 'Received' }))
+    await user.click(within(form).getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(server.actions('create_transaction')).toEqual([
+        {
+          accountId: 'acct',
+          date: '2026-11-15',
+          name: 'Sold a chair',
+          amountCents: -4000,
+          categoryId: null,
+        },
+      ]),
+    )
+    expect(screen.queryByRole('form', { name: 'Add a transaction' })).not.toBeInTheDocument()
+  })
+
+  it('asks for an account before adding by hand when there is none', async () => {
+    fakeServer({
+      get_budget: () => budgetFor(categories, []),
+      list_categories: () => categories,
+      list_rules: () => [],
+      list_accounts: () => [],
+      list_transactions: () => ({ transactions: [], total: 0 }),
+    })
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add by hand' }))
+    expect(await screen.findByText(/Add an account first/)).toBeInTheDocument()
   })
 })
 

@@ -12,16 +12,28 @@ export class FakeBank implements BankProvider {
   readonly name = 'plaid'
   accounts: BankAccount[] = [account('acc-checking', 'Checking', 'depository', 250000)]
   pages: SyncPage[] = []
-  failNext: BankError | null = null
+  /** The next bank call (of any kind) throws this, once. */
+  failNext: Error | null = null
   removedItems: string[] = []
   cursorsSeen: (string | null)[] = []
+  linkTokenRequests: { accessToken?: string; webhookUrl?: string | null }[] = []
   private itemCounter = 0
 
-  async createLinkToken(options: { accessToken?: string }) {
+  private throwIfFailing(): void {
+    if (!this.failNext) return
+    const error = this.failNext
+    this.failNext = null
+    throw error
+  }
+
+  async createLinkToken(options: { accessToken?: string; webhookUrl?: string | null }) {
+    this.throwIfFailing()
+    this.linkTokenRequests.push(options)
     return options.accessToken ? `link-update-${options.accessToken}` : 'link-new'
   }
 
   async exchangePublicToken(publicToken: string) {
+    this.throwIfFailing()
     this.itemCounter += 1
     return {
       accessToken: `access-${publicToken}`,
@@ -32,11 +44,7 @@ export class FakeBank implements BankProvider {
   }
 
   async getAccounts() {
-    if (this.failNext) {
-      const error = this.failNext
-      this.failNext = null
-      throw error
-    }
+    this.throwIfFailing()
     return this.accounts
   }
 
@@ -49,6 +57,7 @@ export class FakeBank implements BankProvider {
   }
 
   async removeItem(accessToken: string) {
+    this.throwIfFailing()
     this.removedItems.push(accessToken)
   }
 

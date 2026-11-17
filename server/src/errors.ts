@@ -1,3 +1,5 @@
+// Errors with plain messages that reach the person or agent as written.
+
 /** An error meant for the caller: shown to the person in the app and to the agent over MCP. */
 export type ErrorCode =
   | 'invalid_input'

@@ -1,8 +1,11 @@
+// The form for adding or changing a category.
+
 import { useState, type FormEvent } from 'react'
 import type { Category, Input } from '../api/client'
 import { useApp } from '../lib/app'
 import { parseMoney } from '../lib/format'
 import { CATEGORY_COLORS } from '../lib/theme'
+import { PercentInput } from './PercentInput'
 import { ErrorNote, Segmented, Setting, Switch } from './ui'
 
 export type CategoryFields = Required<Omit<Input<'create_category'>, 'icon'>>
@@ -49,16 +52,31 @@ export const bankCategoryLabel = (code: string) => {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
+/** What a brand new category starts with. */
+const NEW_CATEGORY: CategoryFields = {
+  name: '',
+  color: CATEGORY_COLORS[0][1],
+  kind: 'expense',
+  budgetCents: null,
+  budgetCadence: 'month',
+  warnAtPercent: null,
+  trackPace: true,
+  providerCategories: [],
+}
+
+/** The editable fields of a category, or the defaults for a new one. */
 export function fieldsOf(category?: Category): CategoryFields {
+  if (!category) return { ...NEW_CATEGORY, providerCategories: [] }
+  const { name, color, kind, budgetCents, budgetCadence, warnAtPercent, trackPace } = category
   return {
-    name: category?.name ?? '',
-    color: category?.color ?? CATEGORY_COLORS[0][1],
-    kind: category?.kind ?? 'expense',
-    budgetCents: category?.budgetCents ?? null,
-    budgetCadence: category?.budgetCadence ?? 'month',
-    warnAtPercent: category?.warnAtPercent ?? null,
-    trackPace: category?.trackPace ?? true,
-    providerCategories: category?.providerCategories ?? [],
+    name,
+    color,
+    kind,
+    budgetCents,
+    budgetCadence,
+    warnAtPercent,
+    trackPace,
+    providerCategories: [...category.providerCategories],
   }
 }
 
@@ -81,7 +99,8 @@ export function CategoryForm({
   const { settings } = useApp()
   const [fields, setFields] = useState(() => fieldsOf(category))
   const [amount, setAmount] = useState(
-    category?.budgetCents ? String(category.budgetCents / 100) : '',
+    // A $0 budget is a real budget, so only null means none.
+    category && category.budgetCents !== null ? String(category.budgetCents / 100) : '',
   )
   const [bankCode, setBankCode] = useState('')
   const set = (change: Partial<CategoryFields>) => setFields((f) => ({ ...f, ...change }))
@@ -161,22 +180,12 @@ export function CategoryForm({
             hint={`Blank uses your default, ${settings.defaultWarnAtPercent}%`}
           >
             <div className="row">
-              <input
-                className="input num"
-                style={{ width: 80 }}
-                type="number"
-                min={1}
-                max={100}
+              <PercentInput
+                label="Warn at percent"
                 placeholder={String(settings.defaultWarnAtPercent)}
-                aria-label="Warn at percent"
-                value={fields.warnAtPercent ?? ''}
-                onChange={(e) =>
-                  set({
-                    warnAtPercent: e.target.value
-                      ? Math.min(100, Math.max(1, Number(e.target.value)))
-                      : null,
-                  })
-                }
+                value={fields.warnAtPercent}
+                optional
+                onChange={(warnAtPercent) => set({ warnAtPercent })}
               />
               %
             </div>

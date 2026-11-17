@@ -11,7 +11,7 @@ import {
   listRules,
   ruleFieldsSchema,
 } from './rules.js'
-import { getSettings, mergeSettings, saveSettings, settingsSchema } from './settings.js'
+import { getSettings, mergeSettings, saveSettings, settingsPatchSchema } from './settings.js'
 
 /**
  * Everything that makes a Leeway yours, minus bank data: settings, categories
@@ -21,7 +21,9 @@ import { getSettings, mergeSettings, saveSettings, settingsSchema } from './sett
 export const portableConfigSchema = z.object({
   app: z.literal('leeway'),
   version: z.literal(1),
-  settings: settingsSchema.partial().default({}),
+  // Settings the file leaves out keep their current values on import. Unknown
+  // keys (from a newer Leeway, say) are dropped rather than refused.
+  settings: z.object(settingsPatchSchema.shape).default({}),
   categories: z.array(categoryInputSchema).default([]),
   // Rules point at categories by name so the file works on any install.
   rules: z

@@ -1,3 +1,5 @@
+// Actions to read and change settings: period, region, warnings, look and layout.
+
 import { z } from 'zod'
 import {
   getSettings,

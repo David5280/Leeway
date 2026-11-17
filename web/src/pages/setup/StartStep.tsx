@@ -1,0 +1,206 @@
+// Step 4: picking a starting point: suggested budgets, a starter set, empty, or an import.
+
+import { useState, type FormEvent } from 'react'
+import { call, type Input } from '../../api/client'
+import { useAction, useActionMutation } from '../../api/hooks'
+import { Dot, ErrorNote, Loading } from '../../components/ui'
+import { useApp } from '../../lib/app'
+import { Frame, Nav } from './Frame'
+import {
+  categoriesToCreate,
+  defaultStart,
+  starterRows,
+  type Edits,
+  type Start,
+  type StarterRow,
+} from './starters'
+
+export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  const hasBank = useAction('list_connections').data?.some((c) => c.accountCount > 0)
+  const [picked, setPicked] = useState<Start | null>(null)
+  const start = defaultStart(picked, hasBank)
+  const [edits, setEdits] = useState<Edits>({})
+  const [imported, setImported] = useState<string | null>(null)
+  const finish = useActionMutation('complete_setup')
+  const listed = start === 'suggest' || start === 'starter'
+  const { rows, ready, error } = useStarterRows(start === 'suggest', edits)
+
+  function choose(choice: Start) {
+    setPicked(choice)
+    setEdits({})
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    // An import has already saved its categories; "empty" makes none.
+    finish.mutate({ categories: listed ? categoriesToCreate(rows) : [] }, { onSuccess: onNext })
+  }
+
+  const edit = (name: string, change: Edits[string]) =>
+    setEdits((current) => ({ ...current, [name]: { ...current[name], ...change } }))
+
+  return (
+    <Frame step={4}>
+      <form className="stack" onSubmit={submit}>
+        <h1>Pick a starting point</h1>
+        <StartChoices start={start} hasBank={hasBank ?? false} onChoose={choose} />
+        {listed && (ready ? <StarterList rows={rows} onEdit={edit} /> : <Loading />)}
+        {start === 'import' && <ImportFile onImported={setImported} />}
+        {imported && <p className="notice">{imported}</p>}
+        <ErrorNote error={error ?? finish.error} />
+        <Nav
+          onBack={onBack}
+          next="Continue"
+          busy={finish.isPending}
+          disabled={start === null || (start === 'import' && !imported)}
+        />
+      </form>
+    </Frame>
+  )
+}
+
+/** The starter categories as rows, with amounts from spending when `fromSpending` is on. */
+function useStarterRows(fromSpending: boolean, edits: Edits) {
+  const starters = useAction('get_starter_categories')
+  const suggestions = useAction(
+    'suggest_starter_budgets',
+    { categories: starters.data ?? [] },
+    { enabled: fromSpending && starters.isSuccess },
+  )
+  if (!starters.isSuccess || (fromSpending && !suggestions.isSuccess)) {
+    return { rows: [], ready: false, error: starters.error ?? suggestions.error }
+  }
+  const found = fromSpending ? (suggestions.data ?? []) : []
+  return { rows: starterRows(starters.data, found, edits), ready: true, error: null }
+}
+
+function StartChoices({
+  start,
+  hasBank,
+  onChoose,
+}: {
+  start: Start | null
+  hasBank: boolean
+  onChoose: (choice: Start) => void
+}) {
+  const choices: { id: Start; title: string; text: string; disabled?: boolean }[] = [
+    {
+      id: 'suggest',
+      title: 'Suggest from my spending',
+      text: hasBank ? 'Budgets from your last 3 months' : 'Connect a bank first',
+      disabled: !hasBank,
+    },
+    { id: 'starter', title: 'Starter set', text: 'Everyday categories with typical amounts' },
+    { id: 'empty', title: 'Start empty', text: 'Make your own categories later' },
+    { id: 'import', title: 'Import leeway.json', text: 'Bring a setup from another Leeway' },
+  ]
+  return (
+    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      {choices.map((choice) => (
+        <button
+          key={choice.id}
+          type="button"
+          className="choice"
+          aria-pressed={start === choice.id}
+          disabled={choice.disabled}
+          onClick={() => onChoose(choice.id)}
+        >
+          {choice.title}
+          <span>{choice.text}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The categories to create: tick to keep, and a monthly amount for spending ones. */
+function StarterList({
+  rows,
+  onEdit,
+}: {
+  rows: StarterRow[]
+  onEdit: (name: string, change: Edits[string]) => void
+}) {
+  const { money } = useApp()
+  return (
+    <div className="stack-sm" aria-label="Categories to create">
+      <p className="small muted">
+        Monthly amounts. Leave one blank for no budget; untick to skip it.
+      </p>
+      {rows.map(({ category, include, amount, averageCents }) => (
+        <div key={category.name} className="list-row">
+          <input
+            type="checkbox"
+            checked={include}
+            aria-label={`Include ${category.name}`}
+            onChange={(e) => onEdit(category.name, { include: e.target.checked })}
+          />
+          <Dot color={category.color} />
+          <span className="grow">
+            {category.name}
+            {averageCents !== null && (
+              <span className="small muted"> · you average {money(averageCents)}</span>
+            )}
+          </span>
+          {category.kind === 'expense' ? (
+            <input
+              className="input num"
+              style={{ width: 110 }}
+              inputMode="decimal"
+              placeholder="No budget"
+              aria-label={`${category.name} budget`}
+              value={amount}
+              disabled={!include}
+              onChange={(e) => onEdit(category.name, { amount: e.target.value })}
+            />
+          ) : (
+            <span className="small muted">
+              {category.kind === 'income' ? 'Income' : 'Transfers'}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Imports a leeway.json from another install, replacing what is here. */
+function ImportFile({ onImported }: { onImported: (message: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+
+  async function importFile(file: File) {
+    setError(null)
+    setBusy(true)
+    try {
+      const config = JSON.parse(await file.text()) as Input<'import_config'>['config']
+      const result = await call('import_config', { config, mode: 'replace' })
+      onImported(
+        `Imported ${result.categoriesAdded} categories and ${result.rulesAdded} rules from ${file.name}.`,
+      )
+    } catch (caught) {
+      // A file that is not JSON at all gets a plain sentence, not a parser error.
+      setError(caught instanceof SyntaxError ? new Error('That file is not valid JSON.') : caught)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <label className="field">
+        Leeway setup file
+        <input
+          type="file"
+          accept="application/json,.json"
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void importFile(file)
+          }}
+        />
+      </label>
+      <ErrorNote error={error} />
+    </>
+  )
+}

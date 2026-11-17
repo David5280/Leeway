@@ -1,5 +1,7 @@
+// Read-only insights: trends, budget suggestions, top merchants and spending pace.
+
 import { z } from 'zod'
-import { budgetSummary } from '../domain/budget.js'
+import { budgetSummary } from '../domain/budgetReport.js'
 import { categoryInputSchema } from '../domain/categories.js'
 import {
   spendingPace,

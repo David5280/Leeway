@@ -1,3 +1,5 @@
+// The MCP endpoint: every action an agent may use, exposed as a tool.
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
@@ -28,11 +30,21 @@ function errorResult(message: string): CallToolResult {
   return { isError: true, content: [{ type: 'text', text: message }] }
 }
 
+/** What an agent sees when a tool fails for a reason that is not its fault. */
+export const UNEXPECTED_TOOL_ERROR = 'Something went wrong on the server. Try again shortly.'
+
 /**
  * An MCP server exposing Leeway's actions as tools. A new one is made per
  * request (stateless), bound to the scope of the token that called.
+ * Unexpected failures go to `onError` for the server log; the agent only gets
+ * a plain message, the same as the web app, so no internals leak.
  */
-export function createMcpServer(ctx: AppContext, scope: 'read' | 'write', version: string): Server {
+export function createMcpServer(
+  ctx: AppContext,
+  scope: 'read' | 'write',
+  version: string,
+  onError: (error: unknown) => void = () => {},
+): Server {
   const server = new Server(
     { name: 'leeway', title: 'Leeway', version },
     { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS },
@@ -74,7 +86,8 @@ export function createMcpServer(ctx: AppContext, scope: 'read' | 'write', versio
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     } catch (error) {
       if (error instanceof AppError) return errorResult(error.message)
-      throw error
+      onError(error)
+      return errorResult(UNEXPECTED_TOOL_ERROR)
     }
   })
 

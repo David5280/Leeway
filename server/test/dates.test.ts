@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, addMonths, dayOfWeek, daysBetween, isIsoDate, todayIn } from '../src/lib/dates.js'
+import {
+  addDays,
+  addMonths,
+  dateParts,
+  dayOfWeek,
+  daysBetween,
+  isIsoDate,
+  isValidTimeZone,
+  maxDate,
+  minDate,
+  todayIn,
+} from '../src/lib/dates.js'
 
 describe('dates', () => {
   it('validates real calendar dates only', () => {
@@ -33,5 +44,26 @@ describe('dates', () => {
     const now = new Date('2026-11-18T02:00:00Z')
     expect(todayIn('UTC', now)).toBe('2026-11-18')
     expect(todayIn('America/Denver', now)).toBe('2026-11-17')
+  })
+
+  it('reads today from the clock when no time is given', () => {
+    expect(isIsoDate(todayIn('UTC'))).toBe(true)
+  })
+
+  it('refuses to do math on a date that does not exist', () => {
+    expect(() => addDays('2026-02-30', 1)).toThrow('Not a valid date: 2026-02-30')
+    expect(() => dateParts('soon')).toThrow('Not a valid date: soon')
+  })
+
+  it('knows real time zones from made-up ones', () => {
+    expect(isValidTimeZone('America/Denver')).toBe(true)
+    expect(isValidTimeZone('Mars/Olympus')).toBe(false)
+  })
+
+  it('picks the earlier and the later of two dates', () => {
+    expect(minDate('2026-11-17', '2026-01-02')).toBe('2026-01-02')
+    expect(minDate('2026-01-02', '2026-11-17')).toBe('2026-01-02')
+    expect(maxDate('2026-11-17', '2026-01-02')).toBe('2026-11-17')
+    expect(maxDate('2026-01-02', '2026-11-17')).toBe('2026-11-17')
   })
 })

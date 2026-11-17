@@ -1,3 +1,5 @@
+// Tokens that let an AI agent connect over MCP, stored only as hashes.
+
 import type { Db } from '../db/pool.js'
 import { notFound } from '../errors.js'
 import { hashToken, randomToken } from '../lib/crypto.js'

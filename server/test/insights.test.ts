@@ -86,6 +86,28 @@ describe('insights', () => {
     expect(periods[1]).toMatchObject({ spentCents: 150000 - 300000 })
   })
 
+  it('counts an income category as income and leaves transfers out of trends', async () => {
+    const pay = (await call('list_categories')).find((c: { name: string }) => c.name === 'Pay')
+    const transfers = await call('create_category', { name: 'Transfers', kind: 'transfer' })
+    await call('create_rule', { pattern: 'paycheck', field: 'description', categoryId: pay.id })
+    await call('create_rule', {
+      pattern: 'card payment',
+      field: 'description',
+      categoryId: transfers.id,
+    })
+    await spend('2026-11-01', 'Paycheck', -300000)
+    await spend('2026-11-02', 'Grocer', 4000)
+    await spend('2026-11-03', 'Card payment', 90000)
+    await recategorize()
+
+    const [current] = (await call('get_trends', { periods: 2 })).slice(-1)
+
+    expect(current).toMatchObject({ spentCents: 4000, incomeCents: 300000 })
+    expect(current.categories.map((c: { categoryId: string }) => c.categoryId)).not.toContain(
+      transfers.id,
+    )
+  })
+
   it('suggests tidy monthly budgets from the last three full months', async () => {
     for (const date of ['2026-08-02', '2026-09-02', '2026-10-02'])
       await spend(date, 'Grocer', 41234)
@@ -181,5 +203,29 @@ describe('rule preview', () => {
       wouldMove: 2,
       movingFrom: [{ categoryId: null, count: 2 }],
     })
+  })
+})
+
+describe('insights with little or no history', () => {
+  it('suggests nothing before there are any transactions', async () => {
+    expect((await call('suggest_budgets')).suggestions).toEqual([])
+    expect(await call('suggest_starter_budgets', { categories: [{ name: 'Groceries' }] })).toEqual(
+      [],
+    )
+  })
+
+  it('shows a past period whole, through its last day', async () => {
+    await spend('2026-10-05', 'Grocer', 2000)
+    await recategorize()
+    const pace = await call('get_spending_pace', { offset: -1 })
+    expect(pace).toMatchObject({ start: '2026-10-01', end: '2026-10-31', days: 31 })
+    expect(pace.cumulative).toHaveLength(31)
+    expect(pace.cumulative.at(-1)).toEqual({ date: '2026-10-31', cents: 2000 })
+    expect(pace.projectedCents).toBe(2000)
+  })
+
+  it('projects nothing for a period that has not started', async () => {
+    const pace = await call('get_spending_pace', { offset: 1 })
+    expect(pace).toMatchObject({ start: '2026-12-01', cumulative: [], projectedCents: 0 })
   })
 })

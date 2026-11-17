@@ -1,3 +1,5 @@
+// React Query hooks for reading and changing data through actions.
+
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { call, type ActionName, type Input, type Output } from './client'
 

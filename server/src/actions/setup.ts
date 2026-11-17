@@ -1,3 +1,5 @@
+// First-run setup, plus exporting and importing a setup as one file.
+
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import { recategorize } from '../domain/categorize.js'

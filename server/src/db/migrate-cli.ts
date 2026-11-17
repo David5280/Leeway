@@ -1,3 +1,5 @@
+// npm run migrate: applies any database migrations not yet run.
+
 import { loadConfig } from '../config.js'
 import { migrate } from './migrate.js'
 import { createPool } from './pool.js'

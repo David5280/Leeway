@@ -1,3 +1,5 @@
+// Runs the SQL files in migrations/ in order, each once, inside a transaction.
+
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'

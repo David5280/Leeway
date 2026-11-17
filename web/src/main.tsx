@@ -1,3 +1,5 @@
+// Entry point: providers, routing and the offline service worker.
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

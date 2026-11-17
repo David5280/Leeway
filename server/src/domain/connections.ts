@@ -1,3 +1,5 @@
+// Bank connections: linking, syncing transactions in, and handling expired logins.
+
 import type pg from 'pg'
 import type { BankAccount, BankProvider, BankTransaction } from '../bank/provider.js'
 import { BankError } from '../bank/provider.js'

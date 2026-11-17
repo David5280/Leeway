@@ -1,3 +1,5 @@
+// Accounts from banks and added by hand, with balances for net worth.
+
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'

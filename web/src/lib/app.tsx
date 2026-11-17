@@ -1,3 +1,5 @@
+// App-wide context: settings, server status and money formatting for the signed-in app.
+
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Settings, Status } from '../api/client'
 import { money, signedAmount, type MoneyOptions } from './format'

@@ -1,8 +1,11 @@
+// Actions for categories: their budgets, warnings, colors and bank mappings.
+
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import { recategorize } from '../domain/categorize.js'
 import {
   categoryInputSchema,
+  categoryPatchSchema,
   createCategory,
   deleteCategory,
   listCategories,
@@ -43,7 +46,7 @@ export const updateCategoryAction = defineAction({
   title: 'Update a category',
   description:
     'Change a category: name, color, icon, kind, budget, cadence, warning threshold or bank category mapping. Only the fields given change.',
-  input: categoryInputSchema.partial().extend({ id: z.uuid() }),
+  input: categoryPatchSchema.extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
   run: (ctx, { id, ...patch }) =>

@@ -11,7 +11,8 @@
     "migrate": "tsx --env-file-if-exists=../.env src/db/migrate-cli.ts",
     "reset-password": "node --env-file-if-exists=../.env dist/src/cli/reset-password.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
+    "@vitest/coverage-v8": "^5.1.0",
     "tsx": "^4.23.15",
     "vitest": "^5.1.0"
   }

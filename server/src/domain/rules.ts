@@ -1,3 +1,5 @@
+// Rules that file transactions into categories by merchant or description.
+
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'

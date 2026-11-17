@@ -1,3 +1,5 @@
+// Actions for the rules that categorize transactions automatically.
+
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import { chooseCategory, recategorize } from '../domain/categorize.js'
@@ -104,7 +106,11 @@ export const previewRuleAction = defineAction({
   title: 'Preview a rule',
   description:
     'See which recent transactions a rule would match before saving it. Returns the match count among the last 500 transactions, up to 10 examples, and (given a category) how many would move there. Transactions categorized by hand never move.',
-  input: ruleFieldsSchema.omit({ categoryId: true }).extend({ categoryId: z.uuid().nullish() }),
+  input: ruleFieldsSchema
+    .omit({ categoryId: true })
+    .extend({ categoryId: z.uuid().nullish() })
+    // Refused here too, so a preview never shows a rule that could not be saved.
+    .refine(amountBoundsValid, AMOUNT_BOUNDS_MESSAGE),
   scope: 'read',
   surface: 'all',
   run: async (ctx, input) => {

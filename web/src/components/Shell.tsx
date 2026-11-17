@@ -1,3 +1,5 @@
+// The frame around every screen: header, navigation and the phone tab bar.
+
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useUpdateSettings } from '../api/settings'
