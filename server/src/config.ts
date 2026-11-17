@@ -50,8 +50,13 @@ export interface Config {
   syncIntervalMinutes: number
 }
 
+/** Drops variables set to nothing, like `PUBLIC_URL=` left blank in a .env file, so defaults apply. */
+function withoutBlanks(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([, value]) => value?.trim()))
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = envSchema.safeParse(env)
+  const parsed = envSchema.safeParse(withoutBlanks(env))
   if (!parsed.success) {
     const problems = parsed.error.issues.map(
       (issue) => `  ${issue.path.join('.')}: ${issue.message}`,

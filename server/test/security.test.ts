@@ -94,6 +94,19 @@ describe('config', () => {
     expect(config.databaseSsl).toBe(false)
   })
 
+  it('treats blank settings as unset, as a copied .env.example leaves them', () => {
+    const config = loadConfig({
+      ...base,
+      PUBLIC_URL: '',
+      PLAID_CLIENT_ID: '',
+      PLAID_SECRET: ' ',
+      PLAID_ENV: '',
+      SYNC_INTERVAL_MINUTES: '',
+    })
+    expect(config).toMatchObject({ publicUrl: null, plaid: null, syncIntervalMinutes: 360 })
+    expect(() => loadConfig({ ...base, ENCRYPTION_KEY: '' })).toThrow(/ENCRYPTION_KEY/)
+  })
+
   it('explains a bad encryption key', () => {
     expect(() => loadConfig({ ...base, ENCRYPTION_KEY: 'short' })).toThrow(/openssl rand -hex 32/)
   })
