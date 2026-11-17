@@ -17,6 +17,7 @@ import {
   getSpendingPaceAction,
   getTrendsAction,
   suggestBudgetsAction,
+  suggestStarterBudgetsAction,
   topMerchantsAction,
 } from './insights.js'
 import {
@@ -93,6 +94,7 @@ export const actionList = [
   importConfigAction,
   starterCategoriesAction,
   completeSetupAction,
+  suggestStarterBudgetsAction,
   listTokensAction,
   createTokenAction,
   deleteTokenAction,

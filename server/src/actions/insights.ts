@@ -1,6 +1,13 @@
 import { z } from 'zod'
 import { budgetSummary } from '../domain/budget.js'
-import { spendingPace, suggestBudgets, topMerchants, trends } from '../domain/insights.js'
+import { categoryInputSchema } from '../domain/categories.js'
+import {
+  spendingPace,
+  suggestBudgets,
+  suggestForPlannedCategories,
+  topMerchants,
+  trends,
+} from '../domain/insights.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
 
@@ -26,6 +33,18 @@ export const suggestBudgetsAction = defineAction({
   scope: 'read',
   surface: 'all',
   run: async (ctx) => suggestBudgets(ctx.db, await getSettings(ctx.db), ctx.now()),
+})
+
+export const suggestStarterBudgetsAction = defineAction({
+  name: 'suggest_starter_budgets',
+  title: 'Suggest budgets for new categories',
+  description:
+    'For categories not created yet (first-run setup), the monthly average spent in each over the last three months, by bank category.',
+  input: z.object({ categories: z.array(categoryInputSchema).max(100) }),
+  scope: 'read',
+  surface: 'app',
+  run: async (ctx, { categories }) =>
+    suggestForPlannedCategories(ctx.db, await getSettings(ctx.db), ctx.now(), categories),
 })
 
 export const topMerchantsAction = defineAction({

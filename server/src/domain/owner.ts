@@ -74,6 +74,22 @@ export async function changePassword(
   await db.query('DELETE FROM sessions')
 }
 
+/**
+ * For a forgotten password: sets a new random one and signs out everywhere.
+ * Run from the server's shell (npm run reset-password), never over the web.
+ */
+export async function resetPassword(db: Db): Promise<{ email: string; password: string }> {
+  const password = randomToken().slice(0, 16)
+  const { rows } = await db.query<{ email: string }>(
+    'UPDATE owner SET password_hash = $1 RETURNING email',
+    [await hashPassword(password)],
+  )
+  if (!rows[0])
+    throw new AppError('not_found', 'There is no account yet. Open Leeway to create one.')
+  await db.query('DELETE FROM sessions')
+  return { email: rows[0].email, password }
+}
+
 export async function markOnboarded(db: Db): Promise<void> {
   await db.query('UPDATE owner SET onboarded_at = coalesce(onboarded_at, now())')
 }

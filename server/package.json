@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/index.js",
     "migrate": "tsx --env-file-if-exists=../.env src/db/migrate-cli.ts",
+    "reset-password": "node --env-file-if-exists=../.env dist/src/cli/reset-password.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -101,6 +101,35 @@ describe('insights', () => {
     )
   })
 
+  it('suggests budgets for starter categories before they exist', async () => {
+    const bank = (date: string, name: string, cents: number, primary: string) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents: cents, primary })
+    for (const date of ['2026-08-02', '2026-09-02', '2026-10-02']) {
+      await bank(date, 'Cafe', 9100, 'FOOD_AND_DRINK')
+      await bank(date, 'Payroll', -300000, 'INCOME')
+    }
+    const starter = (name: string, kind: string, providerCategories: string[]) => ({
+      name,
+      kind,
+      providerCategories,
+    })
+    const result = await call('suggest_starter_budgets', {
+      categories: [
+        starter('Eating out', 'expense', ['FOOD_AND_DRINK']),
+        starter('Pay', 'income', ['INCOME']),
+        starter('Travel', 'expense', ['TRAVEL']),
+      ],
+    })
+    // Only expense categories with spending get a number; 27,300 over 91 days.
+    expect(result).toEqual([
+      {
+        name: 'Eating out',
+        averageMonthlyCents: Math.round((27300 / 91) * (365.25 / 12)),
+        suggestedMonthlyCents: roundUpTidy(Math.round((27300 / 91) * (365.25 / 12))),
+      },
+    ])
+  })
+
   it('rounds suggestions up to tidy amounts', () => {
     expect(roundUpTidy(4210)).toBe(4500)
     expect(roundUpTidy(41234)).toBe(42000)

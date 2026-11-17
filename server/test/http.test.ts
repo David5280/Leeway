@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { agentTools } from '../src/mcp/server.js'
@@ -86,6 +87,20 @@ describe('HTTP API', () => {
     await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })
     const after = await app.inject({ url: '/api/auth/me', headers: { cookie } })
     expect(after.statusCode).toBe(401)
+  })
+
+  it('resets a forgotten password from the shell and signs everyone out', async () => {
+    await expect(resetPassword(ctx.db)).rejects.toThrow(/no account yet/)
+    const cookie = await signUp()
+    const { email, password } = await resetPassword(ctx.db)
+    expect(email).toBe(owner.email)
+    expect(password.length).toBeGreaterThanOrEqual(10)
+    const old = await app.inject({ url: '/api/auth/me', headers: { cookie } })
+    expect(old.statusCode).toBe(401)
+    const login = (pw: string) =>
+      app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: pw } })
+    expect((await login(owner.password)).statusCode).toBe(401)
+    expect((await login(password)).statusCode).toBe(200)
   })
 
   it('refuses actions without a session', async () => {
