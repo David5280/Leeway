@@ -1,9 +1,21 @@
+import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type pg from 'pg'
 
-/** Works from both src/db (tsx) and dist/src/db (built), since migrations/ sits beside src/. */
-const MIGRATIONS_DIR = fileURLToPath(new URL('../../migrations/', import.meta.url))
+/** The server's migrations/ folder, found from src/db (tsx) or dist/src/db (built). */
+function findMigrationsDir(): string {
+  let dir = dirname(fileURLToPath(import.meta.url))
+  for (let i = 0; i < 4; i++) {
+    dir = dirname(dir)
+    const candidate = join(dir, 'migrations')
+    if (existsSync(candidate)) return candidate
+  }
+  throw new Error('Could not find the migrations folder')
+}
+
+const MIGRATIONS_DIR = findMigrationsDir()
 
 // Any constant works; it just has to be the same for every process so two
 // instances starting at once do not run the same migration twice.

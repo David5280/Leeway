@@ -21,7 +21,21 @@ import {
   reorderRulesAction,
   updateRuleAction,
 } from './rules.js'
+import {
+  createLinkTokenAction,
+  linkBankAction,
+  listConnectionsAction,
+  reconnectedBankAction,
+  removeConnectionAction,
+  syncBanksAction,
+} from './connections.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
+import {
+  completeSetupAction,
+  exportConfigAction,
+  importConfigAction,
+  starterCategoriesAction,
+} from './setup.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import {
   categorizeTransactionsAction,
@@ -59,6 +73,16 @@ export const actionList = [
   createAccountAction,
   updateAccountAction,
   deleteAccountAction,
+  listConnectionsAction,
+  syncBanksAction,
+  createLinkTokenAction,
+  linkBankAction,
+  reconnectedBankAction,
+  removeConnectionAction,
+  exportConfigAction,
+  importConfigAction,
+  starterCategoriesAction,
+  completeSetupAction,
   listTokensAction,
   createTokenAction,
   deleteTokenAction,

@@ -51,6 +51,12 @@ export interface LinkedItem {
   institutionName: string | null
 }
 
+/** What a bank webhook tells us, after its signature has been checked. */
+export interface BankWebhook {
+  itemId: string
+  event: 'sync' | 'needs_reauth' | 'repaired' | 'ignored'
+}
+
 export interface BankProvider {
   readonly name: string
   /** A short-lived token the browser uses to open the bank login. Pass an access token to repair a login. */
@@ -60,6 +66,11 @@ export interface BankProvider {
   /** One page of changes since `cursor` (null = from the beginning). */
   syncTransactions(accessToken: string, cursor: string | null): Promise<SyncPage>
   removeItem(accessToken: string): Promise<void>
+  /** Verifies and reads a webhook. Throws if the signature does not check out. */
+  parseWebhook(
+    rawBody: string,
+    headers: Record<string, string | string[] | undefined>,
+  ): Promise<BankWebhook>
 }
 
 /** A failure from the bank. `needsReauth` means the person must log in to the bank again. */

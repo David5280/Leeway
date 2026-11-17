@@ -61,6 +61,7 @@ async function assertCategoryExists(db: Db, categoryId: string): Promise<void> {
 
 /** New rules go first by default, since a specific new rule usually should beat older broad ones. */
 export async function createRule(db: Db, input: RuleInput, atEnd = false): Promise<Rule> {
+  if (!amountBoundsValid(input)) throw new AppError('invalid_input', AMOUNT_BOUNDS_MESSAGE)
   await assertCategoryExists(db, input.categoryId)
   if (!atEnd) await db.query('UPDATE rules SET position = position + 1')
   const { rows } = await db.query<Rule>(
