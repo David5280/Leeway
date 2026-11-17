@@ -630,6 +630,8 @@ describe('AccountsWidget', () => {
       hidden: false,
       manual: false,
       balanceUpdatedAt: null,
+      aprPercent: null,
+      minimumPaymentCents: null,
       ...fields,
     }
   }

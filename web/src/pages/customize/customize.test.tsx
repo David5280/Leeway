@@ -568,6 +568,8 @@ function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>): Accou
     hidden: false,
     manual: false,
     balanceUpdatedAt: null,
+    aprPercent: null,
+    minimumPaymentCents: null,
     ...fields,
   }
 }

@@ -1,9 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { App } from '../../App'
 import {
+  budgetFor,
   category,
   fakeServer,
+  renderPlain,
   renderSignedIn,
   settings,
   status,
@@ -25,15 +28,18 @@ const {
 const paycheck = { ...groceries, name: 'Paycheck', kind: 'income' as const, budgetCents: null }
 
 /** The server for a fresh install, with no banks unless a test adds some. */
-function serve(extra: Handlers = {}) {
-  return fakeServer({
-    update_settings: (patch) => ({ ...settings, ...patch }),
-    list_connections: () => [],
-    get_starter_categories: () => [groceries, paycheck],
-    complete_setup: () => ({ categoriesAdded: 2 }),
-    create_token: () => ({ token: 'lw_secret_key', id: 'tok' }),
-    ...extra,
-  })
+function serve(extra: Handlers = {}, routes: Record<string, () => Response> = {}) {
+  return fakeServer(
+    {
+      update_settings: (patch) => ({ ...settings, ...patch }),
+      list_connections: () => [],
+      get_starter_categories: () => [groceries, paycheck],
+      complete_setup: () => ({ categoriesAdded: 2 }),
+      create_token: () => ({ token: 'lw_secret_key', id: 'tok' }),
+      ...extra,
+    },
+    routes,
+  )
 }
 
 /** Moves from the period step to the starting point, with or without banks. */
@@ -234,5 +240,42 @@ describe('done', () => {
     expect(await screen.findByText('lw_secret_key')).toBeInTheDocument()
     expect(server.actions('create_token')).toEqual([{ name: 'AI assistant', scope: 'read' }])
     expect(screen.getByRole('button', { name: 'Open my overview' })).toBeInTheDocument()
+  })
+
+  it('gives the assistant the address of this page when the server has no public one', async () => {
+    serve()
+    renderSignedIn(<Setup status={{ ...status, publicUrl: null }} startAt={2} />)
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(`${window.location.origin}/mcp`)).toBeInTheDocument()
+  })
+})
+
+describe('finishing setup', () => {
+  it('opens the overview once the owner leaves the last step', async () => {
+    // The owner counts as onboarded once the starting point is saved, as on the real server.
+    let onboarded = false
+    const me = () => Response.json({ owner: { email: 'dana@example.com', name: null, onboarded } })
+    serve(
+      {
+        get_settings: () => ({ ...settings, dashboard: { widgets: [] } }),
+        get_budget: () => budgetFor([], []),
+        complete_setup: () => {
+          onboarded = true
+          return { categoriesAdded: 0 }
+        },
+      },
+      { '/api/status': () => Response.json(status), '/api/auth/me': me },
+    )
+    renderPlain(<App />)
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('button', { name: 'Open my overview' }))
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Setup steps' })).not.toBeInTheDocument()
   })
 })

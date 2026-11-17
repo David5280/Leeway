@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settings } from '../test/fake'
+import { useAppearance } from './app'
 import { applyAppearance, inkOn, THEMES, themeVariables } from './theme'
+
+afterEach(() => vi.unstubAllGlobals())
 
 const base = settings.appearance
 
@@ -38,5 +42,41 @@ describe('theme', () => {
     applyAppearance({ ...base, theme: 'harbor' }, false)
     expect(document.documentElement.style.getPropertyValue('--bg')).toBe(THEMES.harbor.light.bg)
     expect(document.documentElement.dataset.mode).toBe('light')
+  })
+})
+
+/** A stand-in for the device's dark mode setting that a test can flip. */
+function fakeDevice(dark: boolean) {
+  const listeners = new Set<() => void>()
+  const media = {
+    matches: dark,
+    addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+  }
+  vi.stubGlobal('matchMedia', () => media)
+  return {
+    listeners,
+    switchTo(next: boolean) {
+      media.matches = next
+      act(() => listeners.forEach((listener) => listener()))
+    },
+  }
+}
+
+describe('following the device', () => {
+  it('repaints the page when the device switches between light and dark', () => {
+    const device = fakeDevice(false)
+    renderHook(() => useAppearance({ ...base, mode: 'system' }))
+    expect(document.documentElement.dataset.mode).toBe('light')
+    device.switchTo(true)
+    expect(document.documentElement.dataset.mode).toBe('dark')
+  })
+
+  it('stops listening to the device once the page is gone', () => {
+    const device = fakeDevice(false)
+    const { unmount } = renderHook(() => useAppearance(base))
+    expect(device.listeners.size).toBe(1)
+    unmount()
+    expect(device.listeners.size).toBe(0)
   })
 })

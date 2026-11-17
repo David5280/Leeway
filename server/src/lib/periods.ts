@@ -105,7 +105,7 @@ export function shiftPeriod(current: Period, offset: number, config: PeriodConfi
  * A budget amount is entered for a cadence ("$600 a month", "$150 a week").
  * Converting through a yearly figure lets any cadence feed any period type.
  */
-export type Cadence = 'week' | 'biweek' | 'semimonth' | 'month' | 'year'
+export type Cadence = 'week' | 'biweek' | 'semimonth' | 'month' | 'quarter' | 'year'
 
 const DAYS_PER_YEAR = 365.25
 
@@ -114,6 +114,7 @@ export const PER_YEAR: Record<Cadence, number> = {
   biweek: DAYS_PER_YEAR / 14,
   semimonth: 24,
   month: 12,
+  quarter: 4,
   year: 1,
 }
 
@@ -146,6 +147,8 @@ export function addCadence(
       return addDays(date, 14 * count)
     case 'month':
       return addMonths(date, count, dayOfMonth)
+    case 'quarter':
+      return addMonths(date, 3 * count, dayOfMonth)
     case 'year':
       return addMonths(date, 12 * count, dayOfMonth)
     case 'semimonth': {

@@ -21,7 +21,7 @@ export default defineConfig({
       exclude: ['src/main.tsx', 'src/test/**', 'src/**/*.test.{ts,tsx}'],
       // These only ever go up (CONTRIBUTING.md).
       // Floors at the measured coverage; raise them as tests are added, never lower them.
-      thresholds: { statements: 93, branches: 91, functions: 92, lines: 94 },
+      thresholds: { statements: 98, branches: 95, functions: 98, lines: 99 },
     },
   },
 })

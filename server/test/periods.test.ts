@@ -100,9 +100,11 @@ describe('budget periods', () => {
     expect(addCadence('2026-11-16', 'semimonth')).toBe('2026-12-01')
   })
 
-  it('advances weekly and yearly dates, several steps at a time', () => {
+  it('advances weekly, quarterly and yearly dates, several steps at a time', () => {
     expect(addCadence('2026-12-29', 'week', 2)).toBe('2027-01-12')
     expect(addCadence('2028-02-29', 'year')).toBe('2029-02-28')
+    expect(addCadence('2026-11-30', 'quarter', 1, 30)).toBe('2027-02-28')
+    expect(addCadence('2026-02-28', 'quarter', 2, 31)).toBe('2026-08-31')
     expect(addCadence('2026-11-01', 'semimonth', 3)).toBe('2026-12-16')
   })
 

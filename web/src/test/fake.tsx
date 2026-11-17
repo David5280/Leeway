@@ -144,3 +144,23 @@ export function renderPlain(ui: ReactNode) {
     </QueryClientProvider>,
   )
 }
+
+/**
+ * Holds back the reply to one request path until the returned function is
+ * called, so a busy or loading state can be seen. Call after fakeServer.
+ */
+export function holdRequest(path: string): () => void {
+  const reply = globalThis.fetch
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  vi.stubGlobal('fetch', async (requested: string, init?: RequestInit) => {
+    if (requested === path) await gate
+    return reply(requested, init)
+  })
+  return release
+}
+
+/** A reply the real server gives when something fails, with its reason. */
+export function failure(message: string, status = 400): () => Response {
+  return () => Response.json({ error: 'bad_request', message }, { status })
+}

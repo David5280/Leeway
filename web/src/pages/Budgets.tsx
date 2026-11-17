@@ -161,6 +161,8 @@ function Suggestions({ onClose }: { onClose: () => void }) {
           budgetCadence: 'month',
         })
       }
+    } catch {
+      // The mutation keeps the error, and the ErrorNote below shows it; stop at the first failure.
     } finally {
       setApplying(false)
     }

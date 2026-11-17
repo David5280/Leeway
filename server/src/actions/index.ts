@@ -5,6 +5,14 @@ import {
   listAccountsAction,
   updateAccountAction,
 } from './accounts.js'
+import {
+  createBillAction,
+  deleteBillAction,
+  dismissRecurringAction,
+  findRecurringAction,
+  listBillsAction,
+  updateBillAction,
+} from './bills.js'
 import { getBudgetAction } from './budget.js'
 import {
   createCategoryAction,
@@ -20,6 +28,14 @@ import {
   suggestStarterBudgetsAction,
   topMerchantsAction,
 } from './insights.js'
+import {
+  addToGoalAction,
+  createGoalAction,
+  deleteGoalAction,
+  listGoalsAction,
+  updateGoalAction,
+} from './goals.js'
+import { getCashFlowAction, getNetWorthAction, planDebtPayoffAction } from './planning.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -84,6 +100,20 @@ export const actionList = [
   createAccountAction,
   updateAccountAction,
   deleteAccountAction,
+  listBillsAction,
+  createBillAction,
+  updateBillAction,
+  deleteBillAction,
+  findRecurringAction,
+  dismissRecurringAction,
+  listGoalsAction,
+  createGoalAction,
+  updateGoalAction,
+  addToGoalAction,
+  deleteGoalAction,
+  getNetWorthAction,
+  planDebtPayoffAction,
+  getCashFlowAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

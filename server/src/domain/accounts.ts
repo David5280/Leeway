@@ -35,6 +35,10 @@ export interface Account {
   hidden: boolean
   manual: boolean
   balanceUpdatedAt: string | null
+  /** Yearly interest rate for a card or loan, such as 24.99. Banks rarely send it. */
+  aprPercent: number | null
+  /** The required monthly payment for a card or loan. */
+  minimumPaymentCents: number | null
 }
 
 const SELECT = `
@@ -42,7 +46,8 @@ const SELECT = `
     coalesce(a.display_name, a.name) AS name, a.name AS "bankName", a.mask, a.type, a.subtype,
     a.balance_cents AS "balanceCents", a.available_cents AS "availableCents",
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
-    a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt"
+    a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
+    a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
@@ -96,6 +101,9 @@ export const accountPatchSchema = z
     /** Your own label for the account. Null goes back to the bank's name. */
     displayName: z.string().trim().min(1).max(80).nullable(),
     hidden: z.boolean(),
+    /** Debt terms, for payoff plans. Any account can carry them; they matter for cards and loans. */
+    aprPercent: z.number().min(0).max(100).multipleOf(0.01).nullable(),
+    minimumPaymentCents: z.number().int().min(0).nullable(),
     // The rest only apply to manual accounts; bank accounts get them from the bank.
     balanceCents: z.number().int(),
     creditLimitCents: z.number().int().min(0).nullable(),
@@ -127,7 +135,9 @@ export async function updateAccount(
        credit_limit_cents = CASE WHEN $6 THEN $7 ELSE credit_limit_cents END,
        type = coalesce($8, type),
        subtype = CASE WHEN $9 THEN $10 ELSE subtype END,
-       balance_updated_at = CASE WHEN $5::bigint IS NULL THEN balance_updated_at ELSE now() END
+       balance_updated_at = CASE WHEN $5::bigint IS NULL THEN balance_updated_at ELSE now() END,
+       apr_bps = CASE WHEN $11 THEN $12 ELSE apr_bps END,
+       minimum_payment_cents = CASE WHEN $13 THEN $14 ELSE minimum_payment_cents END
      WHERE id = $1`,
     [
       id,
@@ -140,6 +150,11 @@ export async function updateAccount(
       patch.type ?? null,
       patch.subtype !== undefined,
       patch.subtype ?? null,
+      patch.aprPercent !== undefined,
+      // Stored in basis points: 24.99% is 2499.
+      typeof patch.aprPercent === 'number' ? Math.round(patch.aprPercent * 100) : null,
+      patch.minimumPaymentCents !== undefined,
+      patch.minimumPaymentCents ?? null,
     ],
   )
   return getAccount(db, id)
