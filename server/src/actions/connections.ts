@@ -7,9 +7,8 @@ import {
   listConnections,
   reconnected,
   removeConnection,
-  syncAll,
-  syncConnection,
 } from '../domain/connections.js'
+import { syncAll, syncConnection } from '../domain/sync.js'
 import { defineAction } from './action.js'
 
 export const listConnectionsAction = defineAction({

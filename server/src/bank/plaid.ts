@@ -1,3 +1,8 @@
+// Plaid over plain HTTPS. Plaid's API is a handful of JSON POSTs, so calling
+// it directly keeps the dependency list short and the behavior obvious. Only
+// read products are requested: Leeway can see accounts and transactions, never
+// move money.
+
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { decodeProtectedHeader, importJWK, jwtVerify, type JWK } from 'jose'
 import type { PlaidConfig } from '../config.js'
@@ -13,13 +18,6 @@ import {
   type LinkedItem,
   type SyncPage,
 } from './provider.js'
-
-/**
- * Plaid over plain HTTPS. Plaid's API is a handful of JSON POSTs, so calling
- * it directly keeps the dependency list short and the behavior obvious.
- * Only read products are requested: Leeway can see accounts and
- * transactions, never move money.
- */
 
 // Errors that mean the person has to log in to their bank again.
 const REAUTH_CODES = new Set([
@@ -50,7 +48,10 @@ interface PlaidTransaction {
   transaction_id: string
   pending_transaction_id: string | null
   account_id: string
+  /** The day the bank posted it; for a pending transaction, the day it was made. */
   date: IsoDate
+  /** The day the purchase was made (authorized). Null when the bank does not say. */
+  authorized_date?: IsoDate | null
   name: string
   merchant_name: string | null
   amount: number
@@ -229,6 +230,7 @@ function accountType(type: string): AccountType {
     : 'other'
 }
 
+/** A Plaid account in Leeway's terms, with balances in cents. */
 export function toBankAccount(account: PlaidAccount): BankAccount {
   const { balances } = account
   return {
@@ -245,12 +247,19 @@ export function toBankAccount(account: PlaidAccount): BankAccount {
   }
 }
 
+/**
+ * A Plaid transaction in Leeway's terms. Its date is the day the purchase was
+ * made, not the day the bank posted it, which can be days later: a coffee
+ * bought Friday and posted Monday belongs to Friday, as the owner remembers
+ * it. A pending transaction's date is already that day, so a charge keeps its
+ * date when it posts.
+ */
 export function toBankTransaction(tx: PlaidTransaction): BankTransaction {
   return {
     providerTransactionId: tx.transaction_id,
     pendingProviderTransactionId: tx.pending_transaction_id,
     providerAccountId: tx.account_id,
-    date: tx.date,
+    date: tx.authorized_date ?? tx.date,
     name: tx.name,
     merchantName: tx.merchant_name,
     amountCents: toCents(tx.amount),

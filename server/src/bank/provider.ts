@@ -1,10 +1,9 @@
+// The bank data source, kept behind an interface so Plaid can be swapped for
+// another aggregator (Teller, SimpleFIN) without touching the rest of the app.
+// Providers here only ever read: nothing in this interface can move money.
+
 import type { IsoDate } from '../lib/dates.js'
 
-/**
- * The bank data source, kept behind an interface so Plaid can be swapped for
- * another aggregator (Teller, SimpleFIN) without touching the rest of the app.
- * Providers here only ever read: nothing in this interface can move money.
- */
 export type AccountType = 'depository' | 'credit' | 'loan' | 'investment' | 'property' | 'other'
 
 export interface BankAccount {
@@ -25,6 +24,7 @@ export interface BankTransaction {
   providerTransactionId: string
   pendingProviderTransactionId: string | null
   providerAccountId: string
+  /** The day the purchase was made, which may be before the bank posted it. */
   date: IsoDate
   name: string
   merchantName: string | null

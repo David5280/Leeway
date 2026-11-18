@@ -7,8 +7,8 @@ import {
   linkBank,
   listConnections,
   removeConnection,
-  syncConnection,
 } from '../src/domain/connections.js'
+import { latestOfEach, syncConnection } from '../src/domain/sync.js'
 import { listTransactions, setCategory } from '../src/domain/transactions.js'
 import { account, bankTx, FakeBank, page } from './fakeBank.js'
 import { createTestContext, resetData } from './helpers.js'
@@ -170,5 +170,105 @@ describe('bank sync', () => {
     expect(bank.removedItems).toEqual(['access-public-5'])
     expect(await all()).toHaveLength(0)
     expect(await listConnections(ctx.db)).toHaveLength(0)
+  })
+})
+
+describe('pending charges that post', () => {
+  it('replaces the pending charge once, even when the posted one has another date', async () => {
+    const pending = bankTx({
+      name: 'Hardware',
+      amountCents: 2500,
+      pending: true,
+      date: '2026-11-13',
+    })
+    bank.pages = [page({ added: [pending] })]
+    const { connectionId } = await linkBank(ctx, 'public-6')
+    await ctx.db.query(`UPDATE transactions SET excluded = true`)
+
+    bank.pages = [
+      page({
+        added: [
+          bankTx({
+            name: 'Hardware',
+            amountCents: 2500,
+            date: '2026-11-16',
+            pendingProviderTransactionId: pending.providerTransactionId,
+          }),
+        ],
+        removed: [pending.providerTransactionId],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+
+    const txs = await all()
+    expect(txs).toHaveLength(1)
+    expect(txs[0]).toMatchObject({ date: '2026-11-16', pending: false, excluded: true })
+  })
+
+  it('never doubles a charge whose pending and posted versions arrive in one sync', async () => {
+    const pending = bankTx({ name: 'Diner', amountCents: 1800, pending: true })
+    const posted = bankTx({
+      name: 'Diner',
+      amountCents: 2100,
+      pendingProviderTransactionId: pending.providerTransactionId,
+    })
+    bank.pages = [page({ added: [pending, posted], removed: [pending.providerTransactionId] })]
+
+    await linkBank(ctx, 'public-7')
+
+    expect((await all()).map((t) => [t.name, t.amountCents, t.pending])).toEqual([
+      ['Diner', 2100, false],
+    ])
+  })
+})
+
+describe('applying many changes at once', () => {
+  it('writes the newest version of a transaction the bank names twice in one sync', async () => {
+    const coffee = bankTx({ name: 'Coffee', amountCents: 400 })
+    bank.pages = [
+      page({ added: [coffee], hasMore: true }),
+      page({ modified: [{ ...coffee, amountCents: 475, name: 'Coffee bar' }] }),
+    ]
+
+    const result = await linkBank(ctx, 'public-8')
+
+    expect(result).toMatchObject({ added: 1, modified: 1, error: null })
+    expect((await all()).map((t) => [t.name, t.amountCents])).toEqual([['Coffee bar', 475]])
+  })
+
+  it('saves a large first sync in full', async () => {
+    const history = Array.from({ length: 1200 }, (_, i) =>
+      bankTx({ name: `Purchase ${i}`, amountCents: 100 + i, date: '2026-10-01' }),
+    )
+    bank.pages = [
+      page({ added: history.slice(0, 500), hasMore: true }),
+      page({ added: history.slice(500, 1000), hasMore: true }),
+      page({ added: history.slice(1000) }),
+    ]
+
+    await linkBank(ctx, 'public-9')
+
+    const { rows } = await ctx.db.query<{ n: number; total: number }>(
+      'SELECT count(*)::int AS n, sum(amount_cents)::int AS total FROM transactions',
+    )
+    expect(rows[0]).toEqual({ n: 1200, total: history.reduce((s, t) => s + t.amountCents, 0) })
+  })
+})
+
+describe('latestOfEach', () => {
+  it('keeps the last version of each transaction, in the order first seen', () => {
+    const a = bankTx({ name: 'A', amountCents: 1 })
+    const b = bankTx({ name: 'B', amountCents: 2 })
+    const result = latestOfEach([a, b, { ...a, amountCents: 3 }])
+    expect(result.map((t) => [t.name, t.amountCents])).toEqual([
+      ['A', 3],
+      ['B', 2],
+    ])
+  })
+
+  it('tells apart the same bank id on two accounts', () => {
+    const onChecking = bankTx({ name: 'A', amountCents: 1 })
+    const onCard = { ...onChecking, providerAccountId: 'acc-card' }
+    expect(latestOfEach([onChecking, onCard])).toHaveLength(2)
   })
 })

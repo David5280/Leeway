@@ -5,7 +5,7 @@ import { loadConfig } from './config.js'
 import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool } from './db/pool.js'
-import { syncAll } from './domain/connections.js'
+import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { buildApp } from './http/app.js'
 
