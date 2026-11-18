@@ -5,7 +5,7 @@ import { Shell } from '../components/Shell'
 import { ErrorNote } from '../components/ui'
 import { AccountSection } from './customize/Accounts'
 import { AgentSection } from './customize/Agent'
-import { BackupSection } from './customize/Backup'
+import { DataSection } from './customize/Data'
 import { BanksSection } from './customize/Banks'
 import { BudgetingSection } from './customize/Budgeting'
 import { LayoutSection } from './customize/Layout'
@@ -22,7 +22,7 @@ const SECTIONS = [
   ['accounts', 'Accounts'],
   ['banks', 'Banks'],
   ['agent', 'AI assistant'],
-  ['backup', 'Backup'],
+  ['data', 'Data'],
   ['account', 'Sign-in'],
 ] as const
 
@@ -49,7 +49,7 @@ export function Customize() {
       <AccountSection />
       <BanksSection />
       <AgentSection />
-      <BackupSection />
+      <DataSection />
       <SignInSection />
     </Shell>
   )

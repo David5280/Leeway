@@ -145,6 +145,7 @@ function TransactionDetail({ tx }: { tx: Transaction }) {
           Your bank calls this {tx.bankCategory.toLowerCase().replaceAll('_', ' ')}.
         </span>
       )}
+      {tx.source === 'import' && <span className="small muted">Imported from a file.</span>}
       <ErrorNote error={update.error ?? remove.error} />
     </div>
   )

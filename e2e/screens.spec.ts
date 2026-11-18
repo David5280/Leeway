@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test'
 const SCREENS = [
   { path: '/', heading: /to/ },
   { path: '/transactions', heading: 'Transactions' },
+  { path: '/transactions/import', heading: 'Import transactions' },
   { path: '/budgets', heading: 'Budgets' },
   { path: '/plan', heading: 'Plan' },
   { path: '/plan/goals', heading: 'Plan' },

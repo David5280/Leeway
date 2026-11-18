@@ -1,14 +1,14 @@
-// The Backup section: exporting the setup to a file and importing one.
+// The Data section: importing transactions, and exporting the setup to a file and importing one.
 
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn, settings } from '../../test/fake'
-import { BackupSection } from './Backup'
+import { DataSection } from './Data'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('Backup', () => {
+describe('Data', () => {
   const exported = {
     app: 'leeway',
     version: 1,
@@ -45,9 +45,21 @@ describe('Backup', () => {
     return new File([text], name, { type: 'application/json' })
   }
 
+  it('leads to importing transactions from a file', () => {
+    fakeServer({})
+    renderSignedIn(<DataSection />)
+    expect(screen.getByRole('region', { name: 'Data' })).toHaveTextContent(
+      'Bring in transaction history, and back up your setup.',
+    )
+    expect(screen.getByRole('link', { name: 'Import a CSV file' })).toHaveAttribute(
+      'href',
+      '/transactions/import',
+    )
+  })
+
   it('downloads everything as leeway.json and frees the file afterwards', async () => {
     const server = fakeServer({ export_config: () => exported })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Export leeway.json' }))
     await waitFor(() => expect(downloads).toHaveLength(1))
     expect(downloads[0]!.name).toBe('leeway.json')
@@ -59,7 +71,7 @@ describe('Backup', () => {
 
   it('shows why an export failed and downloads nothing', async () => {
     fakeServer({}, { '/api/actions/export_config': failing('Export is broken', 500) })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Export leeway.json' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Export is broken')
     expect(downloads).toEqual([])
@@ -69,7 +81,7 @@ describe('Backup', () => {
     const server = fakeServer({
       import_config: () => ({ categoriesAdded: 2, rulesAdded: 5 }),
     })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     await userEvent
       .setup()
       .upload(screen.getByLabelText('Choose a file'), file(JSON.stringify(exported)))
@@ -83,7 +95,7 @@ describe('Backup', () => {
     const server = fakeServer({
       import_config: () => ({ categoriesAdded: 7, rulesAdded: 0 }),
     })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     const user = userEvent.setup()
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Import mode' }),
@@ -98,7 +110,7 @@ describe('Backup', () => {
 
   it('refreshes what is on screen after an import', async () => {
     fakeServer({ import_config: () => ({ categoriesAdded: 1, rulesAdded: 1 }) })
-    const { client } = renderSignedIn(<BackupSection />)
+    const { client } = renderSignedIn(<DataSection />)
     client.setQueryData(['action', 'list_categories', {}], [])
     await userEvent.setup().upload(screen.getByLabelText('Choose a file'), file('{}'))
     await screen.findByText('Added 1 categories and 1 rules.')
@@ -107,7 +119,7 @@ describe('Backup', () => {
 
   it('says a file that is not JSON is not valid, without sending it', async () => {
     const server = fakeServer({ import_config: () => ({ categoriesAdded: 0, rulesAdded: 0 }) })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     await userEvent.setup().upload(screen.getByLabelText('Choose a file'), file('name,amount\n'))
     expect(await screen.findByRole('alert')).toHaveTextContent('That file is not valid JSON.')
     expect(server.actions('import_config')).toEqual([])
@@ -124,7 +136,7 @@ describe('Backup', () => {
             : Response.json({ result: { categoriesAdded: 1, rulesAdded: 0 } }),
       },
     )
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     const user = userEvent.setup()
     const input = screen.getByLabelText('Choose a file')
     await user.upload(input, file('{}'))
@@ -139,7 +151,7 @@ describe('Backup', () => {
 
   it('lets the same file be chosen again', async () => {
     const server = fakeServer({ import_config: () => ({ categoriesAdded: 0, rulesAdded: 0 }) })
-    renderSignedIn(<BackupSection />)
+    renderSignedIn(<DataSection />)
     const user = userEvent.setup()
     const input = screen.getByLabelText<HTMLInputElement>('Choose a file')
     const same = file('{}')

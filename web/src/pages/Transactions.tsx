@@ -1,7 +1,7 @@
-// The Transactions screen: search, filter, categorize, add by hand, and rules.
+// The Transactions screen: search, filter, categorize, add by hand or import, and rules.
 
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { Category, Output, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
 import { CategorySelect } from '../components/CategorySelect'
@@ -73,9 +73,14 @@ export function Transactions() {
     <Shell>
       <div className="row-between wrap">
         <h1>Transactions</h1>
-        <button type="button" className="btn" onClick={() => setAdding((a) => !a)}>
-          {adding ? 'Close' : 'Add by hand'}
-        </button>
+        <div className="row">
+          <Link to="/transactions/import" className="btn">
+            Import a file
+          </Link>
+          <button type="button" className="btn" onClick={() => setAdding((a) => !a)}>
+            {adding ? 'Close' : 'Add by hand'}
+          </button>
+        </div>
       </div>
 
       {adding && <AddTransaction categories={all} onDone={() => setAdding(false)} />}

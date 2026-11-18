@@ -4,19 +4,10 @@ import { useState, type FormEvent } from 'react'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
-import { isOwed } from '../../lib/accounts'
+import { ACCOUNT_TYPES, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
 import { Section } from './Section'
-
-const ACCOUNT_TYPES = [
-  ['depository', 'Checking or savings'],
-  ['credit', 'Credit card'],
-  ['loan', 'Loan'],
-  ['investment', 'Investment'],
-  ['property', 'Property'],
-  ['other', 'Other'],
-] as const
 
 export function AccountSection() {
   const accounts = useAction('list_accounts', { includeHidden: true })
