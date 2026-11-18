@@ -11,8 +11,13 @@ import { z } from 'zod'
 import type pg from 'pg'
 import type { Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
-import { isIsoDate } from '../lib/dates.js'
-import { ACCOUNT_TYPES, createManualAccount, getAccount, type Account } from './accounts.js'
+import { isoDateSchema } from '../lib/schemas.js'
+import {
+  createManualAccount,
+  getAccount,
+  manualAccountInputSchema,
+  type Account,
+} from './accounts.js'
 import { listCategories } from './categories.js'
 import { recategorize } from './categorize.js'
 import { dateSpan, planImport, type ImportRow } from './importPlan.js'
@@ -23,10 +28,8 @@ export const MAX_IMPORT_ROWS = 20_000
 /** No personal transaction comes near a billion dollars; a bigger one is a misread column. */
 const MAX_AMOUNT_CENTS = 100_000_000_000
 
-const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
-
 export const importRowSchema = z.object({
-  date: isoDate,
+  date: isoDateSchema,
   name: z.string().trim().min(1, 'Every row needs a description').max(200),
   amountCents: z.number().int().min(-MAX_AMOUNT_CENTS).max(MAX_AMOUNT_CENTS),
   /** A category name from the file; blank or unknown names leave the row to the rules. */
@@ -43,9 +46,7 @@ export const importInputSchema = z
     /** An existing account to add the rows to. */
     accountId: z.uuid().optional(),
     /** Or a new manual account to create for them. */
-    newAccount: z
-      .object({ name: z.string().trim().min(1).max(80), type: z.enum(ACCOUNT_TYPES) })
-      .optional(),
+    newAccount: manualAccountInputSchema.pick({ name: true, type: true }).optional(),
     fileName: z.string().trim().max(200).nullish(),
     rows: z
       .array(importRowSchema)
@@ -93,17 +94,19 @@ export interface PastImport {
 /** The account the rows go to: the chosen one, or a new manual one starting at a zero balance. */
 async function targetAccount(db: Db, input: ImportInput): Promise<Account> {
   if (input.newAccount) {
-    return createManualAccount(db, {
-      ...input.newAccount,
-      subtype: null,
-      balanceCents: 0,
-      creditLimitCents: null,
-      currency: 'USD',
-    })
+    // The schema fills in the rest, as for an account added by hand.
+    const account = manualAccountInputSchema.parse({ ...input.newAccount, balanceCents: 0 })
+    return createManualAccount(db, account)
   }
-  return getAccount(db, input.accountId!).catch(() => {
-    throw new AppError('invalid_input', 'That account does not exist')
-  })
+  try {
+    return await getAccount(db, input.accountId!)
+  } catch (error) {
+    // A missing account is the caller's mistake; anything else (the database) is not.
+    if (error instanceof AppError && error.code === 'not_found') {
+      throw new AppError('invalid_input', 'That account does not exist')
+    }
+    throw error
+  }
 }
 
 /** What the account already holds over the import's days, for duplicate checks. */

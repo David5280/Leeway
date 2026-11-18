@@ -2,11 +2,10 @@
 
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
-import { isIsoDate, isValidTimeZone } from '../lib/dates.js'
+import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import type { PeriodConfig } from '../lib/periods.js'
-
-const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
 
 export const periodSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -21,7 +20,7 @@ export const periodSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('paycheck'),
     frequency: z.enum(['weekly', 'biweekly', 'semimonthly', 'monthly']),
-    anchorDate: isoDate,
+    anchorDate: isoDateSchema,
     semimonthlyDays: z
       .tuple([z.number().int().min(1).max(31), z.number().int().min(1).max(31)])
       .default([1, 15]),

@@ -3,7 +3,8 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { notFound } from '../errors.js'
-import { addDays, daysBetween, isIsoDate, maxDate, type IsoDate } from '../lib/dates.js'
+import { addDays, daysBetween, maxDate, type IsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { convertCadence, type Cadence } from '../lib/periods.js'
 import { lastBefore, nextOnOrAfter, occurrences } from '../lib/schedule.js'
 import { patchOf } from '../lib/schemas.js'
@@ -18,7 +19,7 @@ export const billInputSchema = z.object({
   amountCents: z.number().int().positive(),
   cadence: z.enum(BILL_CADENCES),
   /** The first due date to track; later ones repeat from it by cadence. */
-  anchorDate: z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD'),
+  anchorDate: isoDateSchema,
   /**
    * Text found in the merchant or description of the transaction that pays
    * it, such as "netflix". Case, digits and punctuation are ignored. Without

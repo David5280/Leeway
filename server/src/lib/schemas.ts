@@ -1,6 +1,10 @@
 // Schema helpers shared by actions and domain code.
 
 import { z } from 'zod'
+import { isIsoDate } from './dates.js'
+
+/** A real calendar day written as YYYY-MM-DD, the one date format actions take. */
+export const isoDateSchema = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
 
 /** Each field of S made optional, with any default removed. */
 type PatchShape<S extends z.ZodRawShape> = {

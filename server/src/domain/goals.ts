@@ -5,7 +5,8 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { dateParts, isIsoDate, type IsoDate } from '../lib/dates.js'
+import { dateParts, type IsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
@@ -19,11 +20,7 @@ export const goalInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   /** The amount to save, or for a purchase its price. */
   targetCents: z.number().int().positive(),
-  targetDate: z
-    .string()
-    .refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
-    .nullable()
-    .default(null),
+  targetDate: isoDateSchema.nullable().default(null),
   /** Track a savings account's balance as progress, instead of counting by hand. */
   accountId: z.uuid().nullable().default(null),
   /** Saved so far, for a goal not linked to an account. */

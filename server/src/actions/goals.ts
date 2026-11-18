@@ -12,7 +12,7 @@ import {
   listGoals,
   updateGoal,
 } from '../domain/goals.js'
-import { isIsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { defineAction } from './action.js'
 import { goalClock } from './today.js'
 
@@ -60,7 +60,7 @@ export const addToGoalAction = defineAction({
       .number()
       .int()
       .refine((n) => n !== 0, 'Use an amount other than zero'),
-    date: z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD').optional(),
+    date: isoDateSchema.optional(),
   }),
   scope: 'write',
   surface: 'all',
