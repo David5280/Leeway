@@ -1,3 +1,7 @@
+// Shared test helpers: a fake Leeway server behind fetch, sample data built
+// with the server's own code, and renderers that wrap a screen in the app's
+// providers.
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -6,10 +10,15 @@ import { onTestFinished, vi } from 'vitest'
 import { computeBudget } from '../../../server/src/domain/budget'
 import type { Category } from '../../../server/src/domain/categories'
 import type { Transaction } from '../../../server/src/domain/transactions'
-import { settingsSchema } from '../../../server/src/domain/settings'
+import {
+  mergeSettings,
+  settingsPatchSchema,
+  settingsSchema,
+} from '../../../server/src/domain/settings'
 import { periodContaining } from '../../../server/src/lib/periods'
-import type { Settings, Status } from '../api/client'
+import type { Account, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
+import { SETTINGS_KEY } from '../api/settings'
 import { AppProvider } from '../lib/app'
 import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
 
@@ -47,6 +56,29 @@ export function fakeServer(
 
 export const settings: Settings = settingsSchema.parse({ timeZone: 'America/Denver' })
 
+/** Settings built the way the server builds them, so defaults fill what a test leaves out. */
+export function settingsWith(fields: Record<string, unknown>): Settings {
+  return settingsSchema.parse({ ...settings, ...fields })
+}
+
+/**
+ * get_settings and update_settings handlers that keep state and merge a
+ * change like the server does, refusing what it would refuse.
+ */
+export function settingsHandlers(initial: Settings = settings): Handlers {
+  let current = initial
+  return {
+    get_settings: () => current,
+    update_settings: (patch) => {
+      current = mergeSettings(current, settingsPatchSchema.parse(patch))
+      return current
+    },
+  }
+}
+
+/** A server status with Plaid keys set, so bank features show. */
+export const withBank: Partial<Status> = { bank: { provider: 'plaid', environment: 'sandbox' } }
+
 export const status: Status = {
   version: '0.1.0',
   hasOwner: true,
@@ -69,6 +101,28 @@ export function category(name: string, fields: Partial<Category> = {}): Category
     providerCategories: [],
     group: null,
     position: 0,
+    ...fields,
+  }
+}
+
+/** A linked checking account at First Bank holding $1,234.56, unless told otherwise. */
+export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>): Account {
+  return {
+    connectionId: 'conn-1',
+    institutionName: 'First Bank',
+    bankName: fields.name,
+    mask: '1234',
+    type: 'depository',
+    subtype: null,
+    balanceCents: 123456,
+    availableCents: null,
+    creditLimitCents: null,
+    currency: 'USD',
+    hidden: false,
+    manual: false,
+    balanceUpdatedAt: null,
+    aprPercent: null,
+    minimumPaymentCents: null,
     ...fields,
   }
 }
@@ -123,27 +177,36 @@ function LiveSettings({ server, children }: { server: Status; children: ReactNod
   )
 }
 
-/** Renders inside the same providers the app uses, signed in. */
+/**
+ * Renders inside the same providers the app uses, signed in. `status`
+ * overrides parts of the server status (bank keys, public address). Returns
+ * the render result plus the query client, for tests that look at the cache.
+ */
 export function renderSignedIn(
   ui: ReactNode,
   options: { settings?: Settings; route?: string; status?: Partial<Status> } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(['action', 'get_settings', {}], options.settings ?? settings)
-  return render(
+  client.setQueryData(SETTINGS_KEY, options.settings ?? settings)
+  const result = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[options.route ?? '/']}>
         <LiveSettings server={{ ...status, ...options.status }}>{ui}</LiveSettings>
       </MemoryRouter>
     </QueryClientProvider>,
   )
+  return { ...result, client }
 }
 
 /** A route on the fake server that answers with an error, as the real one does. */
-export function failing(message: string, httpStatus = 400) {
+export function failing(message: string, httpStatus = 400): () => Response {
   return () => Response.json({ error: 'invalid_input', message }, { status: httpStatus })
 }
 
+/** The same as failing; older tests use this name. */
+export const failure = failing
+
+/** Renders with a query client and router but no settings or sign-in, like the sign-in screens. */
 export function renderPlain(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -166,11 +229,6 @@ export function holdRequest(path: string): () => void {
     return reply(requested, init)
   })
   return release
-}
-
-/** A reply the real server gives when something fails, with its reason. */
-export function failure(message: string, status = 400): () => Response {
-  return () => Response.json({ error: 'bad_request', message }, { status })
 }
 
 /**

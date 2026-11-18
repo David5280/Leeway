@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Output } from '../api/client'
-import { budgetFor, category, failure, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
+import { budgetFor, category, failing, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
 import { Budgets } from './Budgets'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -143,7 +143,7 @@ describe('suggested budgets', () => {
   })
 
   it('says why a suggestion could not be applied, and lets the owner try again', async () => {
-    serve(undefined, { '/api/actions/update_category': failure('Budget is too large') })
+    serve(undefined, { '/api/actions/update_category': failing('Budget is too large') })
     renderSignedIn(<Budgets />)
     const user = userEvent.setup()
     const card = await openSuggestions(user)
@@ -169,7 +169,7 @@ describe('suggested budgets', () => {
   })
 
   it('says why suggestions could not load', async () => {
-    serve([], { '/api/actions/suggest_budgets': failure('No bank connected', 409) })
+    serve([], { '/api/actions/suggest_budgets': failing('No bank connected', 409) })
     renderSignedIn(<Budgets />)
     const card = await openSuggestions(userEvent.setup())
     expect(await within(card).findByRole('alert')).toHaveTextContent('No bank connected')

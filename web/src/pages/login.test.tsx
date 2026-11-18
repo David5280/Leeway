@@ -2,14 +2,14 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
-import { failure, fakeServer, holdRequest, renderPlain, settings, status } from '../test/fake'
+import { failing, fakeServer, holdRequest, renderPlain, settings, status } from '../test/fake'
 import { Login } from './Login'
 
 afterEach(() => vi.unstubAllGlobals())
 
 const owner = { email: 'owner@example.com', name: null, onboarded: false }
 const signedIn = () => Response.json({ owner })
-const signedOut = failure('Sign in', 401)
+const signedOut = failing('Sign in', 401)
 
 /** Fills in the sign-in form and sends it. */
 async function signIn(user: ReturnType<typeof userEvent.setup>, password = 'correct horse') {
@@ -52,7 +52,7 @@ describe('sign-in form', () => {
   })
 
   it('says why sign-in failed, and clears the reason on the next try', async () => {
-    let reply = failure('Wrong email or password', 401)
+    let reply = failing('Wrong email or password', 401)
     fakeServer({}, { '/api/auth/login': () => reply() })
     renderPlain(<Login />)
     const user = userEvent.setup()
@@ -123,7 +123,7 @@ describe('signing in to the app', () => {
   })
 
   it('says the server is not answering when it cannot be reached', async () => {
-    fakeServer({}, { '/api/status': failure('Bad gateway', 502) })
+    fakeServer({}, { '/api/status': failing('Bad gateway', 502) })
     renderPlain(<App />)
     expect(
       await screen.findByText("Leeway's server is not answering. Check that it is running."),

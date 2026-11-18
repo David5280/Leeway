@@ -6,7 +6,7 @@ import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { Route, Routes } from 'react-router-dom'
 import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '../api/client'
 import { Plan } from '../pages/Plan'
-import { fakeServer, renderSignedIn, type Handlers } from './fake'
+import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
 
 export const TODAY = '2026-11-17'
 
@@ -60,25 +60,9 @@ export function goal(fields: { name: string; targetCents: number } & Partial<Goa
   )
 }
 
+/** An account as the Plan screen tests expect: $2,500.00 unless told otherwise. */
 export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>): Account {
-  return {
-    connectionId: 'conn-1',
-    institutionName: 'First Bank',
-    bankName: fields.name,
-    mask: '1234',
-    type: 'depository',
-    subtype: null,
-    balanceCents: 250000,
-    availableCents: null,
-    creditLimitCents: null,
-    currency: 'USD',
-    hidden: false,
-    manual: false,
-    balanceUpdatedAt: null,
-    aprPercent: null,
-    minimumPaymentCents: null,
-    ...fields,
-  }
+  return baseAccount({ balanceCents: 250000, ...fields })
 }
 
 export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {

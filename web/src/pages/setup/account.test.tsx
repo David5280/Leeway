@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { failure, fakeServer, renderPlain, status } from '../../test/fake'
+import { failing, fakeServer, renderPlain, status } from '../../test/fake'
 import { Setup } from '../Setup'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -32,7 +32,7 @@ describe('creating the account', () => {
   })
 
   it('says why the account could not be made, and lets the owner try again', async () => {
-    fakeServer({}, { '/api/auth/setup': failure('This server already has an owner', 409) })
+    fakeServer({}, { '/api/auth/setup': failing('This server already has an owner', 409) })
     renderPlain(<Setup status={{ ...status, hasOwner: false }} />)
     await createAccount(userEvent.setup())
     expect(await screen.findByRole('alert')).toHaveTextContent('This server already has an owner')
