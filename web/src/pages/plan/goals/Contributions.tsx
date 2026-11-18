@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import type { Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
-import { ErrorNote, Loading } from '../../../components/ui'
+import { ErrorNote, LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
 
@@ -49,7 +49,7 @@ function HistoryList({ goal }: { goal: Goal }) {
   const { exact, settings } = useApp()
   const history = useAction('list_goal_contributions', { id: goal.id, limit: HISTORY_SIZE })
   if (!history.data) {
-    return history.error ? <ErrorNote error={history.error} /> : <Loading />
+    return <LoadingOrError error={history.error} />
   }
   if (history.data.length === 0) {
     return <p className="small muted">Nothing recorded yet. Amounts you add show up here.</p>

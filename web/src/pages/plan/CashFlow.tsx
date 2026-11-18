@@ -2,7 +2,7 @@
 
 import type { CashFlow } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { Card, ErrorNote, Loading } from '../../components/ui'
+import { Card, LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
 
@@ -44,7 +44,7 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
   const { money, exact, settings } = useApp()
   const cash = useAction('get_cash_flow')
   if (!cash.data) {
-    return cash.error ? <ErrorNote error={cash.error} /> : <Loading />
+    return <LoadingOrError error={cash.error} />
   }
   const flow = cash.data
   return (

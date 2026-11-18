@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, CashFlow } from '../../api/client'
-import { failure } from '../../test/fake'
+import { failing } from '../../test/fake'
 import { account, cashFlow, debtPlans, planServer, renderPlan } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -102,7 +102,7 @@ describe('Until payday', () => {
   })
 
   it('shows why it could not load', async () => {
-    planServer(quietBills, { '/api/actions/get_cash_flow': failure('No accounts yet', 500) })
+    planServer(quietBills, { '/api/actions/get_cash_flow': failing('No accounts yet', 500) })
     renderPlan('/plan')
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
   })
@@ -244,7 +244,7 @@ describe('Debts', () => {
   })
 
   it('shows why accounts could not load', async () => {
-    planServer(quietBills, { '/api/actions/list_accounts': failure('Database is down', 500) })
+    planServer(quietBills, { '/api/actions/list_accounts': failing('Database is down', 500) })
     renderPlan('/plan/debts')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
@@ -295,7 +295,7 @@ describe('Net worth', () => {
   })
 
   it('shows why it could not load', async () => {
-    planServer(quietBills, { '/api/actions/get_net_worth': failure('Database is down', 500) })
+    planServer(quietBills, { '/api/actions/get_net_worth': failing('Database is down', 500) })
     renderPlan('/plan/net-worth')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })

@@ -6,7 +6,7 @@ import type { Category } from '../api/client'
 import {
   budgetFor,
   category,
-  failure,
+  failing,
   fakeServer,
   holdRequest,
   renderSignedIn,
@@ -64,7 +64,7 @@ describe('budgets page', () => {
   })
 
   it('says why the budget could not load, without a loading note', async () => {
-    serve([groceries], {}, { '/api/actions/get_budget': failure('The database is down', 500) })
+    serve([groceries], {}, { '/api/actions/get_budget': failing('The database is down', 500) })
     renderBudgets()
     expect(await screen.findByRole('alert')).toHaveTextContent('The database is down')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -181,7 +181,7 @@ describe('adding a category', () => {
   })
 
   it('keeps the form open with the reason when the server refuses the category', async () => {
-    serve([groceries], {}, { '/api/actions/create_category': failure('That name is taken') })
+    serve([groceries], {}, { '/api/actions/create_category': failing('That name is taken') })
     renderBudgets()
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'New category' }))
@@ -283,7 +283,7 @@ describe('changing a budget in place', () => {
   })
 
   it('shows why a budget could not be saved, and clears it on Escape', async () => {
-    serve([groceries], {}, { '/api/actions/update_category': failure('Budget is too large') })
+    serve([groceries], {}, { '/api/actions/update_category': failing('Budget is too large') })
     renderBudgets()
     const user = userEvent.setup()
     const row = await groceriesRow()

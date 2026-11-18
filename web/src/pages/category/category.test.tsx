@@ -300,11 +300,11 @@ describe('Category page', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('shows why the budget could not load', async () => {
+  it('shows why the budget could not load, and stops loading', async () => {
     serve({}, { '/api/actions/get_budget': failing('Budget is unavailable', 500) })
     renderCategory()
     expect(await screen.findByRole('alert')).toHaveTextContent('Budget is unavailable')
-    expect(screen.getByRole('status')).toHaveTextContent('Loading')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('shows why categories could not load', async () => {

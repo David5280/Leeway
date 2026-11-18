@@ -4,7 +4,7 @@ import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useAction } from '../../api/hooks'
 import { LineChart } from '../../components/charts/LineChart'
-import { Card, ErrorNote, Loading, Segmented } from '../../components/ui'
+import { Card, LoadingOrError, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { shortDate } from '../../lib/format'
 
@@ -22,7 +22,7 @@ export function NetWorthSection() {
     { days: Number(range) },
     { placeholderData: keepPreviousData },
   )
-  if (!worth.data) return worth.error ? <ErrorNote error={worth.error} /> : <Loading />
+  if (!worth.data) return <LoadingOrError error={worth.error} />
   const { assetsCents, liabilitiesCents, netWorthCents, history } = worth.data
   const points = history.map((p) => ({ date: p.date, cents: p.netWorthCents }))
 

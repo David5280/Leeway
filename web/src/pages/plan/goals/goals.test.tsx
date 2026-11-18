@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Goal } from '../../../api/client'
-import { failure, type Handlers } from '../../../test/fake'
+import { failing, type Handlers } from '../../../test/fake'
 import { account, goal, planServer, renderPlan } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -183,7 +183,7 @@ describe('Goals', () => {
   })
 
   it('shows why money could not be added, or goals could not load', async () => {
-    serve([trip], {}, { '/api/actions/add_to_goal': failure('Use an amount other than zero') })
+    serve([trip], {}, { '/api/actions/add_to_goal': failing('Use an amount other than zero') })
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const add = within(await screen.findByRole('form', { name: 'Add to Trip' }))
@@ -193,13 +193,13 @@ describe('Goals', () => {
   })
 
   it('shows why goals could not load', async () => {
-    serve([], {}, { '/api/actions/list_goals': failure('Database is down', 500) })
+    serve([], {}, { '/api/actions/list_goals': failing('Database is down', 500) })
     renderPlan('/plan/goals')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 
   it('shows why goals could not load when the date is unavailable', async () => {
-    serve([trip], {}, { '/api/actions/get_cash_flow': failure('Cash flow is down', 500) })
+    serve([trip], {}, { '/api/actions/get_cash_flow': failing('Cash flow is down', 500) })
     renderPlan('/plan/goals')
     expect((await screen.findAllByText('Cash flow is down')).length).toBeGreaterThan(0)
   })
@@ -363,7 +363,7 @@ describe('Goal history', () => {
   })
 
   it('shows why the history could not load', async () => {
-    serve([trip], {}, { '/api/actions/list_goal_contributions': failure('History is down', 500) })
+    serve([trip], {}, { '/api/actions/list_goal_contributions': failing('History is down', 500) })
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const card = within(await screen.findByRole('region', { name: 'Trip' }))

@@ -6,7 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
 import { Shell } from '../components/Shell'
-import { Card, Dot, ErrorNote, Loading } from '../components/ui'
+import { Card, Dot, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
 import { groupNames } from '../lib/groups'
@@ -25,8 +25,7 @@ export function Budgets() {
   if (!budget.data || !categories.data) {
     return (
       <Shell>
-        <ErrorNote error={budget.error ?? categories.error} />
-        {!budget.error && !categories.error && <Loading />}
+        <LoadingOrError error={budget.error ?? categories.error} />
       </Shell>
     )
   }
