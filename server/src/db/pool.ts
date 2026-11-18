@@ -45,3 +45,34 @@ export async function withTransaction<T>(
     client.release()
   }
 }
+
+/** Anything that can be asked a question: the pool, or a stand-in in tests. */
+interface Queryable {
+  query(sql: string): Promise<unknown>
+}
+
+/**
+ * Waits until the database answers. On a fresh deploy the database often
+ * starts alongside the app, so the first connection can be refused for a few
+ * seconds; waiting here beats crashing and being restarted. Gives up with a
+ * plain message after `attempts` tries.
+ */
+export async function waitForDatabase(
+  db: Queryable,
+  { attempts = 30, delayMs = 1000 }: { attempts?: number; delayMs?: number } = {},
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await db.query('SELECT 1')
+      return
+    } catch (error) {
+      if (attempt >= attempts) {
+        throw new Error(
+          `Could not reach the database after ${attempts} tries (${(error as Error).message}). Check DATABASE_URL and that the database is running.`,
+          { cause: error },
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+}

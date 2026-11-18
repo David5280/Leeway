@@ -2,6 +2,14 @@
 
 import { z } from 'zod'
 
+// What to set, said the same way whether a value is missing or malformed, so a
+// fresh deploy that forgot one gets a sentence that says how to fix it.
+// Each is shown after the variable's name.
+const DATABASE_URL_HELP =
+  'set it to a Postgres connection string (on Railway, ${{Postgres.DATABASE_URL}})'
+const ENCRYPTION_KEY_HELP =
+  'set it to 64 hex characters (generate one with: openssl rand -hex 32), and keep a copy somewhere safe'
+
 /**
  * All configuration comes from environment variables, validated once at
  * startup so a missing or malformed value fails loudly with a clear message
@@ -11,13 +19,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required (a Postgres connection string)'),
+  DATABASE_URL: z.string({ error: DATABASE_URL_HELP }).min(1, DATABASE_URL_HELP),
   ENCRYPTION_KEY: z
-    .string()
-    .regex(
-      /^[0-9a-fA-F]{64}$/,
-      'ENCRYPTION_KEY must be 64 hex characters (generate one with: openssl rand -hex 32)',
-    ),
+    .string({ error: ENCRYPTION_KEY_HELP })
+    .regex(/^[0-9a-fA-F]{64}$/, ENCRYPTION_KEY_HELP),
   PUBLIC_URL: z.url().optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
   PLAID_CLIENT_ID: z.string().optional(),
@@ -105,6 +110,31 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
     anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,
   }
+}
+
+/**
+ * Settings that are allowed but probably not what the owner meant, as
+ * sentences for the server log. Leeway still starts; these only explain why
+ * an optional feature is off.
+ */
+export function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
+  const set = withoutBlanks(env)
+  const warnings: string[] = []
+  const plaidKeys = ['PLAID_CLIENT_ID', 'PLAID_SECRET'].filter((name) => set[name])
+  if (plaidKeys.length === 0) {
+    warnings.push(
+      'Bank sync is off: set PLAID_CLIENT_ID and PLAID_SECRET to turn it on. Accounts and transactions can still be added by hand or imported from a CSV file.',
+    )
+  } else if (plaidKeys.length === 1) {
+    const missing = plaidKeys[0] === 'PLAID_CLIENT_ID' ? 'PLAID_SECRET' : 'PLAID_CLIENT_ID'
+    warnings.push(`Bank sync is off: ${plaidKeys[0]} is set but ${missing} is not. Set both.`)
+  }
+  if (plaidKeys.length === 2 && !set.PUBLIC_URL && !set.RAILWAY_PUBLIC_DOMAIN) {
+    warnings.push(
+      'PUBLIC_URL is not set, so banks cannot send updates as they happen and are synced on a timer instead. Set it to the address you open Leeway at.',
+    )
+  }
+  return warnings
 }
 
 function isLocalDatabase(url: string): boolean {

@@ -2,10 +2,10 @@
 
 import { AnthropicSummaryWriter } from './ai/anthropic.js'
 import { PlaidProvider } from './bank/plaid.js'
-import { loadConfig } from './config.js'
+import { configWarnings, loadConfig } from './config.js'
 import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
-import { createPool } from './db/pool.js'
+import { createPool, waitForDatabase } from './db/pool.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
@@ -13,6 +13,8 @@ import { buildApp } from './http/app.js'
 
 const config = loadConfig()
 const db = createPool(config.databaseUrl, config.databaseSsl)
+await waitForDatabase(db)
+// The schema is created and kept current on every start, so a fresh deploy needs no extra step.
 await migrate(db)
 // One-time data upgrades run after the schema is current and before serving.
 await upgradeStarterSet(db)
@@ -52,6 +54,5 @@ process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
 await app.listen({ port: config.port, host: config.host })
-if (!ctx.bank) {
-  app.log.warn('Bank sync is off: set PLAID_CLIENT_ID and PLAID_SECRET to turn it on.')
-}
+// Optional settings left out are fine; say once what each one would turn on.
+for (const warning of configWarnings()) app.log.warn(warning)
