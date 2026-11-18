@@ -105,12 +105,13 @@ describe('HTTP API', () => {
 
     it('refuses them, whatever the browser calls the other site', async () => {
       const cookie = await signUp()
-      for (const headers of [
+      const fromElsewhere: Record<string, string>[] = [
         { 'sec-fetch-site': 'same-site' },
         { 'sec-fetch-site': 'cross-site' },
         { origin: 'https://evil.example.com' },
         { origin: 'null' },
-      ]) {
+      ]
+      for (const headers of fromElsewhere) {
         const response = await createCategory(cookie, headers)
         expect(response.statusCode).toBe(403)
         expect(response.json()).toMatchObject({
