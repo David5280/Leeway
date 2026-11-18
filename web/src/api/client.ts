@@ -95,7 +95,7 @@ export interface Owner {
 export const auth = {
   status: () => request<Status>('GET', '/api/status'),
   me: () => request<{ owner: Owner }>('GET', '/api/auth/me'),
-  setup: (input: { email: string; password: string; name?: string }) =>
+  setup: (input: { email: string; password: string; name?: string; setupCode: string }) =>
     request<{ owner: Owner }>('POST', '/api/auth/setup', input),
   login: (input: { email: string; password: string }) =>
     request<{ owner: Owner }>('POST', '/api/auth/login', input),

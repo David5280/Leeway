@@ -7,9 +7,11 @@ import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool } from './db/pool.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
+import { getOwner } from './domain/owner.js'
 import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { buildApp } from './http/app.js'
+import { generateSetupCode } from './lib/setupCode.js'
 
 const config = loadConfig()
 const db = createPool(config.databaseUrl, config.databaseSsl)
@@ -26,7 +28,11 @@ const ctx: AppContext = {
   now: () => new Date(),
 }
 
-const app = await buildApp(ctx, { logger: true })
+// Until the owner account exists, creating it takes this code, shown only to
+// whoever can read the server log, so a stranger who finds the address first
+// cannot claim the install.
+const setupCode = config.setupCode ?? generateSetupCode()
+const app = await buildApp(ctx, { logger: true, setupCode })
 
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
@@ -52,6 +58,13 @@ process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
 await app.listen({ port: config.port, host: config.host })
+if (!(await getOwner(db))) {
+  app.log.warn(
+    config.setupCode
+      ? 'No account yet. Open Leeway and enter your SETUP_CODE to create it.'
+      : `No account yet. Open Leeway and enter this setup code to create it: ${setupCode}`,
+  )
+}
 if (!ctx.bank) {
   app.log.warn('Bank sync is off: set PLAID_CLIENT_ID and PLAID_SECRET to turn it on.')
 }

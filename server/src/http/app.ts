@@ -13,6 +13,7 @@ import type { AppContext } from '../context.js'
 import { handleBankWebhook } from '../domain/connections.js'
 import { getOwner } from '../domain/owner.js'
 import { AppError } from '../errors.js'
+import { generateSetupCode } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
 import { registerAuthRoutes, sessionGuard } from './auth.js'
 import { registerMcpRoute } from './mcp.js'
@@ -44,6 +45,11 @@ export async function buildApp(
     loadClientDocument?: LoadClientDocument
     /** False turns off per-address rate limits, for tests that sign in many times a minute. */
     rateLimit?: boolean
+    /**
+     * The code that creates the owner account. Defaults to SETUP_CODE, or else
+     * a random code nobody knows, so setup is never open by accident.
+     */
+    setupCode?: string
   } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
@@ -95,7 +101,7 @@ export async function buildApp(
     }
   })
 
-  registerAuthRoutes(app, ctx)
+  registerAuthRoutes(app, ctx, options.setupCode ?? ctx.config.setupCode ?? generateSetupCode())
   const requireSession = sessionGuard(ctx)
 
   app.get('/api/actions', { preHandler: requireSession }, async () =>

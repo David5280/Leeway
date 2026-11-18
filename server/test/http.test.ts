@@ -6,7 +6,7 @@ import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -23,7 +23,11 @@ beforeEach(async () => {
   await resetData(ctx.db)
 })
 
-const owner = { email: 'me@example.com', password: 'correct horse battery' }
+const owner = {
+  email: 'me@example.com',
+  password: 'correct horse battery',
+  setupCode: TEST_SETUP_CODE,
+}
 
 async function signUp(): Promise<string> {
   const response = await app.inject({ method: 'POST', url: '/api/auth/setup', payload: owner })

@@ -2,6 +2,7 @@
 // Run with `npm run e2e` after `npm run build`. See CONTRIBUTING.md.
 
 import { defineConfig, devices } from '@playwright/test'
+import { SETUP_CODE } from './e2e/owner'
 
 // E2E_PORT lets a second checkout run its tests while another holds 3100.
 const PORT = Number(process.env.E2E_PORT ?? 3100)
@@ -47,6 +48,7 @@ export default defineConfig({
       // A fixed key is fine here: the database is wiped on every run.
       ENCRYPTION_KEY: 'e2e0'.repeat(16),
       SYNC_INTERVAL_MINUTES: '0',
+      SETUP_CODE,
     },
   },
 })

@@ -3,6 +3,7 @@ import { loadConfig } from '../src/config.js'
 import { decrypt, encrypt, hashToken, randomToken } from '../src/lib/crypto.js'
 import { formatCents, formatWholeCents, toCents, toCentsOrNull } from '../src/lib/money.js'
 import { hashPassword, verifyPassword } from '../src/lib/password.js'
+import { generateSetupCode, setupCodeMatches } from '../src/lib/setupCode.js'
 
 const key = Buffer.alloc(32, 7)
 
@@ -146,5 +147,26 @@ describe('money', () => {
     expect(formatWholeCents(8470)).toBe('$85')
     expect(formatWholeCents(-1_620_596)).toBe('-$16,206')
     expect(formatWholeCents(149, 'EUR', 'de-DE')).toBe('1\u00a0€')
+  })
+})
+
+describe('setup codes', () => {
+  it('makes readable, unambiguous codes that differ every time', () => {
+    const code = generateSetupCode()
+    expect(code).toMatch(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/)
+    expect(generateSetupCode()).not.toBe(code)
+  })
+
+  it('matches ignoring case, spaces and dashes, and nothing else', () => {
+    expect(setupCodeMatches('k7qm 2xra 9pvd', 'K7QM-2XRA-9PVD')).toBe(true)
+    expect(setupCodeMatches('K7QM-2XRA-9PVE', 'K7QM-2XRA-9PVD')).toBe(false)
+    expect(setupCodeMatches('', 'K7QM-2XRA-9PVD')).toBe(false)
+  })
+
+  it('only takes a configured code long enough to resist guessing', () => {
+    const base = { DATABASE_URL: 'postgres://u:p@localhost/db', ENCRYPTION_KEY: 'ab'.repeat(32) }
+    expect(loadConfig(base).setupCode).toBeNull()
+    expect(loadConfig({ ...base, SETUP_CODE: 'ABCD-EFGH-JKLM' }).setupCode).toBe('ABCD-EFGH-JKLM')
+    expect(() => loadConfig({ ...base, SETUP_CODE: 'ABCD-EFGH-JK' })).toThrow(/SETUP_CODE/)
   })
 })

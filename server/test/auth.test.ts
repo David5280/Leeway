@@ -5,7 +5,7 @@ import { ACCOUNT_LIMIT } from '../src/http/auth.js'
 import { getOwner } from '../src/domain/owner.js'
 import { buildApp } from '../src/http/app.js'
 import { MIN_PASSWORD_LENGTH } from '../src/lib/password.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 
 let ctx: AppContext & { setNow(date: Date): void }
 let app: FastifyInstance
@@ -26,7 +26,11 @@ afterEach(async () => {
   await app.close()
 })
 
-const owner = { email: 'me@example.com', password: 'correct horse battery' }
+const owner = {
+  email: 'me@example.com',
+  password: 'correct horse battery',
+  setupCode: TEST_SETUP_CODE,
+}
 
 /** The cookie header that carries the session a response just set. */
 function sessionCookie(response: LightMyRequestResponse): string {
@@ -49,8 +53,8 @@ async function signUp(): Promise<string> {
 describe('creating the owner', () => {
   it('stores the email in lower case and a blank name as no name', async () => {
     const created = await post('/api/auth/setup', {
+      ...owner,
       email: 'Me@Example.COM',
-      password: owner.password,
       name: '   ',
     })
     expect(created.json().owner).toEqual({ email: 'me@example.com', name: null, onboarded: false })
@@ -84,6 +88,71 @@ describe('creating the owner', () => {
     const response = await post('/api/auth/setup', { email: owner.email })
     expect(response.statusCode).toBe(400)
     expect(response.json().error).toBe('invalid_input')
+  })
+})
+
+describe('the setup code', () => {
+  const setUp = (setupCode?: string, address = '198.51.100.1') =>
+    app.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { email: owner.email, password: owner.password, setupCode },
+      headers: { 'x-forwarded-for': address },
+    })
+
+  it('refuses to create the owner without the code, and says where to find it', async () => {
+    const response = await setUp(undefined)
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Enter the setup code from the server log.',
+    })
+    expect(await getOwner(ctx.db)).toBeNull()
+  })
+
+  it('refuses a wrong code and creates nothing', async () => {
+    const response = await setUp('WRNG-CODE-HERE')
+    expect(response.statusCode).toBe(403)
+    expect(response.json().message).toBe(
+      'That setup code is not right. Copy it from the server log again.',
+    )
+    expect(await getOwner(ctx.db)).toBeNull()
+    expect(response.cookies).toHaveLength(0)
+  })
+
+  it('accepts the code in any case, with or without its dashes and spaces', async () => {
+    const response = await setUp(` ${TEST_SETUP_CODE.toLowerCase().replaceAll('-', ' ')} `)
+    expect(response.statusCode).toBe(200)
+  })
+
+  it('says the install is taken before looking at any code once the owner exists', async () => {
+    await signUp()
+    const response = await setUp('WRNG-CODE-HERE')
+    expect(response.statusCode).toBe(409)
+  })
+
+  it('pauses setup after many wrong codes from anywhere', async () => {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+      expect((await setUp('WRNG-CODE-HERE', `198.51.100.${i}`)).statusCode).toBe(403)
+    }
+    const paused = await setUp(TEST_SETUP_CODE, '198.51.100.200')
+    expect(paused.statusCode).toBe(429)
+    expect(paused.json().message).toBe(
+      'Too many wrong tries. Setup is paused for 15 minutes; try again then.',
+    )
+  })
+
+  it('takes a code given to the app over the one in the configuration', async () => {
+    await app.close()
+    app = await buildApp(ctx, { webDir: null, setupCode: 'ANOTHER-CODE-5678' })
+    expect((await setUp(TEST_SETUP_CODE)).statusCode).toBe(403)
+    expect((await setUp('another-code-5678')).statusCode).toBe(200)
+  })
+
+  it('makes up a code nobody knows when none is configured, so setup is never open', async () => {
+    await app.close()
+    app = await buildApp({ ...ctx, config: { ...ctx.config, setupCode: null } }, { webDir: null })
+    expect((await setUp(TEST_SETUP_CODE)).statusCode).toBe(403)
   })
 })
 
@@ -265,7 +334,7 @@ describe('pausing sign-in after many wrong passwords', () => {
     expect(paused.headers['retry-after']).toBe(String(ACCOUNT_LIMIT.windowMs / 1000))
     expect(paused.json()).toMatchObject({
       error: 'too_many_attempts',
-      message: 'Too many wrong passwords. Sign-in is paused for 15 minutes; try again then.',
+      message: 'Too many wrong tries. Sign-in is paused for 15 minutes; try again then.',
     })
     expect(paused.cookies).toHaveLength(0)
   })

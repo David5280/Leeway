@@ -15,6 +15,7 @@ import {
 } from '../domain/owner.js'
 import { AppError } from '../errors.js'
 import { AttemptLimiter } from '../lib/attemptLimiter.js'
+import { setupCodeMatches } from '../lib/setupCode.js'
 
 const SESSION_COOKIE = 'leeway_session'
 
@@ -43,6 +44,10 @@ const credentials = z.object({
   name: z.string().max(80).nullish(),
 })
 
+const newOwner = credentials.extend({
+  setupCode: z.string().max(100).optional(),
+})
+
 const passwordChange = z.object({ currentPassword: z.string(), newPassword: z.string().max(200) })
 
 /** A preHandler that lets a request through only with a live session cookie. */
@@ -55,9 +60,16 @@ export function sessionGuard(ctx: AppContext) {
   }
 }
 
-export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void {
+/**
+ * The sign-in routes. `setupCode` is the code that may create the owner
+ * account (see lib/setupCode.ts); until the account exists, nobody without it
+ * can claim this install, however early they find its address.
+ */
+export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setupCode: string): void {
   const requireSession = sessionGuard(ctx)
-  const wrongPasswords = new AttemptLimiter({ ...ACCOUNT_LIMIT, now: () => ctx.now().getTime() })
+  const clock = () => ctx.now().getTime()
+  const wrongPasswords = new AttemptLimiter({ ...ACCOUNT_LIMIT, now: clock })
+  const wrongSetupCodes = new AttemptLimiter({ ...ACCOUNT_LIMIT, now: clock })
 
   /**
    * Starts a fresh session for this browser. Any session it already had is
@@ -76,20 +88,37 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     })
   }
 
-  /** Refuses while too many wrong passwords have come in lately, before any is checked. */
-  const checkNotPaused = (reply: FastifyReply) => {
-    const waitMs = wrongPasswords.waitMs()
+  /**
+   * Refuses while too many wrong guesses have come in lately, before another
+   * is checked. `paused` names what stops, like "Sign-in".
+   */
+  const checkNotPaused = (limiter: AttemptLimiter, reply: FastifyReply, paused: string) => {
+    const waitMs = limiter.waitMs()
     if (waitMs === 0) return
     const minutes = Math.ceil(waitMs / 60_000)
+    const unit = minutes === 1 ? 'minute' : 'minutes'
     reply.header('Retry-After', Math.ceil(waitMs / 1000))
     throw new AppError(
       'too_many_attempts',
-      `Too many wrong passwords. Sign-in is paused for ${minutes} minute${minutes === 1 ? '' : 's'}; try again then.`,
+      `Too many wrong tries. ${paused} is paused for ${minutes} ${unit}; try again then.`,
     )
   }
 
   app.post('/api/auth/setup', PER_ADDRESS_LIMIT, async (request, reply) => {
-    const input = parseBody(credentials, request.body)
+    const input = parseBody(newOwner, request.body)
+    if (await getOwner(ctx.db)) {
+      throw new AppError('conflict', 'This Leeway already has an owner; sign in instead')
+    }
+    checkNotPaused(wrongSetupCodes, reply, 'Setup')
+    if (!input.setupCode || !setupCodeMatches(input.setupCode, setupCode)) {
+      if (input.setupCode) wrongSetupCodes.recordFailure()
+      throw new AppError(
+        'forbidden',
+        input.setupCode
+          ? 'That setup code is not right. Copy it from the server log again.'
+          : 'Enter the setup code from the server log.',
+      )
+    }
     const owner = await createOwner(ctx.db, input)
     await startSession(request, reply)
     return { owner }
@@ -97,7 +126,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
 
   app.post('/api/auth/login', PER_ADDRESS_LIMIT, async (request, reply) => {
     const { email, password } = parseBody(credentials, request.body)
-    checkNotPaused(reply)
+    checkNotPaused(wrongPasswords, reply, 'Sign-in')
     if (!(await checkLogin(ctx.db, email, password))) {
       wrongPasswords.recordFailure()
       throw new AppError('unauthorized', 'That email and password do not match')
@@ -123,7 +152,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     async (request, reply) => {
       const { currentPassword, newPassword } = parseBody(passwordChange, request.body)
       // A stolen session must not become a way to guess the password either.
-      checkNotPaused(reply)
+      checkNotPaused(wrongPasswords, reply, 'Sign-in')
       try {
         await changePassword(ctx.db, currentPassword, newPassword)
       } catch (error) {

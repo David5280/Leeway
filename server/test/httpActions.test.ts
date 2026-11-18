@@ -8,7 +8,7 @@ import type { AppContext } from '../src/context.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp, VERSION } from '../src/http/app.js'
 import { FakeBank } from './fakeBank.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 import { UNEXPECTED_TOOL_ERROR } from '../src/mcp/server.js'
 
 let ctx: AppContext
@@ -29,7 +29,11 @@ beforeEach(async () => {
   const setup = await app.inject({
     method: 'POST',
     url: '/api/auth/setup',
-    payload: { email: 'me@example.com', password: 'correct horse battery' },
+    payload: {
+      email: 'me@example.com',
+      password: 'correct horse battery',
+      setupCode: TEST_SETUP_CODE,
+    },
   })
   cookie = `leeway_session=${setup.cookies[0]?.value}`
 })

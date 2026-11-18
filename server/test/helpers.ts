@@ -11,6 +11,9 @@ export const TEST_DATABASE_URL =
 
 export const TEST_KEY_HEX = 'ab'.repeat(32)
 
+/** The setup code every test app accepts for creating the owner account. */
+export const TEST_SETUP_CODE = 'TEST-SETUP-CODE-1234'
+
 /**
  * A context backed by a real, freshly migrated Postgres database. Tests run
  * against real SQL because most bugs in an app like this live in queries.
@@ -31,6 +34,7 @@ export async function createTestContext(
     config: loadConfig({
       DATABASE_URL: TEST_DATABASE_URL,
       ENCRYPTION_KEY: TEST_KEY_HEX,
+      SETUP_CODE: TEST_SETUP_CODE,
       NODE_ENV: 'test',
     }),
     bank: options.bank ?? null,

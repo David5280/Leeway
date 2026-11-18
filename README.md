@@ -44,7 +44,10 @@ and connect banks later.
      makes one). Keep a copy somewhere safe.
    - `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV` if you have Plaid keys.
 4. Under **Settings**, then **Networking**, click **Generate Domain**.
-5. Open that address and follow the setup screens.
+5. Open that address and follow the setup screens. The first one asks for a
+   setup code, so nobody who finds your address first can claim it: open the
+   service's **Deploy Logs** and copy the code from the line that starts
+   `No account yet`.
 
 ### Option 2: Docker on your own machine
 
@@ -55,7 +58,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Then open http://localhost:3000. The database lives in a Docker volume, so it
+Then open http://localhost:3000. The setup screen asks for a code that Leeway
+prints in its log; `docker compose logs leeway` shows it. The database lives in a Docker volume, so it
 survives restarts and upgrades. To upgrade, pull the latest code and run
 `docker compose up -d --build`.
 
@@ -70,25 +74,28 @@ npm run build
 npm start
 ```
 
+The setup screen asks for the code Leeway prints when it starts.
+
 ## Settings
 
 Everything is configured with environment variables. `.env.example` lists them
 all with notes.
 
-| Variable                | Needed   | What it does                                                |
-| ----------------------- | -------- | ----------------------------------------------------------- |
-| `DATABASE_URL`          | Yes      | Postgres connection string                                  |
-| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest      |
-| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants       |
-| `TRUST_PROXY`           | No       | Proxies in front of Leeway (see below); usually leave empty |
-| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                    |
-| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                    |
-| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`         |
-| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`                 |
-| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site    |
-| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off     |
-| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)         |
-| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5` |
+| Variable                | Needed   | What it does                                                 |
+| ----------------------- | -------- | ------------------------------------------------------------ |
+| `DATABASE_URL`          | Yes      | Postgres connection string                                   |
+| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest       |
+| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants        |
+| `TRUST_PROXY`           | No       | Proxies in front of Leeway (see below); usually leave empty  |
+| `SETUP_CODE`            | No       | Your own code for creating the account, instead of the log's |
+| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                     |
+| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                     |
+| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`          |
+| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`                  |
+| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site     |
+| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off      |
+| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)          |
+| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5`  |
 
 On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 

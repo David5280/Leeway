@@ -9,6 +9,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('creating the account', () => {
   /** Fills in the first step and sends it. */
   async function createAccount(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('Setup code'), 'K7QM-2XRA-9PVD')
     await user.type(screen.getByLabelText('Name'), '  Dana Reyes  ')
     await user.type(screen.getByLabelText('Email'), 'dana@example.com')
     await user.type(screen.getByLabelText(/Password/), 'long enough password')
@@ -27,7 +28,16 @@ describe('creating the account', () => {
         email: 'dana@example.com',
         password: 'long enough password',
         name: 'Dana Reyes',
+        setupCode: 'K7QM-2XRA-9PVD',
       }),
+    )
+  })
+
+  it('says where to find the setup code', () => {
+    fakeServer({})
+    renderPlain(<Setup status={{ ...status, hasOwner: false }} />)
+    expect(screen.getByLabelText('Setup code')).toHaveAccessibleDescription(
+      /printed it in its server log/,
     )
   })
 

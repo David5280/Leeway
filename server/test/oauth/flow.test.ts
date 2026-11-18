@@ -8,7 +8,7 @@ import { createToken } from '../../src/domain/tokens.js'
 import { buildApp } from '../../src/http/app.js'
 import type { ClientIdentity } from '../../src/oauth/clientDocument.js'
 import { OAuthError } from '../../src/oauth/errors.js'
-import { createTestContext, resetData } from '../helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from '../helpers.js'
 
 const CLAUDE = 'https://claude.ai/oauth/claude-code-client-metadata'
 const CLAUDE_WEB_CALLBACK = 'https://claude.ai/api/mcp/auth_callback'
@@ -45,7 +45,11 @@ beforeEach(async () => {
   const setup = await app.inject({
     method: 'POST',
     url: '/api/auth/setup',
-    payload: { email: 'me@example.com', password: 'correct horse battery' },
+    payload: {
+      email: 'me@example.com',
+      password: 'correct horse battery',
+      setupCode: TEST_SETUP_CODE,
+    },
   })
   cookie = `leeway_session=${setup.cookies[0]!.value}`
 })

@@ -35,6 +35,7 @@ describe('app shell', () => {
     renderPlain(<App />)
     expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
     const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Setup code'), 'K7QM-2XRA-9PVD')
     await user.type(screen.getByLabelText('Email'), 'a@b.co')
     await user.type(screen.getByLabelText(/Password/), 'long enough password')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
@@ -42,6 +43,7 @@ describe('app shell', () => {
       expect(server.calls.find((c) => c.path === '/api/auth/setup')?.body).toEqual({
         email: 'a@b.co',
         password: 'long enough password',
+        setupCode: 'K7QM-2XRA-9PVD',
       }),
     )
   })

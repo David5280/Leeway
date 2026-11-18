@@ -20,6 +20,14 @@ const envSchema = z.object({
       'ENCRYPTION_KEY must be 64 hex characters (generate one with: openssl rand -hex 32)',
     ),
   PUBLIC_URL: z.url().optional(),
+  // Spaces and dashes are ignored when the code is typed, so they do not count here.
+  SETUP_CODE: z
+    .string()
+    .refine(
+      (code) => code.replace(/[\s-]/g, '').length >= 12,
+      'SETUP_CODE needs 12 characters or more',
+    )
+    .optional(),
   TRUST_PROXY: z.coerce
     .number()
     .int()
@@ -61,6 +69,8 @@ export interface Config {
   encryptionKey: Buffer
   /** Public base URL without a trailing slash, used for webhooks and MCP links. */
   publicUrl: string | null
+  /** The code that creates the owner account; null means a random one each start. */
+  setupCode: string | null
   /** Which proxies to believe about the client's address and protocol (see proxyTrust.ts). */
   trustProxy: ProxyTrust
   /** Null until both Plaid keys are set; the app still runs and explains what to add. */
@@ -109,6 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // Docker database does not. Default to TLS only for non-local hosts.
     databaseSsl: e.DATABASE_SSL ? e.DATABASE_SSL === 'true' : !isLocalDatabase(e.DATABASE_URL),
     encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'hex'),
+    setupCode: e.SETUP_CODE ?? null,
     publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
     // Railway reaches the app only through its own edge proxy, one hop that
     // may connect from any address. Elsewhere, trust a proxy on a private network.
