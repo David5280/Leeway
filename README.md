@@ -63,7 +63,7 @@ finishes:
 2. Copy `ENCRYPTION_KEY` from the service's **Variables** and keep it somewhere
    safe. Without it, connected banks have to be linked again.
 3. For bank sync, fill in `PLAID_CLIENT_ID` and `PLAID_SECRET` there too (see
-   [Plaid keys](#plaid-keys)). Until then, add accounts by hand or import your
+   [Bank sync](#bank-sync-plaid)). Until then, add accounts by hand or import your
    bank's CSV export.
 
 If a required variable is missing, the deploy log says which one and how to
@@ -127,9 +127,9 @@ docker compose up -d
 ```
 
 Then open http://localhost:3000. The setup screen asks for a code that Leeway
-prints in its log; `docker compose logs leeway` shows it. The database lives in a Docker volume, so it
-survives restarts and upgrades. To upgrade, pull the latest code and run
-`docker compose up -d --build`.
+prints in its log; `docker compose logs leeway` shows it. The database lives
+in a Docker volume, so it survives restarts and upgrades. To upgrade, pull the
+latest code and run `docker compose up -d --build`.
 
 ### Option 3: From source
 
@@ -144,10 +144,10 @@ npm start
 
 The setup screen asks for the code Leeway prints when it starts.
 
-## Settings
+## Server settings
 
-Everything is configured with environment variables. `.env.example` lists them
-all with notes.
+The server is configured with environment variables; everything else is
+chosen in the app, under **Customize**. `.env.example` lists them with notes.
 
 | Variable                | Needed   | What it does                                                 |
 | ----------------------- | -------- | ------------------------------------------------------------ |
@@ -166,10 +166,13 @@ all with notes.
 | `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5`  |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email (see below)                |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <me@example.com>`    |
+| `DATABASE_SSL`          | No       | `true` or `false`; by default TLS for any non-local database |
+| `PORT`                  | No       | The port Leeway listens on, default 3000                     |
+| `HOST`                  | No       | The address Leeway listens on, default `0.0.0.0`             |
 
 On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 
-### Plaid keys
+### Bank sync (Plaid)
 
 Create a free account at [Plaid](https://dashboard.plaid.com), then copy the
 client ID and secret from **Developers**, then **Keys**. Start with
@@ -270,7 +273,7 @@ fails, Leeway tries again an hour later, a few times, and Customize shows the
 last error. The email's button needs Leeway's address, which Railway fills in;
 elsewhere, set `PUBLIC_URL`.
 
-## Keeping your data safe
+## Backups and recovery
 
 - Bank access tokens are encrypted with your `ENCRYPTION_KEY`. Lose or change
   the key and each bank shows that it needs linking again: remove it in

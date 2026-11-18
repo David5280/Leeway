@@ -5,11 +5,10 @@ change, however small, meets the standards below before it is merged.
 
 ## Code standards
 
-**Organized and modular.** One responsibility per module. Domain logic lives
-in `server/src/domain`, actions (the API an app or agent calls) in
-`server/src/actions`, screens in `web/src/pages`, shared pieces in
-`web/src/components`. Keep files under 300 lines and functions small enough
-to read in one sitting; split by responsibility before either grows.
+**Organized and modular.** One responsibility per module, in the layer it
+belongs to (see How the code is organized below). Keep files under 300 lines
+and functions small enough to read in one sitting; split by responsibility
+before either grows.
 
 **Readable first.** Name things for what they mean (`safePerDayCents`, not
 `spd`). Prefer plain control flow over clever one-liners. No nested ternaries.
@@ -32,6 +31,106 @@ only ever go up.
 **Professional throughout.** Strict TypeScript with no `any`. Errors reach
 the person as plain sentences that say what to do next. Money is integer
 cents; dates are `YYYY-MM-DD` strings. Nothing ever moves money.
+
+## How the code is organized
+
+Leeway is two npm workspaces, `server` and `web`, plus browser tests in
+`e2e/`. The web app imports the server's action definitions for its types,
+and a few pure server modules (dates, period words, the import's duplicate
+check) for their code, so both sides always agree.
+
+### How a request flows
+
+Everything a person or an assistant can do is an **action**, defined once
+with `defineAction` in `server/src/actions/`. Each action has a name, a zod
+input schema, a scope (`read` or `write`), a surface (`all`, or `app` for
+the owner's eyes only) and a `run` function. The list in
+`actions/index.ts` is the whole API.
+
+```
+web app:   POST /api/actions/:name   http/actions.ts, signed-in session
+assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
+  -> runAction                       actions/action.ts, checks the input schema
+  -> action.run                      actions/*.ts
+  -> domain functions                domain/*.ts
+  -> Postgres                        db/pool.ts
+```
+
+- **HTTP** (`server/src/http/`) only checks who is asking and turns errors
+  into JSON: sign-in (`auth.ts`), the action API (`actions.ts`), MCP
+  (`mcp.ts`), OAuth (`oauth.ts`), bank webhooks (`webhooks.ts`), security
+  headers, rate limits and cross-site checks. `app.ts` puts them in order.
+- **Actions** (`server/src/actions/`) are thin: pick the inputs, call the
+  domain, shape the answer. Actions that need today's date use
+  `actions/today.ts`.
+- **Domain** (`server/src/domain/`) holds the business rules. Pure logic
+  (budget math, duplicate checks, the email's wording) sits in its own files,
+  free of I/O, next to the files that query Postgres with `pg`. The weekly
+  email has its own folder: what it says, how it looks, when it is due and
+  what is stored.
+- **Lib** (`server/src/lib/`) is small, pure helpers with no knowledge of
+  budgets: dates, time zones, money, periods, durations, schemas, crypto.
+- **Outside services** each sit behind an interface so tests use a fake:
+  banks in `bank/` (Plaid), the summary writer in `ai/` (Anthropic), email
+  in `mail/` (Resend). `context.ts` hands them to every action, as `null`
+  when not configured.
+- **Errors** meant for the caller are `AppError`s (`errors.ts`) with a code
+  and a plain sentence that says what to do next. Anything else is a bug: it
+  is logged and the caller gets a generic message.
+
+### The web app
+
+- `web/src/api/`: the only way to the server. `client.ts` calls actions by
+  name, typed from the server's own definitions; `hooks.ts` wraps them in
+  React Query (`useAction` to read, `useActionMutation` to change, which
+  refreshes every read); `settings.ts` saves settings with a live preview.
+- `web/src/pages/`: one file per screen (`Overview.tsx`, `Budgets.tsx`, ...),
+  with the screen's own parts in a folder of the same name (`pages/plan/`,
+  `pages/import/`, ...).
+- `web/src/widgets/`: the dashboard's widgets; `library.ts` lists them.
+- `web/src/components/`: pieces shared by several screens. `ui.tsx` has the
+  small ones (`Card`, `Switch`, `ErrorNote`, `LoadingOrError`); `charts/`
+  draws every chart as plain SVG; `rules/` is the rule builder.
+- `web/src/lib/`: logic without React where it can be: formatting, dates,
+  themes, chart scales, and `csv/` for reading an import file.
+  `lib/app.tsx` provides the settings and money formatters to every screen
+  through `useApp()`, so screens never pass them down as props.
+
+### Adding things
+
+- **An action:** write it with `defineAction` in the matching file in
+  `server/src/actions/`, put its logic in `server/src/domain/`, and add it to
+  `actionList`. It is then in the web API and, with surface `all`, an MCP
+  tool. Keep an action's name and input and output shapes stable once
+  shipped (assistants rely on them); only add to them. Use surface `app` for
+  anything that sends the owner's data somewhere or decides where it goes,
+  like the AI summary switch and the weekly email.
+- **A setting:** add the field with a default to `settingsSchema` in
+  `domain/settings.ts` and to `settingsPatchSchema` so `update_settings`
+  takes it. A setting only the owner may change stays out of the patch
+  schema and gets its own app-only action, as `aiSummary` does.
+- **A dashboard widget:** add its type to `WIDGETS` in `domain/settings.ts`,
+  draw it in `web/src/widgets/`, and list it in `widgets/library.ts`.
+- **A database change:** add a new file to `server/migrations` numbered after
+  the highest one, like `011_something.sql`. Migrations run in filename
+  order when the server starts, each once, and installs record them by file
+  name, so never rename or edit one that has shipped (that is also why two
+  share the number 006 and there is no 008).
+
+### Tests
+
+- `server/test/`: one file per area (`budget.test.ts`, `imports.test.ts`,
+  ...), against a real Postgres database. `helpers.ts` makes a test context
+  and inserts bank data, `actionCaller.ts` calls actions the way the app and
+  MCP do, `fakeBank.ts` stands in for Plaid, and `fixtures/` holds shared
+  data. HTTP tests build the app with `buildApp` and send it requests.
+- `web/src/`: tests sit next to what they test. `test/fake.tsx` answers
+  actions from a fake server and renders a screen signed in; tests find
+  things by role and label, as a person would.
+- `e2e/`: Playwright, against a real build and database (see below).
+- Name tests as sentences about behavior ("refuses a rule whose minimum is
+  above its maximum"), and control time through the context's clock
+  (`ctx.setNow`) rather than waiting on real timers.
 
 ## Before you commit
 
@@ -85,12 +184,6 @@ screenshot and a trace in `test-results/`.
 
 CI (`.github/workflows/ci.yml`) runs `npm run check`, a production build, the
 browser tests and the Docker image build on every push and pull request.
-
-## Database changes
-
-Add a new numbered file to `server/migrations`, like `004_something.sql`.
-Never edit a migration that has shipped: installs that already ran it will
-not run it again. Migrations run automatically when the server starts.
 
 ## The Railway template
 
