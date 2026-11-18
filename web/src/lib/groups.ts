@@ -1,4 +1,4 @@
-/** Category groups: the headings a long list of categories is shown under. */
+// Category groups: the headings a long list of categories is shown under.
 
 export interface Grouped<T> {
   /** The heading, or null for items without a group. */
@@ -15,7 +15,9 @@ export function groupBy<T>(items: T[], groupOf: (item: T) => string | null): Gro
   const groups = new Map<string | null, T[]>()
   for (const item of items) {
     const group = groupOf(item)
-    groups.set(group, [...(groups.get(group) ?? []), item])
+    const list = groups.get(group)
+    if (list) list.push(item)
+    else groups.set(group, [item])
   }
   const grouped = [...groups].map(([group, list]) => ({ group, items: list }))
   return [...grouped.filter((g) => g.group !== null), ...grouped.filter((g) => g.group === null)]

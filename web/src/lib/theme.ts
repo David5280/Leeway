@@ -1,9 +1,8 @@
+// Themes are sets of color tokens. Every theme has a light and a dark set;
+// the rest of the look (accent, font, corners, density) layers on top.
+
 import type { Settings } from '../api/client'
 
-/**
- * Themes are sets of color tokens. Every theme has a light and a dark set;
- * the rest of the look (accent, font, corners, density) layers on top.
- */
 export type Appearance = Settings['appearance']
 export type ThemeId = Appearance['theme']
 type Mode = 'light' | 'dark'

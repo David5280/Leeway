@@ -1,4 +1,4 @@
-/** How a transaction reads in a list: its title, what kind of move it is, and its tone. */
+// How a transaction reads in a list: its title, what kind of move it is, and its tone.
 
 import type { Category, Transaction } from '../api/client'
 

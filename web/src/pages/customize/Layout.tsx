@@ -31,18 +31,17 @@ export function LayoutSection() {
       </p>
       {widgets.map((widget) => {
         const index = all.indexOf(widget)
+        const name = WIDGET_LIBRARY[widget.type]!.name
         return (
           <div key={widget.type} className="list-row wrap">
             <Switch
-              label={`Show ${WIDGET_LIBRARY[widget.type]!.name}`}
+              label={`Show ${name}`}
               checked={widget.visible}
               onChange={(visible) => saveWidgets(changeWidget(all, widget.type, { visible }))}
             />
-            <span className={widget.visible ? 'grow' : 'grow muted'}>
-              {WIDGET_LIBRARY[widget.type]!.name}
-            </span>
+            <span className={widget.visible ? 'grow' : 'grow muted'}>{name}</span>
             <Segmented
-              label={`${WIDGET_LIBRARY[widget.type]!.name} size`}
+              label={`${name} size`}
               value={widget.size}
               options={SIZES}
               onChange={(size) => saveWidgets(changeWidget(all, widget.type, { size }))}
@@ -50,7 +49,7 @@ export function LayoutSection() {
             <button
               type="button"
               className="iconbtn"
-              aria-label={`Move ${WIDGET_LIBRARY[widget.type]!.name} up`}
+              aria-label={`Move ${name} up`}
               disabled={!canMove(all, index, -1)}
               onClick={() => saveWidgets(moveWidget(all, index, -1))}
             >
@@ -59,7 +58,7 @@ export function LayoutSection() {
             <button
               type="button"
               className="iconbtn"
-              aria-label={`Move ${WIDGET_LIBRARY[widget.type]!.name} down`}
+              aria-label={`Move ${name} down`}
               disabled={!canMove(all, index, 1)}
               onClick={() => saveWidgets(moveWidget(all, index, 1))}
             >
