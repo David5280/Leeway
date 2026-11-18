@@ -291,6 +291,39 @@ describe('serving the web app', () => {
     expect(response.body).toContain('<title>Leeway</title>')
   })
 
+  it('serves pages under a policy that runs only its own scripts and Plaid Link', async () => {
+    const response = await site.inject({ url: '/budget/categories' })
+    const policy = response.headers['content-security-policy']
+    expect(policy).toBe(
+      [
+        "default-src 'self'",
+        "script-src 'self' https://cdn.plaid.com",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://*.plaid.com",
+        'frame-src https://cdn.plaid.com',
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "worker-src 'self'",
+        "manifest-src 'self'",
+      ].join(';'),
+    )
+    expect(response.headers).toMatchObject({
+      'x-frame-options': 'DENY',
+      'x-content-type-options': 'nosniff',
+      'strict-transport-security': 'max-age=31536000',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'cross-origin-opener-policy': 'same-origin-allow-popups',
+      'permissions-policy': expect.stringContaining('camera=()'),
+    })
+    // Pages may be cached (they hold no data); answers from the API may not.
+    expect(response.headers['cache-control']).not.toBe('no-store')
+    expect((await site.inject({ url: '/api/status' })).headers['cache-control']).toBe('no-store')
+  })
+
   it('keeps unknown API paths and non-GET requests as JSON 404s', async () => {
     for (const request of [
       { method: 'GET' as const, url: '/api/nope' },

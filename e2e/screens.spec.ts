@@ -1,6 +1,7 @@
 // Every screen loads cleanly: no script errors, no failed API calls, and
 // nothing fetched from another server (fonts included), since Leeway is
-// meant to keep everything on the owner's own server.
+// meant to keep everything on the owner's own server. Nothing the page does
+// may break its Content Security Policy either.
 
 import { expect, test } from '@playwright/test'
 
@@ -19,6 +20,12 @@ for (const { path, heading } of SCREENS) {
   test(`${path} loads cleanly`, async ({ page, baseURL }) => {
     const problems: string[] = []
     page.on('pageerror', (error) => problems.push(`script error: ${error.message}`))
+    // The browser reports a blocked script, style or request as a console error.
+    page.on('console', (message) => {
+      if (message.type() === 'error' && message.text().includes('Content Security Policy')) {
+        problems.push(`blocked by the policy: ${message.text()}`)
+      }
+    })
     page.on('request', (request) => {
       if (!request.url().startsWith(baseURL!) && !request.url().startsWith('data:')) {
         problems.push(`outside request: ${request.url()}`)

@@ -18,6 +18,7 @@ import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/cl
 import { registerAuthRoutes, sessionGuard } from './auth.js'
 import { registerMcpRoute } from './mcp.js'
 import { proxyTrustFunction } from './proxyTrust.js'
+import { registerSecurityHeaders } from './securityHeaders.js'
 import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 
 export const VERSION = '0.1.0'
@@ -65,12 +66,7 @@ export async function buildApp(
     ...(options.rateLimit === false ? { allowList: () => true } : {}),
   })
 
-  // No other site may show Leeway in a frame, so the consent screen cannot be
-  // overlaid and clicked through (clickjacking).
-  app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-Frame-Options', 'DENY')
-    reply.header('Content-Security-Policy', "frame-ancestors 'none'")
-  })
+  await registerSecurityHeaders(app)
 
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     if (error instanceof AppError) {

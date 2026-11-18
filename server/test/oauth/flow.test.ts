@@ -200,7 +200,7 @@ describe('discovery', () => {
   it('keeps every page out of other sites frames', async () => {
     const response = await app.inject('/api/status')
     expect(response.headers['x-frame-options']).toBe('DENY')
-    expect(response.headers['content-security-policy']).toBe("frame-ancestors 'none'")
+    expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'")
   })
 })
 
