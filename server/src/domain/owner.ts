@@ -3,7 +3,8 @@
 import type { Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { hashToken, randomToken } from '../lib/crypto.js'
-import { hashPassword, MIN_PASSWORD_LENGTH, needsRehash, verifyPassword } from '../lib/password.js'
+import { hashPassword, needsRehash, verifyPassword } from '../lib/password.js'
+import { passwordProblem } from '../lib/passwordRules.js'
 
 /** The one person this install belongs to. */
 export interface Owner {
@@ -23,12 +24,8 @@ export async function getOwner(db: Db): Promise<Owner | null> {
 }
 
 function checkPassword(password: string): void {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    throw new AppError(
-      'invalid_input',
-      `Use a password of at least ${MIN_PASSWORD_LENGTH} characters`,
-    )
-  }
+  const problem = passwordProblem(password)
+  if (problem) throw new AppError('invalid_input', problem)
 }
 
 /** Creates the owner account. Only works once, on a fresh install. */

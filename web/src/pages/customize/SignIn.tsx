@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
+import { MIN_PASSWORD_LENGTH } from '../../../../server/src/lib/passwordRules'
 import { auth } from '../../api/client'
 import { ErrorNote } from '../../components/ui'
 import { Section } from './Section'
@@ -57,9 +58,9 @@ export function SignInSection() {
           className="input"
           type="password"
           autoComplete="new-password"
-          placeholder="New password, 10 or more characters"
+          placeholder={`New password, ${MIN_PASSWORD_LENGTH} or more characters`}
           aria-label="New password"
-          minLength={10}
+          minLength={MIN_PASSWORD_LENGTH}
           required
           value={next}
           onChange={(e) => setNext(e.target.value)}

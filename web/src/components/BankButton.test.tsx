@@ -1,12 +1,12 @@
 // The bank button: opening Plaid, linking or repairing a login, and saying
 // what went wrong; and the note shown when the server has no bank keys.
 
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PlaidLinkOnExitMetadata, PlaidLinkOptions } from 'react-plaid-link'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
-import { BankButton, BankKeysMissing } from './BankButton'
+import { BankButton } from './BankButton'
 
 // Plaid's window is a third-party script; the fake hands back whatever the button gave it.
 const plaid = vi.hoisted(() => ({ open: vi.fn(), options: null as PlaidLinkOptions | null }))
@@ -195,12 +195,5 @@ describe('BankButton', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The bank did not answer.')
     expect(onDone).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Connect a bank' })).toBeEnabled()
-  })
-
-  it('explains which keys to set when the server has none', () => {
-    render(<BankKeysMissing />)
-    expect(screen.getByText('Bank sync is not set up on this server yet.')).toBeInTheDocument()
-    expect(screen.getByText('PLAID_CLIENT_ID')).toBeInTheDocument()
-    expect(screen.getByText('PLAID_SECRET')).toBeInTheDocument()
   })
 })

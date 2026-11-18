@@ -1,5 +1,7 @@
 // The Customize screen: every setting, one section each, all saving live.
 
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useSettingsSaveError } from '../api/settings'
 import { Shell } from '../components/Shell'
 import { ErrorNote } from '../components/ui'
@@ -28,8 +30,17 @@ const SECTIONS = [
   ['account', 'Sign-in'],
 ] as const
 
+/** Scrolls to the section a link named, like /customize#accounts from setup's last step. */
+function useScrollToSection() {
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
+  }, [hash])
+}
+
 export function Customize() {
   const saveError = useSettingsSaveError()
+  useScrollToSection()
   return (
     <Shell>
       <div>

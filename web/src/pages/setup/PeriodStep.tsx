@@ -1,4 +1,4 @@
-// Step 2: how budgets reset, the time zone, and when to warn.
+// Step 3: how budgets reset, the time zone, and when to warn.
 
 import { useState, type FormEvent } from 'react'
 import { useUpdateSettings } from '../../api/settings'
@@ -24,11 +24,15 @@ export function PeriodStep({ onNext }: { onNext: () => void }) {
   }
 
   return (
-    <Frame step={2}>
+    <Frame step={3}>
       <form className="stack" onSubmit={submit}>
         <h1>How do you budget?</h1>
+        <p className="muted">
+          Budgets start fresh at the start of each period. Monthly suits most people; pick Every
+          paycheck to plan from one payday to the next.
+        </p>
         <PeriodEditor value={period} onChange={setPeriod} />
-        <Setting label="Time zone">
+        <Setting label="Time zone" hint="So your days start and end at your midnight">
           <select
             className="input"
             aria-label="Time zone"
@@ -42,7 +46,7 @@ export function PeriodStep({ onNext }: { onNext: () => void }) {
             ))}
           </select>
         </Setting>
-        <Setting label="Warn me at" hint="Share of a budget used">
+        <Setting label="Warn me at" hint="How much of a budget is used before Leeway warns you">
           <div className="row">
             <PercentInput
               label="Warn me at percent"

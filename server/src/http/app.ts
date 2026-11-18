@@ -10,7 +10,7 @@ import fastifyStatic from '@fastify/static'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { AppContext } from '../context.js'
 import { getOwner } from '../domain/owner.js'
-import { generateSetupCode } from '../lib/setupCode.js'
+import { generateSetupCode, type SetupCodeSource } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
 import { registerActionRoutes } from './actions.js'
 import { registerAuthRoutes, sessionGuard } from './auth.js'
@@ -80,7 +80,15 @@ export async function buildApp(
 
   app.get('/api/health', async () => ({ ok: true }))
 
-  /** What the web app needs before sign-in: is there an owner, is the bank configured. */
+  // index.ts passes the code it printed in the log when SETUP_CODE is unset.
+  const setupCodeFrom: SetupCodeSource = ctx.config.setupCode ? 'variable' : 'log'
+
+  /**
+   * What the web app needs before sign-in: is there an owner, is the bank
+   * configured, and where things are, so setup can say where to look. Where
+   * the setup code came from is shown only until the owner exists; the code
+   * itself never is.
+   */
   app.get('/api/status', async () => {
     const owner = await getOwner(ctx.db)
     return {
@@ -89,10 +97,15 @@ export async function buildApp(
       onboarded: owner?.onboarded ?? false,
       bank: ctx.config.plaid ? { provider: 'plaid', environment: ctx.config.plaid.env } : null,
       publicUrl: ctx.config.publicUrl,
+      platform: ctx.config.platform,
+      setupCodeFrom: owner ? null : setupCodeFrom,
     }
   })
 
-  registerAuthRoutes(app, ctx, options.setupCode ?? ctx.config.setupCode ?? generateSetupCode())
+  registerAuthRoutes(app, ctx, {
+    code: options.setupCode ?? ctx.config.setupCode ?? generateSetupCode(),
+    from: setupCodeFrom,
+  })
   registerActionRoutes(app, ctx, sessionGuard(ctx))
   await registerWebhookRoutes(app, ctx)
 

@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import {
@@ -47,13 +48,13 @@ function serve(extra: Handlers = {}, routes: Record<string, () => Response> = {}
 async function toStartingPoint(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Continue' }))
   await user.click(await screen.findByRole('button', { name: /Skip for now|Continue/ }))
-  await screen.findByRole('heading', { name: 'Pick a starting point' })
+  await screen.findByRole('heading', { name: 'Choose your categories' })
 }
 
 describe('setup after the account exists', () => {
   it('saves the budget period, time zone and warning level', async () => {
     const server = serve()
-    renderSignedIn(<Setup status={{ ...status, onboarded: false }} startAt={2} />)
+    renderSignedIn(<Setup status={{ ...status, onboarded: false }} signedIn />)
     const user = userEvent.setup()
     expect(screen.getByRole('heading', { name: 'How do you budget?' })).toBeInTheDocument()
     const warn = screen.getByLabelText('Warn me at percent')
@@ -65,12 +66,12 @@ describe('setup after the account exists', () => {
       period: settings.period,
       defaultWarnAtPercent: 90,
     })
-    expect(await screen.findByRole('heading', { name: 'Connect your banks' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sync your bank' })).toBeInTheDocument()
   })
 
   it('keeps the warning level between 1 and 100, and an emptied box keeps the last value', async () => {
     serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     const warn = screen.getByLabelText('Warn me at percent')
     await user.clear(warn)
@@ -84,28 +85,67 @@ describe('setup after the account exists', () => {
 
   it('marks finished steps in the step list', async () => {
     serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const steps = screen.getByRole('list', { name: 'Setup steps' })
     const items = within(steps).getAllByRole('listitem')
-    expect(items[0]).toHaveClass('done')
-    expect(items[1]).toHaveAttribute('aria-current', 'step')
-    expect(items[2]).toHaveClass('step')
+    expect(items.map((item) => item.className)).toEqual([
+      'step done',
+      'step done',
+      'step current',
+      'step',
+      'step',
+      'step',
+    ])
+    expect(items[2]).toHaveAttribute('aria-current', 'step')
+    // Finished steps say so in words too, not only with a tick.
+    expect(items[0]).toHaveTextContent('Setup code (done)')
+    expect(screen.getByText('Step 3 of 6')).toBeInTheDocument()
   })
 
   it('explains bank keys when the server has none, and lets the step be skipped', async () => {
     serve()
-    renderSignedIn(<Setup status={{ ...status, bank: null }} startAt={2} />)
+    renderSignedIn(<Setup status={{ ...status, bank: null }} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(await screen.findByText(/PLAID_CLIENT_ID/)).toBeInTheDocument()
+    expect(await screen.findByText('Bank sync is off on this Leeway.')).toBeInTheDocument()
+    expect(screen.getByText(/^Optional\./)).toHaveTextContent(/import a CSV file/)
+    // The keys go in Railway's Variables, never into this page.
+    await user.click(screen.getByText('How to turn on bank sync'))
+    expect(screen.getByText(/open the Leeway service's/)).toHaveTextContent(
+      "In Railway, open the Leeway service's Variables, set PLAID_CLIENT_ID and PLAID_SECRET",
+    )
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument()
+  })
+
+  it('says Plaid is in Sandbox beside the button, so test banks are no surprise', async () => {
+    serve()
+    renderSignedIn(<Setup status={{ ...status, bank }} signedIn />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(
+      await screen.findByText('Plaid is in Sandbox, so it lists only test banks.'),
+    ).toBeInTheDocument()
+    // Connecting is the step's main button; skipping stays available but quiet.
+    expect(screen.getByRole('button', { name: 'Connect a bank' })).toHaveClass('primary')
+    expect(screen.getByRole('button', { name: 'Skip for now' })).not.toHaveClass('primary')
+  })
+
+  it('says nothing of Sandbox once Plaid reaches real banks', async () => {
+    serve()
+    const production = { provider: 'plaid', environment: 'production' }
+    renderSignedIn(<Setup status={{ ...status, bank: production }} signedIn />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('button', { name: 'Connect a bank' })
+    expect(screen.queryByText(/Sandbox/)).not.toBeInTheDocument()
   })
 
   it('lists connected banks and offers another', async () => {
     serve({
       list_connections: () => [{ id: 'c1', institutionName: 'First Bank', accountCount: 2 }],
     })
-    renderSignedIn(<Setup status={{ ...status, bank }} startAt={2} />)
+    renderSignedIn(<Setup status={{ ...status, bank }} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     expect(await screen.findByText('First Bank')).toBeInTheDocument()
@@ -115,7 +155,7 @@ describe('setup after the account exists', () => {
 
   it('goes back a step', async () => {
     serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(await screen.findByRole('button', { name: 'Back' }))
@@ -126,7 +166,7 @@ describe('setup after the account exists', () => {
 describe('starting point', () => {
   it('uses the starter set when there is no bank, with the owner edits', async () => {
     const server = serve({ get_starter_categories: () => [groceries, paycheck, transfers] })
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     expect(screen.getByRole('button', { name: /Starter set/ })).toHaveAttribute(
@@ -159,7 +199,7 @@ describe('starting point', () => {
       { ...paycheck, group: 'Pay' },
     ]
     serve({ get_starter_categories: () => grouped })
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     await toStartingPoint(userEvent.setup())
     const list = await screen.findByLabelText('Categories to create')
     const shown = within(list).getAllByText(/^(Food|Pay|Groceries|Paycheck)$/)
@@ -168,7 +208,7 @@ describe('starting point', () => {
 
   it('skips a category that is unticked, and stops editing its amount', async () => {
     const server = serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     await user.click(await screen.findByLabelText('Include Groceries'))
@@ -187,7 +227,7 @@ describe('starting point', () => {
         { name: 'Groceries', averageMonthlyCents: 41234, suggestedMonthlyCents: 42000 },
       ],
     })
-    renderSignedIn(<Setup status={{ ...status, bank }} startAt={2} />)
+    renderSignedIn(<Setup status={{ ...status, bank }} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     expect(await screen.findByLabelText('Groceries budget')).toHaveValue('420')
@@ -199,7 +239,7 @@ describe('starting point', () => {
 
   it('starts empty without creating categories', async () => {
     const server = serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     await user.click(screen.getByRole('button', { name: /Start empty/ }))
@@ -210,10 +250,10 @@ describe('starting point', () => {
 
   it('imports a setup file and only then lets the owner continue', async () => {
     const server = serve({ import_config: () => ({ categoriesAdded: 4, rulesAdded: 2 }) })
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
-    await user.click(screen.getByRole('button', { name: /Import leeway.json/ }))
+    await user.click(screen.getByRole('button', { name: /Copy from another Leeway/ }))
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
     const file = new File(['{"version":1,"categories":[]}'], 'leeway.json', {
       type: 'application/json',
@@ -231,10 +271,10 @@ describe('starting point', () => {
 
   it('says plainly when the file is not JSON', async () => {
     const server = serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
-    await user.click(screen.getByRole('button', { name: /Import leeway.json/ }))
+    await user.click(screen.getByRole('button', { name: /Copy from another Leeway/ }))
     await user.upload(
       screen.getByLabelText('Leeway setup file'),
       new File(['not json'], 'notes.txt', { type: 'application/json' }),
@@ -247,7 +287,7 @@ describe('starting point', () => {
 describe('done', () => {
   it('shows the assistant address and a new read-only key once', async () => {
     const server = serve()
-    renderSignedIn(<Setup status={status} startAt={2} />)
+    renderSignedIn(<Setup status={status} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     await user.click(screen.getByRole('button', { name: /Start empty/ }))
@@ -259,9 +299,56 @@ describe('done', () => {
     expect(screen.getByRole('button', { name: 'Open my overview' })).toBeInTheDocument()
   })
 
+  it('offers a CSV import or an account by hand when no bank is synced', async () => {
+    serve()
+    renderSignedIn(<Setup status={status} signedIn />)
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/Next, bring in your money/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Import a CSV file/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Add an account by hand/ })).toBeInTheDocument()
+  })
+
+  it('takes the owner to Customize, Accounts, to add an account by hand', async () => {
+    serve()
+    /** Shows where the router is, as the address bar would. */
+    function Address() {
+      const { pathname, hash } = useLocation()
+      return <output aria-label="Address">{pathname + hash}</output>
+    }
+    renderSignedIn(
+      <>
+        <Setup status={status} signedIn />
+        <Address />
+      </>,
+    )
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('button', { name: /Add an account by hand/ }))
+    expect(screen.getByLabelText('Address')).toHaveTextContent('/customize#accounts')
+  })
+
+  it('says the bank keeps itself current once one is synced', async () => {
+    serve({
+      list_connections: () => [{ id: 'c1', institutionName: 'First Bank', accountCount: 1 }],
+      suggest_starter_budgets: () => [],
+    })
+    renderSignedIn(<Setup status={{ ...status, bank }} signedIn />)
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/Leeway syncs your bank as things happen/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Import a CSV file/ })).not.toBeInTheDocument()
+  })
+
   it('gives the assistant the address of this page when the server has no public one', async () => {
     serve()
-    renderSignedIn(<Setup status={{ ...status, publicUrl: null }} startAt={2} />)
+    renderSignedIn(<Setup status={{ ...status, publicUrl: null }} signedIn />)
     const user = userEvent.setup()
     await toStartingPoint(user)
     await user.click(screen.getByRole('button', { name: /Start empty/ }))
@@ -294,5 +381,29 @@ describe('finishing setup', () => {
     await user.click(await screen.findByRole('button', { name: 'Open my overview' }))
     expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Setup steps' })).not.toBeInTheDocument()
+  })
+
+  it('opens the CSV import straight from the last step', async () => {
+    let onboarded = false
+    const me = () => Response.json({ owner: { email: 'dana@example.com', name: null, onboarded } })
+    serve(
+      {
+        get_settings: () => settings,
+        list_accounts: () => [],
+        list_imports: () => [],
+        complete_setup: () => {
+          onboarded = true
+          return { categoriesAdded: 0 }
+        },
+      },
+      { '/api/status': () => Response.json(status), '/api/auth/me': me },
+    )
+    renderPlain(<App />)
+    const user = userEvent.setup()
+    await toStartingPoint(user)
+    await user.click(screen.getByRole('button', { name: /Start empty/ }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('button', { name: /Import a CSV file/ }))
+    expect(await screen.findByRole('heading', { name: 'Import transactions' })).toBeInTheDocument()
   })
 })

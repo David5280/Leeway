@@ -25,7 +25,8 @@ RUN npm ci --omit=dev --workspace server --include-workspace-root=false
 # Stage 3: the image that runs. The server finds web/dist and server/migrations
 # by walking up from its own folder, so this layout mirrors the repository.
 FROM node:22-alpine
-ENV NODE_ENV=production PORT=3000
+# LEEWAY_DOCKER lets the setup screen and log messages give Docker's commands.
+ENV NODE_ENV=production PORT=3000 LEEWAY_DOCKER=true
 WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
 COPY --from=build /app/package.json ./

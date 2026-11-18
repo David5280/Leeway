@@ -52,22 +52,30 @@ and connect banks later.
 > then, use the steps under "Without the button".
 
 The button makes a Railway project with Leeway and its own PostgreSQL
-database, generates an encryption key and gives Leeway a public address. The
-database is set up automatically, and again on every upgrade. When the deploy
-finishes:
+database, generates an encryption key and a setup code, and gives Leeway a
+public address. The database is set up automatically, and again on every
+upgrade.
 
-1. Open the address shown on the Leeway service. The first visit leads to
-   setup, where you create your sign-in. It asks for a setup code, so nobody
-   who finds your address first can claim it: copy `SETUP_CODE` from the
-   service's **Variables**.
-2. Copy `ENCRYPTION_KEY` from the service's **Variables** and keep it somewhere
-   safe. Without it, connected banks have to be linked again.
-3. For bank sync, fill in `PLAID_CLIENT_ID` and `PLAID_SECRET` there too (see
-   [Bank sync](#bank-sync-plaid)). Until then, add accounts by hand or import your
-   bank's CSV export.
+1. Click **Deploy on Railway** and sign in to Railway, or make an account.
+2. Railway lists Leeway's settings. Every one is already filled in or
+   optional, so choose **Deploy** without changing anything. (The table under
+   [Publishing the Railway template](#publishing-the-railway-template) says
+   what each one is.)
+3. When the deploy finishes, open the address shown on the Leeway service. It
+   ends in `.up.railway.app`.
+4. The first screen asks for a setup code, so nobody else who finds the
+   address can claim your Leeway. The screen says where it is: on the Leeway
+   service, open **Variables** and copy `SETUP_CODE`.
+5. Create your sign-in and follow the setup screens. Bank sync is optional:
+   skip it, and the last screen shows you how to import a CSV file from your
+   bank or add accounts by hand.
+6. Copy `ENCRYPTION_KEY` from the same **Variables** tab and keep it somewhere
+   safe, like a password manager. Without it, connected banks have to be
+   linked again.
+7. Whenever you like, turn on bank sync (see [Bank sync](#bank-sync-plaid)).
 
-If a required variable is missing, the deploy log says which one and how to
-set it.
+If a required setting is missing, the deploy log says which one, what to set
+it to and where.
 
 #### Without the button
 
@@ -81,10 +89,12 @@ set it.
      makes one). Keep a copy somewhere safe.
    - `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV` if you have Plaid keys.
 4. Under **Settings**, then **Networking**, click **Generate Domain**.
-5. Open that address and follow the setup screens. The first one asks for a
-   setup code, so nobody who finds your address first can claim it: open the
-   service's **Deploy Logs** and copy the code from the line that starts
-   `No account yet`.
+5. Open that address. The first screen asks for a setup code and says where
+   it is: click the Leeway service's latest deployment, open **Deploy Logs**
+   and copy the code from the newest line that starts `No account yet`.
+   Leeway makes a new one each time it starts. To choose your own instead,
+   set `SETUP_CODE` (12 characters or more) in **Variables**.
+6. Create your sign-in and follow the setup screens.
 
 #### Publishing the Railway template
 
@@ -105,31 +115,47 @@ needs to be able to read it.
    `railway.com/new/template/...` address) over `TEMPLATE_CODE` in the button
    link above, and delete the placeholder comment and note.
 
-| Variable          | Value                                                | Description to show                                                                         |
-| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`    | `${{Postgres.DATABASE_URL}}`                         | The project's own database. Leave as is.                                                    |
-| `ENCRYPTION_KEY`  | `${{secret(64, "abcdef0123456789")}}`                | Encrypts bank access tokens. Made for you; copy it somewhere safe after deploying.          |
-| `SETUP_CODE`      | `${{secret(16, "ABCDEFGHJKMNPQRSTUVWXYZ23456789")}}` | Proves you own this install when you create your account. Made for you.                     |
-| `PLAID_CLIENT_ID` | empty, optional                                      | For bank sync, from dashboard.plaid.com (Developers, Keys). Empty runs Leeway without sync. |
-| `PLAID_SECRET`    | empty, optional                                      | For bank sync, from the same page as the client ID.                                         |
-| `PLAID_ENV`       | `sandbox`                                            | `sandbox` for Plaid's test banks, `production` for real ones.                               |
+| Variable          | Value                                                | Description to show                                                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`    | `${{Postgres.DATABASE_URL}}`                         | Required, filled in for you. Connects Leeway to the PostgreSQL database this template creates. Leave it as is.                                                                                         |
+| `ENCRYPTION_KEY`  | `${{secret(64, "abcdef0123456789")}}`                | Required, generated for you. Locks your bank connections. After deploying, copy it from Variables and keep it somewhere safe: without it, connected banks must be linked again.                        |
+| `SETUP_CODE`      | `${{secret(16, "ABCDEFGHJKMNPQRSTUVWXYZ23456789")}}` | Generated for you. A one-time code that proves this Leeway is yours. Leeway's first screen asks for it and says where it is: here, in Variables.                                                       |
+| `PLAID_CLIENT_ID` | empty, optional                                      | Optional, for bank sync. Leave empty to start: Leeway works without it, with CSV imports and accounts added by hand. Later, paste the client_id from dashboard.plaid.com, under Developers, then Keys. |
+| `PLAID_SECRET`    | empty, optional                                      | Optional, for bank sync. Leave empty to start. Later, paste a secret from the same Plaid page: the Sandbox secret for test banks, or the Production secret for real ones.                              |
+| `PLAID_ENV`       | `sandbox`                                            | Optional. Leave as sandbox, Plaid's pretend test banks. Change to production once Plaid gives you Production access for real banks (see Bank sync in Leeway's README).                                 |
 
 The build (`Dockerfile`) and the health check (`/api/health`) come from
 `railway.json` in the repository, so they need no setting in the template.
 
 ### Option 2: Docker on your own machine
 
-```sh
-git clone https://github.com/<you>/leeway.git && cd leeway
-cp .env.example .env
-# Set ENCRYPTION_KEY in .env (openssl rand -hex 32), and Plaid keys if you have them
-docker compose up -d
-```
+You need [Docker](https://docs.docker.com/get-docker/) with Compose
+(Docker Desktop includes both) and `git`.
 
-Then open http://localhost:3000. The setup screen asks for a code that Leeway
-prints in its log; `docker compose logs leeway` shows it. The database lives
-in a Docker volume, so it survives restarts and upgrades. To upgrade, pull the
-latest code and run `docker compose up -d --build`.
+1. Get the code and go into its folder:
+   ```sh
+   git clone https://github.com/<you>/leeway.git && cd leeway
+   ```
+2. Make your settings file from the example:
+   ```sh
+   cp .env.example .env
+   ```
+3. Open `.env` and set `ENCRYPTION_KEY` to 64 random hex characters.
+   `openssl rand -hex 32` prints one. Keep a copy somewhere safe. Everything
+   else can stay empty for now.
+4. Start Leeway and its database:
+   ```sh
+   docker compose up -d
+   ```
+5. Open http://localhost:3000. The first screen asks for a setup code and
+   says where it is. If you set `SETUP_CODE` in `.env`, it is that. If not,
+   run `docker compose logs leeway` and copy the code from the newest line
+   that starts `No account yet` (Leeway makes a new one each time it starts).
+6. Create your sign-in and follow the setup screens.
+
+The database lives in a Docker volume, so it survives restarts and upgrades.
+After changing `.env`, run `docker compose up -d` again to apply it. To
+upgrade, pull the latest code and run `docker compose up -d --build`.
 
 ### Option 3: From source
 
@@ -142,7 +168,9 @@ npm run build
 npm start
 ```
 
-The setup screen asks for the code Leeway prints when it starts.
+The setup screen asks for a setup code: `SETUP_CODE` from `.env` if you set
+one, or else the code at the end of the line Leeway prints at startup that
+starts `No account yet`.
 
 ## Server settings
 
@@ -174,11 +202,49 @@ On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 
 ### Bank sync (Plaid)
 
-Create a free account at [Plaid](https://dashboard.plaid.com), then copy the
-client ID and secret from **Developers**, then **Keys**. Start with
-`PLAID_ENV=sandbox` to try test banks (user `user_good`, password
-`pass_good`). Connecting your real banks needs production access, which you
-request from the Plaid dashboard.
+Bank sync is optional. Without it, import CSV files from your bank
+(**Transactions**, then **Import**) or add accounts by hand (**Customize**,
+then **Accounts**). [Plaid](https://plaid.com) is the service many budgeting
+apps use to connect to banks; Leeway uses it only to read balances and
+transactions, and nothing can move money.
+
+1. Make a free account at [dashboard.plaid.com](https://dashboard.plaid.com).
+2. Open **Developers**, then
+   [**Keys**](https://dashboard.plaid.com/developers/keys), and copy your
+   `client_id` and your **Sandbox** secret. Plaid gives each environment its
+   own secret.
+3. Set `PLAID_CLIENT_ID` and `PLAID_SECRET` where Leeway runs: on Railway, in
+   the Leeway service's **Variables**, then deploy the change; with Docker, in
+   `.env`, then `docker compose up -d`. Keys are server settings, so the app
+   never asks for them.
+4. In Leeway, open **Customize**, then **Banks**, and choose **Connect a
+   bank**.
+
+**Sandbox has only test banks.** Sandbox keys show Plaid's pretend banks; sign
+in to any of them with `user_good` and password `pass_good`. Your real bank
+needs Production access from Plaid:
+
+- **In the US and Canada**, Plaid teams created on or after April 15, 2026 can
+  use the free **Trial plan**: real banks, up to 10 bank logins, with
+  Transactions and Balance included. Removing a bank does not free its spot.
+  You apply when you sign up; Plaid approves most applications automatically
+  after an identity check and answers flagged ones by email within 2 to 3
+  business days.
+- **Anywhere else, or for more banks**, choose **Get production access** in
+  the Plaid dashboard. It asks about your business, the products you need and
+  who owns the business, and has you pick a paid plan. Plaid says approval takes a couple of
+  business days.
+
+Once approved, set `PLAID_ENV` to `production` and `PLAID_SECRET` to your
+**Production** secret, the same way as the keys.
+
+Sources: Plaid's
+[Sandbox overview](https://plaid.com/docs/sandbox/),
+[What is the Plaid Trial plan](https://support.plaid.com/hc/en-us/articles/39994173227159-What-is-the-Plaid-Trial-plan),
+[How are Sandbox, Production, Trial plan and Limited Production different](https://support.plaid.com/hc/en-us/articles/16110110883479-How-are-Sandbox-Production-Trial-plan-and-Limited-Production-different)
+and
+[How do I upgrade from the Trial plan to a paid Production plan](https://support.plaid.com/hc/en-us/articles/39917307426967-How-do-I-upgrade-from-the-Trial-plan-to-a-paid-Production-plan),
+read November 2026.
 
 Leeway dates bank transactions by the day you bought something, not the day it
 posted. Transactions synced by an older version still show the posted day;
@@ -293,8 +359,9 @@ Leeway is built to sit on the public internet with one owner.
 
 - **Signing in.** Passwords are hashed with scrypt. Sign-in slows down after
   repeated mistakes from one address, and pauses for everyone after 20 wrong
-  passwords in 15 minutes. Creating the account takes the setup code from the
-  server log, so nobody who finds a new install first can claim it.
+  passwords in 15 minutes. Creating the account takes a one-time setup code
+  (`SETUP_CODE`, or one printed in the server log), so nobody who finds a new
+  install first can claim it. Wrong codes pause setup the same way.
 - **Sessions** are `HttpOnly`, `SameSite=Strict` cookies, `Secure` over https.
   They end after 30 days, at sign-out, and for every device when the password
   changes. Changes are accepted only from Leeway's own pages.

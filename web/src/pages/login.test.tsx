@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
+import { UNREACHABLE } from '../api/client'
 import { failing, fakeServer, holdRequest, renderPlain, settings, status } from '../test/fake'
 import { Login } from './Login'
 
@@ -126,8 +127,6 @@ describe('signing in to the app', () => {
   it('says the server is not answering when it cannot be reached', async () => {
     fakeServer({}, { '/api/status': failing('Bad gateway', 502) })
     renderPlain(<App />)
-    expect(
-      await screen.findByText("Leeway's server is not answering. Check that it is running."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(UNREACHABLE)).toBeInTheDocument()
   })
 })

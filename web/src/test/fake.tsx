@@ -118,6 +118,8 @@ export const status: Status = {
   onboarded: true,
   bank: null,
   publicUrl: 'https://leeway.example.com',
+  platform: 'railway',
+  setupCodeFrom: null,
 }
 
 export function category(name: string, fields: Partial<Category> = {}): Category {

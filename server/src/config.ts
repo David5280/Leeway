@@ -19,6 +19,9 @@ const DATABASE_URL_HELP =
   'set it to a Postgres connection string (on Railway, ${{Postgres.DATABASE_URL}})'
 const ENCRYPTION_KEY_HELP =
   'set it to 64 hex characters (generate one with: openssl rand -hex 32), and keep a copy somewhere safe'
+const ADDRESS_HELP =
+  'set it to a full web address, like https://leeway.example.com, or leave it empty'
+const PROXY_HELP = 'set it to the number of proxies in front of Leeway, like 1, or leave it empty'
 
 /**
  * All configuration comes from environment variables, validated once at
@@ -33,29 +36,40 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z
     .string({ error: ENCRYPTION_KEY_HELP })
     .regex(/^[0-9a-fA-F]{64}$/, ENCRYPTION_KEY_HELP),
-  PUBLIC_URL: z.url().optional(),
+  PUBLIC_URL: z.url(ADDRESS_HELP).optional(),
   // Spaces and dashes are ignored when the code is typed, so they do not count here.
   SETUP_CODE: z
     .string()
     .refine(
       (code) => code.replace(/[\s-]/g, '').length >= 12,
-      'SETUP_CODE needs 12 characters or more',
+      'use 12 characters or more, or leave it empty and Leeway prints a code in its log',
     )
     .optional(),
   TRUST_PROXY: z.coerce
-    .number()
-    .int()
-    .min(0, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
-    .max(10, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
+    .number(PROXY_HELP)
+    .int(PROXY_HELP)
+    .min(0, PROXY_HELP)
+    .max(10, PROXY_HELP)
     .optional(),
+  // Railway sets this, and RAILWAY_PROJECT_ID, on every service (see platformOf).
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
   PLAID_CLIENT_ID: z.string().optional(),
   PLAID_SECRET: z.string().optional(),
-  PLAID_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  PLAID_ENV: z
+    .enum(['sandbox', 'production'], {
+      error: 'set it to sandbox (Plaid test banks) or production (your real banks)',
+    })
+    .default('sandbox'),
   PLAID_COUNTRY_CODES: z.string().default('US'),
-  PLAID_REDIRECT_URI: z.url().optional(),
-  SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(0).default(360),
-  DATABASE_SSL: z.enum(['true', 'false']).optional(),
+  PLAID_REDIRECT_URI: z.url(ADDRESS_HELP).optional(),
+  SYNC_INTERVAL_MINUTES: z.coerce
+    .number('set it to a number of minutes, like 360, or 0 to turn background sync off')
+    .int('set it to a whole number of minutes, like 360')
+    .min(0, 'set it to a number of minutes, like 360, or 0 to turn background sync off')
+    .default(360),
+  DATABASE_SSL: z
+    .enum(['true', 'false'], { error: 'set it to true or false, or leave it empty' })
+    .optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   SUMMARY_MODEL: z.string().default('claude-opus-5-5'),
   RESEND_API_KEY: z.string().optional(),
@@ -67,6 +81,23 @@ const envSchema = z.object({
     )
     .optional(),
 })
+
+/** What Leeway runs on, so messages can say where its settings and log are. */
+export type Platform = 'railway' | 'docker' | 'other'
+
+/** A setting that is missing or malformed, by its variable name. */
+export interface ConfigProblem {
+  name: string
+  message: string
+}
+
+/** Thrown by loadConfig when a setting is wrong; startupMessages.ts says how to fix it. */
+export class ConfigError extends Error {
+  constructor(readonly problems: ConfigProblem[]) {
+    super(`Invalid configuration:\n${problems.map((p) => `  ${p.name}: ${p.message}`).join('\n')}`)
+    this.name = 'ConfigError'
+  }
+}
 
 export interface PlaidConfig {
   clientId: string
@@ -99,6 +130,8 @@ export interface Config {
   publicUrl: string | null
   /** The code that creates the owner account; null means a random one each start. */
   setupCode: string | null
+  /** What Leeway runs on: Railway, Docker or anything else. */
+  platform: Platform
   /** Which proxies to believe about the client's address and protocol (see proxyTrust.ts). */
   trustProxy: ProxyTrust
   /** Null until both Plaid keys are set; the app still runs and explains what to add. */
@@ -112,17 +145,19 @@ export interface Config {
 }
 
 /** Drops variables set to nothing, like `PUBLIC_URL=` left blank in a .env file, so defaults apply. */
-function withoutBlanks(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function withoutBlanks(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([, value]) => value?.trim()))
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = envSchema.safeParse(withoutBlanks(env))
   if (!parsed.success) {
-    const problems = parsed.error.issues.map(
-      (issue) => `  ${issue.path.join('.')}: ${issue.message}`,
+    throw new ConfigError(
+      parsed.error.issues.map((issue) => ({
+        name: issue.path.join('.'),
+        message: issue.message,
+      })),
     )
-    throw new Error(`Invalid configuration:\n${problems.join('\n')}`)
   }
   const e = parsed.data
 
@@ -139,6 +174,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseSsl: e.DATABASE_SSL ? e.DATABASE_SSL === 'true' : !isLocalDatabase(e.DATABASE_URL),
     encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'hex'),
     setupCode: e.SETUP_CODE ?? null,
+    platform: platformOf(env),
     publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
     // Railway reaches the app only through its own edge proxy, one hop that
     // may connect from any address. Elsewhere, trust a proxy on a private network.
@@ -170,28 +206,14 @@ function optionalServices(
 }
 
 /**
- * Settings that are allowed but probably not what the owner meant, as
- * sentences for the server log. Leeway still starts; these only explain why
- * an optional feature is off.
+ * Where Leeway runs, from variables the platform sets: Railway sets its own on
+ * every service, and Leeway's Dockerfile sets LEEWAY_DOCKER.
  */
-export function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
+export function platformOf(env: NodeJS.ProcessEnv = process.env): Platform {
   const set = withoutBlanks(env)
-  const warnings: string[] = []
-  const plaidKeys = ['PLAID_CLIENT_ID', 'PLAID_SECRET'].filter((name) => set[name])
-  if (plaidKeys.length === 0) {
-    warnings.push(
-      'Bank sync is off: set PLAID_CLIENT_ID and PLAID_SECRET to turn it on. Accounts and transactions can still be added by hand or imported from a CSV file.',
-    )
-  } else if (plaidKeys.length === 1) {
-    const missing = plaidKeys[0] === 'PLAID_CLIENT_ID' ? 'PLAID_SECRET' : 'PLAID_CLIENT_ID'
-    warnings.push(`Bank sync is off: ${plaidKeys[0]} is set but ${missing} is not. Set both.`)
-  }
-  if (plaidKeys.length === 2 && !set.PUBLIC_URL && !set.RAILWAY_PUBLIC_DOMAIN) {
-    warnings.push(
-      'PUBLIC_URL is not set, so banks cannot send updates as they happen and are synced on a timer instead. Set it to the address you open Leeway at.',
-    )
-  }
-  return warnings
+  if (set.RAILWAY_PROJECT_ID || set.RAILWAY_PUBLIC_DOMAIN) return 'railway'
+  if (set.LEEWAY_DOCKER) return 'docker'
+  return 'other'
 }
 
 function isLocalDatabase(url: string): boolean {

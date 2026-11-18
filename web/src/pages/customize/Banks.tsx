@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import type { Output } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
-import { BankButton, BankKeysMissing } from '../../components/BankButton'
+import { BankButton } from '../../components/BankButton'
+import { BankKeysMissing, SandboxNote } from '../../components/PlaidHelp'
 import { ErrorNote, Icon } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { timeAgo } from '../../lib/format'
@@ -19,7 +20,7 @@ export function BanksSection() {
   if (!status.bank) {
     return (
       <Section id="banks" title="Banks">
-        <BankKeysMissing />
+        <BankKeysMissing platform={status.platform} />
       </Section>
     )
   }
@@ -68,6 +69,7 @@ export function BanksSection() {
           )}
         </div>
       ))}
+      {status.bank.environment === 'sandbox' && <SandboxNote />}
       <div className="row wrap">
         <BankButton label={connections.data?.length ? 'Connect another bank' : 'Connect a bank'} />
         {Boolean(connections.data?.length) && (

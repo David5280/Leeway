@@ -18,8 +18,6 @@ const scryptAsync = promisify(scrypt) as (
 const PARAMS = { N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }
 const KEY_LENGTH = 64
 
-export const MIN_PASSWORD_LENGTH = 10
-
 /** Stored format: "scrypt:<N>:<r>:<p>:<salt>:<hash>" so parameters can be raised later. */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16)
