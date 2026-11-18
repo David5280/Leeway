@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { monthYear } from '../../lib/format'
-import { bill, goal } from '../../test/planning'
+import { bill } from '../../test/planning'
 import { parseRate } from './DebtTerms'
-import { billStatus, dueText, durationText, goalText } from './text'
-
-const money = (cents: number) => `$${cents / 100}`
+import { billStatus, dueText, durationText } from './text'
 
 describe('dueText', () => {
   it('counts the days while they are close, then gives the date', () => {
@@ -39,26 +37,6 @@ describe('billStatus', () => {
       matchPattern: 'water',
     })
     expect(billStatus(missed, 'en-US')).toEqual({ text: 'No payment found yet', tone: 'over' })
-  })
-})
-
-describe('goalText', () => {
-  const trip = { name: 'Trip', targetCents: 120000, savedCents: 30000 }
-
-  it('gives the monthly amount when there is a date', () => {
-    expect(goalText(goal({ ...trip, targetDate: '2027-04-30' }), money, 'en-US')).toBe(
-      '$900 to go: about $150 a month to reach it by Apr 30.',
-    )
-  })
-
-  it('gives what is left without a date, after one, and once reached', () => {
-    expect(goalText(goal(trip), money, 'en-US')).toBe('$900 to go.')
-    expect(goalText(goal({ ...trip, targetDate: '2026-10-01' }), money, 'en-US')).toBe(
-      '$900 to go. The target date has passed.',
-    )
-    expect(goalText(goal({ ...trip, savedCents: 120000 }), money, 'en-US')).toBe(
-      'Reached. Nice work.',
-    )
   })
 })
 

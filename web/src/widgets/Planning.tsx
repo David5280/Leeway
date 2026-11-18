@@ -5,7 +5,8 @@ import { useAction } from '../api/hooks'
 import { LineChart } from '../components/charts/LineChart'
 import { Card, ErrorNote, Loading, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
-import { monthYear, shortDate } from '../lib/format'
+import { monthYear, periodWord, shortDate } from '../lib/format'
+import { shortPlan } from '../lib/goalText'
 import { CashFlowSummary } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
 
@@ -58,25 +59,36 @@ export function BillsWidget() {
   )
 }
 
+/** Each goal's progress, what it needs per budget period, and whether it is on track. */
 export function GoalsWidget() {
-  const { money } = useApp()
+  const { money, settings } = useApp()
   const goals = useAction('list_goals')
+  const word = periodWord(settings.period.kind)
   return (
     <Card label="Goals" className="stack-sm">
       <Header title="Goals" to="/plan/goals" link="All goals" />
       {!goals.data && <Pending error={goals.error} />}
       {goals.data?.length === 0 && <p className="empty">No savings goals yet.</p>}
-      {goals.data?.slice(0, 4).map((goal) => (
-        <div key={goal.id} className="stack-sm" style={{ gap: 4 }}>
-          <div className="row-between small">
-            <span>{goal.name}</span>
-            <span className="num muted">
-              {money(goal.currentCents)} of {money(goal.targetCents)}
-            </span>
+      {goals.data?.slice(0, 4).map((goal) => {
+        const plan = shortPlan(goal, money, word)
+        return (
+          <div key={goal.id} className="stack-sm" style={{ gap: 4 }}>
+            <div className="row-between small">
+              <span>{goal.name}</span>
+              <span className="num muted">
+                {money(goal.currentCents)} of {money(goal.targetCents)}
+              </span>
+            </div>
+            <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
+            <span className={`small ${plan.tone || 'muted'}`}>{plan.text}</span>
           </div>
-          <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
-        </div>
-      ))}
+        )
+      })}
+      {goals.data && (
+        <Link to="/plan/goals?new=purchase" className="linkbtn small" style={{ marginTop: 'auto' }}>
+          Save for a purchase
+        </Link>
+      )}
     </Card>
   )
 }

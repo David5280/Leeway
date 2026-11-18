@@ -1,15 +1,40 @@
-// The form for adding or changing a savings goal.
+// The form for adding or changing a goal: a savings goal (an emergency fund,
+// a trip) or a purchase being saved for (an item, its price, a date to buy by).
 
 import { useState, type FormEvent } from 'react'
-import type { Account, Goal, Input } from '../../api/client'
-import { ColorPicker } from '../../components/ColorPicker'
-import { ErrorNote, Setting } from '../../components/ui'
-import { parseMoney } from '../../lib/format'
-import { CATEGORY_COLORS } from '../../lib/theme'
+import type { Account, Goal, Input } from '../../../api/client'
+import { ColorPicker } from '../../../components/ColorPicker'
+import { ErrorNote, Setting, Switch } from '../../../components/ui'
+import { useApp } from '../../../lib/app'
+import { parseMoney, periodWord } from '../../../lib/format'
+import { CATEGORY_COLORS } from '../../../lib/theme'
 
 export type GoalFields = Required<Input<'create_goal'>>
+export type GoalKind = GoalFields['kind']
 
 const BY_HAND = ''
+
+/** The words that change with the kind of goal; everything else reads the same. */
+const WORDING = {
+  savings: {
+    form: 'New goal',
+    name: 'Name',
+    placeholder: 'Like emergency fund',
+    target: 'Target',
+    targetLabel: 'Target amount',
+    date: 'By',
+    submit: 'Add goal',
+  },
+  purchase: {
+    form: 'New purchase',
+    name: 'What are you saving for?',
+    placeholder: 'Like a road bike',
+    target: 'Price',
+    targetLabel: 'Price',
+    date: 'Buy by',
+    submit: 'Start saving',
+  },
+} as const
 
 /** The form's starting text in each field, from a goal or blank for a new one. */
 function startingValues(goal?: Goal) {
@@ -20,11 +45,13 @@ function startingValues(goal?: Goal) {
     targetDate: goal?.targetDate ?? '',
     accountId: goal?.accountId ?? BY_HAND,
     color: goal?.color ?? CATEGORY_COLORS[0][1],
+    setAside: goal?.setAside ?? false,
   }
 }
 
 export function GoalForm({
   goal,
+  kind,
   accounts,
   busy,
   error,
@@ -33,6 +60,8 @@ export function GoalForm({
   onDelete,
 }: {
   goal?: Goal
+  /** The kind of a new goal; an existing goal keeps its own. */
+  kind: GoalKind
   accounts: Account[]
   busy: boolean
   error: unknown
@@ -40,6 +69,7 @@ export function GoalForm({
   onCancel: () => void
   onDelete?: () => void
 }) {
+  const { settings } = useApp()
   const [start] = useState(() => startingValues(goal))
   const [name, setName] = useState(start.name)
   const [target, setTarget] = useState(start.target)
@@ -47,6 +77,10 @@ export function GoalForm({
   const [targetDate, setTargetDate] = useState(start.targetDate)
   const [accountId, setAccountId] = useState(start.accountId)
   const [color, setColor] = useState(start.color)
+  const [setAside, setSetAside] = useState(start.setAside)
+  const goalKind = goal?.kind ?? kind
+  const words = WORDING[goalKind]
+  const period = periodWord(settings.period.kind)
   const targetCents = parseMoney(target)
   // Only savings and checking accounts can hold money set aside for a goal.
   const savingsAccounts = accounts.filter((a) => a.type === 'depository' && !a.hidden)
@@ -55,39 +89,42 @@ export function GoalForm({
     event.preventDefault()
     onSubmit({
       name,
+      kind: goalKind,
       targetCents: targetCents ?? 0,
       targetDate: targetDate || null,
       accountId: accountId || null,
       savedCents: Math.max(0, parseMoney(saved) ?? 0),
       color,
+      // Setting money aside needs a date to divide by; the server says so too.
+      setAside: setAside && Boolean(targetDate),
     })
   }
 
   return (
-    <form className="stack" onSubmit={submit} aria-label={goal ? `Edit ${goal.name}` : 'New goal'}>
+    <form className="stack" onSubmit={submit} aria-label={goal ? `Edit ${goal.name}` : words.form}>
       <label className="field">
-        Name
+        {words.name}
         <input
           className="input"
           required
           maxLength={80}
-          placeholder="Like emergency fund"
+          placeholder={words.placeholder}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </label>
-      <Setting label="Target">
+      <Setting label={words.target}>
         <input
           className="input num"
           style={{ width: 130 }}
           inputMode="decimal"
           required
-          aria-label="Target amount"
+          aria-label={words.targetLabel}
           value={target}
           onChange={(e) => setTarget(e.target.value)}
         />
       </Setting>
-      <Setting label="By" hint="Optional. Shows how much to set aside each month">
+      <Setting label={words.date} hint={`Optional. Shows what to set aside each ${period}`}>
         <input
           className="input"
           type="date"
@@ -95,6 +132,21 @@ export function GoalForm({
           style={{ width: 'auto' }}
           value={targetDate}
           onChange={(e) => setTargetDate(e.target.value)}
+        />
+      </Setting>
+      <Setting
+        label="Set aside from my budget"
+        hint={
+          targetDate
+            ? `Holds each ${period}'s share out of Your leeway, so it is not spent`
+            : 'Give it a date first, so there is a share to hold back'
+        }
+      >
+        <Switch
+          label="Set aside from my budget"
+          checked={setAside && Boolean(targetDate)}
+          disabled={!targetDate}
+          onChange={setSetAside}
         />
       </Setting>
       <Setting label="Progress" hint="Follow an account's balance, or count it yourself">
@@ -132,7 +184,7 @@ export function GoalForm({
       <ErrorNote error={error} />
       <div className="row wrap">
         <button type="submit" className="btn primary" disabled={busy || !targetCents}>
-          {goal ? 'Save' : 'Add goal'}
+          {goal ? 'Save' : words.submit}
         </button>
         <button type="button" className="btn" onClick={onCancel}>
           Cancel

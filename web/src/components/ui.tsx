@@ -162,7 +162,8 @@ export function Setting({
 
 /**
  * A budget bar: how much is used, with an optional marker for where steady
- * spending would be today.
+ * spending would be today. `reserved` adds a striped stretch after the fill
+ * for money held back but not yet spent, like a goal's share of the budget.
  */
 export function Progress({
   percent,
@@ -170,14 +171,17 @@ export function Progress({
   marker,
   label,
   thick = false,
+  reserved = 0,
 }: {
   percent: number
   color?: string
   marker?: number | null
   label: string
   thick?: boolean
+  reserved?: number
 }) {
   const clamped = Math.max(0, Math.min(100, percent))
+  const held = Math.max(0, Math.min(100 - clamped, reserved))
   return (
     <div
       className={thick ? 'track thick' : 'track'}
@@ -188,6 +192,9 @@ export function Progress({
       aria-valuenow={Math.round(clamped)}
     >
       <div className="fill" style={{ width: `${clamped}%`, background: color }} />
+      {held > 0 && (
+        <div className="fill reserved" style={{ left: `${clamped}%`, width: `${held}%` }} />
+      )}
       {marker !== null && marker !== undefined && (
         <div className="tick" style={{ left: `${Math.max(0, Math.min(100, marker))}%` }} />
       )}

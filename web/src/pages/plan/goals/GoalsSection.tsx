@@ -1,81 +1,40 @@
-// Savings goals: progress toward each, and what it takes each month to get there.
+// The Goals section of the Plan tab: savings goals and purchases being saved
+// for, with what each budget period needs and whether recent progress makes it.
+// "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
+// the overview's "Save for a purchase" link gets here.
 
 import { useState } from 'react'
-import type { Account, Goal } from '../../api/client'
-import { useAction, useActionMutation } from '../../api/hooks'
-import { Card, ErrorNote, Loading, Progress } from '../../components/ui'
-import { useApp } from '../../lib/app'
-import { parseMoney } from '../../lib/format'
-import { FormCard } from './FormCard'
-import { GoalForm, type GoalFields } from './GoalForm'
-import { goalText } from './text'
+import { useSearchParams } from 'react-router-dom'
+import type { Account, Goal } from '../../../api/client'
+import { useAction, useActionMutation } from '../../../api/hooks'
+import { Card, ErrorNote, Loading } from '../../../components/ui'
+import { FormCard } from '../FormCard'
+import { GoalCard } from './GoalCard'
+import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
 
-/** Put money toward a goal counted by hand, or take some back with a minus sign. */
-function AddMoney({ goal }: { goal: Goal }) {
-  const [amount, setAmount] = useState('')
-  const add = useActionMutation('add_to_goal')
-  const cents = parseMoney(amount)
-  return (
-    <form
-      className="row wrap"
-      aria-label={`Add to ${goal.name}`}
-      onSubmit={(event) => {
-        event.preventDefault()
-        add.mutate({ id: goal.id, amountCents: cents! }, { onSuccess: () => setAmount('') })
-      }}
-    >
-      <input
-        className="input num"
-        style={{ width: 110 }}
-        inputMode="decimal"
-        aria-label={`Amount to add to ${goal.name}`}
-        placeholder="Amount"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
-      <button type="submit" className="btn" disabled={!cents || add.isPending}>
-        Add
-      </button>
-      <ErrorNote error={add.error} />
-    </form>
-  )
+/** What the form is open on: a new goal of a kind, or an existing goal. */
+interface Editing {
+  goal: Goal | null
+  kind: GoalKind
 }
 
-function GoalCard({ goal, onEdit }: { goal: Goal; onEdit: () => void }) {
-  const { money, settings } = useApp()
-  return (
-    <Card label={goal.name} className="span-6 stack-sm">
-      <div className="row-between">
-        <h2>{goal.name}</h2>
-        <button type="button" className="linkbtn" onClick={onEdit}>
-          Edit
-        </button>
-      </div>
-      <div className="row wrap" style={{ alignItems: 'baseline' }}>
-        <span className="num mid-number">{money(goal.currentCents)}</span>
-        <span className="muted">of {money(goal.targetCents)}</span>
-      </div>
-      <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
-      <span className="small">{goalText(goal, money, settings.locale)}</span>
-      {goal.accountId ? (
-        <span className="small muted">Follows the balance of {goal.accountName}.</span>
-      ) : (
-        <AddMoney goal={goal} />
-      )}
-    </Card>
-  )
+/** The form's heading: the goal's name, or what kind of goal is being started. */
+function titleOf({ goal, kind }: Editing): string {
+  if (goal) return goal.name
+  return kind === 'purchase' ? 'Save for a purchase' : 'New goal'
 }
 
-/** The open form, with the changes it can save. A null goal means a new one. */
+/** The open form, with the changes it can save. */
 function GoalEditor({
-  goal,
+  editing,
   accounts,
   onClose,
 }: {
-  goal: Goal | null
+  editing: Editing
   accounts: Account[]
   onClose: () => void
 }) {
+  const { goal, kind } = editing
   const create = useActionMutation('create_goal')
   const update = useActionMutation('update_goal')
   const remove = useActionMutation('delete_goal')
@@ -83,9 +42,10 @@ function GoalEditor({
   const save = (fields: GoalFields) =>
     goal ? update.mutate({ id: goal.id, ...fields }, close) : create.mutate(fields, close)
   return (
-    <FormCard title={goal ? goal.name : 'New goal'}>
+    <FormCard title={titleOf(editing)}>
       <GoalForm
         goal={goal ?? undefined}
+        kind={kind}
         accounts={accounts}
         busy={create.isPending || update.isPending || remove.isPending}
         error={create.error ?? update.error ?? remove.error}
@@ -98,43 +58,73 @@ function GoalEditor({
 }
 
 export function GoalsSection() {
-  // undefined: no form open; null: a new goal; a goal: editing that one.
-  const [editing, setEditing] = useState<Goal | null | undefined>(undefined)
+  const [params, setParams] = useSearchParams()
+  // Opened from a link that asks for a new purchase; otherwise nothing is open.
+  const [editing, setEditing] = useState<Editing | null>(() =>
+    params.get('new') === 'purchase' ? { goal: null, kind: 'purchase' } : null,
+  )
   const goals = useAction('list_goals')
   const accounts = useAction('list_accounts')
+  // The Plan screen loads cash flow anyway; its date is the server's today.
+  const cash = useAction('get_cash_flow')
 
-  if (!goals.data || !accounts.data) {
-    const error = goals.error ?? accounts.error
+  if (!goals.data || !accounts.data || !cash.data) {
+    const error = goals.error ?? accounts.error ?? cash.error
     return error ? <ErrorNote error={error} /> : <Loading />
+  }
+
+  function close() {
+    setEditing(null)
+    // Drop "?new=purchase" so a reload does not open the form again.
+    if (params.has('new')) setParams({}, { replace: true })
   }
 
   return (
     <>
-      {editing !== undefined && (
+      {editing && (
         <GoalEditor
-          key={editing?.id ?? 'new'}
-          goal={editing}
+          key={editing.goal?.id ?? `new-${editing.kind}`}
+          editing={editing}
           accounts={accounts.data}
-          onClose={() => setEditing(undefined)}
+          onClose={close}
         />
       )}
 
       <div className="row-between wrap">
-        <h2>Savings goals</h2>
-        <button type="button" className="btn primary" onClick={() => setEditing(null)}>
-          Add a goal
-        </button>
+        <h2>Goals</h2>
+        <div className="row wrap">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setEditing({ goal: null, kind: 'savings' })}
+          >
+            Add a goal
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setEditing({ goal: null, kind: 'purchase' })}
+          >
+            Save for a purchase
+          </button>
+        </div>
       </div>
       {goals.data.length === 0 ? (
         <Card label="No goals">
           <p className="empty">
-            No goals yet. An emergency fund of one month of spending is a good first one.
+            No goals yet. Save for something you want to buy, or start an emergency fund of one
+            month of spending.
           </p>
         </Card>
       ) : (
         <div className="grid">
           {goals.data.map((goal) => (
-            <GoalCard key={goal.id} goal={goal} onEdit={() => setEditing(goal)} />
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              today={cash.data.today}
+              onEdit={() => setEditing({ goal, kind: goal.kind })}
+            />
           ))}
         </div>
       )}

@@ -6,7 +6,7 @@ import { Segmented } from '../components/ui'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
-import { GoalsSection } from './plan/Goals'
+import { GoalsSection } from './plan/goals/GoalsSection'
 import { NetWorthSection } from './plan/NetWorth'
 
 const SECTIONS = {
