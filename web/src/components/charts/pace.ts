@@ -74,11 +74,6 @@ export function paceFrame(width: number, tickLabels: string[], endLabels: string
   }
 }
 
-/** The date `index` days after `start`. */
-export function dayDate(start: string, index: number): string {
-  return new Date(Date.parse(`${start}T00:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10)
-}
-
 /** The first and last date labels hug the plot's edges so they never spill past them. */
 export function edgeAnchor(index: number, days: number): 'start' | 'middle' | 'end' {
   if (index === 0) return 'start'

@@ -4,10 +4,10 @@
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
 import { axisFormat, axisIndices, spreadLabels, textWidth } from '../../lib/chartScale'
+import { addDays } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import {
-  dayDate,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
@@ -188,7 +188,7 @@ function DateAxis({
           textAnchor={edgeAnchor(index, pace.days)}
           className="chart-axis"
         >
-          {shortDate(dayDate(pace.start, index), locale)}
+          {shortDate(addDays(pace.start, index), locale)}
         </text>
       ))}
     </g>

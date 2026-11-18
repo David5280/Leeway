@@ -2,7 +2,8 @@
 // flag, and where recent progress lands as a dot, all on one line of days.
 // Kept free of React so every placement rule can be tested on its own.
 
-import { dayNumber, textWidth } from '../../lib/chartScale'
+import { textWidth } from '../../lib/chartScale'
+import { toDayNumber } from '../../lib/dates'
 import { AXIS_FONT } from './parts'
 
 export interface TimelineDates {
@@ -60,15 +61,15 @@ export function timelineLayout(
   labels: { target: string; projected: string },
   width: number,
 ): TimelineLayout | null {
-  const start = dayNumber(dates.today)
+  const start = toDayNumber(dates.today)
   const ahead = [dates.targetDate, dates.projectedDate]
     .filter((d): d is string => d !== null && d > dates.today)
-    .map(dayNumber)
+    .map(toDayNumber)
   if (ahead.length === 0) return null
   const span = (Math.max(...ahead) - start) * (1 + END_ROOM)
   const left = 6
   const right = width - 6
-  const x = (iso: string) => left + ((right - left) * (dayNumber(iso) - start)) / span
+  const x = (iso: string) => left + ((right - left) * (toDayNumber(iso) - start)) / span
   const mark = (iso: string | null, label: string): TimelineMark | null => {
     if (!iso || iso <= dates.today) return null
     const at = x(iso)

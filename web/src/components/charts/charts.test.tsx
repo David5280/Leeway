@@ -1,8 +1,9 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { addDays } from '../../lib/dates'
 import { fakeServer, renderSignedIn } from '../../test/fake'
 import { LineChart } from './LineChart'
-import { dayDate, type Pace } from './pace'
+import type { Pace } from './pace'
 import { PaceChart } from './PaceChart'
 import { PeriodBars } from './PeriodBars'
 
@@ -118,7 +119,7 @@ function pace(fields: Partial<Pace> = {}): Pace {
     categoryIds: [],
     budgetCents: 80_000,
     cumulative: Array.from({ length: 17 }, (_, i) => ({
-      date: dayDate('2026-11-01', i),
+      date: addDays('2026-11-01', i),
       cents: (i + 1) * 2_000,
     })),
     projectedCents: 96_000,

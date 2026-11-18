@@ -1,6 +1,7 @@
 // Pure chart math: tidy axis ticks, date ticks, label placement and pointer lookup.
 // Kept free of React so every rule here can be read and tested on its own.
 
+import { fromDayNumber, toDayNumber } from './dates'
 import { money, type MoneyOptions } from './format'
 
 /** The multiples of a power of ten that read as round numbers on an axis. */
@@ -132,18 +133,6 @@ export function nearestIndex(x: number, positions: number[]): number {
   return best
 }
 
-const DAY_MS = 86_400_000
-
-/** Days since 1970 for a YYYY-MM-DD date, so dates can be placed on a line. */
-export function dayNumber(iso: string): number {
-  return Date.parse(`${iso}T00:00:00Z`) / DAY_MS
-}
-
-/** The YYYY-MM-DD date of a day number. */
-export function isoFromDay(day: number): string {
-  return new Date(day * DAY_MS).toISOString().slice(0, 10)
-}
-
 export interface TimeTick {
   date: string
   /** Months show the month; the first tick and each January also show the year. */
@@ -157,15 +146,15 @@ export interface TimeTick {
  * evenly spaced days. At most `maxTicks` labels.
  */
 export function timeTicks(first: string, last: string, maxTicks: number): TimeTick[] {
-  const start = dayNumber(first)
-  const span = dayNumber(last) - start
+  const start = toDayNumber(first)
+  const span = toDayNumber(last) - start
   const count = Math.max(2, maxTicks)
   if (span < 60) {
     if (span <= 0) return [{ date: first, showYear: false, monthly: false }]
     const step = Math.max(1, Math.ceil(span / (count - 1)))
     const ticks: TimeTick[] = []
     for (let day = 0; day <= span; day += step) {
-      ticks.push({ date: isoFromDay(start + day), showYear: false, monthly: false })
+      ticks.push({ date: fromDayNumber(start + day), showYear: false, monthly: false })
     }
     return ticks
   }

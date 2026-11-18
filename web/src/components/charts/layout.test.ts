@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { addDays } from '../../lib/dates'
 import { lineFrame, timeTickLabel } from './LineChart'
 import {
-  dayDate,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
@@ -23,7 +23,7 @@ function pace(fields: Partial<Pace> = {}): Pace {
     categoryIds: [],
     budgetCents: 80_000,
     cumulative: Array.from({ length: 17 }, (_, i) => ({
-      date: dayDate('2026-11-01', i),
+      date: addDays('2026-11-01', i),
       cents: (i + 1) * 2_000,
     })),
     projectedCents: 60_000,
@@ -59,7 +59,7 @@ describe('paceState', () => {
     expect(paceState(pace(), false).projecting).toBe(false)
     const full = pace({
       cumulative: Array.from({ length: 30 }, (_, i) => ({
-        date: dayDate('2026-11-01', i),
+        date: addDays('2026-11-01', i),
         cents: 1_000,
       })),
     })
@@ -117,12 +117,7 @@ describe('paceFrame', () => {
   })
 })
 
-describe('dayDate and edgeAnchor', () => {
-  it('count days on from the start, across a month end', () => {
-    expect(dayDate('2026-11-01', 16)).toBe('2026-11-17')
-    expect(dayDate('2026-11-30', 1)).toBe('2026-12-01')
-  })
-
+describe('edgeAnchor', () => {
   it('pins the first and last date labels inside the plot', () => {
     expect(edgeAnchor(0, 30)).toBe('start')
     expect(edgeAnchor(29, 30)).toBe('end')
