@@ -7,6 +7,7 @@ import { PeriodBars } from '../../components/charts'
 import { Card, ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'
+import { amountClass, amountTone, transactionTitle } from '../../lib/transactions'
 
 /** How many of this period's transactions to list before linking to the full list. */
 const SHOWN = 12
@@ -103,8 +104,10 @@ export function InThisCategory({
           <span className="num small muted" style={{ width: 56 }}>
             {shortDate(tx.date, settings.locale)}
           </span>
-          <span className="grow">{tx.merchantName ?? tx.name}</span>
-          <span className="num">{signed(tx.amountCents)}</span>
+          <span className="grow">{transactionTitle(tx)}</span>
+          <span className={amountClass(amountTone(tx, category.kind))}>
+            {signed(tx.amountCents)}
+          </span>
         </div>
       ))}
       {total > SHOWN && (

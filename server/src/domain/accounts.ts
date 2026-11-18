@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
+import { recategorize } from './categorize.js'
 
 export const ACCOUNT_TYPES = [
   'depository',
@@ -157,6 +158,9 @@ export async function updateAccount(
       patch.minimumPaymentCents ?? null,
     ],
   )
+  // A card counted or left out changes whether payments to it are transfers.
+  const hiddenChanged = patch.hidden !== undefined && patch.hidden !== account.hidden
+  if (hiddenChanged && account.type === 'credit') await recategorize(db)
   return getAccount(db, id)
 }
 

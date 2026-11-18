@@ -25,13 +25,19 @@ export const CADENCE_LABELS = {
   year: 'a year',
 } as const
 
-/** Plaid's top-level categories. Detailed ones (like FOOD_AND_DRINK_GROCERIES) can be typed in. */
+/**
+ * Plaid's top-level categories and the detailed ones people reach for most.
+ * Any other detailed code (see Plaid's taxonomy) can be typed in.
+ */
 export const BANK_CATEGORIES = [
   'FOOD_AND_DRINK',
   'FOOD_AND_DRINK_GROCERIES',
   'FOOD_AND_DRINK_RESTAURANT',
+  'FOOD_AND_DRINK_FAST_FOOD',
   'FOOD_AND_DRINK_COFFEE',
+  'FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR',
   'GENERAL_MERCHANDISE',
+  'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES',
   'GENERAL_SERVICES',
   'ENTERTAINMENT',
   'TRANSPORTATION',
@@ -40,9 +46,12 @@ export const BANK_CATEGORIES = [
   'HOME_IMPROVEMENT',
   'MEDICAL',
   'PERSONAL_CARE',
+  'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS',
   'GOVERNMENT_AND_NON_PROFIT',
   'BANK_FEES',
   'LOAN_PAYMENTS',
+  'LOAN_PAYMENTS_CAR_PAYMENT',
+  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
   'INCOME',
   'TRANSFER_IN',
   'TRANSFER_OUT',
@@ -63,14 +72,17 @@ const NEW_CATEGORY: CategoryFields = {
   warnAtPercent: null,
   trackPace: true,
   providerCategories: [],
+  group: null,
 }
 
 /** The editable fields of a category, or the defaults for a new one. */
 export function fieldsOf(category?: Category): CategoryFields {
   if (!category) return { ...NEW_CATEGORY, providerCategories: [] }
-  const { name, color, kind, budgetCents, budgetCadence, warnAtPercent, trackPace } = category
+  const { name, color, kind, budgetCents, budgetCadence, warnAtPercent, trackPace, group } =
+    category
   return {
     name,
+    group,
     color,
     kind,
     budgetCents,
@@ -84,6 +96,7 @@ export function fieldsOf(category?: Category): CategoryFields {
 /** Everything about a category in one form: used to add one and to change one. */
 export function CategoryForm({
   category,
+  groups = [],
   submitLabel,
   busy,
   error,
@@ -91,6 +104,8 @@ export function CategoryForm({
   onCancel,
 }: {
   category?: Category
+  /** Group names already in use, offered while typing one. */
+  groups?: string[]
   submitLabel: string
   busy: boolean
   error: unknown
@@ -135,6 +150,23 @@ export function CategoryForm({
           value={fields.name}
           onChange={(e) => set({ name: e.target.value })}
         />
+      </label>
+      <label className="field">
+        Group
+        <input
+          className="input"
+          maxLength={40}
+          list="category-groups"
+          placeholder="None, like Food and drink"
+          value={fields.group ?? ''}
+          // A blank group means none, so the category is listed on its own.
+          onChange={(e) => set({ group: e.target.value.trim() ? e.target.value : null })}
+        />
+        <datalist id="category-groups">
+          {groups.map((group) => (
+            <option key={group} value={group} />
+          ))}
+        </datalist>
       </label>
       <Setting label="Kind" hint="Transfers move money between your own accounts and never count">
         <Segmented

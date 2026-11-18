@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { STARTER_CATEGORIES } from '../src/domain/categories.js'
+import { STARTER_RULES } from '../src/domain/starterRules.js'
+import { STARTER_CATEGORIES } from '../src/domain/starters.js'
 import { createOwner, getOwner } from '../src/domain/owner.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -28,7 +29,9 @@ const categoryNames = async () => (await call('list_categories')).map((c) => c.n
 describe('starter categories', () => {
   it('suggests the starter set, with income and transfers kept out of spending', async () => {
     const starters = await call('get_starter_categories')
-    expect(starters).toEqual(STARTER_CATEGORIES)
+    expect(starters).toEqual(
+      STARTER_CATEGORIES.map(({ formerly: _formerly, ...category }) => category),
+    )
     expect(starters.find((c) => c.name === 'Income')?.kind).toBe('income')
     expect(starters.find((c) => c.name === 'Transfers')?.kind).toBe('transfer')
     expect(starters.filter((c) => c.kind === 'expense').length).toBeGreaterThan(5)
@@ -95,6 +98,31 @@ describe('finishing first-run setup', () => {
       categoryId: groceries?.id,
       categorySource: 'provider',
     })
+  })
+
+  it('adds the starter rules for subscription apps when their category is picked', async () => {
+    await call('create_rule', {
+      pattern: 'Netflix',
+      categoryId: (await call('create_category', { name: 'Movies' })).id,
+    })
+
+    await call('complete_setup', {
+      categories: STARTER_CATEGORIES.map(({ formerly: _formerly, ...category }) => category),
+    })
+
+    const rules = await call('list_rules')
+    // The owner's own Netflix rule stays first, and no second one is added for it.
+    expect(rules[0]?.pattern).toBe('Netflix')
+    expect(rules.map((r) => r.pattern)).toEqual([
+      'Netflix',
+      ...STARTER_RULES.map((r) => r.pattern).filter((pattern) => pattern !== 'netflix'),
+    ])
+  })
+
+  it('adds no starter rules when their category is left out', async () => {
+    await call('complete_setup', { categories: [{ name: 'Groceries' }] })
+
+    expect(await call('list_rules')).toEqual([])
   })
 
   it('keeps the first onboarding time when setup is finished twice', async () => {

@@ -1,12 +1,26 @@
 // Where the money went: recent transactions, accounts and top merchants.
 
 import { Link } from 'react-router-dom'
+import type { CategoryBudget, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Card, Dot, ErrorNote, Progress } from '../components/ui'
 import { isOwed } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
+import { amountClass, amountTone, movementTag, transactionTitle } from '../lib/transactions'
 import type { WidgetProps } from './types'
+
+/**
+ * The kind of a transaction's category. The budget lists every category but
+ * transfers, so a category it does not know is a transfer.
+ */
+function kindOf(
+  tx: Transaction,
+  category: CategoryBudget | undefined,
+): CategoryBudget['kind'] | 'transfer' | null {
+  if (category) return category.kind
+  return tx.categoryId ? 'transfer' : null
+}
 
 export function RecentWidget({ budget }: WidgetProps) {
   const { signed, settings } = useApp()
@@ -24,6 +38,7 @@ export function RecentWidget({ budget }: WidgetProps) {
       {recent.data?.transactions.length === 0 && <p className="empty">No transactions yet.</p>}
       {recent.data?.transactions.map((tx) => {
         const category = tx.categoryId ? colors.get(tx.categoryId) : undefined
+        const kind = kindOf(tx, category)
         return (
           <div key={tx.id} className="list-row">
             <span className="num small muted" style={{ width: 56, flex: 'none' }}>
@@ -38,15 +53,15 @@ export function RecentWidget({ budget }: WidgetProps) {
                   textOverflow: 'ellipsis',
                 }}
               >
-                {tx.merchantName ?? tx.name}
+                {transactionTitle(tx)}
               </span>
               <span className="small muted row" style={{ gap: 6 }}>
                 <Dot color={category?.color} dashed={!tx.categoryId} />
-                {category?.name ?? (tx.categoryId ? 'Transfer' : 'Needs a category')}
+                {category?.name ?? movementTag(tx, kind) ?? 'Needs a category'}
                 {tx.pending ? ', pending' : ''}
               </span>
             </span>
-            <span className={`num ${tx.amountCents < 0 ? 'good' : ''}`} style={{ fontWeight: 500 }}>
+            <span className={amountClass(amountTone(tx, kind))} style={{ fontWeight: 500 }}>
               {signed(tx.amountCents)}
             </span>
           </div>

@@ -67,6 +67,7 @@ export function category(name: string, fields: Partial<Category> = {}): Category
     warnAtPercent: null,
     trackPace: true,
     providerCategories: [],
+    group: null,
     position: 0,
     ...fields,
   }
@@ -85,6 +86,7 @@ export function transaction(
     categoryId: null,
     categorySource: null,
     bankCategory: null,
+    person: null,
     note: null,
     excluded: false,
     manual: false,

@@ -159,13 +159,20 @@ export function detectRecurring(
 /** How far back detection looks: long enough to see two yearly charges. */
 export const HISTORY_DAYS = 400
 
-/** Posted, counted transactions from the last HISTORY_DAYS, oldest first. */
+/**
+ * Posted, counted transactions from the last HISTORY_DAYS, oldest first.
+ * Transfers are left out: a monthly card payment is neither a bill nor, seen
+ * from the card's side, a paycheck.
+ */
 export async function recentHistory(db: Db, today: IsoDate): Promise<PastTransaction[]> {
   const { rows } = await db.query<PastTransaction>(
     `SELECT t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
        t.category_id AS "categoryId"
-     FROM transactions t JOIN accounts a ON a.id = t.account_id
+     FROM transactions t
+     JOIN accounts a ON a.id = t.account_id
+     LEFT JOIN categories c ON c.id = t.category_id
      WHERE NOT t.pending AND NOT t.excluded AND NOT a.hidden AND t.date BETWEEN $1 AND $2
+       AND (c.kind IS NULL OR c.kind <> 'transfer')
      ORDER BY t.date`,
     [addDays(today, -HISTORY_DAYS), today],
   )

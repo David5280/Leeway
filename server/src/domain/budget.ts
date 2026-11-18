@@ -15,6 +15,8 @@ export interface CategoryBudget {
   color: string
   icon: string | null
   kind: 'expense' | 'income'
+  /** The heading the category is listed under, or null. */
+  group: string | null
   /** This period's budget, converted from the category's cadence. Null means no budget. */
   budgetCents: number | null
   /** Expense: net spending (refunds subtract). Income: money received. */
@@ -146,6 +148,7 @@ function categoryRow(
     color: category.color,
     icon: category.icon,
     kind: category.kind as 'expense' | 'income',
+    group: category.group,
     budgetCents: budget,
     spentCents: spent,
     leftCents: budget === null ? null : budget - spent,

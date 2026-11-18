@@ -7,7 +7,8 @@ import type { AppContext } from '../context.js'
 import { withTransaction, type Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { decrypt, encrypt } from '../lib/crypto.js'
-import { recategorize } from './categorize.js'
+import { loadOwnAccounts, recategorize } from './categorize.js'
+import { sameOwnAccounts } from './transfers.js'
 
 export interface Connection {
   id: string
@@ -114,6 +115,8 @@ export async function removeConnection(ctx: AppContext, connectionId: string): P
   // Tell the bank first so it stops sharing data, but remove locally either way.
   await ctx.bank?.removeItem(token).catch(() => {})
   await ctx.db.query('DELETE FROM connections WHERE id = $1', [connectionId])
+  // Payments to a card that is no longer tracked count as spending again.
+  await recategorize(ctx.db)
 }
 
 function bankFailure(error: unknown): AppError {
@@ -153,9 +156,13 @@ export async function syncConnection(ctx: AppContext, connectionId: string): Pro
     }
 
     await withTransaction(ctx.db, async (db) => {
+      const cardsBefore = await loadOwnAccounts(db)
       const accountIds = await upsertAccounts(db, connectionId, accounts)
       const touched = await applyTransactions(db, accountIds, added, modified, removed)
-      await recategorize(db, touched)
+      // A newly tracked card turns earlier payments to it into transfers, so
+      // when the cards change every transaction is looked at again.
+      const cardsChanged = !sameOwnAccounts(cardsBefore, await loadOwnAccounts(db))
+      await recategorize(db, cardsChanged ? undefined : touched)
       await db.query(
         `UPDATE connections SET sync_cursor = $2, last_synced_at = now(), status = 'active', last_error = NULL
          WHERE id = $1`,

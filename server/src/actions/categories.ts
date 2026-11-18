@@ -29,7 +29,7 @@ export const createCategoryAction = defineAction({
   name: 'create_category',
   title: 'Create a category',
   description:
-    'Add a category. budgetCents is in cents for budgetCadence (e.g. 60000 with "month" is $600 a month); leave it null for no budget. kind is expense, income or transfer (transfers never count as spending).',
+    'Add a category. budgetCents is in cents for budgetCadence (e.g. 60000 with "month" is $600 a month); leave it null for no budget. kind is expense, income or transfer (transfers never count as spending). group is an optional heading to list it under, like "Food and drink".',
   input: categoryInputSchema,
   scope: 'write',
   surface: 'all',
