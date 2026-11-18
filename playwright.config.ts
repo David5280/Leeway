@@ -12,7 +12,7 @@ export default defineConfig({
   // Every test shares one install, so they run in order, one at a time.
   fullyParallel: false,
   workers: 1,
-  forbidOnly: !!process.env.CI,
+  forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

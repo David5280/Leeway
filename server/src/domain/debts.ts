@@ -67,7 +67,7 @@ async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'needsDetail
 
 /** The month a plan finishes in, counted from this month. */
 function debtFreeDate(plan: PayoffPlan, today: IsoDate): IsoDate | null {
-  return plan.months === null ? null : addMonths(today, plan.months).slice(0, 7) + '-01'
+  return plan.months === null ? null : `${addMonths(today, plan.months).slice(0, 7)}-01`
 }
 
 /** Avalanche, snowball and minimums-only plans, paying `extraCents` a month over the minimums. */
