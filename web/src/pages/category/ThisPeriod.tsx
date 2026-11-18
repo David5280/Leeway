@@ -46,6 +46,7 @@ export function ThisPeriod({
           marker={todayMarker}
         />
       )}
+      <CarriedNote carriedCents={row.carriedCents} />
       {row.expectedByNowCents !== null && row.pace !== null && (
         <span className="small muted">
           Steady spending would be at {money(row.expectedByNowCents)} by today. You warn at{' '}
@@ -53,6 +54,19 @@ export function ThisPeriod({
         </span>
       )}
     </Card>
+  )
+}
+
+/** What rolled over into this period's budget, when rollover moved anything. */
+function CarriedNote({ carriedCents }: { carriedCents: number | null }) {
+  const { money } = useApp()
+  if (!carriedCents) return null
+  return (
+    <span className="small muted">
+      {carriedCents > 0
+        ? `Includes ${money(carriedCents)} rolled over from earlier periods.`
+        : `Less ${money(-carriedCents)} overspent in earlier periods.`}
+    </span>
   )
 }
 

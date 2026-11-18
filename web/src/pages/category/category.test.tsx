@@ -219,6 +219,74 @@ describe('pastAverage', () => {
   })
 })
 
+describe('Rollover', () => {
+  it('turns rollover on for a spending category with a budget', async () => {
+    const server = serve({ update_category: () => groceries })
+    renderCategory()
+    const user = userEvent.setup()
+    const card = within(await screen.findByRole('region', { name: 'Rollover' }))
+    const toggle = card.getByRole('switch', { name: 'Roll over what is left' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(card.getByText(/Unspent money adds to next period/)).toBeInTheDocument()
+    await user.click(toggle)
+    await waitFor(() =>
+      expect(server.actions('update_category')).toEqual([{ id: groceries.id, rollover: true }]),
+    )
+  })
+
+  it('says since when it counts, and what rolled into this period', async () => {
+    const rolling = { ...groceries, rollover: true, rolloverSince: '2026-09-01' }
+    serve({
+      list_categories: () => [rolling, coffee],
+      get_budget: () =>
+        budgetFor([rolling], [{ categoryId: groceries.id, amountCents: 24000 }], {
+          carries: new Map([[groceries.id, 4000]]),
+        }),
+    })
+    renderCategory()
+    const card = within(await screen.findByRole('region', { name: 'Rollover' }))
+    expect(card.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+    expect(card.getByText('Counting from Sep 1, 2026, when it was turned on.')).toBeInTheDocument()
+    expect(
+      within(region('This period')).getByText('Includes $40 rolled over from earlier periods.'),
+    ).toBeInTheDocument()
+  })
+
+  it('notes an overspend taken from this period', async () => {
+    const rolling = { ...groceries, rollover: true, rolloverSince: '2026-09-01' }
+    serve({
+      list_categories: () => [rolling],
+      get_budget: () => budgetFor([rolling], [], { carries: new Map([[groceries.id, -2500]]) }),
+    })
+    renderCategory()
+    expect(await screen.findByText('Less $25 overspent in earlier periods.')).toBeInTheDocument()
+  })
+
+  it('needs a budget first', async () => {
+    serve()
+    renderCategory(coffee.id)
+    const card = within(await screen.findByRole('region', { name: 'Rollover' }))
+    expect(card.getByRole('switch')).toBeDisabled()
+    expect(card.getByText(/Give it a budget first/)).toBeInTheDocument()
+  })
+
+  it('is not offered for income', async () => {
+    serve()
+    renderCategory(paycheck.id)
+    expect(await screen.findByRole('heading', { name: 'Paycheck', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Rollover' })).not.toBeInTheDocument()
+  })
+
+  it('shows why rollover could not be changed', async () => {
+    serve({}, { '/api/actions/update_category': failing('Rollover is unavailable') })
+    renderCategory()
+    const user = userEvent.setup()
+    const card = within(await screen.findByRole('region', { name: 'Rollover' }))
+    await user.click(card.getByRole('switch'))
+    expect(await card.findByRole('alert')).toHaveTextContent('Rollover is unavailable')
+  })
+})
+
 describe('Category page', () => {
   it('says the category is gone and links back to all categories', async () => {
     serve()
