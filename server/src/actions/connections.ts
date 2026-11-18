@@ -8,6 +8,7 @@ import {
   reconnected,
   removeConnection,
 } from '../domain/connections.js'
+import { usePurchaseDates } from '../domain/purchaseDates.js'
 import { syncAll, syncConnection } from '../domain/sync.js'
 import { defineAction } from './action.js'
 
@@ -32,6 +33,17 @@ export const syncBanksAction = defineAction({
   surface: 'all',
   run: async (ctx, { connectionId }) =>
     connectionId ? [await syncConnection(ctx, connectionId)] : syncAll(ctx),
+})
+
+export const usePurchaseDatesAction = defineAction({
+  name: 'use_purchase_dates',
+  title: 'Use purchase dates for older transactions',
+  description:
+    'Ask each bank for its transaction history again and move transactions synced before Leeway used purchase dates onto the day of the purchase instead of the day it posted. Only dates change; categories, notes and exclusions stay, nothing is added or removed, and running it again changes nothing. Returns how many dates changed per bank.',
+  input: z.object({}),
+  scope: 'write',
+  surface: 'all',
+  run: (ctx) => usePurchaseDates(ctx),
 })
 
 // Linking a bank needs the bank's own login window, so these live in the app only.
