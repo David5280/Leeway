@@ -3,7 +3,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { failing, fakeServer, renderSignedIn, settings } from '../../../test/fake'
+import { failing, fakeServer, holdRequest, renderSignedIn, settings } from '../../../test/fake'
 import { SummarySetting } from './SummarySetting'
 
 function serve(options: { on?: boolean; ai?: string } = {}) {
@@ -40,6 +40,17 @@ describe('SummarySetting', () => {
     await userEvent.click(toggle())
     await waitFor(() => expect(server.actions('set_ai_summary')).toEqual([{ on: true }]))
     await waitFor(() => expect(toggle()).toHaveAttribute('aria-checked', 'true'))
+  })
+
+  it('shows the new position at once, and holds the switch until it is saved', async () => {
+    serve()
+    const release = holdRequest('/api/actions/set_ai_summary')
+    renderSignedIn(<SummarySetting />)
+    await userEvent.click(toggle())
+    expect(toggle()).toHaveAttribute('aria-checked', 'true')
+    expect(toggle()).toBeDisabled()
+    release()
+    await waitFor(() => expect(toggle()).toBeEnabled())
   })
 
   it('explains how to add a key when the server has none', async () => {
