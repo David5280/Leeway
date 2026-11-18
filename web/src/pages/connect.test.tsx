@@ -162,4 +162,13 @@ describe('ConnectProblem', () => {
   it('handles a missing problem code', () => {
     expect(show('')).toHaveTextContent('Something went wrong while connecting')
   })
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'treats the built-in object name %s as an unknown code',
+    (code) => {
+      expect(show(`?problem=${code}`)).toHaveTextContent(
+        'Something went wrong while connecting, so nothing was shared.',
+      )
+    },
+  )
 })
