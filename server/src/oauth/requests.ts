@@ -15,7 +15,7 @@ import { narrowerScope, parseScope, type Scope } from './scopes.js'
 /** How long the owner has to answer the consent screen. */
 const REQUEST_MINUTES = 10
 /** How long an authorization code can wait to be exchanged (RFC 6749 suggests at most 10). */
-export const CODE_MINUTES = 5
+const CODE_MINUTES = 5
 
 /** The query parameters of GET /oauth/authorize. */
 export interface AuthorizeParams {

@@ -28,7 +28,7 @@ export const MAX_IMPORT_ROWS = 20_000
 /** No personal transaction comes near a billion dollars; a bigger one is a misread column. */
 const MAX_AMOUNT_CENTS = 100_000_000_000
 
-export const importRowSchema = z.object({
+const importRowSchema = z.object({
   date: isoDateSchema,
   name: z.string().trim().min(1, 'Every row needs a description').max(200),
   amountCents: z.number().int().min(-MAX_AMOUNT_CENTS).max(MAX_AMOUNT_CENTS),

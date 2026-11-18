@@ -42,7 +42,7 @@ export function rowNote(row: CategoryBudget, money: (cents: number) => string) {
  * One category on a line or two: name, bar, then "$208 of $621 · $413 left".
  * The list it sits in decides the layout by its width (.cat-list in styles.css).
  */
-export function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
+function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
   const { money } = useApp()
   const note = rowNote(row, money)
   const isCurrent = budget.period.offset === 0

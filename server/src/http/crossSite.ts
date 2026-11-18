@@ -13,7 +13,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
  * A request with neither came from outside a browser (a script, a test),
  * which carries no visitor's cookie for a page to borrow.
  */
-export function isCrossSite(request: FastifyRequest): boolean {
+function isCrossSite(request: FastifyRequest): boolean {
   const fetchSite = request.headers['sec-fetch-site']
   // "none" means the person did it themselves, like typing an address.
   if (fetchSite) return fetchSite !== 'same-origin' && fetchSite !== 'none'

@@ -236,7 +236,7 @@ function accountType(type: string): AccountType {
 }
 
 /** A Plaid account in Leeway's terms, with balances in cents. */
-export function toBankAccount(account: PlaidAccount): BankAccount {
+function toBankAccount(account: PlaidAccount): BankAccount {
   const { balances } = account
   return {
     providerAccountId: account.account_id,

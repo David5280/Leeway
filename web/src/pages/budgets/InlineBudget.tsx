@@ -10,7 +10,7 @@ import { ErrorNote } from '../../components/ui'
 import { parseMoney } from '../../lib/format'
 
 /** The amount to save from what was typed: cents, null for a blank box, undefined if unreadable. */
-export function typedBudget(text: string): number | null | undefined {
+function typedBudget(text: string): number | null | undefined {
   if (text.trim() === '') return null
   const cents = parseMoney(text)
   return cents !== null && cents >= 0 ? cents : undefined

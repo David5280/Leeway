@@ -31,7 +31,7 @@ const PER_ADDRESS_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '1 minut
 export const ACCOUNT_LIMIT = { maxFailures: 20, windowMs: 15 * MINUTE_MS }
 
 /** Reads a request body with a schema, as an error the person can read when it does not fit. */
-export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
+function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
   const result = schema.safeParse(body ?? {})
   if (!result.success) {
     throw new AppError('invalid_input', result.error.issues.map((i) => i.message).join('; '))

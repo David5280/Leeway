@@ -11,7 +11,7 @@ const PLAID_CDN = 'https://cdn.plaid.com'
  * injected script tag or a link to someone else's script never runs, and
  * nothing else may show Leeway in a frame (no clickjacking of the consent screen).
  */
-export const CONTENT_SECURITY_POLICY = {
+const CONTENT_SECURITY_POLICY = {
   defaultSrc: ["'self'"],
   scriptSrc: ["'self'", PLAID_CDN],
   // Plaid Link styles its window from a script; inline styles cannot run code.
@@ -30,7 +30,7 @@ export const CONTENT_SECURITY_POLICY = {
 }
 
 /** Browser features Leeway never uses, turned off for its pages and anything they frame. */
-export const PERMISSIONS_POLICY =
+const PERMISSIONS_POLICY =
   'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()'
 
 export async function registerSecurityHeaders(app: FastifyInstance): Promise<void> {

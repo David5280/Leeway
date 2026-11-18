@@ -8,7 +8,7 @@ import { MailError, type EmailMessage, type EmailSender } from './sender.js'
 
 export const RESEND_URL = 'https://api.resend.com/emails'
 /** A send is a small request; past this the scheduler tries again later. */
-export const TIMEOUT_MS = 15_000
+const TIMEOUT_MS = 15_000
 /** Provider messages are shown in the app, so long ones are cut. */
 const MAX_DETAIL_LENGTH = 200
 

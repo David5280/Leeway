@@ -112,7 +112,7 @@ export async function listTransactions(
   return { transactions: list.rows.map(present), total: count.rows[0]!.total }
 }
 
-export async function getTransaction(db: Db, id: string): Promise<Transaction> {
+async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
   return present(rows[0])

@@ -35,9 +35,8 @@ export function amountBoundsValid(rule: {
 
 export const AMOUNT_BOUNDS_MESSAGE = 'The minimum amount must not be above the maximum'
 
-export const ruleInputSchema = ruleFieldsSchema.refine(amountBoundsValid, AMOUNT_BOUNDS_MESSAGE)
-
-export type RuleInput = z.infer<typeof ruleInputSchema>
+/** A rule's fields; callers check the amount bounds with amountBoundsValid. */
+export type RuleInput = z.infer<typeof ruleFieldsSchema>
 
 const COLUMNS = `
   id, field, match_type AS "matchType", pattern,

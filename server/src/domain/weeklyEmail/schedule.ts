@@ -33,7 +33,7 @@ export const RETRY_AFTER_MINUTES = 60
  * day, so moving the day, the hour or the time zone never sends twice in a
  * week, while daylight saving (a week give or take an hour) never skips one.
  */
-export const MIN_DAYS_BETWEEN = 6
+const MIN_DAYS_BETWEEN = 6
 
 /** The local day on or before `date` that falls on `weekday`. */
 function onOrBefore(date: IsoDate, weekday: number): IsoDate {

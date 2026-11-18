@@ -54,7 +54,7 @@ export interface WeeklyEmailView {
 }
 
 /** The email for today's numbers, as it would go out now. */
-export async function composeWeeklyEmail(
+async function composeWeeklyEmail(
   ctx: AppContext,
   settings: Settings,
   today: IsoDate,

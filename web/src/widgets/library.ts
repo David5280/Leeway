@@ -59,7 +59,7 @@ export const SIZES = [
   { value: 'full', label: 'Full' },
 ] as const
 
-export const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
+const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
 
 /** The widgets this app draws, in their saved order. */
 export const drawable = (widgets: Widget[]) => widgets.filter(canDraw)

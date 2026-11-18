@@ -162,7 +162,7 @@ export function detectRecurring(
 }
 
 /** How far back detection looks: long enough to see two yearly charges. */
-export const HISTORY_DAYS = 400
+const HISTORY_DAYS = 400
 
 /**
  * Posted, counted transactions from the last HISTORY_DAYS, oldest first.
@@ -184,7 +184,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<PastTransac
   return rows
 }
 
-export async function dismissedKeys(db: Db): Promise<Set<string>> {
+async function dismissedKeys(db: Db): Promise<Set<string>> {
   const { rows } = await db.query<{ key: string }>(
     'SELECT merchant_key AS key FROM dismissed_recurring',
   )

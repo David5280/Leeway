@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { ErrorNote } from '../../components/ui'
 
 /** Far beyond any one account's history as CSV; a bigger file is not a bank export. */
-export const MAX_FILE_BYTES = 25 * 1024 * 1024
+const MAX_FILE_BYTES = 25 * 1024 * 1024
 
 export interface LoadedFile {
   name: string

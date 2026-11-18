@@ -69,7 +69,7 @@ export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Pr
 }
 
 /** Every unpaid bill date before payday, soonest first. */
-export function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] {
+function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] {
   return bills
     .flatMap((bill) =>
       dueBefore(bill, payday).map((dueDate) => ({

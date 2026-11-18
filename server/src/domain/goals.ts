@@ -12,7 +12,7 @@ import { patchOf } from '../lib/schemas.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import { planOf, type GoalPlan, type GoalProgressFacts } from './goalPlan.js'
 
-export const GOAL_KINDS = ['savings', 'purchase'] as const
+const GOAL_KINDS = ['savings', 'purchase'] as const
 
 export const goalInputSchema = z.object({
   /** savings: a pot to fill, like an emergency fund. purchase: one thing to buy, named by `name`. */
@@ -124,7 +124,7 @@ export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
   return withPlans(db, rows, clock)
 }
 
-export async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
+async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
   const { rows } = await db.query<GoalRow>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
   return (await withPlans(db, rows, clock))[0]!

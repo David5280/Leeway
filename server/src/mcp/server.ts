@@ -17,7 +17,7 @@ import type { AppContext } from '../context.js'
 import { AppError, messageOf } from '../errors.js'
 import { getPrompt, listPrompts } from './prompts.js'
 
-export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
+const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
 - Start with get_checkin. It lists what needs attention, most urgent first, with the numbers.
 - For "can I afford this?", use can_i_afford; for "when can I afford it?", use when_can_i_afford.
 - To save for a purchase, use create_goal with kind "purchase" (the item, its price, by when). Its plan says what to set aside each budget period and when recent progress gets there.

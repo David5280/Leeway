@@ -9,7 +9,7 @@ import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
 
 /** How many recent entries the history shows. */
-export const HISTORY_SIZE = 5
+const HISTORY_SIZE = 5
 
 /** Put money toward a goal counted by hand, or take some back with a minus sign. */
 export function AddMoney({ goal }: { goal: Goal }) {

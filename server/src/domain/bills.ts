@@ -62,7 +62,7 @@ export interface Bill extends BillRow {
 }
 
 /** Bills due within this many days are "due soon". */
-export const DUE_SOON_DAYS = 7
+const DUE_SOON_DAYS = 7
 
 /**
  * How many days before a due date a payment still counts toward it. Shorter
@@ -154,7 +154,7 @@ export async function listBills(db: Db, today: IsoDate): Promise<Bill[]> {
     .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.name.localeCompare(b.name))
 }
 
-export async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
+async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
   const { rows } = await db.query<BillRow>(`${SELECT} WHERE b.id = $2`, [today, id])
   if (!rows[0]) throw notFound('Bill')
   return scheduleOf(rows[0], today)

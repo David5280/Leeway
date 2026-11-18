@@ -11,14 +11,14 @@ import { sameResource } from './requests.js'
 import { parseScope, scopeString, type Scope } from './scopes.js'
 
 /** Access tokens are short lived; the app refreshes them quietly. */
-export const ACCESS_TOKEN_SECONDS = 60 * 60
+const ACCESS_TOKEN_SECONDS = 60 * 60
 /** A connection unused this long has to sign in again. Each refresh starts the clock over. */
-export const REFRESH_TOKEN_DAYS = 90
+const REFRESH_TOKEN_DAYS = 90
 /**
  * A refresh token used again within this window gets new tokens instead of
  * ending the connection: an app that sent two refreshes at once is not an attack.
  */
-export const REFRESH_REUSE_GRACE_SECONDS = 120
+const REFRESH_REUSE_GRACE_SECONDS = 120
 
 /** The token response from RFC 6749 section 5.1. */
 export interface TokenResponse {
