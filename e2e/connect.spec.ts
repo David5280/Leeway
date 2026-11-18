@@ -27,7 +27,7 @@ test('an assistant signs in with the owner approval and can be disconnected', as
   const challenge = await request.post('/mcp', { data: {} })
   expect(challenge.status()).toBe(401)
   expect(challenge.headers()['www-authenticate']).toContain(
-    'resource_metadata="http://localhost:3100/.well-known/oauth-protected-resource/mcp"',
+    `resource_metadata="${baseURL}/.well-known/oauth-protected-resource/mcp"`,
   )
   const resource = await (await request.get('/.well-known/oauth-protected-resource/mcp')).json()
   const server = await (await request.get('/.well-known/oauth-authorization-server')).json()
