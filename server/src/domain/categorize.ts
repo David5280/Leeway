@@ -99,11 +99,10 @@ export async function loadOwnAccounts(db: Db): Promise<OwnAccounts> {
  * changed category.
  */
 export async function recategorize(db: Db, transactionIds?: string[]): Promise<number> {
-  const [rules, categories, accounts] = await Promise.all([
-    listRules(db),
-    listCategories(db),
-    loadOwnAccounts(db),
-  ])
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const rules = await listRules(db)
+  const categories = await listCategories(db)
+  const accounts = await loadOwnAccounts(db)
   const { rows } = await db.query<
     Categorizable & { id: string; categoryId: string | null; categorySource: string | null }
   >(

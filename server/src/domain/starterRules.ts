@@ -62,7 +62,9 @@ function coveredBy(patterns: string[], starterPattern: string): boolean {
  * Returns how many were added. Does not re-categorize; the caller does.
  */
 export async function addStarterRules(db: Db): Promise<number> {
-  const [categories, rules] = await Promise.all([listCategories(db), listRules(db)])
+  // One at a time: this runs inside the upgrade's transaction, on one client.
+  const categories = await listCategories(db)
+  const rules = await listRules(db)
   const categoryIds = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]))
   const patterns = rules.map((r) => r.pattern.toLowerCase())
   let added = 0
