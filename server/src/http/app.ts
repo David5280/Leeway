@@ -129,7 +129,9 @@ export async function buildApp(
     scope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) =>
       done(null, body),
     )
-    scope.post('/api/webhooks/plaid', async (request, reply) => {
+    // Unsigned calls cost Leeway a lookup of Plaid's key, so a flood of them is cut off.
+    const webhookLimit = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }
+    scope.post('/api/webhooks/plaid', webhookLimit, async (request, reply) => {
       if (!ctx.bank) return reply.status(404).send()
       let webhook
       try {

@@ -4,6 +4,7 @@ import type { AppContext } from '../src/context.js'
 import { resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
+import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
 import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
@@ -164,6 +165,29 @@ describe('HTTP API', () => {
       // No bank is set up here, so the webhook is unknown rather than forbidden.
       expect(webhook.statusCode).toBe(404)
     })
+  })
+
+  it('cuts off a flood of calls to the endpoints anyone can reach without signing in', async () => {
+    // A separate app, so its rate limits start fresh.
+    const limited = await buildApp(ctx, { webDir: null })
+    try {
+      const flood = async (count: number, send: () => Promise<{ statusCode: number }>) => {
+        for (let i = 0; i < count; i++) expect((await send()).statusCode).not.toBe(429)
+        return (await send()).statusCode
+      }
+      const mcp = () => limited.inject({ method: 'POST', url: '/mcp', payload: {} })
+      const webhook = () =>
+        limited.inject({
+          method: 'POST',
+          url: '/api/webhooks/plaid',
+          headers: { 'content-type': 'application/json' },
+          payload: '{}',
+        })
+      expect(await flood(MCP_LIMIT.config.rateLimit.max, mcp)).toBe(429)
+      expect(await flood(60, webhook)).toBe(429)
+    } finally {
+      await limited.close()
+    }
   })
 
   it('resets a forgotten password from the shell and signs everyone out', async () => {
