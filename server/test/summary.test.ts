@@ -16,12 +16,15 @@ class FakeWriter implements SummaryWriter {
   readonly name = 'Claude'
   calls: SummaryFacts[] = []
   failWith: string | null = null
+  /** Throws `failWith` as a bare string instead of an Error, as some libraries do. */
+  throwBareString = false
   /** Holds each write until release() runs, to test two loads at once. */
   gate: Promise<void> | null = null
 
   async write(facts: SummaryFacts): Promise<SummaryText> {
     this.calls.push(facts)
     if (this.gate) await this.gate
+    if (this.failWith && this.throwBareString) throw this.failWith
     if (this.failWith) throw new Error(this.failWith)
     return { headline: `Written from ${facts.period.spent} spent`, points: ['All good.'] }
   }
@@ -43,6 +46,7 @@ beforeEach(async () => {
   ctx.setNow(START)
   writer.calls = []
   writer.failWith = null
+  writer.throwBareString = false
   writer.gate = null
 })
 
@@ -137,6 +141,14 @@ describe('get_summary written by the AI', () => {
     ctx.setNow(later(RETRY_AFTER_MINUTES + 1))
     expect(await call('get_summary')).toMatchObject({ writtenBy: 'Claude', ai: 'on' })
     expect(writer.calls).toHaveLength(2)
+  })
+
+  it('falls back to Leeway’s words when the writer throws something that is not an Error', async () => {
+    writer.failWith = 'socket hang up'
+    writer.throwBareString = true
+    expect(await call('get_summary')).toMatchObject({ writtenBy: 'Leeway', ai: 'unavailable' })
+    const { rows } = await ctx.db.query<{ error: string }>('SELECT error FROM ai_summaries')
+    expect(rows).toEqual([{ error: 'socket hang up' }])
   })
 
   it('shares one write between two loads at the same moment', async () => {

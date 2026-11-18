@@ -43,6 +43,15 @@ export function notFound(what: string): AppError {
   return new AppError('not_found', `${what} not found`)
 }
 
+/**
+ * The message of anything thrown, for a log line or a stored failure note.
+ * Not everything thrown is an Error, and `(error as Error).message` would be
+ * undefined for a thrown string.
+ */
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** Postgres unique_violation, e.g. a duplicate category name. */
 export function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === '23505'

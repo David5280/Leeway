@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { runAction, type AnyAction } from '../actions/action.js'
 import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
-import { AppError } from '../errors.js'
+import { AppError, messageOf } from '../errors.js'
 import { getPrompt, listPrompts } from './prompts.js'
 
 export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
@@ -106,7 +106,7 @@ export function createMcpServer(
       return getPrompt(request.params.name, request.params.arguments)
     } catch (error) {
       // A prompt that does not exist or lacks an argument is the caller's mistake.
-      throw new McpError(ErrorCode.InvalidParams, (error as Error).message)
+      throw new McpError(ErrorCode.InvalidParams, messageOf(error))
     }
   })
 

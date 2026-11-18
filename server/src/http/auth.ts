@@ -16,6 +16,7 @@ import {
 import { AppError } from '../errors.js'
 import { AttemptLimiter } from '../lib/attemptLimiter.js'
 import { setupCodeMatches } from '../lib/setupCode.js'
+import { MINUTE_MS, SECOND_MS } from '../lib/time.js'
 
 const SESSION_COOKIE = 'leeway_session'
 
@@ -27,7 +28,7 @@ const PER_ADDRESS_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '1 minut
  * most 80 guesses an hour reach the password, however many addresses an
  * attacker has; the owner waits at most this window while under attack.
  */
-export const ACCOUNT_LIMIT = { maxFailures: 20, windowMs: 15 * 60_000 }
+export const ACCOUNT_LIMIT = { maxFailures: 20, windowMs: 15 * MINUTE_MS }
 
 /** Reads a request body with a schema, as an error the person can read when it does not fit. */
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
@@ -95,9 +96,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setupC
   const checkNotPaused = (limiter: AttemptLimiter, reply: FastifyReply, paused: string) => {
     const waitMs = limiter.waitMs()
     if (waitMs === 0) return
-    const minutes = Math.ceil(waitMs / 60_000)
+    const minutes = Math.ceil(waitMs / MINUTE_MS)
     const unit = minutes === 1 ? 'minute' : 'minutes'
-    reply.header('Retry-After', Math.ceil(waitMs / 1000))
+    reply.header('Retry-After', Math.ceil(waitMs / SECOND_MS))
     throw new AppError(
       'too_many_attempts',
       `Too many wrong tries. ${paused} is paused for ${minutes} ${unit}; try again then.`,

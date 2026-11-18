@@ -3,6 +3,7 @@
 // Only used when the owner sets RESEND_API_KEY and MAIL_FROM themselves.
 
 import type { MailConfig } from '../config.js'
+import { messageOf } from '../errors.js'
 import { MailError, type EmailMessage, type EmailSender } from './sender.js'
 
 export const RESEND_URL = 'https://api.resend.com/emails'
@@ -50,8 +51,7 @@ export class ResendSender implements EmailSender {
         `Resend did not answer within ${this.timeoutMs / 1000} seconds. Leeway will try again.`,
       )
     }
-    const reason = error instanceof Error ? error.message : String(error)
-    return new MailError(`Leeway could not reach Resend: ${this.clean(reason)}`)
+    return new MailError(`Leeway could not reach Resend: ${this.clean(messageOf(error))}`)
   }
 
   private async refused(response: Response): Promise<MailError> {

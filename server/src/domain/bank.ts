@@ -3,7 +3,7 @@
 
 import { BankError, type BankProvider } from '../bank/provider.js'
 import type { AppContext } from '../context.js'
-import { AppError, notFound } from '../errors.js'
+import { AppError, messageOf, notFound } from '../errors.js'
 import { decrypt } from '../lib/crypto.js'
 
 /** The configured bank provider, or an error saying how to set one up. */
@@ -42,5 +42,5 @@ export async function accessTokenOf(ctx: AppContext, connectionId: string): Prom
 /** A failed bank call as an error for the caller; errors already meant for them pass through. */
 export function bankFailure(error: unknown): AppError {
   if (error instanceof AppError) return error
-  return new AppError('bank_error', (error as Error).message)
+  return new AppError('bank_error', messageOf(error))
 }

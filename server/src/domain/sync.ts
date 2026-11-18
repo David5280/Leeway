@@ -6,7 +6,7 @@ import type { BankAccount, BankProvider, BankTransaction } from '../bank/provide
 import { BankError } from '../bank/provider.js'
 import type { AppContext } from '../context.js'
 import { withTransaction } from '../db/pool.js'
-import { notFound } from '../errors.js'
+import { messageOf, notFound } from '../errors.js'
 import { accessTokenOf, requireBank } from './bank.js'
 import { loadOwnAccounts, recategorize } from './categorize.js'
 import { sameOwnAccounts } from './transfers.js'
@@ -90,7 +90,7 @@ export async function syncConnection(ctx: AppContext, connectionId: string): Pro
       error: null,
     }
   } catch (error) {
-    const message = (error as Error).message
+    const message = messageOf(error)
     const status = error instanceof BankError && error.needsReauth ? 'needs_reauth' : 'error'
     await ctx.db.query('UPDATE connections SET status = $2, last_error = $3 WHERE id = $1', [
       connectionId,

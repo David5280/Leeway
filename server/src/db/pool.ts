@@ -1,6 +1,7 @@
 // The Postgres pool, how column types are read, and transactions.
 
 import pg from 'pg'
+import { messageOf } from '../errors.js'
 
 /**
  * Anything that can run a query: the pool itself, or a single client checked
@@ -68,7 +69,7 @@ export async function waitForDatabase(
     } catch (error) {
       if (attempt >= attempts) {
         throw new Error(
-          `Could not reach the database after ${attempts} tries (${(error as Error).message}). Check DATABASE_URL and that the database is running.`,
+          `Could not reach the database after ${attempts} tries (${messageOf(error)}). Check DATABASE_URL and that the database is running.`,
           { cause: error },
         )
       }

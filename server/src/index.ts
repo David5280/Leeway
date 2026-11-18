@@ -15,6 +15,7 @@ import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weekl
 import { buildApp } from './http/app.js'
 import { repeatEvery } from './lib/repeat.js'
 import { generateSetupCode } from './lib/setupCode.js'
+import { MINUTE_MS } from './lib/time.js'
 import { ResendSender } from './mail/resend.js'
 
 const config = loadConfig()
@@ -45,7 +46,7 @@ const app = await buildApp(ctx, { logger: true, setupCode })
 // missed webhooks and for installs without a public URL.
 if (ctx.bank && config.syncIntervalMinutes > 0) {
   repeatEvery(
-    config.syncIntervalMinutes * 60_000,
+    config.syncIntervalMinutes * MINUTE_MS,
     () => syncAll(ctx),
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
@@ -55,7 +56,7 @@ if (ctx.bank && config.syncIntervalMinutes > 0) {
 // first check runs at start, so a server that slept through it catches up.
 if (ctx.mailer) {
   repeatEvery(
-    WEEKLY_EMAIL_CHECK_MINUTES * 60_000,
+    WEEKLY_EMAIL_CHECK_MINUTES * MINUTE_MS,
     async () => {
       const outcome = await sendWeeklyEmailIfDue(ctx)
       if (outcome === 'sent') app.log.info('Sent the weekly email')

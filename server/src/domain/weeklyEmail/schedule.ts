@@ -2,6 +2,7 @@
 // time come in, a moment to send for (or none) comes out.
 
 import { addDays, dayOfWeek, todayIn, type IsoDate } from '../../lib/dates.js'
+import { DAY_MS, MINUTE_MS } from '../../lib/time.js'
 import { zonedInstant } from '../../lib/zonedTime.js'
 
 /** The owner's choice: a day of the week (0 = Sunday) and an hour, in their time zone. */
@@ -33,9 +34,6 @@ export const RETRY_AFTER_MINUTES = 60
  * week, while daylight saving (a week give or take an hour) never skips one.
  */
 export const MIN_DAYS_BETWEEN = 6
-
-const MINUTE_MS = 60_000
-const DAY_MS = 24 * 60 * MINUTE_MS
 
 /** The local day on or before `date` that falls on `weekday`. */
 function onOrBefore(date: IsoDate, weekday: number): IsoDate {

@@ -2,9 +2,7 @@
 // real instants. Pure date math over Intl, no I/O.
 
 import type { IsoDate } from './dates.js'
-
-const HOUR_MS = 3_600_000
-const DAY_MS = 24 * HOUR_MS
+import { DAY_MS } from './time.js'
 
 /** The wall clock of `timeZone` at `instant`, read as if it were UTC, in milliseconds. */
 function wallClockMs(instant: number, timeZone: string): number {
