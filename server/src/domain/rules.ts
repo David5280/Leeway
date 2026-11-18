@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
+import { assertCategoryExists } from './categories.js'
 
 export interface Rule {
   id: string
@@ -54,11 +55,6 @@ async function getRule(db: Db, id: string): Promise<Rule> {
   const { rows } = await db.query<Rule>(`SELECT ${COLUMNS} FROM rules WHERE id = $1`, [id])
   if (!rows[0]) throw notFound('Rule')
   return rows[0]
-}
-
-async function assertCategoryExists(db: Db, categoryId: string): Promise<void> {
-  const { rowCount } = await db.query('SELECT 1 FROM categories WHERE id = $1', [categoryId])
-  if (!rowCount) throw new AppError('invalid_input', 'That category does not exist')
 }
 
 /** New rules go first by default, since a specific new rule usually should beat older broad ones. */

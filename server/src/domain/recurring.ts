@@ -74,7 +74,10 @@ function median(values: number[]): number {
     : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
 }
 
-/** The cadence whose band most gaps fall in, if enough of them do. */
+/**
+ * The cadence whose band most gaps fall in, if enough of them do. The bands
+ * do not overlap, so at most one can hold the regular share of the gaps.
+ */
 function cadenceOfGaps(gaps: number[]): (typeof CADENCE_BANDS)[number] | null {
   for (const band of CADENCE_BANDS) {
     const fitting = gaps.filter((gap) => gap >= band.min && gap <= band.max).length
@@ -144,7 +147,9 @@ export function detectRecurring(
     if (!key || tx.amountCents === 0) continue
     const direction = tx.amountCents > 0 ? 'out' : 'in'
     const group = `${direction}:${key}`
-    groups.set(group, [...(groups.get(group) ?? []), tx])
+    const charges = groups.get(group)
+    if (charges) charges.push(tx)
+    else groups.set(group, [tx])
   }
   const found: RecurringSeries[] = []
   for (const [group, charges] of groups) {

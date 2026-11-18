@@ -88,3 +88,23 @@ describe('migrations folder', () => {
     expect(rows.map((r) => r.name)).toEqual(['901_create.sql'])
   })
 })
+
+describe('indexes', () => {
+  it('has the indexes the history queries rely on', async () => {
+    const { rows } = await ctx.db.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()`,
+    )
+    const names = rows.map((r) => r.indexname)
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'accounts_connection_idx',
+        'oauth_tokens_expires_idx',
+        'transactions_account_date_idx',
+        'transactions_category_date_idx',
+        'transactions_date_idx',
+      ]),
+    )
+    // Replaced by transactions_category_date_idx, which starts with the same column.
+    expect(names).not.toContain('transactions_category_idx')
+  })
+})

@@ -1,3 +1,5 @@
+// The action model: how each thing a person can do is defined, checked and run.
+
 import type { z } from 'zod'
 import type { AppContext } from '../context.js'
 import { AppError } from '../errors.js'

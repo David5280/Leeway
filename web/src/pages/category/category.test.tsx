@@ -2,14 +2,14 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { settingsSchema } from '../../../../server/src/domain/settings'
 import type { Output, Rule } from '../../api/client'
 import {
   budgetFor,
   category,
+  failing,
   fakeServer,
   renderSignedIn,
-  settings,
+  settingsWith,
   transaction,
   type Handlers,
 } from '../../test/fake'
@@ -102,10 +102,6 @@ function serve(handlers: Handlers = {}, routes: Record<string, () => Response> =
     },
     routes,
   )
-}
-
-function failing(message: string, status = 400) {
-  return () => Response.json({ error: 'invalid_input', message }, { status })
 }
 
 /** Shows where the app went, query string included. */
@@ -380,7 +376,7 @@ describe('Category page', () => {
     it('calls them periods when the budget is not monthly', async () => {
       serve()
       renderCategory(groceries.id, {
-        settings: settingsSchema.parse({ ...settings, period: { kind: 'weekly' } }),
+        settings: settingsWith({ period: { kind: 'weekly' } }),
       })
       expect(await screen.findByRole('heading', { name: 'Last six periods' })).toBeInTheDocument()
     })

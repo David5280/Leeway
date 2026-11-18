@@ -15,6 +15,7 @@ import {
   type Rule,
 } from '../domain/rules.js'
 import { listTransactions } from '../domain/transactions.js'
+import { patchOf } from '../lib/schemas.js'
 import { defineAction } from './action.js'
 
 const RULES_EXPLAINED =
@@ -51,15 +52,8 @@ export const updateRuleAction = defineAction({
   name: 'update_rule',
   title: 'Update a rule',
   description: 'Change a rule. Only the fields given change. Transactions are re-categorized.',
-  input: z.object({
-    id: z.uuid(),
-    field: z.enum(['merchant', 'description']).optional(),
-    matchType: z.enum(['contains', 'equals', 'starts_with']).optional(),
-    pattern: z.string().trim().min(1).max(200).optional(),
-    minAmountCents: z.number().int().nullable().optional(),
-    maxAmountCents: z.number().int().nullable().optional(),
-    categoryId: z.uuid().optional(),
-  }),
+  // Amount bounds are checked against the rule as changed, in updateRule.
+  input: patchOf(ruleFieldsSchema).extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
   run: (ctx, { id, ...patch }) =>

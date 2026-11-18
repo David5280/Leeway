@@ -1,0 +1,216 @@
+// The Accounts section: listing, renaming, hiding, deleting and adding accounts by hand.
+
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { account, failing, fakeServer, renderSignedIn, settingsWith } from '../../test/fake'
+import { AccountSection } from './Accounts'
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('Accounts', () => {
+  const checking = account({ id: 'acct-1', name: 'Everyday', bankName: 'CHECKING 1234' })
+  const card = account({
+    id: 'acct-2',
+    name: 'Rewards card',
+    type: 'credit',
+    balanceCents: 50000,
+    mask: null,
+    institutionName: null,
+    hidden: true,
+  })
+  const cash = account({
+    id: 'acct-3',
+    name: 'Cash',
+    connectionId: null,
+    institutionName: null,
+    mask: null,
+    manual: true,
+    balanceCents: null,
+  })
+
+  function serve(extra = {}) {
+    return fakeServer({
+      list_accounts: () => [checking, card, cash],
+      update_account: (input) => ({ ...checking, ...input }),
+      delete_account: () => ({ deleted: true }),
+      create_account: (input) => account({ id: 'acct-new', name: String(input.name) }),
+      ...extra,
+    })
+  }
+
+  it('lists accounts with where they come from and their balance', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const section = screen.getByRole('region', { name: 'Accounts' })
+    expect(await within(section).findByText('First Bank ending 1234')).toBeInTheDocument()
+    expect(within(section).getByText('Bank')).toBeInTheDocument()
+    expect(within(section).getByText('Added by hand')).toBeInTheDocument()
+    expect(within(section).getByText('$1,234.56')).toBeInTheDocument()
+    expect(within(section).getByText('$500.00 owed')).toBeInTheDocument()
+    expect(server.actions('list_accounts')).toEqual([{ includeHidden: true }])
+  })
+
+  it('says there are none yet', async () => {
+    fakeServer({ list_accounts: () => [] })
+    renderSignedIn(<AccountSection />)
+    expect(await screen.findByText(/No accounts yet/)).toBeInTheDocument()
+  })
+
+  it('shows why accounts could not load', async () => {
+    fakeServer({}, { '/api/actions/list_accounts': failing('Database is down', 500) })
+    renderSignedIn(<AccountSection />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
+  })
+
+  it('renames an account when the name field loses focus, trimming spaces', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    await user.clear(name)
+    await user.type(name, '  Bills account  ')
+    expect(server.actions('update_account')).toEqual([])
+    await user.tab()
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([
+        { id: 'acct-1', displayName: 'Bills account' },
+      ]),
+    )
+  })
+
+  it('does not save a name that did not change', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    await user.click(name)
+    await user.type(name, ' ')
+    await user.tab()
+    expect(server.actions('update_account')).toEqual([])
+  })
+
+  it('goes back to the bank name when the name is cleared', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    await user.clear(name)
+    await user.tab()
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: null }]),
+    )
+    expect(name).toHaveValue('CHECKING 1234')
+  })
+
+  it('hides and shows accounts in totals', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const everyday = await screen.findByRole('switch', { name: 'Count Everyday' })
+    expect(everyday).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('switch', { name: 'Count Rewards card' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+    await user.click(everyday)
+    await user.click(screen.getByRole('switch', { name: 'Count Rewards card' }))
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([
+        { id: 'acct-1', hidden: true },
+        { id: 'acct-2', hidden: false },
+      ]),
+    )
+  })
+
+  it('deletes only accounts added by hand', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Delete Cash' }))
+    await waitFor(() => expect(server.actions('delete_account')).toEqual([{ id: 'acct-3' }]))
+    expect(screen.queryByRole('button', { name: 'Delete Everyday' })).not.toBeInTheDocument()
+  })
+
+  it('shows why a change to an account failed', async () => {
+    fakeServer(
+      { list_accounts: () => [cash] },
+      { '/api/actions/delete_account': failing('Account not found', 404) },
+    )
+    renderSignedIn(<AccountSection />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Delete Cash' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Account not found')
+  })
+
+  it('adds an account by hand with its type, balance and the currency in settings', async () => {
+    const server = serve()
+    const euros = settingsWith({ currency: 'EUR' })
+    renderSignedIn(<AccountSection />, { settings: euros })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    const form = screen.getByRole('form', { name: 'New account' })
+    await user.type(within(form).getByRole('textbox', { name: 'Account name' }), 'Car loan')
+    await user.selectOptions(within(form).getByRole('combobox', { name: 'Account type' }), 'Loan')
+    const balance = within(form).getByRole('textbox', { name: 'Balance' })
+    expect(balance).toHaveAttribute('placeholder', 'Owed')
+    await user.type(balance, '$12,500.50')
+    await user.click(within(form).getByRole('button', { name: 'Add account' }))
+    await waitFor(() =>
+      expect(server.actions('create_account')).toEqual([
+        { name: 'Car loan', type: 'loan', balanceCents: 1250050, currency: 'EUR' },
+      ]),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'New account' })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('adds an account with no balance as zero', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    expect(screen.getByRole('textbox', { name: 'Balance' })).toHaveAttribute(
+      'placeholder',
+      'Balance',
+    )
+    await user.type(screen.getByRole('textbox', { name: 'Account name' }), 'Cash jar{Enter}')
+    await waitFor(() =>
+      expect(server.actions('create_account')).toEqual([
+        { name: 'Cash jar', type: 'depository', balanceCents: 0, currency: 'USD' },
+      ]),
+    )
+  })
+
+  it('needs a name before adding', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    expect(server.actions('create_account')).toEqual([])
+  })
+
+  it('keeps the form open with the reason when adding fails', async () => {
+    fakeServer(
+      { list_accounts: () => [] },
+      { '/api/actions/create_account': failing('Name is too long') },
+    )
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    await user.type(screen.getByRole('textbox', { name: 'Account name' }), 'Savings{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Name is too long')
+    expect(screen.getByRole('form', { name: 'New account' })).toBeInTheDocument()
+  })
+
+  it('cancels adding without sending anything', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    await user.type(screen.getByRole('textbox', { name: 'Account name' }), 'Nope')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: 'New account' })).not.toBeInTheDocument()
+    expect(server.actions('create_account')).toEqual([])
+  })
+})

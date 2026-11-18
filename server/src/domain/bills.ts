@@ -7,6 +7,7 @@ import { addDays, daysBetween, isIsoDate, maxDate, type IsoDate } from '../lib/d
 import { convertCadence, type Cadence } from '../lib/periods.js'
 import { lastBefore, nextOnOrAfter, occurrences } from '../lib/schedule.js'
 import { patchOf } from '../lib/schemas.js'
+import { assertCategoryExists } from './categories.js'
 
 export const BILL_CADENCES = ['week', 'biweek', 'semimonth', 'month', 'quarter', 'year'] as const
 
@@ -159,6 +160,7 @@ export async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill>
 }
 
 export async function createBill(db: Db, input: BillInput, today: IsoDate): Promise<Bill> {
+  if (input.categoryId) await assertCategoryExists(db, input.categoryId)
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO bills (name, kind, amount_cents, cadence, anchor_date, match_pattern, category_id, autopay)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -183,6 +185,7 @@ export async function updateBill(
   today: IsoDate,
 ): Promise<Bill> {
   const current = await getBill(db, id, today)
+  if (patch.categoryId) await assertCategoryExists(db, patch.categoryId)
   const next = { ...current, ...patch }
   await db.query(
     `UPDATE bills SET name = $2, kind = $3, amount_cents = $4, cadence = $5, anchor_date = $6,

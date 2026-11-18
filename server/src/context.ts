@@ -1,3 +1,5 @@
+// The context every action runs with.
+
 import type pg from 'pg'
 import type { Config } from './config.js'
 import type { SummaryWriter } from './ai/writer.js'

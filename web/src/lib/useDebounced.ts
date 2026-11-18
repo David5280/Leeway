@@ -1,3 +1,5 @@
+// Waiting for a value to settle before acting on it.
+
 import { useEffect, useState } from 'react'
 
 /**

@@ -1,3 +1,5 @@
+// Secrets at rest: encrypting bank tokens, and making and hashing random tokens.
+
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 
 /**

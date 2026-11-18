@@ -1,4 +1,4 @@
-/** Formatting for money and dates. Money is integer cents, dates are YYYY-MM-DD. */
+// Formatting for money and dates. Money is integer cents, dates are YYYY-MM-DD.
 
 export interface MoneyOptions {
   currency: string

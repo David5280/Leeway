@@ -49,11 +49,13 @@ function Frame({ children }: { children: React.ReactNode }) {
 export function ConnectProblem() {
   const [params] = useSearchParams()
   const problem = params.get('problem')
+  // Own keys only: names every object has, like "constructor", are not problem codes.
+  const sentence = problem && Object.hasOwn(PROBLEMS, problem) ? PROBLEMS[problem] : null
   return (
     <Frame>
       <h1>Couldn't connect</h1>
       <p className="notice error" role="alert">
-        {(problem && PROBLEMS[problem]) ?? UNKNOWN_PROBLEM}
+        {sentence ?? UNKNOWN_PROBLEM}
       </p>
       <Link to="/" className="btn">
         Go to Leeway

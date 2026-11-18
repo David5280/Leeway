@@ -64,6 +64,15 @@ export async function getCategory(db: Db, id: string): Promise<Category> {
   return rows[0]
 }
 
+/**
+ * Refuses a category id that names no category, in plain words. Without this
+ * check the database's foreign key would refuse it as a server error.
+ */
+export async function assertCategoryExists(db: Db, categoryId: string): Promise<void> {
+  const { rowCount } = await db.query('SELECT 1 FROM categories WHERE id = $1', [categoryId])
+  if (!rowCount) throw new AppError('invalid_input', 'That category does not exist')
+}
+
 function duplicateName(error: unknown, name: string): never {
   if (isUniqueViolation(error)) {
     throw new AppError('conflict', `A category named "${name}" already exists`)

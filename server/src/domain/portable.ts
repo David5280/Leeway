@@ -1,3 +1,7 @@
+// Everything that makes a Leeway yours, minus bank data: settings, categories
+// and rules, as one JSON file. Use it to back up a setup, move it to a new
+// install, or share a starting point with someone else.
+
 import type pg from 'pg'
 import { z } from 'zod'
 import { withTransaction, type Db } from '../db/pool.js'
@@ -13,11 +17,7 @@ import {
 } from './rules.js'
 import { getSettings, mergeSettings, saveSettings, settingsPatchSchema } from './settings.js'
 
-/**
- * Everything that makes a Leeway yours, minus bank data: settings, categories
- * and rules, as one JSON file. Use it to back up a setup, move it to a new
- * install, or share a starting point with someone else.
- */
+/** The backup file: format markers, then settings, categories and rules. */
 export const portableConfigSchema = z.object({
   app: z.literal('leeway'),
   version: z.literal(1),

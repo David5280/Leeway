@@ -1,10 +1,9 @@
+// The web app's only way to the server. Actions are typed straight from the
+// server's own definitions, so a change there shows up here as a type error.
+
 import type { z } from 'zod'
 import type { ActionName, Actions } from '../../../server/src/actions/index.js'
 
-/**
- * The web app's only way to the server. Actions are typed straight from the
- * server's own definitions, so a change there shows up here as a type error.
- */
 type ActionOf<N extends ActionName> = Extract<Actions, { name: N }>
 export type Input<N extends ActionName> = z.input<ActionOf<N>['input']>
 export type Output<N extends ActionName> = Awaited<ReturnType<ActionOf<N>['run']>>
@@ -26,6 +25,7 @@ export type DebtPlans = Output<'plan_debt_payoff'>
 export type NetWorth = Output<'get_net_worth'>
 export type CashFlow = Output<'get_cash_flow'>
 
+/** A failure the server explained: its HTTP status, error code and a message for people. */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -42,6 +42,7 @@ export function setSignedOutHandler(handler: () => void): void {
   onSignedOut = handler
 }
 
+/** Sends one request, turning an error reply into an ApiError and a lapsed session into sign-in. */
 export async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -65,6 +66,7 @@ export async function request<T>(method: 'GET' | 'POST', path: string, body?: un
   return data as T
 }
 
+/** Runs a server action by name, typed by the server's own definition. */
 export async function call<N extends ActionName>(name: N, input?: Input<N>): Promise<Output<N>> {
   const { result } = await request<{ result: Output<N> }>(
     'POST',
@@ -74,6 +76,7 @@ export async function call<N extends ActionName>(name: N, input?: Input<N>): Pro
   return result
 }
 
+/** What the server says about itself before anyone signs in. */
 export interface Status {
   version: string
   hasOwner: boolean
@@ -88,6 +91,7 @@ export interface Owner {
   onboarded: boolean
 }
 
+/** Sign-in and account routes, which sit outside the actions. */
 export const auth = {
   status: () => request<Status>('GET', '/api/status'),
   me: () => request<{ owner: Owner }>('GET', '/api/auth/me'),

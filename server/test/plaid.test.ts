@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
-import { PlaidProvider } from '../src/bank/plaid.js'
+import { PlaidProvider, toBankTransaction } from '../src/bank/plaid.js'
 import { BankError } from '../src/bank/provider.js'
 
 const config = {
@@ -70,6 +70,11 @@ function plaidTransaction(fields: Record<string, unknown> = {}) {
     personal_finance_category: null,
     ...fields,
   }
+}
+
+/** A Plaid transaction, as above, read into Leeway's terms. */
+function mapped(fields: Record<string, unknown> = {}) {
+  return toBankTransaction(plaidTransaction(fields) as Parameters<typeof toBankTransaction>[0])
 }
 
 /** A fetch whose every call answers with this status and raw body text. */
@@ -352,6 +357,44 @@ describe('Plaid provider', () => {
         }),
         expect.objectContaining({ providerTransactionId: 't3', currency: 'USD', pending: true }),
       ])
+    })
+
+    it('dates a transaction by the day it was made, not the day the bank posted it', () => {
+      expect(mapped({ date: '2026-11-16', authorized_date: '2026-11-13' }).date).toBe('2026-11-13')
+    })
+
+    it('falls back to the posted date when the bank gives no authorized date', () => {
+      expect(mapped({ authorized_date: null }).date).toBe('2026-11-10')
+      // Older payloads leave the field out entirely.
+      expect(mapped().date).toBe('2026-11-10')
+    })
+
+    it('keeps a charge on the same day when it goes from pending to posted', () => {
+      // Plaid dates a pending charge by the day it was made, and the posted one replaces it.
+      const pending = mapped({ transaction_id: 'p1', pending: true, date: '2026-11-13' })
+      const posted = mapped({
+        transaction_id: 't1',
+        pending_transaction_id: 'p1',
+        date: '2026-11-16',
+        authorized_date: '2026-11-13',
+      })
+      expect(posted.date).toBe(pending.date)
+    })
+
+    it('reads the authorized date from a sync page', async () => {
+      const { fetchImpl } = fakeFetch({
+        '/transactions/sync': {
+          body: {
+            added: [plaidTransaction({ date: '2026-11-16', authorized_date: '2026-11-14' })],
+            modified: [],
+            removed: [],
+            next_cursor: 'c1',
+            has_more: false,
+          },
+        },
+      })
+      const page = await new PlaidProvider(config, fetchImpl).syncTransactions('x', null)
+      expect(page.added[0]!.date).toBe('2026-11-14')
     })
   })
 

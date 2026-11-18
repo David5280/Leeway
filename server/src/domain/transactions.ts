@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isIsoDate } from '../lib/dates.js'
+import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
 
@@ -114,12 +115,6 @@ export async function getTransaction(db: Db, id: string): Promise<Transaction> {
   return present(rows[0])
 }
 
-async function assertCategory(db: Db, categoryId: string | null | undefined): Promise<void> {
-  if (!categoryId) return
-  const { rowCount } = await db.query('SELECT 1 FROM categories WHERE id = $1', [categoryId])
-  if (!rowCount) throw new AppError('invalid_input', 'That category does not exist')
-}
-
 /**
  * Sets the category of transactions by hand. A manual choice sticks: rules
  * and syncs never override it. Passing null hands them back to the rules.
@@ -129,7 +124,7 @@ export async function setCategory(
   ids: string[],
   categoryId: string | null,
 ): Promise<number> {
-  await assertCategory(db, categoryId)
+  if (categoryId) await assertCategoryExists(db, categoryId)
   const { rowCount } = await db.query(
     `UPDATE transactions SET category_id = $2, category_source = $3, updated_at = now()
      WHERE id = ANY($1::uuid[])`,
@@ -206,7 +201,7 @@ export async function createManualTransaction(
   db: Db,
   input: z.infer<typeof manualTransactionInputSchema>,
 ): Promise<Transaction> {
-  await assertCategory(db, input.categoryId)
+  if (input.categoryId) await assertCategoryExists(db, input.categoryId)
   const { rows: accounts } = await db.query<{ currency: string }>(
     'SELECT currency FROM accounts WHERE id = $1',
     [input.accountId],

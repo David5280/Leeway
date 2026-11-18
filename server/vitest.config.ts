@@ -11,7 +11,7 @@ export default defineConfig({
       // Process entry points: they only wire things together and are smoke-tested by hand.
       exclude: ['src/index.ts', 'src/cli/**', 'src/db/migrate-cli.ts'],
       // These only ever go up (CONTRIBUTING.md).
-      thresholds: { statements: 99, branches: 97, functions: 99, lines: 99 },
+      thresholds: { statements: 99, branches: 98, functions: 99, lines: 99 },
     },
   },
 })

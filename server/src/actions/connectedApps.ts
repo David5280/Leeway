@@ -1,10 +1,10 @@
+// Actions for apps that connect by signing in, like Claude. Like agent keys,
+// these are app-only: approving or disconnecting needs the owner, never an agent.
+
 import { z } from 'zod'
 import { disconnectApp, listConnectedApps } from '../oauth/grants.js'
 import { answerConnectRequest, getConnectRequest } from '../oauth/requests.js'
 import { defineAction } from './action.js'
-
-// Apps that connect by signing in, like Claude. Like agent keys, these are
-// app-only: approving or disconnecting needs the owner, never an agent.
 
 export const listConnectedAppsAction = defineAction({
   name: 'list_connected_apps',
