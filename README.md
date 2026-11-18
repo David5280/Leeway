@@ -247,9 +247,9 @@ and
 read November 2026.
 
 Leeway dates bank transactions by the day you bought something, not the day it
-posted. Transactions synced by an older version still show the posted day;
-**Customize**, then **Banks**, then **Use purchase dates for older
-transactions** moves them. It changes only dates and is safe to run again.
+posted. Banks linked with an older version are corrected once on their own
+after an upgrade: Leeway asks each bank for its history again and moves only
+those dates, keeping your categories, notes and hidden transactions.
 
 ## Connect your AI assistant
 

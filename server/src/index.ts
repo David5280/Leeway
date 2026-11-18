@@ -9,6 +9,7 @@ import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { getOwner } from './domain/owner.js'
+import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
 import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weeklyEmail/send.js'
@@ -58,12 +59,25 @@ const setup: SetupCode = config.setupCode
   : { code: generateSetupCode(), from: 'log' }
 const app = await buildApp(ctx, { logger: true, setupCode: setup.code })
 
+/**
+ * Moves transactions from banks linked before Leeway used purchase dates onto
+ * the day of purchase. Each bank is corrected once; a bank that cannot be
+ * reached is tried again by the next call.
+ */
+async function catchUpDates(): Promise<void> {
+  const summary = purchaseDatesSummary(await catchUpPurchaseDates(ctx))
+  if (summary) app.log.info(summary)
+}
+
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
 if (ctx.bank && config.syncIntervalMinutes > 0) {
   repeatEvery(
     config.syncIntervalMinutes * MINUTE_MS,
-    () => syncAll(ctx),
+    async () => {
+      await syncAll(ctx)
+      await catchUpDates()
+    },
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
 }
@@ -92,6 +106,10 @@ process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
 await app.listen({ port: config.port, host: config.host })
+// In the background, so a slow bank never holds up serving the app.
+catchUpDates().catch((error: unknown) =>
+  app.log.error({ err: error }, 'Moving older transactions to purchase dates failed'),
+)
 if (!(await getOwner(db))) app.log.warn(setupReminder(setup, config.publicUrl))
 // Optional settings left out are fine; say once what each one would turn on.
 for (const warning of configWarnings()) app.log.warn(warning)

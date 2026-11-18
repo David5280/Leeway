@@ -1,7 +1,6 @@
 // Connected banks: status, fixing a login, syncing now, re-dating older transactions, and removing.
 
 import { useState } from 'react'
-import type { Output } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { BankButton } from '../../components/BankButton'
 import { BankKeysMissing, SandboxNote } from '../../components/PlaidHelp'
@@ -90,54 +89,6 @@ export function BanksSection() {
         </p>
       )}
       <ErrorNote error={connections.error ?? sync.error ?? remove.error} />
-      {Boolean(connections.data?.length) && <PurchaseDates />}
     </Section>
-  )
-}
-
-/** What re-dating did, in a sentence: how many dates moved, and any bank that failed. */
-function purchaseDatesText(results: Output<'use_purchase_dates'>): string {
-  const changed = results.reduce((sum, r) => sum + r.changed, 0)
-  const moved =
-    changed === 0
-      ? 'Every date already shows the day of purchase.'
-      : `Moved ${changed.toLocaleString()} ${changed === 1 ? 'date' : 'dates'} to the day of purchase.`
-  const failed = results
-    .filter((r) => r.error)
-    .map((r) => ` ${r.institutionName ?? 'A bank'} could not be reached: ${r.error}`)
-  return moved + failed.join('')
-}
-
-/**
- * Moves transactions synced before Leeway used purchase dates onto the day
- * of purchase. Only dates change, and running it again changes nothing.
- */
-function PurchaseDates() {
-  const redate = useActionMutation('use_purchase_dates')
-  return (
-    <div className="stack-sm">
-      <h3>Purchase dates</h3>
-      <span className="small muted">
-        Transactions synced before Leeway used the day you bought something still show the day it
-        posted. This asks your banks for their history again and moves only those dates; your
-        categories, notes and hidden transactions stay as they are.
-      </span>
-      <div>
-        <button
-          type="button"
-          className="btn"
-          disabled={redate.isPending}
-          onClick={() => redate.mutate({})}
-        >
-          {redate.isPending ? 'Updating dates' : 'Use purchase dates for older transactions'}
-        </button>
-      </div>
-      {redate.data && (
-        <p className="small" role="status">
-          {purchaseDatesText(redate.data)}
-        </p>
-      )}
-      <ErrorNote error={redate.error} />
-    </div>
   )
 }
