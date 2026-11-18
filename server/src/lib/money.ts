@@ -21,3 +21,13 @@ export function formatCents(cents: number, currency = 'USD', locale = 'en-US'): 
     maximumFractionDigits: 2,
   }).format(cents / 100)
 }
+
+/** "$1,235": whole units, rounded, for a summary meant to be read at a glance. */
+export function formatWholeCents(cents: number, currency = 'USD', locale = 'en-US'): string {
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(cents / 100))
+}

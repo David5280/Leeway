@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { AppContext } from '../context.js'
 import type { IsoDate } from '../lib/dates.js'
-import { formatCents } from '../lib/money.js'
+import { formatWholeCents } from '../lib/money.js'
 import { getCheckin } from './checkin.js'
 import type { Settings } from './settings.js'
 import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from './summaryText.js'
@@ -56,7 +56,8 @@ export async function getSummary(
 ): Promise<Summary> {
   const now = ctx.now()
   const checkin = await getCheckin(ctx.db, settings, now, today)
-  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
+  // Whole dollars: the summary is a glance, and the cards below give exact amounts.
+  const money = (cents: number) => formatWholeCents(cents, settings.currency, settings.locale)
   const own = (ai: AiSummaryState): Summary => ({
     ...plainSummary(checkin, settings, money),
     writtenBy: 'Leeway',

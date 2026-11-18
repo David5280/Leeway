@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { decrypt, encrypt, hashToken, randomToken } from '../src/lib/crypto.js'
-import { formatCents, toCents, toCentsOrNull } from '../src/lib/money.js'
+import { formatCents, formatWholeCents, toCents, toCentsOrNull } from '../src/lib/money.js'
 import { hashPassword, verifyPassword } from '../src/lib/password.js'
 
 const key = Buffer.alloc(32, 7)
@@ -140,5 +140,11 @@ describe('money', () => {
     expect(formatCents(60000)).toBe('$600')
     expect(formatCents(-1050)).toBe('-$10.50')
     expect(formatCents(99900, 'EUR', 'de-DE')).toBe('999\u00a0€')
+  })
+
+  it('rounds to whole units for a summary', () => {
+    expect(formatWholeCents(8470)).toBe('$85')
+    expect(formatWholeCents(-1_620_596)).toBe('-$16,206')
+    expect(formatWholeCents(149, 'EUR', 'de-DE')).toBe('1\u00a0€')
   })
 })

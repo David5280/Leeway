@@ -59,6 +59,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       leewayCents: totals.leewayCents,
       safePerDayCents: totals.safePerDayCents,
       projectedCents: totals.projectedCents,
+      projectedBudgetedCents: totals.projectedBudgetedCents,
       incomeCents: totals.incomeCents,
       previousSpentToDateCents: budget.previous.spentToDateCents,
     },

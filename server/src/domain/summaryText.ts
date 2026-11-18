@@ -48,7 +48,9 @@ export function headline({ budget }: Checkin, money: Money, word: string): strin
   if (budget.leftCents < 0) {
     return `You're ${money(-budget.leftCents)} over budget with ${days} to go.`
   }
-  const overBy = budget.projectedCents - budget.budgetedCents
+  // Budgeted categories only, the same projection the spending pace chart shows,
+  // so a fee or an unbudgeted purchase does not read as the budget running over.
+  const overBy = budget.projectedBudgetedCents - budget.budgetedCents
   if (overBy > 0) {
     return `At this pace you'd finish the ${word} ${money(overBy)} over budget.`
   }
@@ -153,7 +155,7 @@ export function summaryFacts(
       setAsideForGoals: money(budget.setAsideCents),
       leftAfterGoals: money(budget.leewayCents),
       safeToSpendPerDay: budget.safePerDayCents === null ? null : money(budget.safePerDayCents),
-      projectedSpendingByPeriodEnd: money(budget.projectedCents),
+      budgetedSpendingByPeriodEndAtThisPace: money(budget.projectedBudgetedCents),
       income: money(budget.incomeCents),
       spentByThisPointLastPeriod: money(budget.previousSpentToDateCents),
     },

@@ -95,6 +95,31 @@ describe('computeBudget', () => {
     })
   })
 
+  it('projects budgeted spending at the current rate, leaving out unbudgeted spending', () => {
+    // Day 15 of 30: each budgeted category doubles; gifts and uncategorized are left out.
+    expect(summary.totals.projectedBudgetedCents).toBe(50000 + 48000 + 17000)
+    expect(summary.totals.projectedCents).toBe((25000 + 24000 + 8500 + 3000 + 1500) * 2)
+  })
+
+  it('projects a fixed category at its budget, since a bill lands once', () => {
+    const result = computeBudget({
+      settings,
+      period,
+      offset: 0,
+      today: '2026-11-15',
+      categories: [
+        category('rent', { budgetCents: 150000, trackPace: false }),
+        category('utilities', { budgetCents: 10000, trackPace: false }),
+      ],
+      // Rent is paid; the utility bill has not come yet but costs a little more than planned.
+      totals: [
+        { categoryId: 'rent', amountCents: 150000, count: 1 },
+        { categoryId: 'utilities', amountCents: 12000, count: 1 },
+      ],
+    })
+    expect(result.totals.projectedBudgetedCents).toBe(150000 + 12000)
+  })
+
   it('raises alerts, worst first, with plain messages', () => {
     expect(summary.alerts.map((a) => [a.categoryId, a.level])).toEqual([
       ['dining', 'over'],
@@ -115,6 +140,7 @@ describe('computeBudget', () => {
     expect(past.period).toMatchObject({ daysElapsed: 30, daysLeft: 0 })
     expect(past.totals.safePerDayCents).toBeNull()
     expect(past.categories[0]).toMatchObject({ projectedCents: 50000, pace: 'under' })
+    expect(past.totals.projectedBudgetedCents).toBe(50000)
   })
 
   it('converts a weekly budget into a monthly period', () => {

@@ -28,6 +28,7 @@ function checkin(change: Partial<{ [K in keyof Checkin]: Partial<Checkin[K]> }> 
       leewayCents: 120000,
       safePerDayCents: 8571,
       projectedCents: 160000,
+      projectedBudgetedCents: 160000,
       incomeCents: 300000,
       previousSpentToDateCents: 0,
     },
@@ -104,13 +105,21 @@ describe('the headline', () => {
   })
 
   it('warns when the pace would end the period over budget', () => {
-    expect(summarize(checkin({ budget: { projectedCents: 230000 } })).headline).toBe(
+    expect(summarize(checkin({ budget: { projectedBudgetedCents: 230000 } })).headline).toBe(
       "At this pace you'd finish the month $300 over budget.",
     )
   })
 
+  it('ignores spending outside the budgets when judging the pace', () => {
+    // A fee or an unbudgeted purchase pushes all spending up, not the budgets.
+    const fees = checkin({ budget: { projectedCents: 230000, projectedBudgetedCents: 190000 } })
+    expect(summarize(fees).headline).toMatch(/^You're on track/)
+  })
+
   it('says how far over when the budget is already spent', () => {
-    const over = checkin({ budget: { leftCents: -4500, projectedCents: 250000, daysLeft: 3 } })
+    const over = checkin({
+      budget: { leftCents: -4500, projectedBudgetedCents: 250000, daysLeft: 3 },
+    })
     expect(summarize(over).headline).toBe("You're $45 over budget with 4 days to go.")
   })
 
@@ -123,7 +132,7 @@ describe('the headline', () => {
 
   it('names the paycheck or the week as the period', () => {
     const weekly = { period: { kind: 'weekly' as const, weekStartsOn: 1 }, locale: 'en-US' }
-    const busy = checkin({ budget: { projectedCents: 230000 } })
+    const busy = checkin({ budget: { projectedBudgetedCents: 230000 } })
     expect(plainSummary(busy, weekly, money).headline).toContain('finish the week')
   })
 })

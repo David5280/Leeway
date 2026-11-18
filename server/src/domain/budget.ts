@@ -51,7 +51,14 @@ export interface BudgetSummary {
     uncategorizedCount: number
     /** What can be spent per remaining day without going over; null outside the current period. */
     safePerDayCents: number | null
+    /** All spending at the end of the period if the current daily rate holds. */
     projectedCents: number
+    /**
+     * Where spending in budgeted categories is heading, to compare with
+     * budgetedCents: flexible categories at their current daily rate, fixed ones
+     * at their budget (a bill lands once) or what is already spent, if more.
+     */
+    projectedBudgetedCents: number
   }
   categories: CategoryBudget[]
   /** Goals set aside from the budget, and their share of this period. */
@@ -120,6 +127,11 @@ export function computeBudget(input: {
   const budgeted = expenses.filter((r) => r.budgetCents !== null)
   const budgetedCents = sum(budgeted.map((r) => r.budgetCents!))
   const budgetedSpentCents = sum(budgeted.map((r) => r.spentCents))
+  const projectedBudgetedCents = sum(
+    budgeted.map((r) =>
+      isCurrent && r.pace === null ? Math.max(r.spentCents, r.budgetCents!) : r.projectedCents,
+    ),
+  )
   const uncategorized = byCategory.get(null)
   const uncategorizedCents = uncategorized?.amountCents ?? 0
   const spentCents = sum(expenses.map((r) => r.spentCents)) + uncategorizedCents
@@ -155,6 +167,7 @@ export function computeBudget(input: {
         isCurrent && daysElapsed > 0
           ? Math.round((spentCents / daysElapsed) * period.days)
           : spentCents,
+      projectedBudgetedCents,
     },
     categories: rows,
     setAsides,
