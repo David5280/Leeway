@@ -68,7 +68,7 @@ export async function changePassword(
     'SELECT password_hash AS "passwordHash" FROM owner',
   )
   if (!rows[0] || !(await verifyPassword(currentPassword, rows[0].passwordHash))) {
-    throw new AppError('invalid_input', 'Your current password is not right')
+    throw new AppError('wrong_password', 'Your current password is not right')
   }
   checkPassword(newPassword)
   await db.query('UPDATE owner SET password_hash = $1', [await hashPassword(newPassword)])

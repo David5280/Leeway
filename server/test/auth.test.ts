@@ -1,12 +1,13 @@
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { ACCOUNT_LIMIT } from '../src/http/auth.js'
 import { getOwner } from '../src/domain/owner.js'
 import { buildApp } from '../src/http/app.js'
 import { MIN_PASSWORD_LENGTH } from '../src/lib/password.js'
 import { createTestContext, resetData } from './helpers.js'
 
-let ctx: AppContext
+let ctx: AppContext & { setNow(date: Date): void }
 let app: FastifyInstance
 
 beforeAll(async () => {
@@ -18,6 +19,7 @@ afterAll(async () => {
 // A fresh app per test, because sign-in routes are rate limited per app.
 beforeEach(async () => {
   await resetData(ctx.db)
+  ctx.setNow(new Date('2026-11-17T18:00:00Z'))
   app = await buildApp(ctx, { webDir: null })
 })
 afterEach(async () => {
@@ -114,6 +116,14 @@ describe('signing in', () => {
     })
   })
 
+  it('ends the session a browser already had when it signs in again', async () => {
+    const first = await signUp()
+    const second = sessionCookie(await post('/api/auth/login', owner, first))
+
+    expect((await me(first)).statusCode).toBe(401)
+    expect((await me(second)).statusCode).toBe(200)
+  })
+
   it('signs out cleanly even without a session', async () => {
     const response = await post('/api/auth/logout')
     expect(response.statusCode).toBe(204)
@@ -163,7 +173,10 @@ describe('changing the password', () => {
     const cookie = await signUp()
     const response = await change(cookie, 'not my password', 'a whole new password')
     expect(response.statusCode).toBe(400)
-    expect(response.json().message).toBe('Your current password is not right')
+    expect(response.json()).toMatchObject({
+      error: 'wrong_password',
+      message: 'Your current password is not right',
+    })
   })
 
   it('refuses a new password that is too short, keeping the old one', async () => {
@@ -223,5 +236,86 @@ describe('rate limits', () => {
     for (let i = 0; i < 10; i++) expect((await attempt(i)).statusCode).toBe(401)
 
     expect((await attempt(99)).statusCode).toBe(429)
+  })
+})
+
+describe('pausing sign-in after many wrong passwords', () => {
+  /** A sign-in from its own address, so only the account-wide limit can stop it. */
+  const loginFrom = (address: number, password: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { ...owner, password },
+      headers: { 'x-forwarded-for': `198.51.100.${address}` },
+    })
+
+  async function guessFromManyAddresses(): Promise<void> {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+      expect((await loginFrom(i, 'a wrong guess')).statusCode).toBe(401)
+    }
+  }
+
+  it('pauses every address, even with the right password, and says for how long', async () => {
+    await signUp()
+    await guessFromManyAddresses()
+
+    const paused = await loginFrom(200, owner.password)
+
+    expect(paused.statusCode).toBe(429)
+    expect(paused.headers['retry-after']).toBe(String(ACCOUNT_LIMIT.windowMs / 1000))
+    expect(paused.json()).toMatchObject({
+      error: 'too_many_attempts',
+      message: 'Too many wrong passwords. Sign-in is paused for 15 minutes; try again then.',
+    })
+    expect(paused.cookies).toHaveLength(0)
+  })
+
+  it('opens again once the oldest wrong password is out of the window', async () => {
+    await signUp()
+    await guessFromManyAddresses()
+
+    ctx.setNow(new Date(ctx.now().getTime() + ACCOUNT_LIMIT.windowMs - 30_000))
+    const almost = await loginFrom(200, owner.password)
+    expect(almost.json().message).toContain('paused for 1 minute;')
+
+    ctx.setNow(new Date(ctx.now().getTime() + 30_000))
+    expect((await loginFrom(201, owner.password)).statusCode).toBe(200)
+  })
+
+  it('counts wrong current passwords when changing it, so a stolen session cannot guess', async () => {
+    const cookie = await signUp()
+    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+      const wrong = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        payload: { currentPassword: 'a wrong guess', newPassword: 'a whole new password' },
+        headers: { cookie, 'x-forwarded-for': `198.51.100.${i}` },
+      })
+      expect(wrong.statusCode).toBe(400)
+    }
+
+    const paused = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password',
+      payload: { currentPassword: owner.password, newPassword: 'a whole new password' },
+      headers: { cookie, 'x-forwarded-for': '198.51.100.250' },
+    })
+
+    expect(paused.statusCode).toBe(429)
+    expect((await loginFrom(251, owner.password)).statusCode).toBe(429)
+  })
+
+  it('does not count a too-short new password as a wrong guess', async () => {
+    const cookie = await signUp()
+    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+      const tooShort = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password',
+        payload: { currentPassword: owner.password, newPassword: 'short' },
+        headers: { cookie, 'x-forwarded-for': `198.51.100.${i}` },
+      })
+      expect(tooShort.statusCode).toBe(400)
+    }
+    expect((await loginFrom(250, owner.password)).statusCode).toBe(200)
   })
 })
