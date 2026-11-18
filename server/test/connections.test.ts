@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { BankError } from '../src/bank/provider.js'
 import type { AppContext } from '../src/context.js'
+import { actionList } from '../src/actions/index.js'
 import { UNREADABLE_TOKEN } from '../src/domain/bank.js'
 import { handleBankWebhook } from '../src/domain/connections.js'
 import { encrypt } from '../src/lib/crypto.js'
@@ -237,6 +238,25 @@ describe('removing a bank', () => {
 
   it('reports an unknown connection as not found', async () => {
     expect((await callError('remove_connection', { id: UNKNOWN_ID })).code).toBe('not_found')
+  })
+})
+
+describe("a bank's access token", () => {
+  it('is stored encrypted and never comes back from any action that reads', async () => {
+    await call('link_bank', { publicToken: 'public-1' })
+    const { rows } = await ctx.db.query<{ stored: string }>(
+      'SELECT access_token_encrypted AS stored FROM connections',
+    )
+    const stored = rows[0]!.stored
+    expect(stored).not.toContain('access-public-1')
+
+    for (const action of actionList.filter((a) => a.scope === 'read')) {
+      // Actions that need input fail here, which leaks nothing either.
+      const result = await call(action.name).catch(() => null)
+      const text = JSON.stringify(result) ?? ''
+      expect(text, action.name).not.toContain('access-public-1')
+      expect(text, action.name).not.toContain(stored.split(':')[3]!)
+    }
   })
 })
 
