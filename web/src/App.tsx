@@ -7,6 +7,8 @@ import { ApiError, auth, setSignedOutHandler, UNREACHABLE } from './api/client'
 import { useAction } from './api/hooks'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
+import { Accounts } from './pages/Accounts'
+import { Alerts } from './pages/Alerts'
 import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
 import { Connect, ConnectProblem } from './pages/Connect'
@@ -27,6 +29,8 @@ function Screens() {
   return (
     <Routes>
       <Route path="/" element={<Overview />} />
+      <Route path="/accounts" element={<Accounts />} />
+      <Route path="/alerts" element={<Alerts />} />
       <Route path="/transactions" element={<Transactions />} />
       <Route path="/transactions/import" element={<ImportTransactions />} />
       <Route path="/budgets" element={<Budgets />} />

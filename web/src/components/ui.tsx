@@ -29,6 +29,12 @@ const ICONS = {
   ),
   overview: <path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 7h6V4h-6z" />,
   activity: <path d="M4 7h16M4 12h16M4 17h10" />,
+  accounts: (
+    <>
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 10h18M7 15h4" />
+    </>
+  ),
   budgets: (
     <>
       <circle cx="12" cy="12" r="8" />

@@ -5,6 +5,8 @@ import {
   createAccountAction,
   deleteAccountAction,
   listAccountsAction,
+  listAlertsAction,
+  summarizeAccountsAction,
   updateAccountAction,
 } from './accounts.js'
 import {
@@ -125,6 +127,8 @@ export const actionList = [
   listImportsAction,
   undoImportAction,
   listAccountsAction,
+  summarizeAccountsAction,
+  listAlertsAction,
   createAccountAction,
   updateAccountAction,
   deleteAccountAction,

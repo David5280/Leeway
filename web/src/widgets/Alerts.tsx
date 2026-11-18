@@ -1,9 +1,12 @@
-// "Heads up": everything that needs the owner, worst first.
+// "Heads up": everything that needs the owner, worst first: account alerts,
+// banks that stopped syncing, budgets, then transactions to sort.
 
 import { Link } from 'react-router-dom'
 import type { Connection } from '../api/client'
 import { useAction } from '../api/hooks'
+import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
 import { Card, Icon } from '../components/ui'
+import { accountPath } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
 
@@ -16,6 +19,7 @@ const ALERT_LABELS: Record<WidgetProps['budget']['alerts'][number]['level'], str
 export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
+  const accountAlerts = useAction('list_alerts')
   const items: {
     key: string
     tone: 'over' | 'warn' | 'info'
@@ -23,6 +27,16 @@ export function AlertsWidget({ budget }: WidgetProps) {
     level: string
     to?: string
   }[] = []
+  // Money going wrong in an account comes before everything else.
+  for (const alert of accountAlerts.data ?? []) {
+    items.push({
+      key: `${alert.kind}-${alert.accountId}`,
+      tone: alert.severity === 'urgent' ? 'over' : 'warn',
+      text: alert.message,
+      level: ACCOUNT_ALERT_LABELS[alert.kind],
+      to: accountPath(alert.accountId),
+    })
+  }
   for (const connection of connections.data ?? []) {
     const text = bankAlertText(connection)
     if (text)

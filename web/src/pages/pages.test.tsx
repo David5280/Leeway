@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { App } from '../App'
 import {
+  account,
   budgetFor,
   category,
   failing,
@@ -201,6 +202,36 @@ describe('transactions filters and editing', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it("narrows to one account from that account's page, until the chip is cleared", async () => {
+    const server = fakeServer({
+      get_budget: () => budgetFor(categories, []),
+      list_categories: () => categories,
+      list_accounts: () => [account({ id: 'acct-1', name: 'Everyday' })],
+      list_transactions: () => ({ transactions: [], total: 0 }),
+    })
+    renderSignedIn(<Transactions />, { route: '/transactions?account=acct-1' })
+    const chip = await screen.findByRole('button', { name: 'Everyday' })
+    await waitFor(() =>
+      expect(server.actions('list_transactions')).toContainEqual(
+        expect.objectContaining({ accountId: 'acct-1' }),
+      ),
+    )
+    await userEvent.click(chip)
+    expect(screen.queryByRole('button', { name: 'Everyday' })).not.toBeInTheDocument()
+    expect(server.actions('list_transactions').at(-1)).not.toHaveProperty('accountId')
+  })
+
+  it('names a linked account it cannot find plainly', async () => {
+    fakeServer({
+      get_budget: () => budgetFor(categories, []),
+      list_categories: () => categories,
+      list_accounts: () => [],
+      list_transactions: () => ({ transactions: [], total: 0 }),
+    })
+    renderSignedIn(<Transactions />, { route: '/transactions?account=gone' })
+    expect(await screen.findByRole('button', { name: 'One account' })).toBeInTheDocument()
   })
 
   it('searches and widens the date range', async () => {

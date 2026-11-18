@@ -2,6 +2,7 @@
 // an agent can pass on. Pure: the data comes in, nothing is read here.
 
 import { daysBetween } from '../lib/dates.js'
+import type { AccountAlert } from './accountAlerts.js'
 import type { Bill } from './bills.js'
 import type { BudgetReport } from './budgetReport.js'
 import type { CashFlow } from './cashFlow.js'
@@ -15,7 +16,7 @@ export type Priority = 'now' | 'soon' | 'fyi'
 
 export interface AttentionItem {
   priority: Priority
-  topic: 'bank' | 'cash' | 'bill' | 'budget' | 'goal' | 'debt' | 'cleanup'
+  topic: 'account' | 'bank' | 'cash' | 'bill' | 'budget' | 'goal' | 'debt' | 'cleanup'
   message: string
   /**
    * The same point for the owner to read, where `message` speaks to an
@@ -27,6 +28,7 @@ export interface AttentionItem {
 }
 
 export interface CoachSources {
+  accountAlerts: AccountAlert[]
   budget: BudgetReport
   cashFlow: CashFlow
   bills: Bill[]
@@ -41,6 +43,16 @@ type Money = (cents: number) => string
 const PRIORITY_ORDER: Priority[] = ['now', 'soon', 'fyi']
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many)
+
+/** Overdrawn accounts and cards over their limit need the owner today; fees and low balances soon. */
+function accountItems({ accountAlerts }: CoachSources): AttentionItem[] {
+  return accountAlerts.map((alert) => ({
+    priority: alert.severity === 'urgent' ? 'now' : 'soon',
+    topic: 'account',
+    message: alert.message,
+    tool: 'list_alerts',
+  }))
+}
 
 function bankItems({ connections }: CoachSources): AttentionItem[] {
   return connections
@@ -182,6 +194,7 @@ function cleanupItems(sources: CoachSources): AttentionItem[] {
 /** Everything that needs attention, most urgent first; same priority keeps topic order. */
 export function attentionItems(sources: CoachSources, money: Money): AttentionItem[] {
   const items = [
+    ...accountItems(sources),
     ...bankItems(sources),
     ...cashItems(sources, money),
     ...billItems(sources, money),

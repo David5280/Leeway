@@ -1,6 +1,7 @@
 // Check-ins built by hand, for tests of the pure code that words them: the
 // dashboard summary and the weekly email.
 
+import type { AccountAlert } from '../../src/domain/accountAlerts.js'
 import type { Checkin } from '../../src/domain/checkin.js'
 
 export type CheckinGoal = Checkin['goals'][number]
@@ -12,6 +13,7 @@ export function checkin(
   const base: Checkin = {
     today: '2026-11-17',
     attention: [],
+    alerts: [],
     budget: {
       periodStart: '2026-11-01',
       periodEnd: '2026-11-30',
@@ -63,6 +65,22 @@ export function goal(name: string, fields: Partial<CheckinGoal> = {}): CheckinGo
     onTrack: null,
     heldBackCents: 0,
     status: 'in_progress',
+    ...fields,
+  }
+}
+
+/** An overdrawn checking account, or another kind of alert with these fields. */
+export function accountAlert(fields: Partial<AccountAlert> = {}): AccountAlert {
+  return {
+    kind: 'overdrawn',
+    severity: 'urgent',
+    accountId: 'acct-1',
+    accountName: 'Everyday',
+    amountCents: 4210,
+    count: 1,
+    date: null,
+    message: 'Everyday is overdrawn by $42.10.',
+    summary: 'Your Chase checking account is overdrawn by $42.10.',
     ...fields,
   }
 }

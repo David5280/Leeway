@@ -19,11 +19,15 @@ export interface DateRange {
  * Net amount per category in each range, in one query however many ranges
  * there are, returned in the ranges' order. Transfers, excluded transactions,
  * hidden accounts and (if the owner says so) pending transactions are left out.
+ *
+ * Given account ids, only those accounts count, hidden or not: an account
+ * picked by hand is wanted even if it is left out of budgets.
  */
 export async function categoryTotalsByRange(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
+  accountIds: string[] | null = null,
 ): Promise<CategoryTotal[][]> {
   const { rows } = await db.query<CategoryTotal & { range: number }>(
     `SELECT r.n::int AS range, t.category_id AS "categoryId",
@@ -32,12 +36,13 @@ export async function categoryTotalsByRange(
      JOIN transactions t ON t.date >= r.start_date AND t.date < r.end_date
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
-     WHERE NOT t.excluded AND NOT a.hidden
+     WHERE NOT t.excluded
+       AND CASE WHEN $4::uuid[] IS NULL THEN NOT a.hidden ELSE a.id = ANY($4) END
        AND ($3 OR NOT t.pending)
        AND (c.kind IS NULL OR c.kind <> 'transfer')
      GROUP BY r.n, t.category_id
      ORDER BY r.n, t.category_id NULLS LAST`,
-    [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending],
+    [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds],
   )
   const totals = ranges.map((): CategoryTotal[] => [])
   // WITH ORDINALITY counts from 1.

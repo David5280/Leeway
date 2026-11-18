@@ -24,6 +24,8 @@ export type Goal = Output<'list_goals'>[number]
 export type DebtPlans = Output<'plan_debt_payoff'>
 export type NetWorth = Output<'get_net_worth'>
 export type CashFlow = Output<'get_cash_flow'>
+export type AccountAlert = Output<'list_alerts'>[number]
+export type AccountsView = Output<'summarize_accounts'>
 
 /** A failure the server explained: its HTTP status, error code and a message for people. */
 export class ApiError extends Error {

@@ -1,7 +1,8 @@
 // What the weekly email says, worked out from the owner's numbers. Pure: the
 // summary, check-in and bills come in, a structured email comes out, and
-// html.ts and text.ts lay it out. Totals, bills and goals only: no accounts
-// and no transactions, so nothing in an inbox identifies a bank account.
+// html.ts and text.ts lay it out. Totals, bills, goals and account alerts
+// only, and an alert names just the bank and the kind of account: no account
+// names, numbers or transactions, so nothing in an inbox identifies an account.
 
 import type { IsoDate } from '../../lib/dates.js'
 import { periodWord, shortDate } from '../../lib/words.js'
@@ -43,6 +44,8 @@ export interface WeeklyEmailContent {
   subject: string
   /** The line an inbox shows after the subject. */
   preview: string
+  /** Overdrawn accounts, cards over their limit, fees and low balances, shown first. */
+  alerts: string[]
   headline: string
   points: string[]
   /** "This month", over the period at a glance: two or three labelled amounts. */
@@ -58,8 +61,11 @@ export interface WeeklyEmailContent {
 /** Most bills and goals listed, so a busy month still reads at a glance. */
 export const MAX_LIST_ITEMS = 8
 
-/** The subject: where the period stands, in one short phrase. */
-function subjectLine({ budget }: Checkin, money: Money, word: string): string {
+/** The subject: an urgent account alert, or else where the period stands, in one short phrase. */
+function subjectLine({ budget, alerts }: Checkin, money: Money, word: string): string {
+  const kinds = new Set(alerts.map((alert) => alert.kind))
+  if (kinds.has('overdrawn')) return 'Your week in Leeway: an account is overdrawn'
+  if (kinds.has('over_limit')) return 'Your week in Leeway: a card is over its limit'
   if (budget.budgetedCents === 0) return `Your week in Leeway: ${money(budget.spentCents)} spent`
   if (budget.leewayCents < 0) {
     return `Your week in Leeway: ${money(-budget.leewayCents)} over this ${word}`
@@ -83,7 +89,10 @@ function periodFigures({ budget }: Checkin, money: Money, locale: string): Email
 function headsUpSection({ attention }: Checkin): EmailSection {
   return {
     title: 'Heads up',
-    items: attention.map((item) => ({ text: item.forOwner ?? item.message })),
+    // Account alerts lead the email, without account names, so they are not repeated here.
+    items: attention
+      .filter((item) => item.topic !== 'account')
+      .map((item) => ({ text: item.forOwner ?? item.message })),
     empty: 'Nothing needs you right now.',
   }
 }
@@ -136,11 +145,16 @@ function goalsSection({ goals }: Checkin, money: Money, locale: string): EmailSe
 export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent {
   const { checkin, money, settings } = input
   const word = periodWord(settings.period.kind)
+  const alerts = checkin.alerts.map((alert) => alert.summary)
   return {
     subject: subjectLine(checkin, money, word),
     preview: input.summary.headline,
+    alerts,
     headline: input.summary.headline,
-    points: input.summary.points,
+    // Leeway's summary mentions the worst alert, which the alert block already says.
+    points: input.summary.points.filter(
+      (point) => !alerts.some((alert) => point.startsWith(alert)),
+    ),
     figuresTitle: `This ${word}`,
     figures: periodFigures(checkin, money, settings.locale),
     sections: [

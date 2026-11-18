@@ -49,6 +49,8 @@ export const transactionFilterSchema = z.object({
   /** A category id, or "uncategorized". */
   categoryId: z.union([z.uuid(), z.literal('uncategorized')]).optional(),
   accountId: z.uuid().optional(),
+  /** Any of these accounts; with accountId as well, a transaction must match both. */
+  accountIds: z.array(z.uuid()).min(1).max(100).optional(),
   /** Matches the description, merchant or note. */
   search: z.string().trim().min(1).max(100).optional(),
   minAmountCents: z.number().int().optional(),
@@ -87,6 +89,7 @@ export async function listTransactions(
   if (filter.categoryId === 'uncategorized') where.push('t.category_id IS NULL')
   else if (filter.categoryId) add('t.category_id = ?', filter.categoryId)
   if (filter.accountId) add('t.account_id = ?', filter.accountId)
+  if (filter.accountIds) add('t.account_id = ANY(?::uuid[])', filter.accountIds)
   if (filter.search) {
     add(
       `(t.name ILIKE ? OR t.merchant_name ILIKE $${params.length + 1} OR t.note ILIKE $${params.length + 1})`,

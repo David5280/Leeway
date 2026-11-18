@@ -13,6 +13,9 @@ const COLOR = {
   line: '#e3e6ea',
   accent: '#2f6fde',
   onAccent: '#ffffff',
+  /** Account alerts: dark red on a pale red, readable in light and dark mail apps. */
+  alertText: '#8a1c12',
+  alertBack: '#fdecea',
 }
 
 const FONT = `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`
@@ -73,6 +76,13 @@ function points(list: string[]): string {
   return `<ul class="text" style="margin:12px 0 0;padding-left:20px;color:${COLOR.text};">${items}</ul>`
 }
 
+/** Account alerts in a red box above everything else, so an overdraft is the first thing read. */
+function alerts(list: string[]): string {
+  if (list.length === 0) return ''
+  const lines = list.map((alert) => `<p style="margin:0 0 6px;">${escapeHtml(alert)}</p>`).join('')
+  return `<div style="margin:0 0 20px;padding:12px 14px 6px;border-radius:8px;background:${COLOR.alertBack};color:${COLOR.alertText};font-weight:600;">${lines}</div>`
+}
+
 function button(url: string | null): string {
   const href = safeUrl(url)
   if (!href) return ''
@@ -100,6 +110,7 @@ export function weeklyEmailHtml(content: WeeklyEmailContent): string {
 <table role="presentation" class="card" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:${COLOR.card};border:1px solid ${COLOR.line};border-radius:12px;">
 <tr><td style="padding:28px 24px;font-family:${FONT};font-size:15px;line-height:22px;">
 <p class="muted" style="margin:0 0 8px;color:${COLOR.muted};font-size:13px;">Your week in Leeway</p>
+${alerts(content.alerts)}
 <h1 class="text" style="margin:0;font-size:20px;line-height:28px;color:${COLOR.text};">${escapeHtml(content.headline)}</h1>
 ${points(content.points)}
 ${heading(content.figuresTitle)}

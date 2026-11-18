@@ -3,6 +3,7 @@
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
 import { formatCents } from '../lib/money.js'
+import { listAlerts } from './alerts.js'
 import { listBills } from './bills.js'
 import { budgetReport } from './budgetReport.js'
 import { getCashFlow } from './cashFlow.js'
@@ -18,19 +19,22 @@ import { periodConfig, type Settings } from './settings.js'
 const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
-  const [budget, cashFlow, bills, goals, plans, connections, recurring, worth] = await Promise.all([
-    budgetReport(db, settings, now),
-    getCashFlow(db, settings, today),
-    listBills(db, today),
-    listGoals(db, { today, period: periodConfig(settings) }),
-    debtPlans(db, 0, today),
-    listConnections(db),
-    untrackedRecurring(db, today),
-    getNetWorth(db, today, NET_WORTH_DAYS),
-  ])
+  const [budget, cashFlow, bills, goals, plans, connections, recurring, worth, alerts] =
+    await Promise.all([
+      budgetReport(db, settings, now),
+      getCashFlow(db, settings, today),
+      listBills(db, today),
+      listGoals(db, { today, period: periodConfig(settings) }),
+      debtPlans(db, 0, today),
+      listConnections(db),
+      untrackedRecurring(db, today),
+      getNetWorth(db, today, NET_WORTH_DAYS),
+      listAlerts(db, settings, today),
+    ])
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
     {
+      accountAlerts: alerts,
       budget,
       cashFlow,
       bills,
@@ -48,6 +52,8 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
   return {
     today,
     attention,
+    /** Overdrawn accounts, cards over their limit, overdraft fees and low balances (see list_alerts). */
+    alerts,
     budget: {
       periodStart: period.start,
       periodEnd: period.end,

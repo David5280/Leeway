@@ -18,7 +18,7 @@ export const listTransactionsAction = defineAction({
   name: 'list_transactions',
   title: 'List transactions',
   description:
-    'Search transactions, newest first. Amounts are in cents: positive is money out, negative is money in. Filter by date range (inclusive, YYYY-MM-DD), category id or "uncategorized", account, text, or amount. Returns one page plus the total count. A payment between people (Zelle, Venmo and the like) carries "person": the app, the direction (read from the amount) and the other person\'s name when known.',
+    'Search transactions, newest first. Amounts are in cents: positive is money out, negative is money in. Filter by date range (inclusive, YYYY-MM-DD), category id or "uncategorized", account (accountId for one, accountIds for several), text, or amount. Returns one page plus the total count. A payment between people (Zelle, Venmo and the like) carries "person": the app, the direction (read from the amount) and the other person\'s name when known.',
   input: transactionFilterSchema,
   scope: 'read',
   surface: 'all',

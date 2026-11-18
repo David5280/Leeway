@@ -58,6 +58,30 @@ describe('get_checkin', () => {
     })
   })
 
+  it('puts account alerts in the check-in and the attention list, an overdraft first', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Everyday', balanceCents: -4210 })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-12',
+      name: 'NSF FEE',
+      amountCents: 3500,
+    })
+
+    const checkin = await call('get_checkin')
+
+    expect(checkin.alerts.map((a) => a.kind)).toEqual(['overdrawn', 'overdraft_fee'])
+    // The overdraft leads; the fee waits behind what needs doing today.
+    expect(checkin.attention[0]!.topic).toBe('account')
+    expect(checkin.attention.filter((item) => item.topic === 'account')).toEqual([
+      {
+        priority: 'now',
+        topic: 'account',
+        message: 'Everyday is overdrawn by $42.10.',
+        tool: 'list_alerts',
+      },
+      expect.objectContaining({ priority: 'soon', topic: 'account', tool: 'list_alerts' }),
+    ])
+  })
+
   it('lists what needs attention, most urgent first', async () => {
     const checking = await insertBankAccount(ctx.db, { balanceCents: 1000 })
     const card = await insertBankAccount(ctx.db, {

@@ -7,13 +7,16 @@ import { ConfigError, loadConfig, type Config } from './config.js'
 import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
+import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { getOwner } from './domain/owner.js'
+import { getSettings } from './domain/settings.js'
 import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
 import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weeklyEmail/send.js'
 import { buildApp } from './http/app.js'
+import { todayIn } from './lib/dates.js'
 import { repeatEvery } from './lib/repeat.js'
 import { generateSetupCode, setupReminder, type SetupCode } from './lib/setupCode.js'
 import { MINUTE_MS } from './lib/time.js'
@@ -69,6 +72,13 @@ async function catchUpDates(): Promise<void> {
   if (summary) app.log.info(summary)
 }
 
+/** Says in the log how many accounts are overdrawn, low or charged fees: counts only, and only when they change. */
+const logChangedAlerts = changedLinesOnly((line) => app.log.info(line))
+async function logAlerts(): Promise<void> {
+  const settings = await getSettings(db)
+  logChangedAlerts(await alertLogLine(db, settings, todayIn(settings.timeZone, ctx.now())))
+}
+
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
 if (ctx.bank && config.syncIntervalMinutes > 0) {
@@ -77,6 +87,7 @@ if (ctx.bank && config.syncIntervalMinutes > 0) {
     async () => {
       await syncAll(ctx)
       await catchUpDates()
+      await logAlerts()
     },
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
@@ -109,6 +120,9 @@ await app.listen({ port: config.port, host: config.host })
 // In the background, so a slow bank never holds up serving the app.
 catchUpDates().catch((error: unknown) =>
   app.log.error({ err: error }, 'Moving older transactions to purchase dates failed'),
+)
+logAlerts().catch((error: unknown) =>
+  app.log.error({ err: error }, 'Counting account alerts failed'),
 )
 if (!(await getOwner(db))) app.log.warn(setupReminder(setup, config.publicUrl))
 // Optional settings left out are fine; say once what each one would turn on.
