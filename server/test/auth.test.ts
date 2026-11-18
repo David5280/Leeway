@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync } from 'node:crypto'
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
@@ -91,7 +92,7 @@ describe('creating the owner', () => {
   })
 })
 
-describe('the setup code', () => {
+describe('the setup code', { timeout: 30_000 }, () => {
   const setUp = (setupCode?: string, address = '198.51.100.1') =>
     app.inject({
       method: 'POST',
@@ -183,6 +184,21 @@ describe('signing in', () => {
     expect(response.json()).toEqual({
       owner: { email: owner.email, name: null, onboarded: false },
     })
+  })
+
+  it('stores the password again with current settings when an older hash signs in', async () => {
+    await signUp()
+    // The hash an earlier Leeway made: scrypt with p=1.
+    const salt = randomBytes(16)
+    const hash = scryptSync(owner.password, salt, 64, { N: 2 ** 15, r: 8, p: 1, maxmem: 2 ** 26 })
+    const older = ['scrypt', 2 ** 15, 8, 1, salt.toString('base64'), hash.toString('base64')]
+    await ctx.db.query('UPDATE owner SET password_hash = $1', [older.join(':')])
+
+    expect((await post('/api/auth/login', owner)).statusCode).toBe(200)
+
+    const { rows } = await ctx.db.query<{ hash: string }>('SELECT password_hash AS hash FROM owner')
+    expect(rows[0]!.hash).toMatch(/^scrypt:32768:8:3:/)
+    expect((await post('/api/auth/login', owner)).statusCode).toBe(200)
   })
 
   it('ends the session a browser already had when it signs in again', async () => {
@@ -308,7 +324,8 @@ describe('rate limits', () => {
   })
 })
 
-describe('pausing sign-in after many wrong passwords', () => {
+// Each wrong password costs a real scrypt check, so these take a few seconds.
+describe('pausing sign-in after many wrong passwords', { timeout: 30_000 }, () => {
   /** A sign-in from its own address, so only the account-wide limit can stop it. */
   const loginFrom = (address: number, password: string) =>
     app.inject({

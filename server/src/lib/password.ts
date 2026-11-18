@@ -11,8 +11,11 @@ const scryptAsync = promisify(scrypt) as (
 ) => Promise<Buffer>
 
 // scrypt is deliberately slow and memory hungry, which makes guessing
-// passwords from a leaked hash expensive. N=2^15 takes ~50 ms per check.
-const PARAMS = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }
+// passwords from a leaked hash expensive. These are OWASP's minimum for
+// scrypt in the form that keeps memory at 32 MiB per check (N=2^15, r=8,
+// p=3), so a burst of sign-ins cannot exhaust a small server's memory. A
+// check takes ~150 ms.
+const PARAMS = { N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }
 const KEY_LENGTH = 64
 
 export const MIN_PASSWORD_LENGTH = 10
@@ -43,4 +46,13 @@ export async function verifyPassword(password: string, stored: string): Promise<
   })
   // Constant-time comparison so response timing reveals nothing about the hash.
   return timingSafeEqual(actual, expected)
+}
+
+/**
+ * Whether a stored hash was made with weaker settings than today's, so the
+ * next successful sign-in should store it again with the current ones.
+ */
+export function needsRehash(stored: string): boolean {
+  const [, n, r, p] = stored.split(':')
+  return Number(n) < PARAMS.N || Number(r) < PARAMS.r || Number(p) < PARAMS.p
 }

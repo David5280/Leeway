@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { decrypt, encrypt, hashToken, randomToken } from '../src/lib/crypto.js'
 import { formatCents, formatWholeCents, toCents, toCentsOrNull } from '../src/lib/money.js'
-import { hashPassword, verifyPassword } from '../src/lib/password.js'
+import { hashPassword, needsRehash, verifyPassword } from '../src/lib/password.js'
 import { generateSetupCode, setupCodeMatches } from '../src/lib/setupCode.js'
 
 const key = Buffer.alloc(32, 7)
@@ -44,6 +44,15 @@ describe('passwords', () => {
     expect(await verifyPassword('correct horse battery', stored)).toBe(true)
     expect(await verifyPassword('wrong password', stored)).toBe(false)
     expect(await verifyPassword('anything', 'garbage')).toBe(false)
+  })
+
+  it("hashes with at least OWASP's scrypt cost, and asks to redo hashes made with less", async () => {
+    const stored = await hashPassword('correct horse battery')
+    expect(stored).toMatch(/^scrypt:32768:8:3:/)
+    expect(needsRehash(stored)).toBe(false)
+    expect(needsRehash('scrypt:32768:8:1:salt:hash')).toBe(true)
+    expect(needsRehash('scrypt:16384:8:3:salt:hash')).toBe(true)
+    expect(needsRehash('scrypt:32768:4:3:salt:hash')).toBe(true)
   })
 })
 

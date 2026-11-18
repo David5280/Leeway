@@ -3,7 +3,7 @@
 import type { Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { hashToken, randomToken } from '../lib/crypto.js'
-import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from '../lib/password.js'
+import { hashPassword, MIN_PASSWORD_LENGTH, needsRehash, verifyPassword } from '../lib/password.js'
 
 /** The one person this install belongs to. */
 export interface Owner {
@@ -56,7 +56,12 @@ export async function checkLogin(db: Db, email: string, password: string): Promi
   // Always run the slow hash so timing does not reveal whether an owner exists.
   dummyHash ??= hashPassword('no owner yet')
   const valid = await verifyPassword(password, owner?.passwordHash ?? (await dummyHash))
-  return Boolean(owner && valid && owner.email === email.trim().toLowerCase())
+  const signedIn = Boolean(owner && valid && owner.email === email.trim().toLowerCase())
+  // Upgrade a hash made with older, weaker settings now that the password is at hand.
+  if (owner && signedIn && needsRehash(owner.passwordHash)) {
+    await db.query('UPDATE owner SET password_hash = $1', [await hashPassword(password)])
+  }
+  return signedIn
 }
 
 export async function changePassword(
