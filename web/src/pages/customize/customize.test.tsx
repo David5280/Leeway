@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -9,7 +9,7 @@ import {
   settingsPatchSchema,
   settingsSchema,
 } from '../../../../server/src/domain/settings'
-import type { Account, Connection, Settings, Status } from '../../api/client'
+import { auth, type Account, type Connection, type Settings, type Status } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { SETTINGS_KEY } from '../../api/settings'
 import { AppProvider } from '../../lib/app'
@@ -1269,11 +1269,30 @@ describe('Sign-in', () => {
     expect(server.calls).toEqual([])
   })
 
-  it('signs out and forgets everything cached', async () => {
+  it('signs out, forgets everything cached and asks again who is signed in', async () => {
+    let session = true
     const server = fakeServer(settingsHandlers(), {
-      '/api/auth/logout': () => new Response(null, { status: 204 }),
+      '/api/auth/logout': () => {
+        session = false
+        return new Response(null, { status: 204 })
+      },
+      '/api/auth/me': () =>
+        session ? Response.json({ owner: { email: 'a@b.c' } }) : failing('Sign in', 401)(),
     })
-    const client = renderWithStatus(<SignInSection />, {})
+    // Stands in for the app, which shows sign-in once this query fails.
+    function WhoIsSignedIn() {
+      const me = useQuery({ queryKey: ['me'], queryFn: auth.me })
+      if (me.isError) return <p>Signed out</p>
+      return <p>{me.isSuccess ? 'Signed in' : 'Checking'}</p>
+    }
+    const client = renderWithStatus(
+      <>
+        <SignInSection />
+        <WhoIsSignedIn />
+      </>,
+      {},
+    )
+    expect(await screen.findByText('Signed in')).toBeInTheDocument()
     client.setQueryData(['action', 'list_accounts', { includeHidden: true }], [])
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(server.calls.map((c) => c.path)).toContain('/api/auth/logout'))
@@ -1282,6 +1301,7 @@ describe('Sign-in', () => {
         client.getQueryData(['action', 'list_accounts', { includeHidden: true }]),
       ).toBeUndefined(),
     )
+    expect(await screen.findByText('Signed out')).toBeInTheDocument()
   })
 
   it('shows why signing out failed', async () => {

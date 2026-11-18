@@ -2,6 +2,7 @@
 
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
+import { useWidth } from '../lib/useWidth'
 import { niceMax } from './charts'
 
 export interface LinePoint {
@@ -33,7 +34,8 @@ export function LineChart({
   compact?: boolean
 }) {
   const { money, settings } = useApp()
-  const W = 640
+  // Drawn at its real width so the axis labels keep their size in narrow cards.
+  const [measure, W] = useWidth<HTMLDivElement>(640)
   const H = compact ? 90 : 220
   const left = compact ? 4 : 56
   const right = W - 4
@@ -48,63 +50,65 @@ export function LineChart({
   const last = points.at(-1)
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      role="img"
-      aria-label={label}
-      style={{ width: '100%', height: 'auto', overflow: 'visible' }}
-    >
-      {!compact && (
-        <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)">
-          {[low, high].map((value) => (
-            <g key={value}>
-              <line x1={left} x2={right} y1={y(value)} y2={y(value)} stroke="var(--line)" />
-              <text x={left - 8} y={y(value) + 4} textAnchor="end">
-                {money(value)}
-              </text>
-            </g>
-          ))}
-          {low < 0 && (
-            <line
-              x1={left}
-              x2={right}
-              y1={y(0)}
-              y2={y(0)}
-              stroke="var(--muted)"
-              strokeDasharray="2 4"
-            />
-          )}
-          {points.length > 1 && (
-            <>
-              <text x={left} y={H - 8}>
-                {shortDate(points[0]!.date, settings.locale)}
-              </text>
-              <text x={right} y={H - 8} textAnchor="end">
-                {shortDate(last!.date, settings.locale)}
-              </text>
-            </>
-          )}
-        </g>
-      )}
-      {points.length > 1 && (
-        <path
-          d={`M${path}`}
-          stroke="var(--accent)"
-          strokeWidth="2"
-          fill="none"
-          strokeLinejoin="round"
-        />
-      )}
-      {last && (
-        <circle
-          cx={x(last.date)}
-          cy={y(last.cents)}
-          r="4"
-          fill="var(--accent)"
-          stroke="var(--surface)"
-          strokeWidth="2"
-        />
-      )}
-    </svg>
+    <div ref={measure}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={label}
+        style={{ width: '100%', height: 'auto', overflow: 'visible' }}
+      >
+        {!compact && (
+          <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)">
+            {[low, high].map((value) => (
+              <g key={value}>
+                <line x1={left} x2={right} y1={y(value)} y2={y(value)} stroke="var(--line)" />
+                <text x={left - 8} y={y(value) + 4} textAnchor="end">
+                  {money(value)}
+                </text>
+              </g>
+            ))}
+            {low < 0 && (
+              <line
+                x1={left}
+                x2={right}
+                y1={y(0)}
+                y2={y(0)}
+                stroke="var(--muted)"
+                strokeDasharray="2 4"
+              />
+            )}
+            {points.length > 1 && (
+              <>
+                <text x={left} y={H - 8}>
+                  {shortDate(points[0]!.date, settings.locale)}
+                </text>
+                <text x={right} y={H - 8} textAnchor="end">
+                  {shortDate(last!.date, settings.locale)}
+                </text>
+              </>
+            )}
+          </g>
+        )}
+        {points.length > 1 && (
+          <path
+            d={`M${path}`}
+            stroke="var(--accent)"
+            strokeWidth="2"
+            fill="none"
+            strokeLinejoin="round"
+          />
+        )}
+        {last && (
+          <circle
+            cx={x(last.date)}
+            cy={y(last.cents)}
+            r="4"
+            fill="var(--accent)"
+            stroke="var(--surface)"
+            strokeWidth="2"
+          />
+        )}
+      </svg>
+    </div>
   )
 }

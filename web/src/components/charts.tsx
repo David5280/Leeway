@@ -3,6 +3,7 @@
 import type { Output } from '../api/client'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
+import { useWidth } from '../lib/useWidth'
 
 /** A round axis maximum: 1, 2, 2.5 or 5 times a power of ten, in cents. */
 export function niceMax(cents: number): number {
@@ -27,12 +28,12 @@ function compact(cents: number, currency: string, locale: string): string {
  */
 export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
   const { settings, money } = useApp()
-  // The SVG is drawn on a fixed 640 by 230 canvas and scales to fit; the
-  // plot area sits inside it, leaving room for the axis labels.
-  const W = 640
+  // Drawn at the card's real width so labels keep their size; the plot area
+  // sits inside it, leaving room for the axis labels.
+  const [measure, W] = useWidth<HTMLDivElement>(640)
   const H = 230
   const left = 44
-  const right = 620
+  const right = W - 20
   const top = 20
   const bottom = 190
   const spent = pace.cumulative.at(-1)?.cents ?? 0
@@ -50,103 +51,105 @@ export function PaceChart({ pace }: { pace: Output<'get_spending_pace'> }) {
   const summary = `Flexible spending: ${money(spent)} by ${shortDate(pace.cumulative.at(-1)?.date ?? pace.start, settings.locale)} against a ${money(pace.budgetCents)} budget, on track for ${money(pace.projectedCents)}.`
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      role="img"
-      aria-label={summary}
-      style={{ width: '100%', height: 'auto', overflow: 'visible' }}
-    >
-      <g stroke="var(--line)" strokeWidth="1">
-        {grid.map((value) => (
-          <line key={value} x1={left} x2={right} y1={y(value)} y2={y(value)} />
-        ))}
-      </g>
-      <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)" textAnchor="end">
-        {grid.map((value) => (
-          <text key={value} x={left - 8} y={y(value) + 4}>
-            {compact(value, settings.currency, settings.locale)}
+    <div ref={measure}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={summary}
+        style={{ width: '100%', height: 'auto', overflow: 'visible' }}
+      >
+        <g stroke="var(--line)" strokeWidth="1">
+          {grid.map((value) => (
+            <line key={value} x1={left} x2={right} y1={y(value)} y2={y(value)} />
+          ))}
+        </g>
+        <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)" textAnchor="end">
+          {grid.map((value) => (
+            <text key={value} x={left - 8} y={y(value) + 4}>
+              {compact(value, settings.currency, settings.locale)}
+            </text>
+          ))}
+        </g>
+        <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)" textAnchor="middle">
+          <text x={left} y={H - 20}>
+            {shortDate(pace.start, settings.locale)}
           </text>
-        ))}
-      </g>
-      <g fill="var(--muted)" fontSize="11" fontFamily="var(--font-num)" textAnchor="middle">
-        <text x={left} y={H - 20}>
-          {shortDate(pace.start, settings.locale)}
-        </text>
-        {/* "Today" only where it cannot run into the start or end date. */}
-        {isCurrent && lastIndex > 2 && lastIndex < pace.days - 3 && (
-          <text x={x(lastIndex)} y={H - 20}>
-            Today
+          {/* "Today" only where it cannot run into the start or end date. */}
+          {isCurrent && lastIndex > 2 && lastIndex < pace.days - 3 && (
+            <text x={x(lastIndex)} y={H - 20}>
+              Today
+            </text>
+          )}
+          <text x={right} y={H - 20}>
+            {shortDate(pace.end, settings.locale)}
           </text>
+        </g>
+        {pace.budgetCents > 0 && (
+          <>
+            <line
+              x1={left}
+              x2={right}
+              y1={y(pace.budgetCents)}
+              y2={y(pace.budgetCents)}
+              stroke="var(--over)"
+              strokeWidth="1.5"
+              strokeDasharray="2 4"
+            />
+            <text x={left + 4} y={y(pace.budgetCents) - 6} fill="var(--muted)" fontSize="11">
+              Budget {money(pace.budgetCents)}
+            </text>
+            <path
+              d={`M${x(0)} ${y(0)} L${x(pace.days - 1)} ${y(pace.budgetCents)}`}
+              stroke="var(--muted)"
+              strokeWidth="2"
+              strokeDasharray="6 6"
+              fill="none"
+            />
+          </>
         )}
-        <text x={right} y={H - 20}>
-          {shortDate(pace.end, settings.locale)}
-        </text>
-      </g>
-      {pace.budgetCents > 0 && (
-        <>
-          <line
-            x1={left}
-            x2={right}
-            y1={y(pace.budgetCents)}
-            y2={y(pace.budgetCents)}
-            stroke="var(--over)"
-            strokeWidth="1.5"
-            strokeDasharray="2 4"
-          />
-          <text x={left + 4} y={y(pace.budgetCents) - 6} fill="var(--muted)" fontSize="11">
-            Budget {money(pace.budgetCents)}
-          </text>
+        {isCurrent && lastIndex >= 0 && (
           <path
-            d={`M${x(0)} ${y(0)} L${x(pace.days - 1)} ${y(pace.budgetCents)}`}
-            stroke="var(--muted)"
+            d={`M${x(lastIndex)} ${y(spent)} L${x(pace.days - 1)} ${y(pace.projectedCents)}`}
+            stroke="var(--accent)"
             strokeWidth="2"
-            strokeDasharray="6 6"
+            strokeDasharray="1 5"
+            strokeLinecap="round"
             fill="none"
           />
-        </>
-      )}
-      {isCurrent && lastIndex >= 0 && (
-        <path
-          d={`M${x(lastIndex)} ${y(spent)} L${x(pace.days - 1)} ${y(pace.projectedCents)}`}
-          stroke="var(--accent)"
-          strokeWidth="2"
-          strokeDasharray="1 5"
-          strokeLinecap="round"
-          fill="none"
-        />
-      )}
-      {points.length > 0 && (
-        <path
-          d={`M${points.join(' L')}`}
-          stroke="var(--accent)"
-          strokeWidth="2"
-          fill="none"
-          strokeLinejoin="round"
-        />
-      )}
-      {lastIndex >= 0 && (
-        <>
-          <circle
-            cx={x(lastIndex)}
-            cy={y(spent)}
-            r="5"
-            fill="var(--accent)"
-            stroke="var(--surface)"
+        )}
+        {points.length > 0 && (
+          <path
+            d={`M${points.join(' L')}`}
+            stroke="var(--accent)"
             strokeWidth="2"
+            fill="none"
+            strokeLinejoin="round"
           />
-          <text
-            x={Math.min(x(lastIndex) + 12, right - 40)}
-            y={y(spent) + 4}
-            fill="var(--ink)"
-            fontSize="12"
-            fontWeight="600"
-            fontFamily="var(--font-num)"
-          >
-            {money(spent)}
-          </text>
-        </>
-      )}
-    </svg>
+        )}
+        {lastIndex >= 0 && (
+          <>
+            <circle
+              cx={x(lastIndex)}
+              cy={y(spent)}
+              r="5"
+              fill="var(--accent)"
+              stroke="var(--surface)"
+              strokeWidth="2"
+            />
+            <text
+              x={Math.min(x(lastIndex) + 12, right - 40)}
+              y={y(spent) + 4}
+              fill="var(--ink)"
+              fontSize="12"
+              fontWeight="600"
+              fontFamily="var(--font-num)"
+            >
+              {money(spent)}
+            </text>
+          </>
+        )}
+      </svg>
+    </div>
   )
 }
 
@@ -163,10 +166,10 @@ export function PeriodBars({
   label: string
 }) {
   const { money } = useApp()
-  const W = 540
+  const [measure, W] = useWidth<HTMLDivElement>(540)
   const H = 200
   const left = 36
-  const right = 520
+  const right = W - 20
   const top = 24
   const bottom = 170
   const max = niceMax(Math.max(budgetCents ?? 0, ...bars.map((b) => b.cents), 1) * 1.1)
@@ -178,62 +181,77 @@ export function PeriodBars({
   const description = `${label}: ${bars.map((b) => `${b.label} ${money(b.cents)}`).join(', ')}${budgetCents !== null ? `. Budget ${money(budgetCents)}.` : ''}`
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      role="img"
-      aria-label={description}
-      style={{ width: '100%', height: 'auto' }}
-    >
-      <line x1={left} x2={right} y1={bottom} y2={bottom} stroke="var(--muted)" strokeOpacity=".5" />
-      {budgetCents !== null && budgetCents > 0 && (
-        <>
-          <line
-            x1={left}
-            x2={right}
-            y1={y(budgetCents)}
-            y2={y(budgetCents)}
-            stroke="var(--muted)"
-            strokeWidth="1.5"
-            strokeDasharray="2 4"
-          />
-          <text x={right} y={y(budgetCents) - 6} textAnchor="end" fill="var(--muted)" fontSize="11">
-            Budget {money(budgetCents)}
-          </text>
-        </>
-      )}
-      {bars.map((bar, i) => {
-        const cx = left + slot * i + slot / 2
-        return (
-          <g key={bar.label}>
-            <rect
-              x={cx - width / 2}
-              y={y(bar.cents)}
-              width={width}
-              height={bottom - y(bar.cents)}
-              rx="4"
-              fill={color}
-              // The current period is still filling up, so it is drawn lighter.
-              fillOpacity={bar.current ? 0.5 : 1}
+    <div ref={measure}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={description}
+        style={{ width: '100%', height: 'auto' }}
+      >
+        <line
+          x1={left}
+          x2={right}
+          y1={bottom}
+          y2={bottom}
+          stroke="var(--muted)"
+          strokeOpacity=".5"
+        />
+        {budgetCents !== null && budgetCents > 0 && (
+          <>
+            <line
+              x1={left}
+              x2={right}
+              y1={y(budgetCents)}
+              y2={y(budgetCents)}
+              stroke="var(--muted)"
+              strokeWidth="1.5"
+              strokeDasharray="2 4"
             />
-            {bar.current && (
-              <text
-                x={cx}
-                y={y(bar.cents) - 8}
-                textAnchor="middle"
-                fill="var(--ink)"
-                fontSize="12"
-                fontWeight="600"
-                fontFamily="var(--font-num)"
-              >
-                {money(bar.cents)}
-              </text>
-            )}
-            <text x={cx} y={H - 12} textAnchor="middle" fill="var(--muted)" fontSize="11">
-              {bar.label}
+            <text
+              x={right}
+              y={y(budgetCents) - 6}
+              textAnchor="end"
+              fill="var(--muted)"
+              fontSize="11"
+            >
+              Budget {money(budgetCents)}
             </text>
-          </g>
-        )
-      })}
-    </svg>
+          </>
+        )}
+        {bars.map((bar, i) => {
+          const cx = left + slot * i + slot / 2
+          return (
+            <g key={bar.label}>
+              <rect
+                x={cx - width / 2}
+                y={y(bar.cents)}
+                width={width}
+                height={bottom - y(bar.cents)}
+                rx="4"
+                fill={color}
+                // The current period is still filling up, so it is drawn lighter.
+                fillOpacity={bar.current ? 0.5 : 1}
+              />
+              {bar.current && (
+                <text
+                  x={cx}
+                  y={y(bar.cents) - 8}
+                  textAnchor="middle"
+                  fill="var(--ink)"
+                  fontSize="12"
+                  fontWeight="600"
+                  fontFamily="var(--font-num)"
+                >
+                  {money(bar.cents)}
+                </text>
+              )}
+              <text x={cx} y={H - 12} textAnchor="middle" fill="var(--muted)" fontSize="11">
+                {bar.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }

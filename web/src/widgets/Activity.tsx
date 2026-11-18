@@ -3,6 +3,7 @@
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { Card, Dot, ErrorNote, Progress } from '../components/ui'
+import { isOwed } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
 import type { WidgetProps } from './types'
@@ -79,7 +80,9 @@ export function AccountsWidget() {
             {account.hidden && ' (ignored for budgets)'}
           </span>
           <span className="num">
-            {account.balanceCents === null ? 'No balance' : exact(account.balanceCents)}
+            {account.balanceCents === null
+              ? 'No balance'
+              : `${exact(account.balanceCents)}${isOwed(account) ? ' owed' : ''}`}
           </span>
         </div>
       ))}

@@ -85,7 +85,7 @@ function CategoryDetail({
       </div>
       <div className="grid">
         <CategorySettings category={category} />
-        <div className="span-wide stack">
+        <div className="span-half stack">
           <CategoryRules category={category} categories={categories} />
           <DeleteCategory category={category} />
         </div>

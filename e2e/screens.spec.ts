@@ -1,0 +1,36 @@
+// Every screen loads cleanly: no script errors, no failed API calls, and
+// nothing fetched from another server (fonts included), since Leeway is
+// meant to keep everything on the owner's own server.
+
+import { expect, test } from '@playwright/test'
+
+const SCREENS = [
+  { path: '/', heading: /to/ },
+  { path: '/transactions', heading: 'Transactions' },
+  { path: '/budgets', heading: 'Budgets' },
+  { path: '/plan', heading: 'Plan' },
+  { path: '/plan/goals', heading: 'Plan' },
+  { path: '/plan/debts', heading: 'Plan' },
+  { path: '/plan/net-worth', heading: 'Plan' },
+  { path: '/customize', heading: 'Make it yours' },
+]
+
+for (const { path, heading } of SCREENS) {
+  test(`${path} loads cleanly`, async ({ page, baseURL }) => {
+    const problems: string[] = []
+    page.on('pageerror', (error) => problems.push(`script error: ${error.message}`))
+    page.on('request', (request) => {
+      if (!request.url().startsWith(baseURL!) && !request.url().startsWith('data:')) {
+        problems.push(`outside request: ${request.url()}`)
+      }
+    })
+    page.on('response', (response) => {
+      if (response.status() >= 400) problems.push(`${response.status()} from ${response.url()}`)
+    })
+
+    await page.goto(path)
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    expect(problems).toEqual([])
+  })
+}

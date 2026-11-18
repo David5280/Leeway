@@ -35,9 +35,9 @@ export function SignInSection() {
       setError(caught)
       return
     }
-    // Drop everything cached for this owner, then refetch so the app lands on sign-in.
-    client.clear()
-    await client.invalidateQueries()
+    // Forget everything cached for this owner. Resetting, unlike clearing, also
+    // refetches what is on screen, so the app asks who is signed in and shows sign-in.
+    await client.resetQueries()
   }
 
   return (

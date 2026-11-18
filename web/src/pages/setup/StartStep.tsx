@@ -154,8 +154,10 @@ function StarterList({
               onChange={(e) => onEdit(category.name, { amount: e.target.value })}
             />
           ) : (
+            // Income and transfers take no budget, so say how each is counted
+            // instead of repeating the name.
             <span className="small muted">
-              {category.kind === 'income' ? 'Income' : 'Transfers'}
+              {category.kind === 'income' ? 'Money in' : 'Not counted'}
             </span>
           )}
         </div>

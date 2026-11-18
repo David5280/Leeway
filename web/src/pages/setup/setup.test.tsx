@@ -26,6 +26,7 @@ const {
   budgetCents: 60000,
 })
 const paycheck = { ...groceries, name: 'Paycheck', kind: 'income' as const, budgetCents: null }
+const transfers = { ...paycheck, name: 'Transfers', kind: 'transfer' as const }
 
 /** The server for a fresh install, with no banks unless a test adds some. */
 function serve(extra: Handlers = {}, routes: Record<string, () => Response> = {}) {
@@ -124,7 +125,7 @@ describe('setup after the account exists', () => {
 
 describe('starting point', () => {
   it('uses the starter set when there is no bank, with the owner edits', async () => {
-    const server = serve()
+    const server = serve({ get_starter_categories: () => [groceries, paycheck, transfers] })
     renderSignedIn(<Setup status={status} startAt={2} />)
     const user = userEvent.setup()
     await toStartingPoint(user)
@@ -137,7 +138,10 @@ describe('starting point', () => {
     expect(amount).toHaveValue('600')
     await user.clear(amount)
     await user.type(amount, '450')
-    expect(screen.getByText('Income')).toBeInTheDocument()
+    // Income and transfers take no budget; each row says how it counts instead.
+    expect(screen.getByText('Money in')).toBeInTheDocument()
+    expect(screen.getByText('Not counted')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Include Transfers' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await waitFor(() => expect(server.actions('complete_setup')).toHaveLength(1))
     expect(server.actions('complete_setup')[0]).toEqual({

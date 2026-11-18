@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint'
 
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 export default tseslint.config(
-  { ignores: ['**/dist', '**/coverage', '**/node_modules'] },
+  { ignores: ['**/dist', '**/coverage', '**/node_modules', 'playwright-report', 'test-results'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -17,6 +17,10 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },
     rules: reactHooks.configs.recommended.rules,
+  },
+  {
+    files: ['e2e/**/*.{ts,mjs}', 'playwright.config.ts'],
+    languageOptions: { globals: globals.node },
   },
   {
     files: ['web/public/sw.js'],

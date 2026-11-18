@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
+import { isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
 import { Section } from './Section'
@@ -47,7 +48,7 @@ function AccountRow({ account }: { account: Account }) {
   const [name, setName] = useState(account.name)
   const update = useActionMutation('update_account')
   const remove = useActionMutation('delete_account')
-  const owed = account.type === 'credit' || account.type === 'loan'
+  const owed = isOwed(account)
   return (
     <div className="list-row wrap">
       <Switch
@@ -136,7 +137,7 @@ function AddAccount({ onDone }: { onDone: () => void }) {
           className="input num"
           style={{ width: 130 }}
           inputMode="decimal"
-          placeholder={type === 'credit' || type === 'loan' ? 'Owed' : 'Balance'}
+          placeholder={isOwed({ type }) ? 'Owed' : 'Balance'}
           aria-label="Balance"
           value={balance}
           onChange={(e) => setBalance(e.target.value)}

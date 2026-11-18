@@ -9,7 +9,7 @@ export function FormCard({ title, children }: { title: string; children: ReactNo
     ref.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [])
   return (
-    <section ref={ref} className="card" aria-label={title}>
+    <section ref={ref} className="card stack" aria-label={title}>
       <h2>{title}</h2>
       {children}
     </section>

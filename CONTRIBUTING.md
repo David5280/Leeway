@@ -57,8 +57,31 @@ docker run -d --name leeway-test-db -p 5432:5432 \
 docker exec leeway-test-db createdb -U postgres leeway_test
 ```
 
-CI (`.github/workflows/ci.yml`) runs `npm run check`, a production build and
-the Docker image build on every push and pull request.
+### Browser tests
+
+`e2e/` holds Playwright tests that drive a real build in a real browser:
+first-run setup, signing in and out, the overview, transactions, budgets, the
+Plan tab, customizing and switching themes, and a phone-sized screen. They
+share one install and run in order; `setup.spec.ts` creates the owner and
+saves the signed-in session the others reuse.
+
+They need a database with `e2e` in its name, which every run wipes. The
+default is `postgres://postgres@localhost:5432/leeway_e2e`; set
+`E2E_DATABASE_URL` to use another.
+
+```sh
+docker exec leeway-test-db createdb -U postgres leeway_e2e
+npx playwright install chromium   # once
+npm run build
+npm run e2e
+```
+
+On a machine where Playwright's browsers will not install, run them in
+Playwright's own image instead: `e2e/run-in-docker.sh`. A failed test leaves a
+screenshot and a trace in `test-results/`.
+
+CI (`.github/workflows/ci.yml`) runs `npm run check`, a production build, the
+browser tests and the Docker image build on every push and pull request.
 
 ## Database changes
 

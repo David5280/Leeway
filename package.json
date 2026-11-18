@@ -17,15 +17,17 @@
     "start": "npm run start --workspace server",
     "reset-password": "npm run reset-password --workspace server",
     "test": "npm run test --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
+    "typecheck": "npm run typecheck --workspaces && tsc -p e2e",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:coverage": "npm run test:coverage --workspaces",
+    "e2e": "playwright test",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.65.1",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.0.0",

@@ -13,7 +13,7 @@ import { Card, ErrorNote } from '../../components/ui'
 export function CategorySettings({ category }: { category: Category }) {
   const update = useActionMutation('update_category')
   return (
-    <Card label="Settings" className="span-wide">
+    <Card label="Settings" className="span-wide stack">
       <h2>Settings</h2>
       <CategoryForm
         category={category}

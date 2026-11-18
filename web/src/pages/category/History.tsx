@@ -91,7 +91,7 @@ export function InThisCategory({
   const transactions = list.data
   const total = transactions?.total ?? 0
   return (
-    <Card label="In this category" className="span-wide stack-sm">
+    <Card label="In this category" className="span-half stack-sm">
       <div className="row-between">
         <h2>In this category</h2>
         {transactions && <span className="small muted">{total} this period</span>}

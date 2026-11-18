@@ -5,6 +5,7 @@ import { useState } from 'react'
 import type { DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { Card, ErrorNote, Loading, Segmented, Setting } from '../../components/ui'
+import { isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
@@ -93,9 +94,7 @@ export function DebtsSection() {
   const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
   const accounts = useAction('list_accounts')
   if (!accounts.data) return accounts.error ? <ErrorNote error={accounts.error} /> : <Loading />
-  const debts = accounts.data.filter(
-    (a) => (a.type === 'credit' || a.type === 'loan') && !a.hidden && (a.balanceCents ?? 0) > 0,
-  )
+  const debts = accounts.data.filter((a) => isOwed(a) && !a.hidden && (a.balanceCents ?? 0) > 0)
   if (debts.length === 0) {
     return (
       <Card label="Debts">

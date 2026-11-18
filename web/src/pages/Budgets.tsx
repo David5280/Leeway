@@ -71,7 +71,7 @@ export function Budgets() {
       </div>
 
       {adding && (
-        <Card label="New category">
+        <Card label="New category" className="stack">
           <h2>New category</h2>
           <CategoryForm
             submitLabel="Add category"

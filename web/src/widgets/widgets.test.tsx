@@ -642,11 +642,14 @@ describe('AccountsWidget', () => {
         account({ id: 'a', name: 'Checking', balanceCents: 123456 }),
         account({ id: 'b', name: 'Old savings', hidden: true, balanceCents: 500 }),
         account({ id: 'c', name: 'House', balanceCents: null }),
+        account({ id: 'd', name: 'Travel card', type: 'credit', balanceCents: 80000 }),
       ],
     })
     renderSignedIn(<AccountsWidget />)
     expect(await screen.findByText('Checking')).toBeInTheDocument()
     expect(screen.getByText('$1,234.56')).toBeInTheDocument()
+    // A card's balance is money owed, so it says so rather than reading as cash.
+    expect(screen.getByText('$800.00 owed')).toBeInTheDocument()
     expect(screen.getByText('Old savings (ignored for budgets)')).toBeInTheDocument()
     expect(screen.getByText('No balance')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
