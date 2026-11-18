@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createToken } from '../../src/domain/tokens.js'
 import { buildApp } from '../../src/http/app.js'
 import type { ClientIdentity } from '../../src/oauth/clientDocument.js'
+import { MAX_UNUSED_REGISTRATIONS } from '../../src/oauth/clients.js'
 import { OAuthError } from '../../src/oauth/errors.js'
 import { createTestContext, resetData, TEST_SETUP_CODE } from '../helpers.js'
 
@@ -473,6 +474,41 @@ describe('registering an app (dynamic client registration)', () => {
       [unused.client_id],
     )
     expect(rows).toEqual([])
+  })
+
+  it('keeps only the newest few hundred unused registrations, and every one that connected', async () => {
+    // Older registrations, minutes apart, one of which went on to connect.
+    await ctx.db.query(
+      `INSERT INTO oauth_clients (client_id, name, redirect_uris, created_at)
+       SELECT 'old-' || n, 'An app', ARRAY['https://a.example.com/cb'],
+         $1::timestamptz - make_interval(mins => n)
+       FROM generate_series(1, $2::int) AS n`,
+      [ctx.now(), MAX_UNUSED_REGISTRATIONS + 1],
+    )
+    const connected = `old-${MAX_UNUSED_REGISTRATIONS + 1}`
+    await ctx.db.query(
+      `INSERT INTO oauth_grants (client_id, client_name, client_host, scope, resource, created_at)
+       VALUES ($1, 'An app', 'a.example.com', 'read', 'x', now())`,
+      [connected],
+    )
+
+    const newest = (await register({ redirect_uris: ['https://b.example.com/cb'] })).json()
+
+    const { rows } = await ctx.db.query<{ clientId: string }>(
+      'SELECT client_id AS "clientId" FROM oauth_clients',
+    )
+    const ids = rows.map((row) => row.clientId)
+    expect(ids).toHaveLength(MAX_UNUSED_REGISTRATIONS + 1)
+    expect(ids).toContain(newest.client_id)
+    expect(ids).toContain(connected)
+    // The oldest unused one made room.
+    expect(ids).not.toContain(`old-${MAX_UNUSED_REGISTRATIONS}`)
+    expect(ids).toContain(`old-${MAX_UNUSED_REGISTRATIONS - 1}`)
+  })
+
+  it('refuses an overlong redirect URI', async () => {
+    const long = await register({ redirect_uris: [`https://a.example.com/${'x'.repeat(2000)}`] })
+    expect(long.json().error).toBe('invalid_client_metadata')
   })
 })
 
