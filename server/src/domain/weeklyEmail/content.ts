@@ -4,10 +4,11 @@
 // and no transactions, so nothing in an inbox identifies a bank account.
 
 import type { IsoDate } from '../../lib/dates.js'
+import { periodWord, shortDate } from '../../lib/words.js'
 import type { BillDue } from '../cashFlow.js'
 import type { Checkin } from '../checkin.js'
 import type { Settings } from '../settings.js'
-import { periodWord, shortDate, type SummaryText } from '../summaryText.js'
+import type { SummaryText } from '../summaryText.js'
 
 type Money = (cents: number) => string
 
@@ -134,7 +135,7 @@ function goalsSection({ goals }: Checkin, money: Money, locale: string): EmailSe
 /** The weekly email's content, in the order it reads. */
 export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent {
   const { checkin, money, settings } = input
-  const word = periodWord(settings)
+  const word = periodWord(settings.period.kind)
   return {
     subject: subjectLine(checkin, money, word),
     preview: input.summary.headline,

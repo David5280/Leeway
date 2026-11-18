@@ -3,6 +3,7 @@
 // It is always available, and it is the fallback when an AI writer is off or fails.
 
 import { daysBetween, type IsoDate } from '../lib/dates.js'
+import { periodWord, shortDate } from '../lib/words.js'
 import type { Checkin } from './checkin.js'
 import type { Settings } from './settings.js'
 
@@ -17,26 +18,7 @@ type Money = (cents: number) => string
 /** The most points the dashboard shows, so the summary stays a glance. */
 export const MAX_POINTS = 4
 
-const PERIOD_WORDS: Record<Settings['period']['kind'], string> = {
-  monthly: 'month',
-  paycheck: 'paycheck',
-  weekly: 'week',
-}
-
-export function periodWord(settings: Pick<Settings, 'period'>): string {
-  return PERIOD_WORDS[settings.period.kind]
-}
-
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
-
-/** "Nov 28", in the owner's language. Dates are calendar days, so UTC keeps the day put. */
-export function shortDate(date: IsoDate, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${date}T00:00:00Z`))
-}
 
 /** One sentence on the period: over, heading over, on track, or no budget yet. */
 export function headline({ budget }: Checkin, money: Money, word: string): string {
@@ -120,7 +102,7 @@ export function plainSummary(
   settings: Pick<Settings, 'period' | 'locale'>,
   money: Money,
 ): SummaryText {
-  const word = periodWord(settings)
+  const word = periodWord(settings.period.kind)
   const points = [
     urgentPoint(checkin),
     cashPoint(checkin, money, settings.locale),
@@ -146,7 +128,7 @@ export function summaryFacts(
   return {
     today: date(checkin.today),
     period: {
-      kind: periodWord(settings),
+      kind: periodWord(settings.period.kind),
       ends: date(budget.periodEnd),
       daysLeftCountingToday: budget.daysLeft + 1,
       budgeted: money(budget.budgetedCents),

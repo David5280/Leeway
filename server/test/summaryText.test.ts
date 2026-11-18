@@ -4,7 +4,6 @@ import { formatCents } from '../src/lib/money.js'
 import {
   MAX_POINTS,
   plainSummary,
-  shortDate,
   summaryFacts,
   type SummaryText,
 } from '../src/domain/summaryText.js'
@@ -169,12 +168,5 @@ describe('summaryFacts', () => {
       netWorthChangeLast30Days: '$0',
     })
     expect(JSON.stringify(facts)).not.toContain('list_bills')
-  })
-})
-
-describe('shortDate', () => {
-  it('keeps the calendar day in any language', () => {
-    expect(shortDate('2026-01-01', 'en-US')).toBe('Jan 1')
-    expect(shortDate('2026-01-01', 'de-DE')).toBe('1. Jan.')
   })
 })
