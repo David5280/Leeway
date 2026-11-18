@@ -52,6 +52,16 @@ export function shortDate(iso: string, locale = 'en-US'): string {
   return asDate(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** "Nov 17, 2026", for dates that can be a year or more away, like a goal's. */
+export function longDate(iso: string, locale = 'en-US'): string {
+  return asDate(iso).toLocaleDateString(locale, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 /** "Tue, Nov 17" */
 export function dayLabel(iso: string, locale = 'en-US'): string {
   return asDate(iso).toLocaleDateString(locale, {

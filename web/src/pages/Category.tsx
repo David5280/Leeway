@@ -9,7 +9,12 @@ import { useApp } from '../lib/app'
 import { groupNames } from '../lib/groups'
 import { categoryStatus } from '../widgets/Categories'
 import { History, InThisCategory } from './category/History'
-import { CategoryRules, CategorySettings, DeleteCategory } from './category/Manage'
+import {
+  CategoryRollover,
+  CategoryRules,
+  CategorySettings,
+  DeleteCategory,
+} from './category/Manage'
 import { ThisPeriod } from './category/ThisPeriod'
 
 export function CategoryPage() {
@@ -87,6 +92,7 @@ function CategoryDetail({
       <div className="grid">
         <CategorySettings category={category} groups={groupNames(categories)} />
         <div className="span-half stack">
+          {category.kind === 'expense' && <CategoryRollover category={category} />}
           <CategoryRules category={category} categories={categories} />
           <DeleteCategory category={category} />
         </div>

@@ -67,10 +67,33 @@ describe('Goals widget', () => {
     expect(widget.queryByText('Boat')).not.toBeInTheDocument()
   })
 
+  it('gives what each goal needs per period and whether it is on track', async () => {
+    const quick = { savedThisPeriodCents: 0, recentSavedCents: 60000, recentDays: 90 }
+    const goals = [
+      goal(
+        { name: 'Bike', targetCents: 120000, savedCents: 30000, targetDate: '2027-04-30' },
+        quick,
+      ),
+      goal({ name: 'Trip', targetCents: 120000, savedCents: 30000, targetDate: '2027-04-30' }),
+      goal({ name: 'House', targetCents: 100000 }),
+    ]
+    fakeServer({ list_goals: () => goals })
+    renderSignedIn(<GoalsWidget />)
+    const widget = within(await screen.findByRole('region', { name: 'Goals' }))
+    expect(await widget.findByText('$150 each month, on track')).toHaveClass('good')
+    expect(widget.getByText('$150 each month, behind')).toHaveClass('warn')
+    expect(widget.getByText('$1,000 to go')).toHaveClass('muted')
+    expect(widget.getByRole('link', { name: 'Save for a purchase' })).toHaveAttribute(
+      'href',
+      '/plan/goals?new=purchase',
+    )
+  })
+
   it('says when there are none', async () => {
     fakeServer({ list_goals: () => [] })
     renderSignedIn(<GoalsWidget />)
     expect(await screen.findByText('No savings goals yet.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Save for a purchase' })).toBeInTheDocument()
   })
 })
 

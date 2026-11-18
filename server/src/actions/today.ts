@@ -3,7 +3,8 @@
 import type { AppContext } from '../context.js'
 import type { IsoDate } from '../lib/dates.js'
 import { todayIn } from '../lib/dates.js'
-import { getSettings, type Settings } from '../domain/settings.js'
+import type { GoalClock } from '../domain/goals.js'
+import { getSettings, periodConfig, type Settings } from '../domain/settings.js'
 
 export async function settingsAndToday(
   ctx: AppContext,
@@ -14,4 +15,10 @@ export async function settingsAndToday(
 
 export async function today(ctx: AppContext): Promise<IsoDate> {
   return (await settingsAndToday(ctx)).today
+}
+
+/** Today and the owner's budget periods, which a goal's plan is worked out in. */
+export async function goalClock(ctx: AppContext): Promise<GoalClock> {
+  const { settings, today: date } = await settingsAndToday(ctx)
+  return { today: date, period: periodConfig(settings) }
 }

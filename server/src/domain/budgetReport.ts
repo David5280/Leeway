@@ -3,8 +3,10 @@
 import type { Db } from '../db/pool.js'
 import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
 import { periodContaining, shiftPeriod, type Period } from '../lib/periods.js'
-import { computeBudget, type BudgetSummary, type CategoryTotal } from './budget.js'
+import { computeBudget, type BudgetSummary, type CategoryTotal, type SetAside } from './budget.js'
 import { listCategories, type Category } from './categories.js'
+import { listGoals } from './goals.js'
+import { rolloverCarries } from './rollover.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** A span of days: `end` is exclusive, like a Period's. */
@@ -68,6 +70,22 @@ export function currentPeriod(
   return { period: shiftPeriod(periodContaining(today, config), offset, config), today }
 }
 
+/**
+ * What goals set aside from the budget hold back this period. Only the current
+ * period holds anything: a goal's share of an earlier one is not kept.
+ */
+export async function setAsides(db: Db, settings: Settings, today: IsoDate): Promise<SetAside[]> {
+  const goals = await listGoals(db, { today, period: periodConfig(settings) })
+  return goals
+    .filter((goal) => goal.heldBackCents > 0)
+    .map((goal) => ({
+      goalId: goal.id,
+      name: goal.name,
+      color: goal.color,
+      amountCents: goal.heldBackCents,
+    }))
+}
+
 /** The budget for one period, as computeBudget works it out from stored data. */
 export async function budgetSummary(
   db: Db,
@@ -76,11 +94,22 @@ export async function budgetSummary(
   offset = 0,
 ): Promise<BudgetSummary> {
   const { period, today } = currentPeriod(settings, now, offset)
-  const [categories, totals] = await Promise.all([
-    listCategories(db),
+  const categories = await listCategories(db)
+  const [totals, carries, held] = await Promise.all([
     categoryTotals(db, period.start, period.end, settings.includePending),
+    rolloverCarries(db, categories, period, periodConfig(settings), settings.includePending),
+    offset === 0 ? setAsides(db, settings, today) : [],
   ])
-  return computeBudget({ categories, totals, period, offset, today, settings })
+  return computeBudget({
+    categories,
+    totals,
+    period,
+    offset,
+    today,
+    settings,
+    carries,
+    setAsides: held,
+  })
 }
 
 /** Spending (expense categories plus uncategorized) and income in a set of totals. */
@@ -132,4 +161,25 @@ export async function budgetReport(
       spentToDateCents: sumTotals(categories, toDate).spentCents,
     },
   }
+}
+
+/** How many full periods the recent surplus is averaged over. */
+export const SURPLUS_PERIODS = 3
+
+/**
+ * Income minus spending, averaged over the last few full budget periods:
+ * roughly what is left over each period to save. Null when those periods
+ * have no income or spending at all, since there is nothing to go on.
+ */
+export async function recentSurplus(db: Db, settings: Settings, now: Date): Promise<number | null> {
+  const config = periodConfig(settings)
+  const { period } = currentPeriod(settings, now)
+  const first = shiftPeriod(period, -SURPLUS_PERIODS, config)
+  const [categories, totals] = await Promise.all([
+    listCategories(db),
+    categoryTotals(db, first.start, period.start, settings.includePending),
+  ])
+  if (totals.length === 0) return null
+  const { spentCents, incomeCents } = sumTotals(categories, totals)
+  return Math.round((incomeCents - spentCents) / SURPLUS_PERIODS)
 }

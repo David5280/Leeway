@@ -50,7 +50,10 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     version: 1,
     exportedAt: new Date().toISOString(),
     settings,
-    categories: categories.map(({ id: _id, position: _position, ...rest }) => rest),
+    // Rollover counts from a day on this install, so it stays here.
+    categories: categories.map(
+      ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,
+    ),
     rules: rules.map(({ id: _id, position: _position, categoryId, ...rest }) => ({
       ...rest,
       category: names.get(categoryId)!,

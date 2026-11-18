@@ -1,5 +1,6 @@
-// "Can I afford this?": a purchase checked against cash until payday and the budget.
-// Pure: the cash flow and budget come in, nothing is read here.
+// "Can I afford this?": a purchase checked against cash until payday, the
+// budget, and what goals hold back. Pure: the cash flow and budget come in,
+// nothing is read here.
 
 import type { BudgetSummary } from './budget.js'
 import type { CashFlow } from './cashFlow.js'
@@ -13,12 +14,17 @@ export interface Affordability {
   amountCents: number
   /** Cash left after the bills due before payday, once this is bought. */
   leftAfterBillsCents: number
-  /** What is left to spend per day until payday, once this is bought; never below zero. */
+  /** What goals set aside from the budget hold back this period. */
+  goalsSetAsideCents: number
+  /**
+   * What is left to spend per day until payday, after the bills and what goals
+   * hold back, before and once this is bought; never below zero.
+   */
   perDayBeforeCents: number
   perDayAfterCents: number
   /** The category's budget left once this is bought; null without a category budget. */
   categoryLeftCents: number | null
-  /** All budgets' room left once this is bought; null when nothing is budgeted. */
+  /** All budgets' room left once this is bought and goals are set aside; null when nothing is budgeted. */
   budgetLeftCents: number | null
 }
 
@@ -32,11 +38,21 @@ interface Reason {
   text: string
 }
 
-/** Whether the cash covers the purchase and the bills before payday, and how it squeezes each day. */
+/** "the $115 set aside for Road bike", or "the $165 set aside for your goals" for several. */
+function heldFor(budget: BudgetSummary, money: Money): string {
+  const { setAsides } = budget
+  const amount = money(budget.totals.setAsideCents)
+  return setAsides.length === 1
+    ? `the ${amount} set aside for ${setAsides[0]!.name}`
+    : `the ${amount} set aside for your goals`
+}
+
+/** Whether the cash covers the purchase, the bills before payday and the goals, and how it squeezes each day. */
 function cashReason(
   cashFlow: CashFlow,
+  budget: BudgetSummary,
   leftAfterBills: number,
-  perDayAfter: number,
+  perDay: { before: number; after: number },
   money: Money,
 ): Reason | null {
   if (leftAfterBills < 0) {
@@ -45,10 +61,16 @@ function cashReason(
       text: `It would leave ${money(-leftAfterBills)} too little for the bills due before payday on ${cashFlow.nextPayday}.`,
     }
   }
-  if (perDayAfter < cashFlow.perDayCents * TIGHT_SHARE) {
+  if (leftAfterBills < budget.totals.setAsideCents) {
     return {
       level: 'tight',
-      text: `Spending money until payday would drop from ${money(cashFlow.perDayCents)} to ${money(perDayAfter)} a day.`,
+      text: `It would dip into ${heldFor(budget, money)}.`,
+    }
+  }
+  if (perDay.after < perDay.before * TIGHT_SHARE) {
+    return {
+      level: 'tight',
+      text: `Spending money until payday would drop from ${money(perDay.before)} to ${money(perDay.after)} a day.`,
     }
   }
   return null
@@ -59,36 +81,46 @@ function budgetRoom(budget: BudgetSummary, categoryId: string | null, amountCent
   const row = budget.categories.find((c) => c.categoryId === categoryId)
   // Spending only counts against the overall budget when its category has a budget.
   const budgeted = row !== undefined && row.leftCents !== null
+  const counted = budgeted ? amountCents : 0
+  const nothingBudgeted = budget.totals.budgetedCents === 0
   return {
     name: row?.name ?? '',
     categoryLeftCents: budgeted ? row.leftCents! - amountCents : null,
-    budgetLeftCents:
-      budget.totals.budgetedCents === 0
-        ? null
-        : budget.totals.leftCents - (budgeted ? amountCents : 0),
+    /** Before goals are set aside, to tell a squeeze from goals apart from overspending. */
+    beforeGoalsCents: nothingBudgeted ? null : budget.totals.leftCents - counted,
+    budgetLeftCents: nothingBudgeted ? null : budget.totals.leewayCents - counted,
   }
 }
 
-function budgetReason(room: ReturnType<typeof budgetRoom>, money: Money): Reason | null {
+function budgetReason(
+  room: ReturnType<typeof budgetRoom>,
+  budget: BudgetSummary,
+  money: Money,
+): Reason | null {
   if (room.categoryLeftCents !== null && room.categoryLeftCents < 0) {
     return {
       level: 'tight',
       text: `${room.name} would go ${money(-room.categoryLeftCents)} over budget this period.`,
     }
   }
-  if (room.budgetLeftCents !== null && room.budgetLeftCents < 0) {
+  if (room.budgetLeftCents === null || room.budgetLeftCents >= 0) return null
+  if (room.beforeGoalsCents! >= 0) {
     return {
       level: 'tight',
-      text: `Budgets overall would go ${money(-room.budgetLeftCents)} over this period.`,
+      text: `It fits the budgets only by using ${heldFor(budget, money)}.`,
     }
   }
-  return null
+  return {
+    level: 'tight',
+    text: `Budgets overall would go ${money(-room.beforeGoalsCents!)} over this period.`,
+  }
 }
 
 /**
  * Weighs a purchase three ways: whether the cash covers it and the bills due
- * before payday ("no" if not), whether it pushes a budget over, and how much it
- * squeezes daily spending until payday (either makes it "tight").
+ * before payday ("no" if not), whether it pushes a budget over or into what
+ * goals hold back, and how much it squeezes daily spending until payday
+ * (either of those makes it "tight").
  */
 export function affordability(
   amountCents: number,
@@ -98,12 +130,22 @@ export function affordability(
   money: Money,
 ): Affordability {
   const days = Math.max(1, cashFlow.daysUntilPayday)
+  const held = budget.totals.setAsideCents
   const leftAfterBillsCents = cashFlow.leftAfterBillsCents - amountCents
-  const perDayAfterCents = Math.max(0, Math.floor(leftAfterBillsCents / days))
+  // Money held for goals is not there to spend, so it comes off the daily figure.
+  const perDay = (left: number) => Math.max(0, Math.floor((left - held) / days))
+  const perDayBeforeCents = perDay(cashFlow.leftAfterBillsCents)
+  const perDayAfterCents = perDay(leftAfterBillsCents)
   const room = budgetRoom(budget, categoryId, amountCents)
   const reasons = [
-    cashReason(cashFlow, leftAfterBillsCents, perDayAfterCents, money),
-    budgetReason(room, money),
+    cashReason(
+      cashFlow,
+      budget,
+      leftAfterBillsCents,
+      { before: perDayBeforeCents, after: perDayAfterCents },
+      money,
+    ),
+    budgetReason(room, budget, money),
   ].filter((reason) => reason !== null)
 
   let verdict: Verdict = 'yes'
@@ -118,7 +160,8 @@ export function affordability(
         : reasons.map((r) => r.text),
     amountCents,
     leftAfterBillsCents,
-    perDayBeforeCents: cashFlow.perDayCents,
+    goalsSetAsideCents: held,
+    perDayBeforeCents,
     perDayAfterCents,
     categoryLeftCents: room.categoryLeftCents,
     budgetLeftCents: room.budgetLeftCents,

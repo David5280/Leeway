@@ -29,6 +29,18 @@ export const COACH_PROMPTS: CoachPrompt[] = [
       `I'm thinking of buying ${item} for ${amount}. Use can_i_afford, with the category it would fall under if one fits (see list_categories). Tell me plainly whether it fits, why, and what it would leave me per day until payday. If it is tight, suggest when it would fit better.`,
   },
   {
+    name: 'save_for',
+    title: 'Save for a purchase',
+    description: 'Plans saving for something: when it is affordable, and a goal to get there.',
+    arguments: [
+      { name: 'item', description: 'What it is, like "a road bike"', required: true },
+      { name: 'amount', description: 'What it costs, like "1800"', required: true },
+      { name: 'by', description: 'When it is wanted, like "April" (optional)', required: false },
+    ],
+    text: ({ item, amount, by }) =>
+      `I want to save for ${item}, which costs ${amount}${by?.trim() ? `, by ${by.trim()}` : ''}. Use when_can_i_afford to tell me when I could afford it. Then offer to start a purchase goal with create_goal (kind "purchase"), tell me what I would need to set aside each budget period, and ask whether to hold that back from my safe-to-spend (setAside) before turning it on.`,
+  },
+  {
     name: 'debt_plan',
     title: 'Plan my debt payoff',
     description: 'Compares avalanche and snowball, and what paying extra changes.',

@@ -13,6 +13,7 @@ import {
   updateCategory,
 } from '../domain/categories.js'
 import { defineAction } from './action.js'
+import { today } from './today.js'
 
 export const listCategoriesAction = defineAction({
   name: 'list_categories',
@@ -45,13 +46,13 @@ export const updateCategoryAction = defineAction({
   name: 'update_category',
   title: 'Update a category',
   description:
-    'Change a category: name, color, icon, kind, budget, cadence, warning threshold or bank category mapping. Only the fields given change.',
+    'Change a category: name, color, icon, kind, budget, cadence, warning threshold, bank category mapping or rollover. With rollover on, what the category leaves unspent (or overspends) each budget period carries into the next, counting from the period it was turned on in; get_budget shows it as carriedCents. Only the fields given change.',
   input: categoryPatchSchema.extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
   run: (ctx, { id, ...patch }) =>
     withTransaction(ctx.db, async (db) => {
-      const category = await updateCategory(db, id, patch)
+      const category = await updateCategory(db, id, patch, await today(ctx))
       if (patch.providerCategories) await recategorize(db)
       return category
     }),

@@ -28,6 +28,9 @@ describe('progressOf', () => {
     color: '#4f8cff',
     accountName: null,
     accountBalanceCents: null,
+    kind: 'savings' as const,
+    setAside: false,
+    createdOn: '2026-11-01',
   }
 
   it('works out what to set aside each month, counting this month', () => {
@@ -127,5 +130,153 @@ describe('goal actions', () => {
     const goal = await call('create_goal', { name: 'Trip', targetCents: 1000, accountId })
     await ctx.db.query('DELETE FROM accounts WHERE id = $1', [accountId])
     expect((await call('list_goals'))[0]).toMatchObject({ id: goal.id, accountId: null })
+  })
+})
+
+describe('saving for a purchase', () => {
+  // The test clock reads 2026-11-17; the default budget period is the calendar month.
+  const bike = {
+    kind: 'purchase',
+    name: 'Road bike',
+    targetCents: 180000,
+    targetDate: '2027-04-30',
+  }
+
+  it('plans what to set aside each month to buy it on time', async () => {
+    const goal = await call('create_goal', { ...bike, savedCents: 30000 })
+    expect(goal).toMatchObject({
+      kind: 'purchase',
+      setAside: false,
+      remainingCents: 150000,
+      periodsLeft: 6,
+      perPeriodCents: 25000,
+      thisPeriodLeftCents: 25000,
+      heldBackCents: 0,
+      // Nothing was put toward it yet, so there is no pace to project from.
+      projectedDate: null,
+      onTrack: false,
+    })
+  })
+
+  it('plans per paycheck when the budget runs paycheck to paycheck', async () => {
+    await call('update_settings', {
+      period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-13' },
+    })
+    const goal = await call('create_goal', {
+      ...bike,
+      targetDate: '2026-12-24',
+      targetCents: 30000,
+    })
+    expect(goal).toMatchObject({ periodsLeft: 3, perPeriodCents: 10000 })
+  })
+
+  it('records contributions with their day, newest first, and projects from them', async () => {
+    const goal = await call('create_goal', bike)
+    await call('add_to_goal', { id: goal.id, amountCents: 20000, date: '2026-10-20' })
+    const latest = await call('add_to_goal', { id: goal.id, amountCents: 10000 })
+    // $300 over the month-long minimum window is $10 a day: $1,500 more takes 150 days.
+    expect(latest).toMatchObject({
+      currentCents: 30000,
+      savedThisPeriodCents: 10000,
+      projectedDate: '2027-04-16',
+      onTrack: true,
+    })
+    expect(await call('list_goal_contributions', { id: goal.id })).toEqual([
+      { id: expect.any(String), amountCents: 10000, date: '2026-11-17' },
+      { id: expect.any(String), amountCents: 20000, date: '2026-10-20' },
+    ])
+    expect(await call('list_goal_contributions', { id: goal.id, limit: 1 })).toHaveLength(1)
+  })
+
+  it('records what was really taken back, and refuses taking back from nothing', async () => {
+    const goal = await call('create_goal', { ...bike, savedCents: 5000 })
+    expect((await call('add_to_goal', { id: goal.id, amountCents: -9000 })).currentCents).toBe(0)
+    const [taken] = await call('list_goal_contributions', { id: goal.id })
+    expect(taken!.amountCents).toBe(-5000)
+
+    const error = await callError('add_to_goal', { id: goal.id, amountCents: -100 })
+    expect(error.message).toBe('Nothing is saved toward Road bike yet to take back')
+  })
+
+  it('refuses a contribution dated in the future, or a date that is not one', async () => {
+    const goal = await call('create_goal', bike)
+    const future = await callError('add_to_goal', {
+      id: goal.id,
+      amountCents: 100,
+      date: '2026-11-18',
+    })
+    expect(future.message).toBe('Record money on today or an earlier day')
+    const bad = await callError('add_to_goal', { id: goal.id, amountCents: 100, date: '11/1' })
+    expect(bad.code).toBe('invalid_input')
+    expect(await call('list_goal_contributions', { id: goal.id })).toEqual([])
+  })
+
+  it('needs a date to set money aside, on create and on change', async () => {
+    const noDate = await callError('create_goal', { ...bike, targetDate: null, setAside: true })
+    expect(noDate.message).toBe(
+      'Give Road bike a date to set money aside for it, so Leeway knows how much each period needs',
+    )
+    const goal = await call('create_goal', { ...bike, setAside: true })
+    expect(goal.heldBackCents).toBe(30000)
+    const cleared = await callError('update_goal', { id: goal.id, targetDate: null })
+    expect(cleared.code).toBe('invalid_input')
+    expect(await call('update_goal', { id: goal.id, setAside: false })).toMatchObject({
+      setAside: false,
+      heldBackCents: 0,
+    })
+  })
+
+  it('forgets a goal history with the goal, and says when a goal is gone', async () => {
+    const goal = await call('create_goal', bike)
+    await call('add_to_goal', { id: goal.id, amountCents: 1000 })
+    await call('delete_goal', { id: goal.id })
+    const { rows } = await ctx.db.query('SELECT count(*)::int AS n FROM goal_contributions')
+    expect(rows[0].n).toBe(0)
+    const error = await callError('list_goal_contributions', { id: goal.id })
+    expect(error.message).toBe('Goal not found')
+  })
+
+  it("follows a linked account's balance history for its pace", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 90000 })
+    await ctx.db.query('DELETE FROM balance_history')
+    await ctx.db.query(
+      `INSERT INTO balance_history (account_id, day, balance_cents)
+       VALUES ($1, '2026-08-01', 30000), ($1, '2026-10-31', 60000), ($1, '2026-11-15', 90000)`,
+      [accountId],
+    )
+    const goal = await call('create_goal', { ...bike, accountId })
+    // $600 over the last 90 days, $300 of it this month: $900 more takes 135 days.
+    expect(goal).toMatchObject({
+      currentCents: 90000,
+      savedThisPeriodCents: 30000,
+      recentPerPeriodCents: 20292,
+      projectedDate: '2027-04-01',
+      onTrack: true,
+    })
+    expect(await call('list_goal_contributions', { id: goal.id })).toEqual([])
+
+    // An account with no recorded balances yet has made no progress to measure.
+    await ctx.db.query('DELETE FROM balance_history')
+    expect((await call('list_goals'))[0]).toMatchObject({
+      savedThisPeriodCents: 0,
+      recentPerPeriodCents: 0,
+      projectedDate: null,
+    })
+  })
+
+  it('says when a goal to change is gone', async () => {
+    const missing = '00000000-0000-4000-8000-000000000000'
+    expect((await callError('update_goal', { id: missing, name: 'X' })).message).toBe(
+      'Goal not found',
+    )
+  })
+
+  it('keeps goals made before purchases existed as plain savings', async () => {
+    await ctx.db.query(`INSERT INTO goals (name, target_cents) VALUES ('Old goal', 1000)`)
+    expect((await call('list_goals'))[0]).toMatchObject({
+      kind: 'savings',
+      setAside: false,
+      heldBackCents: 0,
+    })
   })
 })

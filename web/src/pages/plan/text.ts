@@ -1,6 +1,6 @@
-// Plain-language labels for bills, goals and debts, kept apart from the screens so they can be tested alone.
+// Plain-language labels for bills and debts, kept apart from the screens so they can be tested alone.
 
-import type { Bill, Goal } from '../../api/client'
+import type { Bill } from '../../api/client'
 import { shortDate } from '../../lib/format'
 
 export const BILL_CADENCES = {
@@ -39,15 +39,6 @@ export function billStatus(
     default:
       return { text: dueText(bill.nextDueDate, bill.daysUntilDue, locale), tone: '' }
   }
-}
-
-/** What a goal still needs, as a sentence. */
-export function goalText(goal: Goal, money: (cents: number) => string, locale: string): string {
-  if (goal.status === 'reached') return 'Reached. Nice work.'
-  const left = `${money(goal.remainingCents)} to go`
-  if (goal.status === 'past_due') return `${left}. The target date has passed.`
-  if (goal.monthlyNeededCents === null || !goal.targetDate) return `${left}.`
-  return `${left}: about ${money(goal.monthlyNeededCents)} a month to reach it by ${shortDate(goal.targetDate, locale)}.`
 }
 
 /** "1 year 4 months" for a payoff time, or a plain answer when it never ends. */

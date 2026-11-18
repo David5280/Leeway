@@ -17,6 +17,8 @@ function category(id: string, fields: Partial<Category> = {}): Category {
     trackPace: true,
     providerCategories: [],
     group: null,
+    rollover: false,
+    rolloverSince: null,
     position: 0,
     ...fields,
   }
@@ -158,5 +160,82 @@ describe('pace settings', () => {
     // $250 spent against $300 expected by now on a $600 budget.
     expect(run(5)).toBe('under')
     expect(run(10)).toBe('on')
+  })
+})
+
+describe('rollover and set-asides', () => {
+  const base = { period, offset: 0, today: '2026-11-15', settings }
+
+  it('adds what rolled over to the budget, and leaves other categories alone', () => {
+    const summary = computeBudget({
+      ...base,
+      categories: [
+        category('dining', { budgetCents: 10000, rollover: true, rolloverSince: '2026-10-01' }),
+        category('fun', { budgetCents: 10000 }),
+      ],
+      totals: [{ categoryId: 'dining', amountCents: 12000, count: 2 }],
+      carries: new Map([['dining', 4000]]),
+    })
+    expect(summary.categories[0]).toMatchObject({
+      rollover: true,
+      carriedCents: 4000,
+      budgetCents: 14000,
+      leftCents: 2000,
+      status: 'warning',
+    })
+    expect(summary.categories[1]).toMatchObject({ rollover: false, carriedCents: null })
+    expect(summary.totals.budgetedCents).toBe(24000)
+  })
+
+  it('reads a rolled-over overspend as over, with no spending yet and no pace to keep', () => {
+    const summary = computeBudget({
+      ...base,
+      categories: [
+        category('dining', { budgetCents: 10000, rollover: true, rolloverSince: '2026-10-01' }),
+      ],
+      totals: [],
+      carries: new Map([['dining', -15000]]),
+    })
+    expect(summary.categories[0]).toMatchObject({
+      budgetCents: -5000,
+      percentUsed: 100,
+      status: 'over',
+      expectedByNowCents: 0,
+      pace: 'on',
+    })
+    expect(summary.alerts[0]!.message).toBe(
+      'dining is over budget by $50 (counting $150 overspent in earlier periods).',
+    )
+  })
+
+  it('holds goal set-asides back from the leeway and the daily figure', () => {
+    const setAsides = [
+      { goalId: 'bike', name: 'Bike', color: '#5ccf8c', amountCents: 16000 },
+      { goalId: 'trip', name: 'Trip', color: '#e5c07b', amountCents: 4000 },
+    ]
+    const summary = computeBudget({
+      ...base,
+      categories: [category('groceries', { budgetCents: 60000 })],
+      totals: [],
+      setAsides,
+    })
+    // $600 left, $200 held: $400 over the 16 days left, today included.
+    expect(summary.setAsides).toEqual(setAsides)
+    expect(summary.totals).toMatchObject({
+      leftCents: 60000,
+      setAsideCents: 20000,
+      leewayCents: 40000,
+      safePerDayCents: 2500,
+    })
+  })
+
+  it('never offers a negative daily figure when goals hold more than is left', () => {
+    const summary = computeBudget({
+      ...base,
+      categories: [category('groceries', { budgetCents: 10000 })],
+      totals: [],
+      setAsides: [{ goalId: 'bike', name: 'Bike', color: '#5ccf8c', amountCents: 30000 }],
+    })
+    expect(summary.totals).toMatchObject({ leewayCents: -20000, safePerDayCents: 0 })
   })
 })

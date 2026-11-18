@@ -8,7 +8,9 @@ import { CategoryForm } from '../../components/CategoryForm'
 import { RuleBuilder } from '../../components/rules/RuleBuilder'
 import { RulesList } from '../../components/rules/RulesList'
 import type { RuleDraft } from '../../components/rules/rules'
-import { Card, ErrorNote } from '../../components/ui'
+import { Card, ErrorNote, Setting, Switch } from '../../components/ui'
+import { useApp } from '../../lib/app'
+import { longDate } from '../../lib/format'
 
 export function CategorySettings({
   category,
@@ -31,6 +33,41 @@ export function CategorySettings({
         onSubmit={(fields) => update.mutate({ id: category.id, ...fields })}
       />
       {update.isSuccess && <p className="small good">Saved.</p>}
+    </Card>
+  )
+}
+
+/**
+ * Rollover: whether what is left at the end of a period (or overspent) carries
+ * into the next one. Only spending categories with a budget have anything to carry.
+ */
+export function CategoryRollover({ category }: { category: Category }) {
+  const { settings } = useApp()
+  const update = useActionMutation('update_category')
+  const noBudget = category.budgetCents === null
+  return (
+    <Card label="Rollover" className="stack-sm">
+      <Setting
+        label="Roll over what is left"
+        hint={
+          noBudget
+            ? 'Give it a budget first, so there is something to carry'
+            : 'Unspent money adds to next period, overspending takes from it'
+        }
+      >
+        <Switch
+          label="Roll over what is left"
+          checked={category.rollover}
+          disabled={noBudget || update.isPending}
+          onChange={(rollover) => update.mutate({ id: category.id, rollover })}
+        />
+      </Setting>
+      {category.rolloverSince && (
+        <span className="small muted">
+          Counting from {longDate(category.rolloverSince, settings.locale)}, when it was turned on.
+        </span>
+      )}
+      <ErrorNote error={update.error} />
     </Card>
   )
 }

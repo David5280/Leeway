@@ -126,6 +126,43 @@ describe('LeewayWidget', () => {
     expect(region()).not.toHaveTextContent('Marker')
     expect(screen.getByRole('progressbar', { name: 'Budget used' })).toBeInTheDocument()
   })
+
+  it('holds back what goals set aside, and lists each one', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }], {
+      setAsides: [
+        { goalId: 'goal-bike', name: 'Road bike', color: '#E0622D', amountCents: 15000 },
+        { goalId: 'goal-trip', name: 'Trip', color: '#7F70E0', amountCents: 5000 },
+      ],
+    })
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    // $600 left in the budgets, less $200 for goals.
+    expect(region()).toHaveTextContent('$400left of $800, after $200 set aside')
+    expect(region()).toHaveTextContent('About $29 a day for the next 14 days.')
+    const list = within(screen.getByRole('list', { name: 'Set aside for goals' }))
+    expect(list.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Set aside for Road bike$150',
+      'Set aside for Trip$50',
+    ])
+    expect(list.getByRole('link', { name: 'Set aside for Road bike' })).toHaveAttribute(
+      'href',
+      '/plan/goals',
+    )
+    // The striped stretch after the spending shows the share held back: $200 of $800.
+    const held = document.querySelector('.fill.reserved') as HTMLElement
+    expect(held.style.left).toBe('25%')
+    expect(held.style.width).toBe('25%')
+  })
+
+  it('says nothing is left once goals take the rest', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 60000 }], {
+      setAsides: [{ goalId: 'goal-bike', name: 'Road bike', color: '#E0622D', amountCents: 30000 }],
+    })
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    expect(region()).toHaveTextContent('$100over $800, after $300 set aside')
+    expect(region()).toHaveTextContent('Nothing left to spend this period.')
+    // $300 held back is more than the $200 the bar has room for, so it stops at full.
+    expect((document.querySelector('.fill.reserved') as HTMLElement).style.width).toBe('25%')
+  })
 })
 
 describe('GlanceWidget', () => {

@@ -7,7 +7,7 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { onTestFinished, vi } from 'vitest'
-import { computeBudget } from '../../../server/src/domain/budget'
+import { computeBudget, type SetAside } from '../../../server/src/domain/budget'
 import type { Category } from '../../../server/src/domain/categories'
 import type { Transaction } from '../../../server/src/domain/transactions'
 import {
@@ -100,6 +100,8 @@ export function category(name: string, fields: Partial<Category> = {}): Category
     trackPace: true,
     providerCategories: [],
     group: null,
+    rollover: false,
+    rolloverSince: null,
     position: 0,
     ...fields,
   }
@@ -148,10 +150,14 @@ export function transaction(
   }
 }
 
-/** A budget as get_budget returns it, from the server's own math. */
+/**
+ * A budget as get_budget returns it, from the server's own math. `extra` gives
+ * rollover carries and goal set-asides, as the server would load them.
+ */
 export function budgetFor(
   categories: Category[],
   totals: { categoryId: string | null; amountCents: number }[],
+  extra: { carries?: Map<string, number>; setAsides?: SetAside[] } = {},
 ) {
   return {
     ...computeBudget({
@@ -161,6 +167,7 @@ export function budgetFor(
       offset: 0,
       today: '2026-11-17',
       settings,
+      ...extra,
     }),
     previous: { spentCents: 0, spentToDateCents: 0 },
   }

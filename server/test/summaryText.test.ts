@@ -24,6 +24,8 @@ function checkin(change: Partial<{ [K in keyof Checkin]: Partial<Checkin[K]> }> 
       budgetedCents: 200000,
       spentCents: 80000,
       leftCents: 120000,
+      setAsideCents: 0,
+      leewayCents: 120000,
       safePerDayCents: 8571,
       projectedCents: 160000,
       incomeCents: 300000,
@@ -51,6 +53,26 @@ function checkin(change: Partial<{ [K in keyof Checkin]: Partial<Checkin[K]> }> 
   } as Checkin
 }
 
+type Goal = Checkin['goals'][number]
+
+/** A savings goal a quarter of the way there, with no date. */
+function goal(name: string, fields: Partial<Goal> = {}): Goal {
+  return {
+    name,
+    kind: 'savings',
+    percent: 25,
+    remainingCents: 10000,
+    targetDate: null,
+    perPeriodCents: null,
+    monthlyNeededCents: null,
+    projectedDate: null,
+    onTrack: null,
+    heldBackCents: 0,
+    status: 'in_progress',
+    ...fields,
+  }
+}
+
 const summarize = (c: Checkin): SummaryText => plainSummary(c, monthly, money)
 
 describe('the headline', () => {
@@ -63,6 +85,22 @@ describe('the headline', () => {
   it('leaves out the daily amount when there is none', () => {
     const headline = summarize(checkin({ budget: { safePerDayCents: null, daysLeft: 0 } })).headline
     expect(headline).toBe("You're on track: $1,200 left for 1 day.")
+  })
+
+  it('takes out what is set aside for goals', () => {
+    const held = checkin({ budget: { setAsideCents: 20000, leewayCents: 100000 } })
+    expect(summarize(held).headline).toBe(
+      "You're on track: $1,000 left after $200 set aside for goals, about $85.71 a day for 15 days.",
+    )
+  })
+
+  it('says when spending has dipped into what is set aside for goals', () => {
+    const dipped = checkin({
+      budget: { leftCents: 5000, setAsideCents: 20000, leewayCents: -15000 },
+    })
+    expect(summarize(dipped).headline).toBe(
+      'Spending has dipped $150 into what you set aside for goals.',
+    )
   })
 
   it('warns when the pace would end the period over budget', () => {
@@ -104,15 +142,7 @@ describe('the points', () => {
       ],
       cashFlow: { cashCents: 250000, billsDueCents: 150000, leftAfterBillsCents: 100000 },
       budget: { previousSpentToDateCents: 70000 },
-      goals: [
-        {
-          name: 'Trip',
-          percent: 25,
-          remainingCents: 75000,
-          monthlyNeededCents: 12500,
-          status: 'in_progress',
-        },
-      ],
+      goals: [goal('Trip')],
       netWorth: { changeCents: 120000 },
     })
     expect(summarize(busy).points).toEqual([
@@ -151,22 +181,23 @@ describe('the points', () => {
     ])
   })
 
-  it('names a late goal before the one closest to done', () => {
-    const goal = (name: string, percent: number, status: Checkin['goals'][number]['status']) => ({
-      name,
-      percent,
-      remainingCents: 10000,
-      monthlyNeededCents: null,
-      status,
-    })
-    const goals = checkin({
-      goals: [goal('Bike', 40, 'in_progress'), goal('Couch', 90, 'in_progress')],
-    })
-    expect(summarize(goals).points).toEqual(['Couch is 90% of the way there.'])
-    const late = checkin({
-      goals: [goal('Couch', 90, 'in_progress'), goal('Trip', 10, 'past_due')],
-    })
-    expect(summarize(late).points).toEqual(['Trip passed its date with $100 still to go.'])
+  it('names a late goal, then a behind one, then one ready to buy, then the closest to done', () => {
+    const late = goal('Trip', { status: 'past_due', percent: 10 })
+    const behind = goal('Bike', { onTrack: false, targetDate: '2027-04-30' })
+    const ready = goal('Couch', { kind: 'purchase', status: 'reached', percent: 100 })
+    const closest = goal('Fund', { percent: 90 })
+    const pointFor = (goals: Goal[]) => summarize(checkin({ goals })).points
+
+    expect(pointFor([closest, ready, behind, late])).toEqual([
+      'Trip passed its date with $100 still to go.',
+    ])
+    expect(pointFor([closest, ready, behind])).toEqual(['Bike is behind pace for Apr 30.'])
+    expect(pointFor([closest, ready])).toEqual(['Couch is fully saved and ready to buy.'])
+    expect(pointFor([goal('Bike', { percent: 40 }), closest])).toEqual([
+      'Fund is 90% of the way there.',
+    ])
+    // A reached savings goal, or a behind one with no date, is not worth a line.
+    expect(pointFor([goal('Done', { status: 'reached' })])).toEqual([])
   })
 })
 

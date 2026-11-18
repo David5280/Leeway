@@ -1,16 +1,17 @@
-// The Budgets screen: every category this period, new categories and suggestions.
+// The Budgets screen: every category this period, with budgets editable in
+// place and a plain sentence on each, plus new categories and suggestions.
 
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { Budget, CategoryBudget } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
 import { Shell } from '../components/Shell'
 import { Card, Dot, ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
-import { groupBy, groupNames } from '../lib/groups'
-import { CategoryRow } from '../widgets/Categories'
+import { groupNames } from '../lib/groups'
+import { SpendingList } from './budgets/SpendingList'
+import { Suggestions } from './budgets/Suggestions'
 
 export function Budgets() {
   const { money, settings } = useApp()
@@ -67,6 +68,11 @@ export function Budgets() {
           <span className={`mid-number num ${b.totals.leftCents < 0 ? 'over' : ''}`}>
             {money(b.totals.leftCents)}
           </span>
+          {b.totals.setAsideCents > 0 && (
+            <Link to="/plan/goals" className="small muted">
+              {money(b.totals.setAsideCents)} of it set aside for goals
+            </Link>
+          )}
         </Card>
       </div>
 
@@ -91,13 +97,15 @@ export function Budgets() {
       {suggesting && <Suggestions onClose={() => setSuggesting(false)} />}
 
       <Card label="Spending categories" className="stack-sm cat-list">
-        <h2>Spending</h2>
-        {expenses.length === 0 && <p className="empty">No categories yet.</p>}
-        {expenses.some((row) => row.group !== null) ? (
-          <GroupedRows rows={expenses} budget={b} />
-        ) : (
-          <BudgetedThenTracked rows={expenses} budget={b} />
-        )}
+        <div className="row-between wrap">
+          <h2>Spending</h2>
+          <span className="small muted">Click an amount to change its budget</span>
+        </div>
+        <SpendingList
+          rows={expenses}
+          budget={b}
+          categories={new Map(categories.data.map((c) => [c.id, c]))}
+        />
       </Card>
 
       {(income.length > 0 || transfers.length > 0) && (
@@ -130,125 +138,5 @@ export function Budgets() {
         </Card>
       )}
     </Shell>
-  )
-}
-
-/** Spending categories under their group headings, in order; ungrouped ones last. */
-function GroupedRows({ rows, budget }: { rows: CategoryBudget[]; budget: Budget }) {
-  return groupBy(rows, (row) => row.group).map(({ group, items }) => (
-    <Fragment key={group ?? ''}>
-      <span className="eyebrow" style={{ marginTop: 12 }}>
-        {group ?? 'Other'}
-      </span>
-      {items.map((row) => (
-        <CategoryRow key={row.categoryId} row={row} budget={budget} />
-      ))}
-    </Fragment>
-  ))
-}
-
-/** Without groups: budgeted categories first, then the ones only tracked. */
-function BudgetedThenTracked({ rows, budget }: { rows: CategoryBudget[]; budget: Budget }) {
-  const budgeted = rows.filter((row) => row.budgetCents !== null)
-  const tracked = rows.filter((row) => row.budgetCents === null)
-  return (
-    <>
-      {budgeted.map((row) => (
-        <CategoryRow key={row.categoryId} row={row} budget={budget} />
-      ))}
-      {tracked.length > 0 && (
-        <>
-          <span className="eyebrow" style={{ marginTop: 12 }}>
-            Tracking only
-          </span>
-          {tracked.map((row) => (
-            <CategoryRow key={row.categoryId} row={row} budget={budget} />
-          ))}
-        </>
-      )}
-    </>
-  )
-}
-
-/** Budgets based on the last three full months, applied one at a time or all at once. */
-function Suggestions({ onClose }: { onClose: () => void }) {
-  const { money, settings } = useApp()
-  const result = useAction('suggest_budgets')
-  const update = useActionMutation('update_category')
-  const [applying, setApplying] = useState(false)
-  const rows = result.data?.suggestions ?? []
-  const differs = rows.filter(
-    (s) => s.currentBudgetCents !== s.suggestedMonthlyCents || s.currentCadence !== 'month',
-  )
-
-  async function apply(list: typeof rows) {
-    setApplying(true)
-    try {
-      for (const s of list) {
-        await update.mutateAsync({
-          id: s.categoryId,
-          budgetCents: s.suggestedMonthlyCents,
-          budgetCadence: 'month',
-        })
-      }
-    } catch {
-      // The mutation keeps the error, and the ErrorNote below shows it; stop at the first failure.
-    } finally {
-      setApplying(false)
-    }
-  }
-
-  return (
-    <Card label="Suggested budgets" className="stack-sm">
-      <div className="row-between">
-        <h2>Suggested monthly budgets</h2>
-        <button type="button" className="linkbtn" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      {result.isPending && <Loading />}
-      {result.data && (
-        <span className="small muted">
-          From what you spent {periodLabel(result.data.from, result.data.to, settings.locale)},
-          rounded up a little.
-        </span>
-      )}
-      {result.isSuccess && rows.length === 0 && (
-        <p className="empty">
-          Not enough history yet. Suggestions appear once a bank has a few weeks of spending.
-        </p>
-      )}
-      {rows.map((s) => (
-        <div key={s.categoryId} className="list-row wrap">
-          <span className="grow">{s.name}</span>
-          <span className="small muted">
-            you average {money(s.averageMonthlyCents)}
-            {s.currentBudgetCents !== null && `, budget now ${money(s.currentBudgetCents)}`}
-          </span>
-          <strong className="num">{money(s.suggestedMonthlyCents)}</strong>
-          <button
-            type="button"
-            className="btn small"
-            disabled={applying || !differs.includes(s)}
-            onClick={() => void apply([s])}
-          >
-            {differs.includes(s) ? 'Use' : 'In use'}
-          </button>
-        </div>
-      ))}
-      {differs.length > 1 && (
-        <div>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={applying}
-            onClick={() => void apply(differs)}
-          >
-            Use all {differs.length}
-          </button>
-        </div>
-      )}
-      <ErrorNote error={result.error ?? update.error} />
-    </Card>
   )
 }

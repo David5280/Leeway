@@ -52,9 +52,15 @@ export function headline({ budget }: Checkin, money: Money, word: string): strin
   if (overBy > 0) {
     return `At this pace you'd finish the ${word} ${money(overBy)} over budget.`
   }
+  // Money set aside for goals is not free to spend, so it comes out of what is left.
+  if (budget.leewayCents < 0) {
+    return `Spending has dipped ${money(-budget.leewayCents)} into what you set aside for goals.`
+  }
+  const afterGoals =
+    budget.setAsideCents > 0 ? ` after ${money(budget.setAsideCents)} set aside for goals` : ''
   const perDay =
     budget.safePerDayCents === null ? '' : `, about ${money(budget.safePerDayCents)} a day`
-  return `You're on track: ${money(budget.leftCents)} left${perDay} for ${days}.`
+  return `You're on track: ${money(budget.leewayCents)} left${afterGoals}${perDay} for ${days}.`
 }
 
 /** How many things the Heads up list says need doing today, if any. */
@@ -83,9 +89,16 @@ function pacePoint({ budget }: Checkin, money: Money, word: string): string | nu
   return `You've spent ${money(Math.abs(diff))} ${diff > 0 ? 'more' : 'less'} than at this point last ${word}.`
 }
 
-function goalPoint({ goals }: Checkin, money: Money): string | null {
+/** The goal most worth a line: late, then behind, then ready to buy, then closest to done. */
+function goalPoint({ goals }: Checkin, money: Money, locale: string): string | null {
   const late = goals.find((g) => g.status === 'past_due')
   if (late) return `${late.name} passed its date with ${money(late.remainingCents)} still to go.`
+  const behind = goals.find((g) => g.status === 'in_progress' && g.onTrack === false)
+  if (behind?.targetDate) {
+    return `${behind.name} is behind pace for ${shortDate(behind.targetDate, locale)}.`
+  }
+  const ready = goals.find((g) => g.status === 'reached' && g.kind === 'purchase')
+  if (ready) return `${ready.name} is fully saved and ready to buy.`
   // The goal closest to done is the encouraging one to mention.
   const open = goals.filter((g) => g.status === 'in_progress')
   const closest = open.sort((a, b) => b.percent - a.percent)[0]
@@ -110,7 +123,7 @@ export function plainSummary(
     urgentPoint(checkin),
     cashPoint(checkin, money, settings.locale),
     pacePoint(checkin, money, word),
-    goalPoint(checkin, money),
+    goalPoint(checkin, money, settings.locale),
     netWorthPoint(checkin, money),
   ].filter((point): point is string => point !== null)
   return { headline: headline(checkin, money, word), points: points.slice(0, MAX_POINTS) }
@@ -137,6 +150,8 @@ export function summaryFacts(
       budgeted: money(budget.budgetedCents),
       spent: money(budget.spentCents),
       left: money(budget.leftCents),
+      setAsideForGoals: money(budget.setAsideCents),
+      leftAfterGoals: money(budget.leewayCents),
       safeToSpendPerDay: budget.safePerDayCents === null ? null : money(budget.safePerDayCents),
       projectedSpendingByPeriodEnd: money(budget.projectedCents),
       income: money(budget.incomeCents),
@@ -151,8 +166,12 @@ export function summaryFacts(
     headsUp: checkin.attention.map(({ priority, message }) => ({ priority, message })),
     goals: checkin.goals.map((g) => ({
       name: g.name,
+      kind: g.kind,
       percentDone: g.percent,
       stillToGo: money(g.remainingCents),
+      targetDate: g.targetDate && date(g.targetDate),
+      setAsideEachPeriod: g.perPeriodCents === null ? null : money(g.perPeriodCents),
+      onTrack: g.onTrack,
       status: g.status,
     })),
     debts: checkin.debts && {
