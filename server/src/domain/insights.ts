@@ -1,3 +1,7 @@
+// Looking back and around: spending by period, by day and by merchant, and
+// budget suggestions from what was actually spent. These feed the dashboard
+// charts and give an AI agent what it needs to coach.
+
 import type { Db } from '../db/pool.js'
 import {
   addDays,
@@ -9,16 +13,10 @@ import {
   type IsoDate,
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
-import { categoryTotals, currentPeriod, sumTotals } from './budgetReport.js'
+import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { periodConfig, type Settings } from './settings.js'
-
-/**
- * Looking back and around: spending by period, by day and by merchant, and
- * budget suggestions from what was actually spent. These feed the dashboard
- * charts and give an AI agent what it needs to coach.
- */
 
 export interface PeriodTrend {
   offset: number
@@ -42,19 +40,18 @@ export async function trends(
   const { period: current } = currentPeriod(settings, now)
   const config = periodConfig(settings)
   const offsets = Array.from({ length: count }, (_, i) => i - count + 1)
-  return Promise.all(
-    offsets.map(async (offset) => {
-      const period = shiftPeriod(current, offset, config)
-      const totals = await categoryTotals(db, period.start, period.end, settings.includePending)
-      return {
-        offset,
-        start: period.start,
-        end: addDays(period.end, -1),
-        ...sumTotals(categories, totals),
-        categories: totals.map(({ categoryId, amountCents }) => ({ categoryId, amountCents })),
-      }
-    }),
-  )
+  const periods = offsets.map((offset) => shiftPeriod(current, offset, config))
+  const totalsByPeriod = await categoryTotalsByRange(db, periods, settings.includePending)
+  return periods.map((period, i) => {
+    const totals = totalsByPeriod[i]!
+    return {
+      offset: offsets[i]!,
+      start: period.start,
+      end: addDays(period.end, -1),
+      ...sumTotals(categories, totals),
+      categories: totals.map(({ categoryId, amountCents }) => ({ categoryId, amountCents })),
+    }
+  })
 }
 
 export interface BudgetSuggestion {
