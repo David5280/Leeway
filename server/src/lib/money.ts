@@ -1,3 +1,5 @@
+// Money as integer cents: converting bank amounts and formatting for agents.
+
 /**
  * Converts a decimal amount from a bank API (e.g. 12.34) to integer cents.
  * Math.round fixes float artifacts like 0.1 + 0.2 = 0.30000000000000004.

@@ -1,3 +1,5 @@
+// The context every action runs with.
+
 import type pg from 'pg'
 import type { Config } from './config.js'
 import type { BankProvider } from './bank/provider.js'

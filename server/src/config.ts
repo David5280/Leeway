@@ -1,3 +1,5 @@
+// Configuration from environment variables, read and checked once at startup.
+
 import { z } from 'zod'
 
 /**

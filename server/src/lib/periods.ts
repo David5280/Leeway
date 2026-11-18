@@ -1,3 +1,5 @@
+// Budget periods (by month, week or paycheck) and repeating cadences.
+
 import {
   addDays,
   addMonths,

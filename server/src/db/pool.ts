@@ -1,3 +1,5 @@
+// The Postgres pool, how column types are read, and transactions.
+
 import pg from 'pg'
 
 /**

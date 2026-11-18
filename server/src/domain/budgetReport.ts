@@ -54,6 +54,10 @@ export async function categoryTotals(
   return totals!
 }
 
+/**
+ * Today in the owner's time zone, and the budget period `offset` periods from
+ * the one holding it (0 is the current period, -1 the one before).
+ */
 export function currentPeriod(
   settings: Settings,
   now: Date,
@@ -64,6 +68,7 @@ export function currentPeriod(
   return { period: shiftPeriod(periodContaining(today, config), offset, config), today }
 }
 
+/** The budget for one period, as computeBudget works it out from stored data. */
 export async function budgetSummary(
   db: Db,
   settings: Settings,

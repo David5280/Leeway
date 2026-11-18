@@ -1,8 +1,8 @@
-/**
- * Calendar dates as "YYYY-MM-DD" strings. Budgets care about days, not
- * instants, so dates never carry a time or time zone. All math goes through
- * a day number (days since 1970-01-01, UTC) which makes it exact.
- */
+// Calendar dates as "YYYY-MM-DD" strings. Budgets care about days, not
+// instants, so dates never carry a time or time zone. All math goes through
+// a day number (days since 1970-01-01, UTC) which makes it exact.
+
+/** A calendar day, "YYYY-MM-DD". */
 export type IsoDate = string
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/

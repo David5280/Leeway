@@ -1,9 +1,9 @@
+// Actions for agent access tokens. They are managed only from the app, so an
+// agent can never grant itself more access.
+
 import { z } from 'zod'
 import { createToken, deleteToken, listTokens } from '../domain/tokens.js'
 import { defineAction } from './action.js'
-
-// Access tokens are managed only from the app, so an agent can never grant
-// itself more access.
 
 export const listTokensAction = defineAction({
   name: 'list_tokens',

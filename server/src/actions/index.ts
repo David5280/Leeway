@@ -1,3 +1,5 @@
+// Every action, in one list: the HTTP API and the MCP endpoint both read it.
+
 import type { AnyAction } from './action.js'
 import {
   createAccountAction,
