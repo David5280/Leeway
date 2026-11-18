@@ -1,11 +1,13 @@
 // Coaching: what needs the owner's attention, most urgent first, in plain words
 // an agent can pass on. Pure: the data comes in, nothing is read here.
 
+import { daysBetween } from '../lib/dates.js'
 import type { Bill } from './bills.js'
 import type { BudgetReport } from './budgetReport.js'
 import type { CashFlow } from './cashFlow.js'
 import type { Connection } from './connections.js'
 import type { DebtGap } from './debts.js'
+import { MIN_RECENT_DAYS } from './goalHistory.js'
 import type { Goal } from './goals.js'
 
 /** now: act today. soon: this week. fyi: worth a mention, nothing urgent. */
@@ -97,15 +99,35 @@ function budgetItems({ budget }: CoachSources): AttentionItem[] {
   }))
 }
 
-function goalItems({ goals }: CoachSources, money: Money): AttentionItem[] {
-  return goals
+/** A goal in progress whose recent pace would miss its date, in words. */
+function behindMessage(goal: Goal, money: Money): string {
+  const needs = `Setting aside ${money(goal.perPeriodCents!)} each budget period would make it.`
+  if (goal.projectedDate === null) {
+    return `Nothing was put toward ${goal.name} lately, and it is due ${goal.targetDate}. ${needs}`
+  }
+  return `At its recent pace ${goal.name} would be reached ${goal.projectedDate}, after its date of ${goal.targetDate}. ${needs}`
+}
+
+function goalItems({ goals, cashFlow: { today } }: CoachSources, money: Money): AttentionItem[] {
+  const pastDue = goals
     .filter((g) => g.status === 'past_due')
-    .map((g) => ({
+    .map<AttentionItem>((g) => ({
       priority: 'soon',
       topic: 'goal',
       message: `${g.name} passed its target date of ${g.targetDate} with ${money(g.remainingCents)} still to go. Ask whether to move the date or the target.`,
       tool: 'list_goals',
     }))
+  const behind = goals
+    .filter((g) => g.status === 'in_progress' && g.onTrack === false)
+    // A goal started lately has had no time to make progress, so it is not behind yet.
+    .filter((g) => g.projectedDate !== null || daysBetween(g.createdOn, today) >= MIN_RECENT_DAYS)
+    .map<AttentionItem>((g) => ({
+      priority: 'fyi',
+      topic: 'goal',
+      message: behindMessage(g, money),
+      tool: 'list_goals',
+    }))
+  return [...pastDue, ...behind]
 }
 
 function debtItems({ debtGaps }: CoachSources): AttentionItem[] {

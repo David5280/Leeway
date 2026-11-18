@@ -199,9 +199,15 @@ describe('get_checkin', () => {
     expect(checkin.goals).toEqual([
       {
         name: 'Trip',
+        kind: 'savings',
         percent: 25,
         remainingCents: 75000,
+        targetDate: '2027-04-30',
+        perPeriodCents: 12500,
         monthlyNeededCents: 12500,
+        projectedDate: null,
+        onTrack: false,
+        heldBackCents: 0,
         status: 'in_progress',
       },
     ])
@@ -228,6 +234,7 @@ describe('can_i_afford', () => {
       reasons: ['It fits: $140 a day would be left until payday on 2026-11-27.'],
       amountCents: 10000,
       leftAfterBillsCents: 140000,
+      goalsSetAsideCents: 0,
       perDayBeforeCents: 15000,
       perDayAfterCents: 14000,
       categoryLeftCents: null,
@@ -288,5 +295,170 @@ describe('can_i_afford', () => {
   it('needs a positive whole number of cents', async () => {
     expect((await callError('can_i_afford', { amountCents: 0 })).code).toBe('invalid_input')
     expect((await callError('can_i_afford', { amountCents: 9.5 })).code).toBe('invalid_input')
+  })
+
+  it('keeps what goals hold back out of the cash it weighs', async () => {
+    await paidBiweekly(150000)
+    // $500 by Christmas Eve is three paychecks: $166.67 held back from this one.
+    await call('create_goal', {
+      name: 'Bike',
+      targetCents: 50000,
+      targetDate: '2026-12-24',
+      setAside: true,
+    })
+    const result = await call('can_i_afford', { amountCents: 140000 })
+    expect(result).toMatchObject({
+      verdict: 'tight',
+      goalsSetAsideCents: 16667,
+      perDayBeforeCents: 13333,
+      perDayAfterCents: 0,
+    })
+    expect(result.reasons).toEqual(['It would dip into the $166.67 set aside for Bike.'])
+  })
+
+  it('says when a purchase fits the budgets only by using money set aside', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 900000 })
+    const fun = await call('create_category', { name: 'Fun', budgetCents: 50000 })
+    const goal = {
+      targetCents: 60000,
+      targetDate: '2027-04-30',
+      setAside: true,
+    }
+    await call('create_goal', { ...goal, name: 'Bike' })
+    // $100 held this month, of the $500 Fun budget.
+    const one = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
+    expect(one).toMatchObject({ verdict: 'tight', categoryLeftCents: 5000, budgetLeftCents: -5000 })
+    expect(one.reasons).toEqual(['It fits the budgets only by using the $100 set aside for Bike.'])
+
+    await call('create_goal', { ...goal, name: 'Trip' })
+    const two = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
+    expect(two.reasons).toEqual([
+      'It fits the budgets only by using the $200 set aside for your goals.',
+    ])
+  })
+})
+
+describe('when_can_i_afford', () => {
+  /** A month of pay and spending on the 10th, filed under income and spending categories. */
+  async function month(accountId: string, date: string, payId: string, spendId: string) {
+    for (const [name, cents, categoryId] of [
+      ['ACME PAYROLL', -300000, payId],
+      ['Rent', 200000, spendId],
+    ] as const) {
+      const id = await insertBankTransaction(ctx.db, accountId, { date, name, amountCents: cents })
+      await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [id, categoryId])
+    }
+  }
+
+  it('is today when it already fits', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 500000 })
+    const plan = await call('when_can_i_afford', { amountCents: 20000 })
+    expect(plan).toMatchObject({ affordableBy: '2026-11-17', periodsNeeded: 0, basis: null })
+    expect(plan.message).toMatch(/^It fits today\. It fits: /)
+  })
+
+  it('counts periods of saving at an amount the owner gives, after what is saved', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    const plan = await call('when_can_i_afford', {
+      amountCents: 100000,
+      savedCents: 10000,
+      perPeriodCents: 20000,
+    })
+    // $900 at $200 a month is five months, November through March.
+    expect(plan).toMatchObject({
+      perPeriodCents: 20000,
+      basis: 'given',
+      periodsNeeded: 5,
+      affordableBy: '2027-03-31',
+      message:
+        'Not today. Putting aside $200 each budget period, it is affordable by 2027-03-31 (5 periods).',
+    })
+    expect(plan.today.verdict).toBe('no')
+
+    const single = await call('when_can_i_afford', { amountCents: 20000, perPeriodCents: 20000 })
+    expect(single.message).toBe(
+      'Not today. Putting aside $200 each budget period, it is affordable by 2026-11-30 (1 period).',
+    )
+  })
+
+  it('uses the recent surplus, after what goals in progress need', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    const home = await call('create_category', { name: 'Home' })
+    for (const date of ['2026-08-10', '2026-09-10', '2026-10-10']) {
+      await month(accountId, date, pay.id, home.id)
+    }
+    await call('create_goal', { name: 'Trip', targetCents: 120000, targetDate: '2027-04-30' })
+    // A goal with no date needs nothing in particular each period.
+    await call('create_goal', { name: 'Someday', targetCents: 90000 })
+
+    // $1,000 left over a month, $200 of it for the trip: $5,000 takes seven months.
+    const plan = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(plan).toMatchObject({
+      surplusPerPeriodCents: 100000,
+      goalsNeedPerPeriodCents: 20000,
+      perPeriodCents: 80000,
+      basis: 'recent_surplus',
+      periodsNeeded: 7,
+      affordableBy: '2027-05-31',
+    })
+    expect(plan.message).toContain('At the recent surplus of $800 each budget period')
+  })
+
+  it('has no date when nothing was left over lately, or there is no history', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    const empty = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(empty).toMatchObject({
+      surplusPerPeriodCents: null,
+      perPeriodCents: null,
+      periodsNeeded: null,
+      affordableBy: null,
+    })
+    expect(empty.message).toMatch(/^Not today, and recent periods left nothing over/)
+
+    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    const home = await call('create_category', { name: 'Home' })
+    await month(accountId, '2026-10-10', pay.id, home.id)
+    // $1,000 left over in October is $333 a month on average, all of it needed by the trip.
+    await call('create_goal', { name: 'Trip', targetCents: 400000, targetDate: '2027-04-30' })
+    const spoken = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(spoken).toMatchObject({ surplusPerPeriodCents: 33333, affordableBy: null })
+  })
+
+  it('refuses a missing or non-positive amount to save each period', async () => {
+    const error = await callError('when_can_i_afford', { amountCents: 100, perPeriodCents: 0 })
+    expect(error.code).toBe('invalid_input')
+  })
+})
+
+describe('goals behind their date', () => {
+  it('flags a goal whose recent pace would miss its date, or that has stalled', async () => {
+    const slow = await call('create_goal', {
+      name: 'Bike',
+      targetCents: 100000,
+      targetDate: '2026-12-31',
+    })
+    await call('add_to_goal', { id: slow.id, amountCents: 3000, date: '2026-11-01' })
+    const stalled = await call('create_goal', {
+      name: 'Trip',
+      targetCents: 50000,
+      targetDate: '2027-03-31',
+    })
+    // A goal made months ago with nothing put toward it has stalled; a new one has not.
+    await ctx.db.query(`UPDATE goals SET created_at = '2026-08-01' WHERE id = $1`, [stalled.id])
+    await call('create_goal', { name: 'New', targetCents: 50000, targetDate: '2027-03-31' })
+
+    const goalItems = (await call('get_checkin')).attention.filter((a) => a.topic === 'goal')
+    // Oldest goal first. Bike's $30 in a month is $1 a day; its share counts from the month's start.
+    expect(goalItems.map((a) => [a.priority, a.message])).toEqual([
+      [
+        'fyi',
+        'Nothing was put toward Trip lately, and it is due 2027-03-31. Setting aside $100 each budget period would make it.',
+      ],
+      [
+        'fyi',
+        'At its recent pace Bike would be reached 2029-07-14, after its date of 2026-12-31. Setting aside $500 each budget period would make it.',
+      ],
+    ])
   })
 })

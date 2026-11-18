@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, isUniqueViolation, notFound } from '../errors.js'
+import type { IsoDate } from '../lib/dates.js'
 import { patchOf } from '../lib/schemas.js'
 
 export const CADENCES = ['week', 'biweek', 'semimonth', 'month', 'year'] as const
@@ -21,6 +22,10 @@ export interface Category {
   providerCategories: string[]
   /** The heading the category is listed under, like "Food and drink"; null for none. */
   group: string | null
+  /** Unspent (or overspent) budget carries into the next period. */
+  rollover: boolean
+  /** The day rollover was turned on (carrying starts with its period); null while it is off. */
+  rolloverSince: IsoDate | null
   position: number
 }
 
@@ -42,14 +47,22 @@ export const categoryInputSchema = z.object({
 
 export type CategoryInput = z.infer<typeof categoryInputSchema>
 
-/** What update_category may change: any subset, and only the fields given. */
-export const categoryPatchSchema = patchOf(categoryInputSchema)
+/**
+ * What update_category may change: any subset, and only the fields given.
+ * Rollover is only switched on an existing category, since it counts from the
+ * period it was switched on in.
+ */
+export const categoryPatchSchema = patchOf(categoryInputSchema).extend({
+  rollover: z.boolean().optional(),
+})
+
+export type CategoryPatch = z.infer<typeof categoryPatchSchema>
 
 const COLUMNS = `
   id, name, color, icon, kind,
   budget_cents AS "budgetCents", budget_cadence AS "budgetCadence",
   warn_at_percent AS "warnAtPercent", track_pace AS "trackPace", provider_categories AS "providerCategories",
-  group_name AS "group", position`
+  group_name AS "group", rollover, rollover_since AS "rolloverSince", position`
 
 export async function listCategories(db: Db): Promise<Category[]> {
   const { rows } = await db.query<Category>(
@@ -69,6 +82,20 @@ function duplicateName(error: unknown, name: string): never {
     throw new AppError('conflict', `A category named "${name}" already exists`)
   }
   throw error
+}
+
+/**
+ * When rollover counts from: the day it was turned on (carrying starts with
+ * that day's period), kept while it stays on, and cleared when it goes off so
+ * turning it on again starts fresh.
+ */
+export function rolloverSinceFor(
+  rollover: boolean,
+  previous: Pick<Category, 'rollover' | 'rolloverSince'>,
+  today: IsoDate,
+): IsoDate | null {
+  if (!rollover) return null
+  return previous.rollover ? previous.rolloverSince : today
 }
 
 export async function createCategory(db: Db, input: CategoryInput): Promise<Category> {
@@ -102,14 +129,17 @@ export async function createCategory(db: Db, input: CategoryInput): Promise<Cate
 export async function updateCategory(
   db: Db,
   id: string,
-  patch: Partial<CategoryInput>,
+  patch: CategoryPatch,
+  today: IsoDate,
 ): Promise<Category> {
-  const next = { ...(await getCategory(db, id)), ...patch }
+  const current = await getCategory(db, id)
+  const next = { ...current, ...patch }
   try {
     const { rows } = await db.query<Category>(
       `UPDATE categories SET
          name = $2, color = $3, icon = $4, kind = $5, budget_cents = $6, budget_cadence = $7,
-         warn_at_percent = $8, provider_categories = $9, track_pace = $10, group_name = $11
+         warn_at_percent = $8, provider_categories = $9, track_pace = $10, group_name = $11,
+         rollover = $12, rollover_since = $13
        WHERE id = $1
        RETURNING ${COLUMNS}`,
       [
@@ -124,6 +154,8 @@ export async function updateCategory(
         next.providerCategories,
         next.trackPace,
         next.group,
+        next.rollover,
+        rolloverSinceFor(next.rollover, current, today),
       ],
     )
     return rows[0]!

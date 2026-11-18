@@ -1,7 +1,8 @@
 // Fixtures for the Plan screen, built with the server's own math where there is some.
 
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
-import { goalInputSchema, progressOf } from '../../../server/src/domain/goals'
+import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
+import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { Route, Routes } from 'react-router-dom'
 import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '../api/client'
@@ -44,10 +45,23 @@ export function series(fields: Partial<RecurringSeries> & { name: string }): Rec
   }
 }
 
-/** A goal as list_goals returns it on November 17th. */
-export function goal(fields: { name: string; targetCents: number } & Partial<Goal>): Goal {
-  const { id, accountName, accountBalanceCents, ...input } = fields
-  return progressOf(
+/** No contributions lately: the history of a goal nobody has put money toward. */
+export const NO_PROGRESS: GoalProgressFacts = {
+  savedThisPeriodCents: 0,
+  recentSavedCents: 0,
+  recentDays: 90,
+}
+
+/**
+ * A goal as list_goals returns it on November 17th, budgeting by the month,
+ * from the server's own math. `facts` stands in for its recent history.
+ */
+export function goal(
+  fields: { name: string; targetCents: number } & Partial<Goal>,
+  facts: GoalProgressFacts = NO_PROGRESS,
+): Goal {
+  const { id, accountName, accountBalanceCents, createdOn, ...input } = fields
+  return goalOf(
     {
       // Test account ids are not UUIDs, so the account is checked apart from the schema.
       ...goalInputSchema.parse({ ...input, accountId: null }),
@@ -55,8 +69,10 @@ export function goal(fields: { name: string; targetCents: number } & Partial<Goa
       id: id ?? `goal-${fields.name.toLowerCase().replaceAll(' ', '-')}`,
       accountName: accountName ?? null,
       accountBalanceCents: accountBalanceCents ?? null,
+      createdOn: createdOn ?? '2026-09-01',
     },
-    TODAY,
+    facts,
+    { today: TODAY, period: { kind: 'monthly', startDay: 1 } },
   )
 }
 

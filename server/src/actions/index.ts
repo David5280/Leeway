@@ -14,7 +14,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
-import { canIAffordAction, getCheckinAction } from './coach.js'
+import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
   answerConnectRequestAction,
   disconnectAppAction,
@@ -39,6 +39,7 @@ import {
   addToGoalAction,
   createGoalAction,
   deleteGoalAction,
+  listGoalContributionsAction,
   listGoalsAction,
   updateGoalAction,
 } from './goals.js'
@@ -82,6 +83,7 @@ import {
 export const actionList = [
   getCheckinAction,
   canIAffordAction,
+  whenCanIAffordAction,
   getBudgetAction,
   getTrendsAction,
   getSpendingPaceAction,
@@ -119,6 +121,7 @@ export const actionList = [
   createGoalAction,
   updateGoalAction,
   addToGoalAction,
+  listGoalContributionsAction,
   deleteGoalAction,
   getNetWorthAction,
   planDebtPayoffAction,

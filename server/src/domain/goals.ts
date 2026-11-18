@@ -1,14 +1,23 @@
 // Savings goals: a target amount, an optional date, and progress toward it.
+// A goal can be general savings or a purchase (an item, its price, by when).
 // Recording progress never moves money; it only keeps count.
 
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { dateParts, isIsoDate, type IsoDate } from '../lib/dates.js'
+import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
+import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
+import { planOf, type GoalPlan, type GoalProgressFacts } from './goalPlan.js'
+
+export const GOAL_KINDS = ['savings', 'purchase'] as const
 
 export const goalInputSchema = z.object({
+  /** savings: a pot to fill, like an emergency fund. purchase: one thing to buy, named by `name`. */
+  kind: z.enum(GOAL_KINDS).default('savings'),
   name: z.string().trim().min(1).max(80),
+  /** The amount to save, or for a purchase its price. */
   targetCents: z.number().int().positive(),
   targetDate: z
     .string()
@@ -23,19 +32,24 @@ export const goalInputSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #4f8cff')
     .default('#4f8cff'),
+  /** Hold what the goal needs each budget period back from safe-to-spend. Needs a target date. */
+  setAside: z.boolean().default(false),
 })
 
 export const goalPatchSchema = patchOf(goalInputSchema)
 
 export type GoalInput = z.infer<typeof goalInputSchema>
 
-interface GoalRow extends GoalInput {
+/** A goal as stored, with its linked account's name and balance. */
+export interface GoalRow extends GoalInput {
   id: string
   accountName: string | null
   accountBalanceCents: number | null
+  /** The day the goal was made. */
+  createdOn: IsoDate
 }
 
-export interface Goal extends GoalRow {
+export interface GoalProgress extends GoalRow {
   /** Progress: the linked account's balance, or what was counted by hand. */
   currentCents: number
   remainingCents: number
@@ -46,6 +60,14 @@ export interface Goal extends GoalRow {
   /** What to set aside each month to make the date; null without a date or once reached. */
   monthlyNeededCents: number | null
   status: 'reached' | 'in_progress' | 'past_due'
+}
+
+export type Goal = GoalProgress & GoalPlan
+
+/** Today, and how the owner slices time into budget periods. */
+export interface GoalClock {
+  today: IsoDate
+  period: PeriodConfig
 }
 
 /** Months from today's month to the target's month, counting both: November to January is 3. */
@@ -60,8 +82,8 @@ function goalStatus(reached: boolean, pastDue: boolean): Goal['status'] {
   return pastDue ? 'past_due' : 'in_progress'
 }
 
-/** A goal's progress and what it takes to reach it on time. */
-export function progressOf(row: GoalRow, today: IsoDate): Goal {
+/** A goal's progress and what it takes each month to reach it on time. */
+export function progressOf(row: GoalRow, today: IsoDate): GoalProgress {
   const current = row.accountId ? Math.max(0, row.accountBalanceCents ?? 0) : row.savedCents
   const remaining = Math.max(0, row.targetCents - current)
   const months = row.targetDate ? monthsUntil(today, row.targetDate) : null
@@ -80,85 +102,140 @@ export function progressOf(row: GoalRow, today: IsoDate): Goal {
   }
 }
 
+/** A goal in full: progress, plus its plan in the owner's budget periods. */
+export function goalOf(row: GoalRow, facts: GoalProgressFacts, clock: GoalClock): Goal {
+  const progress = progressOf(row, clock.today)
+  return { ...progress, ...planOf(progress, facts, clock.today, clock.period) }
+}
+
 const SELECT = `
-  SELECT g.id, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
-    g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color,
+  SELECT g.id, g.kind, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
+    g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
+    g.created_at::date AS "createdOn",
     coalesce(a.display_name, a.name) AS "accountName", a.balance_cents AS "accountBalanceCents"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
 
-export async function listGoals(db: Db, today: IsoDate): Promise<Goal[]> {
-  const { rows } = await db.query<GoalRow>(`${SELECT} ORDER BY g.created_at, g.name`)
-  return rows.map((row) => progressOf(row, today))
+async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goal[]> {
+  const period = periodContaining(clock.today, clock.period)
+  const progress = rows.map((row) => progressOf(row, clock.today))
+  const facts = await progressFacts(db, progress, clock.today, period)
+  return rows.map((row) => goalOf(row, facts.get(row.id)!, clock))
 }
 
-export async function getGoal(db: Db, id: string, today: IsoDate): Promise<Goal> {
+export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
+  const { rows } = await db.query<GoalRow>(`${SELECT} ORDER BY g.created_at, g.name`)
+  return withPlans(db, rows, clock)
+}
+
+export async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
   const { rows } = await db.query<GoalRow>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
-  return progressOf(rows[0], today)
+  return (await withPlans(db, rows, clock))[0]!
 }
 
-async function assertAccount(db: Db, accountId: string | null): Promise<void> {
-  if (!accountId) return
-  const { rowCount } = await db.query('SELECT 1 FROM accounts WHERE id = $1', [accountId])
+/** The checks a goal must pass however it was made or changed. */
+async function assertValid(db: Db, goal: GoalInput): Promise<void> {
+  if (goal.setAside && goal.targetDate === null) {
+    throw new AppError(
+      'invalid_input',
+      `Give ${goal.name} a date to set money aside for it, so Leeway knows how much each period needs`,
+    )
+  }
+  if (!goal.accountId) return
+  const { rowCount } = await db.query('SELECT 1 FROM accounts WHERE id = $1', [goal.accountId])
   if (!rowCount) throw notFound('Account')
 }
 
-export async function createGoal(db: Db, input: GoalInput, today: IsoDate): Promise<Goal> {
-  await assertAccount(db, input.accountId)
+export async function createGoal(db: Db, input: GoalInput, clock: GoalClock): Promise<Goal> {
+  await assertValid(db, input)
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO goals (name, target_cents, target_date, account_id, saved_cents, color)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO goals (kind, name, target_cents, target_date, account_id, saved_cents, color, set_aside)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
     [
+      input.kind,
       input.name,
       input.targetCents,
       input.targetDate,
       input.accountId,
       input.savedCents,
       input.color,
+      input.setAside,
     ],
   )
-  return getGoal(db, rows[0]!.id, today)
+  return getGoal(db, rows[0]!.id, clock)
 }
 
+/**
+ * Changes only the fields given. A changed "saved so far" is a correction, not
+ * a contribution, so it does not count toward recent progress.
+ */
 export async function updateGoal(
   db: Db,
   id: string,
   patch: z.infer<typeof goalPatchSchema>,
-  today: IsoDate,
+  clock: GoalClock,
 ): Promise<Goal> {
-  const next = { ...(await getGoal(db, id, today)), ...patch }
-  await assertAccount(db, next.accountId)
+  const next = { ...(await getGoal(db, id, clock)), ...patch }
+  await assertValid(db, next)
   await db.query(
-    `UPDATE goals SET name = $2, target_cents = $3, target_date = $4, account_id = $5,
-       saved_cents = $6, color = $7
+    `UPDATE goals SET kind = $2, name = $3, target_cents = $4, target_date = $5, account_id = $6,
+       saved_cents = $7, color = $8, set_aside = $9
      WHERE id = $1`,
-    [id, next.name, next.targetCents, next.targetDate, next.accountId, next.savedCents, next.color],
+    [
+      id,
+      next.kind,
+      next.name,
+      next.targetCents,
+      next.targetDate,
+      next.accountId,
+      next.savedCents,
+      next.color,
+      next.setAside,
+    ],
   )
-  return getGoal(db, id, today)
+  return getGoal(db, id, clock)
 }
 
 /**
- * Adds to (or, with a negative amount, takes from) what was saved toward a
- * goal counted by hand. It records the change only; no money moves.
+ * Records money put toward (or, with a negative amount, taken back from) a
+ * goal counted by hand, on `day`. Taking back more than was saved takes back
+ * what there is. It records the change only; no money moves. Run it in a
+ * transaction: the goal row is locked so two quick taps cannot both count.
  */
 export async function addToGoal(
   db: Db,
   id: string,
   amountCents: number,
-  today: IsoDate,
+  day: IsoDate,
+  clock: GoalClock,
 ): Promise<Goal> {
-  const goal = await getGoal(db, id, today)
+  if (day > clock.today) {
+    throw new AppError('invalid_input', 'Record money on today or an earlier day')
+  }
+  const goal = await getGoal(db, id, clock)
   if (goal.accountId) {
     throw new AppError(
       'invalid_input',
       `${goal.name} follows the balance of ${goal.accountName}, so its progress updates on its own`,
     )
   }
-  await db.query('UPDATE goals SET saved_cents = greatest(0, saved_cents + $2) WHERE id = $1', [
-    id,
-    amountCents,
-  ])
-  return getGoal(db, id, today)
+  const { rows } = await db.query<{ saved: number }>(
+    'SELECT saved_cents AS saved FROM goals WHERE id = $1 FOR UPDATE',
+    [id],
+  )
+  const applied = Math.max(-rows[0]!.saved, amountCents)
+  if (applied === 0) {
+    throw new AppError('invalid_input', `Nothing is saved toward ${goal.name} yet to take back`)
+  }
+  await recordContribution(db, id, applied, day)
+  return getGoal(db, id, clock)
+}
+
+/** A goal's recent contributions, newest first. */
+export async function goalContributions(db: Db, id: string, limit: number) {
+  const { rowCount } = await db.query('SELECT 1 FROM goals WHERE id = $1', [id])
+  if (!rowCount) throw notFound('Goal')
+  return listContributions(db, id, limit)
 }
 
 export async function deleteGoal(db: Db, id: string): Promise<void> {

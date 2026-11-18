@@ -12,6 +12,8 @@ const categories: Category[] = STARTER_CATEGORIES.map((c, position) => ({
   ...c,
   id: c.name,
   position,
+  rollover: false,
+  rolloverSince: null,
 }))
 const rules: Rule[] = STARTER_RULES.map(({ category, ...rule }, position) => ({
   ...rule,

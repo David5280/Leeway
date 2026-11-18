@@ -1,41 +1,27 @@
-// The budget math: spending against budgets, pace, projections and alerts. Pure, no database.
+// The budget math: spending against budgets, pace, projections, alerts and
+// what goals hold back. Pure, no database. One category's numbers are worked
+// out in budgetCategory.ts.
 
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
-import { formatCents } from '../lib/money.js'
-import { cadenceOf, convertCadence, type Period } from '../lib/periods.js'
+import type { Period } from '../lib/periods.js'
+import {
+  alertFor,
+  categoryRow,
+  type BudgetAlert,
+  type CategoryBudget,
+  type PeriodPosition,
+} from './budgetCategory.js'
 import type { Category } from './categories.js'
-import { periodConfig, type Settings } from './settings.js'
+import type { Settings } from './settings.js'
 
-export type BudgetStatus = 'no_budget' | 'ok' | 'warning' | 'over'
-export type Pace = 'under' | 'on' | 'over'
+export type { BudgetAlert, BudgetStatus, CategoryBudget, Pace } from './budgetCategory.js'
 
-export interface CategoryBudget {
-  categoryId: string
+/** A goal's share of this period, held back from what is safe to spend. */
+export interface SetAside {
+  goalId: string
   name: string
   color: string
-  icon: string | null
-  kind: 'expense' | 'income'
-  /** The heading the category is listed under, or null. */
-  group: string | null
-  /** This period's budget, converted from the category's cadence. Null means no budget. */
-  budgetCents: number | null
-  /** Expense: net spending (refunds subtract). Income: money received. */
-  spentCents: number
-  leftCents: number | null
-  percentUsed: number | null
-  warnAtPercent: number
-  status: BudgetStatus
-  /** Where spending would be if it were spread evenly across the period. */
-  expectedByNowCents: number | null
-  pace: Pace | null
-  /** Spending at the end of the period if the current daily rate holds. */
-  projectedCents: number
-}
-
-export interface BudgetAlert {
-  categoryId: string
-  level: 'over' | 'warning' | 'pace'
-  message: string
+  amountCents: number
 }
 
 export interface BudgetSummary {
@@ -56,6 +42,10 @@ export interface BudgetSummary {
     /** All spending, including categories without a budget and uncategorized. */
     spentCents: number
     leftCents: number
+    /** What goals hold back this period (see setAsides). */
+    setAsideCents: number
+    /** Truly safe to spend: what is left in the budgets, minus what goals hold back. */
+    leewayCents: number
     incomeCents: number
     uncategorizedCents: number
     uncategorizedCount: number
@@ -64,6 +54,8 @@ export interface BudgetSummary {
     projectedCents: number
   }
   categories: CategoryBudget[]
+  /** Goals set aside from the budget, and their share of this period. */
+  setAsides: SetAside[]
   alerts: BudgetAlert[]
 }
 
@@ -80,124 +72,13 @@ function daysElapsedIn(period: Period, today: IsoDate): number {
   return daysBetween(period.start, today) + 1
 }
 
-/** The margin (a share of the budget) keeps a few dollars early on from reading as "over pace". */
-function paceOf(spent: number, expected: number, budget: number, tolerance: number): Pace {
-  const margin = budget * tolerance
-  if (spent > expected + margin) return 'over'
-  if (spent < expected - margin) return 'under'
-  return 'on'
-}
-
-function statusOf(spent: number, budget: number, warnAtPercent: number): BudgetStatus {
-  if (spent > budget) return 'over'
-  if (spent > 0 && spent >= (budget * warnAtPercent) / 100) return 'warning'
-  return 'ok'
-}
-
-function percentUsed(spent: number, budget: number | null): number | null {
-  if (budget === null) return null
-  // A zero budget with any spending is fully used, not a division by zero.
-  if (budget === 0) return spent > 0 ? 100 : null
-  return Math.round((spent / budget) * 100)
-}
-
-/** Where today falls in the period, shared by every category's math. */
-interface PeriodPosition {
-  period: Period
-  daysElapsed: number
-  isCurrent: boolean
-}
-
-/** One category's numbers for the period. */
-function categoryRow(
-  category: Category,
-  net: number,
-  position: PeriodPosition,
-  settings: Settings,
-): CategoryBudget {
-  const { period, daysElapsed, isCurrent } = position
-  // Income arrives as negative amounts (money in); show it as a positive number received.
-  const spent = category.kind === 'income' ? -net : net
-  const budget =
-    category.budgetCents === null
-      ? null
-      : convertCadence(
-          category.budgetCents,
-          category.budgetCadence,
-          cadenceOf(periodConfig(settings)),
-        )
-  const warnAt = category.warnAtPercent ?? settings.defaultWarnAtPercent
-  // Only a period in progress has a rate to project from; otherwise the total is final.
-  const projected =
-    isCurrent && daysElapsed > 0 ? Math.round((spent / daysElapsed) * period.days) : spent
-
-  let status: BudgetStatus = 'no_budget'
-  let pace: Pace | null = null
-  let expected: number | null = null
-  if (budget !== null) {
-    expected = Math.round((budget * daysElapsed) / period.days)
-    status = category.kind === 'expense' ? statusOf(spent, budget, warnAt) : 'ok'
-    if (category.kind === 'expense' && category.trackPace) {
-      pace = paceOf(spent, expected, budget, settings.paceTolerancePercent / 100)
-    }
-  }
-
-  return {
-    categoryId: category.id,
-    name: category.name,
-    color: category.color,
-    icon: category.icon,
-    kind: category.kind as 'expense' | 'income',
-    group: category.group,
-    budgetCents: budget,
-    spentCents: spent,
-    leftCents: budget === null ? null : budget - spent,
-    percentUsed: percentUsed(spent, budget),
-    warnAtPercent: warnAt,
-    status,
-    expectedByNowCents: expected,
-    pace,
-    projectedCents: projected,
-  }
-}
-
-/** The one alert a category raises, if any: over beats warning beats pace. */
-function alertFor(
-  row: CategoryBudget,
-  isCurrent: boolean,
-  money: (cents: number) => string,
-): BudgetAlert | null {
-  const { categoryId, name, spentCents: spent, budgetCents: budget } = row
-  if (row.kind !== 'expense' || budget === null) return null
-  if (row.status === 'over') {
-    return {
-      categoryId,
-      level: 'over',
-      message: `${name} is over budget by ${money(spent - budget)} (${money(spent)} of ${money(budget)}).`,
-    }
-  }
-  if (row.status === 'warning') {
-    return {
-      categoryId,
-      level: 'warning',
-      message: `${name} has used ${row.percentUsed}% of its budget, with ${money(budget - spent)} left.`,
-    }
-  }
-  if (isCurrent && row.pace === 'over' && row.projectedCents > budget) {
-    return {
-      categoryId,
-      level: 'pace',
-      message: `${name} is spending ahead of pace and would reach ${money(row.projectedCents)} of ${money(budget)} by the end of the period.`,
-    }
-  }
-  return null
-}
-
 const ALERT_ORDER: BudgetAlert['level'][] = ['over', 'warning', 'pace']
 
 /**
  * The budget math, kept pure (no database) so it is easy to test: given the
  * categories, what was spent in each, and where today falls in the period.
+ * `carries` is what each rollover category brings in from earlier periods,
+ * and `setAsides` what goals hold back; both are empty when not given.
  */
 export function computeBudget(input: {
   categories: Category[]
@@ -206,8 +87,11 @@ export function computeBudget(input: {
   offset: number
   today: IsoDate
   settings: Settings
+  carries?: Map<string, number>
+  setAsides?: SetAside[]
 }): BudgetSummary {
   const { categories, totals, period, today, settings } = input
+  const setAsides = input.setAsides ?? []
   const position: PeriodPosition = {
     period,
     daysElapsed: daysElapsedIn(period, today),
@@ -215,15 +99,20 @@ export function computeBudget(input: {
   }
   const { daysElapsed, isCurrent } = position
   const byCategory = new Map(totals.map((t) => [t.categoryId, t]))
-  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
 
   const rows = categories
     .filter((category) => category.kind !== 'transfer')
     .map((category) =>
-      categoryRow(category, byCategory.get(category.id)?.amountCents ?? 0, position, settings),
+      categoryRow(
+        category,
+        byCategory.get(category.id)?.amountCents ?? 0,
+        position,
+        settings,
+        input.carries ?? new Map(),
+      ),
     )
   const alerts = rows
-    .map((row) => alertFor(row, isCurrent, money))
+    .map((row) => alertFor(row, isCurrent, settings))
     .filter((alert) => alert !== null)
     .sort((a, b) => ALERT_ORDER.indexOf(a.level) - ALERT_ORDER.indexOf(b.level))
 
@@ -235,6 +124,8 @@ export function computeBudget(input: {
   const uncategorizedCents = uncategorized?.amountCents ?? 0
   const spentCents = sum(expenses.map((r) => r.spentCents)) + uncategorizedCents
   const leftCents = budgetedCents - budgetedSpentCents
+  const setAsideCents = sum(setAsides.map((s) => s.amountCents))
+  const leewayCents = leftCents - setAsideCents
   const daysLeft = period.days - daysElapsed
   // Today still counts as a day you can spend, so divide by the days left including today.
   const spendableDays = daysLeft + 1
@@ -254,16 +145,19 @@ export function computeBudget(input: {
       budgetedSpentCents,
       spentCents,
       leftCents,
+      setAsideCents,
+      leewayCents,
       incomeCents: sum(rows.filter((r) => r.kind === 'income').map((r) => r.spentCents)),
       uncategorizedCents,
       uncategorizedCount: uncategorized?.count ?? 0,
-      safePerDayCents: isCurrent ? Math.max(0, Math.floor(leftCents / spendableDays)) : null,
+      safePerDayCents: isCurrent ? Math.max(0, Math.floor(leewayCents / spendableDays)) : null,
       projectedCents:
         isCurrent && daysElapsed > 0
           ? Math.round((spentCents / daysElapsed) * period.days)
           : spentCents,
     },
     categories: rows,
+    setAsides,
     alerts,
   }
 }

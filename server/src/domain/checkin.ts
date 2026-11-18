@@ -12,7 +12,7 @@ import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
-import type { Settings } from './settings.js'
+import { periodConfig, type Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
 const NET_WORTH_DAYS = 30
@@ -22,7 +22,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     budgetReport(db, settings, now),
     getCashFlow(db, settings, today),
     listBills(db, today),
-    listGoals(db, today),
+    listGoals(db, { today, period: periodConfig(settings) }),
     debtPlans(db, 0, today),
     listConnections(db),
     untrackedRecurring(db, today),
@@ -55,6 +55,8 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       budgetedCents: totals.budgetedCents,
       spentCents: totals.spentCents,
       leftCents: totals.leftCents,
+      setAsideCents: totals.setAsideCents,
+      leewayCents: totals.leewayCents,
       safePerDayCents: totals.safePerDayCents,
       projectedCents: totals.projectedCents,
       incomeCents: totals.incomeCents,
@@ -74,9 +76,15 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     },
     goals: goals.map((g) => ({
       name: g.name,
+      kind: g.kind,
       percent: g.percent,
       remainingCents: g.remainingCents,
+      targetDate: g.targetDate,
+      perPeriodCents: g.perPeriodCents,
       monthlyNeededCents: g.monthlyNeededCents,
+      projectedDate: g.projectedDate,
+      onTrack: g.onTrack,
+      heldBackCents: g.heldBackCents,
       status: g.status,
     })),
     debts:

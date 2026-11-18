@@ -143,7 +143,13 @@ export async function suggestForPlannedCategories(
     [start, end],
   )
   const accounts = await loadOwnAccounts(db)
-  const categories: Category[] = planned.map((c, position) => ({ ...c, id: c.name, position }))
+  const categories: Category[] = planned.map((c, position) => ({
+    ...c,
+    id: c.name,
+    position,
+    rollover: false,
+    rolloverSince: null,
+  }))
   const sums = new Map<string, number>()
   for (const tx of rows) {
     const choice = chooseCategory(tx, [], categories, accounts)

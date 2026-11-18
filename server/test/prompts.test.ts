@@ -31,3 +31,20 @@ describe('coaching prompts', () => {
     }
   })
 })
+
+describe('save_for', () => {
+  const text = (args: Record<string, string>) => {
+    const content = getPrompt('save_for', args).messages[0]!.content
+    return content.type === 'text' ? content.text : ''
+  }
+
+  it('names the item, the price and, when given, when it is wanted', () => {
+    expect(text({ item: 'a road bike', amount: '1800', by: ' April ' })).toMatch(
+      /^I want to save for a road bike, which costs 1800, by April\. /,
+    )
+    expect(text({ item: 'a road bike', amount: '1800', by: ' ' })).toMatch(
+      /^I want to save for a road bike, which costs 1800\. /,
+    )
+    expect(text({ item: 'a road bike', amount: '1800' })).toContain('when_can_i_afford')
+  })
+})
