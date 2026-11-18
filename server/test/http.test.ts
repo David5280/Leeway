@@ -41,10 +41,17 @@ async function signUp(): Promise<string> {
 describe('HTTP API', () => {
   it('reports setup state before anyone signs in', async () => {
     const before = await app.inject({ url: '/api/status' })
-    expect(before.json()).toMatchObject({ hasOwner: false, bank: null })
+    expect(before.json()).toMatchObject({
+      hasOwner: false,
+      bank: null,
+      platform: 'other',
+      setupCodeFrom: 'variable',
+    })
+    // Where the code is, but never the code itself.
+    expect(before.body).not.toContain(TEST_SETUP_CODE)
     await signUp()
     const after = await app.inject({ url: '/api/status' })
-    expect(after.json()).toMatchObject({ hasOwner: true, onboarded: false })
+    expect(after.json()).toMatchObject({ hasOwner: true, onboarded: false, setupCodeFrom: null })
   })
 
   it('allows only one owner', async () => {

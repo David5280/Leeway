@@ -3,7 +3,12 @@ import { loadConfig } from '../src/config.js'
 import { decrypt, encrypt, hashToken, randomToken } from '../src/lib/crypto.js'
 import { formatCents, formatWholeCents, toCents, toCentsOrNull } from '../src/lib/money.js'
 import { hashPassword, needsRehash, verifyPassword } from '../src/lib/password.js'
-import { generateSetupCode, setupCodeMatches } from '../src/lib/setupCode.js'
+import {
+  generateSetupCode,
+  setupCodeMatches,
+  setupReminder,
+  whereSetupCodeIs,
+} from '../src/lib/setupCode.js'
 
 const key = Buffer.alloc(32, 7)
 
@@ -198,5 +203,29 @@ describe('setup codes', () => {
     expect(loadConfig(base).setupCode).toBeNull()
     expect(loadConfig({ ...base, SETUP_CODE: 'ABCD-EFGH-JKLM' }).setupCode).toBe('ABCD-EFGH-JKLM')
     expect(() => loadConfig({ ...base, SETUP_CODE: 'ABCD-EFGH-JK' })).toThrow(/SETUP_CODE/)
+  })
+
+  it('says where the code is, for a code from the log or from SETUP_CODE on each platform', () => {
+    expect(whereSetupCodeIs('log', 'railway')).toBe(
+      'the newest line in Leeway\'s log that starts "No account yet"',
+    )
+    expect(whereSetupCodeIs('variable', 'railway')).toBe(
+      "SETUP_CODE in your Leeway service's Variables on Railway",
+    )
+    expect(whereSetupCodeIs('variable', 'docker')).toBe('SETUP_CODE in your .env file')
+    expect(whereSetupCodeIs('variable', 'other')).toBe("SETUP_CODE in Leeway's settings")
+  })
+
+  it('prints a code from the log in full at startup, and only names one from SETUP_CODE', () => {
+    expect(
+      setupReminder({ code: 'K7QM-2XRA-9PVD', from: 'log' }, 'https://money.example.com'),
+    ).toBe(
+      'No account yet. Open https://money.example.com and enter this setup code to create your account: K7QM-2XRA-9PVD (a new code is made each time Leeway starts, so use the newest one).',
+    )
+    const configured = setupReminder({ code: 'SECRET-CODE-1234', from: 'variable' }, null)
+    expect(configured).toBe(
+      'No account yet. Open Leeway in your browser and enter your SETUP_CODE to create your account.',
+    )
+    expect(configured).not.toContain('SECRET')
   })
 })

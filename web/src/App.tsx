@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { ApiError, auth, setSignedOutHandler } from './api/client'
+import { ApiError, auth, setSignedOutHandler, UNREACHABLE } from './api/client'
 import { useAction } from './api/hooks'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
@@ -60,7 +60,7 @@ export function App() {
   if (status.isError) {
     return (
       <Centered>
-        <p className="notice error">Leeway's server is not answering. Check that it is running.</p>
+        <p className="notice error">{UNREACHABLE}</p>
       </Centered>
     )
   }
@@ -96,9 +96,7 @@ export function App() {
         <Route path="/connect/:id" element={<Connect />} />
         <Route
           path="*"
-          element={
-            me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} startAt={2} />
-          }
+          element={me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} signedIn />}
         />
       </Routes>
     </AppProvider>

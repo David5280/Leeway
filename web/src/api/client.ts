@@ -42,14 +42,27 @@ export function setSignedOutHandler(handler: () => void): void {
   onSignedOut = handler
 }
 
+/** Said when the server cannot be reached, or a proxy in front of it answers instead. */
+export const UNREACHABLE =
+  "Leeway's server is not answering. Check that it is running, then try again in a minute."
+
+/** Statuses a proxy sends while Leeway itself is down or restarting, with no message of ours. */
+const PROXY_DOWN = new Set([502, 503, 504])
+
 /** Sends one request, turning an error reply into an ApiError and a lapsed session into sign-in. */
 export async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    // fetch only throws when no answer came at all: offline, or the server is down.
+    throw new ApiError(0, 'unreachable', UNREACHABLE)
+  }
   if (response.status === 204) return undefined as T
   const data = (await response.json().catch(() => ({}))) as {
     error?: string
@@ -57,11 +70,10 @@ export async function request<T>(method: 'GET' | 'POST', path: string, body?: un
   }
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
-    throw new ApiError(
-      response.status,
-      data.error ?? 'error',
-      data.message ?? 'Something went wrong. Please try again.',
-    )
+    const fallback = PROXY_DOWN.has(response.status)
+      ? UNREACHABLE
+      : 'Something went wrong. Please try again.'
+    throw new ApiError(response.status, data.error ?? 'error', data.message ?? fallback)
   }
   return data as T
 }
@@ -83,6 +95,10 @@ export interface Status {
   onboarded: boolean
   bank: { provider: string; environment: string } | null
   publicUrl: string | null
+  /** What Leeway runs on, so setup can say where its settings and log are. */
+  platform: 'railway' | 'docker' | 'other'
+  /** Where the setup code came from, until the owner exists; never the code itself. */
+  setupCodeFrom: 'variable' | 'log' | null
 }
 
 export interface Owner {
@@ -95,6 +111,8 @@ export interface Owner {
 export const auth = {
   status: () => request<Status>('GET', '/api/status'),
   me: () => request<{ owner: Owner }>('GET', '/api/auth/me'),
+  checkSetupCode: (setupCode: string) =>
+    request<void>('POST', '/api/auth/setup-code', { setupCode }),
   setup: (input: { email: string; password: string; name?: string; setupCode: string }) =>
     request<{ owner: Owner }>('POST', '/api/auth/setup', input),
   login: (input: { email: string; password: string }) =>

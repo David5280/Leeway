@@ -15,7 +15,7 @@ import {
 } from '../domain/owner.js'
 import { AppError } from '../errors.js'
 import { AttemptLimiter } from '../lib/attemptLimiter.js'
-import { setupCodeMatches } from '../lib/setupCode.js'
+import { setupCodeMatches, whereSetupCodeIs, type SetupCode } from '../lib/setupCode.js'
 import { perMinute } from './rateLimit.js'
 import { MINUTE_MS, SECOND_MS } from '../lib/time.js'
 
@@ -46,9 +46,8 @@ const credentials = z.object({
   name: z.string().max(80).nullish(),
 })
 
-const newOwner = credentials.extend({
-  setupCode: z.string().max(100).optional(),
-})
+const setupCodeOnly = z.object({ setupCode: z.string().max(100).optional() })
+const newOwner = credentials.extend(setupCodeOnly.shape)
 
 const passwordChange = z.object({ currentPassword: z.string(), newPassword: z.string().max(200) })
 
@@ -63,11 +62,11 @@ export function sessionGuard(ctx: AppContext) {
 }
 
 /**
- * The sign-in routes. `setupCode` is the code that may create the owner
- * account (see lib/setupCode.ts); until the account exists, nobody without it
- * can claim this install, however early they find its address.
+ * The sign-in routes. `setup` is the code that may create the owner account
+ * (see lib/setupCode.ts); until the account exists, nobody without it can
+ * claim this install, however early they find its address.
  */
-export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setupCode: string): void {
+export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setup: SetupCode): void {
   const requireSession = sessionGuard(ctx)
   const clock = () => ctx.now().getTime()
   const wrongPasswords = new AttemptLimiter({ ...ACCOUNT_LIMIT, now: clock })
@@ -106,21 +105,32 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setupC
     )
   }
 
-  app.post('/api/auth/setup', PER_ADDRESS_LIMIT, async (request, reply) => {
-    const input = parseBody(newOwner, request.body)
+  /**
+   * Refuses unless the install is unclaimed and `typed` is the setup code. A
+   * wrong code counts toward the same pause as every other wrong code.
+   */
+  const checkSetupCode = async (typed: string | undefined, reply: FastifyReply) => {
     if (await getOwner(ctx.db)) {
       throw new AppError('conflict', 'This Leeway already has an owner; sign in instead')
     }
     checkNotPaused(wrongSetupCodes, reply, 'Setup')
-    if (!input.setupCode || !setupCodeMatches(input.setupCode, setupCode)) {
-      if (input.setupCode) wrongSetupCodes.recordFailure()
-      throw new AppError(
-        'forbidden',
-        input.setupCode
-          ? 'That setup code is not right. Copy it from the server log again.'
-          : 'Enter the setup code from the server log.',
-      )
-    }
+    if (typed && setupCodeMatches(typed, setup.code)) return
+    const where = whereSetupCodeIs(setup.from, ctx.config.platform)
+    if (!typed) throw new AppError('forbidden', `Enter the setup code. It is ${where}.`)
+    wrongSetupCodes.recordFailure()
+    throw new AppError('forbidden', `That setup code is not right. Copy it again from ${where}.`)
+  }
+
+  // Checks the code alone, so the setup screen can ask for it on its own step
+  // before the person types anything else.
+  app.post('/api/auth/setup-code', PER_ADDRESS_LIMIT, async (request, reply) => {
+    await checkSetupCode(parseBody(setupCodeOnly, request.body).setupCode, reply)
+    return reply.status(204).send()
+  })
+
+  app.post('/api/auth/setup', PER_ADDRESS_LIMIT, async (request, reply) => {
+    const input = parseBody(newOwner, request.body)
+    await checkSetupCode(input.setupCode, reply)
     const owner = await createOwner(ctx.db, input)
     await startSession(request, reply)
     return { owner }

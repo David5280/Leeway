@@ -1,8 +1,9 @@
-// Step 3: connecting banks, which can be skipped.
+// Step 4: bank sync through Plaid, which is optional and can be skipped.
 
 import type { Status } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { BankButton, BankKeysMissing } from '../../components/BankButton'
+import { BankButton } from '../../components/BankButton'
+import { BankKeysMissing, SandboxNote, WHAT_IS_PLAID } from '../../components/PlaidHelp'
 import { Frame, Nav } from './Frame'
 
 export function BanksStep({
@@ -17,7 +18,7 @@ export function BanksStep({
   const connections = useAction('list_connections', undefined, { enabled: status.bank !== null })
   const linked = connections.data ?? []
   return (
-    <Frame step={3}>
+    <Frame step={4}>
       <form
         className="stack"
         onSubmit={(e) => {
@@ -25,13 +26,18 @@ export function BanksStep({
           onNext()
         }}
       >
-        <h1>Connect your banks</h1>
+        <h1>Sync your bank</h1>
+        <p className="muted">
+          Optional. With bank sync, your transactions arrive on their own. Without it, you import a
+          CSV file from your bank or type them in; the last step shows you how.
+        </p>
         {status.bank ? (
           <>
-            <p className="muted">
-              Plaid opens a secure window from your bank. Leeway only reads balances and
-              transactions, and stores the access key encrypted.
+            <p className="small muted">
+              {WHAT_IS_PLAID} Your bank opens in Plaid&apos;s secure window, and the key it hands
+              back is stored encrypted.
             </p>
+            {status.bank.environment === 'sandbox' && <SandboxNote />}
             {linked.map((c) => (
               <div key={c.id} className="list-row">
                 <span className="grow">
@@ -52,9 +58,13 @@ export function BanksStep({
             </div>
           </>
         ) : (
-          <BankKeysMissing />
+          <BankKeysMissing platform={status.platform} />
         )}
-        <Nav onBack={onBack} next={linked.length ? 'Continue' : 'Skip for now'} />
+        <Nav
+          onBack={onBack}
+          next={linked.length ? 'Continue' : 'Skip for now'}
+          quiet={status.bank !== null && linked.length === 0}
+        />
       </form>
     </Frame>
   )

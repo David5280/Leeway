@@ -5,7 +5,7 @@ import type { AppContext } from '../src/context.js'
 import { ACCOUNT_LIMIT } from '../src/http/auth.js'
 import { createOwner, getOwner } from '../src/domain/owner.js'
 import { buildApp } from '../src/http/app.js'
-import { MIN_PASSWORD_LENGTH } from '../src/lib/password.js'
+import { MIN_PASSWORD_LENGTH } from '../src/lib/passwordRules.js'
 import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 
 let ctx: AppContext & { setNow(date: Date): void }
@@ -117,7 +117,7 @@ describe('the setup code', { timeout: 30_000 }, () => {
     expect(response.statusCode).toBe(403)
     expect(response.json()).toMatchObject({
       error: 'forbidden',
-      message: 'Enter the setup code from the server log.',
+      message: "Enter the setup code. It is SETUP_CODE in Leeway's settings.",
     })
     expect(await getOwner(ctx.db)).toBeNull()
   })
@@ -126,10 +126,29 @@ describe('the setup code', { timeout: 30_000 }, () => {
     const response = await setUp('WRNG-CODE-HERE')
     expect(response.statusCode).toBe(403)
     expect(response.json().message).toBe(
-      'That setup code is not right. Copy it from the server log again.',
+      "That setup code is not right. Copy it again from SETUP_CODE in Leeway's settings.",
     )
     expect(await getOwner(ctx.db)).toBeNull()
     expect(response.cookies).toHaveLength(0)
+  })
+
+  it('points to the log for a code Leeway made up, and to Railway on Railway', async () => {
+    await app.close()
+    app = await buildApp(
+      { ...ctx, config: { ...ctx.config, setupCode: null, platform: 'railway' } },
+      { webDir: null, setupCode: 'LOGGED-CODE-5678' },
+    )
+    expect((await setUp('WRNG-CODE-HERE')).json().message).toBe(
+      'That setup code is not right. Copy it again from the newest line in Leeway\'s log that starts "No account yet".',
+    )
+    await app.close()
+    app = await buildApp(
+      { ...ctx, config: { ...ctx.config, platform: 'railway' } },
+      { webDir: null },
+    )
+    expect((await setUp(undefined)).json().message).toBe(
+      "Enter the setup code. It is SETUP_CODE in your Leeway service's Variables on Railway.",
+    )
   })
 
   it('accepts the code in any case, with or without its dashes and spaces', async () => {
@@ -152,6 +171,32 @@ describe('the setup code', { timeout: 30_000 }, () => {
     expect(paused.json().message).toBe(
       'Too many wrong tries. Setup is paused for 15 minutes; try again then.',
     )
+  })
+
+  it('checks a code on its own, without creating the owner', async () => {
+    const check = (setupCode?: string) =>
+      app.inject({ method: 'POST', url: '/api/auth/setup-code', payload: { setupCode } })
+    expect((await check('WRNG-CODE-HERE')).statusCode).toBe(403)
+    expect((await check(undefined)).json().message).toMatch(/^Enter the setup code/)
+    const right = await check(TEST_SETUP_CODE.toLowerCase())
+    expect(right.statusCode).toBe(204)
+    expect(right.cookies).toHaveLength(0)
+    expect(await getOwner(ctx.db)).toBeNull()
+    await signUp()
+    expect((await check(TEST_SETUP_CODE)).statusCode).toBe(409)
+  })
+
+  it('counts wrong codes from the check toward the same pause', async () => {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+      const wrong = await app.inject({
+        method: 'POST',
+        url: '/api/auth/setup-code',
+        payload: { setupCode: 'WRNG-CODE-HERE' },
+        headers: { 'x-forwarded-for': `198.51.100.${i}` },
+      })
+      expect(wrong.statusCode).toBe(403)
+    }
+    expect((await setUp(TEST_SETUP_CODE, '198.51.100.200')).statusCode).toBe(429)
   })
 
   it('takes a code given to the app over the one in the configuration', async () => {

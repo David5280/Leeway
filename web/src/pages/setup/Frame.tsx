@@ -3,9 +3,17 @@
 import type { ReactNode } from 'react'
 import { Logo } from '../../components/ui'
 
-const STEPS = ['Your account', 'Budget period', 'Banks', 'Starting point', 'Done']
+/** The steps in order, as the step list names them. Step numbers count from 1. */
+export const STEPS = [
+  'Setup code',
+  'Your sign-in',
+  'Budget period',
+  'Bank sync',
+  'Categories',
+  'Done',
+] as const
 
-/** The step list beside the current step's card. */
+/** The step list beside the current step's card; on a phone, only the current name shows. */
 export function Frame({ step, children }: { step: number; children: ReactNode }) {
   return (
     <main className="setup">
@@ -21,13 +29,17 @@ export function Frame({ step, children }: { step: number; children: ReactNode })
               className={stepClass(i + 1, step)}
               aria-current={i + 1 === step ? 'step' : undefined}
             >
-              <span className="step-badge num">{i + 1 < step ? '✓' : i + 1}</span>
-              {name}
+              <span className="step-badge num" aria-hidden="true">
+                {i + 1 < step ? '✓' : i + 1}
+              </span>
+              <span className="step-name">{name}</span>
+              {i + 1 < step && <span className="visually-hidden"> (done)</span>}
             </li>
           ))}
         </ol>
       </aside>
-      <section className="card stack" aria-label={STEPS[step - 1]}>
+      {/* "step" keeps the region's name apart from a field named the same, like Setup code. */}
+      <section className="card stack" aria-label={`${STEPS[step - 1]} step`}>
         <div className="eyebrow">
           Step {step} of {STEPS.length}
         </div>
@@ -37,17 +49,25 @@ export function Frame({ step, children }: { step: number; children: ReactNode })
   )
 }
 
-/** Back and the step's main button. */
+/**
+ * Back and the step's main button. `busyLabel` replaces the button's words
+ * while it works; `quiet` drops its emphasis when another button on the step
+ * is the one to press, like Connect a bank beside Skip for now.
+ */
 export function Nav({
   onBack,
   next,
   busy,
+  busyLabel = 'Saving',
   disabled,
+  quiet = false,
 }: {
   onBack?: () => void
   next: string
   busy?: boolean
+  busyLabel?: string
   disabled?: boolean
+  quiet?: boolean
 }) {
   return (
     <div className="row-between">
@@ -58,8 +78,8 @@ export function Nav({
       ) : (
         <span />
       )}
-      <button type="submit" className="btn primary" disabled={busy || disabled}>
-        {busy ? 'Saving' : next}
+      <button type="submit" className={quiet ? 'btn' : 'btn primary'} disabled={busy || disabled}>
+        {busy ? busyLabel : next}
       </button>
     </div>
   )

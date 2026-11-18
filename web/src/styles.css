@@ -769,6 +769,16 @@ button.chip {
   }
 }
 
+/* A setting name or a command inside a sentence, like SETUP_CODE. */
+code:not(.code) {
+  font-family: var(--font-num);
+  font-size: 0.88em;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 1px 5px;
+  overflow-wrap: anywhere;
+}
+
 pre.code,
 code.code {
   font-family: var(--font-num);
@@ -887,6 +897,31 @@ code.code {
   padding: 40px;
   min-height: 100vh;
   align-items: start;
+  align-content: start;
+}
+
+/* Numbered how-to steps, like where to find the setup code. */
+.how-to {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.how-to li::marker {
+  color: var(--muted);
+}
+
+/* Help that stays folded until asked for, like how to turn on bank sync. */
+details.more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+details.more[open] summary {
+  margin-bottom: 10px;
 }
 
 .steps {
@@ -927,6 +962,7 @@ code.code {
   justify-content: center;
   font-size: 12px;
   border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .step.current .step-badge,
@@ -1032,7 +1068,8 @@ code.code {
   }
 
   .setup {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) lets the step list scroll instead of widening the page. */
+    grid-template-columns: minmax(0, 1fr);
     padding: 16px;
     gap: 16px;
   }
@@ -1042,7 +1079,12 @@ code.code {
     overflow-x: auto;
   }
 
-  .setup aside .step-name {
+  .setup aside .step {
+    white-space: nowrap;
+  }
+
+  /* Only the current step keeps its name, so all six fit across a phone. */
+  .setup aside .step:not(.current) .step-name {
     display: none;
   }
 }

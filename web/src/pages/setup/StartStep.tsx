@@ -1,4 +1,4 @@
-// Step 4: picking a starting point: suggested budgets, a starter set, empty, or an import.
+// Step 5: picking the categories to start with: suggested budgets, a starter set, empty, or a copy.
 
 import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
@@ -41,9 +41,13 @@ export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () =
     setEdits((current) => ({ ...current, [name]: { ...current[name], ...change } }))
 
   return (
-    <Frame step={4}>
+    <Frame step={5}>
       <form className="stack" onSubmit={submit}>
-        <h1>Pick a starting point</h1>
+        <h1>Choose your categories</h1>
+        <p className="muted">
+          Categories sort your spending, like Groceries or Rent, and each can have a monthly budget.
+          Pick a place to start; you can change all of it later.
+        </p>
         <StartChoices start={start} hasBank={hasBank ?? false} onChoose={choose} />
         {listed && (ready ? <StarterList rows={rows} onEdit={edit} /> : <Loading />)}
         {start === 'import' && <ImportFile onImported={setImported} />}
@@ -93,7 +97,11 @@ function StartChoices({
     },
     { id: 'starter', title: 'Starter set', text: 'Everyday categories with typical amounts' },
     { id: 'empty', title: 'Start empty', text: 'Make your own categories later' },
-    { id: 'import', title: 'Import leeway.json', text: 'Bring a setup from another Leeway' },
+    {
+      id: 'import',
+      title: 'Copy from another Leeway',
+      text: 'Use a leeway.json file saved from its Customize, Data',
+    },
   ]
   return (
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -125,7 +133,7 @@ function StarterList({
   return (
     <div className="stack-sm" aria-label="Categories to create">
       <p className="small muted">
-        Monthly amounts. Leave one blank for no budget; untick to skip it.
+        Monthly budgets. Leave an amount blank for no budget, or untick a category to leave it out.
       </p>
       {groupBy(rows, (row) => row.category.group ?? null).map(({ group, items }) => (
         <Fragment key={group ?? ''}>

@@ -89,18 +89,3 @@ export function BankButton({
     </>
   )
 }
-
-/** Shown when the server has no bank keys, so the owner knows what to set. */
-export function BankKeysMissing() {
-  return (
-    <div className="notice stack-sm">
-      <strong>Bank sync is not set up on this server yet.</strong>
-      <span>
-        Create free keys at dashboard.plaid.com, then set{' '}
-        <code className="code">PLAID_CLIENT_ID</code> and <code className="code">PLAID_SECRET</code>{' '}
-        where Leeway runs (on Railway, under Variables) and restart it. Until then you can add
-        accounts by hand.
-      </span>
-    </div>
-  )
-}

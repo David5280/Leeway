@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { App } from '../App'
 import {
   budgetFor,
@@ -28,18 +28,23 @@ describe('app shell', () => {
     const server = fakeServer(
       {},
       {
-        '/api/status': () => Response.json({ ...status, hasOwner: false, onboarded: false }),
+        '/api/status': () =>
+          Response.json({ ...status, hasOwner: false, onboarded: false, setupCodeFrom: 'log' }),
+        '/api/auth/setup-code': () => new Response(null, { status: 204 }),
         '/api/auth/setup': () =>
           Response.json({ owner: { email: 'a@b.co', name: null, onboarded: false } }),
       },
     )
     renderPlain(<App />)
-    expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Enter your setup code' }),
+    ).toBeInTheDocument()
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Setup code'), 'K7QM-2XRA-9PVD')
-    await user.type(screen.getByLabelText('Email'), 'a@b.co')
-    await user.type(screen.getByLabelText(/Password/), 'long enough password')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.type(await screen.findByLabelText('Email'), 'a@b.co')
+    await user.type(screen.getByLabelText('Password'), 'long enough password')
+    await user.click(screen.getByRole('button', { name: 'Create my account' }))
     await waitFor(() =>
       expect(server.calls.find((c) => c.path === '/api/auth/setup')?.body).toEqual({
         email: 'a@b.co',
@@ -363,5 +368,20 @@ describe('customize', () => {
     expect(screen.getByRole('region', { name: 'AI assistant' })).toHaveTextContent(
       'https://leeway.example.com/mcp',
     )
+  })
+
+  it('scrolls to the section a link named, like accounts from the end of setup', () => {
+    fakeServer({ list_accounts: () => [], list_tokens: () => [] })
+    const scrolled: string[] = []
+    // jsdom has no layout, so record which element was asked to scroll into view.
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this.id)
+    }
+    onTestFinished(() => {
+      HTMLElement.prototype.scrollIntoView = original
+    })
+    renderSignedIn(<Customize />, { route: '/customize#accounts' })
+    expect(scrolled).toEqual(['accounts'])
   })
 })

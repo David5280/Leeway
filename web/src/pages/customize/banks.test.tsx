@@ -81,6 +81,22 @@ describe('Banks', () => {
     expect(server.actions('list_connections')).toEqual([])
   })
 
+  it('says Plaid lists only test banks while it is in Sandbox', async () => {
+    serve()
+    renderSignedIn(<BanksSection />, { status: withBank })
+    expect(
+      await screen.findByText('Plaid is in Sandbox, so it lists only test banks.'),
+    ).toBeInTheDocument()
+  })
+
+  it('says nothing of Sandbox once Plaid reaches real banks', async () => {
+    serve()
+    const production = { provider: 'plaid', environment: 'production' }
+    renderSignedIn(<BanksSection />, { status: { bank: production } })
+    await screen.findByText('First Bank')
+    expect(screen.queryByText(/Sandbox/)).not.toBeInTheDocument()
+  })
+
   it('lists banks with their accounts, last sync and status', async () => {
     serve()
     renderSignedIn(<BanksSection />, { status: withBank })
