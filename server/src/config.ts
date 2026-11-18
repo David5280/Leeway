@@ -25,6 +25,8 @@ const envSchema = z.object({
   PLAID_REDIRECT_URI: z.url().optional(),
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(0).default(360),
   DATABASE_SSL: z.enum(['true', 'false']).optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  SUMMARY_MODEL: z.string().default('claude-opus-5-5'),
 })
 
 export interface PlaidConfig {
@@ -33,6 +35,12 @@ export interface PlaidConfig {
   env: 'sandbox' | 'production'
   countryCodes: string[]
   redirectUri: string | null
+}
+
+export interface AnthropicConfig {
+  apiKey: string
+  /** The Claude model that writes the dashboard summary. */
+  model: string
 }
 
 export interface Config {
@@ -48,6 +56,8 @@ export interface Config {
   plaid: PlaidConfig | null
   /** How often to sync every bank in the background. 0 turns it off. */
   syncIntervalMinutes: number
+  /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
+  anthropic: AnthropicConfig | null
 }
 
 /** Drops variables set to nothing, like `PUBLIC_URL=` left blank in a .env file, so defaults apply. */
@@ -91,6 +101,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
     plaid,
     syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
+    anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,
   }
 }
 

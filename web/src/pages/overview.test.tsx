@@ -46,6 +46,7 @@ function budgetAt(offset: number) {
 
 /** The region names the widgets render, by type. */
 const REGION: Record<string, string> = {
+  summary: 'Summary',
   leeway: 'Your leeway',
   glance: 'This period at a glance',
   alerts: 'Heads up',
@@ -62,6 +63,7 @@ const REGION: Record<string, string> = {
  * and half ones beside them, so Recent comes before the pace chart.
  */
 const DEFAULT_PAGE_ORDER = [
+  'Summary',
   'Your leeway',
   'This period at a glance',
   'Heads up',
@@ -86,6 +88,13 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
       },
       get_budget: (input) => budgetAt(Number(input.offset ?? 0)),
       list_connections: () => [],
+      get_summary: () => ({
+        headline: "You're on track.",
+        points: [],
+        writtenBy: 'Leeway',
+        writtenAt: '2026-11-17T18:00:00Z',
+        ai: 'off',
+      }),
       get_spending_pace: () => ({
         start: '2026-11-01',
         end: '2026-11-30',
@@ -152,7 +161,7 @@ async function startEditing() {
 }
 
 describe('moveWidget', () => {
-  const widgets = DEFAULT_LAYOUT.slice(0, 3)
+  const widgets = DEFAULT_LAYOUT.slice(1, 4)
 
   it('swaps a widget with the next one in its column, or a full one, either way', () => {
     expect(moveWidget(widgets, 2, -1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
@@ -338,6 +347,7 @@ describe('Overview edit mode', () => {
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
     // Recent swaps with Categories, the wide widget above it, not the pace chart beside it.
     expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual([
+      'summary',
       'leeway',
       'glance',
       'alerts',
@@ -347,7 +357,7 @@ describe('Overview edit mode', () => {
       'accounts',
     ])
     await waitFor(() =>
-      expect(shownWidgets().slice(3, 5)).toEqual(['Recent transactions', 'Categories']),
+      expect(shownWidgets().slice(4, 6)).toEqual(['Recent transactions', 'Categories']),
     )
   })
 
@@ -355,15 +365,13 @@ describe('Overview edit mode', () => {
     serve()
     renderOverview()
     await startEditing()
-    expect(
-      toolsFor('Your leeway').getByRole('button', { name: 'Move Your leeway up' }),
-    ).toBeDisabled()
+    expect(toolsFor('Summary').getByRole('button', { name: 'Move Summary up' })).toBeDisabled()
     expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts down' })).toBeDisabled()
     expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeEnabled()
-    // At a glance already tops the side column; above it is only Your leeway, beside it.
+    // At a glance tops the side column, so moving it up trades places with the full-width summary.
     expect(
       toolsFor('At a glance').getByRole('button', { name: 'Move At a glance up' }),
-    ).toBeDisabled()
+    ).toBeEnabled()
   })
 
   it('resizes a widget', async () => {
@@ -377,7 +385,7 @@ describe('Overview edit mode', () => {
     )
     await user.click(within(size).getByRole('button', { name: 'Full' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![0]).toEqual({ type: 'leeway', size: 'full', visible: true })
+    expect(sentLayouts(server)[0]![1]).toEqual({ type: 'leeway', size: 'full', visible: true })
     expect(screen.getByRole('region', { name: 'Your leeway' }).closest('.widget')).toHaveAttribute(
       'data-size',
       'full',
@@ -390,7 +398,7 @@ describe('Overview edit mode', () => {
     const user = await startEditing()
     await user.click(toolsFor('Heads up').getByRole('button', { name: 'Hide' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![2]).toEqual({ type: 'alerts', size: 'full', visible: false })
+    expect(sentLayouts(server)[0]![3]).toEqual({ type: 'alerts', size: 'full', visible: false })
     // While editing the widget keeps its place, faded and without its content.
     expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
     expect(toolsFor('Heads up').getByRole('button', { name: 'Show' })).toBeInTheDocument()

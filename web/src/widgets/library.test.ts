@@ -22,7 +22,7 @@ describe('the default layout', () => {
 
 describe('drawable', () => {
   it('keeps the saved order and skips unknown widgets', () => {
-    expect(types(drawable([DEFAULT_LAYOUT[1]!, future, DEFAULT_LAYOUT[0]!]))).toEqual([
+    expect(types(drawable([w('glance', 'half'), future, w('leeway', 'wide')]))).toEqual([
       'glance',
       'leeway',
     ])
@@ -51,7 +51,7 @@ describe('moveWidget', () => {
   })
 
   it('steps over widgets it cannot draw, keeping them in the list', () => {
-    const saved = [DEFAULT_LAYOUT[0]!, future, w('recent', 'wide')]
+    const saved = [w('leeway', 'wide'), future, w('recent', 'wide')]
     expect(types(moveWidget(saved, 0, 1))).toEqual(['recent', 'forecast', 'leeway'])
     expect(types(moveWidget(saved, 2, -1))).toEqual(['recent', 'forecast', 'leeway'])
   })
@@ -85,7 +85,11 @@ describe('canMove', () => {
 describe('changeWidget', () => {
   it('changes only the widget of that type', () => {
     const next = changeWidget(DEFAULT_LAYOUT, 'glance', { visible: false, size: 'full' })
-    expect(next[1]).toEqual({ type: 'glance', size: 'full', visible: false })
+    expect(next.find((w) => w.type === 'glance')).toEqual({
+      type: 'glance',
+      size: 'full',
+      visible: false,
+    })
     expect(next.filter((w) => w.type !== 'glance')).toEqual(
       DEFAULT_LAYOUT.filter((w) => w.type !== 'glance'),
     )

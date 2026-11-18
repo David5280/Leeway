@@ -1,5 +1,6 @@
 import type pg from 'pg'
 import type { Config } from './config.js'
+import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
 
 /**
@@ -12,5 +13,7 @@ export interface AppContext {
   config: Config
   /** Null until Plaid keys are configured. */
   bank: BankProvider | null
+  /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
+  writer: SummaryWriter | null
   now: () => Date
 }

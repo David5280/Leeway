@@ -55,3 +55,26 @@ test('a key for an AI assistant is shown once, ready to copy', async ({ page }) 
   ).toBeVisible()
   await expect(agent.getByLabel('New key')).toHaveText(/^lw_/)
 })
+
+test('the dashboard summary says how to have Claude write it, and what a missing key means', async ({
+  page,
+}) => {
+  await page.goto('/')
+  const summary = page.getByRole('region', { name: 'Summary' })
+  await expect(summary).toContainText('Want Claude to write this?')
+
+  await summary.getByRole('link', { name: 'Customize' }).click()
+  const toggle = page.getByRole('switch', { name: 'Have Claude write the dashboard summary' })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  // The test server has no Anthropic key, so it says how to add one.
+  await expect(page.getByText('ANTHROPIC_API_KEY')).toBeVisible()
+
+  await page.goto('/')
+  await expect(summary).toContainText('Claude needs an Anthropic key on your server first.')
+
+  // Put it back for the other tests.
+  await page.goto('/customize#agent')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+})

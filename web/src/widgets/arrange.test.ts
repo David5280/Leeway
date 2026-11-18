@@ -14,8 +14,9 @@ function names(band: Band) {
 }
 
 describe('arrange', () => {
-  it('lays the default dashboard out as main and side columns around the alerts', () => {
+  it('lays the default dashboard out as main and side columns between the summary and alerts', () => {
     expect(arrange(DEFAULT_LAYOUT).map(names)).toEqual([
+      { full: 'summary' },
       { main: ['leeway'], side: ['glance'] },
       { full: 'alerts' },
       { main: ['categories', 'recent'], side: ['pace', 'accounts'] },

@@ -1,11 +1,13 @@
 // Starts Leeway: migrates the database, serves the app and syncs banks on a timer.
 
+import { AnthropicSummaryWriter } from './ai/anthropic.js'
 import { PlaidProvider } from './bank/plaid.js'
 import { loadConfig } from './config.js'
 import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool } from './db/pool.js'
 import { syncAll } from './domain/connections.js'
+import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { buildApp } from './http/app.js'
 
@@ -14,11 +16,13 @@ const db = createPool(config.databaseUrl, config.databaseSsl)
 await migrate(db)
 // One-time data upgrades run after the schema is current and before serving.
 await upgradeStarterSet(db)
+await addSummaryWidget(db)
 
 const ctx: AppContext = {
   db,
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
+  writer: config.anthropic ? new AnthropicSummaryWriter(config.anthropic) : null,
   now: () => new Date(),
 }
 

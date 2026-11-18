@@ -16,7 +16,10 @@ except to talk to your bank.
 - **Planning:** bills and subscriptions with due dates, recurring charges found
   for you, savings goals, debt payoff plans (avalanche and snowball), cash left
   until payday, and net worth over time.
-- **A dashboard you arrange yourself**, with themes and colors you choose.
+- **A dashboard you arrange yourself**, with themes and colors you choose, and
+  a summary at the top that says in a sentence how the period is going and
+  what needs you. Leeway writes it from your numbers, or Claude can write it
+  if you add an Anthropic key.
 - **An AI coach.** Connect Claude or any assistant that speaks MCP. It can run a
   money check-in, tell you whether a purchase fits, review subscriptions and
   plan debt payoff. You approve what it may do, and nothing can ever move
@@ -72,17 +75,19 @@ npm start
 Everything is configured with environment variables. `.env.example` lists them
 all with notes.
 
-| Variable                | Needed   | What it does                                             |
-| ----------------------- | -------- | -------------------------------------------------------- |
-| `DATABASE_URL`          | Yes      | Postgres connection string                               |
-| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest   |
-| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants    |
-| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                 |
-| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                 |
-| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`      |
-| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`              |
-| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site |
-| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off  |
+| Variable                | Needed   | What it does                                                |
+| ----------------------- | -------- | ----------------------------------------------------------- |
+| `DATABASE_URL`          | Yes      | Postgres connection string                                  |
+| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest      |
+| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants       |
+| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                    |
+| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                    |
+| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`         |
+| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`                 |
+| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site    |
+| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off     |
+| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)         |
+| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5` |
 
 On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 
@@ -137,6 +142,22 @@ MCP authorization spec describes. Assistants find it through
 metadata document or dynamic registration, and sign in with PKCE. Access
 tokens last an hour; refresh tokens last 90 days and change on every use. Every
 token is stored only as a hash.
+
+## The dashboard summary
+
+The top of the dashboard sums up the period in a sentence and a few points:
+whether you're on track, what needs you today, cash until payday, goals and net
+worth. Leeway writes it from your numbers on its own.
+
+To have Claude write it instead, add `ANTHROPIC_API_KEY` (from the
+[Anthropic Console](https://console.anthropic.com)) to your server's
+variables, then turn on **Have Claude write it** in **Customize**, then **AI
+assistant**. Nothing is sent until you turn it on. When on, Leeway sends this
+period's totals, cash until payday, the Heads up list, and your bill and goal
+names; never your accounts or transactions. A summary is saved and reused
+while your numbers stay the same, or for up to four hours, and a new day starts
+fresh, so it costs a few cents a summary on your own Anthropic account. If
+Claude can't be reached, Leeway's own summary shows instead.
 
 ## Keeping your data safe
 

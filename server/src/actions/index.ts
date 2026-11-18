@@ -60,6 +60,7 @@ import {
   syncBanksAction,
 } from './connections.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
+import { getSummaryAction, setAiSummaryAction } from './summary.js'
 import {
   completeSetupAction,
   exportConfigAction,
@@ -81,6 +82,7 @@ import {
  */
 export const actionList = [
   getCheckinAction,
+  getSummaryAction,
   canIAffordAction,
   getBudgetAction,
   getTrendsAction,
@@ -89,6 +91,7 @@ export const actionList = [
   suggestBudgetsAction,
   getSettingsAction,
   updateSettingsAction,
+  setAiSummaryAction,
   listCategoriesAction,
   createCategoryAction,
   updateCategoryAction,

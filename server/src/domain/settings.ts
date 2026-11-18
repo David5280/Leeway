@@ -32,6 +32,7 @@ export const THEMES = ['night', 'harbor', 'neon'] as const
 export const ACCENTS = ['blue', 'teal', 'violet', 'orange', 'pink', 'mint'] as const
 export const FONTS = ['geist', 'space-grotesk', 'ibm-plex', 'system'] as const
 export const WIDGETS = [
+  'summary',
   'leeway',
   'glance',
   'alerts',
@@ -79,6 +80,7 @@ export const widgetSchema = z.object({
 })
 
 export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
+  { type: 'summary', size: 'full', visible: true },
   { type: 'leeway', size: 'wide', visible: true },
   { type: 'glance', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
@@ -116,6 +118,12 @@ export const settingsSchema = z.object({
   includePending: z.boolean().default(true),
   appearance: appearanceSchema.default(appearanceSchema.parse({})),
   dashboard: z.object({ widgets: widgetsSchema }).default({ widgets: DEFAULT_WIDGETS }),
+  /**
+   * Whether Claude writes the dashboard summary (it also needs ANTHROPIC_API_KEY).
+   * Only the owner can change it, in the app, because it sends data to Anthropic;
+   * so it is left out of settingsPatchSchema, and of imports and agents with it.
+   */
+  aiSummary: z.boolean().default(false),
 })
 
 export type Settings = z.infer<typeof settingsSchema>

@@ -89,6 +89,20 @@ describe('config', () => {
     expect(loadConfig({ ...base, DATABASE_SSL: 'false' }).databaseSsl).toBe(false)
   })
 
+  it('turns the Claude summary writer on with a key, on the default model unless one is named', () => {
+    expect(loadConfig(base).anthropic).toBeNull()
+    expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({
+      apiKey: 'key',
+      model: 'claude-opus-5-5',
+    })
+    const named = loadConfig({
+      ...base,
+      ANTHROPIC_API_KEY: 'key',
+      SUMMARY_MODEL: 'claude-sonnet-5-5',
+    })
+    expect(named.anthropic?.model).toBe('claude-sonnet-5-5')
+  })
+
   it('treats a private network database as local', () => {
     const config = loadConfig({ ...base, DATABASE_URL: 'postgres://u:p@db.railway.internal/db' })
     expect(config.databaseSsl).toBe(false)

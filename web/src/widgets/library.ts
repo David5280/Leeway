@@ -10,6 +10,7 @@ import { LeewayWidget } from './Leeway'
 import { PaceWidget } from './Pace'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
 import { sharesLane } from './arrange'
+import { SummaryWidget } from './Summary'
 import { TrendsWidget } from './Trends'
 import type { WidgetProps } from './types'
 
@@ -24,6 +25,7 @@ export type WidgetType = Widget['type']
 export const WIDGET_LIBRARY: Partial<
   Record<WidgetType, { name: string; component: ComponentType<WidgetProps> }>
 > = {
+  summary: { name: 'Summary', component: SummaryWidget },
   leeway: { name: 'Your leeway', component: LeewayWidget },
   glance: { name: 'At a glance', component: GlanceWidget },
   alerts: { name: 'Heads up', component: AlertsWidget },
@@ -41,6 +43,7 @@ export const WIDGET_LIBRARY: Partial<
 }
 
 export const DEFAULT_LAYOUT: Widget[] = [
+  { type: 'summary', size: 'full', visible: true },
   { type: 'leeway', size: 'wide', visible: true },
   { type: 'glance', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
