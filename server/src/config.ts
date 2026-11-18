@@ -2,6 +2,15 @@
 
 import { z } from 'zod'
 
+/** An email address with no spaces or angle brackets in it. */
+const ADDRESS = String.raw`[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+`
+
+/**
+ * A sender: an address, or a name and an address in angle brackets. One
+ * line, with no quotes or brackets in the name, so it cannot carry anything else.
+ */
+const MAIL_FROM_PATTERN = new RegExp(`^(?:${ADDRESS}|[^<>"\\r\\n]+ <${ADDRESS}>)$`)
+
 /**
  * All configuration comes from environment variables, validated once at
  * startup so a missing or malformed value fails loudly with a clear message
@@ -29,6 +38,14 @@ const envSchema = z.object({
   DATABASE_SSL: z.enum(['true', 'false']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   SUMMARY_MODEL: z.string().default('claude-opus-5-5'),
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z
+    .string()
+    .regex(
+      MAIL_FROM_PATTERN,
+      'MAIL_FROM must be an email address, like leeway@example.com or Leeway <leeway@example.com>',
+    )
+    .optional(),
 })
 
 export interface PlaidConfig {
@@ -43,6 +60,12 @@ export interface AnthropicConfig {
   apiKey: string
   /** The Claude model that writes the dashboard summary. */
   model: string
+}
+
+export interface MailConfig {
+  apiKey: string
+  /** The sender: an address on a domain verified with the provider. */
+  from: string
 }
 
 export interface Config {
@@ -60,6 +83,8 @@ export interface Config {
   syncIntervalMinutes: number
   /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
   anthropic: AnthropicConfig | null
+  /** Null until RESEND_API_KEY and MAIL_FROM are both set; the weekly email is then unavailable. */
+  mail: MailConfig | null
 }
 
 /** Drops variables set to nothing, like `PUBLIC_URL=` left blank in a .env file, so defaults apply. */
@@ -104,6 +129,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     plaid,
     syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
     anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,
+    mail: e.RESEND_API_KEY && e.MAIL_FROM ? { apiKey: e.RESEND_API_KEY, from: e.MAIL_FROM } : null,
   }
 }
 

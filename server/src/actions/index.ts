@@ -72,6 +72,11 @@ import {
 } from './setup.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import {
+  getWeeklyEmailAction,
+  sendTestWeeklyEmailAction,
+  setWeeklyEmailAction,
+} from './weeklyEmail.js'
+import {
   categorizeTransactionsAction,
   createTransactionAction,
   deleteTransactionAction,
@@ -96,6 +101,9 @@ export const actionList = [
   getSettingsAction,
   updateSettingsAction,
   setAiSummaryAction,
+  getWeeklyEmailAction,
+  setWeeklyEmailAction,
+  sendTestWeeklyEmailAction,
   listCategoriesAction,
   createCategoryAction,
   updateCategoryAction,

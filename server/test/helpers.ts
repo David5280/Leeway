@@ -1,6 +1,7 @@
 import pg from 'pg'
 import type { SummaryWriter } from '../src/ai/writer.js'
 import type { BankProvider } from '../src/bank/provider.js'
+import type { EmailSender } from '../src/mail/sender.js'
 import { loadConfig } from '../src/config.js'
 import type { AppContext } from '../src/context.js'
 import { migrate } from '../src/db/migrate.js'
@@ -16,7 +17,12 @@ export const TEST_KEY_HEX = 'ab'.repeat(32)
  * against real SQL because most bugs in an app like this live in queries.
  */
 export async function createTestContext(
-  options: { now?: Date; bank?: BankProvider | null; writer?: SummaryWriter | null } = {},
+  options: {
+    now?: Date
+    bank?: BankProvider | null
+    writer?: SummaryWriter | null
+    mailer?: EmailSender | null
+  } = {},
 ): Promise<AppContext & { setNow(date: Date): void }> {
   const admin = new pg.Client({ connectionString: TEST_DATABASE_URL })
   await admin.connect()
@@ -35,6 +41,7 @@ export async function createTestContext(
     }),
     bank: options.bank ?? null,
     writer: options.writer ?? null,
+    mailer: options.mailer ?? null,
     now: () => now,
     setNow(date: Date) {
       now = date
@@ -48,7 +55,8 @@ export async function resetData(db: pg.Pool): Promise<void> {
     `TRUNCATE owner, sessions, api_tokens, oauth_clients, oauth_requests, oauth_grants,
        oauth_codes, oauth_tokens, connections, accounts, categories, rules, transactions,
        bills, goals, goal_contributions, dismissed_recurring, applied_upgrades, ai_summaries CASCADE;
-     UPDATE settings SET data = '{}';`,
+     UPDATE settings SET data = '{}';
+     DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);`,
   )
 }
 

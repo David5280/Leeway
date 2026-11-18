@@ -17,6 +17,11 @@ export interface AttentionItem {
   priority: Priority
   topic: 'bank' | 'cash' | 'bill' | 'budget' | 'goal' | 'debt' | 'cleanup'
   message: string
+  /**
+   * The same point for the owner to read, where `message` speaks to an
+   * assistant (naming tools, or "the owner"). Absent when `message` suits both.
+   */
+  forOwner?: string
   /** The tool that shows more or fixes it. */
   tool: string
 }
@@ -40,15 +45,21 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 function bankItems({ connections }: CoachSources): AttentionItem[] {
   return connections
     .filter((c) => c.status !== 'active')
-    .map((c) => ({
-      priority: 'now',
-      topic: 'bank',
-      message:
-        c.status === 'needs_reauth'
-          ? `${c.institutionName ?? 'A bank'} needs the owner to log in again before it can sync. This is done in the Leeway app.`
-          : `${c.institutionName ?? 'A bank'} failed to sync. Try sync_banks; if it keeps failing, check the bank in the Leeway app.`,
-      tool: 'list_connections',
-    }))
+    .map<AttentionItem>((c) => {
+      const bank = c.institutionName ?? 'A bank'
+      const needsLogin = c.status === 'needs_reauth'
+      return {
+        priority: 'now',
+        topic: 'bank',
+        message: needsLogin
+          ? `${bank} needs the owner to log in again before it can sync. This is done in the Leeway app.`
+          : `${bank} failed to sync. Try sync_banks; if it keeps failing, check the bank in the Leeway app.`,
+        forOwner: needsLogin
+          ? `${bank} needs you to log in again to keep syncing.`
+          : `${bank} stopped syncing. Open Banks in Leeway to see why.`,
+        tool: 'list_connections',
+      }
+    })
 }
 
 function cashItems({ cashFlow }: CoachSources, money: Money): AttentionItem[] {
@@ -115,6 +126,7 @@ function goalItems({ goals, cashFlow: { today } }: CoachSources, money: Money): 
       priority: 'soon',
       topic: 'goal',
       message: `${g.name} passed its target date of ${g.targetDate} with ${money(g.remainingCents)} still to go. Ask whether to move the date or the target.`,
+      forOwner: `${g.name} passed its target date of ${g.targetDate} with ${money(g.remainingCents)} still to go. You could move the date or the target.`,
       tool: 'list_goals',
     }))
   const behind = goals
@@ -138,6 +150,7 @@ function debtItems({ debtGaps }: CoachSources): AttentionItem[] {
       priority: 'fyi',
       topic: 'debt',
       message: `Payoff plans leave out ${names} until ${plural(debtGaps.length, 'it has', 'they have')} an interest rate and payment. Ask the owner for them (they are on each statement) and save them with update_account.`,
+      forOwner: `Payoff plans leave out ${names} until you add ${plural(debtGaps.length, 'its', 'their')} interest rate and payment, from the statement.`,
       tool: 'plan_debt_payoff',
     },
   ]

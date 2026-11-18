@@ -103,6 +103,27 @@ describe('config', () => {
     expect(named.anthropic?.model).toBe('claude-sonnet-5-5')
   })
 
+  it('turns email on only once both the Resend key and a sender are set', () => {
+    expect(loadConfig(base).mail).toBeNull()
+    expect(loadConfig({ ...base, RESEND_API_KEY: 're_key' }).mail).toBeNull()
+    expect(loadConfig({ ...base, MAIL_FROM: 'leeway@example.com' }).mail).toBeNull()
+    expect(
+      loadConfig({ ...base, RESEND_API_KEY: 're_key', MAIL_FROM: 'Leeway <leeway@example.com>' })
+        .mail,
+    ).toEqual({ apiKey: 're_key', from: 'Leeway <leeway@example.com>' })
+  })
+
+  it('refuses a sender that is not one plain address', () => {
+    for (const from of [
+      'leeway',
+      'Leeway leeway@example.com',
+      'Leeway <leeway@example.com>\r\nBcc: someone@example.com',
+      '"Leeway" <leeway@example.com>',
+    ]) {
+      expect(() => loadConfig({ ...base, MAIL_FROM: from })).toThrow(/MAIL_FROM must be/)
+    }
+  })
+
   it('treats a private network database as local', () => {
     const config = loadConfig({ ...base, DATABASE_URL: 'postgres://u:p@db.railway.internal/db' })
     expect(config.databaseSsl).toBe(false)

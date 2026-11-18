@@ -20,6 +20,8 @@ except to talk to your bank.
   a summary at the top that says in a sentence how the period is going and
   what needs you. Leeway writes it from your numbers, or Claude can write it
   if you add an Anthropic key.
+- **A weekly email**, if you want one, with that summary, what's left, bills
+  before payday and anything that needs you.
 - **An AI coach.** Connect Claude or any assistant that speaks MCP. It can run a
   money check-in, tell you whether a purchase fits, review subscriptions and
   plan debt payoff. You approve what it may do, and nothing can ever move
@@ -88,6 +90,8 @@ all with notes.
 | `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off     |
 | `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)         |
 | `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5` |
+| `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email (see below)               |
+| `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <me@example.com>`   |
 
 On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 
@@ -158,6 +162,34 @@ names; never your accounts or transactions. A summary is saved and reused
 while your numbers stay the same, or for up to four hours, and a new day starts
 fresh, so it costs a few cents a summary on your own Anthropic account. If
 Claude can't be reached, Leeway's own summary shows instead.
+
+## Weekly email
+
+Once a week, Leeway can email you the dashboard summary with what's left this
+period and per day, the Heads up list, bills due before payday, and how your
+goals are doing, with a button that opens Leeway. It holds totals, bill and
+goal names only: never account numbers or transactions.
+
+It sends through [Resend](https://resend.com)'s HTTPS API, since many hosts,
+Railway included, block outgoing SMTP. To set it up:
+
+1. Make a free Resend account and add your domain under **Domains**. Resend
+   only sends from a verified domain, so add the DNS records it shows you and
+   wait for it to say Verified.
+2. Make an API key under **API Keys** (sending access is enough).
+3. Add two variables to your server: `RESEND_API_KEY` set to that key, and
+   `MAIL_FROM` set to an address on the verified domain, like
+   `Leeway <leeway@yourdomain.com>`.
+4. In **Customize**, then **Email**, turn on the weekly email and choose the
+   day, the hour (in your time zone setting) and the address. It goes to your
+   sign-in email unless you name another. **Send a test email now** shows you
+   one straight away.
+
+Nothing is sent until you turn it on. Only you can, in the app: connected
+assistants can neither see nor change the email or its address. If a send
+fails, Leeway tries again an hour later, a few times, and Customize shows the
+last error. The email's button needs Leeway's address, which Railway fills in;
+elsewhere, set `PUBLIC_URL`.
 
 ## Keeping your data safe
 
