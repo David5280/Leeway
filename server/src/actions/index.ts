@@ -62,7 +62,6 @@ import {
   reconnectedBankAction,
   removeConnectionAction,
   syncBanksAction,
-  usePurchaseDatesAction,
 } from './connections.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
 import { getSummaryAction, setAiSummaryAction } from './summary.js'
@@ -146,7 +145,6 @@ export const actionList = [
   getCashFlowAction,
   listConnectionsAction,
   syncBanksAction,
-  usePurchaseDatesAction,
   createLinkTokenAction,
   linkBankAction,
   reconnectedBankAction,

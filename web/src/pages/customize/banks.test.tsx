@@ -3,8 +3,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Connection, Output } from '../../api/client'
-import { failing, fakeServer, holdRequest, renderSignedIn, withBank } from '../../test/fake'
+import type { Connection } from '../../api/client'
+import { failing, fakeServer, renderSignedIn, withBank } from '../../test/fake'
 import { BanksSection } from './Banks'
 
 // Plaid's window cannot open in jsdom; this stand-in opens at once and hands back a token.
@@ -191,91 +191,5 @@ describe('Banks', () => {
     fakeServer({}, { '/api/actions/list_connections': failing('Not allowed', 403) })
     renderSignedIn(<BanksSection />, { status: withBank })
     expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed')
-  })
-})
-
-describe('Using purchase dates for older transactions', () => {
-  const one = [connection({ id: 'conn-1' })]
-  const result = (fields: Partial<Output<'use_purchase_dates'>[number]>) => ({
-    connectionId: 'conn-1',
-    institutionName: 'First Bank',
-    checked: 10,
-    changed: 0,
-    error: null,
-    ...fields,
-  })
-  const button = () =>
-    screen.findByRole('button', { name: 'Use purchase dates for older transactions' })
-
-  it('is offered only once a bank is connected', async () => {
-    fakeServer({ list_connections: () => [] })
-    renderSignedIn(<BanksSection />, { status: withBank })
-    await screen.findByRole('button', { name: 'Connect a bank' })
-    expect(
-      screen.queryByRole('button', { name: 'Use purchase dates for older transactions' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('moves the dates and says how many moved', async () => {
-    const server = fakeServer({
-      list_connections: () => one,
-      use_purchase_dates: () => [
-        result({ changed: 11 }),
-        result({ connectionId: 'conn-2', changed: 1 }),
-      ],
-    })
-    renderSignedIn(<BanksSection />, { status: withBank })
-    await userEvent.setup().click(await button())
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Moved 12 dates to the day of purchase.',
-    )
-    expect(server.actions('use_purchase_dates')).toEqual([{}])
-  })
-
-  it('says so when one date moved, or none', async () => {
-    let changed = 1
-    fakeServer({ list_connections: () => one, use_purchase_dates: () => [result({ changed })] })
-    renderSignedIn(<BanksSection />, { status: withBank })
-    const user = userEvent.setup()
-    await user.click(await button())
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Moved 1 date to the day of purchase.',
-    )
-    changed = 0
-    await user.click(await button())
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'Every date already shows the day of purchase.',
-      ),
-    )
-  })
-
-  it('names a bank that could not be reached', async () => {
-    fakeServer({
-      list_connections: () => one,
-      use_purchase_dates: () => [
-        result({ changed: 2 }),
-        result({ institutionName: 'Credit Union', error: 'Sign in again' }),
-        result({ institutionName: null, error: 'Down' }),
-      ],
-    })
-    renderSignedIn(<BanksSection />, { status: withBank })
-    await userEvent.setup().click(await button())
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Moved 2 dates to the day of purchase. Credit Union could not be reached: Sign in again A bank could not be reached: Down',
-    )
-  })
-
-  it('shows the button as busy, and why it failed', async () => {
-    fakeServer(
-      { list_connections: () => one },
-      { '/api/actions/use_purchase_dates': failing('Bank sync is not set up yet', 503) },
-    )
-    const release = holdRequest('/api/actions/use_purchase_dates')
-    renderSignedIn(<BanksSection />, { status: withBank })
-    await userEvent.setup().click(await button())
-    expect(await screen.findByRole('button', { name: 'Updating dates' })).toBeDisabled()
-    release()
-    expect(await screen.findByRole('alert')).toHaveTextContent('Bank sync is not set up yet')
   })
 })
