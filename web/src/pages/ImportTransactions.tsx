@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { IMPORT_LIMITS } from '../../../server/src/domain/importPlan'
 import type { Input, Output } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { Shell } from '../components/Shell'
@@ -20,8 +21,7 @@ import { MappingForm } from './import/MappingForm'
 import { PastImports } from './import/PastImports'
 import { Preview } from './import/Preview'
 
-/** The server's limit on one import (MAX_IMPORT_ROWS). */
-const MAX_ROWS = 20_000
+const MAX_ROWS = IMPORT_LIMITS.maxRows
 
 /** The file name without its extension, as a starting name for a new account. */
 function baseName(fileName: string): string {

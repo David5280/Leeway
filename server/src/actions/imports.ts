@@ -6,15 +6,15 @@ import {
   importInputSchema,
   importTransactions,
   listImports,
-  MAX_IMPORT_ROWS,
   undoImport,
 } from '../domain/imports.js'
+import { IMPORT_LIMITS } from '../domain/importPlan.js'
 import { defineAction } from './action.js'
 
 export const importTransactionsAction = defineAction({
   name: 'import_transactions',
   title: 'Import transactions',
-  description: `Add transaction history from a bank export or another budgeting app, already read into rows: date (YYYY-MM-DD), name (the description), amountCents (positive is money out, negative is money in) and an optional category name. Up to ${MAX_IMPORT_ROWS} rows go to one account: accountId for an existing one, or newAccount ({ name, type }) to create a manual one. Rows the account already has (same day, amount and description) are skipped, as are exact repeats within the rows unless keepRepeats is true, and, with skipBankDays, rows from the day the account's bank history starts (the bank feed already has those). A category name that matches one of the owner's categories sticks; other rows are filed by the rules. All rows are added or none. Returns what was added and skipped, and an importId that undo_import takes.`,
+  description: `Add transaction history from a bank export or another budgeting app, already read into rows: date (YYYY-MM-DD), name (the description), amountCents (positive is money out, negative is money in) and an optional category name. Up to ${IMPORT_LIMITS.maxRows} rows go to one account: accountId for an existing one, or newAccount ({ name, type }) to create a manual one. Rows the account already has (same day, amount and description) are skipped, as are exact repeats within the rows unless keepRepeats is true, and, with skipBankDays, rows from the day the account's bank history starts (the bank feed already has those). A category name that matches one of the owner's categories sticks; other rows are filed by the rules. All rows are added or none. Returns what was added and skipped, and an importId that undo_import takes.`,
   input: importInputSchema,
   scope: 'write',
   surface: 'all',

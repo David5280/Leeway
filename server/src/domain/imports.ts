@@ -20,23 +20,19 @@ import {
 } from './accounts.js'
 import { listCategories } from './categories.js'
 import { recategorize } from './categorize.js'
-import { dateSpan, planImport, type ImportRow } from './importPlan.js'
+import { dateSpan, IMPORT_LIMITS, planImport, type ImportRow } from './importPlan.js'
 
-/** The most rows one import takes: decades of history for one account, and a few megabytes. */
-export const MAX_IMPORT_ROWS = 20_000
-
-/** No personal transaction comes near a billion dollars; a bigger one is a misread column. */
-const MAX_AMOUNT_CENTS = 100_000_000_000
+const { maxRows, nameLength, categoryLength, maxAmountCents } = IMPORT_LIMITS
 
 const importRowSchema = z.object({
   date: isoDateSchema,
-  name: z.string().trim().min(1, 'Every row needs a description').max(200),
-  amountCents: z.number().int().min(-MAX_AMOUNT_CENTS).max(MAX_AMOUNT_CENTS),
+  name: z.string().trim().min(1, 'Every row needs a description').max(nameLength),
+  amountCents: z.number().int().min(-maxAmountCents).max(maxAmountCents),
   /** A category name from the file; blank or unknown names leave the row to the rules. */
   category: z
     .string()
     .trim()
-    .max(80)
+    .max(categoryLength)
     .nullish()
     .transform((name) => name || null),
 })
@@ -51,10 +47,7 @@ export const importInputSchema = z
     rows: z
       .array(importRowSchema)
       .min(1, 'The file has no rows to import')
-      .max(
-        MAX_IMPORT_ROWS,
-        `Import at most ${MAX_IMPORT_ROWS.toLocaleString('en-US')} rows at once`,
-      ),
+      .max(maxRows, `Import at most ${maxRows.toLocaleString('en-US')} rows at once`),
     keepRepeats: z.boolean().default(false),
     /**
      * Skip rows from the day the account's bank history starts, which the

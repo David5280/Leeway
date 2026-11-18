@@ -1,7 +1,7 @@
 // Turning a CSV table into the rows Leeway saves, by the owner's mapping, and
 // saying plainly which rows could not be read and why.
 
-import { transactionKey } from '../../../../server/src/domain/importPlan'
+import { IMPORT_LIMITS, transactionKey } from '../../../../server/src/domain/importPlan'
 import { parseAmount } from './amounts'
 import { parseDate } from './dates'
 import { directionOf, type ColumnMapping } from './mapping'
@@ -32,9 +32,7 @@ export interface PreparedRows {
 }
 
 // The server's limits, applied here too so a long cell is cut, not refused.
-const NAME_LIMIT = 200
-const CATEGORY_LIMIT = 80
-const MAX_AMOUNT_CENTS = 100_000_000_000
+const { nameLength, categoryLength, maxAmountCents } = IMPORT_LIMITS
 
 /** What the owner must still choose before anything can be read, or null when nothing is missing. */
 export function missingColumn(mapping: ColumnMapping): string | null {
@@ -76,13 +74,13 @@ function prepareRow(cells: string[], mapping: ColumnMapping): PreparedRow | stri
   const dateCell = cells[mapping.date!]!
   const date = parseDate(dateCell, mapping.dateFormat)
   if (!date) return dateCell ? `has "${dateCell}", which is not a date` : 'has no date'
-  const name = cells[mapping.description!]!.replace(/\s+/g, ' ').slice(0, NAME_LIMIT).trim()
+  const name = cells[mapping.description!]!.replace(/\s+/g, ' ').slice(0, nameLength).trim()
   if (!name) return 'has no description'
   const amount = amountOf(cells, mapping)
   if (typeof amount === 'string') return amount
-  if (Math.abs(amount) > MAX_AMOUNT_CENTS) return 'has an amount too large to be real'
+  if (Math.abs(amount) > maxAmountCents) return 'has an amount too large to be real'
   const category =
-    mapping.category === null ? '' : cells[mapping.category]!.slice(0, CATEGORY_LIMIT).trim()
+    mapping.category === null ? '' : cells[mapping.category]!.slice(0, categoryLength).trim()
   return {
     date,
     name,

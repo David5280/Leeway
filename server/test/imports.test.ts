@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { findAction } from '../src/actions/index.js'
 import type { AppContext } from '../src/context.js'
-import { MAX_IMPORT_ROWS } from '../src/domain/imports.js'
+import { IMPORT_LIMITS } from '../src/domain/importPlan.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { actionCaller } from './actionCaller.js'
@@ -307,13 +307,13 @@ describe('checking an import', () => {
     expect(await call('list_accounts')).toEqual([])
   })
 
-  it(`takes up to ${MAX_IMPORT_ROWS} rows at once`, async () => {
+  it(`takes up to ${IMPORT_LIMITS.maxRows} rows at once`, async () => {
     const accountId = await cashAccount()
-    const many = Array.from({ length: MAX_IMPORT_ROWS }, (_, i) =>
+    const many = Array.from({ length: IMPORT_LIMITS.maxRows }, (_, i) =>
       row('2025-01-02', `Row ${i}`, i + 1),
     )
     expect(await call('import_transactions', { accountId, rows: many })).toMatchObject({
-      added: MAX_IMPORT_ROWS,
+      added: IMPORT_LIMITS.maxRows,
     })
     const tooMany = [...many, row('2025-01-02', 'One more', 1)]
     expect((await callError('import_transactions', { accountId, rows: tooMany })).message).toMatch(
