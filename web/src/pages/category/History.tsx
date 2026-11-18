@@ -3,7 +3,7 @@
 import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget, Output } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { PeriodBars } from '../../components/charts'
+import { PeriodBars } from '../../components/charts/PeriodBars'
 import { Card, ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'

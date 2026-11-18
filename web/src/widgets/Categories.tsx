@@ -23,39 +23,58 @@ export function categoryStatus(row: CategoryBudget, money: (cents: number) => st
   return { text: 'On track', className: 'good' }
 }
 
+/**
+ * The short note after a row's amounts: its status when it needs attention,
+ * otherwise what is left. "On track" on every row would only be noise.
+ */
+export function rowNote(row: CategoryBudget, money: (cents: number) => string) {
+  if (row.budgetCents === null) return { text: 'No budget', className: 'muted' }
+  const status = categoryStatus(row, money)
+  const needsAttention = status.className.startsWith('over') || status.className.startsWith('warn')
+  if (needsAttention) return status
+  if (row.leftCents !== null && row.leftCents > 0) {
+    return { text: `${money(row.leftCents)} left`, className: 'muted' }
+  }
+  return { text: 'Fully used', className: 'muted' }
+}
+
+/**
+ * One category on a line or two: name, bar, then "$208 of $621 · $413 left".
+ * The list it sits in decides the layout by its width (.cat-list in styles.css).
+ */
 export function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
   const { money } = useApp()
-  const status = categoryStatus(row, money)
+  const note = rowNote(row, money)
   const isCurrent = budget.period.offset === 0
   const marker =
     isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
   return (
-    <Link to={`/budgets/${row.categoryId}`} className="clickrow">
-      <div className="row">
+    <Link to={`/budgets/${row.categoryId}`} className="cat-row">
+      <span className="cat-name">
         <Dot color={row.color} />
-        <span className="grow strong" style={{ fontWeight: 500 }}>
-          {row.name}
-        </span>
-        <span className="num" style={{ fontSize: 14 }}>
+        <span className="cat-label">{row.name}</span>
+      </span>
+      <span className="cat-bar">
+        {row.budgetCents !== null && (
+          <Progress
+            percent={row.percentUsed ?? 0}
+            color={row.status === 'over' ? 'var(--over-fill)' : row.color}
+            marker={marker}
+            label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
+          />
+        )}
+      </span>
+      <span className="cat-figures">
+        <span className="num">
           {row.budgetCents === null
             ? money(row.spentCents)
             : `${money(row.spentCents)} of ${money(row.budgetCents)}`}
         </span>
-      </div>
-      {row.budgetCents !== null && (
-        <Progress
-          percent={row.percentUsed ?? 0}
-          color={row.status === 'over' ? 'var(--over-fill)' : row.color}
-          marker={marker}
-          label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
-        />
-      )}
-      <div className="row-between small">
-        <span className={status.className}>{status.text}</span>
-        {row.leftCents !== null && row.leftCents > 0 && (
-          <span className="muted">{money(row.leftCents)} left</span>
-        )}
-      </div>
+        <span className="muted" aria-hidden="true">
+          {' · '}
+        </span>
+        <span className={note.className}>{note.text}</span>
+      </span>
     </Link>
   )
 }
@@ -63,7 +82,7 @@ export function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budg
 export function CategoriesWidget({ budget }: WidgetProps) {
   const rows = budget.categories.filter((c) => c.kind === 'expense')
   return (
-    <Card label="Categories" className="stack-sm">
+    <Card label="Categories" className="stack-sm cat-list">
       <div className="row-between">
         <h2>Categories</h2>
         <Link to="/budgets" className="linkbtn">
@@ -75,7 +94,11 @@ export function CategoriesWidget({ budget }: WidgetProps) {
           No categories yet. <Link to="/budgets">Add one</Link>
         </p>
       ) : (
-        rows.map((row) => <CategoryRow key={row.categoryId} row={row} budget={budget} />)
+        <div className="cat-rows">
+          {rows.map((row) => (
+            <CategoryRow key={row.categoryId} row={row} budget={budget} />
+          ))}
+        </div>
       )}
     </Card>
   )

@@ -57,6 +57,20 @@ const REGION: Record<string, string> = {
   trends: 'Spending by period',
 }
 
+/**
+ * The default widgets in page order. Wide widgets stack in the main column
+ * and half ones beside them, so Recent comes before the pace chart.
+ */
+const DEFAULT_PAGE_ORDER = [
+  'Your leeway',
+  'This period at a glance',
+  'Heads up',
+  'Categories',
+  'Recent transactions',
+  'Spending pace',
+  'Accounts',
+]
+
 function layout(widgets: Partial<Widget>[]): Settings {
   return settingsSchema.parse({ ...settings, dashboard: { widgets } })
 }
@@ -140,9 +154,10 @@ async function startEditing() {
 describe('moveWidget', () => {
   const widgets = DEFAULT_LAYOUT.slice(0, 3)
 
-  it('swaps a widget with its neighbor either way', () => {
-    expect(moveWidget(widgets, 1, -1).map((w) => w.type)).toEqual(['glance', 'leeway', 'alerts'])
+  it('swaps a widget with the next one in its column, or a full one, either way', () => {
+    expect(moveWidget(widgets, 2, -1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
     expect(moveWidget(widgets, 1, 1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
+    expect(moveWidget(widgets, 0, 1).map((w) => w.type)).toEqual(['alerts', 'glance', 'leeway'])
   })
 
   it('returns the same list at either end and never changes the one passed in', () => {
@@ -158,7 +173,7 @@ describe('Overview widgets', () => {
     serve()
     renderOverview()
     await screen.findByRole('region', { name: 'Your leeway' })
-    expect(shownWidgets()).toEqual(DEFAULT_LAYOUT.map((w) => REGION[w.type]))
+    expect(shownWidgets()).toEqual(DEFAULT_PAGE_ORDER)
   })
 
   it('follows a custom order and size, and leaves out hidden widgets', async () => {
@@ -171,13 +186,42 @@ describe('Overview widgets', () => {
     serve(custom)
     renderOverview(custom)
     await screen.findByRole('region', { name: 'Top merchants' })
-    expect(shownWidgets()).toEqual(['Top merchants', 'Spending by period', 'Accounts'])
-    expect(screen.getByRole('region', { name: 'Top merchants' }).closest('.widget')).toHaveClass(
-      'span-full',
-    )
+    // Accounts is wide by default, so it leads the main column with the half-size chart beside it.
+    expect(shownWidgets()).toEqual(['Top merchants', 'Accounts', 'Spending by period'])
+    expect(
+      screen.getByRole('region', { name: 'Top merchants' }).closest('.widget'),
+    ).toHaveAttribute('data-size', 'full')
+    // A lone half widget spans the page, the size is still the one saved.
     expect(
       screen.getByRole('region', { name: 'Spending by period' }).closest('.widget'),
-    ).toHaveClass('span-half')
+    ).toHaveAttribute('data-size', 'half')
+  })
+
+  it('sets half widgets side by side, keeping their saved order for a phone', async () => {
+    const halves = layout([
+      { type: 'merchants', size: 'half' },
+      { type: 'accounts', size: 'half' },
+      { type: 'trends', size: 'half' },
+    ])
+    const server = serve(halves)
+    renderOverview(halves)
+    await screen.findByRole('region', { name: 'Top merchants' })
+    // Two columns, filled in turn: the first and third on the left, the second on the right.
+    expect(shownWidgets()).toEqual(['Top merchants', 'Spending by period', 'Accounts'])
+    const slot = (name: string) => screen.getByRole('region', { name }).closest('.widget')
+    expect(slot('Top merchants')!.closest('.band')).toHaveClass('pair')
+    // A phone shows one column, ordered by these.
+    expect(slot('Top merchants')).toHaveStyle({ order: '0' })
+    expect(slot('Accounts')).toHaveStyle({ order: '1' })
+    expect(slot('Spending by period')).toHaveStyle({ order: '2' })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Customize' }))
+    await user.click(
+      toolsFor('Top merchants').getByRole('button', { name: 'Move Top merchants down' }),
+    )
+    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual(['accounts', 'merchants', 'trends'])
   })
 
   it('skips widgets this app cannot draw yet', async () => {
@@ -276,7 +320,7 @@ describe('Overview edit mode', () => {
     const toggle = screen.getByRole('button', { name: 'Done' })
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText(/Move, resize or hide widgets/)).toBeInTheDocument()
-    expect(document.querySelector('.grid.editing')).not.toBeNull()
+    expect(document.querySelector('.board.editing')).not.toBeNull()
     await user.click(toggle)
     expect(screen.getByRole('button', { name: 'Customize' })).toHaveAttribute(
       'aria-pressed',
@@ -290,19 +334,20 @@ describe('Overview edit mode', () => {
     const server = serve()
     renderOverview()
     const user = await startEditing()
-    await user.click(toolsFor('At a glance').getByRole('button', { name: 'Move At a glance up' }))
+    await user.click(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    // Recent swaps with Categories, the wide widget above it, not the pace chart beside it.
     expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual([
-      'glance',
       'leeway',
+      'glance',
       'alerts',
-      'categories',
-      'pace',
       'recent',
+      'pace',
+      'categories',
       'accounts',
     ])
     await waitFor(() =>
-      expect(shownWidgets().slice(0, 2)).toEqual(['This period at a glance', 'Your leeway']),
+      expect(shownWidgets().slice(3, 5)).toEqual(['Recent transactions', 'Categories']),
     )
   })
 
@@ -315,6 +360,10 @@ describe('Overview edit mode', () => {
     ).toBeDisabled()
     expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts down' })).toBeDisabled()
     expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeEnabled()
+    // At a glance already tops the side column; above it is only Your leeway, beside it.
+    expect(
+      toolsFor('At a glance').getByRole('button', { name: 'Move At a glance up' }),
+    ).toBeDisabled()
   })
 
   it('resizes a widget', async () => {
@@ -329,8 +378,9 @@ describe('Overview edit mode', () => {
     await user.click(within(size).getByRole('button', { name: 'Full' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
     expect(sentLayouts(server)[0]![0]).toEqual({ type: 'leeway', size: 'full', visible: true })
-    expect(screen.getByRole('region', { name: 'Your leeway' }).closest('.widget')).toHaveClass(
-      'span-full',
+    expect(screen.getByRole('region', { name: 'Your leeway' }).closest('.widget')).toHaveAttribute(
+      'data-size',
+      'full',
     )
   })
 
@@ -395,7 +445,7 @@ describe('Overview edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Reset layout' }))
     await waitFor(() => expect(sentLayouts(server)).toEqual([DEFAULT_LAYOUT]))
     await user.click(screen.getByRole('button', { name: 'Done' }))
-    await waitFor(() => expect(shownWidgets()).toEqual(DEFAULT_LAYOUT.map((w) => REGION[w.type])))
+    await waitFor(() => expect(shownWidgets()).toEqual(DEFAULT_PAGE_ORDER))
   })
 
   it('keeps widgets this app cannot draw yet when saving a change', async () => {

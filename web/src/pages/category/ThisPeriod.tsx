@@ -42,7 +42,7 @@ export function ThisPeriod({
           thick
           label={`${row.name} budget used`}
           percent={row.percentUsed ?? 0}
-          color={category.color}
+          color={row.status === 'over' ? 'var(--over-fill)' : category.color}
           marker={todayMarker}
         />
       )}

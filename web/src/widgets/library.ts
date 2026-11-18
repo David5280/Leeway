@@ -9,6 +9,7 @@ import { GlanceWidget } from './Glance'
 import { LeewayWidget } from './Leeway'
 import { PaceWidget } from './Pace'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
+import { sharesLane } from './arrange'
 import { TrendsWidget } from './Trends'
 import type { WidgetProps } from './types'
 
@@ -67,10 +68,14 @@ export function addableTypes(widgets: Widget[]): WidgetType[] {
   )
 }
 
-/** Where the widget at `index` would move: the nearest drawable one that way, or -1 at the end. */
+/**
+ * Where the widget at `index` would move: the nearest drawable one that way in
+ * the same lane (see arrange.ts), or -1 when there is none.
+ */
 function moveTarget(widgets: Widget[], index: number, by: -1 | 1): number {
+  const moving = widgets[index]!
   for (let i = index + by; i >= 0 && i < widgets.length; i += by) {
-    if (canDraw(widgets[i]!)) return i
+    if (canDraw(widgets[i]!) && sharesLane(moving, widgets[i]!)) return i
   }
   return -1
 }
@@ -81,9 +86,9 @@ export function canMove(widgets: Widget[], index: number, by: -1 | 1): boolean {
 }
 
 /**
- * Swaps a widget with its nearest drawable neighbor, stepping over widgets this
- * app cannot draw so every move visibly does something. At either end the list
- * comes back unchanged.
+ * Swaps a widget with its nearest drawable neighbor in the same lane, stepping
+ * over widgets this app cannot draw or that sit in another column, so every
+ * move visibly does something. At either end the list comes back unchanged.
  */
 export function moveWidget(widgets: Widget[], index: number, by: -1 | 1): Widget[] {
   const target = moveTarget(widgets, index, by)

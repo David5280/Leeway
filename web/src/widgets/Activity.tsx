@@ -3,7 +3,7 @@
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { Card, Dot, ErrorNote, Progress } from '../components/ui'
-import { isOwed } from '../lib/accounts'
+import { accountDetail, accountName, isOwed } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
 import type { WidgetProps } from './types'
@@ -70,19 +70,21 @@ export function AccountsWidget() {
       <ErrorNote error={accounts.error} />
       {accounts.data?.length === 0 && <p className="empty">No accounts yet.</p>}
       {accounts.data?.map((account) => (
-        <div
-          key={account.id}
-          className={`list-row ${account.hidden ? 'muted' : ''}`}
-          style={{ justifyContent: 'space-between' }}
-        >
-          <span>
-            {account.name}
-            {account.hidden && ' (ignored for budgets)'}
+        <div key={account.id} className={`list-row ${account.hidden ? 'muted' : ''}`}>
+          <span className="grow stack-sm" style={{ gap: 0 }}>
+            <span className="ellipsis">{accountName(account)}</span>
+            <span className="small muted">
+              {accountDetail(account)}
+              {account.hidden && ' · ignored for budgets'}
+            </span>
           </span>
-          <span className="num">
-            {account.balanceCents === null
-              ? 'No balance'
-              : `${exact(account.balanceCents)}${isOwed(account) ? ' owed' : ''}`}
+          <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
+            <span className="num">
+              {account.balanceCents === null ? 'No balance' : exact(account.balanceCents)}
+            </span>
+            {isOwed(account) && account.balanceCents !== null && (
+              <span className="small muted">owed</span>
+            )}
           </span>
         </div>
       ))}

@@ -354,8 +354,9 @@ describe('Category page', () => {
       expect(
         await within(history).findByText('Average $570 against a $600 budget'),
       ).toBeInTheDocument()
-      expect(within(history).getByRole('img')).toHaveAccessibleName(
-        'Groceries by period: Jun $500, Jul $620, Aug $580, Sep $550, Oct $600, Nov $240. Budget $600.',
+      const chart = within(history).getByRole('img', { name: 'Groceries by period' })
+      expect(chart).toHaveAccessibleDescription(
+        'Jun $500, Jul $620, Aug $580, Sep $550, Oct $600, Nov $240. Budget $600.',
       )
       expect(server.actions('get_trends')).toEqual([{ periods: 6 }])
     })

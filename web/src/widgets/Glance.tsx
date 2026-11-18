@@ -13,11 +13,7 @@ export function GlanceWidget({ budget }: WidgetProps) {
   const { money, settings } = useApp()
   const word = periodWord(settings.period.kind)
   return (
-    <section
-      aria-label="This period at a glance"
-      className="glance grid"
-      style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
-    >
+    <section aria-label="This period at a glance" className="glance">
       <SpentCard budget={budget} word={word} />
       <GlanceCard title="Income">
         <span className="num mid-number">{money(budget.totals.incomeCents)}</span>
@@ -31,7 +27,7 @@ export function GlanceWidget({ budget }: WidgetProps) {
 
 function GlanceCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="card stack-sm" style={{ gridColumn: 'span 1' }}>
+    <div className="card stack-sm">
       <p className="eyebrow">{title}</p>
       {children}
     </div>

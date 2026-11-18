@@ -270,7 +270,9 @@ describe('Net worth', () => {
     expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent('$7,000')
     expect(screen.getByRole('region', { name: 'Assets' })).toHaveTextContent('$8,200')
     expect(screen.getByRole('region', { name: 'Debts' })).toHaveTextContent('$1,200')
-    expect(screen.getByRole('img', { name: 'Net worth from -$500 to $7,000' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
+      'Net worth from -$500 on Jun 1 to $7,000 on Nov 17.',
+    )
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))

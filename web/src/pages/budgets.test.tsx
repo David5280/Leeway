@@ -106,7 +106,7 @@ describe('budgets page', () => {
       `/budgets/${coffee.id}`,
     ])
     expect(within(spending).getByText('Tracking only')).toBeInTheDocument()
-    expect(links[1]).toHaveTextContent('No budget, tracking only')
+    expect(links[1]).toHaveTextContent('No budget')
   })
 
   it('hides the tracking only heading when every category has a budget', async () => {

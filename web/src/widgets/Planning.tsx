@@ -2,10 +2,10 @@
 
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
-import { LineChart } from '../components/LineChart'
+import { LineChart } from '../components/charts/LineChart'
 import { Card, ErrorNote, Loading, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
-import { monthYear } from '../lib/format'
+import { monthYear, shortDate } from '../lib/format'
 import { CashFlowSummary } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
 
@@ -117,7 +117,7 @@ export function DebtsWidget() {
 }
 
 export function NetWorthWidget() {
-  const { money } = useApp()
+  const { money, settings } = useApp()
   const worth = useAction('get_net_worth', { days: 365 })
   const points = worth.data?.history.map((p) => ({ date: p.date, cents: p.netWorthCents })) ?? []
   return (
@@ -130,7 +130,18 @@ export function NetWorthWidget() {
         </span>
       )}
       {points.length > 1 && (
-        <LineChart compact points={points} label="Net worth over the last year" />
+        <>
+          <LineChart
+            compact
+            points={points}
+            label="Net worth over the last year"
+            description={`From ${money(points[0]!.cents)} on ${shortDate(points[0]!.date, settings.locale)} to ${money(points.at(-1)!.cents)} on ${shortDate(points.at(-1)!.date, settings.locale)}.`}
+          />
+          <span className="small muted row-between">
+            <span>{shortDate(points[0]!.date, settings.locale)}</span>
+            <span>{shortDate(points.at(-1)!.date, settings.locale)}</span>
+          </span>
+        </>
       )}
     </Card>
   )

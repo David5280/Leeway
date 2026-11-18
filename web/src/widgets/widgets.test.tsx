@@ -5,10 +5,10 @@ import { settingsSchema } from '../../../server/src/domain/settings'
 import { budgetFor, category, fakeServer, renderSignedIn, transaction } from '../test/fake'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
-import { CategoriesWidget, categoryStatus } from './Categories'
+import { CategoriesWidget, categoryStatus, rowNote } from './Categories'
 import { GlanceWidget } from './Glance'
 import { LeewayWidget } from './Leeway'
-import { PaceWidget } from './Pace'
+import { followedText, PaceWidget } from './Pace'
 import { TrendsWidget } from './Trends'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -388,6 +388,22 @@ describe('CategoriesWidget', () => {
     )
   })
 
+  it("notes a row's status only when it needs attention, and what is left otherwise", () => {
+    expect(rowNote(row({ budgetCents: null }), money)).toEqual({
+      text: 'No budget',
+      className: 'muted',
+    })
+    expect(rowNote(row({ status: 'over', leftCents: -4000 }), money).text).toBe('Over by $40')
+    expect(rowNote(row({ status: 'ok', pace: 'over' }), money).text).toBe('Ahead of pace')
+    expect(rowNote(row({ status: 'ok', pace: 'on', leftCents: 41300 }), money)).toEqual({
+      text: '$413 left',
+      className: 'muted',
+    })
+    // Pace off is not worth calling out on the dashboard; what is left still is.
+    expect(rowNote(row({ status: 'ok', pace: null, leftCents: 100 }), money).text).toBe('$1 left')
+    expect(rowNote(row({ status: 'ok', pace: 'on', leftCents: 0 }), money).text).toBe('Fully used')
+  })
+
   it('lists spending categories with their budget, status and what is left', () => {
     const rent = category('Rent')
     const paycheck = category('Paycheck', { kind: 'income', budgetCents: 500000 })
@@ -404,9 +420,9 @@ describe('CategoriesWidget', () => {
 
     const groceriesRow = screen.getByRole('link', { name: /Groceries/ })
     expect(groceriesRow).toHaveAttribute('href', '/budgets/cat-groceries')
-    expect(groceriesRow).toHaveTextContent('$200 of $600')
-    expect(groceriesRow).toHaveTextContent('On track')
-    expect(groceriesRow).toHaveTextContent('$400 left')
+    // On track needs no saying: the row just shows what is left.
+    expect(groceriesRow).toHaveTextContent('$200 of $600 · $400 left')
+    expect(groceriesRow).not.toHaveTextContent('On track')
 
     const diningRow = screen.getByRole('link', { name: /Dining out/ })
     expect(diningRow).toHaveTextContent('$240 of $200')
@@ -420,7 +436,7 @@ describe('CategoriesWidget', () => {
 
     const rentRow = screen.getByRole('link', { name: /Rent/ })
     expect(rentRow).toHaveTextContent('$1,500')
-    expect(rentRow).toHaveTextContent('No budget, tracking only')
+    expect(rentRow).toHaveTextContent('$1,500 · No budget')
     expect(within(rentRow).queryByRole('progressbar')).not.toBeInTheDocument()
 
     // Income is not spending, so it has no row here.
@@ -466,6 +482,14 @@ describe('PaceWidget', () => {
     }
   }
 
+  it('names up to three followed categories, and counts the rest', () => {
+    expect(followedText(['Groceries'])).toBe('Groceries')
+    expect(followedText(['Groceries', 'Dining', 'Fun'])).toBe('Groceries, Dining, Fun')
+    expect(followedText(['Groceries', 'Dining', 'Fun', 'Gas', 'Gifts'])).toBe(
+      'Groceries, Dining and 3 more',
+    )
+  })
+
   it('shows loading until the pace arrives', () => {
     fakeServer({ get_spending_pace: () => pace() })
     renderSignedIn(<PaceWidget budget={budgetFor(categories, [])} offset={0} />)
@@ -476,15 +500,18 @@ describe('PaceWidget', () => {
     const server = fakeServer({ get_spending_pace: () => pace({ projectedCents: 96000 }) })
     renderSignedIn(<PaceWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(
-      await screen.findByRole('img', {
-        name: /^Flexible spending: \$340 by Nov 17 against a \$800 budget, on track for \$960/,
-      }),
-    ).toBeInTheDocument()
+      await screen.findByRole('img', { name: 'Flexible spending pace' }),
+    ).toHaveAccessibleDescription(
+      '$340 spent by Nov 17 against a $800 budget for Nov 1 to Nov 30, on track for $960.',
+    )
     expect(region()).toHaveTextContent(
       'At this rate you land near $960, about $160 over the $800 budget.',
     )
     expect(screen.getByText('Groceries, Dining out')).toBeInTheDocument()
-    expect(region()).toHaveTextContent('ActualEven paceProjected')
+    // The lines are named where they end, not in a legend.
+    expect(region()).toHaveTextContent('Projected$960')
+    expect(region()).toHaveTextContent('Budget$800')
+    expect(region()).toHaveTextContent('Today')
     expect(server.actions('get_spending_pace')).toEqual([{ offset: 0 }])
   })
 
@@ -649,13 +676,52 @@ describe('AccountsWidget', () => {
     expect(await screen.findByText('Checking')).toBeInTheDocument()
     expect(screen.getByText('$1,234.56')).toBeInTheDocument()
     // A card's balance is money owed, so it says so rather than reading as cash.
-    expect(screen.getByText('$800.00 owed')).toBeInTheDocument()
-    expect(screen.getByText('Old savings (ignored for budgets)')).toBeInTheDocument()
+    const card = screen.getByText('Travel card').closest('.list-row')!
+    expect(card).toHaveTextContent('$800.00owed')
+    expect(screen.getByText('Old savings').closest('.list-row')).toHaveTextContent(
+      'ignored for budgets',
+    )
     expect(screen.getByText('No balance')).toBeInTheDocument()
+    // A cash or house account has no balance owed, so no "owed" under it.
+    expect(screen.getAllByText('owed')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
       'href',
       '/customize#accounts',
     )
+  })
+
+  it('tells two similar cards apart by bank and last four digits, in readable casing', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({
+          id: 'a',
+          name: 'Credit Card',
+          institutionName: 'Chase',
+          mask: '0388',
+          type: 'credit',
+        }),
+        account({
+          id: 'b',
+          name: 'CREDIT CARD',
+          institutionName: 'Capital One',
+          mask: '7712',
+          type: 'credit',
+        }),
+        account({ id: 'c', name: 'Car', manual: true, type: 'property' }),
+        // The owner's own label is shown as typed, capitals and all.
+        account({ id: 'd', name: 'MY HSA', bankName: 'HEALTH SAVINGS', mask: '5555' }),
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    expect(await screen.findByText('Chase ··0388')).toBeInTheDocument()
+    expect(screen.getByText('Capital One ··7712').closest('.list-row')).toHaveTextContent(
+      'Credit Card',
+    )
+    expect(screen.queryByText('CREDIT CARD')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Credit Card')).toHaveLength(2)
+    expect(screen.getByText('Added by hand')).toBeInTheDocument()
+    expect(screen.getByText('MY HSA')).toBeInTheDocument()
+    expect(screen.getByText('··5555')).toBeInTheDocument()
   })
 
   it('says when there are no accounts', async () => {
@@ -724,10 +790,10 @@ describe('TrendsWidget', () => {
     })
     renderSignedIn(<TrendsWidget />)
     expect(
-      await screen.findByRole('img', {
-        name: 'Spending by period: Jun $500, Jul $600, Aug $550, Sep $700, Oct $650, Nov $340. Budget $800.',
-      }),
-    ).toBeInTheDocument()
+      await screen.findByRole('img', { name: 'Spending by period' }),
+    ).toHaveAccessibleDescription(
+      'Jun $500, Jul $600, Aug $550, Sep $700, Oct $650, Nov $340. Budget $800.',
+    )
     expect(screen.getByText('Jun 1 to Nov 30')).toBeInTheDocument()
     expect(server.actions('get_trends')).toEqual([{ periods: 6 }])
     expect(server.actions('get_budget')).toEqual([{ offset: 0 }])
@@ -740,15 +806,15 @@ describe('TrendsWidget', () => {
     })
     renderSignedIn(<TrendsWidget />)
     expect(
-      await screen.findByRole('img', { name: /^Spending by period: .*Nov \$340$/ }),
-    ).toBeInTheDocument()
+      await screen.findByRole('img', { name: 'Spending by period' }),
+    ).toHaveAccessibleDescription(/Nov \$340$/)
   })
 
   it('still charts spending when the budget cannot be read', async () => {
     fakeServer({ get_trends: () => trends }, failing('get_budget', 'Budget failed'))
     renderSignedIn(<TrendsWidget />)
     const chart = await screen.findByRole('img', { name: /^Spending by period/ })
-    expect(chart).not.toHaveAccessibleName(/Budget/)
+    expect(chart).not.toHaveAccessibleDescription(/Budget/)
   })
 
   it('labels bars by start day for periods that are not months', async () => {
@@ -761,8 +827,8 @@ describe('TrendsWidget', () => {
       settings: settingsSchema.parse({ timeZone: 'America/Denver', period: { kind: 'weekly' } }),
     })
     expect(
-      await screen.findByRole('img', { name: /^Spending by period: Nov 9 \$500, Nov 16 \$600/ }),
-    ).toBeInTheDocument()
+      await screen.findByRole('img', { name: 'Spending by period' }),
+    ).toHaveAccessibleDescription(/^Nov 9 \$500, Nov 16 \$600/)
     expect(screen.getByText('Nov 9 to Nov 22')).toBeInTheDocument()
   })
 

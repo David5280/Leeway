@@ -3,9 +3,10 @@
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useAction } from '../../api/hooks'
-import { LineChart } from '../../components/LineChart'
+import { LineChart } from '../../components/charts/LineChart'
 import { Card, ErrorNote, Loading, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
+import { shortDate } from '../../lib/format'
 
 const RANGES = [
   { value: '90', label: '3 months' },
@@ -14,7 +15,7 @@ const RANGES = [
 ] as const
 
 export function NetWorthSection() {
-  const { money } = useApp()
+  const { money, settings } = useApp()
   const [range, setRange] = useState<(typeof RANGES)[number]['value']>('365')
   const worth = useAction(
     'get_net_worth',
@@ -53,7 +54,8 @@ export function NetWorthSection() {
         ) : (
           <LineChart
             points={points}
-            label={`Net worth from ${money(points[0]!.cents)} to ${money(points.at(-1)!.cents)}`}
+            label="Net worth over time"
+            description={`Net worth from ${money(points[0]!.cents)} on ${shortDate(points[0]!.date, settings.locale)} to ${money(points.at(-1)!.cents)} on ${shortDate(points.at(-1)!.date, settings.locale)}.`}
           />
         )}
         <p className="small muted">

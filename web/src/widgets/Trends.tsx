@@ -1,7 +1,7 @@
 // Spending per period over the last six, against the total budget.
 
 import { useAction } from '../api/hooks'
-import { PeriodBars } from '../components/charts'
+import { PeriodBars } from '../components/charts/PeriodBars'
 import { Card } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodBarLabel, periodLabel } from '../lib/format'
