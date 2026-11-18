@@ -167,6 +167,16 @@ describe('public addresses', () => {
       'fd00::1',
       'fe80::1',
       '::ffff:10.0.0.1',
+      // Documentation ranges, and IPv6 forms that carry an IPv4 address inside.
+      '192.0.2.1',
+      '198.51.100.7',
+      '203.0.113.9',
+      '::ffff:a00:1',
+      '::10.0.0.1',
+      '64:ff9b::a00:1',
+      '2002:a00:1::1',
+      '2001:0:4136:e378::1',
+      '2001:db8::1',
       'not-an-ip',
     ]) {
       expect(isPublicAddress(address)).toBe(false)
@@ -211,6 +221,11 @@ describe('fetching JSON documents', () => {
       if (request.url === '/big') return response.end(`{"pad":"${'x'.repeat(2000)}"}`)
       if (request.url === '/broken') return response.end('not json')
       if (request.url === '/slow') return setTimeout(() => response.end('{}'), 500)
+      if (request.url === '/drip') {
+        // A byte every 50 ms: never silent long enough for a socket timeout.
+        const drip = setInterval(() => response.write(' '), 50)
+        return response.on('close', () => clearInterval(drip))
+      }
       response.writeHead(302, { location: '/doc' }).end()
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -247,10 +262,30 @@ describe('fetching JSON documents', () => {
     await expect(fetchJson(`${base}/slow`, options)).rejects.toThrow(/too long/)
   })
 
+  it('gives up on a server that answers a byte at a time, however long it keeps at it', async () => {
+    const started = Date.now()
+    await expect(fetchJson(`${base}/drip`, options)).rejects.toThrow(/too long/)
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+
   it('only connects to public addresses by default', async () => {
     await expect(
       fetchJson('https://localhost:1/doc', { timeoutMs: 500, maxBytes: 100 }),
     ).rejects.toThrow(/not a public address/)
+  })
+
+  it('refuses an address written as an IP, which skips the lookup, unless it is public', async () => {
+    for (const url of [
+      'https://127.0.0.1:1/doc',
+      'https://10.0.0.5/doc',
+      'https://169.254.169.254/latest',
+      'https://[::1]:1/doc',
+      'https://[::ffff:10.0.0.5]/doc',
+    ]) {
+      await expect(fetchJson(url, { timeoutMs: 500, maxBytes: 100 })).rejects.toThrow(
+        /not a public address/,
+      )
+    }
   })
 })
 
