@@ -11,6 +11,7 @@ export function AccountStep() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [setupCode, setSetupCode] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
 
@@ -19,7 +20,7 @@ export function AccountStep() {
     setBusy(true)
     setError(null)
     try {
-      await auth.setup({ email, password, name: name.trim() || undefined })
+      await auth.setup({ email, password, name: name.trim() || undefined, setupCode })
       await client.invalidateQueries()
     } catch (caught) {
       setError(caught)
@@ -34,6 +35,23 @@ export function AccountStep() {
         <p className="muted">
           This copy of Leeway is yours. Your bank data stays in your own database, and nobody else
           can sign in.
+        </p>
+        <label className="field">
+          Setup code
+          <input
+            className="input"
+            autoComplete="off"
+            spellCheck={false}
+            required
+            aria-describedby="setup-code-hint"
+            value={setupCode}
+            onChange={(e) => setSetupCode(e.target.value)}
+          />
+        </label>
+        {/* The code proves whoever makes the account runs this server (see lib/setupCode.ts). */}
+        <p className="muted" id="setup-code-hint">
+          Leeway printed it in its server log when it started. On Railway, open your Leeway
+          service&apos;s Deploy Logs; with Docker, run <code>docker compose logs leeway</code>.
         </p>
         <label className="field">
           Name

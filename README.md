@@ -46,7 +46,10 @@ and connect banks later.
      makes one). Keep a copy somewhere safe.
    - `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV` if you have Plaid keys.
 4. Under **Settings**, then **Networking**, click **Generate Domain**.
-5. Open that address and follow the setup screens.
+5. Open that address and follow the setup screens. The first one asks for a
+   setup code, so nobody who finds your address first can claim it: open the
+   service's **Deploy Logs** and copy the code from the line that starts
+   `No account yet`.
 
 ### Option 2: Docker on your own machine
 
@@ -57,7 +60,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Then open http://localhost:3000. The database lives in a Docker volume, so it
+Then open http://localhost:3000. The setup screen asks for a code that Leeway
+prints in its log; `docker compose logs leeway` shows it. The database lives in a Docker volume, so it
 survives restarts and upgrades. To upgrade, pull the latest code and run
 `docker compose up -d --build`.
 
@@ -72,26 +76,30 @@ npm run build
 npm start
 ```
 
+The setup screen asks for the code Leeway prints when it starts.
+
 ## Settings
 
 Everything is configured with environment variables. `.env.example` lists them
 all with notes.
 
-| Variable                | Needed   | What it does                                                |
-| ----------------------- | -------- | ----------------------------------------------------------- |
-| `DATABASE_URL`          | Yes      | Postgres connection string                                  |
-| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest      |
-| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants       |
-| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                    |
-| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                    |
-| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`         |
-| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`                 |
-| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site    |
-| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off     |
-| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)         |
-| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5` |
-| `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email (see below)               |
-| `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <me@example.com>`   |
+| Variable                | Needed   | What it does                                                 |
+| ----------------------- | -------- | ------------------------------------------------------------ |
+| `DATABASE_URL`          | Yes      | Postgres connection string                                   |
+| `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest       |
+| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants        |
+| `TRUST_PROXY`           | No       | Proxies in front of Leeway (see Security); usually empty     |
+| `SETUP_CODE`            | No       | Your own code for creating the account, instead of the log's |
+| `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                     |
+| `PLAID_SECRET`          | For sync | From the Plaid dashboard                                     |
+| `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`          |
+| `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`                  |
+| `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site     |
+| `SYNC_INTERVAL_MINUTES` | No       | Background sync interval, default 360; `0` turns it off      |
+| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary (see below)          |
+| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5`  |
+| `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email (see below)                |
+| `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <me@example.com>`    |
 
 On Railway, `PUBLIC_URL` is filled in from the generated domain automatically.
 
@@ -193,8 +201,9 @@ elsewhere, set `PUBLIC_URL`.
 
 ## Keeping your data safe
 
-- Bank access tokens are encrypted with your `ENCRYPTION_KEY`. Lose the key and
-  you will need to link your banks again; your other data is unaffected.
+- Bank access tokens are encrypted with your `ENCRYPTION_KEY`. Lose or change
+  the key and each bank shows that it needs linking again: remove it in
+  **Customize** and link it once more. Your other data is unaffected.
 - Back up the database. Railway's Postgres has backups in its settings; with
   Docker, `docker compose exec db pg_dump -U leeway leeway > leeway.sql`.
 - **Customize**, then **Backup** exports your categories, rules and settings to
@@ -203,6 +212,39 @@ elsewhere, set `PUBLIC_URL`.
   source) or
   `docker compose exec leeway node server/dist/src/cli/reset-password.js`
   (Docker). It prints a temporary password and signs out every device.
+
+## Security
+
+Leeway is built to sit on the public internet with one owner.
+
+- **Signing in.** Passwords are hashed with scrypt. Sign-in slows down after
+  repeated mistakes from one address, and pauses for everyone after 20 wrong
+  passwords in 15 minutes. Creating the account takes the setup code from the
+  server log, so nobody who finds a new install first can claim it.
+- **Sessions** are `HttpOnly`, `SameSite=Strict` cookies, `Secure` over https.
+  They end after 30 days, at sign-out, and for every device when the password
+  changes. Changes are accepted only from Leeway's own pages.
+- **Secrets at rest.** Bank access tokens are encrypted (AES-256-GCM) and never
+  returned by any screen or assistant tool. Sessions, assistant keys and
+  sign-in tokens are stored only as hashes.
+- **The browser** gets a strict Content Security Policy, HSTS and no framing.
+  Nothing in Leeway can move money.
+
+What you should do:
+
+- Set `ENCRYPTION_KEY` to 64 random hex characters (`openssl rand -hex 32`) and
+  keep a copy apart from your database backups; together they open your bank
+  tokens.
+- Serve Leeway over https only (Railway does), keep Postgres off the public
+  internet, and update Leeway now and then.
+- Leave `TRUST_PROXY` empty unless your setup differs: Leeway trusts Railway's
+  edge, or one reverse proxy on your own network, to say who is visiting. Set
+  `0` if Leeway faces the internet directly, or `2` with a CDN in front too.
+- Look over **Customize**, then **AI assistant** now and then, and revoke apps
+  and keys you no longer use.
+- If you think someone else got in: reset your password (above), revoke every
+  app and key, and if the database or `ENCRYPTION_KEY` may have leaked, remove
+  and link each bank again (that makes new bank tokens) under a new key.
 
 ## Development
 

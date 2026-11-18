@@ -15,6 +15,12 @@ import { urlsFor } from './base.js'
 /** Agent keys made in Customize start with this; anything else is an OAuth access token. */
 const AGENT_KEY_PREFIX = 'lw_'
 
+/**
+ * Per address. An assistant makes a handful of calls per question; this only
+ * stops a runaway client or someone hammering the endpoint with bad tokens.
+ */
+export const MCP_LIMIT = { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }
+
 const NO_TOKEN = 'Sign in to Leeway, or use a key from Customize > AI assistant'
 const BAD_TOKEN = 'That token is not valid or has expired. Sign in to Leeway again'
 
@@ -50,7 +56,7 @@ function refuse(
 }
 
 export function registerMcpRoute(app: FastifyInstance, ctx: AppContext, version: string): void {
-  app.all('/mcp', async (request, reply) => {
+  app.all('/mcp', MCP_LIMIT, async (request, reply) => {
     const urls = urlsFor(ctx, request)
     const header = request.headers.authorization ?? ''
     // Tokens are only read from the header, never the query string (OAuth 2.1 section 5.1).

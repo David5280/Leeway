@@ -1,9 +1,11 @@
 // A small, careful HTTPS GET for JSON documents published by other servers.
 
 import https from 'node:https'
-import { publicOnlyLookup } from './publicAddress.js'
+import { isIP } from 'node:net'
+import { publicOnlyLookup } from '../lib/publicAddress.js'
 
 export interface FetchJsonOptions {
+  /** The most the whole fetch may take, from connecting to the last byte. */
   timeoutMs: number
   /** Larger answers are cut off and refused, so a hostile server cannot exhaust memory. */
   maxBytes: number
@@ -13,13 +15,29 @@ export interface FetchJsonOptions {
 }
 
 /**
+ * Node skips the lookup for a URL written with an IP address, like
+ * https://10.0.0.5/app, so such an address is put through it here instead.
+ * Otherwise a client_id could point the fetch straight at a private network.
+ */
+function checkAddressLiteral(url: string, lookup: typeof publicOnlyLookup): Promise<void> {
+  // URL keeps an IPv6 host in brackets, which isIP does not accept.
+  const host = new URL(url).hostname.replace(/^\[(.*)\]$/, '$1')
+  if (!isIP(host)) return Promise.resolve()
+  return new Promise((resolve, reject) =>
+    lookup(host, { all: true }, (error) => (error ? reject(error) : resolve())),
+  )
+}
+
+/**
  * Fetches and parses one JSON document. Redirects are not followed and only a
  * 200 counts, so the document always comes from the exact URL asked for.
  * Connections only go to public addresses (see publicAddress.ts).
  */
-export function fetchJson(url: string, options: FetchJsonOptions): Promise<unknown> {
+export async function fetchJson(url: string, options: FetchJsonOptions): Promise<unknown> {
   const { transport = https, lookup = publicOnlyLookup } = options
+  await checkAddressLiteral(url, lookup)
   return new Promise((resolve, reject) => {
+    const tooLong = () => new Error(`${url} took too long to answer`)
     const request = transport.get(
       url,
       { lookup, timeout: options.timeoutMs, headers: { accept: 'application/json' } },
@@ -51,7 +69,11 @@ export function fetchJson(url: string, options: FetchJsonOptions): Promise<unkno
         })
       },
     )
-    request.on('timeout', () => request.destroy(new Error(`${url} took too long to answer`)))
+    // The socket timeout only notices silence; a server sending a byte at a
+    // time would never trip it, so the whole fetch also has a deadline.
+    const deadline = setTimeout(() => request.destroy(tooLong()), options.timeoutMs)
+    request.on('close', () => clearTimeout(deadline))
+    request.on('timeout', () => request.destroy(tooLong()))
     request.on('error', reject)
   })
 }

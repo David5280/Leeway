@@ -13,9 +13,16 @@ import { redirectUriProblem } from './redirects.js'
 
 /** Registrations nobody ever used are cleared after this long. */
 const UNUSED_REGISTRATION_DAYS = 30
+/**
+ * At most this many unused registrations are kept, newest first. Registering
+ * needs no sign-in, so without a cap a stream of them from many addresses
+ * could fill the database; an app that registered and then waited behind
+ * hundreds of others simply registers again.
+ */
+export const MAX_UNUSED_REGISTRATIONS = 200
 
 const registrationSchema = z.object({
-  redirect_uris: z.array(z.string()).min(1).max(10),
+  redirect_uris: z.array(z.string().max(2000)).min(1).max(10),
   client_name: z.string().trim().max(100).optional(),
 })
 
@@ -51,14 +58,10 @@ export async function registerClient(db: Db, body: unknown, now: Date): Promise<
   const clientId = randomToken('lwc_')
   const name = parsed.data.client_name || 'An app'
   await db.query(
-    `DELETE FROM oauth_clients c
-     WHERE created_at < $1 AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.client_id)`,
-    [new Date(now.getTime() - UNUSED_REGISTRATION_DAYS * 86_400_000)],
-  )
-  await db.query(
     'INSERT INTO oauth_clients (client_id, name, redirect_uris, created_at) VALUES ($1, $2, $3, $4)',
     [clientId, name, redirectUris, now],
   )
+  await clearUnusedRegistrations(db, now)
   return {
     client_id: clientId,
     client_id_issued_at: Math.floor(now.getTime() / 1000),
@@ -68,6 +71,20 @@ export async function registerClient(db: Db, body: unknown, now: Date): Promise<
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   }
+}
+
+/** Drops registrations that never connected: old ones, and any past the newest few hundred. */
+async function clearUnusedRegistrations(db: Db, now: Date): Promise<void> {
+  await db.query(
+    `DELETE FROM oauth_clients c
+     WHERE NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.client_id)
+       AND (c.created_at < $1 OR c.client_id NOT IN (
+         SELECT u.client_id FROM oauth_clients u
+         WHERE NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = u.client_id)
+         ORDER BY u.created_at DESC, u.client_id
+         LIMIT $2))`,
+    [new Date(now.getTime() - UNUSED_REGISTRATION_DAYS * 86_400_000), MAX_UNUSED_REGISTRATIONS],
+  )
 }
 
 /** Finds the app behind a client_id, fetching its metadata document when the id is a URL. */

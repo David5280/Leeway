@@ -458,6 +458,17 @@ describe('Plaid provider', () => {
       ).rejects.toThrow(/does not match/)
     })
 
+    it('rejects a signature made with a key Plaid has retired', async () => {
+      const retired = { ...jwk, expired_at: 1_700_000_000 }
+      const plaid = new PlaidProvider(
+        config,
+        fakeFetch({ '/webhook_verification_key/get': { body: { key: retired } } }).fetchImpl,
+      )
+      await expect(
+        plaid.parseWebhook(body, { 'plaid-verification': await sign(body) }),
+      ).rejects.toThrow(/retired key/)
+    })
+
     it('fetches each verification key from Plaid only once', async () => {
       const { calls, fetchImpl } = fakeFetch({
         '/webhook_verification_key/get': { body: { key: jwk } },

@@ -2,6 +2,7 @@
 // Run with `npm run e2e` after `npm run build`. See CONTRIBUTING.md.
 
 import { defineConfig, devices } from '@playwright/test'
+import { SETUP_CODE } from './e2e/owner'
 
 // E2E_PORT lets a second checkout run its tests while another holds 3100.
 const PORT = Number(process.env.E2E_PORT ?? 3100)
@@ -50,6 +51,7 @@ export default defineConfig({
       // No email provider, whatever the shell has set: the tests never send real email.
       RESEND_API_KEY: '',
       MAIL_FROM: '',
+      SETUP_CODE,
     },
   },
 })

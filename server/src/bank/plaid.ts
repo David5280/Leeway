@@ -181,9 +181,12 @@ export class PlaidProvider implements BankProvider {
 
     let jwk = this.webhookKeys.get(kid)
     if (!jwk) {
-      const { key } = await this.call<{ key: JWK }>('/webhook_verification_key/get', {
-        key_id: kid,
-      })
+      const { key } = await this.call<{ key: JWK & { expired_at?: number | null } }>(
+        '/webhook_verification_key/get',
+        { key_id: kid },
+      )
+      // Plaid marks a key it has retired; a signature made with one is refused (Plaid's guidance).
+      if (key.expired_at) throw new BankError('Webhook signed with a retired key')
       jwk = key
       this.webhookKeys.set(kid, key)
     }

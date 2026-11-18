@@ -4,9 +4,10 @@ import type { AppContext } from '../src/context.js'
 import { resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
+import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -23,7 +24,11 @@ beforeEach(async () => {
   await resetData(ctx.db)
 })
 
-const owner = { email: 'me@example.com', password: 'correct horse battery' }
+const owner = {
+  email: 'me@example.com',
+  password: 'correct horse battery',
+  setupCode: TEST_SETUP_CODE,
+}
 
 async function signUp(): Promise<string> {
   const response = await app.inject({ method: 'POST', url: '/api/auth/setup', payload: owner })
@@ -88,6 +93,101 @@ describe('HTTP API', () => {
     await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })
     const after = await app.inject({ url: '/api/auth/me', headers: { cookie } })
     expect(after.statusCode).toBe(401)
+  })
+
+  describe('changes sent from other websites', () => {
+    const createCategory = (cookie: string, headers: Record<string, string>) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/actions/create_category',
+        headers: { cookie, host: 'leeway.example.com', ...headers },
+        payload: { name: 'Groceries' },
+      })
+
+    it('refuses them, whatever the browser calls the other site', async () => {
+      const cookie = await signUp()
+      const fromElsewhere: Record<string, string>[] = [
+        { 'sec-fetch-site': 'same-site' },
+        { 'sec-fetch-site': 'cross-site' },
+        { origin: 'https://evil.example.com' },
+        { origin: 'null' },
+      ]
+      for (const headers of fromElsewhere) {
+        const response = await createCategory(cookie, headers)
+        expect(response.statusCode).toBe(403)
+        expect(response.json()).toMatchObject({
+          error: 'forbidden',
+          message: 'Leeway only accepts changes from its own pages.',
+        })
+      }
+      expect((await app.inject({ url: '/api/status' })).statusCode).toBe(200)
+    })
+
+    it('refuses a sign-out or sign-in from another site too', async () => {
+      const cookie = await signUp()
+      const logout = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: { cookie, 'sec-fetch-site': 'cross-site' },
+      })
+      expect(logout.statusCode).toBe(403)
+      expect((await app.inject({ url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(200)
+    })
+
+    it("accepts them from Leeway's own pages, and from scripts outside a browser", async () => {
+      const cookie = await signUp()
+      expect((await createCategory(cookie, { 'sec-fetch-site': 'same-origin' })).statusCode).toBe(
+        200,
+      )
+      const fromOldBrowser = await app.inject({
+        method: 'POST',
+        url: '/api/actions/create_category',
+        headers: { cookie, host: 'leeway.example.com', origin: 'https://leeway.example.com' },
+        payload: { name: 'Rent' },
+      })
+      expect(fromOldBrowser.statusCode).toBe(200)
+      expect((await createCategory(cookie, {})).statusCode).toBe(409)
+    })
+
+    it('leaves reads and bank webhooks alone, which need no page of ours', async () => {
+      const cookie = await signUp()
+      const read = await app.inject({
+        url: '/api/auth/me',
+        headers: { cookie, 'sec-fetch-site': 'cross-site' },
+      })
+      expect(read.statusCode).toBe(200)
+      const webhook = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks/plaid',
+        headers: { 'sec-fetch-site': 'cross-site', 'content-type': 'application/json' },
+        payload: '{}',
+      })
+      // No bank is set up here, so the webhook is unknown rather than forbidden.
+      expect(webhook.statusCode).toBe(404)
+    })
+  })
+
+  it('cuts off a flood of calls to the endpoints anyone can reach without signing in', async () => {
+    // A separate app, so its rate limits start fresh.
+    const limited = await buildApp(ctx, { webDir: null })
+    try {
+      const flood = async (count: number, send: () => Promise<{ statusCode: number }>) => {
+        for (let i = 0; i < count; i++) expect((await send()).statusCode).not.toBe(429)
+        return (await send()).statusCode
+      }
+      const mcp = () => limited.inject({ method: 'POST', url: '/mcp', payload: {} })
+      const webhook = () =>
+        limited.inject({
+          method: 'POST',
+          url: '/api/webhooks/plaid',
+          headers: { 'content-type': 'application/json' },
+          payload: '{}',
+        })
+      expect(await flood(MCP_LIMIT.config.rateLimit.max, mcp)).toBe(429)
+      expect(await flood(60, webhook)).toBe(429)
+    } finally {
+      await limited.close()
+    }
   })
 
   it('resets a forgotten password from the shell and signs everyone out', async () => {

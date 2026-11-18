@@ -7,7 +7,7 @@ import { oauthUrls, type OAuthUrls } from '../oauth/metadata.js'
 /**
  * PUBLIC_URL (or Railway's domain) when set. Otherwise the address this
  * request came in on, which is right for a server reached at one address, like
- * a home server; the proxy headers are trusted (see trustProxy in app.ts).
+ * a home server. Forwarded headers count only from a trusted proxy (proxyTrust.ts).
  */
 export function publicBase(ctx: AppContext, request: FastifyRequest): string {
   return ctx.config.publicUrl ?? `${request.protocol}://${request.host}`

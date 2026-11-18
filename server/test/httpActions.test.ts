@@ -8,7 +8,7 @@ import type { AppContext } from '../src/context.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp, VERSION } from '../src/http/app.js'
 import { FakeBank } from './fakeBank.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
 import { UNEXPECTED_TOOL_ERROR } from '../src/mcp/server.js'
 
 let ctx: AppContext
@@ -29,7 +29,11 @@ beforeEach(async () => {
   const setup = await app.inject({
     method: 'POST',
     url: '/api/auth/setup',
-    payload: { email: 'me@example.com', password: 'correct horse battery' },
+    payload: {
+      email: 'me@example.com',
+      password: 'correct horse battery',
+      setupCode: TEST_SETUP_CODE,
+    },
   })
   cookie = `leeway_session=${setup.cookies[0]?.value}`
 })
@@ -285,6 +289,39 @@ describe('serving the web app', () => {
     const response = await site.inject({ url: '/budget/categories' })
     expect(response.statusCode).toBe(200)
     expect(response.body).toContain('<title>Leeway</title>')
+  })
+
+  it('serves pages under a policy that runs only its own scripts and Plaid Link', async () => {
+    const response = await site.inject({ url: '/budget/categories' })
+    const policy = response.headers['content-security-policy']
+    expect(policy).toBe(
+      [
+        "default-src 'self'",
+        "script-src 'self' https://cdn.plaid.com",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://*.plaid.com",
+        'frame-src https://cdn.plaid.com',
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "worker-src 'self'",
+        "manifest-src 'self'",
+      ].join(';'),
+    )
+    expect(response.headers).toMatchObject({
+      'x-frame-options': 'DENY',
+      'x-content-type-options': 'nosniff',
+      'strict-transport-security': 'max-age=31536000',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'cross-origin-opener-policy': 'same-origin-allow-popups',
+      'permissions-policy': expect.stringContaining('camera=()'),
+    })
+    // Pages may be cached (they hold no data); answers from the API may not.
+    expect(response.headers['cache-control']).not.toBe('no-store')
+    expect((await site.inject({ url: '/api/status' })).headers['cache-control']).toBe('no-store')
   })
 
   it('keeps unknown API paths and non-GET requests as JSON 404s', async () => {

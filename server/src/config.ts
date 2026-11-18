@@ -1,6 +1,7 @@
 // Configuration from environment variables, read and checked once at startup.
 
 import { z } from 'zod'
+import type { ProxyTrust } from './http/proxyTrust.js'
 
 /** An email address with no spaces or angle brackets in it. */
 const ADDRESS = String.raw`[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+`
@@ -28,6 +29,20 @@ const envSchema = z.object({
       'ENCRYPTION_KEY must be 64 hex characters (generate one with: openssl rand -hex 32)',
     ),
   PUBLIC_URL: z.url().optional(),
+  // Spaces and dashes are ignored when the code is typed, so they do not count here.
+  SETUP_CODE: z
+    .string()
+    .refine(
+      (code) => code.replace(/[\s-]/g, '').length >= 12,
+      'SETUP_CODE needs 12 characters or more',
+    )
+    .optional(),
+  TRUST_PROXY: z.coerce
+    .number()
+    .int()
+    .min(0, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
+    .max(10, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
+    .optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
   PLAID_CLIENT_ID: z.string().optional(),
   PLAID_SECRET: z.string().optional(),
@@ -77,6 +92,10 @@ export interface Config {
   encryptionKey: Buffer
   /** Public base URL without a trailing slash, used for webhooks and MCP links. */
   publicUrl: string | null
+  /** The code that creates the owner account; null means a random one each start. */
+  setupCode: string | null
+  /** Which proxies to believe about the client's address and protocol (see proxyTrust.ts). */
+  trustProxy: ProxyTrust
   /** Null until both Plaid keys are set; the app still runs and explains what to add. */
   plaid: PlaidConfig | null
   /** How often to sync every bank in the background. 0 turns it off. */
@@ -105,6 +124,29 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const publicUrl =
     e.PUBLIC_URL ?? (e.RAILWAY_PUBLIC_DOMAIN ? `https://${e.RAILWAY_PUBLIC_DOMAIN}` : null)
 
+  return {
+    env: e.NODE_ENV,
+    port: e.PORT,
+    host: e.HOST,
+    databaseUrl: e.DATABASE_URL,
+    // Hosted Postgres (Railway's public URL, Neon, Supabase) needs TLS; a local
+    // Docker database does not. Default to TLS only for non-local hosts.
+    databaseSsl: e.DATABASE_SSL ? e.DATABASE_SSL === 'true' : !isLocalDatabase(e.DATABASE_URL),
+    encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'hex'),
+    setupCode: e.SETUP_CODE ?? null,
+    publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
+    // Railway reaches the app only through its own edge proxy, one hop that
+    // may connect from any address. Elsewhere, trust a proxy on a private network.
+    trustProxy: e.TRUST_PROXY ?? (e.RAILWAY_PUBLIC_DOMAIN ? 1 : 'private-network'),
+    syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
+    ...optionalServices(e),
+  }
+}
+
+/** The outside services Leeway can use, each null until all of its keys are set. */
+function optionalServices(
+  e: z.infer<typeof envSchema>,
+): Pick<Config, 'plaid' | 'anthropic' | 'mail'> {
   const plaid =
     e.PLAID_CLIENT_ID && e.PLAID_SECRET
       ? {
@@ -115,19 +157,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           redirectUri: e.PLAID_REDIRECT_URI ?? null,
         }
       : null
-
   return {
-    env: e.NODE_ENV,
-    port: e.PORT,
-    host: e.HOST,
-    databaseUrl: e.DATABASE_URL,
-    // Hosted Postgres (Railway's public URL, Neon, Supabase) needs TLS; a local
-    // Docker database does not. Default to TLS only for non-local hosts.
-    databaseSsl: e.DATABASE_SSL ? e.DATABASE_SSL === 'true' : !isLocalDatabase(e.DATABASE_URL),
-    encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'hex'),
-    publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
     plaid,
-    syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
     anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,
     mail: e.RESEND_API_KEY && e.MAIL_FROM ? { apiKey: e.RESEND_API_KEY, from: e.MAIL_FROM } : null,
   }

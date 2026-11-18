@@ -10,6 +10,8 @@ export type ErrorCode =
   | 'not_configured'
   | 'bank_error'
   | 'mail_error'
+  | 'wrong_password'
+  | 'too_many_attempts'
 
 const STATUS: Record<ErrorCode, number> = {
   invalid_input: 400,
@@ -20,6 +22,8 @@ const STATUS: Record<ErrorCode, number> = {
   not_configured: 503,
   bank_error: 502,
   mail_error: 502,
+  wrong_password: 400,
+  too_many_attempts: 429,
 }
 
 export class AppError extends Error {

@@ -6,29 +6,23 @@ import { fileURLToPath } from 'node:url'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
-import { z } from 'zod'
+import Fastify, { type FastifyInstance } from 'fastify'
 import { runAction } from '../actions/action.js'
 import { actionList, findAction } from '../actions/index.js'
 import type { AppContext } from '../context.js'
 import { handleBankWebhook } from '../domain/connections.js'
-import {
-  changePassword,
-  checkLogin,
-  createOwner,
-  createSession,
-  deleteSession,
-  getOwner,
-  isValidSession,
-  SESSION_MAX_AGE_SECONDS,
-} from '../domain/owner.js'
+import { getOwner } from '../domain/owner.js'
 import { AppError } from '../errors.js'
+import { generateSetupCode } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
+import { registerAuthRoutes, sessionGuard } from './auth.js'
+import { refuseCrossSiteChanges } from './crossSite.js'
 import { registerMcpRoute } from './mcp.js'
+import { proxyTrustFunction } from './proxyTrust.js'
+import { registerSecurityHeaders } from './securityHeaders.js'
 import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 
 export const VERSION = '0.1.0'
-const SESSION_COOKIE = 'leeway_session'
 
 /** Paths that are never web app pages, so an unknown one is a plain 404, not index.html. */
 const NOT_PAGES = /^\/(api\/|mcp|oauth\/|\.well-known\/)/
@@ -44,14 +38,6 @@ function findWebDir(): string | null {
   return null
 }
 
-function parse<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
-  const result = schema.safeParse(body ?? {})
-  if (!result.success) {
-    throw new AppError('invalid_input', result.error.issues.map((i) => i.message).join('; '))
-  }
-  return result.data
-}
-
 export async function buildApp(
   ctx: AppContext,
   options: {
@@ -61,12 +47,18 @@ export async function buildApp(
     loadClientDocument?: LoadClientDocument
     /** False turns off per-address rate limits, for tests that sign in many times a minute. */
     rateLimit?: boolean
+    /**
+     * The code that creates the owner account. Defaults to SETUP_CODE, or else
+     * a random code nobody knows, so setup is never open by accident.
+     */
+    setupCode?: string
   } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
-    // Railway and most hosts sit behind a proxy; trust it for the client IP and https.
-    trustProxy: true,
+    // Believe only the proxies this install sits behind about the client's
+    // address and https, so a client cannot pick its own address (proxyTrust.ts).
+    trustProxy: proxyTrustFunction(ctx.config.trustProxy),
     bodyLimit: 2 * 1024 * 1024,
   })
   await app.register(cookie)
@@ -75,12 +67,7 @@ export async function buildApp(
     ...(options.rateLimit === false ? { allowList: () => true } : {}),
   })
 
-  // No other site may show Leeway in a frame, so the consent screen cannot be
-  // overlaid and clicked through (clickjacking).
-  app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-Frame-Options', 'DENY')
-    reply.header('Content-Security-Policy', "frame-ancestors 'none'")
-  })
+  await registerSecurityHeaders(app)
 
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     if (error instanceof AppError) {
@@ -97,23 +84,7 @@ export async function buildApp(
       .send({ error: 'internal', message: 'Something went wrong on the server' })
   })
 
-  const setSessionCookie = (reply: FastifyReply, token: string) =>
-    reply.setCookie(SESSION_COOKIE, token, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: 'auto',
-      maxAge: SESSION_MAX_AGE_SECONDS,
-    })
-
-  const requireSession = async (request: FastifyRequest) => {
-    const token = request.cookies[SESSION_COOKIE]
-    if (!token || !(await isValidSession(ctx.db, token))) {
-      throw new AppError('unauthorized', 'Please sign in')
-    }
-  }
-
-  const authLimit = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }
+  refuseCrossSiteChanges(app)
 
   app.get('/api/health', async () => ({ ok: true }))
 
@@ -129,52 +100,8 @@ export async function buildApp(
     }
   })
 
-  const credentials = z.object({
-    email: z.email('Enter a valid email'),
-    password: z.string().min(1, 'Enter a password').max(200),
-    name: z.string().max(80).nullish(),
-  })
-
-  app.post('/api/auth/setup', authLimit, async (request, reply) => {
-    const input = parse(credentials, request.body)
-    const owner = await createOwner(ctx.db, input)
-    setSessionCookie(reply, await createSession(ctx.db))
-    return { owner }
-  })
-
-  app.post('/api/auth/login', authLimit, async (request, reply) => {
-    const { email, password } = parse(credentials, request.body)
-    if (!(await checkLogin(ctx.db, email, password))) {
-      throw new AppError('unauthorized', 'That email and password do not match')
-    }
-    setSessionCookie(reply, await createSession(ctx.db))
-    return { owner: await getOwner(ctx.db) }
-  })
-
-  app.post('/api/auth/logout', async (request, reply) => {
-    const token = request.cookies[SESSION_COOKIE]
-    if (token) await deleteSession(ctx.db, token)
-    reply.clearCookie(SESSION_COOKIE, { path: '/' })
-    return reply.status(204).send()
-  })
-
-  app.get('/api/auth/me', { preHandler: requireSession }, async () => ({
-    owner: await getOwner(ctx.db),
-  }))
-
-  app.post(
-    '/api/auth/password',
-    { preHandler: requireSession, ...authLimit },
-    async (request, reply) => {
-      const { currentPassword, newPassword } = parse(
-        z.object({ currentPassword: z.string(), newPassword: z.string().max(200) }),
-        request.body,
-      )
-      await changePassword(ctx.db, currentPassword, newPassword)
-      setSessionCookie(reply, await createSession(ctx.db))
-      return reply.status(204).send()
-    },
-  )
+  registerAuthRoutes(app, ctx, options.setupCode ?? ctx.config.setupCode ?? generateSetupCode())
+  const requireSession = sessionGuard(ctx)
 
   app.get('/api/actions', { preHandler: requireSession }, async () =>
     actionList.map(({ name, title, description, scope, surface }) => ({
@@ -202,7 +129,9 @@ export async function buildApp(
     scope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) =>
       done(null, body),
     )
-    scope.post('/api/webhooks/plaid', async (request, reply) => {
+    // Unsigned calls cost Leeway a lookup of Plaid's key, so a flood of them is cut off.
+    const webhookLimit = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }
+    scope.post('/api/webhooks/plaid', webhookLimit, async (request, reply) => {
       if (!ctx.bank) return reply.status(404).send()
       let webhook
       try {

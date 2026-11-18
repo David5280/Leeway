@@ -2,14 +2,21 @@
 // signed-in session is saved for every other browser test.
 
 import { expect, test } from '@playwright/test'
-import { OWNER, OWNER_STATE } from './owner'
+import { OWNER, OWNER_STATE, SETUP_CODE } from './owner'
 
 test('a new owner sets up Leeway and lands on the overview', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible()
+  // A stranger who finds the address first cannot claim it without the code from the log.
+  await page.getByRole('textbox', { name: 'Setup code' }).fill('WRNG-CODE-HERE')
   await page.getByRole('textbox', { name: 'Name' }).fill(OWNER.name)
   await page.getByRole('textbox', { name: 'Email' }).fill(OWNER.email)
   await page.getByRole('textbox', { name: /Password/ }).fill(OWNER.password)
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByRole('alert')).toHaveText(
+    'That setup code is not right. Copy it from the server log again.',
+  )
+  await page.getByRole('textbox', { name: 'Setup code' }).fill(SETUP_CODE)
   await page.getByRole('button', { name: 'Continue' }).click()
 
   // Budget period: paid every other week, warned at 90%.
