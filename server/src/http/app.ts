@@ -16,6 +16,7 @@ import { AppError } from '../errors.js'
 import { generateSetupCode } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
 import { registerAuthRoutes, sessionGuard } from './auth.js'
+import { refuseCrossSiteChanges } from './crossSite.js'
 import { registerMcpRoute } from './mcp.js'
 import { proxyTrustFunction } from './proxyTrust.js'
 import { registerSecurityHeaders } from './securityHeaders.js'
@@ -82,6 +83,8 @@ export async function buildApp(
       .status(500)
       .send({ error: 'internal', message: 'Something went wrong on the server' })
   })
+
+  refuseCrossSiteChanges(app)
 
   app.get('/api/health', async () => ({ ok: true }))
 
