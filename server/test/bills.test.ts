@@ -22,6 +22,9 @@ beforeEach(async () => {
   await resetData(ctx.db)
 })
 
+// A well-formed id that matches no category.
+const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000'
+
 const netflix = {
   name: 'Netflix',
   kind: 'subscription',
@@ -101,6 +104,19 @@ describe('bills', () => {
     const category = await call('create_category', { name: 'Streaming' })
     const bill = await call('create_bill', { ...netflix, categoryId: category.id })
     await call('delete_category', { id: category.id })
+    expect((await call('list_bills')).bills[0]).toMatchObject({ id: bill.id, categoryId: null })
+  })
+
+  it('refuses a category that does not exist, in plain words, when adding a bill', async () => {
+    const error = await callError('create_bill', { ...netflix, categoryId: UNKNOWN_ID })
+    expect(error).toMatchObject({ code: 'invalid_input', message: 'That category does not exist' })
+    expect((await call('list_bills')).bills).toEqual([])
+  })
+
+  it('refuses a category that does not exist when changing a bill, and keeps the bill', async () => {
+    const bill = await call('create_bill', netflix)
+    const error = await callError('update_bill', { id: bill.id, categoryId: UNKNOWN_ID })
+    expect(error).toMatchObject({ code: 'invalid_input', message: 'That category does not exist' })
     expect((await call('list_bills')).bills[0]).toMatchObject({ id: bill.id, categoryId: null })
   })
 })
