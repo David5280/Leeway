@@ -221,6 +221,14 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
   )
 }
 
+/**
+ * What to show until a screen's data is in: why it could not load, or a
+ * spinner while it still might. Every screen waits the same way.
+ */
+export function LoadingOrError({ error, label }: { error: unknown; label?: string }) {
+  return error ? <ErrorNote error={error} /> : <Loading label={label} />
+}
+
 export function Card({
   children,
   className = '',

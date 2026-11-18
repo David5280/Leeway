@@ -3,7 +3,7 @@
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { LineChart } from '../components/charts/LineChart'
-import { Card, ErrorNote, Loading, Progress } from '../components/ui'
+import { Card, LoadingOrError, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
 import { monthYear, periodWord, shortDate } from '../lib/format'
 import { shortPlan } from '../lib/goalText'
@@ -22,11 +22,6 @@ function Header({ title, to, link }: { title: string; to: string; link: string }
   )
 }
 
-/** Shows the error or a spinner until there is data. */
-function Pending({ error }: { error: unknown }) {
-  return error ? <ErrorNote error={error} /> : <Loading />
-}
-
 export function CashFlowWidget() {
   return (
     <Card label="Until payday" className="stack-sm">
@@ -43,7 +38,7 @@ export function BillsWidget() {
   return (
     <Card label="Bills" className="stack-sm">
       <Header title="Bills" to="/plan/bills" link="All bills" />
-      {!bills.data && <Pending error={bills.error} />}
+      {!bills.data && <LoadingOrError error={bills.error} />}
       {bills.data?.bills.length === 0 && <p className="empty">No bills tracked yet.</p>}
       {bills.data?.bills.slice(0, 5).map((bill) => {
         const status = billStatus(bill, settings.locale)
@@ -67,7 +62,7 @@ export function GoalsWidget() {
   return (
     <Card label="Goals" className="stack-sm">
       <Header title="Goals" to="/plan/goals" link="All goals" />
-      {!goals.data && <Pending error={goals.error} />}
+      {!goals.data && <LoadingOrError error={goals.error} />}
       {goals.data?.length === 0 && <p className="empty">No savings goals yet.</p>}
       {goals.data?.slice(0, 4).map((goal) => {
         const plan = shortPlan(goal, money, word)
@@ -102,7 +97,7 @@ export function DebtsWidget() {
   return (
     <Card label="Debt payoff" className="stack-sm">
       <Header title="Debt payoff" to="/plan/debts" link="Plan it" />
-      {!plans.data && <Pending error={plans.error} />}
+      {!plans.data && <LoadingOrError error={plans.error} />}
       {plans.data && !plan?.debts.length && (
         <p className="small muted">
           {plans.data.needsDetails.length > 0
@@ -135,7 +130,7 @@ export function NetWorthWidget() {
   return (
     <Card label="Net worth" className="stack-sm">
       <Header title="Net worth" to="/plan/net-worth" link="Details" />
-      {!worth.data && <Pending error={worth.error} />}
+      {!worth.data && <LoadingOrError error={worth.error} />}
       {worth.data && (
         <span className={`num mid-number ${worth.data.netWorthCents < 0 ? 'over' : ''}`}>
           {money(worth.data.netWorthCents)}

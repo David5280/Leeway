@@ -50,7 +50,6 @@ describe('format', () => {
     expect(periodWord('monthly')).toBe('month')
     expect(periodWord('weekly')).toBe('week')
     expect(periodWord('paycheck')).toBe('paycheck')
-    expect(periodWord('fortnightly')).toBe('period')
   })
 
   it('labels chart bars by month for monthly budgets and by start day otherwise', () => {

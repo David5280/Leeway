@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { failure, fakeServer, renderSignedIn } from '../test/fake'
+import { failing, fakeServer, renderSignedIn } from '../test/fake'
 import { bill, cashFlow, debtPlans, goal } from '../test/planning'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
 
@@ -47,7 +47,7 @@ describe('Bills widget', () => {
   })
 
   it('shows why bills could not load', async () => {
-    fakeServer({}, { '/api/actions/list_bills': failure('Database is down', 500) })
+    fakeServer({}, { '/api/actions/list_bills': failing('Database is down', 500) })
     renderSignedIn(<BillsWidget />)
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })

@@ -84,13 +84,13 @@ export function AlertsWidget({ budget }: WidgetProps) {
 }
 
 /** "1 transaction ($45) needs a category." or "3 transactions ($90) need a category." */
-export function uncategorizedText(count: number, amount: string): string {
+function uncategorizedText(count: number, amount: string): string {
   if (count === 1) return `1 transaction (${amount}) needs a category.`
   return `${count} transactions (${amount}) need a category.`
 }
 
 /** What to tell the owner about a bank that is not syncing, or null when it is fine. */
-export function bankAlertText(connection: Pick<Connection, 'status' | 'institutionName'>) {
+function bankAlertText(connection: Pick<Connection, 'status' | 'institutionName'>) {
   const name = connection.institutionName ?? 'A bank'
   if (connection.status === 'needs_reauth')
     return `${name} needs you to log in again to keep syncing.`

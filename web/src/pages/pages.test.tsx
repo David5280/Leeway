@@ -5,6 +5,7 @@ import { App } from '../App'
 import {
   budgetFor,
   category,
+  failing,
   fakeServer,
   renderPlain,
   renderSignedIn,
@@ -59,6 +60,21 @@ describe('app shell', () => {
     )
     renderPlain(<App />)
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+  })
+
+  it('says why when the settings cannot be read, instead of loading forever', async () => {
+    fakeServer(
+      {},
+      {
+        '/api/status': () => Response.json(status),
+        '/api/auth/me': () =>
+          Response.json({ owner: { email: 'a@b.co', name: null, onboarded: true } }),
+        '/api/actions/get_settings': failing('The database is not answering.', 500),
+      },
+    )
+    renderPlain(<App />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('The database is not answering.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
 

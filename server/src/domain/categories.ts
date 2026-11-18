@@ -6,7 +6,7 @@ import { AppError, isUniqueViolation, notFound } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { patchOf } from '../lib/schemas.js'
 
-export const CADENCES = ['week', 'biweek', 'semimonth', 'month', 'year'] as const
+const CADENCES = ['week', 'biweek', 'semimonth', 'month', 'year'] as const
 
 export interface Category {
   id: string
@@ -71,7 +71,7 @@ export async function listCategories(db: Db): Promise<Category[]> {
   return rows
 }
 
-export async function getCategory(db: Db, id: string): Promise<Category> {
+async function getCategory(db: Db, id: string): Promise<Category> {
   const { rows } = await db.query<Category>(`SELECT ${COLUMNS} FROM categories WHERE id = $1`, [id])
   if (!rows[0]) throw notFound('Category')
   return rows[0]
@@ -98,7 +98,7 @@ function duplicateName(error: unknown, name: string): never {
  * that day's period), kept while it stays on, and cleared when it goes off so
  * turning it on again starts fresh.
  */
-export function rolloverSinceFor(
+function rolloverSinceFor(
   rollover: boolean,
   previous: Pick<Category, 'rollover' | 'rolloverSince'>,
   today: IsoDate,

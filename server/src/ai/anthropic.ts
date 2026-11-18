@@ -6,6 +6,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import { MAX_POINTS, type SummaryFacts, type SummaryText } from '../domain/summaryText.js'
 import type { AnthropicConfig } from '../config.js'
+import { MINUTE_MS } from '../lib/time.js'
 import type { SummaryWriter } from './writer.js'
 
 /** The part of the SDK client this writer uses, so tests can pass a fake. */
@@ -45,7 +46,7 @@ export class AnthropicSummaryWriter implements SummaryWriter {
     client: MessagesClient = new Anthropic({
       apiKey: config.apiKey,
       maxRetries: 1,
-      timeout: 60_000,
+      timeout: MINUTE_MS,
     }),
   ) {
     this.client = client

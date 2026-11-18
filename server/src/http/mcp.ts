@@ -11,6 +11,7 @@ import { bearerChallenge, type OAuthUrls } from '../oauth/metadata.js'
 import type { Scope } from '../oauth/scopes.js'
 import { verifyAccessToken } from '../oauth/tokens.js'
 import { urlsFor } from './base.js'
+import { perMinute } from './rateLimit.js'
 
 /** Agent keys made in Customize start with this; anything else is an OAuth access token. */
 const AGENT_KEY_PREFIX = 'lw_'
@@ -19,7 +20,7 @@ const AGENT_KEY_PREFIX = 'lw_'
  * Per address. An assistant makes a handful of calls per question; this only
  * stops a runaway client or someone hammering the endpoint with bad tokens.
  */
-export const MCP_LIMIT = { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }
+export const MCP_LIMIT = perMinute(120)
 
 const NO_TOKEN = 'Sign in to Leeway, or use a key from Customize > AI assistant'
 const BAD_TOKEN = 'That token is not valid or has expired. Sign in to Leeway again'

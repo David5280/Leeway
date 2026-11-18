@@ -8,7 +8,7 @@ import type { Period } from '../lib/periods.js'
 import type { GoalProgressFacts } from './goalPlan.js'
 
 /** How far back "recent progress" looks. */
-export const RECENT_DAYS = 90
+const RECENT_DAYS = 90
 
 /**
  * The shortest window a pace is measured over. A goal started last week with

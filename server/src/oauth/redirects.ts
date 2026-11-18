@@ -14,7 +14,7 @@ function parseUrl(uri: string): URL | null {
 }
 
 /** True for http://localhost, http://127.0.0.1 and http://[::1], on any port. */
-export function isLoopback(url: URL): boolean {
+function isLoopback(url: URL): boolean {
   return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)
 }
 

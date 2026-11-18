@@ -6,8 +6,10 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { decodeProtectedHeader, importJWK, jwtVerify, type JWK } from 'jose'
 import type { PlaidConfig } from '../config.js'
+import { messageOf } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { toCents, toCentsOrNull } from '../lib/money.js'
+import { SECOND_MS } from '../lib/time.js'
 import {
   BankError,
   type AccountType,
@@ -85,10 +87,10 @@ export class PlaidProvider implements BankProvider {
           secret: this.config.secret,
           ...body,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(30 * SECOND_MS),
       })
     } catch (error) {
-      throw new BankError(`Could not reach Plaid: ${(error as Error).message}`)
+      throw new BankError(`Could not reach Plaid: ${messageOf(error)}`)
     }
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
     if (!response.ok) {
@@ -234,7 +236,7 @@ function accountType(type: string): AccountType {
 }
 
 /** A Plaid account in Leeway's terms, with balances in cents. */
-export function toBankAccount(account: PlaidAccount): BankAccount {
+function toBankAccount(account: PlaidAccount): BankAccount {
   const { balances } = account
   return {
     providerAccountId: account.account_id,

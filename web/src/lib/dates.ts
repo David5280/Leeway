@@ -1,7 +1,18 @@
-// Calendar dates as YYYY-MM-DD strings, in the owner's time zone.
+// Calendar dates as YYYY-MM-DD strings, in the owner's time zone. The day
+// math is the server's own (server/src/lib/dates.ts), so the app and the
+// server always agree on what "30 days ago" or "the day after" is.
 
-/** The date `days` days before now, as the calendar shows it in `timeZone`. */
+import { addDays, todayIn } from '../../../server/src/lib/dates'
+
+export {
+  addDays,
+  dateParts,
+  daysBetween,
+  fromDayNumber,
+  toDayNumber,
+} from '../../../server/src/lib/dates'
+
+/** The date `days` calendar days before today, as the calendar shows it in `timeZone`. */
 export function isoDaysAgo(days: number, timeZone: string, now = Date.now()): string {
-  // en-CA formats dates as YYYY-MM-DD, which is exactly the form the server uses.
-  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(now - days * 86_400_000))
+  return addDays(todayIn(timeZone, new Date(now)), -days)
 }

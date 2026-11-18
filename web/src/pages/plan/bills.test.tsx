@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Bill } from '../../api/client'
-import { category, failure, type Handlers } from '../../test/fake'
+import { category, failing, type Handlers } from '../../test/fake'
 import { bill, planServer, renderPlan, series } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -167,7 +167,7 @@ describe('Bills', () => {
   })
 
   it('shows why a bill could not be saved', async () => {
-    serve([], {}, { '/api/actions/create_bill': failure('Use a real date as YYYY-MM-DD') })
+    serve([], {}, { '/api/actions/create_bill': failing('Use a real date as YYYY-MM-DD') })
     renderPlan('/plan/bills')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a bill' }))
@@ -179,7 +179,7 @@ describe('Bills', () => {
   })
 
   it('shows why bills could not load', async () => {
-    serve([], {}, { '/api/actions/list_bills': failure('Database is down', 500) })
+    serve([], {}, { '/api/actions/list_bills': failing('Database is down', 500) })
     renderPlan('/plan/bills')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
@@ -251,7 +251,7 @@ describe('Recurring charges found in history', () => {
     serve(
       [],
       { find_recurring: () => [spotify] },
-      { '/api/actions/dismiss_recurring': failure('Try again') },
+      { '/api/actions/dismiss_recurring': failing('Try again') },
     )
     renderPlan('/plan/bills')
     await userEvent
@@ -261,7 +261,7 @@ describe('Recurring charges found in history', () => {
   })
 
   it('shows why suggestions could not load', async () => {
-    serve([], {}, { '/api/actions/find_recurring': failure('History is unavailable', 500) })
+    serve([], {}, { '/api/actions/find_recurring': failing('History is unavailable', 500) })
     renderPlan('/plan/bills')
     expect(await screen.findByText('History is unavailable')).toBeInTheDocument()
   })

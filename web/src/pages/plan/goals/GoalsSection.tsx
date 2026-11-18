@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Account, Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
-import { Card, ErrorNote, Loading } from '../../../components/ui'
+import { Card, LoadingOrError } from '../../../components/ui'
 import { FormCard } from '../FormCard'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
@@ -70,7 +70,7 @@ export function GoalsSection() {
 
   if (!goals.data || !accounts.data || !cash.data) {
     const error = goals.error ?? accounts.error ?? cash.error
-    return error ? <ErrorNote error={error} /> : <Loading />
+    return <LoadingOrError error={error} />
   }
 
   function close() {

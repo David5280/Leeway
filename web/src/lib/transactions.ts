@@ -1,6 +1,7 @@
 // How a transaction reads in a list: its title, what kind of move it is, and its tone.
 
 import type { Category, Transaction } from '../api/client'
+import { daysBetween } from './dates'
 
 type CategoryKind = Category['kind'] | null
 
@@ -56,10 +57,6 @@ export function movementTag(
 
 /** How far apart, in days, the two sides of one move may post. */
 const PAIR_WINDOW_DAYS = 5
-const DAY_MS = 86_400_000
-
-/** Days between two YYYY-MM-DD dates, either way round. Both parse as UTC midnight. */
-const daysApart = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / DAY_MS
 
 type Pairable = Pick<Transaction, 'id' | 'accountId' | 'date' | 'amountCents'>
 
@@ -75,7 +72,7 @@ export function pairTransfers<T extends Pairable>(transfers: T[]): Map<string, T
   for (const out of transfers.filter((tx) => tx.amountCents > 0)) {
     for (const arrival of transfers) {
       if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) continue
-      const gap = daysApart(out.date, arrival.date)
+      const gap = Math.abs(daysBetween(out.date, arrival.date))
       if (gap <= PAIR_WINDOW_DAYS) candidates.push([out, arrival, gap])
     }
   }

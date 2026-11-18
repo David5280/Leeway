@@ -1,6 +1,7 @@
 // Client ID Metadata Documents: an app, like Claude, identifies itself with a URL
 // whose JSON lists its name and redirect URIs, so it needs no registration here.
 
+import { MINUTE_MS } from '../lib/time.js'
 import { OAuthError } from './errors.js'
 import { fetchJson } from './fetchJson.js'
 import { redirectUriProblem } from './redirects.js'
@@ -64,7 +65,7 @@ export function parseClientDocument(clientId: string, body: unknown): ClientIden
 }
 
 /** How long a fetched document is reused before fetching it again. */
-const CACHE_MS = 10 * 60 * 1000
+const CACHE_MS = 10 * MINUTE_MS
 const CACHE_LIMIT = 50
 
 /**

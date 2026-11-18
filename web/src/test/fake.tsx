@@ -244,9 +244,6 @@ export function failing(message: string, httpStatus = 400): () => Response {
   return () => Response.json({ error: 'invalid_input', message }, { status: httpStatus })
 }
 
-/** The same as failing; older tests use this name. */
-export const failure = failing
-
 /** Renders with a query client and router but no settings or sign-in, like the sign-in screens. */
 export function renderPlain(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

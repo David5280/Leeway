@@ -4,7 +4,7 @@ import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { Card, ErrorNote, Loading, Segmented, Setting } from '../../components/ui'
+import { Card, LoadingOrError, Segmented, Setting } from '../../components/ui'
 import { isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
@@ -51,7 +51,7 @@ function PayoffPlan({ extraCents }: { extraCents: number }) {
   const { money } = useApp()
   const [strategy, setStrategy] = useState<Strategy>('avalanche')
   const plans = useAction('plan_debt_payoff', { extraCents }, { placeholderData: keepPreviousData })
-  if (!plans.data) return plans.error ? <ErrorNote error={plans.error} /> : <Loading />
+  if (!plans.data) return <LoadingOrError error={plans.error} />
   const data = plans.data
   if (data.debts.length === 0) {
     return <p className="empty">Add an interest rate for a debt above to see a plan.</p>
@@ -93,7 +93,7 @@ export function DebtsSection() {
   const [extra, setExtra] = useState('')
   const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
   const accounts = useAction('list_accounts')
-  if (!accounts.data) return accounts.error ? <ErrorNote error={accounts.error} /> : <Loading />
+  if (!accounts.data) return <LoadingOrError error={accounts.error} />
   const debts = accounts.data.filter((a) => isOwed(a) && !a.hidden && (a.balanceCents ?? 0) > 0)
   if (debts.length === 0) {
     return (

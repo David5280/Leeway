@@ -7,7 +7,7 @@ import { withTransaction } from '../db/pool.js'
 import { getSettings, saveSettings } from './settings.js'
 
 /** The name this upgrade is recorded under in applied_upgrades. */
-export const SUMMARY_WIDGET_UPGRADE = 'summary-widget'
+const SUMMARY_WIDGET_UPGRADE = 'summary-widget'
 
 /** Returns true when the summary was added to a saved dashboard. */
 export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {

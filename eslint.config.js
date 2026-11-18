@@ -44,6 +44,15 @@ export default tseslint.config(
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       'max-depth': ['error', 3],
       complexity: ['error', 15],
+      // Plain, predictable control flow and no surprises in what a value is.
+      'no-else-return': ['error', { allowElseIf: false }],
+      'no-lonely-if': 'error',
+      'no-unneeded-ternary': 'error',
+      'no-useless-return': 'error',
+      'no-param-reassign': 'error',
+      'no-implicit-coercion': 'error',
+      'prefer-template': 'error',
+      'no-throw-literal': 'error',
     },
   },
   {

@@ -164,7 +164,7 @@ export async function budgetReport(
 }
 
 /** How many full periods the recent surplus is averaged over. */
-export const SURPLUS_PERIODS = 3
+const SURPLUS_PERIODS = 3
 
 /**
  * Income minus spending, averaged over the last few full budget periods:

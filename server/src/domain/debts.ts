@@ -47,7 +47,7 @@ function missingTerms(row: DebtRow): DebtGap['missing'] {
 }
 
 /** Counted cards and loans with a balance owed, split into plannable debts and gaps. */
-export async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'needsDetails'>> {
+async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'needsDetails'>> {
   const { rows } = await db.query<DebtRow>(
     `SELECT id, coalesce(display_name, name) AS name, type, balance_cents AS "balanceCents",
        apr_bps AS "aprBps", minimum_payment_cents AS "minimumCents"
@@ -67,7 +67,7 @@ export async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'need
 
 /** The month a plan finishes in, counted from this month. */
 function debtFreeDate(plan: PayoffPlan, today: IsoDate): IsoDate | null {
-  return plan.months === null ? null : addMonths(today, plan.months).slice(0, 7) + '-01'
+  return plan.months === null ? null : `${addMonths(today, plan.months).slice(0, 7)}-01`
 }
 
 /** Avalanche, snowball and minimums-only plans, paying `extraCents` a month over the minimums. */

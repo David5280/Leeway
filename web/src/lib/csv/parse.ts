@@ -6,7 +6,7 @@
 // Hand-written rather than a dependency: the format is small, every rule
 // here has a test, and an app that holds bank data keeps its supply chain short.
 
-export const DELIMITERS = [',', ';', '\t', '|'] as const
+const DELIMITERS = [',', ';', '\t', '|'] as const
 export type Delimiter = (typeof DELIMITERS)[number]
 
 /** A file read into columns and rows; every row has one cell per column. */

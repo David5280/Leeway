@@ -4,20 +4,21 @@ import type { Db } from '../db/pool.js'
 import { withTransaction } from '../db/pool.js'
 import { hashToken, randomToken } from '../lib/crypto.js'
 import type pg from 'pg'
+import { DAY_MS, SECOND_MS } from '../lib/time.js'
 import { OAuthError } from './errors.js'
 import { verifierMatches } from './pkce.js'
 import { sameResource } from './requests.js'
 import { parseScope, scopeString, type Scope } from './scopes.js'
 
 /** Access tokens are short lived; the app refreshes them quietly. */
-export const ACCESS_TOKEN_SECONDS = 60 * 60
+const ACCESS_TOKEN_SECONDS = 60 * 60
 /** A connection unused this long has to sign in again. Each refresh starts the clock over. */
-export const REFRESH_TOKEN_DAYS = 90
+const REFRESH_TOKEN_DAYS = 90
 /**
  * A refresh token used again within this window gets new tokens instead of
  * ending the connection: an app that sent two refreshes at once is not an attack.
  */
-export const REFRESH_REUSE_GRACE_SECONDS = 120
+const REFRESH_REUSE_GRACE_SECONDS = 120
 
 /** The token response from RFC 6749 section 5.1. */
 export interface TokenResponse {
@@ -42,7 +43,7 @@ async function issueTokens(
   const refresh = randomToken('lwr_')
   // Tidy up tokens that expired at least a day ago while we are here.
   await client.query('DELETE FROM oauth_tokens WHERE expires_at < $1', [
-    new Date(now.getTime() - 86_400_000),
+    new Date(now.getTime() - DAY_MS),
   ])
   await client.query(
     `INSERT INTO oauth_tokens (token_hash, grant_id, kind, expires_at, created_at)
@@ -51,8 +52,8 @@ async function issueTokens(
       hashToken(access),
       hashToken(refresh),
       grantId,
-      new Date(now.getTime() + ACCESS_TOKEN_SECONDS * 1000),
-      new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
+      new Date(now.getTime() + ACCESS_TOKEN_SECONDS * SECOND_MS),
+      new Date(now.getTime() + REFRESH_TOKEN_DAYS * DAY_MS),
       now,
     ],
   )

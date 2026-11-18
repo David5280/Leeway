@@ -1,5 +1,9 @@
 // Formatting for money and dates. Money is integer cents, dates are YYYY-MM-DD.
 
+import { addDays, dateParts } from './dates'
+
+export { periodWord } from '../../../server/src/lib/words'
+
 export interface MoneyOptions {
   currency: string
   locale: string
@@ -74,11 +78,15 @@ export function dayLabel(iso: string, locale = 'en-US'): string {
 
 /** "November 2026" for a whole month, otherwise "Nov 14 to Nov 27". */
 export function periodLabel(start: string, end: string, locale = 'en-US'): string {
-  const s = asDate(start)
-  const e = asDate(end)
-  const nextDay = new Date(e.getTime() + 86_400_000)
-  if (s.getUTCDate() === 1 && nextDay.getUTCDate() === 1 && s.getUTCMonth() === e.getUTCMonth()) {
-    return s.toLocaleDateString(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const first = dateParts(start)
+  const wholeMonth =
+    first.day === 1 && dateParts(addDays(end, 1)).day === 1 && dateParts(end).month === first.month
+  if (wholeMonth) {
+    return asDate(start).toLocaleDateString(locale, {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
   }
   return `${shortDate(start, locale)} to ${shortDate(end, locale)}`
 }
@@ -96,17 +104,6 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
 
 export function percent(value: number): string {
   return `${Math.round(value)}%`
-}
-
-const PERIOD_WORDS: Record<string, string> = {
-  monthly: 'month',
-  weekly: 'week',
-  paycheck: 'paycheck',
-}
-
-/** The everyday word for a budget period kind: "month", "week" or "paycheck". */
-export function periodWord(kind: string): string {
-  return PERIOD_WORDS[kind] ?? 'period'
 }
 
 /** A short label for a period's bar in a chart: "Mar" for months, "Mar 4" otherwise. */

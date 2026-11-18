@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { isIsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
@@ -42,12 +42,10 @@ function present(row: StoredTransaction): Transaction {
   return { ...tx, person: personPayment(row) }
 }
 
-const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
-
 export const transactionFilterSchema = z.object({
-  start: isoDate.optional(),
+  start: isoDateSchema.optional(),
   /** Inclusive. */
-  end: isoDate.optional(),
+  end: isoDateSchema.optional(),
   /** A category id, or "uncategorized". */
   categoryId: z.union([z.uuid(), z.literal('uncategorized')]).optional(),
   accountId: z.uuid().optional(),
@@ -114,7 +112,7 @@ export async function listTransactions(
   return { transactions: list.rows.map(present), total: count.rows[0]!.total }
 }
 
-export async function getTransaction(db: Db, id: string): Promise<Transaction> {
+async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
   return present(rows[0])
@@ -146,7 +144,7 @@ export const transactionPatchSchema = z
     /** Excluded transactions count toward nothing (duplicates, reimbursed costs). */
     excluded: z.boolean(),
     // Only for transactions entered by hand.
-    date: isoDate,
+    date: isoDateSchema,
     name: z.string().trim().min(1).max(200),
     amountCents: z.number().int(),
   })
@@ -193,7 +191,7 @@ export async function updateTransaction(
 
 export const manualTransactionInputSchema = z.object({
   accountId: z.uuid(),
-  date: isoDate,
+  date: isoDateSchema,
   name: z.string().trim().min(1).max(200),
   /** Positive is money out, negative is money in. */
   amountCents: z.number().int(),

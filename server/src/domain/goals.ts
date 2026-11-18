@@ -5,13 +5,14 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { dateParts, isIsoDate, type IsoDate } from '../lib/dates.js'
+import { dateParts, type IsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import { planOf, type GoalPlan, type GoalProgressFacts } from './goalPlan.js'
 
-export const GOAL_KINDS = ['savings', 'purchase'] as const
+const GOAL_KINDS = ['savings', 'purchase'] as const
 
 export const goalInputSchema = z.object({
   /** savings: a pot to fill, like an emergency fund. purchase: one thing to buy, named by `name`. */
@@ -19,11 +20,7 @@ export const goalInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   /** The amount to save, or for a purchase its price. */
   targetCents: z.number().int().positive(),
-  targetDate: z
-    .string()
-    .refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
-    .nullable()
-    .default(null),
+  targetDate: isoDateSchema.nullable().default(null),
   /** Track a savings account's balance as progress, instead of counting by hand. */
   accountId: z.uuid().nullable().default(null),
   /** Saved so far, for a goal not linked to an account. */
@@ -127,7 +124,7 @@ export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
   return withPlans(db, rows, clock)
 }
 
-export async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
+async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
   const { rows } = await db.query<GoalRow>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
   return (await withPlans(db, rows, clock))[0]!

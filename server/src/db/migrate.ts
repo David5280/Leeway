@@ -5,6 +5,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type pg from 'pg'
+import { messageOf } from '../errors.js'
 
 /** The server's migrations/ folder, found from src/db (tsx) or dist/src/db (built). */
 function findMigrationsDir(): string {
@@ -53,7 +54,7 @@ export async function migrate(pool: pg.Pool, dir = MIGRATIONS_DIR): Promise<stri
         await client.query('COMMIT')
       } catch (error) {
         await client.query('ROLLBACK')
-        throw new Error(`Migration ${file} failed: ${(error as Error).message}`, { cause: error })
+        throw new Error(`Migration ${file} failed: ${messageOf(error)}`, { cause: error })
       }
       ran.push(file)
     }

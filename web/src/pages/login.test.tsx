@@ -71,7 +71,8 @@ describe('signing in to the app', () => {
    * A server whose session begins once sign-in succeeds. Saving settings ends
    * it, as an expired session would, so a test can sign out mid-use.
    */
-  function serveSignedOut(session = false) {
+  function serveSignedOut(startSignedIn = false) {
+    let session = startSignedIn
     return fakeServer(
       { get_settings: () => settings },
       {

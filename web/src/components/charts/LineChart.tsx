@@ -3,14 +3,8 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import {
-  axisFormat,
-  dayNumber,
-  niceTicks,
-  textWidth,
-  timeTicks,
-  type TimeTick,
-} from '../../lib/chartScale'
+import { axisFormat, niceTicks, textWidth, timeTicks, type TimeTick } from '../../lib/chartScale'
+import { toDayNumber } from '../../lib/dates'
 import { monthYear, shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
@@ -72,9 +66,9 @@ export function LineChart({
   const frame = lineFrame(compact, width, axis.values.map(format), last ? money(last.cents) : '')
   const { left, right, top, bottom, height } = frame
 
-  const first = dayNumber(points[0]?.date ?? '2000-01-01')
-  const span = Math.max(1, dayNumber(last?.date ?? '2000-01-01') - first)
-  const x = (date: string) => left + ((right - left) * (dayNumber(date) - first)) / span
+  const first = toDayNumber(points[0]?.date ?? '2000-01-01')
+  const span = Math.max(1, toDayNumber(last?.date ?? '2000-01-01') - first)
+  const x = (date: string) => left + ((right - left) * (toDayNumber(date) - first)) / span
   const y = (cents: number) =>
     bottom - ((bottom - top) * (cents - axis.low)) / (axis.high - axis.low)
   const placed = points.map((p) => ({ x: x(p.date), y: y(p.cents) }))

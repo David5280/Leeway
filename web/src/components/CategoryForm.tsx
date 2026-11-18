@@ -29,7 +29,7 @@ export const CADENCE_LABELS = {
  * Plaid's top-level categories and the detailed ones people reach for most.
  * Any other detailed code (see Plaid's taxonomy) can be typed in.
  */
-export const BANK_CATEGORIES = [
+const BANK_CATEGORIES = [
   'FOOD_AND_DRINK',
   'FOOD_AND_DRINK_GROCERIES',
   'FOOD_AND_DRINK_RESTAURANT',

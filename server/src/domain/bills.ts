@@ -3,7 +3,8 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { notFound } from '../errors.js'
-import { addDays, daysBetween, isIsoDate, maxDate, type IsoDate } from '../lib/dates.js'
+import { addDays, daysBetween, maxDate, type IsoDate } from '../lib/dates.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import { convertCadence, type Cadence } from '../lib/periods.js'
 import { lastBefore, nextOnOrAfter, occurrences } from '../lib/schedule.js'
 import { patchOf } from '../lib/schemas.js'
@@ -18,7 +19,7 @@ export const billInputSchema = z.object({
   amountCents: z.number().int().positive(),
   cadence: z.enum(BILL_CADENCES),
   /** The first due date to track; later ones repeat from it by cadence. */
-  anchorDate: z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD'),
+  anchorDate: isoDateSchema,
   /**
    * Text found in the merchant or description of the transaction that pays
    * it, such as "netflix". Case, digits and punctuation are ignored. Without
@@ -61,7 +62,7 @@ export interface Bill extends BillRow {
 }
 
 /** Bills due within this many days are "due soon". */
-export const DUE_SOON_DAYS = 7
+const DUE_SOON_DAYS = 7
 
 /**
  * How many days before a due date a payment still counts toward it. Shorter
@@ -153,7 +154,7 @@ export async function listBills(db: Db, today: IsoDate): Promise<Bill[]> {
     .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.name.localeCompare(b.name))
 }
 
-export async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
+async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
   const { rows } = await db.query<BillRow>(`${SELECT} WHERE b.id = $2`, [today, id])
   if (!rows[0]) throw notFound('Bill')
   return scheduleOf(rows[0], today)

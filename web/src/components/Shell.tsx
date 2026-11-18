@@ -16,7 +16,7 @@ const LINKS: { to: string; label: string; short: string; icon: IconName }[] = [
 ]
 
 /** Quick theme switch: one dot per theme, painted in that theme's colors. */
-export function ThemeDots() {
+function ThemeDots() {
   const { settings } = useApp()
   const prefersDark = usePrefersDark()
   const update = useUpdateSettings()

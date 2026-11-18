@@ -2,11 +2,12 @@
 // instants, so dates never carry a time or time zone. All math goes through
 // a day number (days since 1970-01-01, UTC) which makes it exact.
 
+import { DAY_MS } from './time.js'
+
 /** A calendar day, "YYYY-MM-DD". */
 export type IsoDate = string
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
-const MS_PER_DAY = 86_400_000
 
 export function isIsoDate(value: string): boolean {
   const match = ISO_DATE.exec(value)
@@ -28,11 +29,11 @@ export function makeDate(year: number, month: number, day: number): IsoDate {
 
 export function toDayNumber(date: IsoDate): number {
   const [y, m, d] = parts(date)
-  return Date.UTC(y, m - 1, d) / MS_PER_DAY
+  return Date.UTC(y, m - 1, d) / DAY_MS
 }
 
 export function fromDayNumber(day: number): IsoDate {
-  return new Date(day * MS_PER_DAY).toISOString().slice(0, 10)
+  return new Date(day * DAY_MS).toISOString().slice(0, 10)
 }
 
 export function addDays(date: IsoDate, days: number): IsoDate {

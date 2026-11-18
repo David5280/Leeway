@@ -2,7 +2,7 @@
 // and what the app shows about it.
 
 import type { AppContext } from '../../context.js'
-import { AppError } from '../../errors.js'
+import { AppError, messageOf } from '../../errors.js'
 import { todayIn, type IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
 import type { EmailMessage } from '../../mail/sender.js'
@@ -54,7 +54,7 @@ export interface WeeklyEmailView {
 }
 
 /** The email for today's numbers, as it would go out now. */
-export async function composeWeeklyEmail(
+async function composeWeeklyEmail(
   ctx: AppContext,
   settings: Settings,
   today: IsoDate,
@@ -86,8 +86,6 @@ async function recipient(ctx: AppContext, row: WeeklyEmailRow): Promise<string> 
   return to
 }
 
-const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
 /**
  * Sends this week's email if it is due. Run on a timer: most calls find
  * nothing due. A failed send is recorded for the app to show and tried again
@@ -108,7 +106,7 @@ export async function sendWeeklyEmailIfDue(ctx: AppContext): Promise<SendOutcome
     const message = await composeWeeklyEmail(ctx, settings, todayIn(settings.timeZone, now))
     await mailer.send({ to, ...message })
   } catch (error) {
-    await recordFailure(ctx.db, reason(error), ctx.now())
+    await recordFailure(ctx.db, messageOf(error), ctx.now())
     return 'failed'
   }
   await recordSent(ctx.db, slot, ctx.now())
@@ -137,7 +135,7 @@ export async function sendTestEmail(ctx: AppContext): Promise<{ sentTo: string }
   try {
     await mailer.send({ to, ...message, subject: `Test: ${message.subject}` })
   } catch (error) {
-    throw new AppError('mail_error', reason(error))
+    throw new AppError('mail_error', messageOf(error))
   }
   return { sentTo: to }
 }

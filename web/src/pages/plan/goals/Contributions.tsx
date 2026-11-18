@@ -4,12 +4,12 @@
 import { useState } from 'react'
 import type { Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
-import { ErrorNote, Loading } from '../../../components/ui'
+import { ErrorNote, LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
 
 /** How many recent entries the history shows. */
-export const HISTORY_SIZE = 5
+const HISTORY_SIZE = 5
 
 /** Put money toward a goal counted by hand, or take some back with a minus sign. */
 export function AddMoney({ goal }: { goal: Goal }) {
@@ -49,7 +49,7 @@ function HistoryList({ goal }: { goal: Goal }) {
   const { exact, settings } = useApp()
   const history = useAction('list_goal_contributions', { id: goal.id, limit: HISTORY_SIZE })
   if (!history.data) {
-    return history.error ? <ErrorNote error={history.error} /> : <Loading />
+    return <LoadingOrError error={history.error} />
   }
   if (history.data.length === 0) {
     return <p className="small muted">Nothing recorded yet. Amounts you add show up here.</p>

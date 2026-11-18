@@ -2,13 +2,12 @@
 
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
-import { isIsoDate, isValidTimeZone } from '../lib/dates.js'
+import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
+import { isoDateSchema } from '../lib/schemas.js'
 import type { PeriodConfig } from '../lib/periods.js'
 
-const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
-
-export const periodSchema = z.discriminatedUnion('kind', [
+const periodSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('monthly'),
     // Capped at 28 so every month has the start day.
@@ -21,7 +20,7 @@ export const periodSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('paycheck'),
     frequency: z.enum(['weekly', 'biweekly', 'semimonthly', 'monthly']),
-    anchorDate: isoDate,
+    anchorDate: isoDateSchema,
     semimonthlyDays: z
       .tuple([z.number().int().min(1).max(31), z.number().int().min(1).max(31)])
       .default([1, 15]),
@@ -31,7 +30,7 @@ export const periodSchema = z.discriminatedUnion('kind', [
 export const THEMES = ['night', 'harbor', 'neon'] as const
 export const ACCENTS = ['blue', 'teal', 'violet', 'orange', 'pink', 'mint'] as const
 export const FONTS = ['geist', 'space-grotesk', 'ibm-plex', 'system'] as const
-export const WIDGETS = [
+const WIDGETS = [
   'summary',
   'leeway',
   'glance',
@@ -48,12 +47,12 @@ export const WIDGETS = [
   'debts',
   'trends',
 ] as const
-export const WIDGET_SIZES = ['half', 'wide', 'full'] as const
+const WIDGET_SIZES = ['half', 'wide', 'full'] as const
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #4f8cff')
 
 /** Each appearance option; 'theme' means "whatever the theme does". */
-export const appearanceFields = {
+const appearanceFields = {
   theme: z.enum(THEMES),
   /** Light or dark. Every theme has both; 'theme' uses the one it is known for. */
   mode: z.enum(['theme', 'system', 'light', 'dark']),
@@ -64,7 +63,7 @@ export const appearanceFields = {
   corners: z.enum(['theme', 'round', 'soft', 'square']),
 }
 
-export const appearanceSchema = z.object({
+const appearanceSchema = z.object({
   theme: appearanceFields.theme.default('night'),
   mode: appearanceFields.mode.default('theme'),
   accent: appearanceFields.accent.default('theme'),
@@ -73,13 +72,13 @@ export const appearanceSchema = z.object({
   corners: appearanceFields.corners.default('theme'),
 })
 
-export const widgetSchema = z.object({
+const widgetSchema = z.object({
   type: z.enum(WIDGETS),
   size: z.enum(WIDGET_SIZES).default('wide'),
   visible: z.boolean().default(true),
 })
 
-export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
+const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
   { type: 'summary', size: 'full', visible: true },
   { type: 'leeway', size: 'wide', visible: true },
   { type: 'glance', size: 'half', visible: true },

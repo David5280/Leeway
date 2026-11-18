@@ -3,8 +3,6 @@ import {
   axisFormat,
   axisIndices,
   compactMoney,
-  dayNumber,
-  isoFromDay,
   nearestIndex,
   niceTicks,
   spreadLabels,
@@ -124,14 +122,6 @@ describe('nearestIndex', () => {
     expect(nearestIndex(37, [0, 30, 60])).toBe(1)
     expect(nearestIndex(15, [0, 30])).toBe(0)
     expect(nearestIndex(15, [])).toBe(-1)
-  })
-})
-
-describe('dayNumber and isoFromDay', () => {
-  it('count whole days from 1970 and back again', () => {
-    expect(dayNumber('1970-01-02')).toBe(1)
-    expect(isoFromDay(1)).toBe('1970-01-02')
-    expect(isoFromDay(dayNumber('2026-11-17'))).toBe('2026-11-17')
   })
 })
 

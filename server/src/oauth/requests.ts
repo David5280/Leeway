@@ -2,8 +2,9 @@
 // for the owner's answer on the consent screen, then send them back with a code.
 
 import type { Db } from '../db/pool.js'
-import { AppError } from '../errors.js'
+import { AppError, messageOf } from '../errors.js'
 import { hashToken, randomToken } from '../lib/crypto.js'
+import { MINUTE_MS } from '../lib/time.js'
 import type { ClientIdentity, LoadClientDocument } from './clientDocument.js'
 import { resolveClient } from './clients.js'
 import type { OAuthUrls } from './metadata.js'
@@ -14,7 +15,7 @@ import { narrowerScope, parseScope, type Scope } from './scopes.js'
 /** How long the owner has to answer the consent screen. */
 const REQUEST_MINUTES = 10
 /** How long an authorization code can wait to be exchanged (RFC 6749 suggests at most 10). */
-export const CODE_MINUTES = 5
+const CODE_MINUTES = 5
 
 /** The query parameters of GET /oauth/authorize. */
 export interface AuthorizeParams {
@@ -71,7 +72,7 @@ async function checkClient(
   try {
     client = await resolveClient(db, params.client_id, loadDocument)
   } catch (error) {
-    return problem('unknown_app', `${(error as Error).message}.`)
+    return problem('unknown_app', `${messageOf(error)}.`)
   }
   // A redirect URI may be left out only when the app registered exactly one.
   const redirectUri =
@@ -118,7 +119,7 @@ export async function startAuthorization(
   }
 
   const id = randomToken()
-  const expires = new Date(now.getTime() + REQUEST_MINUTES * 60_000)
+  const expires = new Date(now.getTime() + REQUEST_MINUTES * MINUTE_MS)
   await db.query('DELETE FROM oauth_requests WHERE expires_at < $1', [now])
   await db.query(
     `INSERT INTO oauth_requests (id, client_id, client_name, client_host, redirect_uri,
@@ -237,7 +238,7 @@ export async function answerConnectRequest(
       row.codeChallenge,
       narrowerScope(row.scope, answer.scope),
       row.resource,
-      new Date(now.getTime() + CODE_MINUTES * 60_000),
+      new Date(now.getTime() + CODE_MINUTES * MINUTE_MS),
     ],
   )
   return { redirectTo: withParams(row.redirectUri, { code, state: row.state, iss: row.issuer }) }

@@ -211,7 +211,7 @@ export const FONTS: Record<FontId, { name: string; ui: string; num: string }> = 
 export const CORNERS = { round: 16, soft: 8, square: 2 } as const
 
 /** Which of a theme's two color sets to use. */
-export function resolveMode(appearance: Appearance, prefersDark: boolean): Mode {
+function resolveMode(appearance: Appearance, prefersDark: boolean): Mode {
   if (appearance.mode === 'light' || appearance.mode === 'dark') return appearance.mode
   if (appearance.mode === 'system') return prefersDark ? 'dark' : 'light'
   return THEMES[appearance.theme].mode

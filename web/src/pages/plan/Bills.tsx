@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { Bill, Category, RecurringSeries } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
-import { Card, ErrorNote, Loading } from '../../components/ui'
+import { Card, ErrorNote, LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
@@ -119,7 +119,7 @@ export function BillsSection() {
 
   if (!bills.data || !categories.data) {
     const error = bills.error ?? categories.error
-    return error ? <ErrorNote error={error} /> : <Loading />
+    return <LoadingOrError error={error} />
   }
   const track = (series: RecurringSeries) =>
     setEditing({

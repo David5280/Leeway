@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { randomToken } from '../lib/crypto.js'
+import { DAY_MS } from '../lib/time.js'
 import {
   isClientDocumentUrl,
   type ClientIdentity,
@@ -83,7 +84,7 @@ async function clearUnusedRegistrations(db: Db, now: Date): Promise<void> {
          WHERE NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = u.client_id)
          ORDER BY u.created_at DESC, u.client_id
          LIMIT $2))`,
-    [new Date(now.getTime() - UNUSED_REGISTRATION_DAYS * 86_400_000), MAX_UNUSED_REGISTRATIONS],
+    [new Date(now.getTime() - UNUSED_REGISTRATION_DAYS * DAY_MS), MAX_UNUSED_REGISTRATIONS],
   )
 }
 

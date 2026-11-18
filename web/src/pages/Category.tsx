@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Shell } from '../components/Shell'
-import { ErrorNote, Icon, Loading } from '../components/ui'
+import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { groupNames } from '../lib/groups'
 import { categoryStatus } from '../widgets/Categories'
@@ -35,8 +35,7 @@ export function CategoryPage() {
   if (!category || !budget.data) {
     return (
       <Shell>
-        <ErrorNote error={categories.error ?? budget.error} />
-        <Loading />
+        <LoadingOrError error={categories.error ?? budget.error} />
       </Shell>
     )
   }

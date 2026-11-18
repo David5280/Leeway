@@ -3,6 +3,20 @@
 
 import type { IsoDate } from '../lib/dates.js'
 
+/**
+ * The limits on an import. The server refuses rows past them; the browser
+ * applies the same ones while reading a file, so a long cell is cut there
+ * instead of failing the whole import.
+ */
+export const IMPORT_LIMITS = {
+  /** Rows in one import: decades of history for one account, and a few megabytes. */
+  maxRows: 20_000,
+  nameLength: 200,
+  categoryLength: 80,
+  /** No personal transaction comes near a billion dollars; a bigger one is a misread column. */
+  maxAmountCents: 100_000_000_000,
+}
+
 /** One row of an import, after the file's columns were mapped in the browser. */
 export interface ImportRow {
   date: IsoDate

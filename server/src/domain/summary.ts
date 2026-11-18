@@ -4,8 +4,10 @@
 
 import { createHash } from 'node:crypto'
 import type { AppContext } from '../context.js'
+import { messageOf } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { formatWholeCents } from '../lib/money.js'
+import { HOUR_MS, MINUTE_MS } from '../lib/time.js'
 import { getCheckin } from './checkin.js'
 import type { Settings } from './settings.js'
 import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from './summaryText.js'
@@ -29,8 +31,8 @@ export interface Summary extends SummaryText {
 export const REUSE_HOURS = 4
 /** After a failed try, wait this long before trying again. */
 export const RETRY_AFTER_MINUTES = 60
-
-const HOUR = 3_600_000
+/** A failure's message is kept for the log and the app, so very long ones are cut. */
+const MAX_ERROR_LENGTH = 500
 
 interface SavedRow {
   factsHash: string
@@ -76,7 +78,7 @@ export async function getSummary(
 
   if (saved?.headline && saved.points) {
     // Reuse it while the numbers are unchanged, or while it is recent enough.
-    if (saved.factsHash === factsHash || age < REUSE_HOURS * HOUR) {
+    if (saved.factsHash === factsHash || age < REUSE_HOURS * HOUR_MS) {
       return {
         headline: saved.headline,
         points: saved.points,
@@ -85,7 +87,7 @@ export async function getSummary(
         ai: 'on',
       }
     }
-  } else if (saved?.error && age < RETRY_AFTER_MINUTES * 60_000) {
+  } else if (saved?.error && age < RETRY_AFTER_MINUTES * MINUTE_MS) {
     return own('unavailable')
   }
 
@@ -100,7 +102,7 @@ export async function getSummary(
     await saveSummary(ctx, today, factsHash, { text })
     return { ...text, writtenBy: writer.name, writtenAt: now.toISOString(), ai: 'on' }
   } catch (error) {
-    await saveSummary(ctx, today, factsHash, { error: (error as Error).message })
+    await saveSummary(ctx, today, factsHash, { error: messageOf(error) })
     return own('unavailable')
   }
 }
@@ -122,7 +124,7 @@ async function saveSummary(
   result: { text: SummaryText } | { error: string },
 ): Promise<void> {
   const text = 'text' in result ? result.text : null
-  const error = 'error' in result ? result.error.slice(0, 500) : null
+  const error = 'error' in result ? result.error.slice(0, MAX_ERROR_LENGTH) : null
   await ctx.db.query(
     `INSERT INTO ai_summaries (day, facts_hash, headline, points, error, created_at)
      VALUES ($1, $2, $3, $4, $5, $6)
