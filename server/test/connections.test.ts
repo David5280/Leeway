@@ -360,4 +360,21 @@ describe('bank webhooks', () => {
 
     expect(await transactionCount()).toBe(1)
   })
+
+  it('refreshes both balances on a bank update, so an overdraft shows at once', async () => {
+    await call('link_bank', { publicToken: 'public-1' })
+    expect(await call('list_alerts')).toEqual([])
+    // The bank posted $120 but pending charges leave $42.10 overdrawn.
+    bank.accounts = [
+      { ...account('acc-checking', 'Checking', 'depository', 12000), availableCents: -4210 },
+    ]
+
+    await handleBankWebhook(ctx, 'item-public-1', 'sync')
+
+    const [checking] = await call('list_accounts')
+    expect(checking).toMatchObject({ balanceCents: 12000, availableCents: -4210 })
+    expect((await call('list_alerts')).map((a) => [a.kind, a.amountCents])).toEqual([
+      ['overdrawn', 4210],
+    ])
+  })
 })

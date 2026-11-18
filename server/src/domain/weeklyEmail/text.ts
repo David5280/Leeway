@@ -12,6 +12,9 @@ function section({ title, items, empty }: EmailSection): string {
 /** The email as plain text: the same words as the HTML, in the same order. */
 export function weeklyEmailText(content: WeeklyEmailContent): string {
   const blocks = [
+    content.alerts.length
+      ? section({ title: 'Alerts', items: content.alerts.map((text) => ({ text })), empty: '' })
+      : '',
     content.headline,
     content.points.map((point) => `- ${point}`).join('\n'),
     section({ title: content.figuresTitle, items: content.figures, empty: '' }),

@@ -47,9 +47,21 @@ export function headline({ budget }: Checkin, money: Money, word: string): strin
   return `You're on track: ${money(budget.leewayCents)} left${afterGoals}${perDay} for ${days}.`
 }
 
-/** How many things the Heads up list says need doing today, if any. */
+/**
+ * The most serious account alert, in words that name the bank but not the
+ * account, since this summary also goes in the weekly email and to an AI writer.
+ */
+function alertPoint({ alerts }: Checkin): string | null {
+  const [first, ...rest] = alerts
+  if (!first) return null
+  if (rest.length === 0) return first.summary
+  return `${first.summary} ${plural(rest.length, 'more account alert is', 'more account alerts are')} at the top of the dashboard.`
+}
+
+/** How many other things the Heads up list says need doing today, if any. */
 function urgentPoint({ attention }: Checkin): string | null {
-  const now = attention.filter((item) => item.priority === 'now').length
+  // Account alerts have their own point above.
+  const now = attention.filter((item) => item.priority === 'now' && item.topic !== 'account').length
   if (now === 0) return null
   return `${plural(now, 'thing needs', 'things need')} you today. See Heads up below.`
 }
@@ -104,6 +116,7 @@ export function plainSummary(
 ): SummaryText {
   const word = periodWord(settings.period.kind)
   const points = [
+    alertPoint(checkin),
     urgentPoint(checkin),
     cashPoint(checkin, money, settings.locale),
     pacePoint(checkin, money, word),
@@ -116,7 +129,8 @@ export function plainSummary(
 /**
  * What an AI writer is told: the check-in's numbers, already formatted as
  * money and dates so nothing has to be converted from cents. Only totals,
- * the heads-up list, and bill and goal names: no accounts or transactions.
+ * the heads-up list, account alerts naming only the bank and the kind of
+ * account, and bill and goal names: no account names, numbers or transactions.
  */
 export function summaryFacts(
   checkin: Checkin,
@@ -147,7 +161,11 @@ export function summaryFacts(
       billsDueBeforePayday: money(cashFlow.billsDueCents),
       leftAfterBills: money(cashFlow.leftAfterBillsCents),
     },
-    headsUp: checkin.attention.map(({ priority, message }) => ({ priority, message })),
+    // Account alerts go without account names, so they are not in the heads-up list.
+    headsUp: checkin.attention
+      .filter((item) => item.topic !== 'account')
+      .map(({ priority, message }) => ({ priority, message })),
+    accountAlerts: checkin.alerts.map((alert) => alert.summary),
     goals: checkin.goals.map((g) => ({
       name: g.name,
       kind: g.kind,

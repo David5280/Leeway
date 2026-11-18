@@ -97,6 +97,9 @@ const widgetsSchema = z
     'Each widget can only appear once',
   )
 
+/** Account ids picked on the Accounts dashboard; empty picks every account. */
+const accountSelectionSchema = z.array(z.uuid()).max(100)
+
 /**
  * Every preference in one validated document. Defaults fill anything missing,
  * so an empty document is a complete, sensible setup.
@@ -117,6 +120,11 @@ export const settingsSchema = z.object({
   includePending: z.boolean().default(true),
   appearance: appearanceSchema.default(appearanceSchema.parse({})),
   dashboard: z.object({ widgets: widgetsSchema }).default({ widgets: DEFAULT_WIDGETS }),
+  /**
+   * The accounts picked on the Accounts dashboard, kept here rather than in
+   * the browser so a laptop and a phone show the same pick. Empty means all.
+   */
+  accountSelection: accountSelectionSchema.default([]),
   /**
    * Whether Claude writes the dashboard summary (it also needs ANTHROPIC_API_KEY).
    * Only the owner can change it, in the app, because it sends data to Anthropic;
@@ -140,6 +148,7 @@ export const settingsPatchSchema = z
     // No defaults here: a partial patch must not reset the fields it leaves out.
     appearance: z.object(appearanceFields).partial(),
     dashboard: z.object({ widgets: widgetsSchema }),
+    accountSelection: accountSelectionSchema,
   })
   .partial()
   .strict()

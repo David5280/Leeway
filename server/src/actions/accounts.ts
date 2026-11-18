@@ -1,4 +1,5 @@
-// Actions for bank and manual accounts: list, add by hand, rename, hide, delete.
+// Actions for bank and manual accounts: list, summarize, alerts, add by hand,
+// rename, hide, set a low-balance warning, delete.
 
 import { z } from 'zod'
 import {
@@ -9,7 +10,16 @@ import {
   manualAccountInputSchema,
   updateAccount,
 } from '../domain/accounts.js'
+import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../domain/accountAlerts.js'
+import { getAccountsView } from '../domain/accountView.js'
+import { listAlerts } from '../domain/alerts.js'
 import { defineAction } from './action.js'
+import { settingsAndToday } from './today.js'
+
+/** Some accounts by id; none, or ids that match no account, mean every account. */
+const accountIdsInput = z.object({
+  accountIds: z.array(z.uuid()).max(100).default([]),
+})
 
 export const listAccountsAction = defineAction({
   name: 'list_accounts',
@@ -36,8 +46,7 @@ export const createAccountAction = defineAction({
 export const updateAccountAction = defineAction({
   name: 'update_account',
   title: 'Update an account',
-  description:
-    'Rename or hide an account. Manual accounts can also change balance, credit limit and type.',
+  description: `Rename or hide an account, set its debt terms, or set lowBalanceCents: warn when the money available drops below it (null follows the default of ${DEFAULT_LOW_BALANCE_CENTS} cents for checking accounts and none for others; 0 turns it off). Manual accounts can also change balance, credit limit and type.`,
   input: accountPatchSchema.extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
@@ -54,5 +63,32 @@ export const deleteAccountAction = defineAction({
   run: async (ctx, { id }) => {
     await deleteManualAccount(ctx.db, id)
     return { deleted: true }
+  },
+})
+
+export const listAlertsAction = defineAction({
+  name: 'list_alerts',
+  title: 'List account alerts',
+  description: `What is going wrong with accounts right now, most serious first: a checking or savings account overdrawn (kind "overdrawn", severity "urgent"), a credit card over its limit ("over_limit", urgent), overdraft or insufficient funds fees charged in the last ${FEE_DAYS} days ("overdraft_fee", warning, with the count and latest date), and money available below the account's low-balance warning ("low_balance", warning). amountCents is how far overdrawn or over the limit, the balance left, or the fees in all. Worked out from the balances of the last bank sync. Give accountIds for some accounts only.`,
+  input: accountIdsInput,
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { accountIds }) => {
+    const { settings, today } = await settingsAndToday(ctx)
+    return listAlerts(ctx.db, settings, today, accountIds)
+  },
+})
+
+export const summarizeAccountsAction = defineAction({
+  name: 'summarize_accounts',
+  title: 'Summarize accounts',
+  description:
+    'One or several accounts together, as the Accounts dashboard shows them: combined balances (cash as posted, available to spend, owed on cards and loans, credit left, net), money in and out over the last 4 budget periods (transfers left out), spending by category this period, recent transactions, alerts, and a short summary in plain words. Give accountIds to pick accounts; none means all. Amounts are in cents.',
+  input: accountIdsInput,
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { accountIds }) => {
+    const { settings } = await settingsAndToday(ctx)
+    return getAccountsView(ctx.db, settings, ctx.now(), accountIds)
   },
 })

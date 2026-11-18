@@ -1,30 +1,16 @@
 // Where the money went: recent transactions, accounts and top merchants.
 
 import { Link } from 'react-router-dom'
-import type { CategoryBudget, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
-import { Card, Dot, ErrorNote, Progress } from '../components/ui'
-import { accountDetail, accountName, isOwed } from '../lib/accounts'
+import { TransactionLine } from '../components/TransactionLine'
+import { Card, ErrorNote, Progress } from '../components/ui'
+import { accountDetail, accountName, accountPath, isOwed, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
-import { shortDate } from '../lib/format'
-import { amountClass, amountTone, movementTag, transactionTitle } from '../lib/transactions'
 import type { WidgetProps } from './types'
 
-/**
- * The kind of a transaction's category. The budget lists every category but
- * transfers, so a category it does not know is a transfer.
- */
-function kindOf(
-  tx: Transaction,
-  category: CategoryBudget | undefined,
-): CategoryBudget['kind'] | 'transfer' | null {
-  if (category) return category.kind
-  return tx.categoryId ? 'transfer' : null
-}
-
 export function RecentWidget({ budget }: WidgetProps) {
-  const { signed, settings } = useApp()
   const recent = useAction('list_transactions', { limit: 6, end: budget.period.end })
+  // The budget lists every category but transfers, which the line reads as transfers.
   const colors = new Map(budget.categories.map((c) => [c.categoryId, c]))
   return (
     <Card label="Recent transactions" className="stack-sm">
@@ -36,37 +22,13 @@ export function RecentWidget({ budget }: WidgetProps) {
       </div>
       {recent.error && <ErrorNote error={recent.error} />}
       {recent.data?.transactions.length === 0 && <p className="empty">No transactions yet.</p>}
-      {recent.data?.transactions.map((tx) => {
-        const category = tx.categoryId ? colors.get(tx.categoryId) : undefined
-        const kind = kindOf(tx, category)
-        return (
-          <div key={tx.id} className="list-row">
-            <span className="num small muted" style={{ width: 56, flex: 'none' }}>
-              {shortDate(tx.date, settings.locale)}
-            </span>
-            <span className="grow stack-sm" style={{ gap: 0 }}>
-              <span
-                style={{
-                  fontWeight: 500,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {transactionTitle(tx)}
-              </span>
-              <span className="small muted row" style={{ gap: 6 }}>
-                <Dot color={category?.color} dashed={!tx.categoryId} />
-                {category?.name ?? movementTag(tx, kind) ?? 'Needs a category'}
-                {tx.pending ? ', pending' : ''}
-              </span>
-            </span>
-            <span className={amountClass(amountTone(tx, kind))} style={{ fontWeight: 500 }}>
-              {signed(tx.amountCents)}
-            </span>
-          </div>
-        )
-      })}
+      {recent.data?.transactions.map((tx) => (
+        <TransactionLine
+          key={tx.id}
+          tx={tx}
+          category={tx.categoryId ? colors.get(tx.categoryId) : undefined}
+        />
+      ))}
     </Card>
   )
 }
@@ -78,14 +40,18 @@ export function AccountsWidget() {
     <Card label="Accounts" className="stack-sm">
       <div className="row-between">
         <h2>Accounts</h2>
-        <Link to="/customize#accounts" className="linkbtn">
-          Manage
+        <Link to="/accounts" className="linkbtn">
+          All accounts
         </Link>
       </div>
       <ErrorNote error={accounts.error} />
       {accounts.data?.length === 0 && <p className="empty">No accounts yet.</p>}
       {accounts.data?.map((account) => (
-        <div key={account.id} className={`list-row ${account.hidden ? 'muted' : ''}`}>
+        <Link
+          key={account.id}
+          to={accountPath(account.id)}
+          className={`list-row clickrow ${account.hidden ? 'muted' : ''}`}
+        >
           <span className="grow stack-sm" style={{ gap: 0 }}>
             <span className="ellipsis">{accountName(account)}</span>
             <span className="small muted">
@@ -94,14 +60,14 @@ export function AccountsWidget() {
             </span>
           </span>
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
-            <span className="num">
+            <span className={overdrawn(account) ? 'num over' : 'num'}>
               {account.balanceCents === null ? 'No balance' : exact(account.balanceCents)}
             </span>
             {isOwed(account) && account.balanceCents !== null && (
               <span className="small muted">owed</span>
             )}
           </span>
-        </div>
+        </Link>
       ))}
     </Card>
   )

@@ -213,4 +213,92 @@ describe('Accounts', () => {
     expect(screen.queryByRole('form', { name: 'New account' })).not.toBeInTheDocument()
     expect(server.actions('create_account')).toEqual([])
   })
+
+  describe('low-balance warning', () => {
+    const field = (name: string) =>
+      screen.getByRole('textbox', { name: `Low balance warning for ${name}` })
+
+    it('offers one on cash accounts only, showing the default it follows', async () => {
+      const everyday = { ...checking, subtype: 'checking' }
+      fakeServer({ list_accounts: () => [everyday, card, cash] })
+      renderSignedIn(<AccountSection />)
+      expect(
+        await screen.findByRole('textbox', { name: 'Low balance warning for Everyday' }),
+      ).toHaveAttribute('placeholder', '$100')
+      // Accounts other than checking warn only once an amount is set.
+      expect(field('Cash')).toHaveAttribute('placeholder', 'Off')
+      expect(
+        screen.queryByRole('textbox', { name: 'Low balance warning for Rewards card' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows an amount already set', async () => {
+      fakeServer({ list_accounts: () => [{ ...checking, lowBalanceCents: 25050 }] })
+      renderSignedIn(<AccountSection />)
+      expect(await screen.findByRole('textbox', { name: /Low balance warning/ })).toHaveValue(
+        '250.5',
+      )
+    })
+
+    it('saves an amount in cents, 0 to turn it off, and empty for the default', async () => {
+      // Keeps what was saved, so each change is compared with the last one.
+      let current = checking
+      const server = fakeServer({
+        list_accounts: () => [current],
+        update_account: (input) => (current = { ...current, ...input }),
+      })
+      renderSignedIn(<AccountSection />)
+      const input = await screen.findByRole('textbox', { name: 'Low balance warning for Everyday' })
+      const user = userEvent.setup()
+
+      await user.type(input, '$250')
+      await user.tab()
+      await user.clear(input)
+      await user.type(input, '0')
+      await user.tab()
+      await user.clear(input)
+      await user.tab()
+
+      expect(server.actions('update_account')).toEqual([
+        { id: 'acct-1', lowBalanceCents: 25000 },
+        { id: 'acct-1', lowBalanceCents: 0 },
+        { id: 'acct-1', lowBalanceCents: null },
+      ])
+    })
+
+    it('sends nothing when the amount did not change, or is not a positive number', async () => {
+      const server = serve()
+      renderSignedIn(<AccountSection />)
+      const input = await screen.findByRole('textbox', { name: 'Low balance warning for Everyday' })
+      const user = userEvent.setup()
+      await user.click(input)
+      await user.tab()
+      await user.type(input, '-5')
+      await user.tab()
+      expect(input).toHaveValue('')
+      expect(server.actions('update_account')).toEqual([])
+    })
+
+    it('shows why a warning could not be saved', async () => {
+      fakeServer(
+        { list_accounts: () => [checking] },
+        { '/api/actions/update_account': failing('Could not save the warning') },
+      )
+      renderSignedIn(<AccountSection />)
+      const input = await screen.findByRole('textbox', { name: 'Low balance warning for Everyday' })
+      await userEvent.type(input, '50')
+      await userEvent.tab()
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the warning')
+    })
+  })
+
+  it("opens each account's page from its balance", async () => {
+    serve()
+    renderSignedIn(<AccountSection />)
+    expect(await screen.findByRole('link', { name: 'Open Everyday' })).toHaveAttribute(
+      'href',
+      '/accounts?select=acct-1',
+    )
+    expect(screen.getByRole('link', { name: 'Open Cash' })).toHaveTextContent('Open')
+  })
 })

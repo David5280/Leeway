@@ -1,19 +1,26 @@
-// The owner's accounts: rename, hide, and add or delete ones kept by hand.
+// The owner's accounts: rename, hide, set low-balance warnings, and add or
+// delete ones kept by hand.
 
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
-import { ACCOUNT_TYPES, isOwed } from '../../lib/accounts'
+import { ACCOUNT_TYPES, accountPath, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
+import { LowBalanceField } from './LowBalance'
 import { Section } from './Section'
 
 export function AccountSection() {
   const accounts = useAction('list_accounts', { includeHidden: true })
   const [adding, setAdding] = useState(false)
   return (
-    <Section id="accounts" title="Accounts" hint="Hidden accounts stay out of every total">
+    <Section
+      id="accounts"
+      title="Accounts"
+      hint="Hidden accounts stay out of every total. Checking and savings accounts warn when they run low: leave the amount empty for the default, or 0 for no warning."
+    >
       {accounts.data?.length === 0 && (
         <p className="empty small">No accounts yet. Connect a bank below or add one by hand.</p>
       )}
@@ -66,11 +73,17 @@ function AccountRow({ account }: { account: Account }) {
             : `${account.institutionName ?? 'Bank'}${account.mask ? ` ending ${account.mask}` : ''}`}
         </span>
       </span>
-      <span className="num" style={{ textAlign: 'right' }}>
+      {account.type === 'depository' && <LowBalanceField account={account} />}
+      <Link
+        to={accountPath(account.id)}
+        className="num linkbtn"
+        style={{ textAlign: 'right' }}
+        aria-label={`Open ${account.name}`}
+      >
         {account.balanceCents === null
-          ? ''
+          ? 'Open'
           : `${exact(account.balanceCents)}${owed ? ' owed' : ''}`}
-      </span>
+      </Link>
       {account.manual && (
         <button
           type="button"

@@ -8,6 +8,7 @@ import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
 import { Board } from '../widgets/Board'
+import { AccountHealth } from './overview/AccountHealth'
 import {
   addableTypes,
   DEFAULT_LAYOUT,
@@ -55,6 +56,8 @@ export function Overview() {
           </button>
         </div>
       )}
+
+      <AccountHealth />
 
       <section className="row-between" style={{ alignItems: 'end' }}>
         <div>

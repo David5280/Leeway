@@ -51,3 +51,40 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   const parts = [account.institutionName, account.mask ? `··${account.mask}` : null]
   return parts.filter(Boolean).join(' ')
 }
+
+/**
+ * Where one account opens: the Accounts dashboard with just that account
+ * picked. One page serves one account or several, so every link goes there.
+ */
+export function accountPath(id: string): string {
+  return `/accounts?select=${encodeURIComponent(id)}`
+}
+
+/**
+ * The pick after tapping an account's chip. An empty pick means every
+ * account. From every account, a tap narrows to the one tapped; otherwise it
+ * adds or removes that one, and removing the last goes back to every account.
+ * A pick naming every account is saved as empty, so it still means "all"
+ * once more accounts are added.
+ */
+export function toggleAccount(picked: string[], id: string, allIds: string[]): string[] {
+  if (picked.length === 0) return [id]
+  const next = picked.includes(id) ? picked.filter((other) => other !== id) : [...picked, id]
+  const coversAll = allIds.every((other) => next.includes(other))
+  return coversAll ? [] : next
+}
+
+/**
+ * The saved pick that still applies: ids of accounts that exist, in the
+ * accounts' order. Empty, meaning every account, when none of them do, so a
+ * deleted account never leaves the page blank.
+ */
+export function activePick(picked: string[], accounts: Pick<Account, 'id'>[]): string[] {
+  const wanted = new Set(picked)
+  return accounts.filter((account) => wanted.has(account.id)).map((account) => account.id)
+}
+
+/** A checking or savings account below zero. A card's balance is owed, so it never is. */
+export function overdrawn(account: Pick<Account, 'type' | 'balanceCents'>): boolean {
+  return account.type === 'depository' && (account.balanceCents ?? 0) < 0
+}

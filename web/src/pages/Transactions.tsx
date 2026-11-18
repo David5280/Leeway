@@ -9,7 +9,8 @@ import { RuleBuilder } from '../components/rules/RuleBuilder'
 import { RulesList } from '../components/rules/RulesList'
 import type { RuleDraft } from '../components/rules/rules'
 import { Shell } from '../components/Shell'
-import { ErrorNote, Loading, Segmented } from '../components/ui'
+import { ErrorNote, Icon, Loading, Segmented } from '../components/ui'
+import { accountName } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { dayLabel } from '../lib/format'
 import { pairTransfers } from '../lib/transactions'
@@ -23,27 +24,31 @@ const PAGE = 100
 const MAX_SHOWN = 500
 const UNCATEGORIZED = 'uncategorized'
 
-/** The category filter lives in the address (?category=), so other screens can link to it. */
-function useCategoryFilter(): [string | null, (id: string | null) => void] {
+/**
+ * A filter that lives in the address (?category=, ?account=), so other
+ * screens can link to it.
+ */
+function useAddressFilter(name: string): [string | null, (id: string | null) => void] {
   const [params, setParams] = useSearchParams()
   const set = (id: string | null) =>
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
-        if (id) next.set('category', id)
-        else next.delete('category')
+        if (id) next.set(name, id)
+        else next.delete(name)
         return next
       },
       { replace: true },
     )
-  return [params.get('category'), set]
+  return [params.get(name), set]
 }
 
 export function Transactions() {
   const { settings } = useApp()
   const [search, setSearch] = useState('')
   const [range, setRange] = useState<Range>('period')
-  const [categoryId, setCategoryId] = useCategoryFilter()
+  const [categoryId, setCategoryId] = useAddressFilter('category')
+  const [accountId, setAccountId] = useAddressFilter('account')
   const [limit, setLimit] = useState(PAGE)
   const [rule, setRule] = useState<RuleDraft | null>(null)
   const [adding, setAdding] = useState(false)
@@ -57,6 +62,7 @@ export function Transactions() {
     {
       search: query || undefined,
       categoryId: categoryId ?? undefined,
+      accountId: accountId ?? undefined,
       start: rangeStart(range, budget.data?.period.start, settings.timeZone),
       limit,
     },
@@ -67,7 +73,7 @@ export function Transactions() {
       placeholderData: (previous) => previous,
     },
   )
-  const filtered = Boolean(query || categoryId || range !== 'all')
+  const filtered = Boolean(query || categoryId || accountId || range !== 'all')
 
   return (
     <Shell>
@@ -109,6 +115,7 @@ export function Transactions() {
           />
         </div>
         <UncategorizedChip selected={categoryId === UNCATEGORIZED} onChange={setCategoryId} />
+        {accountId && <AccountChip id={accountId} onClear={() => setAccountId(null)} />}
       </div>
 
       {rule && (
@@ -174,6 +181,18 @@ function UncategorizedChip({
       onClick={() => onChange(selected ? null : UNCATEGORIZED)}
     >
       {count} need a category
+    </button>
+  )
+}
+
+/** The account the list is narrowed to, from an account's page; tapping it shows every account. */
+function AccountChip({ id, onClear }: { id: string; onClear: () => void }) {
+  const accounts = useAction('list_accounts')
+  const account = accounts.data?.find((a) => a.id === id)
+  return (
+    <button type="button" className="chip on" aria-pressed onClick={onClear}>
+      {account ? accountName(account) : 'One account'}
+      <Icon name="close" size={14} />
     </button>
   )
 }

@@ -9,7 +9,7 @@ import {
 import { escapeHtml, weeklyEmailHtml } from '../src/domain/weeklyEmail/html.js'
 import { weeklyEmailText } from '../src/domain/weeklyEmail/text.js'
 import { formatCents } from '../src/lib/money.js'
-import { checkin, goal } from './fixtures/checkin.js'
+import { accountAlert, checkin, goal } from './fixtures/checkin.js'
 
 const monthly = { period: { kind: 'monthly' as const, startDay: 1 }, locale: 'en-US' }
 
@@ -152,6 +152,66 @@ describe('weeklyEmailContent', () => {
     })
     expect(german.figures[0]!.detail).toBe('1.200\u00a0€')
     expect(german.figures.at(-1)!.detail).toBe('30. Nov.')
+  })
+})
+
+describe('account alerts in the weekly email', () => {
+  const overdrawn = accountAlert()
+  const accountItem: AttentionItem = {
+    priority: 'now',
+    topic: 'account',
+    message: overdrawn.message,
+    tool: 'list_alerts',
+  }
+
+  it('opens with the alerts, naming the bank but not the account', () => {
+    const email = content({
+      checkin: checkin({ alerts: [overdrawn], attention: [accountItem] }),
+      summary: {
+        headline: "You're on track.",
+        points: [
+          `${overdrawn.summary} 1 more account alert is at the top of the dashboard.`,
+          'Payday is Dec 1.',
+        ],
+        writtenBy: 'Leeway',
+      },
+    })
+    expect(email.subject).toBe('Your week in Leeway: an account is overdrawn')
+    expect(email.alerts).toEqual(['Your Chase checking account is overdrawn by $42.10.'])
+    // Said once, at the top: not again in the points or the heads-up list.
+    expect(email.points).toEqual(['Payday is Dec 1.'])
+    expect(
+      section({ checkin: checkin({ alerts: [overdrawn], attention: [accountItem] }) }, 'Heads up')
+        .items,
+    ).toEqual([])
+
+    const page = weeklyEmailHtml(email)
+    expect(page.indexOf(overdrawn.summary)).toBeLessThan(page.indexOf('<h1'))
+    expect(page).not.toContain('Everyday')
+    expect(weeklyEmailText(email)).toMatch(
+      /^Alerts\n- Your Chase checking account is overdrawn by \$42\.10\.\n\nYou're on track\./,
+    )
+  })
+
+  it('names a card over its limit in the subject, and keeps it plain for warnings', () => {
+    const overLimit = accountAlert({
+      kind: 'over_limit',
+      summary: 'Your card is $5.00 over its limit.',
+    })
+    expect(content({ checkin: checkin({ alerts: [overLimit] }) }).subject).toBe(
+      'Your week in Leeway: a card is over its limit',
+    )
+    const low = accountAlert({ kind: 'low_balance', severity: 'warning' })
+    expect(content({ checkin: checkin({ alerts: [low] }) }).subject).toBe(
+      'Your week in Leeway: $1,200 left this month',
+    )
+  })
+
+  it('has no alert block when nothing is wrong', () => {
+    const email = content()
+    expect(email.alerts).toEqual([])
+    expect(weeklyEmailHtml(email)).not.toContain('#fdecea')
+    expect(weeklyEmailText(email)).not.toContain('Alerts')
   })
 })
 

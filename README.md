@@ -19,16 +19,25 @@ except to talk to your bank.
 - **Planning:** bills and subscriptions with due dates, recurring charges found
   for you, savings goals, debt payoff plans (avalanche and snowball), cash left
   until payday, and net worth over time.
+- **Accounts dashboard:** pick one account or several and see their balances
+  together, money in and out by month, spending by category, recent
+  transactions and a short summary. Your pick is saved, so your laptop and
+  phone show the same accounts, and tapping an account anywhere opens it here.
+- **Account alerts** at the top of the dashboard when a bank account is
+  overdrawn, a card is over its limit, a balance is low or an overdraft fee
+  was charged in the last 30 days. Checking accounts warn below $100 by
+  default; set your own amount for any bank account in **Customize**, then
+  **Accounts**, or 0 to turn it off.
 - **A dashboard you arrange yourself**, with themes and colors you choose, and
   a summary at the top that says in a sentence how the period is going and
   what needs you. Leeway writes it from your numbers, or Claude can write it
   if you add an Anthropic key.
-- **A weekly email**, if you want one, with that summary, what's left, bills
-  before payday and anything that needs you.
-- **An AI coach.** Connect Claude or any assistant that speaks MCP. It can run a
-  money check-in, tell you whether a purchase fits, review subscriptions and
-  plan debt payoff. You approve what it may do, and nothing can ever move
-  money.
+- **A weekly email**, if you want one, with any account alerts first, then
+  that summary, what's left, bills before payday and anything that needs you.
+- **An AI coach.** Connect Claude or any assistant that speaks MCP. It can run
+  a money check-in, list account alerts, sum up any accounts you name, tell
+  you whether a purchase fits, review subscriptions and plan debt payoff. You
+  approve what it may do, and nothing can ever move money.
 - **Works on laptop and phone.** Install it to your home screen like an app.
 
 ## Get started
@@ -298,25 +307,29 @@ token is stored only as a hash.
 ## The dashboard summary
 
 The top of the dashboard sums up the period in a sentence and a few points:
-whether you're on track, what needs you today, cash until payday, goals and net
-worth. Leeway writes it from your numbers on its own.
+account alerts first, then whether you're on track, what needs you today, cash
+until payday, goals and net worth. Leeway writes it from your numbers on its
+own.
 
-To have Claude write it instead, add `ANTHROPIC_API_KEY` (from the
-[Anthropic Console](https://console.anthropic.com)) to your server's
-variables, then turn on **Have Claude write it** in **Customize**, then **AI
-assistant**. Nothing is sent until you turn it on. When on, Leeway sends this
-period's totals, cash until payday, the Heads up list, and your bill and goal
-names; never your accounts or transactions. A summary is saved and reused
-while your numbers stay the same, or for up to four hours, and a new day starts
-fresh, so it costs a few cents a summary on your own Anthropic account. If
-Claude can't be reached, Leeway's own summary shows instead.
+To have Claude write it instead, add `ANTHROPIC_API_KEY` (from the [Anthropic
+Console](https://console.anthropic.com)) to your server's variables, then turn
+on **Have Claude write it** in **Customize**, then **AI assistant**. Nothing is
+sent until you turn it on. When on, Leeway sends this period's totals, cash
+until payday, the Heads up list, any account alerts named only by bank and kind
+of account (like "Your Chase checking account"), and your bill and goal names;
+never account names, account numbers or transactions. A summary is saved and
+reused while your numbers stay the same, or for up to four hours, and a new day
+starts fresh, so it costs a few cents a summary on your own Anthropic account.
+If Claude can't be reached, Leeway's own summary shows instead.
 
 ## Weekly email
 
-Once a week, Leeway can email you the dashboard summary with what's left this
-period and per day, the Heads up list, bills due before payday, and how your
-goals are doing, with a button that opens Leeway. It holds totals, bill and
-goal names only: never account numbers or transactions.
+Once a week, Leeway can email you any account alerts at the very top, named
+only by bank and kind of account, then the dashboard summary with what's left
+this period and per day, the Heads up list, bills due before payday, and how
+your goals are doing, with a button that opens Leeway. It holds totals, bill
+and goal names, and the bank and kind of an account with an alert: never
+account names, account numbers or transactions.
 
 It sends through [Resend](https://resend.com)'s HTTPS API, since many hosts,
 Railway included, block outgoing SMTP. To set it up:

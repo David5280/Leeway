@@ -7,7 +7,7 @@ import {
   summaryFacts,
   type SummaryText,
 } from '../src/domain/summaryText.js'
-import { checkin, goal, type CheckinGoal as Goal } from './fixtures/checkin.js'
+import { accountAlert, checkin, goal, type CheckinGoal as Goal } from './fixtures/checkin.js'
 
 const money = (cents: number) => formatCents(cents)
 const monthly = { period: { kind: 'monthly' as const, startDay: 1 }, locale: 'en-US' }
@@ -148,7 +148,57 @@ describe('the points', () => {
   })
 })
 
+describe('the account alert point', () => {
+  const lowAlert = accountAlert({
+    kind: 'low_balance',
+    severity: 'warning',
+    summary: 'Your Chase savings account is down to $35.00.',
+  })
+  const accountItem = {
+    priority: 'now' as const,
+    topic: 'account' as const,
+    message: 'Everyday is overdrawn by $42.10.',
+    tool: 'list_alerts',
+  }
+
+  it('leads with the worst alert, without naming the account', () => {
+    const points = summarize(checkin({ alerts: [accountAlert()], attention: [accountItem] })).points
+    // The alert is its own point, so it is not counted again as a thing needing you today.
+    expect(points).toEqual(['Your Chase checking account is overdrawn by $42.10.'])
+  })
+
+  it('counts the other alerts after the worst one', () => {
+    const one = summarize(checkin({ alerts: [accountAlert(), lowAlert] })).points[0]
+    expect(one).toBe(
+      'Your Chase checking account is overdrawn by $42.10. 1 more account alert is at the top of the dashboard.',
+    )
+    const two = summarize(checkin({ alerts: [accountAlert(), lowAlert, lowAlert] })).points[0]
+    expect(two).toContain('2 more account alerts are at the top of the dashboard.')
+  })
+})
+
 describe('summaryFacts', () => {
+  it('gives an AI account alerts without account names', () => {
+    const facts = summaryFacts(
+      checkin({
+        alerts: [accountAlert()],
+        attention: [
+          {
+            priority: 'now',
+            topic: 'account',
+            message: 'Everyday is overdrawn by $42.10.',
+            tool: 'list_alerts',
+          },
+        ],
+      }),
+      monthly,
+      money,
+    )
+    expect(facts.headsUp).toEqual([])
+    expect(facts.accountAlerts).toEqual(['Your Chase checking account is overdrawn by $42.10.'])
+    expect(JSON.stringify(facts)).not.toContain('Everyday')
+  })
+
   it('gives an AI formatted amounts and dates, and no accounts or transactions', () => {
     const facts = summaryFacts(
       checkin({

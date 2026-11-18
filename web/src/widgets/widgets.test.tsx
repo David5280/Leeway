@@ -2,7 +2,15 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, Budget, CategoryBudget, Connection, SpendingPace } from '../api/client'
 import { settingsSchema } from '../../../server/src/domain/settings'
-import { budgetFor, category, fakeServer, renderSignedIn, transaction } from '../test/fake'
+import {
+  account as bankAccount,
+  alertsFor,
+  budgetFor,
+  category,
+  fakeServer,
+  renderSignedIn,
+  transaction,
+} from '../test/fake'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
 import { CategoriesWidget, categoryStatus, rowNote } from './Categories'
@@ -375,11 +383,34 @@ describe('AlertsWidget', () => {
     expect(region()).toHaveTextContent('1 transaction ($45) needs a category.')
   })
 
+  it('puts account alerts before everything else, each opening its account', async () => {
+    fakeServer({
+      list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
+      list_alerts: () =>
+        alertsFor([
+          bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+          bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
+        ]),
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    await screen.findByText('Chase needs you to log in again to keep syncing.')
+    const links = within(region()).getAllByRole('link')
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/accounts?select=short',
+      '/accounts?select=low',
+      '/customize#banks',
+    ])
+    expect(links[0]).toHaveTextContent('Overdrawn')
+    expect(links[1]).toHaveTextContent('Low')
+  })
+
   it('still shows budget alerts when the banks cannot be read', async () => {
     const server = fakeServer({}, failing('list_connections', 'Could not read banks'))
     const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }])
     renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
-    await waitFor(() => expect(server.calls).toHaveLength(1))
+    // The banks and the account alerts are both asked for; neither answers.
+    await waitFor(() => expect(server.calls).toHaveLength(2))
     expect(region()).toHaveTextContent('Dining out is over budget by $40')
   })
 })
@@ -726,6 +757,7 @@ describe('AccountsWidget', () => {
       balanceUpdatedAt: null,
       aprPercent: null,
       minimumPaymentCents: null,
+      lowBalanceCents: null,
       ...fields,
     }
   }
@@ -751,10 +783,21 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('No balance')).toBeInTheDocument()
     // A cash or house account has no balance owed, so no "owed" under it.
     expect(screen.getAllByText('owed')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
-      'href',
-      '/customize#accounts',
-    )
+    expect(screen.getByRole('link', { name: 'All accounts' })).toHaveAttribute('href', '/accounts')
+    // Each account opens the Accounts dashboard with just it picked.
+    expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
+  })
+
+  it('shows an overdrawn cash balance in red, but never a card balance', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: -4210 }),
+        account({ id: 'b', name: 'Card', type: 'credit', balanceCents: 5000 }),
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    expect(await screen.findByText('-$42.10')).toHaveClass('over')
+    expect(screen.getByText('$50.00')).not.toHaveClass('over')
   })
 
   it('tells two similar cards apart by bank and last four digits, in readable casing', async () => {

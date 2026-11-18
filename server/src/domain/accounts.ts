@@ -40,6 +40,11 @@ export interface Account {
   aprPercent: number | null
   /** The required monthly payment for a card or loan. */
   minimumPaymentCents: number | null
+  /**
+   * The owner's own low-balance warning: warn below this. Null follows the
+   * default (see accountAlerts.ts) and 0 turns the warning off.
+   */
+  lowBalanceCents: number | null
 }
 
 const SELECT = `
@@ -48,7 +53,8 @@ const SELECT = `
     a.balance_cents AS "balanceCents", a.available_cents AS "availableCents",
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
-    a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents"
+    a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents",
+    a.low_balance_cents AS "lowBalanceCents"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
@@ -105,6 +111,8 @@ export const accountPatchSchema = z
     /** Debt terms, for payoff plans. Any account can carry them; they matter for cards and loans. */
     aprPercent: z.number().min(0).max(100).multipleOf(0.01).nullable(),
     minimumPaymentCents: z.number().int().min(0).nullable(),
+    /** Warn when the balance drops below this. Null follows the default; 0 turns it off. */
+    lowBalanceCents: z.number().int().min(0).nullable(),
     // The rest only apply to manual accounts; bank accounts get them from the bank.
     balanceCents: z.number().int(),
     creditLimitCents: z.number().int().min(0).nullable(),
@@ -138,7 +146,8 @@ export async function updateAccount(
        subtype = CASE WHEN $9 THEN $10 ELSE subtype END,
        balance_updated_at = CASE WHEN $5::bigint IS NULL THEN balance_updated_at ELSE now() END,
        apr_bps = CASE WHEN $11 THEN $12 ELSE apr_bps END,
-       minimum_payment_cents = CASE WHEN $13 THEN $14 ELSE minimum_payment_cents END
+       minimum_payment_cents = CASE WHEN $13 THEN $14 ELSE minimum_payment_cents END,
+       low_balance_cents = CASE WHEN $15 THEN $16 ELSE low_balance_cents END
      WHERE id = $1`,
     [
       id,
@@ -156,6 +165,8 @@ export async function updateAccount(
       typeof patch.aprPercent === 'number' ? Math.round(patch.aprPercent * 100) : null,
       patch.minimumPaymentCents !== undefined,
       patch.minimumPaymentCents ?? null,
+      patch.lowBalanceCents !== undefined,
+      patch.lowBalanceCents ?? null,
     ],
   )
   // A card counted or left out changes whether payments to it are transfers.

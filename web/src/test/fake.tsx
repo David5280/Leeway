@@ -7,6 +7,13 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { onTestFinished, vi } from 'vitest'
+import { accountAlerts, type FeeCandidate } from '../../../server/src/domain/accountAlerts'
+import {
+  accountsSummary,
+  combineBalances,
+  type CategorySpending,
+  type PeriodFlow,
+} from '../../../server/src/domain/accountViewText'
 import { computeBudget, type SetAside } from '../../../server/src/domain/budget'
 import type { Category } from '../../../server/src/domain/categories'
 import type { Transaction } from '../../../server/src/domain/transactions'
@@ -16,8 +23,9 @@ import {
   settingsSchema,
 } from '../../../server/src/domain/settings'
 import { weeklyEmailPatchSchema } from '../../../server/src/domain/weeklyEmail/store'
+import { formatCents } from '../../../server/src/lib/money'
 import { periodContaining } from '../../../server/src/lib/periods'
-import type { Account, Settings, Status } from '../api/client'
+import type { Account, AccountAlert, AccountsView, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
 import { AppProvider } from '../lib/app'
@@ -160,7 +168,54 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
     balanceUpdatedAt: null,
     aprPercent: null,
     minimumPaymentCents: null,
+    lowBalanceCents: null,
     ...fields,
+  }
+}
+
+/** Money as the server words alerts and summaries, in US dollars. */
+const dollars = (cents: number) => formatCents(cents)
+
+/** The alerts the server would raise for these accounts and charges, built with its own code. */
+export function alertsFor(accounts: Account[], charges: FeeCandidate[] = []): AccountAlert[] {
+  return accountAlerts(accounts, charges, { money: dollars, date: (date) => date })
+}
+
+/**
+ * The Accounts dashboard for these accounts as summarize_accounts answers,
+ * built with the server's own code: November 2026, with the flows, spending
+ * and transactions given.
+ */
+export function accountsViewFor(
+  accounts: Account[],
+  fields: {
+    flows?: PeriodFlow[]
+    spending?: CategorySpending[]
+    recent?: Transaction[]
+    alerts?: AccountAlert[]
+    allAccounts?: boolean
+  } = {},
+): AccountsView {
+  const flows = fields.flows ?? [
+    { start: '2026-10-01', end: '2026-10-31', inCents: 300000, outCents: 280000 },
+    { start: '2026-11-01', end: '2026-11-30', inCents: 250000, outCents: 120000 },
+  ]
+  const spending = fields.spending ?? []
+  const alerts = fields.alerts ?? alertsFor(accounts)
+  const balances = combineBalances(accounts)
+  return {
+    accounts,
+    allAccounts: fields.allAccounts ?? true,
+    period: { start: '2026-11-01', end: '2026-11-30' },
+    balances,
+    flows,
+    spending,
+    recent: fields.recent ?? [],
+    alerts,
+    summary: accountsSummary(
+      { accounts, balances, flows, spending, alerts, periodWord: 'month' },
+      dollars,
+    ),
   }
 }
 
