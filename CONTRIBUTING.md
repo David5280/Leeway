@@ -68,7 +68,8 @@ others reuse.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set
-`E2E_DATABASE_URL` to use another.
+`E2E_DATABASE_URL` to use another. The test server listens on port 3100; set
+`E2E_PORT` to use another.
 
 ```sh
 docker exec leeway-test-db createdb -U postgres leeway_e2e

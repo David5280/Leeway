@@ -25,6 +25,10 @@ export function LayoutSection() {
 
   return (
     <Section id="layout" title="Dashboard" hint="Or press Customize on the overview">
+      <p className="small muted">
+        Wide widgets stack on the left and half widgets on the right; full widgets span the page. On
+        a phone they all follow this order.
+      </p>
       {widgets.map((widget) => {
         const index = all.indexOf(widget)
         return (

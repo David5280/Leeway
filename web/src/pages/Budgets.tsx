@@ -90,7 +90,7 @@ export function Budgets() {
 
       {suggesting && <Suggestions onClose={() => setSuggesting(false)} />}
 
-      <Card label="Spending categories" className="stack-sm">
+      <Card label="Spending categories" className="stack-sm cat-list">
         <h2>Spending</h2>
         {expenses.length === 0 && <p className="empty">No categories yet.</p>}
         {expenses.some((row) => row.group !== null) ? (

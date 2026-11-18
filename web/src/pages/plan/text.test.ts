@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { niceRange } from '../../components/LineChart'
 import { monthYear } from '../../lib/format'
 import { bill, goal } from '../../test/planning'
 import { parseRate } from './DebtTerms'
@@ -80,15 +79,6 @@ describe('parseRate', () => {
     expect(parseRate('19.999%')).toBe(20)
     expect(parseRate('')).toBeNull()
     expect(parseRate('abc')).toBeNull()
-  })
-})
-
-describe('niceRange', () => {
-  it('always includes zero and rounds outward', () => {
-    expect(niceRange([120000, 340000])).toEqual([0, 500000])
-    expect(niceRange([-120000, 340000])).toEqual([-200000, 500000])
-    expect(niceRange([-120000, -5000])).toEqual([-200000, 0])
-    expect(niceRange([0])).toEqual([0, 10000])
   })
 })
 

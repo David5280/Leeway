@@ -47,7 +47,8 @@ export function LeewayWidget({ budget }: WidgetProps) {
           )}
         </p>
       )}
-      <div className="stack-sm">
+      {/* Pinned to the bottom, so the card reads well when its column stretches it. */}
+      <div className="stack-sm" style={{ marginTop: 'auto' }}>
         <Progress
           thick
           percent={used}

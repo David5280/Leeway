@@ -4,17 +4,14 @@ import { useState } from 'react'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { Shell } from '../components/Shell'
-import { ErrorNote, Icon, Loading, Segmented } from '../components/ui'
+import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
+import { Board } from '../widgets/Board'
 import {
   addableTypes,
-  canMove,
-  changeWidget,
   DEFAULT_LAYOUT,
   drawable,
-  moveWidget,
-  SIZES,
   WIDGET_LIBRARY,
   type Widget,
 } from '../widgets/library'
@@ -100,69 +97,17 @@ export function Overview() {
       {!budget.data ? (
         <Loading />
       ) : (
-        <div className={editing ? 'grid editing' : 'grid'}>
-          {widgets.map((widget) => {
-            if (!widget.visible && !editing) return null
-            const entry = WIDGET_LIBRARY[widget.type]!
-            const Component = entry.component
-            const index = all.indexOf(widget)
-            return (
-              <div
-                key={widget.type}
-                className={`widget span-${widget.size}`}
-                style={widget.visible ? undefined : { opacity: 0.5 }}
-              >
-                {editing && (
-                  <div className="widget-tools">
-                    <strong className="grow">{entry.name}</strong>
-                    <Segmented
-                      label={`${entry.name} size`}
-                      value={widget.size}
-                      options={SIZES}
-                      onChange={(size) => saveWidgets(changeWidget(all, widget.type, { size }))}
-                    />
-                    <button
-                      type="button"
-                      className="iconbtn"
-                      aria-label={`Move ${entry.name} up`}
-                      disabled={!canMove(all, index, -1)}
-                      onClick={() => saveWidgets(moveWidget(all, index, -1))}
-                    >
-                      <Icon name="up" />
-                    </button>
-                    <button
-                      type="button"
-                      className="iconbtn"
-                      aria-label={`Move ${entry.name} down`}
-                      disabled={!canMove(all, index, 1)}
-                      onClick={() => saveWidgets(moveWidget(all, index, 1))}
-                    >
-                      <Icon name="down" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn small"
-                      onClick={() =>
-                        saveWidgets(changeWidget(all, widget.type, { visible: !widget.visible }))
-                      }
-                    >
-                      {widget.visible ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                )}
-                {widget.visible && <Component budget={budget.data} offset={offset} />}
-              </div>
-            )
-          })}
+        <>
+          <Board
+            all={all}
+            shown={widgets.filter((widget) => widget.visible || editing)}
+            editing={editing}
+            budget={budget.data}
+            offset={offset}
+            save={saveWidgets}
+          />
           {editing && addable.length > 0 && (
-            <div
-              className="span-full card stack-sm"
-              style={{
-                border: '2px dashed var(--line)',
-                background: 'transparent',
-                boxShadow: 'none',
-              }}
-            >
+            <div className="card stack-sm add-widget">
               <p className="muted">Add a widget</p>
               <div className="row wrap" style={{ gap: 8 }}>
                 {addable.map((type) => (
@@ -178,7 +123,7 @@ export function Overview() {
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
     </Shell>
   )

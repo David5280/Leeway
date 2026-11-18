@@ -31,7 +31,7 @@ test('a new owner sets up Leeway and lands on the overview', async ({ page }) =>
   await page.getByRole('button', { name: 'Continue' }).click()
 
   await expect(page.getByRole('heading', { name: "You're set" })).toBeVisible()
-  await expect(page.getByText('http://localhost:3100/mcp')).toBeVisible()
+  await expect(page.getByText(`${new URL(page.url()).origin}/mcp`)).toBeVisible()
   await page.getByRole('button', { name: 'Open my overview' }).click()
 
   await expect(page.getByRole('navigation').first()).toBeVisible()

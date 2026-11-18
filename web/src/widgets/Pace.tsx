@@ -1,9 +1,8 @@
 // Flexible spending so far against an even pace, with where it is heading.
 
-import type { CSSProperties } from 'react'
 import type { SpendingPace } from '../api/client'
 import { useAction } from '../api/hooks'
-import { PaceChart } from '../components/charts'
+import { PaceChart } from '../components/charts/PaceChart'
 import { Card, ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
@@ -14,10 +13,14 @@ export function PaceWidget({ budget, offset }: WidgetProps) {
     .filter((c) => pace.data?.categoryIds.includes(c.categoryId))
     .map((c) => c.name)
   return (
-    <Card label="Spending pace" className="stack">
-      <div className="row-between" style={{ alignItems: 'baseline' }}>
+    <Card label="Spending pace" className="stack-sm">
+      <div className="stack-sm" style={{ gap: 2 }}>
         <h2>Flexible spending pace</h2>
-        {names.length > 0 && <span className="small muted">{names.join(', ')}</span>}
+        {names.length > 0 && (
+          <span className="small muted" title={names.join(', ')}>
+            {followedText(names)}
+          </span>
+        )}
       </div>
       {pace.error ? (
         <ErrorNote error={pace.error} />
@@ -26,6 +29,12 @@ export function PaceWidget({ budget, offset }: WidgetProps) {
       )}
     </Card>
   )
+}
+
+/** The categories the pace follows: all of a few, or the first two and a count of the rest. */
+export function followedText(names: string[]): string {
+  if (names.length <= 3) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 }
 
 function PaceBody({ pace, isCurrent }: { pace: SpendingPace | undefined; isCurrent: boolean }) {
@@ -40,8 +49,7 @@ function PaceBody({ pace, isCurrent }: { pace: SpendingPace | undefined; isCurre
   return (
     <>
       <PaceSummary pace={pace} isCurrent={isCurrent} />
-      <PaceChart pace={pace} />
-      <PaceLegend isCurrent={isCurrent} />
+      <PaceChart pace={pace} isCurrent={isCurrent} />
     </>
   )
 }
@@ -55,38 +63,16 @@ function PaceSummary({ pace, isCurrent }: { pace: SpendingPace; isCurrent: boole
   return (
     <p style={{ fontSize: 14 }}>
       {isCurrent ? 'At this rate you land near ' : 'You spent '}
-      <strong className="num">{money(landing)}</strong>
+      <strong>{money(landing)}</strong>
       {gap > 0 ? (
         <>
-          , about <span className="num over strong">{money(gap)} over</span> the {budget} budget.
+          , about <span className="over strong">{money(gap)} over</span> the {budget} budget.
         </>
       ) : (
         <>
-          , <span className="num good">{money(-gap)} under</span> the {budget} budget.
+          , <span className="good strong">{money(-gap)} under</span> the {budget} budget.
         </>
       )}
     </p>
-  )
-}
-
-function LegendItem({ line, label }: { line: CSSProperties; label: string }) {
-  return (
-    <span className="row" style={{ gap: 6 }}>
-      <span aria-hidden="true" style={{ width: 16, ...line }} />
-      {label}
-    </span>
-  )
-}
-
-function PaceLegend({ isCurrent }: { isCurrent: boolean }) {
-  return (
-    <div className="row wrap small muted" style={{ gap: 16 }}>
-      <LegendItem line={{ height: 2, background: 'var(--accent)' }} label="Actual" />
-      <LegendItem line={{ borderTop: '2px dashed var(--muted)' }} label="Even pace" />
-      {/* A past period is finished, so there is nothing to project. */}
-      {isCurrent && (
-        <LegendItem line={{ borderTop: '2px dotted var(--accent)' }} label="Projected" />
-      )}
-    </div>
   )
 }
