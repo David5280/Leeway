@@ -3,7 +3,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { ACCOUNT_LIMIT } from '../src/http/auth.js'
-import { getOwner } from '../src/domain/owner.js'
+import { createOwner, getOwner } from '../src/domain/owner.js'
 import { buildApp } from '../src/http/app.js'
 import { MIN_PASSWORD_LENGTH } from '../src/lib/password.js'
 import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
@@ -83,6 +83,17 @@ describe('creating the owner', () => {
       message: `Use a password of at least ${MIN_PASSWORD_LENGTH} characters`,
     })
     expect(await getOwner(ctx.db)).toBeNull()
+  })
+
+  it('still refuses a second owner when two setups race past the first check', async () => {
+    await createOwner(ctx.db, owner)
+    await expect(createOwner(ctx.db, owner)).rejects.toMatchObject({ code: 'conflict' })
+  })
+
+  it('asks for an email and password when the request has no body at all', async () => {
+    const response = await post('/api/auth/login')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error).toBe('invalid_input')
   })
 
   it('asks for a password when none is given', async () => {
