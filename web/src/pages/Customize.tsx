@@ -8,6 +8,7 @@ import { AgentSection } from './customize/Agent'
 import { BackupSection } from './customize/Backup'
 import { BanksSection } from './customize/Banks'
 import { BudgetingSection } from './customize/Budgeting'
+import { EmailSection } from './customize/Email'
 import { LayoutSection } from './customize/Layout'
 import { LookSection } from './customize/Look'
 import { RegionSection } from './customize/Region'
@@ -22,6 +23,7 @@ const SECTIONS = [
   ['accounts', 'Accounts'],
   ['banks', 'Banks'],
   ['agent', 'AI assistant'],
+  ['email', 'Email'],
   ['backup', 'Backup'],
   ['account', 'Sign-in'],
 ] as const
@@ -49,6 +51,7 @@ export function Customize() {
       <AccountSection />
       <BanksSection />
       <AgentSection />
+      <EmailSection />
       <BackupSection />
       <SignInSection />
     </Shell>

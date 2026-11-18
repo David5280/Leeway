@@ -15,11 +15,13 @@ import {
   settingsPatchSchema,
   settingsSchema,
 } from '../../../server/src/domain/settings'
+import { weeklyEmailPatchSchema } from '../../../server/src/domain/weeklyEmail/store'
 import { periodContaining } from '../../../server/src/lib/periods'
 import type { Account, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
 import { AppProvider } from '../lib/app'
+import type { WeeklyEmailView } from '../pages/customize/email/emailText'
 import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
 
 /** A stand-in for the Leeway server: action handlers by name, plus the auth routes. */
@@ -73,6 +75,37 @@ export function settingsHandlers(initial: Settings = settings): Handlers {
       current = mergeSettings(current, settingsPatchSchema.parse(patch))
       return current
     },
+  }
+}
+
+/** The weekly email as get_weekly_email shows it: off, with the server able to send. */
+export const weeklyEmail: WeeklyEmailView = {
+  available: true,
+  on: false,
+  sendTo: null,
+  ownerEmail: 'owner@example.com',
+  weekday: 1,
+  hour: 8,
+  timeZone: 'America/Denver',
+  nextSendAt: null,
+  lastSentAt: null,
+  lastError: null,
+  linksTo: 'https://leeway.example.com',
+}
+
+/**
+ * get_weekly_email and set_weekly_email handlers that keep state, checking a
+ * change with the server's own schema, plus a test send that succeeds.
+ */
+export function weeklyEmailHandlers(initial: Partial<WeeklyEmailView> = {}): Handlers {
+  let current = { ...weeklyEmail, ...initial }
+  return {
+    get_weekly_email: () => current,
+    set_weekly_email: (patch) => {
+      current = { ...current, ...weeklyEmailPatchSchema.parse(patch) }
+      return current
+    },
+    send_test_weekly_email: () => ({ sentTo: current.sendTo ?? current.ownerEmail }),
   }
 }
 

@@ -133,6 +133,13 @@ describe('get_checkin', () => {
       '1 transaction needs a category this period.',
       '1 repeating charge or deposit is not tracked yet. Tracking bills makes cash flow to payday accurate.',
     ])
+    // Where a message speaks to an assistant, the owner gets their own words (the weekly email).
+    expect(attention.filter((a) => a.forOwner).map((a) => a.forOwner)).toEqual([
+      'Test Bank needs you to log in again to keep syncing.',
+      'A bank stopped syncing. Open Banks in Leeway to see why.',
+      'Trip passed its target date of 2026-10-31 with $1,000 still to go. You could move the date or the target.',
+      'Payoff plans leave out Rewards card until you add its interest rate and payment, from the statement.',
+    ])
   })
 
   it('counts several debts, transactions and charges in plain words', async () => {

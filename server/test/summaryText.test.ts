@@ -8,71 +8,10 @@ import {
   summaryFacts,
   type SummaryText,
 } from '../src/domain/summaryText.js'
+import { checkin, goal, type CheckinGoal as Goal } from './fixtures/checkin.js'
 
 const money = (cents: number) => formatCents(cents)
 const monthly = { period: { kind: 'monthly' as const, startDay: 1 }, locale: 'en-US' }
-
-/** A quiet mid-month: on budget, cash to spare, nothing to flag, nothing to compare. */
-function checkin(change: Partial<{ [K in keyof Checkin]: Partial<Checkin[K]> }> = {}): Checkin {
-  const base: Checkin = {
-    today: '2026-11-17',
-    attention: [],
-    budget: {
-      periodStart: '2026-11-01',
-      periodEnd: '2026-11-30',
-      daysLeft: 14,
-      budgetedCents: 200000,
-      spentCents: 80000,
-      leftCents: 120000,
-      setAsideCents: 0,
-      leewayCents: 120000,
-      safePerDayCents: 8571,
-      projectedCents: 160000,
-      projectedBudgetedCents: 160000,
-      incomeCents: 300000,
-      previousSpentToDateCents: 0,
-    },
-    cashFlow: {
-      cashCents: 0,
-      nextPayday: '2026-12-01',
-      paydaySource: 'period_end',
-      billsDueCents: 0,
-      leftAfterBillsCents: 0,
-      perDayCents: 0,
-    },
-    bills: { count: 0, monthlyCents: 0 },
-    goals: [],
-    debts: null,
-    netWorth: { netWorthCents: 0, changeCents: 0, sinceDays: 30 },
-  }
-  return {
-    ...base,
-    ...change,
-    budget: { ...base.budget, ...change.budget },
-    cashFlow: { ...base.cashFlow, ...change.cashFlow },
-    netWorth: { ...base.netWorth, ...change.netWorth },
-  } as Checkin
-}
-
-type Goal = Checkin['goals'][number]
-
-/** A savings goal a quarter of the way there, with no date. */
-function goal(name: string, fields: Partial<Goal> = {}): Goal {
-  return {
-    name,
-    kind: 'savings',
-    percent: 25,
-    remainingCents: 10000,
-    targetDate: null,
-    perPeriodCents: null,
-    monthlyNeededCents: null,
-    projectedDate: null,
-    onTrack: null,
-    heldBackCents: 0,
-    status: 'in_progress',
-    ...fields,
-  }
-}
 
 const summarize = (c: Checkin): SummaryText => plainSummary(c, monthly, money)
 

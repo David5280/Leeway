@@ -1,4 +1,4 @@
-// Customizing the look and the dashboard, and connecting an AI assistant.
+// Customizing the look and the dashboard, connecting an AI assistant, and the weekly email.
 
 import { expect, test } from '@playwright/test'
 
@@ -77,4 +77,29 @@ test('the dashboard summary says how to have Claude write it, and what a missing
   await page.goto('/customize#agent')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
+})
+
+test('the weekly email says what the server needs, and keeps its choices for later', async ({
+  page,
+}) => {
+  await page.goto('/customize#email')
+  const email = page.getByRole('region', { name: 'Email' })
+  const day = email.getByRole('combobox', { name: 'Day' })
+  // The test server has no Resend key, so nothing can be sent or turned on yet.
+  await expect(email).toContainText('RESEND_API_KEY')
+  await expect(email).toContainText('MAIL_FROM')
+  await expect(email.getByRole('switch', { name: 'Send me a weekly email' })).toBeDisabled()
+  await expect(email.getByRole('button', { name: 'Send a test email now' })).toBeDisabled()
+  await expect(email).toContainText('Goes to your sign-in email')
+
+  // The day can still be chosen ahead of time, and it sticks.
+  const saved = page.waitForResponse('**/api/actions/set_weekly_email')
+  await day.selectOption('Friday')
+  expect((await saved).ok()).toBe(true)
+  await page.reload()
+  await expect(day).toHaveValue('5')
+
+  // Put it back for the other tests.
+  await day.selectOption('Monday')
+  await expect(day).toHaveValue('1')
 })

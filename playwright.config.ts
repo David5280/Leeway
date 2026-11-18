@@ -47,6 +47,9 @@ export default defineConfig({
       // A fixed key is fine here: the database is wiped on every run.
       ENCRYPTION_KEY: 'e2e0'.repeat(16),
       SYNC_INTERVAL_MINUTES: '0',
+      // No email provider, whatever the shell has set: the tests never send real email.
+      RESEND_API_KEY: '',
+      MAIL_FROM: '',
     },
   },
 })

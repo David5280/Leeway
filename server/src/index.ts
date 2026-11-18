@@ -1,4 +1,5 @@
-// Starts Leeway: migrates the database, serves the app and syncs banks on a timer.
+// Starts Leeway: migrates the database, serves the app, and on timers syncs
+// banks and sends the weekly email.
 
 import { AnthropicSummaryWriter } from './ai/anthropic.js'
 import { PlaidProvider } from './bank/plaid.js'
@@ -9,7 +10,10 @@ import { createPool } from './db/pool.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { syncAll } from './domain/sync.js'
 import { upgradeStarterSet } from './domain/starterUpgrade.js'
+import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weeklyEmail/send.js'
 import { buildApp } from './http/app.js'
+import { repeatEvery } from './lib/repeat.js'
+import { ResendSender } from './mail/resend.js'
 
 const config = loadConfig()
 const db = createPool(config.databaseUrl, config.databaseSsl)
@@ -23,6 +27,7 @@ const ctx: AppContext = {
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
   writer: config.anthropic ? new AnthropicSummaryWriter(config.anthropic) : null,
+  mailer: config.mail ? new ResendSender(config.mail) : null,
   now: () => new Date(),
 }
 
@@ -30,17 +35,27 @@ const app = await buildApp(ctx, { logger: true })
 
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
-let syncing = false
 if (ctx.bank && config.syncIntervalMinutes > 0) {
-  setInterval(() => {
-    if (syncing) return
-    syncing = true
-    syncAll(ctx)
-      .catch((error) => app.log.error({ err: error }, 'Scheduled sync failed'))
-      .finally(() => {
-        syncing = false
-      })
-  }, config.syncIntervalMinutes * 60_000).unref()
+  repeatEvery(
+    config.syncIntervalMinutes * 60_000,
+    () => syncAll(ctx),
+    (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
+  )
+}
+
+// The weekly email goes out within minutes of the owner's chosen hour. The
+// first check runs at start, so a server that slept through it catches up.
+if (ctx.mailer) {
+  repeatEvery(
+    WEEKLY_EMAIL_CHECK_MINUTES * 60_000,
+    async () => {
+      const outcome = await sendWeeklyEmailIfDue(ctx)
+      if (outcome === 'sent') app.log.info('Sent the weekly email')
+      if (outcome === 'failed') app.log.warn('The weekly email failed; see Customize, then Email')
+    },
+    (error) => app.log.error({ err: error }, 'Weekly email check failed'),
+    { runNow: true },
+  )
 }
 
 const shutdown = async () => {
