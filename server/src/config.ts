@@ -1,6 +1,7 @@
 // Configuration from environment variables, read and checked once at startup.
 
 import { z } from 'zod'
+import type { ProxyTrust } from './http/proxyTrust.js'
 
 /**
  * All configuration comes from environment variables, validated once at
@@ -19,6 +20,12 @@ const envSchema = z.object({
       'ENCRYPTION_KEY must be 64 hex characters (generate one with: openssl rand -hex 32)',
     ),
   PUBLIC_URL: z.url().optional(),
+  TRUST_PROXY: z.coerce
+    .number()
+    .int()
+    .min(0, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
+    .max(10, 'TRUST_PROXY is the number of proxies in front of Leeway, like 1')
+    .optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
   PLAID_CLIENT_ID: z.string().optional(),
   PLAID_SECRET: z.string().optional(),
@@ -54,6 +61,8 @@ export interface Config {
   encryptionKey: Buffer
   /** Public base URL without a trailing slash, used for webhooks and MCP links. */
   publicUrl: string | null
+  /** Which proxies to believe about the client's address and protocol (see proxyTrust.ts). */
+  trustProxy: ProxyTrust
   /** Null until both Plaid keys are set; the app still runs and explains what to add. */
   plaid: PlaidConfig | null
   /** How often to sync every bank in the background. 0 turns it off. */
@@ -101,6 +110,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseSsl: e.DATABASE_SSL ? e.DATABASE_SSL === 'true' : !isLocalDatabase(e.DATABASE_URL),
     encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'hex'),
     publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
+    // Railway reaches the app only through its own edge proxy, one hop that
+    // may connect from any address. Elsewhere, trust a proxy on a private network.
+    trustProxy: e.TRUST_PROXY ?? (e.RAILWAY_PUBLIC_DOMAIN ? 1 : 'private-network'),
     plaid,
     syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
     anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,

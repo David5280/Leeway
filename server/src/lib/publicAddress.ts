@@ -1,4 +1,4 @@
-// Keeps outgoing fetches on the public internet, so a client_id URL cannot reach private networks.
+// Telling public internet addresses from private ones: for outgoing fetches and for trusting proxies.
 
 import { lookup as dnsLookup, type LookupAddress } from 'node:dns'
 import { BlockList, isIP } from 'node:net'

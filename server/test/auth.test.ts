@@ -210,4 +210,18 @@ describe('rate limits', () => {
     expect(blocked.json()).toMatchObject({ error: 'bad_request' })
     expect(blocked.json().message).toMatch(/rate limit/i)
   })
+
+  it('counts attempts by the address the proxy saw, whatever address the client claims', async () => {
+    // Each attempt claims a new address of its own before the one the proxy recorded.
+    const attempt = (i: number) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { ...owner, password: 'guess' },
+        headers: { 'x-forwarded-for': `10.0.0.${i}, 198.51.100.7` },
+      })
+    for (let i = 0; i < 10; i++) expect((await attempt(i)).statusCode).toBe(401)
+
+    expect((await attempt(99)).statusCode).toBe(429)
+  })
 })

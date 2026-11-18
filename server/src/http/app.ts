@@ -25,6 +25,7 @@ import {
 import { AppError } from '../errors.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
 import { registerMcpRoute } from './mcp.js'
+import { proxyTrustFunction } from './proxyTrust.js'
 import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 
 export const VERSION = '0.1.0'
@@ -65,8 +66,9 @@ export async function buildApp(
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
-    // Railway and most hosts sit behind a proxy; trust it for the client IP and https.
-    trustProxy: true,
+    // Believe only the proxies this install sits behind about the client's
+    // address and https, so a client cannot pick its own address (proxyTrust.ts).
+    trustProxy: proxyTrustFunction(ctx.config.trustProxy),
     bodyLimit: 2 * 1024 * 1024,
   })
   await app.register(cookie)

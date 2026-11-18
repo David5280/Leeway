@@ -80,6 +80,7 @@ all with notes.
 | `DATABASE_URL`          | Yes      | Postgres connection string                                  |
 | `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest      |
 | `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants       |
+| `TRUST_PROXY`           | No       | Proxies in front of Leeway (see below); usually leave empty |
 | `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                    |
 | `PLAID_SECRET`          | For sync | From the Plaid dashboard                                    |
 | `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`         |

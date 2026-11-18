@@ -1,7 +1,7 @@
 // A small, careful HTTPS GET for JSON documents published by other servers.
 
 import https from 'node:https'
-import { publicOnlyLookup } from './publicAddress.js'
+import { publicOnlyLookup } from '../lib/publicAddress.js'
 
 export interface FetchJsonOptions {
   timeoutMs: number

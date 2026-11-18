@@ -16,7 +16,7 @@ import {
   protectedResourceMetadata,
 } from '../../src/oauth/metadata.js'
 import { isValidChallenge, verifierMatches } from '../../src/oauth/pkce.js'
-import { isPublicAddress, publicOnlyLookup } from '../../src/oauth/publicAddress.js'
+import { isPublicAddress, publicOnlyLookup } from '../../src/lib/publicAddress.js'
 import {
   describeRedirect,
   redirectMatches,
