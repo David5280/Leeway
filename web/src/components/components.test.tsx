@@ -276,12 +276,14 @@ describe('CategoryForm', () => {
       warnAtPercent: null,
       trackPace: true,
       providerCategories: [],
+      group: null,
     })
   })
 
   it('sends every field the owner filled in', async () => {
     const { onSubmit, user } = renderForm()
     await user.type(screen.getByLabelText('Name'), 'Coffee')
+    await user.type(screen.getByLabelText('Group'), 'Food and drink')
     await user.type(screen.getByLabelText('Budget amount'), '$1,200.50')
     await user.selectOptions(screen.getByLabelText('Budget cadence'), 'a week')
     await user.type(screen.getByLabelText('Warn at percent'), '90')
@@ -300,9 +302,30 @@ describe('CategoryForm', () => {
       warnAtPercent: 90,
       trackPace: false,
       providerCategories: ['FOOD_AND_DRINK_COFFEE'],
+      group: 'Food and drink',
     })
     expect(screen.getByRole('radio', { name: 'Orange' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Blue' })).not.toBeChecked()
+  })
+
+  it('offers the groups already in use, and sends a cleared group as none', async () => {
+    const { onSubmit, user } = renderForm({
+      category: category('Coffee', { group: 'Food and drink' }),
+      groups: ['Food and drink', 'Home'],
+    })
+    const group = screen.getByLabelText('Group')
+    expect(group).toHaveValue('Food and drink')
+    const suggestions = document.querySelectorAll('#category-groups option')
+    expect([...suggestions].map((option) => option.getAttribute('value'))).toEqual([
+      'Food and drink',
+      'Home',
+    ])
+
+    await user.clear(group)
+    await user.type(group, '   ')
+    await save(user)
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ group: null }))
   })
 
   it('does not send a category without a name', async () => {

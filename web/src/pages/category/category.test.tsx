@@ -480,6 +480,7 @@ describe('Category page', () => {
             warnAtPercent: null,
             trackPace: true,
             providerCategories: [],
+            group: null,
           },
         ]),
       )

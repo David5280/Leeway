@@ -5,6 +5,7 @@ import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isIsoDate } from '../lib/dates.js'
 import { recategorize } from './categorize.js'
+import { personPayment, type Movement, type PersonPayment } from './transfers.js'
 
 export interface Transaction {
   id: string
@@ -24,6 +25,17 @@ export interface Transaction {
   note: string | null
   excluded: boolean
   manual: boolean
+  /** Set when one person paid another through an app like Zelle: who, and which way. */
+  person: PersonPayment | null
+}
+
+/** A transaction as stored, with the bank codes that only reading `person` needs. */
+type StoredTransaction = Omit<Transaction, 'person'> &
+  Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
+
+function present(row: StoredTransaction): Transaction {
+  const { providerCategoryPrimary: _primary, providerCategoryDetailed: _detailed, ...tx } = row
+  return { ...tx, person: personPayment(row) }
 }
 
 const isoDate = z.string().refine(isIsoDate, 'Use a real date as YYYY-MM-DD')
@@ -51,7 +63,9 @@ const SELECT = `
     t.date, t.name, t.merchant_name AS "merchantName", t.amount_cents AS "amountCents",
     t.currency, t.pending, t.category_id AS "categoryId", t.category_source AS "categorySource",
     coalesce(t.provider_category_detailed, t.provider_category_primary) AS "bankCategory",
-    t.note, t.excluded, t.provider_transaction_id IS NULL AS manual
+    t.note, t.excluded, t.provider_transaction_id IS NULL AS manual,
+    t.provider_category_primary AS "providerCategoryPrimary",
+    t.provider_category_detailed AS "providerCategoryDetailed"
   FROM transactions t JOIN accounts a ON a.id = t.account_id`
 
 export async function listTransactions(
@@ -81,7 +95,7 @@ export async function listTransactions(
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
   const [list, count] = await Promise.all([
-    db.query<Transaction>(
+    db.query<StoredTransaction>(
       `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, filter.limit, filter.offset],
@@ -91,13 +105,13 @@ export async function listTransactions(
       params,
     ),
   ])
-  return { transactions: list.rows, total: count.rows[0]!.total }
+  return { transactions: list.rows.map(present), total: count.rows[0]!.total }
 }
 
 export async function getTransaction(db: Db, id: string): Promise<Transaction> {
-  const { rows } = await db.query<Transaction>(`${SELECT} WHERE t.id = $1`, [id])
+  const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
-  return rows[0]
+  return present(rows[0])
 }
 
 async function assertCategory(db: Db, categoryId: string | null | undefined): Promise<void> {

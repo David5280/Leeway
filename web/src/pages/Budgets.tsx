@@ -1,13 +1,15 @@
 // The Budgets screen: every category this period, new categories and suggestions.
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import type { Budget, CategoryBudget } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
 import { Shell } from '../components/Shell'
 import { Card, Dot, ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
+import { groupBy, groupNames } from '../lib/groups'
 import { CategoryRow } from '../widgets/Categories'
 
 export function Budgets() {
@@ -29,8 +31,6 @@ export function Budgets() {
   }
   const b = budget.data
   const expenses = b.categories.filter((c) => c.kind === 'expense')
-  const budgeted = expenses.filter((c) => c.budgetCents !== null)
-  const tracked = expenses.filter((c) => c.budgetCents === null)
   const income = b.categories.filter((c) => c.kind === 'income')
   const transfers = categories.data.filter((c) => c.kind === 'transfer')
 
@@ -74,6 +74,7 @@ export function Budgets() {
         <Card label="New category" className="stack">
           <h2>New category</h2>
           <CategoryForm
+            groups={groupNames(categories.data)}
             submitLabel="Add category"
             busy={create.isPending}
             error={create.error}
@@ -92,18 +93,10 @@ export function Budgets() {
       <Card label="Spending categories" className="stack-sm">
         <h2>Spending</h2>
         {expenses.length === 0 && <p className="empty">No categories yet.</p>}
-        {budgeted.map((row) => (
-          <CategoryRow key={row.categoryId} row={row} budget={b} />
-        ))}
-        {tracked.length > 0 && (
-          <>
-            <span className="eyebrow" style={{ marginTop: 12 }}>
-              Tracking only
-            </span>
-            {tracked.map((row) => (
-              <CategoryRow key={row.categoryId} row={row} budget={b} />
-            ))}
-          </>
+        {expenses.some((row) => row.group !== null) ? (
+          <GroupedRows rows={expenses} budget={b} />
+        ) : (
+          <BudgetedThenTracked rows={expenses} budget={b} />
         )}
       </Card>
 
@@ -137,6 +130,43 @@ export function Budgets() {
         </Card>
       )}
     </Shell>
+  )
+}
+
+/** Spending categories under their group headings, in order; ungrouped ones last. */
+function GroupedRows({ rows, budget }: { rows: CategoryBudget[]; budget: Budget }) {
+  return groupBy(rows, (row) => row.group).map(({ group, items }) => (
+    <Fragment key={group ?? ''}>
+      <span className="eyebrow" style={{ marginTop: 12 }}>
+        {group ?? 'Other'}
+      </span>
+      {items.map((row) => (
+        <CategoryRow key={row.categoryId} row={row} budget={budget} />
+      ))}
+    </Fragment>
+  ))
+}
+
+/** Without groups: budgeted categories first, then the ones only tracked. */
+function BudgetedThenTracked({ rows, budget }: { rows: CategoryBudget[]; budget: Budget }) {
+  const budgeted = rows.filter((row) => row.budgetCents !== null)
+  const tracked = rows.filter((row) => row.budgetCents === null)
+  return (
+    <>
+      {budgeted.map((row) => (
+        <CategoryRow key={row.categoryId} row={row} budget={budget} />
+      ))}
+      {tracked.length > 0 && (
+        <>
+          <span className="eyebrow" style={{ marginTop: 12 }}>
+            Tracking only
+          </span>
+          {tracked.map((row) => (
+            <CategoryRow key={row.categoryId} row={row} budget={budget} />
+          ))}
+        </>
+      )}
+    </>
   )
 }
 

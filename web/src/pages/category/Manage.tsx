@@ -10,13 +10,21 @@ import { RulesList } from '../../components/rules/RulesList'
 import type { RuleDraft } from '../../components/rules/rules'
 import { Card, ErrorNote } from '../../components/ui'
 
-export function CategorySettings({ category }: { category: Category }) {
+export function CategorySettings({
+  category,
+  groups,
+}: {
+  category: Category
+  /** Group names already in use, offered in the form. */
+  groups: string[]
+}) {
   const update = useActionMutation('update_category')
   return (
     <Card label="Settings" className="span-wide stack">
       <h2>Settings</h2>
       <CategoryForm
         category={category}
+        groups={groups}
         submitLabel="Save changes"
         busy={update.isPending}
         error={update.error}

@@ -96,6 +96,21 @@ describe('budgets page', () => {
     expect(within(left).getByText('-$100')).toHaveClass('over')
   })
 
+  it('lists categories under their group headings, with ungrouped ones last', async () => {
+    const food = { group: 'Food and drink' }
+    const alcohol = category('Alcohol', food)
+    const mine = category('Bourbon club', { budgetCents: 5000 })
+    serve([{ ...groceries, ...food }, mine, alcohol])
+    renderBudgets()
+    const spending = await screen.findByRole('region', { name: 'Spending categories' })
+    const order = within(spending)
+      .getAllByText(/^(Food and drink|Other|Groceries|Alcohol|Bourbon club)$/)
+      .map((element) => element.textContent)
+    expect(order).toEqual(['Food and drink', 'Groceries', 'Alcohol', 'Other', 'Bourbon club'])
+    // With groups, budgeted and tracked categories stay together under their heading.
+    expect(within(spending).queryByText('Tracking only')).not.toBeInTheDocument()
+  })
+
   it('lists budgeted categories first, then the ones only tracked', async () => {
     serve([coffee, groceries])
     renderBudgets()

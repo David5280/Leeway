@@ -24,6 +24,8 @@ test('a new owner sets up Leeway and lands on the overview', async ({ page }) =>
 
   // The starter categories, with one budget changed and one left out.
   await expect(page.getByRole('heading', { name: 'Pick a starting point' })).toBeVisible()
+  // They are listed under group headings, so the longer list stays easy to scan.
+  await expect(page.getByText('Food and drink', { exact: true })).toBeVisible()
   await page.getByRole('textbox', { name: 'Groceries budget' }).fill('650')
   await page.getByRole('checkbox', { name: 'Include Fees' }).uncheck()
   await page.getByRole('button', { name: 'Continue' }).click()

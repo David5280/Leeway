@@ -2,7 +2,7 @@
 
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
-import { chooseCategory, recategorize } from '../domain/categorize.js'
+import { recategorize, ruleMatches } from '../domain/categorize.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -121,14 +121,7 @@ export const previewRuleAction = defineAction({
       offset: 0,
       includeExcluded: false,
     })
-    const matches = transactions.filter(
-      (tx) =>
-        chooseCategory(
-          { ...tx, providerCategoryPrimary: null, providerCategoryDetailed: null },
-          [rule],
-          [],
-        ) !== null,
-    )
+    const matches = transactions.filter((tx) => ruleMatches(rule, tx))
     const moving = target
       ? matches.filter((tx) => tx.categorySource !== 'manual' && tx.categoryId !== target)
       : []

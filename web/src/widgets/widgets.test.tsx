@@ -600,6 +600,36 @@ describe('RecentWidget', () => {
     )
   })
 
+  it('labels a card payment arriving on the card, in a neutral color rather than as money in', async () => {
+    const arrival = transaction({
+      id: 'card',
+      date: '2026-11-04',
+      name: 'Payment Thank You-Mobile',
+      amountCents: -40930,
+      categoryId: transfer.id,
+      bankCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    })
+    fakeServer({ list_transactions: () => ({ transactions: [arrival], total: 1 }) })
+    renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
+    expect(await screen.findByText('Card payment')).toBeInTheDocument()
+    expect(screen.getByText('+$409.30')).toHaveClass('muted')
+    expect(screen.getByText('+$409.30')).not.toHaveClass('good')
+  })
+
+  it('names the person a Zelle came from, as money in', async () => {
+    const zelle = transaction({
+      id: 'zelle',
+      date: '2026-11-07',
+      name: 'Zelle payment from JANE DOE BACmmhq0yzbn',
+      amountCents: -12500,
+      person: { app: 'Zelle', direction: 'in', counterparty: 'Jane Doe' },
+    })
+    fakeServer({ list_transactions: () => ({ transactions: [zelle], total: 1 }) })
+    renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
+    expect(await screen.findByText('From Jane Doe')).toBeInTheDocument()
+    expect(screen.getByText('+$125.00')).toHaveClass('good')
+  })
+
   it('says when there are no transactions', async () => {
     fakeServer({ list_transactions: () => ({ transactions: [], total: 0 }) })
     renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)

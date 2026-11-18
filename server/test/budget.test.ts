@@ -16,6 +16,7 @@ function category(id: string, fields: Partial<Category> = {}): Category {
     warnAtPercent: null,
     trackPace: true,
     providerCategories: [],
+    group: null,
     position: 0,
     ...fields,
   }

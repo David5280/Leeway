@@ -153,6 +153,19 @@ describe('starting point', () => {
     expect(await screen.findByRole('heading', { name: "You're set" })).toBeInTheDocument()
   })
 
+  it('lists the starter set under its group headings', async () => {
+    const grouped = [
+      { ...groceries, group: 'Food' },
+      { ...paycheck, group: 'Pay' },
+    ]
+    serve({ get_starter_categories: () => grouped })
+    renderSignedIn(<Setup status={status} startAt={2} />)
+    await toStartingPoint(userEvent.setup())
+    const list = await screen.findByLabelText('Categories to create')
+    const shown = within(list).getAllByText(/^(Food|Pay|Groceries|Paycheck)$/)
+    expect(shown.map((e) => e.textContent)).toEqual(['Food', 'Groceries', 'Pay', 'Paycheck'])
+  })
+
   it('skips a category that is unticked, and stops editing its amount', async () => {
     const server = serve()
     renderSignedIn(<Setup status={status} startAt={2} />)

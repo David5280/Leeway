@@ -6,6 +6,7 @@ import { useAction } from '../api/hooks'
 import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
+import { groupNames } from '../lib/groups'
 import { categoryStatus } from '../widgets/Categories'
 import { History, InThisCategory } from './category/History'
 import { CategoryRules, CategorySettings, DeleteCategory } from './category/Manage'
@@ -84,7 +85,7 @@ function CategoryDetail({
         <InThisCategory category={category} period={period} />
       </div>
       <div className="grid">
-        <CategorySettings category={category} />
+        <CategorySettings category={category} groups={groupNames(categories)} />
         <div className="span-half stack">
           <CategoryRules category={category} categories={categories} />
           <DeleteCategory category={category} />

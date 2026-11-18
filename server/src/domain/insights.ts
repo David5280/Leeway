@@ -10,7 +10,7 @@ import {
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, currentPeriod, sumTotals } from './budgetReport.js'
-import { chooseCategory, type Categorizable } from './categorize.js'
+import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { periodConfig, type Settings } from './settings.js'
 
@@ -137,15 +137,16 @@ export async function suggestForPlannedCategories(
   const { rows } = await db.query<Categorizable>(
     `SELECT t.name, t.merchant_name AS "merchantName", t.amount_cents AS "amountCents",
             t.provider_category_primary AS "providerCategoryPrimary",
-            t.provider_category_detailed AS "providerCategoryDetailed"
+            t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
      FROM transactions t JOIN accounts a ON a.id = t.account_id
      WHERE t.date >= $1 AND t.date < $2 AND NOT t.excluded AND NOT a.hidden AND NOT t.pending`,
     [start, end],
   )
+  const accounts = await loadOwnAccounts(db)
   const categories: Category[] = planned.map((c, position) => ({ ...c, id: c.name, position }))
   const sums = new Map<string, number>()
   for (const tx of rows) {
-    const choice = chooseCategory(tx, [], categories)
+    const choice = chooseCategory(tx, [], categories, accounts)
     if (choice) sums.set(choice.categoryId, (sums.get(choice.categoryId) ?? 0) + tx.amountCents)
   }
   return planned

@@ -6,6 +6,7 @@ import { useActionMutation } from '../../api/hooks'
 import { CategorySelect } from '../../components/CategorySelect'
 import { Dot, ErrorNote, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
+import { amountClass, amountTone, movementTag, transactionTitle } from '../../lib/transactions'
 
 /** How a transaction got its category, in words. */
 const SOURCES: Record<NonNullable<Transaction['categorySource']>, string> = {
@@ -14,11 +15,24 @@ const SOURCES: Record<NonNullable<Transaction['categorySource']>, string> = {
   provider: 'from your bank',
 }
 
+/**
+ * The account line under a transaction's title: the account, what kind of
+ * move it was, and for a transfer, the account on its other side.
+ */
+function detailLine(tx: Transaction, category: Category | undefined, partner?: Transaction) {
+  const kind = category?.kind ?? null
+  const parts = [tx.accountName, movementTag(tx, kind)]
+  if (partner) parts.push(`${tx.amountCents > 0 ? 'to' : 'from'} ${partner.accountName}`)
+  if (tx.note) parts.push(tx.note)
+  return parts.filter(Boolean).join(' · ')
+}
+
 /** One transaction: tap it for details, or change its category in place. */
 export function TransactionRow({
   tx,
   category,
   categories,
+  partner,
   open,
   onToggle,
   onMakeRule,
@@ -26,12 +40,15 @@ export function TransactionRow({
   tx: Transaction
   category: Category | undefined
   categories: Category[]
+  /** For a transfer, the other side of the same move, when it is in the list. */
+  partner?: Transaction
   open: boolean
   onToggle: () => void
   onMakeRule: () => void
 }) {
   const { signed } = useApp()
   const update = useActionMutation('update_transaction')
+  const title = transactionTitle(tx)
   return (
     <div className="list-row wrap" style={{ alignItems: 'flex-start' }}>
       <button
@@ -41,13 +58,10 @@ export function TransactionRow({
         aria-expanded={open}
         onClick={onToggle}
       >
-        <span style={{ fontWeight: 500 }}>{tx.merchantName ?? tx.name}</span>
+        <span style={{ fontWeight: 500 }}>{title}</span>
         {tx.pending && <span className="small muted"> · pending</span>}
         <br />
-        <span className="small muted">
-          {tx.accountName}
-          {tx.note ? ` · ${tx.note}` : ''}
-        </span>
+        <span className="small muted">{detailLine(tx, category, partner)}</span>
       </button>
       <span className="stack-sm" style={{ gap: 2, width: 200 }}>
         <span className="row" style={{ gap: 6 }}>
@@ -55,7 +69,7 @@ export function TransactionRow({
           <CategorySelect
             categories={categories}
             value={tx.categoryId}
-            label={`Category for ${tx.merchantName ?? tx.name}`}
+            label={`Category for ${title}`}
             emptyLabel="Needs a category"
             disabled={update.isPending}
             onChange={(categoryId) => update.mutate({ id: tx.id, categoryId })}
@@ -69,7 +83,7 @@ export function TransactionRow({
         </span>
       </span>
       <span
-        className={tx.amountCents < 0 ? 'num good' : 'num'}
+        className={amountClass(amountTone(tx, category?.kind ?? null))}
         style={{ width: 100, textAlign: 'right', fontWeight: 600 }}
       >
         {signed(tx.amountCents)}

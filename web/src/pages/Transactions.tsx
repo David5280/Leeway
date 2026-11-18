@@ -12,6 +12,7 @@ import { Shell } from '../components/Shell'
 import { ErrorNote, Loading, Segmented } from '../components/ui'
 import { useApp } from '../lib/app'
 import { dayLabel } from '../lib/format'
+import { pairTransfers } from '../lib/transactions'
 import { useDebounced } from '../lib/useDebounced'
 import { AddTransaction } from './transactions/AddTransaction'
 import { groupByDay, RANGES, rangeStart, type Range } from './transactions/filters'
@@ -190,6 +191,16 @@ function TransactionList({
   const { settings } = useApp()
   const [open, setOpen] = useState<string | null>(null)
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  // The two sides of each transfer in view, so each can name the other's account.
+  const partners = useMemo(
+    () =>
+      pairTransfers(
+        result.transactions.filter(
+          (tx) => tx.categoryId && byId.get(tx.categoryId)?.kind === 'transfer',
+        ),
+      ),
+    [result.transactions, byId],
+  )
   if (result.transactions.length === 0) {
     return <p className="empty">{filtered ? 'Nothing matches.' : 'No transactions yet.'}</p>
   }
@@ -207,6 +218,7 @@ function TransactionList({
               tx={tx}
               categories={categories}
               category={tx.categoryId ? byId.get(tx.categoryId) : undefined}
+              partner={partners.get(tx.id)}
               open={open === tx.id}
               onToggle={() => setOpen(open === tx.id ? null : tx.id)}
               onMakeRule={() => onMakeRule(tx)}

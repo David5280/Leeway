@@ -3,12 +3,7 @@
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import { recategorize } from '../domain/categorize.js'
-import {
-  categoryInputSchema,
-  createCategory,
-  listCategories,
-  STARTER_CATEGORIES,
-} from '../domain/categories.js'
+import { categoryInputSchema, createCategory, listCategories } from '../domain/categories.js'
 import { markOnboarded } from '../domain/owner.js'
 import { exportConfig, importConfig, portableConfigSchema } from '../domain/portable.js'
 import {
@@ -17,23 +12,26 @@ import {
   saveSettings,
   settingsPatchSchema,
 } from '../domain/settings.js'
+import { addStarterRules } from '../domain/starterRules.js'
+import { STARTER_CATEGORIES } from '../domain/starters.js'
 import { defineAction } from './action.js'
 
 export const starterCategoriesAction = defineAction({
   name: 'get_starter_categories',
   title: 'Get starter categories',
-  description: 'A suggested set of categories with budgets, for first-run setup.',
+  description:
+    'A suggested set of categories with budgets, grouped under headings, for first-run setup.',
   input: z.object({}),
   scope: 'read',
   surface: 'app',
-  run: async () => STARTER_CATEGORIES,
+  run: async () => STARTER_CATEGORIES.map(({ formerly: _formerly, ...category }) => category),
 })
 
 export const completeSetupAction = defineAction({
   name: 'complete_setup',
   title: 'Finish setup',
   description:
-    'Finish first-run setup: create the chosen categories (skipping names that already exist), save settings and open the dashboard.',
+    'Finish first-run setup: create the chosen categories (skipping names that already exist) and the starter rules for them, save settings and open the dashboard.',
   input: z.object({
     categories: z.array(categoryInputSchema).max(100).default([]),
     settings: settingsPatchSchema.default({}),
@@ -48,6 +46,8 @@ export const completeSetupAction = defineAction({
         await createCategory(db, category)
         existing.add(category.name.toLowerCase())
       }
+      // Rules for well-known subscriptions, for whichever of their categories were picked.
+      await addStarterRules(db)
       await saveSettings(db, mergeSettings(await getSettings(db), input.settings))
       await recategorize(db)
       await markOnboarded(db)

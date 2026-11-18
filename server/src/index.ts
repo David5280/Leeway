@@ -6,11 +6,14 @@ import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool } from './db/pool.js'
 import { syncAll } from './domain/connections.js'
+import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { buildApp } from './http/app.js'
 
 const config = loadConfig()
 const db = createPool(config.databaseUrl, config.databaseSsl)
 await migrate(db)
+// One-time data upgrades run after the schema is current and before serving.
+await upgradeStarterSet(db)
 
 const ctx: AppContext = {
   db,

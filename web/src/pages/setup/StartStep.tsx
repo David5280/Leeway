@@ -1,10 +1,11 @@
 // Step 4: picking a starting point: suggested budgets, a starter set, empty, or an import.
 
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
 import { useApp } from '../../lib/app'
+import { groupBy } from '../../lib/groups'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
@@ -113,7 +114,7 @@ function StartChoices({
   )
 }
 
-/** The categories to create: tick to keep, and a monthly amount for spending ones. */
+/** The categories to create, under their group headings. */
 function StarterList({
   rows,
   onEdit,
@@ -121,47 +122,65 @@ function StarterList({
   rows: StarterRow[]
   onEdit: (name: string, change: Edits[string]) => void
 }) {
-  const { money } = useApp()
   return (
     <div className="stack-sm" aria-label="Categories to create">
       <p className="small muted">
         Monthly amounts. Leave one blank for no budget; untick to skip it.
       </p>
-      {rows.map(({ category, include, amount, averageCents }) => (
-        <div key={category.name} className="list-row">
-          <input
-            type="checkbox"
-            checked={include}
-            aria-label={`Include ${category.name}`}
-            onChange={(e) => onEdit(category.name, { include: e.target.checked })}
-          />
-          <Dot color={category.color} />
-          <span className="grow">
-            {category.name}
-            {averageCents !== null && (
-              <span className="small muted"> · you average {money(averageCents)}</span>
-            )}
-          </span>
-          {category.kind === 'expense' ? (
-            <input
-              className="input num"
-              style={{ width: 110 }}
-              inputMode="decimal"
-              placeholder="No budget"
-              aria-label={`${category.name} budget`}
-              value={amount}
-              disabled={!include}
-              onChange={(e) => onEdit(category.name, { amount: e.target.value })}
-            />
-          ) : (
-            // Income and transfers take no budget, so say how each is counted
-            // instead of repeating the name.
-            <span className="small muted">
-              {category.kind === 'income' ? 'Money in' : 'Not counted'}
-            </span>
-          )}
-        </div>
+      {groupBy(rows, (row) => row.category.group ?? null).map(({ group, items }) => (
+        <Fragment key={group ?? ''}>
+          {group && <span className="eyebrow">{group}</span>}
+          {items.map((row) => (
+            <StarterItem key={row.category.name} row={row} onEdit={onEdit} />
+          ))}
+        </Fragment>
       ))}
+    </div>
+  )
+}
+
+/** One category to create: tick to keep, and a monthly amount for spending ones. */
+function StarterItem({
+  row: { category, include, amount, averageCents },
+  onEdit,
+}: {
+  row: StarterRow
+  onEdit: (name: string, change: Edits[string]) => void
+}) {
+  const { money } = useApp()
+  return (
+    <div className="list-row">
+      <input
+        type="checkbox"
+        checked={include}
+        aria-label={`Include ${category.name}`}
+        onChange={(e) => onEdit(category.name, { include: e.target.checked })}
+      />
+      <Dot color={category.color} />
+      <span className="grow">
+        {category.name}
+        {averageCents !== null && (
+          <span className="small muted"> · you average {money(averageCents)}</span>
+        )}
+      </span>
+      {category.kind === 'expense' ? (
+        <input
+          className="input num"
+          style={{ width: 110 }}
+          inputMode="decimal"
+          placeholder="No budget"
+          aria-label={`${category.name} budget`}
+          value={amount}
+          disabled={!include}
+          onChange={(e) => onEdit(category.name, { amount: e.target.value })}
+        />
+      ) : (
+        // Income and transfers take no budget, so say how each is counted
+        // instead of repeating the name.
+        <span className="small muted">
+          {category.kind === 'income' ? 'Money in' : 'Not counted'}
+        </span>
+      )}
     </div>
   )
 }
