@@ -111,11 +111,11 @@ export function budgetFor(
 }
 
 /** Reads settings from the cache, as the app does, so saved changes show up. */
-function LiveSettings({ children }: { children: ReactNode }) {
+function LiveSettings({ server, children }: { server: Status; children: ReactNode }) {
   const current = useAction('get_settings', undefined, { staleTime: Infinity })
   if (!current.data) return null
   return (
-    <AppProvider settings={current.data} status={status}>
+    <AppProvider settings={current.data} status={server}>
       {children}
     </AppProvider>
   )
@@ -124,17 +124,22 @@ function LiveSettings({ children }: { children: ReactNode }) {
 /** Renders inside the same providers the app uses, signed in. */
 export function renderSignedIn(
   ui: ReactNode,
-  options: { settings?: Settings; route?: string } = {},
+  options: { settings?: Settings; route?: string; status?: Partial<Status> } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['action', 'get_settings', {}], options.settings ?? settings)
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[options.route ?? '/']}>
-        <LiveSettings>{ui}</LiveSettings>
+        <LiveSettings server={{ ...status, ...options.status }}>{ui}</LiveSettings>
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+/** A route on the fake server that answers with an error, as the real one does. */
+export function failing(message: string, httpStatus = 400) {
+  return () => Response.json({ error: 'invalid_input', message }, { status: httpStatus })
 }
 
 export function renderPlain(ui: ReactNode) {

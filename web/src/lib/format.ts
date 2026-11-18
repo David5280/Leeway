@@ -113,3 +113,13 @@ export function monthYear(iso: string, locale = 'en-US'): string {
     timeZone: 'UTC',
   })
 }
+
+/** The calendar day of a timestamp, like "Nov 17", with the year when it is not this year. */
+export function calendarDate(iso: string, now = new Date()): string {
+  const date = new Date(iso)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  })
+}

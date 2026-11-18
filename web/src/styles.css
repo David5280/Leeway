@@ -906,3 +906,25 @@ code.code {
     display: none;
   }
 }
+
+/* A value to copy, like the connector address, with its Copy button beside it. */
+.copy-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-field code.code {
+  flex: 1 1 260px;
+  overflow-wrap: anywhere;
+}
+
+/* Numbered how-to steps in the AI assistant section. */
+.how-to {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

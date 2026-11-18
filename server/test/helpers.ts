@@ -43,7 +43,8 @@ export async function createTestContext(
 /** Empties every table between tests, keeping the schema. */
 export async function resetData(db: pg.Pool): Promise<void> {
   await db.query(
-    `TRUNCATE owner, sessions, api_tokens, connections, accounts, categories, rules, transactions,
+    `TRUNCATE owner, sessions, api_tokens, oauth_clients, oauth_requests, oauth_grants,
+       oauth_codes, oauth_tokens, connections, accounts, categories, rules, transactions,
        bills, goals, dismissed_recurring CASCADE;
      UPDATE settings SET data = '{}';`,
   )

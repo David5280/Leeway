@@ -9,6 +9,7 @@ import { Loading } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
 import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
+import { Connect, ConnectProblem } from './pages/Connect'
 import { Customize } from './pages/Customize'
 import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
@@ -18,6 +19,22 @@ import { Transactions } from './pages/Transactions'
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="auth">{children}</div>
+}
+
+/** The app's screens, once setup is done. */
+function Screens() {
+  return (
+    <Routes>
+      <Route path="/" element={<Overview />} />
+      <Route path="/transactions" element={<Transactions />} />
+      <Route path="/budgets" element={<Budgets />} />
+      <Route path="/budgets/:id" element={<CategoryPage />} />
+      <Route path="/plan" element={<Plan />} />
+      <Route path="/plan/:section" element={<Plan />} />
+      <Route path="/customize" element={<Customize />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }
 
 /** Decides what to show: first-run setup, sign-in, or the app itself. */
@@ -53,20 +70,17 @@ export function App() {
 
   return (
     <AppProvider settings={settings.data} status={status.data}>
-      {!me.data.owner.onboarded ? (
-        <Setup status={status.data} startAt={2} />
-      ) : (
-        <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/budgets" element={<Budgets />} />
-          <Route path="/budgets/:id" element={<CategoryPage />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/plan/:section" element={<Plan />} />
-          <Route path="/customize" element={<Customize />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      )}
+      <Routes>
+        {/* An assistant asking to connect is answered even before setup is finished. */}
+        <Route path="/connect" element={<ConnectProblem />} />
+        <Route path="/connect/:id" element={<Connect />} />
+        <Route
+          path="*"
+          element={
+            me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} startAt={2} />
+          }
+        />
+      </Routes>
     </AppProvider>
   )
 }

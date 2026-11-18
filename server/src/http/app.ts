@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { runAction } from '../actions/action.js'
@@ -23,12 +22,16 @@ import {
   isValidSession,
   SESSION_MAX_AGE_SECONDS,
 } from '../domain/owner.js'
-import { verifyToken } from '../domain/tokens.js'
 import { AppError } from '../errors.js'
-import { createMcpServer } from '../mcp/server.js'
+import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
+import { registerMcpRoute } from './mcp.js'
+import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 
 export const VERSION = '0.1.0'
 const SESSION_COOKIE = 'leeway_session'
+
+/** Paths that are never web app pages, so an unknown one is a plain 404, not index.html. */
+const NOT_PAGES = /^\/(api\/|mcp|oauth\/|\.well-known\/)/
 
 /** Finds the built web app (web/dist) by walking up from this file, in dev and in a build. */
 function findWebDir(): string | null {
@@ -51,7 +54,14 @@ function parse<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
 
 export async function buildApp(
   ctx: AppContext,
-  options: { webDir?: string | null; logger?: boolean } = {},
+  options: {
+    webDir?: string | null
+    logger?: boolean
+    /** Fetches apps' client metadata documents; tests pass a fake instead of the network. */
+    loadClientDocument?: LoadClientDocument
+    /** False turns off per-address rate limits, for tests that sign in many times a minute. */
+    rateLimit?: boolean
+  } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
@@ -60,7 +70,17 @@ export async function buildApp(
     bodyLimit: 2 * 1024 * 1024,
   })
   await app.register(cookie)
-  await app.register(rateLimit, { global: false })
+  await app.register(rateLimit, {
+    global: false,
+    ...(options.rateLimit === false ? { allowList: () => true } : {}),
+  })
+
+  // No other site may show Leeway in a frame, so the consent screen cannot be
+  // overlaid and clicked through (clickjacking).
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('Content-Security-Policy', "frame-ancestors 'none'")
+  })
 
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     if (error instanceof AppError) {
@@ -199,39 +219,16 @@ export async function buildApp(
     })
   })
 
-  // The MCP endpoint for AI agents, authenticated with a bearer token.
-  app.all('/mcp', async (request, reply) => {
-    const header = request.headers.authorization ?? ''
-    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-    const scope = token ? await verifyToken(ctx.db, token) : null
-    if (!scope) {
-      return reply
-        .status(401)
-        .header('WWW-Authenticate', 'Bearer realm="leeway"')
-        .send({ error: 'unauthorized', message: 'Use a token from Leeway: Settings > AI agents' })
-    }
-    const server = createMcpServer(ctx, scope, VERSION, (err) =>
-      request.log.error({ err }, 'Agent tool failed'),
-    )
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    })
-    reply.hijack()
-    reply.raw.on('close', () => {
-      void transport.close()
-      void server.close()
-    })
-    await server.connect(transport)
-    await transport.handleRequest(request.raw, reply.raw, request.body)
-  })
+  allowCrossOrigin(app)
+  await registerOAuthRoutes(app, ctx, options.loadClientDocument ?? createClientDocumentLoader())
+  registerMcpRoute(app, ctx, VERSION)
 
   const webDir = options.webDir === undefined ? findWebDir() : options.webDir
   if (webDir) {
     await app.register(fastifyStatic, { root: webDir, wildcard: false })
     // The web app routes in the browser, so unknown non-API paths get index.html.
     app.setNotFoundHandler((request, reply) => {
-      if (request.method === 'GET' && !request.url.startsWith('/api/') && request.url !== '/mcp') {
+      if (request.method === 'GET' && !NOT_PAGES.test(request.url)) {
         return reply.sendFile('index.html')
       }
       return reply.status(404).send({ error: 'not_found', message: 'Not found' })

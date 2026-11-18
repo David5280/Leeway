@@ -18,7 +18,6 @@ import { fakeServer, forgetWidgets, renderSignedIn, settings, status } from '../
 import { WIDGET_LIBRARY } from '../../widgets/library'
 import { Customize } from '../Customize'
 import { AccountSection } from './Accounts'
-import { AgentSection } from './Agent'
 import { BackupSection } from './Backup'
 import { BanksSection } from './Banks'
 import { BudgetingSection } from './Budgeting'
@@ -86,7 +85,7 @@ const withBank: Partial<Status> = { bank: { provider: 'plaid', environment: 'san
 
 describe('Customize page', () => {
   it('links to every section by its anchor, with the section title as the link text', () => {
-    fakeServer({ list_accounts: () => [], list_tokens: () => [] })
+    fakeServer({ list_accounts: () => [], list_tokens: () => [], list_connected_apps: () => [] })
     renderSignedIn(<Customize />)
     expect(screen.getByRole('heading', { name: 'Make it yours', level: 1 })).toBeInTheDocument()
     const links = within(
@@ -102,7 +101,7 @@ describe('Customize page', () => {
   })
 
   it('shows each section hint under its title', () => {
-    fakeServer({ list_accounts: () => [], list_tokens: () => [] })
+    fakeServer({ list_accounts: () => [], list_tokens: () => [], list_connected_apps: () => [] })
     renderSignedIn(<Customize />)
     expect(screen.getByRole('region', { name: 'Accounts' })).toHaveTextContent(
       'Hidden accounts stay out of every total',
@@ -112,7 +111,7 @@ describe('Customize page', () => {
 
   it('shows a message when a settings change fails to save', async () => {
     fakeServer(
-      { list_accounts: () => [], list_tokens: () => [] },
+      { list_accounts: () => [], list_tokens: () => [], list_connected_apps: () => [] },
       { '/api/actions/update_settings': failing('Settings could not be saved') },
     )
     renderSignedIn(<Customize />)
@@ -932,131 +931,6 @@ describe('Banks', () => {
     fakeServer({}, { '/api/actions/list_connections': failing('Not allowed', 403) })
     renderWithStatus(<BanksSection />, withBank)
     expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed')
-  })
-})
-
-describe('AI assistant', () => {
-  const tokens = [
-    {
-      id: 'tok-1',
-      name: 'Claude',
-      scope: 'read',
-      createdAt: '2026-11-01T00:00:00Z',
-      lastUsedAt: null,
-    },
-    {
-      id: 'tok-2',
-      name: 'Coach',
-      scope: 'write',
-      createdAt: '2026-11-02T00:00:00Z',
-      lastUsedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
-    },
-  ]
-
-  function serve() {
-    let n = 0
-    return fakeServer({
-      list_tokens: () => tokens,
-      create_token: (input) => ({
-        id: `tok-new-${++n}`,
-        name: input.name,
-        scope: input.scope,
-        createdAt: '2026-11-17T00:00:00Z',
-        lastUsedAt: null,
-        token: `lw_secret_${n}`,
-      }),
-      delete_token: () => ({ deleted: true }),
-    })
-  }
-
-  function agent() {
-    return screen.getByRole('region', { name: 'AI assistant' })
-  }
-
-  it('gives the MCP address from the public URL', () => {
-    serve()
-    renderSignedIn(<AgentSection />)
-    expect(agent()).toHaveTextContent('https://leeway.example.com/mcp')
-    expect(agent()).toHaveTextContent('ask it for a money check-in')
-  })
-
-  it('falls back to this page address when no public URL is set', () => {
-    serve()
-    renderWithStatus(<AgentSection />, { publicUrl: null })
-    expect(agent()).toHaveTextContent(`${window.location.origin}/mcp`)
-  })
-
-  it('lists keys with what each can do and when it was last used', async () => {
-    serve()
-    renderSignedIn(<AgentSection />)
-    expect(await within(agent()).findByText('Claude')).toBeInTheDocument()
-    expect(agent()).toHaveTextContent('Can look, last used never')
-    expect(agent()).toHaveTextContent('Can look and change, last used 2 h ago')
-  })
-
-  it('creates a read-only key and shows it once', async () => {
-    const server = serve()
-    renderSignedIn(<AgentSection />)
-    expect(within(agent()).queryByText(/shown only once/)).not.toBeInTheDocument()
-    await userEvent.setup().click(within(agent()).getByRole('button', { name: 'Create a key' }))
-    await waitFor(() =>
-      expect(server.actions('create_token')).toEqual([{ name: 'AI assistant', scope: 'read' }]),
-    )
-    expect(await within(agent()).findByText('lw_secret_1')).toBeInTheDocument()
-    expect(agent()).toHaveTextContent('Your new key, shown only once')
-  })
-
-  it('creates a named key that can change budgets', async () => {
-    const server = serve()
-    renderSignedIn(<AgentSection />)
-    const user = userEvent.setup()
-    const name = within(agent()).getByRole('textbox', { name: 'Key name' })
-    await user.clear(name)
-    await user.type(name, 'Budget coach')
-    await user.selectOptions(
-      within(agent()).getByRole('combobox', { name: 'What the key can do' }),
-      'write',
-    )
-    await user.click(within(agent()).getByRole('button', { name: 'Create a key' }))
-    await waitFor(() =>
-      expect(server.actions('create_token')).toEqual([{ name: 'Budget coach', scope: 'write' }]),
-    )
-    expect(await within(agent()).findByText('lw_secret_1')).toBeInTheDocument()
-  })
-
-  it('needs a key name', async () => {
-    const server = serve()
-    renderSignedIn(<AgentSection />)
-    const user = userEvent.setup()
-    await user.clear(within(agent()).getByRole('textbox', { name: 'Key name' }))
-    await user.click(within(agent()).getByRole('button', { name: 'Create a key' }))
-    expect(server.actions('create_token')).toEqual([])
-  })
-
-  it('revokes a key', async () => {
-    const server = serve()
-    renderSignedIn(<AgentSection />)
-    await within(agent()).findByText('Coach')
-    const coach = within(agent()).getByText('Coach').closest('.list-row') as HTMLElement
-    await userEvent.setup().click(within(coach).getByRole('button', { name: 'Revoke' }))
-    await waitFor(() => expect(server.actions('delete_token')).toEqual([{ id: 'tok-2' }]))
-  })
-
-  it('shows why creating a key failed', async () => {
-    fakeServer({ list_tokens: () => [] }, { '/api/actions/create_token': failing('Too many keys') })
-    renderSignedIn(<AgentSection />)
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Create a key' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Too many keys')
-    expect(screen.queryByText(/shown only once/)).not.toBeInTheDocument()
-  })
-
-  it('shows why revoking failed', async () => {
-    fakeServer({ list_tokens: () => tokens }, { '/api/actions/delete_token': failing('Gone', 404) })
-    renderSignedIn(<AgentSection />)
-    await userEvent
-      .setup()
-      .click((await within(agent()).findAllByRole('button', { name: 'Revoke' }))[0]!)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Gone')
   })
 })
 

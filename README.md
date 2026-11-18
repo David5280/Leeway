@@ -19,7 +19,8 @@ except to talk to your bank.
 - **A dashboard you arrange yourself**, with themes and colors you choose.
 - **An AI coach.** Connect Claude or any assistant that speaks MCP. It can run a
   money check-in, tell you whether a purchase fits, review subscriptions and
-  plan debt payoff. Keys can be read-only, and no key can ever move money.
+  plan debt payoff. You approve what it may do, and nothing can ever move
+  money.
 - **Works on laptop and phone.** Install it to your home screen like an app.
 
 ## Get started
@@ -75,7 +76,7 @@ all with notes.
 | ----------------------- | -------- | -------------------------------------------------------- |
 | `DATABASE_URL`          | Yes      | Postgres connection string                               |
 | `ENCRYPTION_KEY`        | Yes      | 64 hex characters; encrypts bank access tokens at rest   |
-| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and the MCP link  |
+| `PUBLIC_URL`            | No       | Your Leeway address, for bank webhooks and assistants    |
 | `PLAID_CLIENT_ID`       | For sync | From the Plaid dashboard                                 |
 | `PLAID_SECRET`          | For sync | From the Plaid dashboard                                 |
 | `PLAID_ENV`             | No       | `sandbox` (test banks, the default) or `production`      |
@@ -95,18 +96,47 @@ request from the Plaid dashboard.
 
 ## Connect your AI assistant
 
-In Leeway, open **Customize**, then **AI assistant**. Create a key, then add the
-address shown there (your Leeway address followed by `/mcp`) as a connector in
-your assistant, with the key as the bearer token.
+Your connector address is your Leeway address followed by `/mcp`, like
+`https://leeway-yourname.up.railway.app/mcp`. **Customize**, then **AI
+assistant**, shows it with a Copy button.
+
+**Claude (web, desktop or phone).** In Claude, open **Customize**, then
+**Connectors**, and choose **Add custom connector**. Name it Leeway, paste the
+address and choose **Connect**. Leeway opens and asks you to approve; you can
+let Claude look only, or look and change budgets. Leeway then works in every
+chat, on every device. Claude's connectors reach Leeway from the internet, so
+this needs Leeway on a public `https` address, which Railway gives you.
+
+**Claude Code.** Run this, then `/mcp` inside Claude Code to sign in:
+
+```sh
+claude mcp add --transport http leeway https://your-leeway-address/mcp
+```
+
+**Other assistants.** Any assistant that speaks MCP over HTTP can connect. If it
+can sign in (MCP's OAuth), give it the address. If it needs a bearer token,
+create a key in **Customize**, then **AI assistant**, and use that.
 
 Then ask for a money check-in, or whether you can afford something. Assistants
 that show MCP prompts also list Leeway's ready-made ones: a check-in, a
 purchase check, debt payoff, a subscription review, a review of last period
 and budget setup.
 
-A read-only key lets the assistant look. A read and write key also lets it
-change budgets, categories and rules. Neither can move money, pay a bill or
-cancel a subscription.
+Looking lets the assistant read your accounts, spending, budgets and goals.
+Changing also lets it edit budgets, categories, rules and goals. Neither can
+move money, pay a bill or cancel a subscription. Connected apps and keys are
+listed in **Customize**, then **AI assistant**, where you can disconnect or
+revoke any of them at once.
+
+### How signing in works
+
+Leeway is its own OAuth 2.1 authorization server for the MCP endpoint, as the
+MCP authorization spec describes. Assistants find it through
+`/.well-known/oauth-protected-resource/mcp` and
+`/.well-known/oauth-authorization-server`, identify themselves with a client
+metadata document or dynamic registration, and sign in with PKCE. Access
+tokens last an hour; refresh tokens last 90 days and change on every use. Every
+token is stored only as a hash.
 
 ## Keeping your data safe
 

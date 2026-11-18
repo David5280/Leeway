@@ -61,9 +61,10 @@ docker exec leeway-test-db createdb -U postgres leeway_test
 
 `e2e/` holds Playwright tests that drive a real build in a real browser:
 first-run setup, signing in and out, the overview, transactions, budgets, the
-Plan tab, customizing and switching themes, and a phone-sized screen. They
-share one install and run in order; `setup.spec.ts` creates the owner and
-saves the signed-in session the others reuse.
+Plan tab, customizing and switching themes, an assistant connecting through
+the consent screen, and a phone-sized screen. They share one install and run
+in order; `setup.spec.ts` creates the owner and saves the signed-in session the
+others reuse.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set

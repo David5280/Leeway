@@ -50,6 +50,8 @@ test('a key for an AI assistant is shown once, ready to copy', async ({ page }) 
   const agent = page.getByRole('region', { name: 'AI assistant' })
   await agent.getByRole('textbox', { name: 'Key name' }).fill('Test assistant')
   await agent.getByRole('button', { name: 'Create a key' }).click()
-  await expect(agent.getByText('Your new key, shown only once. Copy it now:')).toBeVisible()
-  await expect(agent.locator('code').filter({ hasText: /^lw_/ })).toBeVisible()
+  await expect(
+    agent.getByText('Your new key "Test assistant", shown only once. Copy it now:'),
+  ).toBeVisible()
+  await expect(agent.getByLabel('New key')).toHaveText(/^lw_/)
 })

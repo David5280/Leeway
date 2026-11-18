@@ -16,6 +16,12 @@ import {
 import { getBudgetAction } from './budget.js'
 import { canIAffordAction, getCheckinAction } from './coach.js'
 import {
+  answerConnectRequestAction,
+  disconnectAppAction,
+  getConnectRequestAction,
+  listConnectedAppsAction,
+} from './connectedApps.js'
+import {
   createCategoryAction,
   deleteCategoryAction,
   listCategoriesAction,
@@ -131,6 +137,10 @@ export const actionList = [
   listTokensAction,
   createTokenAction,
   deleteTokenAction,
+  listConnectedAppsAction,
+  disconnectAppAction,
+  getConnectRequestAction,
+  answerConnectRequestAction,
 ] as const
 
 export type Actions = (typeof actionList)[number]

@@ -85,7 +85,7 @@ export function createMcpServer(
       const exists = actionList.some((a) => a.name === request.params.name)
       return errorResult(
         exists && scope === 'read'
-          ? `${request.params.name} changes data, and this token is read-only. The owner can create a write token in Leeway under Settings > AI agents.`
+          ? `${request.params.name} changes data, and this token is read-only. The owner can create a key that can change data in Leeway under Customize > AI assistant.`
           : `Unknown tool ${request.params.name}`,
       )
     }
