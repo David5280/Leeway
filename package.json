@@ -2,6 +2,7 @@
   "name": "leeway",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Self-hosted personal finance manager with bank sync, a live dashboard, and an MCP endpoint so your AI assistant can coach you.",
   "type": "module",
   "workspaces": [

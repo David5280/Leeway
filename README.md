@@ -131,3 +131,12 @@ npm run check   # formatting, lint, types and every test; must pass before a com
 
 Server tests need a Postgres database; see [CONTRIBUTING.md](CONTRIBUTING.md)
 for that and for the code standards every change meets.
+
+## License
+
+Copyright (C) 2026 David Engel.
+
+Leeway is free software under the
+[GNU Affero General Public License v3.0](LICENSE). You can use, change and
+share it. If you run a changed version for other people over a network, you
+must offer them its source code under the same license.
