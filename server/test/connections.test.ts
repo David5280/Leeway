@@ -1,10 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { BankError } from '../src/bank/provider.js'
 import type { AppContext } from '../src/context.js'
+import { UNREADABLE_TOKEN } from '../src/domain/bank.js'
 import { handleBankWebhook } from '../src/domain/connections.js'
+import { encrypt } from '../src/lib/crypto.js'
 import { actionCaller } from './actionCaller.js'
 import { account, bankTx, FakeBank, page } from './fakeBank.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, resetData, TEST_KEY_HEX } from './helpers.js'
 
 let ctx: AppContext
 let bank: FakeBank
@@ -235,6 +237,54 @@ describe('removing a bank', () => {
 
   it('reports an unknown connection as not found', async () => {
     expect((await callError('remove_connection', { id: UNKNOWN_ID })).code).toBe('not_found')
+  })
+})
+
+describe('a saved bank login that no longer decrypts', () => {
+  /** Links a bank, then runs as if ENCRYPTION_KEY had been changed since. */
+  async function linkThenChangeKey(): Promise<string> {
+    const { connectionId } = await call('link_bank', { publicToken: 'public-1' })
+    ctx.config.encryptionKey = Buffer.alloc(32, 9)
+    return connectionId
+  }
+  const originalKey = Buffer.from(TEST_KEY_HEX, 'hex')
+  afterEach(() => {
+    ctx.config.encryptionKey = originalKey
+  })
+
+  it('marks the bank as needing attention, and keeps syncing the others', async () => {
+    const broken = await linkThenChangeKey()
+    ctx.config.encryptionKey = originalKey
+    await call('link_bank', { publicToken: 'public-2' })
+    ctx.config.encryptionKey = Buffer.alloc(32, 9)
+    // Only the second bank's token is readable with the key in use now.
+    await ctx.db.query('UPDATE connections SET access_token_encrypted = $2 WHERE id <> $1', [
+      broken,
+      encrypt('access-public-2', ctx.config.encryptionKey),
+    ])
+
+    const results = await call('sync_banks', {})
+
+    expect(results.map((r) => r.error)).toEqual([UNREADABLE_TOKEN, null])
+    expect(await connectionStatus(broken)).toMatchObject({
+      status: 'needs_reauth',
+      lastError: UNREADABLE_TOKEN,
+    })
+  })
+
+  it('explains itself when the owner tries to repair the login', async () => {
+    const connectionId = await linkThenChangeKey()
+    const error = await callError('create_link_token', { connectionId })
+    expect(error).toMatchObject({ code: 'bank_error', message: UNREADABLE_TOKEN })
+  })
+
+  it('can still be removed, without telling the bank it cannot reach', async () => {
+    const connectionId = await linkThenChangeKey()
+
+    expect(await call('remove_connection', { id: connectionId })).toEqual({ deleted: true })
+
+    expect(bank.removedItems).toEqual([])
+    expect(await call('list_connections')).toEqual([])
   })
 })
 

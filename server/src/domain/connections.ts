@@ -1,7 +1,7 @@
 // Bank connections: linking a bank, repairing its login, removing it, and
 // acting on the bank's webhooks. Pulling data in is bank sync (sync.ts).
 
-import type { BankWebhook } from '../bank/provider.js'
+import { BankError, type BankWebhook } from '../bank/provider.js'
 import type { AppContext } from '../context.js'
 import type { Db } from '../db/pool.js'
 import { encrypt } from '../lib/crypto.js'
@@ -38,8 +38,8 @@ function webhookUrl(ctx: AppContext): string | null {
 /** A token the browser uses to open the bank login. Pass a connection to repair its login. */
 export async function createLinkToken(ctx: AppContext, connectionId?: string): Promise<string> {
   const bank = requireBank(ctx)
-  const token = connectionId ? await accessTokenOf(ctx, connectionId) : undefined
   try {
+    const token = connectionId ? await accessTokenOf(ctx, connectionId) : undefined
     return await bank.createLinkToken({
       ...(token ? { accessToken: token } : {}),
       webhookUrl: webhookUrl(ctx),
@@ -86,9 +86,13 @@ export async function reconnected(ctx: AppContext, connectionId: string): Promis
 
 /** Unlinks a bank and deletes its accounts and transactions here. */
 export async function removeConnection(ctx: AppContext, connectionId: string): Promise<void> {
-  const token = await accessTokenOf(ctx, connectionId)
-  // Tell the bank first so it stops sharing data, but remove locally either way.
-  await ctx.bank?.removeItem(token).catch(() => {})
+  // Tell the bank first so it stops sharing data, but remove locally either way,
+  // even when the saved login can no longer be read to tell it.
+  const token = await accessTokenOf(ctx, connectionId).catch((error: unknown) => {
+    if (error instanceof BankError) return null
+    throw error
+  })
+  if (token) await ctx.bank?.removeItem(token).catch(() => {})
   await ctx.db.query('DELETE FROM connections WHERE id = $1', [connectionId])
   // Payments to a card that is no longer tracked count as spending again.
   await recategorize(ctx.db)

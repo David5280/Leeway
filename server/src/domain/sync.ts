@@ -71,9 +71,9 @@ export async function syncConnection(ctx: AppContext, connectionId: string): Pro
   )
   if (!rows[0]) throw notFound('Connection')
   const { institutionName } = rows[0]
-  const token = await accessTokenOf(ctx, connectionId)
 
   try {
+    const token = await accessTokenOf(ctx, connectionId)
     const accounts = await bank.getAccounts(token)
     const changes = await fetchChanges(bank, token, rows[0].cursor)
     await withTransaction(ctx.db, (db) => applySync(db, connectionId, accounts, changes))
