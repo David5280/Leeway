@@ -1,4 +1,5 @@
-// The HTTP server: sign-in, the action API, the MCP endpoint, bank webhooks and the web app.
+// The HTTP server: sign-in, the action API, the MCP endpoint, bank webhooks and
+// the web app. Each part registers its own routes; this file puts them in order.
 
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -7,24 +8,23 @@ import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import Fastify, { type FastifyInstance } from 'fastify'
-import { runAction } from '../actions/action.js'
-import { actionList, findAction } from '../actions/index.js'
 import type { AppContext } from '../context.js'
-import { handleBankWebhook } from '../domain/connections.js'
 import { getOwner } from '../domain/owner.js'
-import { AppError } from '../errors.js'
 import { generateSetupCode } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
+import { registerActionRoutes } from './actions.js'
 import { registerAuthRoutes, sessionGuard } from './auth.js'
 import { refuseCrossSiteChanges } from './crossSite.js'
+import { registerErrorHandler } from './errors.js'
 import { registerMcpRoute } from './mcp.js'
+import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 import { proxyTrustFunction } from './proxyTrust.js'
 import { registerSecurityHeaders } from './securityHeaders.js'
-import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
+import { registerWebhookRoutes } from './webhooks.js'
 
 export const VERSION = '0.1.0'
-/** The largest action request: a 20,000-row CSV import is a few megabytes of JSON. */
-const ACTION_BODY_LIMIT = 8 * 1024 * 1024
+/** The largest body any other route takes; the action API allows more for CSV imports. */
+const DEFAULT_BODY_LIMIT = 2 * 1024 * 1024
 
 /** Paths that are never web app pages, so an unknown one is a plain 404, not index.html. */
 const NOT_PAGES = /^\/(api\/|mcp|oauth\/|\.well-known\/)/
@@ -40,6 +40,10 @@ function findWebDir(): string | null {
   return null
 }
 
+/**
+ * The server with every route, ready to listen. index.ts starts it; tests
+ * build one with a test context and send it requests with inject().
+ */
 export async function buildApp(
   ctx: AppContext,
   options: {
@@ -61,7 +65,7 @@ export async function buildApp(
     // Believe only the proxies this install sits behind about the client's
     // address and https, so a client cannot pick its own address (proxyTrust.ts).
     trustProxy: proxyTrustFunction(ctx.config.trustProxy),
-    bodyLimit: 2 * 1024 * 1024,
+    bodyLimit: DEFAULT_BODY_LIMIT,
   })
   await app.register(cookie)
   await app.register(rateLimit, {
@@ -71,21 +75,7 @@ export async function buildApp(
 
   await registerSecurityHeaders(app)
 
-  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
-    if (error instanceof AppError) {
-      return reply
-        .status(error.status)
-        .send({ error: error.code, message: error.message, details: error.details })
-    }
-    if (error.statusCode && error.statusCode < 500) {
-      return reply.status(error.statusCode).send({ error: 'bad_request', message: error.message })
-    }
-    request.log.error(error)
-    return reply
-      .status(500)
-      .send({ error: 'internal', message: 'Something went wrong on the server' })
-  })
-
+  registerErrorHandler(app)
   refuseCrossSiteChanges(app)
 
   app.get('/api/health', async () => ({ ok: true }))
@@ -103,53 +93,8 @@ export async function buildApp(
   })
 
   registerAuthRoutes(app, ctx, options.setupCode ?? ctx.config.setupCode ?? generateSetupCode())
-  const requireSession = sessionGuard(ctx)
-
-  app.get('/api/actions', { preHandler: requireSession }, async () =>
-    actionList.map(({ name, title, description, scope, surface }) => ({
-      name,
-      title,
-      description,
-      scope,
-      surface,
-    })),
-  )
-
-  app.post<{ Params: { name: string } }>(
-    '/api/actions/:name',
-    // Room for the largest CSV import (20,000 rows), which arrives as one JSON body.
-    { preHandler: requireSession, bodyLimit: ACTION_BODY_LIMIT },
-    async (request) => {
-      const action = findAction(request.params.name)
-      if (!action) throw new AppError('not_found', `Unknown action ${request.params.name}`)
-      return { result: await runAction(ctx, action, request.body) }
-    },
-  )
-
-  // Webhooks need the exact raw body to check the signature, so they get
-  // their own JSON parser in an isolated scope.
-  await app.register(async (scope) => {
-    scope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) =>
-      done(null, body),
-    )
-    // Unsigned calls cost Leeway a lookup of Plaid's key, so a flood of them is cut off.
-    const webhookLimit = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }
-    scope.post('/api/webhooks/plaid', webhookLimit, async (request, reply) => {
-      if (!ctx.bank) return reply.status(404).send()
-      let webhook
-      try {
-        webhook = await ctx.bank.parseWebhook(String(request.body), request.headers)
-      } catch (error) {
-        request.log.warn({ err: error }, 'Rejected bank webhook')
-        return reply.status(401).send({ error: 'unauthorized', message: 'Invalid signature' })
-      }
-      // Answer right away; Plaid retries slow webhooks. Sync in the background.
-      handleBankWebhook(ctx, webhook.itemId, webhook.event).catch((error) =>
-        request.log.error({ err: error }, 'Webhook sync failed'),
-      )
-      return { ok: true }
-    })
-  })
+  registerActionRoutes(app, ctx, sessionGuard(ctx))
+  await registerWebhookRoutes(app, ctx)
 
   allowCrossOrigin(app)
   await registerOAuthRoutes(app, ctx, options.loadClientDocument ?? createClientDocumentLoader())

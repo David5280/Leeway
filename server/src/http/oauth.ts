@@ -11,6 +11,7 @@ import { authorizationServerMetadata, protectedResourceMetadata } from '../oauth
 import { startAuthorization, type AuthorizeParams } from '../oauth/requests.js'
 import { exchangeCode, refreshTokens, revokeToken } from '../oauth/tokens.js'
 import { urlsFor } from './base.js'
+import { perMinute } from './rateLimit.js'
 
 /** Paths other sites' apps call from a browser (like MCP Inspector), so they allow any origin. */
 const CROSS_ORIGIN_PATHS = /^\/(\.well-known\/|oauth\/(token|register|revoke)|mcp)/
@@ -72,7 +73,7 @@ export async function registerOAuthRoutes(
 
   app.get<{ Querystring: AuthorizeParams }>(
     '/oauth/authorize',
-    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    perMinute(30),
     async (request, reply) => {
       const outcome = await startAuthorization(
         ctx.db,
@@ -113,60 +114,49 @@ export async function registerOAuthRoutes(
         .send({ error: 'server_error', error_description: 'Something went wrong. Try again' })
     })
 
-    scope.post(
-      '/oauth/token',
-      { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
-      async (request, reply) => {
-        const body = request.body
-        const grantType = field(body, 'grant_type')
-        const common = { client_id: field(body, 'client_id'), resource: field(body, 'resource') }
-        let tokens
-        if (grantType === 'authorization_code') {
-          tokens = await exchangeCode(
-            ctx.db,
-            {
-              ...common,
-              code: field(body, 'code'),
-              redirect_uri: field(body, 'redirect_uri'),
-              code_verifier: field(body, 'code_verifier'),
-            },
-            ctx.now(),
-          )
-        } else if (grantType === 'refresh_token') {
-          tokens = await refreshTokens(
-            ctx.db,
-            { ...common, refresh_token: field(body, 'refresh_token'), scope: field(body, 'scope') },
-            ctx.now(),
-          )
-        } else {
-          throw new OAuthError(
-            'unsupported_grant_type',
-            'Use grant_type authorization_code or refresh_token',
-          )
-        }
-        return noStore(reply).send(tokens)
-      },
+    scope.post('/oauth/token', perMinute(60), async (request, reply) => {
+      const body = request.body
+      const grantType = field(body, 'grant_type')
+      const common = { client_id: field(body, 'client_id'), resource: field(body, 'resource') }
+      let tokens
+      if (grantType === 'authorization_code') {
+        tokens = await exchangeCode(
+          ctx.db,
+          {
+            ...common,
+            code: field(body, 'code'),
+            redirect_uri: field(body, 'redirect_uri'),
+            code_verifier: field(body, 'code_verifier'),
+          },
+          ctx.now(),
+        )
+      } else if (grantType === 'refresh_token') {
+        tokens = await refreshTokens(
+          ctx.db,
+          { ...common, refresh_token: field(body, 'refresh_token'), scope: field(body, 'scope') },
+          ctx.now(),
+        )
+      } else {
+        throw new OAuthError(
+          'unsupported_grant_type',
+          'Use grant_type authorization_code or refresh_token',
+        )
+      }
+      return noStore(reply).send(tokens)
+    })
+
+    scope.post('/oauth/register', perMinute(10), async (request, reply) =>
+      noStore(reply)
+        .status(201)
+        .send(await registerClient(ctx.db, request.body, ctx.now())),
     )
 
-    scope.post(
-      '/oauth/register',
-      { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-      async (request, reply) =>
-        noStore(reply)
-          .status(201)
-          .send(await registerClient(ctx.db, request.body, ctx.now())),
-    )
-
-    scope.post(
-      '/oauth/revoke',
-      { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
-      async (request, reply) => {
-        const token = field(request.body, 'token')
-        if (!token) throw new OAuthError('invalid_request', 'Send the token to revoke')
-        await revokeToken(ctx.db, token, field(request.body, 'client_id'))
-        // RFC 7009: the answer is the same whether or not the token existed.
-        return noStore(reply).status(200).send()
-      },
-    )
+    scope.post('/oauth/revoke', perMinute(60), async (request, reply) => {
+      const token = field(request.body, 'token')
+      if (!token) throw new OAuthError('invalid_request', 'Send the token to revoke')
+      await revokeToken(ctx.db, token, field(request.body, 'client_id'))
+      // RFC 7009: the answer is the same whether or not the token existed.
+      return noStore(reply).status(200).send()
+    })
   })
 }

@@ -16,12 +16,13 @@ import {
 import { AppError } from '../errors.js'
 import { AttemptLimiter } from '../lib/attemptLimiter.js'
 import { setupCodeMatches } from '../lib/setupCode.js'
+import { perMinute } from './rateLimit.js'
 import { MINUTE_MS, SECOND_MS } from '../lib/time.js'
 
 const SESSION_COOKIE = 'leeway_session'
 
 /** Per address: a person mistyping is never slowed, a script guessing is. */
-const PER_ADDRESS_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }
+const PER_ADDRESS_LIMIT = perMinute(10)
 
 /**
  * Wrong passwords allowed across every address before sign-in pauses. At
