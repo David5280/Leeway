@@ -25,7 +25,10 @@ export interface Transaction {
   bankCategory: string | null
   note: string | null
   excluded: boolean
+  /** True for anything not from the bank feed: entered by hand or imported. Those can be edited and deleted. */
   manual: boolean
+  /** Where it came from: the bank feed, entered by hand, or a CSV import. */
+  source: 'bank' | 'manual' | 'import'
   /** Set when one person paid another through an app like Zelle: who, and which way. */
   person: PersonPayment | null
 }
@@ -65,6 +68,8 @@ const SELECT = `
     t.currency, t.pending, t.category_id AS "categoryId", t.category_source AS "categorySource",
     coalesce(t.provider_category_detailed, t.provider_category_primary) AS "bankCategory",
     t.note, t.excluded, t.provider_transaction_id IS NULL AS manual,
+    CASE WHEN t.provider_transaction_id IS NOT NULL THEN 'bank'
+      WHEN t.import_id IS NOT NULL THEN 'import' ELSE 'manual' END AS source,
     t.provider_category_primary AS "providerCategoryPrimary",
     t.provider_category_detailed AS "providerCategoryDetailed"
   FROM transactions t JOIN accounts a ON a.id = t.account_id`

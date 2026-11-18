@@ -61,9 +61,9 @@ docker exec leeway-test-db createdb -U postgres leeway_test
 
 `e2e/` holds Playwright tests that drive a real build in a real browser:
 first-run setup, signing in and out, the overview, transactions, budgets, the
-Plan tab, customizing and switching themes, the dashboard summary switch, the
-weekly email settings, an assistant connecting through the consent screen, and
-a phone-sized screen.
+Plan tab, importing a CSV file, customizing and switching themes, the
+dashboard summary switch, the weekly email settings, an assistant connecting
+through the consent screen, and a phone-sized screen.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
 
@@ -94,14 +94,8 @@ not run it again. Migrations run automatically when the server starts.
 
 ## The Railway template
 
-A one-click "Deploy on Railway" button needs a template made from this repository.
-To publish or update it in Railway: create a template with a PostgreSQL
-database and a service from this repository (it builds from `Dockerfile`, as
-`railway.json` says), give the service a public domain, and set its variables
-to:
-
-- `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
-- `ENCRYPTION_KEY`: `${{secret(64, "abcdef0123456789")}}`
-- `PLAID_CLIENT_ID`, `PLAID_SECRET`: left for the person deploying to fill in,
-  marked optional
-- `PLAID_ENV`: `sandbox`
+The "Deploy on Railway" button in the README needs a template published from
+this repository. The README's "Publishing the Railway template" has the steps
+and every variable with its description; keep that table in step with
+`.env.example` when adding a setting a new install needs. `railway.json` sets
+the build and the health check for every Railway deploy, button or not.

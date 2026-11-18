@@ -505,6 +505,41 @@ select.input {
   list-style: none;
 }
 
+/* A small table of rows, such as an import preview; it scrolls sideways on a phone. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Descriptions wrap; everything else stays on one line. */
+.data-table td:nth-child(2) {
+  min-width: 160px;
+  white-space: normal;
+}
+
+.data-table .num {
+  text-align: right;
+}
+
 button.chip {
   cursor: pointer;
 }

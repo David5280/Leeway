@@ -21,7 +21,7 @@ export interface SyncResult {
 }
 
 /** Everything that changed at the bank since a cursor, and where to continue from next time. */
-interface BankChanges {
+export interface BankChanges {
   added: BankTransaction[]
   modified: BankTransaction[]
   removed: string[]
@@ -35,8 +35,12 @@ interface BankChanges {
  */
 const MAX_PAGES = 200
 
-/** Follows the bank's pages from `cursor` until it has nothing more. */
-async function fetchChanges(
+/**
+ * Follows the bank's pages from `cursor` until it has nothing more. A null
+ * cursor starts from the beginning, which returns the whole history the bank
+ * holds as `added`.
+ */
+export async function fetchChanges(
   bank: BankProvider,
   token: string,
   cursor: string | null,

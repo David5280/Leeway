@@ -23,6 +23,8 @@ import { registerSecurityHeaders } from './securityHeaders.js'
 import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 
 export const VERSION = '0.1.0'
+/** The largest action request: a 20,000-row CSV import is a few megabytes of JSON. */
+const ACTION_BODY_LIMIT = 8 * 1024 * 1024
 
 /** Paths that are never web app pages, so an unknown one is a plain 404, not index.html. */
 const NOT_PAGES = /^\/(api\/|mcp|oauth\/|\.well-known\/)/
@@ -115,7 +117,8 @@ export async function buildApp(
 
   app.post<{ Params: { name: string } }>(
     '/api/actions/:name',
-    { preHandler: requireSession },
+    // Room for the largest CSV import (20,000 rows), which arrives as one JSON body.
+    { preHandler: requireSession, bodyLimit: ACTION_BODY_LIMIT },
     async (request) => {
       const action = findAction(request.params.name)
       if (!action) throw new AppError('not_found', `Unknown action ${request.params.name}`)

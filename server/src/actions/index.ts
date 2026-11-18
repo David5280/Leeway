@@ -45,6 +45,7 @@ import {
   listGoalsAction,
   updateGoalAction,
 } from './goals.js'
+import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
 import { getCashFlowAction, getNetWorthAction, planDebtPayoffAction } from './planning.js'
 import {
   createRuleAction,
@@ -61,6 +62,7 @@ import {
   reconnectedBankAction,
   removeConnectionAction,
   syncBanksAction,
+  usePurchaseDatesAction,
 } from './connections.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
 import { getSummaryAction, setAiSummaryAction } from './summary.js'
@@ -120,6 +122,9 @@ export const actionList = [
   categorizeTransactionsAction,
   createTransactionAction,
   deleteTransactionAction,
+  importTransactionsAction,
+  listImportsAction,
+  undoImportAction,
   listAccountsAction,
   createAccountAction,
   updateAccountAction,
@@ -141,6 +146,7 @@ export const actionList = [
   getCashFlowAction,
   listConnectionsAction,
   syncBanksAction,
+  usePurchaseDatesAction,
   createLinkTokenAction,
   linkBankAction,
   reconnectedBankAction,

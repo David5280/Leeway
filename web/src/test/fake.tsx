@@ -179,6 +179,7 @@ export function transaction(
     note: null,
     excluded: false,
     manual: false,
+    source: 'bank',
     ...fields,
   }
 }

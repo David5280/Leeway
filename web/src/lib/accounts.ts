@@ -2,6 +2,18 @@
 
 import type { Account } from '../api/client'
 
+/** The kinds of account, as the owner picks one for an account kept by hand. */
+export const ACCOUNT_TYPES = [
+  ['depository', 'Checking or savings'],
+  ['credit', 'Credit card'],
+  ['loan', 'Loan'],
+  ['investment', 'Investment'],
+  ['property', 'Property'],
+  ['other', 'Other'],
+] as const
+
+export type AccountType = (typeof ACCOUNT_TYPES)[number][0]
+
 /** Cards and loans hold money owed, not money owned, so their balances read as debt. */
 export function isOwed(account: Pick<Account, 'type'>): boolean {
   return account.type === 'credit' || account.type === 'loan'

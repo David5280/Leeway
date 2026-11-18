@@ -11,6 +11,7 @@ import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
 import { Connect, ConnectProblem } from './pages/Connect'
 import { Customize } from './pages/Customize'
+import { ImportTransactions } from './pages/ImportTransactions'
 import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
 import { Plan } from './pages/Plan'
@@ -27,6 +28,7 @@ function Screens() {
     <Routes>
       <Route path="/" element={<Overview />} />
       <Route path="/transactions" element={<Transactions />} />
+      <Route path="/transactions/import" element={<ImportTransactions />} />
       <Route path="/budgets" element={<Budgets />} />
       <Route path="/budgets/:id" element={<CategoryPage />} />
       <Route path="/plan" element={<Plan />} />

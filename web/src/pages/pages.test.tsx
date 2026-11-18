@@ -145,7 +145,13 @@ describe('transactions filters and editing', () => {
     categorySource: 'manual',
     bankCategory: 'FOOD_AND_DRINK_GROCERIES',
   })
-  const cash = transaction({ id: 't2', date: '2026-11-16', name: 'Farmers market', manual: true })
+  const cash = transaction({
+    id: 't2',
+    date: '2026-11-16',
+    name: 'Farmers market',
+    manual: true,
+    source: 'manual',
+  })
 
   function serve(list: Record<string, unknown> = {}) {
     return fakeServer({
@@ -233,6 +239,27 @@ describe('transactions filters and editing', () => {
     await user.click(await screen.findByRole('button', { name: /Farmers market/ }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(server.actions('delete_transaction')).toEqual([{ id: 't2' }]))
+  })
+
+  it('says which transactions were imported from a file, and links to importing more', async () => {
+    const imported = transaction({
+      id: 't3',
+      date: '2026-11-15',
+      name: 'Old rent',
+      manual: true,
+      source: 'import',
+    })
+    serve({ transactions: [imported, cash], total: 2 })
+    renderSignedIn(<Transactions />)
+    const user = userEvent.setup()
+    expect(screen.getByRole('link', { name: 'Import a file' })).toHaveAttribute(
+      'href',
+      '/transactions/import',
+    )
+    await user.click(await screen.findByRole('button', { name: /Old rent/ }))
+    expect(screen.getByText('Imported from a file.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Farmers market/ }))
+    expect(screen.queryByText('Imported from a file.')).not.toBeInTheDocument()
   })
 
   it('adds money received by hand as money in', async () => {

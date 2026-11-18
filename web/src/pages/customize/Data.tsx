@@ -1,12 +1,14 @@
-// Exporting everything to a file, and importing it back.
+// Your data: bringing in transaction history from a file, and exporting the
+// setup (settings, categories, rules) to a file and importing it back.
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { call, type Input } from '../../api/client'
 import { ErrorNote } from '../../components/ui'
 import { Section } from './Section'
 
-export function BackupSection() {
+export function DataSection() {
   const [mode, setMode] = useState<'merge' | 'replace'>('merge')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -43,11 +45,25 @@ export function BackupSection() {
   }
 
   return (
-    <Section
-      id="backup"
-      title="Backup"
-      hint="Settings, categories and rules as one file. Bank data is never included."
-    >
+    <Section id="data" title="Data" hint="Bring in transaction history, and back up your setup.">
+      <div className="stack-sm">
+        <h3>Import transactions</h3>
+        <span className="small muted">
+          From a bank&apos;s CSV export or another budgeting app, such as history from before your
+          bank was connected.
+        </span>
+        <div>
+          <Link to="/transactions/import" className="btn">
+            Import a CSV file
+          </Link>
+        </div>
+      </div>
+      <div className="stack-sm">
+        <h3>Backup</h3>
+        <span className="small muted">
+          Settings, categories and rules as one file. Bank data is never included.
+        </span>
+      </div>
       <div className="row wrap">
         <button type="button" className="btn" onClick={() => void download()}>
           Export leeway.json
