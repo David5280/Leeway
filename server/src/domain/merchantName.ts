@@ -192,13 +192,20 @@ function endsName(rawWord: string, rawNext = '', previous = ''): boolean {
     /^(transaction|trans|ref|conf|confirmation|trace|id|ppd|web|ccd|card|acct)\b[#:]*/i.test(word)
   )
     return true
-  // "STR 12345": the word only says a store number follows. "STORE" is left
-  // in, since it can be the name's own ("THE UPS STORE 1234"); its number ends the name.
-  if (/^(str|location)$/i.test(word) && /^#?\d+$/.test(next)) return true
-  if (/^(store|unit)$/i.test(previous) && /^#?\d+$/.test(word)) return true
+  if (storeNumber(word, next, previous)) return true
   if (/^\d{3,}$/.test(word)) return true // plain numbers: store or terminal ids
   // Codes that mix letters and digits, like "P1A2" or "S586321456".
   return digits >= 2 && /\p{L}/u.test(word)
+}
+
+/**
+ * A store's number, or the label that only says one follows: "STR 12345"
+ * ends at "STR". "STORE" is kept, since it can be the name's own ("THE UPS
+ * STORE 1234"), and its number ends the name instead.
+ */
+function storeNumber(word: string, next: string, previous: string): boolean {
+  if (/^(str|location)$/i.test(word) && /^#?\d+$/.test(next)) return true
+  return /^(store|unit)$/i.test(previous) && /^#?\d+$/.test(word)
 }
 
 /** How many digits a word holds, letters and marks between them ignored. */
