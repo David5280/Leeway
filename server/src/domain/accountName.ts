@@ -5,8 +5,8 @@
 // "TOTAL CHECKING" from "BOK Financial - Online Banking", which read better as
 // "BOK Total Checking": the bank's short name, then the account in plain case.
 // Names leave the app (the weekly email, the AI writer), so a name built from
-// the bank's text never shows the account's mask, as carriesMask defines it:
-// see accountNumber.ts.
+// the bank's text never shows the account's mask, nor another account's mask
+// of digits, as carriesMask defines it: see accountNumber.ts.
 
 import { carriesMask, isDigitMask, withoutAccountNumber } from './accountNumber.js'
 import {
@@ -83,8 +83,8 @@ const COMMON_BANK_WORDS = new Set([
  * built from the bank's text shows neither the account's own mask nor any of
  * otherMasks, the masks of the owner's accounts: "OVERDRAFT PROTECTION
  * ...417" may name the checking account whose mask is 417. Of other masks,
- * only those of digits count, as Plaid sends them. A mask of letters alone is
- * a few letters many words share, and two of them, NT and EY, would rule out
+ * only those of digits alone count, as Plaid sends them. A mask with letters
+ * may be letters many words share, and two such, NT and EY, would rule out
  * both last resorts, so another account's is not checked.
  */
 export function accountDisplayName(

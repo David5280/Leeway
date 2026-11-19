@@ -3,14 +3,17 @@
 // Banks put the account number in an account's name in many ways: "CHECKING
 // ...4417", "CREDIT CARD (X4417)", "CHK417", "SAVINGS 44-17". Names leave the
 // app, in the weekly email and to the AI writer, so the mask (the number's
-// last 2 to 4 characters, as Plaid sends them) must never be shown. Two
-// layers keep it out:
+// last 2 to 4 characters, as Plaid sends them) must never be shown, nor
+// another account's, as a linked account's name may hold: "OVERDRAFT
+// PROTECTION ...417". Two layers keep them out:
 //
 // 1. withoutAccountNumber tidies the number out where it can, so most names
-//    stay readable: "CHECKING ...4417" is "CHECKING". It reads ASCII digits
-//    only, and misses some placements by design ("12 MONTH CD" keeps its 12).
+//    stay readable: "CHECKING ...4417" is "CHECKING", and so does any marked
+//    run of two digits or more, "...417". It reads ASCII digits only, and
+//    misses some placements by design ("12 MONTH CD" keeps its 12).
 // 2. carriesMask is the guarantee. accountName.ts checks every name built from
-//    the bank's text with it, and a name that carries the mask is thrown away
+//    the bank's text with it, against the account's own mask and every other
+//    account's mask of digits, and a name that carries one is thrown away
 //    for one built only from what Leeway controls, like "Chase Checking". It
 //    reads digits in any script or form, and splits runs on letters alone, so
 //    no separator, "44 17", "441–7" or "441/7", hides a mask from it.

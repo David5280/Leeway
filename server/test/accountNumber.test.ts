@@ -3,7 +3,11 @@
 // real words to hold the guarantee across every way a bank writes a number.
 
 import { describe, expect, it } from 'vitest'
-import { accountDisplayName, type AccountNameParts } from '../src/domain/accountName.js'
+import {
+  accountDisplayName,
+  distinctAccountNames,
+  type AccountNameParts,
+} from '../src/domain/accountName.js'
 import { asciiDigits, carriesMask, withoutAccountNumber } from '../src/domain/accountNumber.js'
 import { isShouted, readableCase } from '../src/domain/nameWords.js'
 
@@ -515,9 +519,9 @@ function lettersReveal(text: string, key: string): boolean {
   })
 }
 
-/** Bank-derived name of a Chase checking account. */
-function shown(bankName: string, mask: string): string {
-  const parts: AccountNameParts = {
+/** A linked Chase checking account the bank calls bankName, with no name of the owner's. */
+function chaseChecking(bankName: string, mask: string): AccountNameParts {
+  return {
     nickname: null,
     bankName,
     institutionName: 'Chase',
@@ -526,7 +530,11 @@ function shown(bankName: string, mask: string): string {
     type: 'depository',
     subtype: 'checking',
   }
-  return accountDisplayName(parts)
+}
+
+/** Bank-derived name of a Chase checking account. */
+function shown(bankName: string, mask: string): string {
+  return accountDisplayName(chaseChecking(bankName, mask))
 }
 
 /**
@@ -626,6 +634,22 @@ describe('the guarantee, across masks, placements and real words', () => {
     const leaks = cases
       .map(({ bankName, mask }) => ({ bankName, mask, name: shown(bankName, mask) }))
       .filter(({ name, mask }) => reveals(name, mask))
+    expect(leaks).toEqual([])
+  })
+
+  it("never shows another account's mask of digits, in any of them", () => {
+    // The bank's name holds the mask of the owner's other account, not its own.
+    const own = '9087'
+    const leaks = cases
+      .filter(({ mask }) => /^\d+$/.test(mask))
+      .map(({ bankName, mask }) => {
+        const names = distinctAccountNames([
+          { ...chaseChecking(bankName, own), id: 'this' },
+          { ...chaseChecking('SAVINGS', mask), id: 'other', subtype: 'savings' },
+        ])
+        return { bankName, mask, name: names.get('this')! }
+      })
+      .filter(({ name, mask }) => reveals(name, mask) || reveals(name, own))
     expect(leaks).toEqual([])
   })
 

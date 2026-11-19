@@ -464,6 +464,47 @@ describe('distinctAccountNames', () => {
     expect(names[3]).toBe('Chase Total Checking (Twenty-Second Checking)')
   })
 
+  it("never shows another account's mask, tidying it out where it is marked", () => {
+    const checking = account('checking', { mask: '417' })
+    const linked = (bankName: string) =>
+      account('linked', { bankName, mask: '9921', subtype: 'savings' })
+    const named = (bankName: string) =>
+      distinctAccountNames([checking, linked(bankName)]).get('linked')
+    expect(named('OVERDRAFT PROTECTION ...417')).toBe('Chase Overdraft Protection')
+    expect(named('OVERDRAFT PROTECTION (X417)')).toBe('Chase Overdraft Protection')
+    // Unmarked, it can't be told from the name, so the name gives way to the kind.
+    expect(named('OVERDRAFT PROTECTION 417')).toBe('Chase Savings')
+    expect(named('OVERDRAFT 4-17 PLUS')).toBe('Chase Savings')
+    // Alone, the account's own name has no reason to hide 417.
+    expect(accountDisplayName(linked('OVERDRAFT PROTECTION 417'))).toBe(
+      'Chase Overdraft Protection 417',
+    )
+  })
+
+  it("never shows another account's mask of 52 marked with a #", () => {
+    const names = distinctAccountNames([
+      account('checking', { mask: '52' }),
+      account('savings', { bankName: 'SAVINGS LINKED TO #52', mask: '9921', subtype: 'savings' }),
+    ])
+    expect(names.get('savings')).toBe('Chase Savings Linked To')
+  })
+
+  it("leaves out another account's mask from the kind a name is told apart by", () => {
+    const names = distinctAccountNames([
+      account('a', { bankName: 'RETIREMENT', type: 'investment', subtype: 'ira', mask: '4417' }),
+      account('b', { bankName: 'RETIREMENT', type: 'investment', subtype: '401k', mask: '9921' }),
+      // Its mask, 01, is in the kind "401k", so b is told apart by its type instead.
+      account('c', { bankName: 'OTHER', mask: '01' }),
+    ])
+    expect(names.get('b')).toBe('Chase Retirement (Investment)')
+  })
+
+  it("doesn't check another account's mask of letters alone, which many words share", () => {
+    const names = distinctAccountNames([account('a'), account('b', { mask: 'AL', bankName: 'X' })])
+    // TOTAL holds AL, but only the account whose mask it is avoids it.
+    expect(names.get('a')).toBe('Chase Total Checking')
+  })
+
   it('never shows the mask run on from the name into its suffix', () => {
     const savings = { bankName: 'SAVINGS', subtype: 'savings', mask: 'SC' }
     const names = distinctAccountNames([
@@ -483,6 +524,30 @@ describe('distinctAccountNames', () => {
       expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(30)
       for (const name of names) expect(carriesMask(name, mask), `${name} with ${mask}`).toBe(false)
     }
+  })
+
+  it('always finds an order, for every mask of two letters', () => {
+    const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+    for (const mask of letters.flatMap((first) => letters.map((second) => first + second))) {
+      const many = Array.from({ length: 12 }, (_, index) => account(String(index), { mask }))
+      const names = [...distinctAccountNames(many).values()]
+      expect(new Set(names).size, mask).toBe(12)
+      expect(
+        names.filter((name) => carriesMask(name, mask)),
+        mask,
+      ).toEqual([])
+    }
+  })
+
+  it('never runs the order into digits the name ends with', () => {
+    // A name ending in 5 beside masks 51 to 59: "(59th...)" would read 559.
+    const masks = Array.from({ length: 9 }, (_, index) => `5${index + 1}`)
+    const many = [...masks, '9921', '9922', '9923'].map((mask, index) =>
+      account(String(index), { bankName: 'PLAN 5', mask }),
+    )
+    const names = [...distinctAccountNames(many).values()]
+    expect(new Set(names).size).toBe(12)
+    for (const mask of masks) expect(names.filter((name) => carriesMask(name, mask))).toEqual([])
   })
 
   it('tells apart by type when the kind itself shows the mask', () => {
