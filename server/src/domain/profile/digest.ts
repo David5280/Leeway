@@ -7,9 +7,11 @@ import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
-import { RATE_GUARD_FOR_AI } from '../savings/rate.js'
+import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
+import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
+import { middleCase, percent, range } from './rangeWords.js'
 
 type Money = (cents: number) => string
 
@@ -86,7 +88,10 @@ function emergencyLine({ emergencyFund: fund, locale }: FinancialProfile, money:
 function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string | null {
   if (!rate) return null
   const parts = rate.sources.map((s) => `${s.label.toLowerCase()} ${money(s.monthlyCents)}`)
-  return `Savings rate seen at the bank: about ${rate.percent}% of take-home pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
+  const seen = countsPayroll(rate)
+    ? 'from bank transfers and the pension contributions the owner entered'
+    : 'seen at the bank'
+  return `Savings rate ${seen}: about ${rate.percent}% of ${payNoun(rate)} (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
 }
 
 /** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
@@ -121,6 +126,77 @@ function goalsLine({ goals, locale }: FinancialProfile, money: Money): string | 
   return `Goals: ${parts.join('; ')}${rest}.`
 }
 
+/** A pension's benefit in words, saying where the figure came from. */
+function benefitWords(pension: PensionInPlan, money: Money): string {
+  const { benefit, startsAge } = pension
+  if (!benefit) return 'benefit not known yet'
+  if (benefit.source === 'statement') {
+    return `about ${money(benefit.mid)} a month from age ${startsAge}, from the plan's statement`
+  }
+  return `${range(benefit, money)} a month from age ${startsAge}, worked out from the salary, multiplier and service the owner entered (no plan rules applied)`
+}
+
+/** What a pension takes from pay, and what the employer adds, as far as the owner entered. */
+function payInWords({ payIn, plan }: PensionInPlan, money: Money): string {
+  const { perPaycheckCents, monthlyCents, employerMonthlyCents } = payIn
+  const monthly = monthlyCents === null ? '' : `, about ${money(monthlyCents)} a month`
+  const pays =
+    perPaycheckCents === null
+      ? 'contribution not known yet'
+      : `the owner pays ${money(perPaycheckCents)} a paycheck${monthly}`
+  const percent = plan.employerContributionPercent
+  if (percent === null) return pays
+  const employer =
+    employerMonthlyCents === null ? '' : ` (about ${money(employerMonthlyCents)} a month)`
+  return `${pays}; the employer adds ${percent}% of pay${employer}`
+}
+
+/** Each pension, without its name, as the owner entered it. */
+function pensionLines({ retirement }: FinancialProfile, money: Money): string[] {
+  return retirement.pensions.map((pension) => {
+    const later = pension.counted || !pension.benefit ? '' : '; starts after the retirement age'
+    return `Pension, entered by the owner: ${benefitWords(pension, money)}; ${payInWords(pension, money)}${later}.`
+  })
+}
+
+/**
+ * How the projection compares with the target, in words. It is compared only
+ * where Leeway gives a verdict (plan.ts), so with a pension it never reads as
+ * a shortfall: the comparison is left out, or says why it waits.
+ */
+function againstTarget(retirement: RetirementPlan, projection: Projection, money: Money): string {
+  const { target, coverage, laterPensionAge, atAge } = projection
+  if (!target) return ''
+  if (coverage) {
+    return ` against a ${money(target.monthlyCents)} target (${range(coverage, percent)}${middleCase(coverage, percent)})`
+  }
+  if (retirement.pensionsWithoutBenefit > 0) {
+    return `; not compared with the ${money(target.monthlyCents)} target until the pension benefit is known`
+  }
+  if (laterPensionAge !== null) {
+    return `; not compared with the target, since a pension starts at ${laterPensionAge}, after ${atAge}`
+  }
+  return ''
+}
+
+/** The projection in one line, with the plain note that goes with it. */
+function projectionLine({ retirement }: FinancialProfile, money: Money): string | null {
+  const projection = retirement.projection
+  if (!projection) return null
+  const { savingsAtRetirement: at, income, realReturns, atAge, retirementAge } = projection
+  const when =
+    atAge > retirementAge
+      ? `Retirement now, at ${atAge} (past the planned ${retirementAge})`
+      : `Retirement at ${atAge} (now about ${projection.age})`
+  return `${when}: savings ${range(at, money)}, income ${range(income.total, money)} a month including pensions started by then${againstTarget(retirement, projection, money)}; returns ${range(realReturns, percent)} after inflation. ${retirement.note}`
+}
+
+/** What an assistant must not say when a pension is recorded. */
+function pensionRule({ retirement }: FinancialProfile): string | null {
+  if (!retirement.hasPension) return null
+  return 'A defined-benefit pension is retirement saving: never call low or missing IRA, 401(k) or brokerage contributions under-saving.'
+}
+
 /** What Leeway could not work out, so an assistant knows to ask. */
 function unknownsLine(profile: FinancialProfile): string | null {
   const unknown: string[] = []
@@ -129,6 +205,11 @@ function unknownsLine(profile: FinancialProfile): string | null {
   else if (profile.monthly.incomeCents === null) unknown.push('take-home pay')
   if (profile.savings.hasSavings && !profile.emergencyFund) unknown.push('emergency fund')
   if (!profile.savingsRate) unknown.push('savings rate')
+  const retirementMatters =
+    profile.retirement.hasPension || profile.savings.kinds.some((k) => k.kind === 'retirement')
+  if (retirementMatters && !profile.retirement.projection) {
+    unknown.push('birth year, for retirement projections')
+  }
   if (unknown.length === 0) return null
   return `Not known yet: ${unknown.join(', ')}.`
 }
@@ -147,6 +228,9 @@ export function profileDigest(profile: FinancialProfile, money: Money): string {
     emergencyLine(profile, money),
     rateLine(profile, money),
     goalsLine(profile, money),
+    ...pensionLines(profile, money),
+    projectionLine(profile, money),
+    pensionRule(profile),
     ...profile.userContext.map((fact) => `The owner says: ${fact}`),
     unknownsLine(profile),
   ]

@@ -2,6 +2,13 @@
 // them: the insights, the per-kind views and the assistant's digest.
 
 import type { FinancialProfile, ProfileGoal } from '../../src/domain/profile/profile.js'
+import { retirementSchema, type RetirementPatch } from '../../src/domain/retirement/assumptions.js'
+import { EMPTY_PLAN, type Pension, type PensionPlan } from '../../src/domain/retirement/pensions.js'
+import {
+  retirementPlan,
+  type RetirementInput,
+  type RetirementPlan,
+} from '../../src/domain/retirement/plan.js'
 import type { SavingsKindReport, SavingsReport } from '../../src/domain/savings/report.js'
 
 const NO_CHANGES = { month: null, days30: null, year: null, all: null }
@@ -70,6 +77,8 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
     emergencyFund: null,
     savingsRate: null,
     savingsRateTargetPercent: null,
+    pensionPay: { memberCents: null, employerCents: null },
+    retirement: retirement(),
     goals: [],
     userContext: [],
     ...fields,
@@ -91,6 +100,37 @@ export function profileGoal(fields: Partial<ProfileGoal> = {}): ProfileGoal {
     projectedDate: null,
     onTrack: null,
     status: 'in_progress',
+    ...fields,
+  }
+}
+
+/** A retirement plan from these inputs; with none, no savings, birth year or pension. */
+export function retirement(
+  fields: Partial<RetirementInput> = {},
+  assumptions: RetirementPatch = {},
+): RetirementPlan {
+  return retirementPlan({
+    today: '2026-11-19',
+    assumptions: retirementSchema.parse(assumptions),
+    retirementCents: 0,
+    investmentCents: 0,
+    cashCents: null,
+    emergencyTargetCents: null,
+    foundMonthlyContributionCents: null,
+    recentMonthlySpendingCents: null,
+    pensions: [],
+    payCadence: null,
+    ...fields,
+  })
+}
+
+/** A pension named Colorado PERA, with every plan figure blank unless given. */
+export function pension(plan: Partial<PensionPlan> = {}, fields: Partial<Pension> = {}): Pension {
+  return {
+    accountId: 'pension-1',
+    name: 'Colorado PERA',
+    balanceCents: null,
+    plan: { ...EMPTY_PLAN, ...plan },
     ...fields,
   }
 }

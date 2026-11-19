@@ -7,7 +7,7 @@ import {
   wholeMonthsBefore,
 } from '../src/domain/profile/income.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
-import { savingsRate } from '../src/domain/savings/rate.js'
+import { RATE_GUARD_FOR_AI, savingsRate } from '../src/domain/savings/rate.js'
 import {
   dollars,
   emptyProfile,
@@ -251,9 +251,11 @@ describe('profileDigest', () => {
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19.',
       'Emergency fund: savings cover 2.6 months of essentials ($3,000 a month); target 6 months ($18,000), $10,000 to go, reached around July 2028 at the recent pace.',
-      'Savings rate seen at the bank: about 10% of take-home pay ($500 of $5,200 a month: transfers to savings $500). Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.',
+      `Savings rate seen at the bank: about 10% of take-home pay ($500 of $5,200 a month: transfers to savings $500). ${RATE_GUARD_FOR_AI}`,
       'Goals: Japan trip 40% ($3,000 to go by Jun 1, on track).',
       'The owner says: I am saving for a sailboat.',
+      // A retirement account with no birth year: projections wait for one.
+      'Not known yet: birth year, for retirement projections.',
     ])
     // A few hundred tokens at most: well under 2,000 characters.
     expect(digest.length).toBeLessThan(2000)

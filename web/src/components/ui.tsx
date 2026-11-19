@@ -200,17 +200,20 @@ export function Segmented<T extends string>({
 export function Setting({
   label,
   hint,
+  hintId,
   children,
 }: {
   label: string
   hint?: string
+  /** The hint's id, for the control to name with aria-describedby so a screen reader reads it. */
+  hintId?: string
   children: ReactNode
 }) {
   return (
     <div className="setting">
       <span className="setting-label">
         {label}
-        {hint && <small>{hint}</small>}
+        {hint && <small id={hintId}>{hint}</small>}
       </span>
       {children}
     </div>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BillDue } from '../src/domain/cashFlow.js'
+import type { Checkin } from '../src/domain/checkin.js'
 import type { AttentionItem } from '../src/domain/coach.js'
 import {
   MAX_LIST_ITEMS,
@@ -155,6 +156,9 @@ describe('weeklyEmailContent', () => {
   })
 })
 
+/** What the check-in says goes into the owner's pensions. */
+type PensionGlance = NonNullable<NonNullable<Checkin['savings']>['pension']>
+
 describe('savings in the weekly email', () => {
   const savings = {
     totalCents: 5_800_000,
@@ -163,6 +167,9 @@ describe('savings in the weekly email', () => {
     emergencyFundMonths: 2.5,
     emergencyFundTargetMonths: 6,
     bankSeenSavingsRatePercent: 9,
+    hasSavingsAccounts: true,
+    pensionIncludedSavingsRatePercent: null,
+    pension: null,
   }
 
   it('shows the total, how it moved and the emergency fund', () => {
@@ -181,6 +188,26 @@ describe('savings in the weekly email', () => {
     expect(section({ checkin: checkin({ savings: unmoved }) }, 'Savings').items[0]).toEqual({
       text: 'Saved and invested',
       detail: '$58,000',
+    })
+  })
+
+  it('shows what goes into a pension, as far as the owner entered it', () => {
+    const items = (pension: PensionGlance, fields = {}) =>
+      section(
+        { checkin: checkin({ savings: { ...savings, ...fields, pension } }) },
+        'Savings and investments',
+      ).items
+    const both = { count: 1, monthlyContributionCents: 42_300, employerMonthlyCents: 82_283 }
+    expect(items(both, { hasSavingsAccounts: false, emergencyFundMonths: null })).toEqual([
+      { text: 'Pension', detail: '$423 a month going in, plus $822.83 from your employer' },
+    ])
+    expect(items({ ...both, count: 2, employerMonthlyCents: null }).at(-1)).toEqual({
+      text: 'Pensions',
+      detail: '$423 a month going in',
+    })
+    expect(items({ ...both, monthlyContributionCents: null }).at(-1)).toEqual({
+      text: 'Pension',
+      detail: 'recorded, contribution not entered yet',
     })
   })
 

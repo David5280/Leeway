@@ -303,6 +303,14 @@ describe('MCP endpoint', () => {
       name: 'Coffee',
       amountCents: 1_000,
     })
+    // A pension at the bank, its number in its name too, for the retirement tools.
+    const pension = await insertBankAccount(ctx.db, {
+      name: 'PERA DB ...4321',
+      type: 'investment',
+      subtype: 'pension',
+      mask: '4321',
+      balanceCents: 4_500_000,
+    })
     const { token } = await createToken(ctx.db, 'Coach', 'write')
     const tool = async (name: string, args: Record<string, unknown> = {}) => {
       const response = await rpc(token, 'tools/call', { name, arguments: args })
@@ -331,6 +339,22 @@ describe('MCP endpoint', () => {
       await tool('list_accounts'),
       await tool('list_alerts'),
       await tool('get_checkin'),
+      await tool('update_account', { id: pension.accountId, kind: 'pension' }),
+      await tool('attach_pension', {
+        accountId: pension.accountId,
+        serviceYears: 9.5,
+        statementBenefitMonthlyCents: 218_000,
+      }),
+      await tool('update_pension', {
+        accountId: pension.accountId,
+        contribution: { kind: 'amount', cents: 42_300 },
+        statementBenefitMonthlyCents: 218_000,
+      }),
+      await tool('create_pension', { name: 'Second plan', serviceYears: 2 }),
+      await tool('update_settings', { retirement: { birthYear: 1990 } }),
+      await tool('project_retirement', { retirementAge: 62 }),
+      await tool('summarize_savings'),
+      await tool('get_financial_profile'),
     ]
     const byName = new Map(named.map((result) => [result.name, result]))
     expect(byName.get('add_to_goal')).toMatchObject({
@@ -338,15 +362,27 @@ describe('MCP endpoint', () => {
       text: expect.stringContaining('Trip follows the balance of'),
     })
     expect(byName.get('list_alerts')!.text).toContain('is overdrawn by')
-    for (const name of ['create_goal', 'list_accounts', 'update_account', 'get_checkin']) {
+    for (const name of [
+      'create_goal',
+      'list_accounts',
+      'update_account',
+      'get_checkin',
+      'attach_pension',
+      'update_pension',
+      'create_pension',
+      'project_retirement',
+    ]) {
       expect(byName.get(name)!.isError, name).toBe(false)
     }
+    expect(JSON.parse(byName.get('project_retirement')!.text).pensions).toHaveLength(2)
     // Agents get the clean name, and neither the mask nor the bank's raw name.
-    expect(JSON.parse(byName.get('list_accounts')!.text)).toEqual([
-      expect.objectContaining({ id: accountId, kind: 'savings', name: 'Test Savings' }),
-    ])
+    expect(JSON.parse(byName.get('list_accounts')!.text)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: accountId, kind: 'savings', name: 'Test Savings' }),
+      ]),
+    )
     for (const result of [...bare, ...named]) {
-      expect(result.text, result.name).not.toContain('9876')
+      expect(result.text, result.name).not.toMatch(/9876|4321/)
       expect(result.text, result.name).not.toMatch(/"(mask|bankName)"/)
     }
 
@@ -357,9 +393,16 @@ describe('MCP endpoint', () => {
       headers: { cookie: `leeway_session=${await createSession(ctx.db)}` },
       payload: {},
     })
-    expect(ownApp.json().result).toEqual([
-      expect.objectContaining({ name: 'Test Savings', mask: '9876', bankName: 'SAVINGS ...9876' }),
-    ])
+    expect(ownApp.json().result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Test Savings',
+          mask: '9876',
+          bankName: 'SAVINGS ...9876',
+        }),
+        expect.objectContaining({ kind: 'pension', mask: '4321' }),
+      ]),
+    )
   })
 
   it('offers coaching prompts, filled in with their arguments', async () => {

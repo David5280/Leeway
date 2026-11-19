@@ -172,12 +172,14 @@ type SavingsKindAccount = Account & { kind: SavingsKind }
 /**
  * The savings accounts among the counted ones, and the everyday accounts
  * contributions are read from: only those outside savings, so a transfer is
- * never counted from both ends.
+ * never counted from both ends. A pension is neither: what goes into it is
+ * counted from what the owner entered (retirement/pensions.ts).
  */
 function splitAccounts(accounts: Account[]) {
+  const everyday = accounts.filter((a) => !isSavingsKind(a.kind) && a.kind !== 'pension')
   return {
     savings: accounts.filter((a): a is SavingsKindAccount => isSavingsKind(a.kind)),
-    everydayIds: accounts.filter((a) => !isSavingsKind(a.kind)).map((a) => a.id),
+    everydayIds: everyday.map((a) => a.id),
   }
 }
 

@@ -295,6 +295,11 @@ h2 {
   font-weight: 600;
 }
 
+/* A range such as "$1,200 to $4,950 / mo" breaks into even lines, never a lone unit. */
+.mid-number.range {
+  text-wrap: balance;
+}
+
 .list-row {
   display: flex;
   align-items: center;
@@ -856,6 +861,16 @@ button.chip {
 .setting-lists > select.input {
   width: auto;
   max-width: 100%;
+}
+
+/* A figure typed beside its setting: room for "$100,000.00", and no more. */
+.setting > .input.figure {
+  width: 130px;
+}
+
+/* A date keeps the width its picker needs. */
+.setting > .input.figure[type='date'] {
+  width: auto;
 }
 
 .swatch {
@@ -1616,6 +1631,20 @@ details.more[open] summary {
   stroke: var(--muted);
   stroke-width: 1.5;
   stroke-dasharray: 6 5;
+}
+
+/*
+ * A range of cases, such as a retirement projection: low to high, shaded.
+ * The pale fill alone is too faint to see against the card, so its edge is
+ * drawn in the muted ink, which holds at least 3:1 against the surface in
+ * every theme, whatever accent the owner picks (6:1 in the built-in ones).
+ */
+.chart-band {
+  fill: var(--accent);
+  fill-opacity: 0.16;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
 }
 
 .chart-line.budget {

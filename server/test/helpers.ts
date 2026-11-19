@@ -59,7 +59,7 @@ export async function resetData(db: pg.Pool): Promise<void> {
     `TRUNCATE owner, sessions, api_tokens, oauth_clients, oauth_requests, oauth_grants,
        oauth_codes, oauth_tokens, connections, accounts, categories, rules, transactions,
        bills, goals, goal_contributions, dismissed_recurring, applied_upgrades, ai_summaries,
-       imports CASCADE;
+       imports, pension_plans CASCADE;
      UPDATE settings SET data = '{}';
      DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);`,
   )

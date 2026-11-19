@@ -217,7 +217,7 @@ describe('the savings lens', () => {
       parts: [{ label: 'Savings account', cents: 600_000 }],
     })
     expect(saving).toMatchObject({
-      question: 'How much of my take-home pay goes to savings?',
+      question: 'How much of my pay goes to savings?',
       headline: '8%',
       detail:
         'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
@@ -305,9 +305,14 @@ describe('the retirement and investing lenses', () => {
       ],
       { contributions },
     ).lenses
-    expect(retirement!.answer).toMatchObject({
+    // Without a birth year there is no projection: the lens shows what is held and asks for one.
+    expect(retirement!.question).toBe('Can I stop working on time?')
+    expect(retirement!.answer).toEqual({
       headline: '$50,000',
-      detail: 'in retirement across 1 account. -$1,200 since Nov 19.',
+      detail:
+        'in retirement across 1 account. -$1,200 since Nov 19. Add your birth year to see what your savings and any pension could pay.',
+      tone: 'neutral',
+      progress: null,
     })
     expect(retirement!.meters.map((m) => [m.id, m.headline])).toEqual([
       ['growth', '-$1,200'],
@@ -324,9 +329,12 @@ describe('the retirement and investing lenses', () => {
   })
 
   it('say where history starts, and that payroll deductions are unseen, when there is nothing yet', () => {
-    const [retirement] = view([kindReport('retirement', 100)], { historyStartsOn: TODAY }).lenses
-    expect(retirement!.answer.detail).toBe(
-      'in retirement across 1 account. History starts Nov 19, so changes show from the next day on.',
+    const [retirement, investing] = view(
+      [kindReport('retirement', 100), kindReport('investment', 100)],
+      { historyStartsOn: TODAY },
+    ).lenses
+    expect(investing!.answer.detail).toBe(
+      'in investing across 1 account. History starts Nov 19, so changes show from the next day on.',
     )
     expect(retirement!.meters.map((m) => [m.headline, m.detail])).toEqual([
       [null, 'History starts Nov 19, so changes show from the next day on.'],
@@ -336,8 +344,8 @@ describe('the retirement and investing lenses', () => {
       ],
     ])
     expect(retirement!.insight).toBeNull()
-    const [investing] = view([kindReport('investment', 100)], { historyStartsOn: null }).lenses
-    expect(investing!.answer.detail).toMatch(
+    const [fresh] = view([kindReport('investment', 100)], { historyStartsOn: null }).lenses
+    expect(fresh!.answer.detail).toMatch(
       /Changes show once Leeway has a balance from an earlier day\.$/,
     )
   })

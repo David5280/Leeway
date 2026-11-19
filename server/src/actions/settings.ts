@@ -24,7 +24,7 @@ export const updateSettingsAction = defineAction({
   name: 'update_settings',
   title: 'Update settings',
   description:
-    'Change any preferences. Only the fields given change. appearance and savingsPlan merge field by field (savingsPlan: emergencyFundMonths 1 to 24, essentialCategoryIds where null counts every spending category, savingsRateTargetPercent where null sets no target); period and dashboard.widgets replace the whole value.',
+    'Change any preferences. Only the fields given change. appearance and savingsPlan merge field by field (savingsPlan: emergencyFundMonths 1 to 24, essentialCategoryIds where null counts every spending category, savingsRateTargetPercent where null sets no target) and retirement merge field by field (retirement: birthYear, retirementAge, returnPercent, inflationPercent, withdrawalPercent, monthlyContributionCents where null uses what Leeway found, targetMonthlyIncomeCents where null uses recent spending); period and dashboard.widgets replace the whole value.',
   input: settingsPatchSchema,
   scope: 'write',
   surface: 'all',
