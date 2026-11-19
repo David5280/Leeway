@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import {
   account,
@@ -15,7 +15,6 @@ import {
   transaction,
 } from '../test/fake'
 import { Budgets } from './Budgets'
-import { Customize } from './Customize'
 import { Transactions } from './Transactions'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -81,6 +80,27 @@ describe('app shell', () => {
     renderPlain(<App />)
     expect(await screen.findByRole('alert')).toHaveTextContent('The database is not answering.')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('opens Settings from its old Customize address, with Settings marked in the menu', async () => {
+    fakeServer(
+      { get_settings: () => settings, list_accounts: () => [], list_tokens: () => [] },
+      {
+        '/api/status': () => Response.json(status),
+        '/api/auth/me': () =>
+          Response.json({ owner: { email: 'a@b.co', name: null, onboarded: true } }),
+      },
+    )
+    renderPlain(<App />, '/customize/banks')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Banks' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
+    const menus = screen.getAllByRole('navigation', { name: 'Main' })
+    for (const menu of menus) {
+      expect(within(menu).getByRole('link', { name: /Settings/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
+    }
   })
 })
 
@@ -352,6 +372,10 @@ describe('transactions filters and editing', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Add by hand' }))
     expect(await screen.findByText(/Add an account first/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
+      'href',
+      '/settings/accounts',
+    )
   })
 })
 
@@ -366,53 +390,5 @@ describe('budgets', () => {
     expect(screen.getByText('November 2026')).toBeInTheDocument()
     expect(screen.getByText('Over by $40')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Budgeted' })).toHaveTextContent('$800')
-  })
-})
-
-describe('customize', () => {
-  it('saves a theme change and shows it right away', async () => {
-    const server = fakeServer({
-      update_settings: (patch) => ({
-        ...settings,
-        appearance: { ...settings.appearance, ...(patch.appearance as object) },
-      }),
-      list_accounts: () => [],
-      list_tokens: () => [],
-    })
-    renderSignedIn(<Customize />)
-    const user = userEvent.setup()
-    const look = screen.getByRole('region', { name: 'Look' })
-    await user.click(within(look).getByRole('button', { name: /Harbor/ }))
-    await waitFor(() =>
-      expect(server.actions('update_settings')).toEqual([{ appearance: { theme: 'harbor' } }]),
-    )
-    expect(within(look).getByRole('button', { name: /Harbor/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-  })
-
-  it('explains how to add bank keys when the server has none', () => {
-    fakeServer({ list_accounts: () => [], list_tokens: () => [] })
-    renderSignedIn(<Customize />)
-    expect(screen.getByRole('region', { name: 'Banks' })).toHaveTextContent('PLAID_CLIENT_ID')
-    expect(screen.getByRole('region', { name: 'AI assistant' })).toHaveTextContent(
-      'https://leeway.example.com/mcp',
-    )
-  })
-
-  it('scrolls to the section a link named, like accounts from the end of setup', () => {
-    fakeServer({ list_accounts: () => [], list_tokens: () => [] })
-    const scrolled: string[] = []
-    // jsdom has no layout, so record which element was asked to scroll into view.
-    const original = HTMLElement.prototype.scrollIntoView
-    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
-      scrolled.push(this.id)
-    }
-    onTestFinished(() => {
-      HTMLElement.prototype.scrollIntoView = original
-    })
-    renderSignedIn(<Customize />, { route: '/customize#accounts' })
-    expect(scrolled).toEqual(['accounts'])
   })
 })

@@ -140,10 +140,10 @@ describe('plan_debt_payoff', () => {
     expect(terms).toMatchObject({ aprPercent: 9.99, minimumPaymentCents: null })
 
     let plans = await call('plan_debt_payoff', { extraCents: 10000 })
-    expect(plans.debts.map((d) => d.name)).toEqual(['Rewards card'])
+    expect(plans.debts.map((d) => d.name)).toEqual(['Test Rewards card'])
     expect(plans.needsDetails).toEqual([
-      { id: loan.accountId, name: 'Personal loan', missing: ['minimumPaymentCents'] },
-      { id: expect.any(String), name: 'Store card', missing: ['aprPercent'] },
+      { id: loan.accountId, name: 'Test Personal loan', missing: ['minimumPaymentCents'] },
+      { id: expect.any(String), name: 'Test Store card', missing: ['aprPercent'] },
     ])
 
     await call('update_account', { id: loan.accountId, minimumPaymentCents: 2500 })
@@ -207,6 +207,29 @@ describe('get_cash_flow', () => {
       leftAfterBillsCents: 144000,
       perDayCents: 14400,
     })
+  })
+
+  it('counts only checking and savings the owner can spend as cash', async () => {
+    const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 100_000 })
+    // What the bank says is available already takes out pending charges.
+    await ctx.db.query('UPDATE accounts SET available_cents = 90000 WHERE id = $1', [
+      checking.accountId,
+    ])
+    // No balance from the bank yet: nothing to count.
+    await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: null })
+    await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: 20_000 })
+    // Money at the bank that is not for spending before payday.
+    await insertBankAccount(ctx.db, { subtype: 'hsa', balanceCents: 300_000 })
+    await insertBankAccount(ctx.db, { subtype: 'cd', balanceCents: 400_000 })
+    await insertBankAccount(ctx.db, {
+      name: 'IRA Savings',
+      subtype: 'savings',
+      balanceCents: 500_000,
+    })
+    // A savings account the owner calls retirement is not spending money either.
+    const picked = await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: 600_000 })
+    await call('update_account', { id: picked.accountId, kind: 'retirement' })
+    expect((await call('get_cash_flow')).cashCents).toBe(110_000)
   })
 
   it('finds payday from regular deposits, and never goes below zero per day', async () => {

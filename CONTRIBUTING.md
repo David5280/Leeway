@@ -108,7 +108,14 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
 - **A setting:** add the field with a default to `settingsSchema` in
   `domain/settings.ts` and to `settingsPatchSchema` so `update_settings`
   takes it. A setting only the owner may change stays out of the patch
-  schema and gets its own app-only action, as `aiSummary` does.
+  schema and gets its own app-only action, as `aiSummary` does. Its control
+  goes in a section in `web/src/pages/settings/`, inside one of the groups
+  listed in `settings/groups.tsx`.
+- **A Settings group:** add one entry to `SETTINGS_GROUPS` in
+  `web/src/pages/settings/groups.tsx` (an id, a title, a one-line description
+  and its sections). The menu, the address `/settings/<id>` and the tests that
+  check every group come from that list. Link to it with `settingsPath`, and
+  never rename an id once shipped, since links and bookmarks use it.
 - **A dashboard widget:** add its type to `WIDGETS` in `domain/settings.ts`,
   draw it in `web/src/widgets/`, and list it in `widgets/library.ts`.
 - **A database change:** add a new file to `server/migrations` numbered after
@@ -161,9 +168,9 @@ docker exec leeway-test-db createdb -U postgres leeway_test
 `e2e/` holds Playwright tests that drive a real build in a real browser:
 first-run setup, signing in and out, the overview, the accounts dashboard and
 account alerts, transactions, budgets, the Plan tab, importing a CSV file,
-customizing and switching themes, the dashboard summary switch, the weekly
-email settings, an assistant connecting through the consent screen, and a
-phone-sized screen.
+the Settings groups and their addresses, switching themes, the dashboard
+summary switch, the weekly email settings, an assistant connecting through
+the consent screen, and a phone-sized screen.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
 

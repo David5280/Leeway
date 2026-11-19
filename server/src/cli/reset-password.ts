@@ -10,7 +10,7 @@ try {
   const { email, password } = await resetPassword(pool)
   console.log(`Password for ${email} reset. Every device is signed out.`)
   console.log(
-    `Sign in with this temporary password, then change it in Customize:\n\n  ${password}\n`,
+    `Sign in with this temporary password, then change it in Settings, under Sign-in:\n\n  ${password}\n`,
   )
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)

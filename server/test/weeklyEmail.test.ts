@@ -8,7 +8,7 @@ import { buildApp } from '../src/http/app.js'
 import { MailError, type EmailMessage, type EmailSender } from '../src/mail/sender.js'
 import { agentTools } from '../src/mcp/server.js'
 import { actionCaller } from './actionCaller.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 
 /** A stand-in for Resend that keeps what it was given and can be made to fail. */
 class FakeMailer implements EmailSender {
@@ -317,6 +317,36 @@ describe('send_test_weekly_email', () => {
     expect(mailer.sent).toHaveLength(1)
     expect(mailer.sent[0]!.subject).toBe('Test: Your week in Leeway: $0 spent')
     expect(await call('get_weekly_email')).toMatchObject({ on: false, lastSentAt: null })
+  })
+
+  it('names an account in an alert as the app does', async () => {
+    await insertBankAccount(ctx.db, { name: 'TOTAL CHECKING', balanceCents: -4210 })
+    const [alert] = await call('list_alerts')
+    await call('send_test_weekly_email')
+    expect(alert!.accountName).toBe('Test Total Checking')
+    expect(mailer.sent[0]!.text).toContain('Test Total Checking is overdrawn by $42.10.')
+    expect(mailer.sent[0]!.html).toContain('Test Total Checking is overdrawn by $42.10.')
+  })
+
+  it('never puts an account number in the email, even one in the bank name', async () => {
+    await insertBankAccount(ctx.db, {
+      name: 'CREDIT CARD (X4417)',
+      mask: '4417',
+      type: 'depository',
+      balanceCents: -4210,
+    })
+    await call('send_test_weekly_email')
+    const [email] = mailer.sent
+    expect(email!.text).toContain('Test Credit Card is overdrawn by $42.10.')
+    expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toContain('4417')
+  })
+
+  it('never puts a short mask in the email, even glued to the bank name', async () => {
+    await insertBankAccount(ctx.db, { name: 'CHECKING-417', mask: '417', balanceCents: -4210 })
+    await call('send_test_weekly_email')
+    const [email] = mailer.sent
+    expect(email!.text).toContain('Test Checking is overdrawn by $42.10.')
+    expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toMatch(/\b417\b/)
   })
 
   it('goes to the chosen address', async () => {

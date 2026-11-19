@@ -1,16 +1,17 @@
-// The savings and investing lenses, and the parts the retirement lens
-// (retirementLens.ts) shares with them: each kind's question, answer and
-// meters, worked out from the financial profile with no AI. The shapes and
-// the parts every lens shares are in lens.ts.
+// The savings, retirement and investing lenses: each kind's question, answer
+// and meters, worked out from the financial profile with no AI. The shapes
+// and shared parts are in lens.ts.
 
 import { shortDate } from '../../lib/words.js'
+import type { SavingsKind } from '../accountKinds.js'
 import type { EmergencyFund } from '../savings/emergency.js'
+import { SEEN_AT_BANK } from '../savings/rate.js'
 import type { SavingsKindReport } from '../savings/report.js'
 import { monthYear, type Insight, type InsightFormat, type InsightTopic } from './insights.js'
 import {
   accountCount,
-  CONTRIBUTION_NOT_SET,
   balanceMeter,
+  growthMeter,
   LENS_QUESTIONS,
   longestChange,
   noHistoryYet,
@@ -31,7 +32,7 @@ export interface LensInput {
 }
 
 /** The first insight on the first topic in `topics` that has one. */
-export function pick(insights: Insight[], topics: InsightTopic[]): Insight | null {
+function pick(insights: Insight[], topics: InsightTopic[]): Insight | null {
   for (const topic of topics) {
     const found = insights.find((insight) => insight.topic === topic)
     if (found) return found
@@ -68,61 +69,49 @@ function protectionAnswer(
   }
 }
 
-/** Why there is no savings rate, in the order the owner can fix it. */
-function noRateReason(profile: FinancialProfile, pensionPayUnknown: boolean): string {
-  if (pensionPayUnknown) {
-    return `Your pension contribution is not set yet, so the savings rate leaves it out. ${CONTRIBUTION_NOT_SET}`
-  }
-  if (profile.monthly.incomeCents === null) {
-    return 'Leeway needs a whole month of pay to work out your savings rate.'
-  }
-  return 'Leeway has not seen a month of transfers to savings or investments yet, so it cannot work out your savings rate.'
-}
-
 /**
- * The share of pay saved, against the owner's target when they keep one. A
- * pension whose contribution is not set yet is said to be left out, and then
- * the rate is not held against the target: it would read low for a reason
- * that is not the owner's saving.
+ * The share of take-home pay saved, as far as the bank shows it, and the
+ * owner's target when they set one. There is no bar toward the target: pension
+ * and 401(k) contributions come out of pay before the bank sees it, so a bar
+ * would make a partial rate look like falling short.
  */
 function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): Meter {
   const target = profile.savingsRateTargetPercent
   const rate = profile.savingsRate
-  const pensionPayUnknown = profile.retirement.pensions.some((p) => p.payIn.monthlyCents === null)
   const shared = {
     id: 'savings_rate' as const,
-    question: 'Am I saving enough?',
+    question: 'How much of my take-home pay goes to savings?',
     parts: [],
     series: [],
-    band: [],
   }
   if (!rate) {
-    const detail = noRateReason(profile, pensionPayUnknown)
-    return { ...shared, headline: null, detail, tone: 'neutral', progress: null }
+    const needs =
+      profile.monthly.incomeCents === null
+        ? 'Leeway needs a whole month of pay to work out your savings rate.'
+        : 'Leeway has not seen a month of transfers to savings or investments yet, so it cannot work out your savings rate.'
+    return { ...shared, headline: null, detail: needs, tone: 'neutral', progress: null }
   }
-  const of = `of pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}.`
-  const judged = target !== null && !pensionPayUnknown
-  // Below target is said plainly, never as a warning: the bank cannot see everything saved.
+  const of = `of take-home pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`
+  // Below target is said plainly, never as a warning: the bank cannot see everything
+  // saved, and either way the comparison says what it counts.
   let against = ''
-  if (pensionPayUnknown) against = ' Your pension contribution is not set yet, so it is left out.'
-  else if (judged) {
+  if (target !== null) {
     against =
-      rate.percent >= target ? ` Above your ${target}% target.` : ` Your target is ${target}%.`
+      rate.percent >= target
+        ? ` Above your ${target}% target, counting only bank transfers.`
+        : ` Your target is ${target}%, counting only bank transfers.`
   }
   return {
     ...shared,
     headline: `${rate.percent}%`,
     detail: `${of}${against}`,
-    tone: judged && rate.percent >= target ? 'good' : 'neutral',
-    progress: judged ? { value: rate.percent, target } : null,
+    tone: target !== null && rate.percent >= target ? 'good' : 'neutral',
+    progress: null,
   }
 }
 
 /** Money sent from the bank into investment and retirement accounts over the last year. */
-export function contributionsMeter(
-  profile: FinancialProfile,
-  { money, locale }: InsightFormat,
-): Meter {
+function contributionsMeter(profile: FinancialProfile, { money, locale }: InsightFormat): Meter {
   const contributions = profile.savings.contributions
   const unseen = 'Payroll deductions, like a 401(k), do not show in bank transactions.'
   const shared = {
@@ -132,7 +121,6 @@ export function contributionsMeter(
     progress: null,
     parts: [],
     series: [],
-    band: [],
   }
   if (!contributions || contributions.totalCents.invested === 0) {
     return {
@@ -190,6 +178,28 @@ function balanceAnswer(
   }
 }
 
+/**
+ * Retirement: until the owner gives an age, the honest answer is what is held
+ * and how it moved; projections answer the question once they can.
+ */
+export function retirementLens({
+  profile,
+  report,
+  insights,
+  format,
+}: LensInput): Lens<'retirement'> {
+  return {
+    kind: 'retirement',
+    ...LENS_QUESTIONS.retirement,
+    answer: balanceAnswer(report, profile, format),
+    meters: [
+      growthMeter(report.changes, report.history, profile.savings.historyStartsOn, format),
+      contributionsMeter(profile, format),
+    ],
+    insight: pick(insights, ['goal', 'contributions', 'change']),
+  }
+}
+
 /** Investing: how the balance moved, what it holds and what went in. */
 export function investingLens({
   profile,
@@ -216,4 +226,11 @@ export function investingLens({
     ],
     insight: pick(insights, ['goal', 'contributions', 'change']),
   }
+}
+
+/** Each savings kind's lens builder. */
+export const LENS_BUILDERS: { [K in SavingsKind]: (input: LensInput) => Lens<K> } = {
+  savings: savingsLens,
+  retirement: retirementLens,
+  investment: investingLens,
 }

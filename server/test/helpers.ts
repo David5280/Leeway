@@ -77,6 +77,8 @@ export async function insertBankAccount(
     balanceCents?: number | null
     currency?: string
     hidden?: boolean
+    /** The account number's last digits, as Plaid sends them. */
+    mask?: string
   } = {},
 ): Promise<{ accountId: string; connectionId: string }> {
   counter += 1
@@ -88,8 +90,8 @@ export async function insertBankAccount(
   const connectionId = rows[0]!.id
   const account = await db.query<{ id: string }>(
     `INSERT INTO accounts (connection_id, provider_account_id, name, type, subtype, balance_cents,
-       currency, hidden)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+       currency, hidden, mask)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
     [
       connectionId,
       `acct-${counter}`,
@@ -99,6 +101,7 @@ export async function insertBankAccount(
       fields.balanceCents === undefined ? 100000 : fields.balanceCents,
       fields.currency ?? 'USD',
       fields.hidden ?? false,
+      fields.mask ?? null,
     ],
   )
   return { accountId: account.rows[0]!.id, connectionId }

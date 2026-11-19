@@ -42,6 +42,17 @@ export function balanceOn(points: BalancePoint[], day: IsoDate): BalancePoint | 
 }
 
 /**
+ * The day whose closing balance a window is measured from. The month starts
+ * at the beginning of the 1st, so it is measured from the close of the day
+ * before: a paycheck that lands on the 1st counts as this month's. The other
+ * windows are a fixed number of days, measured from the close of their first.
+ */
+export function baseDay(window: Exclude<ChangeWindow, 'all'>, today: IsoDate): IsoDate {
+  const start = windowStart(window, today)
+  return window === 'month' ? addDays(start, -1) : start
+}
+
+/**
  * The change from the start of a window to the current balance. Null when
  * history does not reach back to the window's start, since the balance then
  * is unknown. The month is the exception: a change "this month" is useful
@@ -57,9 +68,8 @@ export function changeOver(
   const first = points[0]
   if (!first || first.day >= today) return null
   if (window === 'all') return { changeCents: currentCents - first.cents, since: first.day }
-  const start = windowStart(window, today)
-  const base = balanceOn(points, start)
-  if (base) return { changeCents: currentCents - base.cents, since: start }
+  const base = balanceOn(points, baseDay(window, today))
+  if (base) return { changeCents: currentCents - base.cents, since: windowStart(window, today) }
   if (window === 'month') return { changeCents: currentCents - first.cents, since: first.day }
   return null
 }
@@ -82,22 +92,51 @@ export interface CombinedChange extends Change {
 /**
  * Adds up the accounts' changes over one window. An account without history
  * that far back is left out and counted, rather than its whole balance being
- * taken as a change. The combined change starts at the latest account's start.
+ * taken as a change.
+ *
+ * With `from`, the window's own first day, the total never mixes starting
+ * days under one label. Only changes measured from that day are added; an
+ * account measured from a later first day of history (this month's fallback)
+ * is counted as left out. When no account reaches back to `from`, the
+ * accounts measured from the earliest day of history are added instead, and
+ * those seen only later are left out, so "+$500 since Nov 10" means just that.
+ * Without `from` (all history), every known change is added.
  */
-export function combineChanges(changes: (Change | null)[]): CombinedChange | null {
+export function combineChanges(changes: (Change | null)[], from?: IsoDate): CombinedChange | null {
   const known = changes.filter((change): change is Change => change !== null)
-  if (known.length === 0) return null
+  const added = from === undefined ? known : sameStart(known, from)
+  if (added.length === 0) return null
   return {
-    changeCents: known.reduce((sum, change) => sum + change.changeCents, 0),
-    since: known.map((change) => change.since).reduce((a, b) => (a > b ? a : b)),
-    accountsLeftOut: changes.length - known.length,
+    changeCents: added.reduce((sum, change) => sum + change.changeCents, 0),
+    since: added.map((change) => change.since).reduce((a, b) => (a > b ? a : b)),
+    accountsLeftOut: changes.length - added.length,
   }
 }
 
+/** The changes measured from `from`, or failing any, from the earliest day any is measured from. */
+function sameStart(changes: Change[], from: IsoDate): Change[] {
+  const fromStart = changes.filter((change) => change.since === from)
+  if (fromStart.length > 0 || changes.length === 0) return fromStart
+  const earliest = changes.map((change) => change.since).reduce((a, b) => (a < b ? a : b))
+  return changes.filter((change) => change.since === earliest)
+}
+
 /** All windows combined, one account's changes per entry. */
-export function combineAll(accounts: Changes[]): Record<ChangeWindow, CombinedChange | null> {
-  const pick = (window: ChangeWindow) => combineChanges(accounts.map((changes) => changes[window]))
-  return { month: pick('month'), days30: pick('days30'), year: pick('year'), all: pick('all') }
+export function combineAll(
+  accounts: Changes[],
+  today: IsoDate,
+): Record<ChangeWindow, CombinedChange | null> {
+  const pick = (window: Exclude<ChangeWindow, 'all'>) =>
+    combineChanges(
+      accounts.map((changes) => changes[window]),
+      windowStart(window, today),
+    )
+  return {
+    month: pick('month'),
+    days30: pick('days30'),
+    year: pick('year'),
+    all: combineChanges(accounts.map((changes) => changes.all)),
+  }
 }
 
 /**

@@ -1,8 +1,8 @@
 // What the weekly email says, worked out from the owner's numbers. Pure: the
 // summary, check-in and bills come in, a structured email comes out, and
 // html.ts and text.ts lay it out. Totals, bills, goals and account alerts
-// only, and an alert names just the bank and the kind of account: no account
-// names, numbers or transactions, so nothing in an inbox identifies an account.
+// only, each alert naming its account as the app does (accountName.ts):
+// never an account number or a transaction.
 
 import type { IsoDate } from '../../lib/dates.js'
 import { periodWord, shortDate } from '../../lib/words.js'
@@ -89,7 +89,7 @@ function periodFigures({ budget }: Checkin, money: Money, locale: string): Email
 function headsUpSection({ attention }: Checkin): EmailSection {
   return {
     title: 'Heads up',
-    // Account alerts lead the email, without account names, so they are not repeated here.
+    // Account alerts lead the email, so they are not repeated here.
     items: attention
       .filter((item) => item.topic !== 'account')
       .map((item) => ({ text: item.forOwner ?? item.message })),
@@ -211,7 +211,7 @@ export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent 
 
 function footer(writtenBy: string): string {
   const why =
-    'You get this because the weekly email is on in Leeway. To stop it or change its day, open Customize, then Email.'
+    'You get this because the weekly email is on in Leeway. To stop it or change its day, open Settings, then Email.'
   // Leeway's own words need no credit; an AI's are named, as on the dashboard.
   return writtenBy === 'Leeway' ? why : `${why} Summary written by ${writtenBy}.`
 }

@@ -7,6 +7,7 @@ import { AlertRows } from '../components/AccountAlerts'
 import { Shell } from '../components/Shell'
 import { Card, Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
+import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
 
 export function Alerts() {
@@ -36,7 +37,7 @@ export function Alerts() {
         </ul>
         <p className="small muted">
           Balances come from your bank at every sync. Change each account&apos;s warning in{' '}
-          <Link to="/customize#accounts">Customize, then Accounts</Link>.
+          <Link to={settingsPath('accounts')}>Settings, then Accounts</Link>.
         </p>
       </Card>
     </Shell>

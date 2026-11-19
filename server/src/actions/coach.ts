@@ -37,7 +37,7 @@ export const getCheckinAction = defineAction({
   name: 'get_checkin',
   title: 'Money check-in',
   description:
-    'Everything a coach needs in one call: the attention list (priority now, soon or fyi, each with a plain message and the tool that shows more), this budget period, cash until payday, bills, goals, debts (avalanche plan with no extra payment), the net worth change over 30 days and a savings glance (total saved and invested, its change this month, emergency fund months and savings rate, or null with no savings accounts). Start any check-in or open question about money here. Amounts are in cents.',
+    'Everything a coach needs in one call: the attention list (priority now, soon or fyi, each with a plain message and the tool that shows more), this budget period, cash until payday, bills, goals, debts (avalanche plan with no extra payment), the net worth change over 30 days and a savings glance (total saved and invested, its change this month, emergency fund months and bankSeenSavingsRatePercent, or null with no savings accounts). bankSeenSavingsRatePercent counts only money moved through the bank: payroll deductions, such as a pension or a 401(k), are not counted, so never say it is too little. Start any check-in or open question about money here. Amounts are in cents.',
   input: z.object({}),
   scope: 'read',
   surface: 'all',

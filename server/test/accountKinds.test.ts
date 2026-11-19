@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   ACCOUNT_KINDS,
   automaticKind,
+  choiceThatFits,
   isSavingsKind,
+  isSpendableCash,
   kindFitsType,
   kindOf,
   kindsForType,
+  type AccountKind,
 } from '../src/domain/accountKinds.js'
 
 describe('automaticKind', () => {
@@ -37,12 +40,57 @@ describe('automaticKind', () => {
     expect(automaticKind(investment(null, 'Mirage Fund'))).toBe('investment')
   })
 
-  it.each(['savings', 'money market', 'cd', 'hsa', 'Savings '])(
+  it.each(['savings', 'money market', 'cd', 'cash isa', 'Savings '])(
     'reads a bank %s account as savings',
     (subtype) => {
       expect(automaticKind({ type: 'depository', subtype, bankName: 'Bank' })).toBe('savings')
     },
   )
+
+  describe('a bank account held for retirement', () => {
+    const bank = (subtype: string | null, bankName: string) => ({
+      type: 'depository',
+      subtype,
+      bankName,
+    })
+
+    it.each([
+      ['cd', 'IRA CD 12 Month'],
+      ['savings', 'Roth IRA Savings'],
+      ['money market', 'Traditional IRA Money Market'],
+      ['cash management', 'IRA Cash'],
+      // Added by hand, with no subtype.
+      [null, 'Traditional IRA'],
+      ['savings', 'Pension Savings'],
+      ['cd', '401(k) Rollover CD'],
+    ])('reads a %s named %s as retirement', (subtype, bankName) => {
+      expect(automaticKind(bank(subtype, bankName))).toBe('retirement')
+    })
+
+    it.each([
+      // A person's name, not the account type: only "IRA" in capitals counts.
+      ['savings', "Ira's Savings", 'savings'],
+      ['savings', 'Rollover Savings', 'savings'],
+      ['cd', 'Rollover CD', 'savings'],
+      [null, 'Ira Household', 'checking'],
+      // An account the bank calls checking keeps its kind, whatever its name says.
+      ['checking', 'Pension Direct Deposit', 'checking'],
+      ['checking', 'IRA Funding Checking', 'checking'],
+    ])('reads a %s named %s as %s', (subtype, bankName, kind) => {
+      expect(automaticKind(bank(subtype, bankName))).toBe(kind)
+    })
+  })
+
+  it('keeps a health savings account out of savings, at a bank or a broker', () => {
+    // Savings is what the emergency fund counts, and HSA money is for medical costs.
+    expect(automaticKind({ type: 'depository', subtype: 'hsa', bankName: 'Bank' })).toBe(
+      'investment',
+    )
+    expect(automaticKind({ type: 'depository', subtype: ' HSA', bankName: 'Bank' })).toBe(
+      'investment',
+    )
+    expect(automaticKind(investment('hsa'))).toBe('investment')
+  })
 
   it('reads other bank accounts, with or without a subtype, as checking', () => {
     for (const subtype of ['checking', 'prepaid', 'cash management', null]) {
@@ -82,7 +130,44 @@ describe('kinds the owner may pick', () => {
     expect(kindOf({ ...checking, type: 'credit', kindChoice: 'savings' })).toBe('credit_card')
   })
 
+  it('keeps a pick only while it fits the account type', () => {
+    expect(choiceThatFits('savings', 'depository')).toBe('savings')
+    expect(choiceThatFits('savings', 'loan')).toBeNull()
+    expect(choiceThatFits('other', 'loan')).toBe('other')
+    expect(choiceThatFits(null, 'depository')).toBeNull()
+  })
+
   it('names the savings kinds', () => {
     expect(ACCOUNT_KINDS.filter(isSavingsKind)).toEqual(['savings', 'retirement', 'investment'])
+  })
+})
+
+describe('isSpendableCash', () => {
+  const account = (
+    type: string,
+    subtype: string | null,
+    bankName = 'Bank',
+    kindChoice: AccountKind | null = null,
+  ) => ({ type, subtype, bankName, kindChoice })
+
+  it('counts checking and savings the owner can draw on', () => {
+    expect(isSpendableCash(account('depository', 'checking'))).toBe(true)
+    expect(isSpendableCash(account('depository', 'savings'))).toBe(true)
+    expect(isSpendableCash(account('depository', 'money market'))).toBe(true)
+  })
+
+  it('leaves out a CD, a bank IRA, a bank HSA and anything that is not a bank account', () => {
+    expect(isSpendableCash(account('depository', 'cd'))).toBe(false)
+    expect(isSpendableCash(account('depository', 'savings', 'IRA Savings'))).toBe(false)
+    expect(isSpendableCash(account('depository', 'hsa'))).toBe(false)
+    expect(isSpendableCash(account('investment', 'brokerage'))).toBe(false)
+    expect(isSpendableCash(account('credit', 'credit card'))).toBe(false)
+  })
+
+  it('follows the kind the owner picked', () => {
+    expect(isSpendableCash(account('depository', 'savings', 'Bank', 'retirement'))).toBe(false)
+    expect(isSpendableCash(account('depository', 'checking', 'Bank', 'savings'))).toBe(true)
+    // A manual account with no subtype, called savings.
+    expect(isSpendableCash(account('depository', null, 'Jar', 'savings'))).toBe(true)
   })
 })

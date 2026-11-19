@@ -8,6 +8,7 @@ import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlert
 import { Card, Icon } from '../components/ui'
 import { accountPath } from '../lib/accounts'
 import { useApp } from '../lib/app'
+import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
 
 const ALERT_LABELS: Record<WidgetProps['budget']['alerts'][number]['level'], string> = {
@@ -40,7 +41,13 @@ export function AlertsWidget({ budget }: WidgetProps) {
   for (const connection of connections.data ?? []) {
     const text = bankAlertText(connection)
     if (text)
-      items.push({ key: connection.id, tone: 'warn', text, level: 'Bank', to: '/customize#banks' })
+      items.push({
+        key: connection.id,
+        tone: 'warn',
+        text,
+        level: 'Bank',
+        to: settingsPath('banks'),
+      })
   }
   for (const alert of budget.alerts) {
     items.push({

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Status } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
+import { settingsPath } from '../settings/paths'
 import { Frame, Nav } from './Frame'
 
 /** Where someone without bank sync adds their money, once setup is done. */
@@ -15,7 +16,7 @@ const NEXT_STEPS = [
     text: "Download your transactions from your bank's website, then bring them in",
   },
   {
-    path: '/customize#accounts',
+    path: settingsPath('accounts'),
     title: 'Add an account by hand',
     text: 'Type in an account and its balance, then add spending as it happens',
   },
@@ -84,7 +85,7 @@ function AssistantKey({ status }: { status: Status }) {
       <strong>Optional: let your AI assistant keep an eye on it</strong>
       <span className="small muted">
         Create a read-only key and add this address as a connector in your assistant. It can then
-        check your budgets and warn you. You can do this later in Customize, AI assistant.
+        check your budgets and warn you. You can do this later in Settings, then AI assistant.
       </span>
       <code className="code">{address}</code>
       {create.data ? (

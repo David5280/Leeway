@@ -4,6 +4,8 @@
 import type { Db } from '../db/pool.js'
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import { periodContaining, type Cadence } from '../lib/periods.js'
+import { isSpendableCash } from './accountKinds.js'
+import { listAccounts } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
 import { detectRecurring, recentHistory } from './recurring.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -99,12 +101,16 @@ function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] 
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name))
 }
 
+/**
+ * Money available to spend before payday: counted checking and savings
+ * accounts that are not locked up (see isSpendableCash). Available balance
+ * where the bank gives one, since it already takes out pending charges.
+ */
 async function cashOnHand(db: Db): Promise<number> {
-  const { rows } = await db.query<{ cents: number }>(
-    `SELECT coalesce(sum(coalesce(available_cents, balance_cents)), 0)::bigint AS cents
-     FROM accounts WHERE type = 'depository' AND NOT hidden`,
-  )
-  return rows[0]!.cents
+  const accounts = await listAccounts(db, false)
+  return accounts
+    .filter(isSpendableCash)
+    .reduce((sum, a) => sum + (a.availableCents ?? a.balanceCents ?? 0), 0)
 }
 
 export async function getCashFlow(db: Db, settings: Settings, today: IsoDate): Promise<CashFlow> {

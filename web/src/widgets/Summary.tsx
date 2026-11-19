@@ -1,12 +1,13 @@
 // The summary at the top of the dashboard: how the period is going and what
 // needs the owner, in a sentence and a few points. Leeway writes it from the
-// numbers, or Claude does when the owner turns that on in Customize.
+// numbers, or Claude does when the owner turns that on in Settings.
 
 import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Card, ErrorNote, Loading } from '../components/ui'
 import { timeAgo } from '../lib/format'
+import { settingsPath } from '../pages/settings/paths'
 
 type Summary = Output<'get_summary'>
 
@@ -41,7 +42,7 @@ function SummaryBody() {
 
 /** Who wrote it and when, or how to have Claude write it. */
 export function Byline({ summary, now }: { summary: Summary; now?: number }) {
-  const customize = <Link to="/customize#agent">Customize</Link>
+  const settings = <Link to={settingsPath('assistant')}>Settings, then AI assistant</Link>
   switch (summary.ai) {
     case 'on':
       return (
@@ -58,10 +59,10 @@ export function Byline({ summary, now }: { summary: Summary; now?: number }) {
     case 'no_key':
       return (
         <p className="small muted">
-          Claude needs an Anthropic key on your server first. See {customize}.
+          Claude needs an Anthropic key on your server first. See {settings}.
         </p>
       )
     case 'off':
-      return <p className="small muted">Want Claude to write this? Turn it on in {customize}.</p>
+      return <p className="small muted">Want Claude to write this? Turn it on in {settings}.</p>
   }
 }

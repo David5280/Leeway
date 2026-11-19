@@ -86,6 +86,55 @@ describe('get_summary in Leeway’s own words', () => {
   })
 })
 
+describe('get_summary and account names', () => {
+  /** An account the bank calls TOTAL CHECKING, at Test Bank, $42.10 below zero. */
+  const overdraw = () => insertBankAccount(ctx.db, { name: 'TOTAL CHECKING', balanceCents: -4210 })
+
+  it('names the overdrawn account as the alerts beside it do', async () => {
+    await overdraw()
+    const [alert] = await call('list_alerts')
+    const { headline } = await call('get_summary')
+    expect(headline).toBe('Test Total Checking is overdrawn by $42.10.')
+    expect(headline).toBe(alert!.message)
+  })
+
+  it('hands the AI writer the account by the same name', async () => {
+    await overdraw()
+    await call('set_ai_summary', { on: true })
+    await call('get_summary')
+    expect(writer.calls[0]).toMatchObject({
+      fixedHeadline: 'Test Total Checking is overdrawn by $42.10.',
+      accountAlerts: ['Test Total Checking is overdrawn by $42.10.'],
+    })
+  })
+
+  it('never hands the AI writer an account number, even one in the bank name', async () => {
+    await insertBankAccount(ctx.db, {
+      name: 'CHECKING ...4417',
+      mask: '4417',
+      balanceCents: -4210,
+    })
+    await call('set_ai_summary', { on: true })
+    await call('get_summary')
+    expect(writer.calls[0]!.fixedHeadline).toBe('Test Checking is overdrawn by $42.10.')
+    expect(JSON.stringify(writer.calls[0])).not.toContain('4417')
+  })
+
+  it('never hands the AI writer a short mask the bank put in the name', async () => {
+    await insertBankAccount(ctx.db, { name: 'CHECKING 417', mask: '417', balanceCents: -4210 })
+    await call('set_ai_summary', { on: true })
+    await call('get_summary')
+    expect(writer.calls[0]!.fixedHeadline).toBe('Test Checking is overdrawn by $42.10.')
+    expect(JSON.stringify(writer.calls[0])).not.toMatch(/\b417\b/)
+  })
+
+  it("uses the owner's own name for the account when there is one", async () => {
+    const { accountId } = await overdraw()
+    await call('update_account', { id: accountId, displayName: 'Bills' })
+    expect((await call('get_summary')).headline).toBe('Bills is overdrawn by $42.10.')
+  })
+})
+
 describe('get_summary written by the AI', () => {
   beforeEach(async () => {
     await call('set_ai_summary', { on: true })

@@ -60,12 +60,12 @@ describe('list_alerts', () => {
     const alerts = await call('list_alerts')
 
     expect(alerts.map((a) => [a.kind, a.accountName, a.amountCents])).toEqual([
-      ['overdrawn', 'Everyday', 4210],
-      ['overdraft_fee', 'Everyday', 3500],
-      ['low_balance', 'Bills', 6000],
+      ['overdrawn', 'Test Everyday', 4210],
+      ['overdraft_fee', 'Test Everyday', 3500],
+      ['low_balance', 'Test Bills', 6000],
     ])
-    // Money and dates read in the owner's format.
-    expect(alerts[0]!.message).toBe('Everyday is overdrawn by $42.10.')
+    // Money and dates read in the owner's format, and accounts as named everywhere.
+    expect(alerts[0]!.message).toBe('Test Everyday is overdrawn by $42.10.')
     expect(alerts[1]!.message).toContain('most recently Nov 12')
   })
 
@@ -81,14 +81,14 @@ describe('list_alerts', () => {
   it('includes hidden accounts, since an overdraft there still costs money', async () => {
     await checking('Old joint', { balanceCents: -900, availableCents: null }, true)
     const alerts = await call('list_alerts')
-    expect(alerts.map((a) => a.accountName)).toEqual(['Old joint'])
+    expect(alerts.map((a) => a.accountName)).toEqual(['Test Old joint'])
   })
 
   it('narrows to the accounts asked for', async () => {
     const short = await checking('Short', { balanceCents: -100, availableCents: -100 })
     const low = await checking('Low', { balanceCents: 500, availableCents: 500 })
     expect((await call('list_alerts', { accountIds: [low] })).map((a) => a.accountName)).toEqual([
-      'Low',
+      'Test Low',
     ])
     expect((await call('list_alerts', { accountIds: [short] })).map((a) => a.kind)).toEqual([
       'overdrawn',

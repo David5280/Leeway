@@ -185,26 +185,36 @@ export const ACCENTS = {
 
 export type FontId = Exclude<Appearance['font'], 'theme'>
 
-export const FONTS: Record<FontId, { name: string; ui: string; num: string }> = {
+/**
+ * Lends money its commas and points from a proportional font, ahead of each
+ * monospaced font, which would give them a whole digit's width and turn
+ * "$2,485" into "$2 , 485". The face covers only those marks (see styles.css),
+ * so the digits still come from the theme's monospaced font. Only money uses
+ * it: code and addresses keep every character the same width.
+ */
+export const NUMBER_MARKS = "'Leeway Number Marks'"
+
+/** Each font choice: one for words, and a monospaced one for numbers and code. */
+export const FONTS: Record<FontId, { name: string; ui: string; mono: string }> = {
   geist: {
     name: 'Geist',
     ui: "'Geist', system-ui, sans-serif",
-    num: "'Geist Mono', ui-monospace, monospace",
+    mono: "'Geist Mono', ui-monospace, monospace",
   },
   'space-grotesk': {
     name: 'Space Grotesk',
     ui: "'Space Grotesk', system-ui, sans-serif",
-    num: "'JetBrains Mono', ui-monospace, monospace",
+    mono: "'JetBrains Mono', ui-monospace, monospace",
   },
   'ibm-plex': {
     name: 'IBM Plex',
     ui: "'IBM Plex Sans', system-ui, sans-serif",
-    num: "'IBM Plex Mono', ui-monospace, monospace",
+    mono: "'IBM Plex Mono', ui-monospace, monospace",
   },
   system: {
     name: 'System',
     ui: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-    num: 'ui-monospace, "SF Mono", Menlo, monospace',
+    mono: 'ui-monospace, "SF Mono", Menlo, monospace',
   },
 }
 
@@ -248,7 +258,8 @@ export function themeVariables(
   const compact = appearance.density === 'compact'
   const vars: Record<string, string> = {
     '--font-ui': font.ui,
-    '--font-num': font.num,
+    '--font-mono': font.mono,
+    '--font-num': `${NUMBER_MARKS}, ${font.mono}`,
     '--radius': `${radius}px`,
     '--radius-sm': `${Math.min(radius, 10)}px`,
     '--pad': compact ? '16px' : '24px',

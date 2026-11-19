@@ -139,7 +139,7 @@ describe('weeklyEmailContent', () => {
 
   it('credits an AI that wrote the summary, and says how to stop the email', () => {
     expect(content().footer).toBe(
-      'You get this because the weekly email is on in Leeway. To stop it or change its day, open Customize, then Email.',
+      'You get this because the weekly email is on in Leeway. To stop it or change its day, open Settings, then Email.',
     )
     const byClaude = content({ summary: { headline: 'Fine.', points: [], writtenBy: 'Claude' } })
     expect(byClaude.footer).toMatch(/Summary written by Claude\.$/)
@@ -162,7 +162,7 @@ describe('savings in the weekly email', () => {
     changeSince: '2026-11-01',
     emergencyFundMonths: 2.5,
     emergencyFundTargetMonths: 6,
-    savingsRatePercent: 9,
+    bankSeenSavingsRatePercent: 9,
   }
 
   it('shows the total, how it moved and the emergency fund', () => {
@@ -354,7 +354,7 @@ Goals
 
 Open Leeway: https://leeway.example.com
 
-You get this because the weekly email is on in Leeway. To stop it or change its day, open Customize, then Email.
+You get this because the weekly email is on in Leeway. To stop it or change its day, open Settings, then Email.
 `)
   })
 

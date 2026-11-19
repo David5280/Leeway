@@ -3,12 +3,12 @@
  * one typed object, worked out fresh from the stored data on every read so it
  * is never out of date. Nothing here is stored.
  *
- * It is the single source for anything that speaks about the owner's whole
- * picture: the per-kind views on the Savings page (views.ts), the rule-based
- * insights (insights.ts), the short digest an AI assistant reads (digest.ts),
- * the check-in, the dashboard summary and the weekly email. Each of those
- * reads from here, so a number is worked out once and reads the same
- * everywhere.
+ * It is the source for what speaks about the owner's whole picture: the
+ * per-kind savings view (views.ts), the rule-based insights (insights.ts) and
+ * the short digest an AI assistant reads (digest.ts). The check-in, which the
+ * dashboard summary and the weekly email read, needs only a glance at savings,
+ * so it reads that much and works out the emergency fund and savings rate
+ * with the same savingsMeasures, and the numbers read the same everywhere.
  *
  * Sources, and where each is worked out:
  * - accounts and their kinds: accounts.ts and accountKinds.ts
@@ -16,7 +16,6 @@
  * - pay schedule and a typical month of income and spending: income.ts
  * - bills: bills.ts; goals: goals.ts
  * - the emergency fund and savings rate: savings/emergency.ts, savings/rate.ts
- * - pensions and retirement projections: retirement/plan.ts
  *
  * userContext is where life context the owner writes in their own words will
  * go (and facts an assistant proposes once the owner approves them). It is
@@ -29,11 +28,10 @@ import { ACCOUNT_KINDS, KIND_INFO, type AccountKind } from '../accountKinds.js'
 import { listAccounts, type Account } from '../accounts.js'
 import { listBills } from '../bills.js'
 import { listGoals, type Goal } from '../goals.js'
-import { listPensions } from '../retirement/pensions.js'
-import { retirementPlan, type PensionInPlan, type RetirementPlan } from '../retirement/plan.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
 import { savingsRate, type SavingSource, type SavingsRate } from '../savings/rate.js'
-import { getSavingsReport, type SavingsReport } from '../savings/report.js'
+import type { BankContributions } from '../savings/contributions.js'
+import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import { periodConfig, type Settings } from '../settings.js'
 import { monthlyAverages, paySchedule, type MonthlyAverages, type PaySchedule } from './income.js'
 
@@ -82,8 +80,6 @@ export interface FinancialProfile {
   /** The share of pay the owner aims to save, or null for no target. */
   savingsRateTargetPercent: number | null
   goals: ProfileGoal[]
-  /** Pensions and the retirement projection; the projection waits for a birth year. */
-  retirement: RetirementPlan
   /** Life context in the owner's own words. Empty until the owner can add it. */
   userContext: string[]
 }
@@ -125,33 +121,69 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
 }
 
 /**
- * The streams of saving Leeway can see, for the savings rate: transfers the
- * bank labeled, and pension contributions taken from pay before it lands.
+ * The streams of saving Leeway can see, for the savings rate. Only bank
+ * transfers so far; payroll pensions join them, before the paycheck, once
+ * the owner can describe their plan.
  */
-export function savingSources(savings: SavingsReport, pensions: PensionInPlan[]): SavingSource[] {
-  const monthly = savings.contributions?.monthlyCents
-  const transfers: SavingSource[] = monthly
-    ? [
-        { label: 'Transfers to savings', monthlyCents: monthly.cash, beforePaycheck: false },
-        {
-          label: 'Transfers to investment and retirement accounts',
-          monthlyCents: monthly.invested,
-          beforePaycheck: false,
-        },
-      ]
-    : []
-  const fromPay = pensions.flatMap((pension) =>
-    pension.payIn.monthlyCents === null
-      ? []
-      : [
-          {
-            label: `${pension.planName} contributions`,
-            monthlyCents: pension.payIn.monthlyCents,
-            beforePaycheck: true,
-          },
-        ],
-  )
-  return [...transfers, ...fromPay]
+export function savingSources(contributions: BankContributions | null): SavingSource[] {
+  const monthly = contributions?.monthlyCents
+  if (!monthly) return []
+  return [
+    { label: 'Transfers to savings', monthlyCents: monthly.cash, beforePaycheck: false },
+    {
+      label: 'Transfers to investment and retirement accounts',
+      monthlyCents: monthly.invested,
+      beforePaycheck: false,
+    },
+  ]
+}
+
+/** What the emergency fund and the savings rate are worked out from. */
+export interface SavingsMeasuresInput {
+  /** Cash in savings accounts, or null without any savings account. */
+  cashCents: number | null
+  contributions: BankContributions | null
+  monthly: MonthlyAverages
+  /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
+  billsMonthlyCents: number
+  settings: Pick<Settings, 'savingsPlan'>
+  today: IsoDate
+}
+
+export interface SavingsMeasures {
+  emergencyFund: EmergencyFund | null
+  savingsRate: SavingsRate | null
+}
+
+/**
+ * The emergency fund and the savings rate, from data already read. Pure, so
+ * the check-in can work them out from its own reads without building the
+ * whole profile.
+ */
+export function savingsMeasures({
+  cashCents,
+  contributions,
+  monthly,
+  billsMonthlyCents,
+  settings,
+  today,
+}: SavingsMeasuresInput): SavingsMeasures {
+  // Without a whole month of spending, the bills are the best measure of essentials.
+  const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
+  return {
+    emergencyFund:
+      cashCents === null
+        ? null
+        : emergencyFund({
+            savedCents: cashCents,
+            monthlyEssentialsCents: essentials,
+            essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
+            targetMonths: settings.savingsPlan.emergencyFundMonths,
+            monthlyPaceCents: contributions?.monthlyCents?.cash ?? null,
+            today,
+          }),
+    savingsRate: savingsRate(monthly.incomeCents, savingSources(contributions)),
+  }
 }
 
 /** The whole financial picture as of today. */
@@ -162,27 +194,13 @@ export async function getFinancialProfile(
 ): Promise<FinancialProfile> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const accounts = await listAccounts(db, false)
-  const savings = await getSavingsReport(db, settings, today)
+  const savings = await getSavingsReport(db, settings, today, accounts)
   const monthly = await monthlyAverages(db, settings, today)
   const pay = await paySchedule(db, settings, today)
   const bills = await listBills(db, today)
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
-  const pensions = await listPensions(db)
 
   const billsMonthlyCents = bills.reduce((sum, bill) => sum + bill.monthlyCents, 0)
-  const cash = savings.kinds.find((k) => k.kind === 'savings')
-  // Without a whole month of spending, the bills are the best measure of essentials.
-  const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
-  const retirement = retirementPlan({
-    today,
-    assumptions: settings.retirement,
-    balanceCents: savings.kinds.find((k) => k.kind === 'retirement')?.totalCents ?? 0,
-    foundMonthlyContributionCents: savings.contributions?.monthlyCents?.invested ?? null,
-    recentMonthlySpendingCents: monthly.spendingCents,
-    pensions,
-    payCadence: pay.cadence,
-  })
-
   return {
     asOf: today,
     currency: settings.currency,
@@ -192,20 +210,16 @@ export async function getFinancialProfile(
     bills: { count: bills.length, monthlyCents: billsMonthlyCents },
     accounts: kindSummaries(accounts, settings.currency),
     savings,
-    emergencyFund: cash
-      ? emergencyFund({
-          savedCents: cash.totalCents,
-          monthlyEssentialsCents: essentials,
-          essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
-          targetMonths: settings.savingsPlan.emergencyFundMonths,
-          monthlyPaceCents: savings.contributions?.monthlyCents?.cash ?? null,
-          today,
-        })
-      : null,
-    savingsRate: savingsRate(monthly.incomeCents, savingSources(savings, retirement.pensions)),
+    ...savingsMeasures({
+      cashCents: cashSaved(savings),
+      contributions: savings.contributions,
+      monthly,
+      billsMonthlyCents,
+      settings,
+      today,
+    }),
     savingsRateTargetPercent: settings.savingsPlan.savingsRateTargetPercent,
     goals: goals.map((goal) => profileGoal(goal, accounts)),
-    retirement,
     userContext: [],
   }
 }

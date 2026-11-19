@@ -5,6 +5,7 @@
 import type { IsoDate } from '../../lib/dates.js'
 import { shortDate } from '../../lib/words.js'
 import type { SavingsKind } from '../accountKinds.js'
+import { SEEN_AT_BANK } from '../savings/rate.js'
 import type { CombinedChanges } from '../savings/report.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
@@ -131,7 +132,7 @@ function overallInsights(profile: FinancialProfile, { money, locale }: InsightFo
       about: 'overall',
       topic: 'savings_rate',
       tone: 'neutral',
-      text: `You save about ${rate.percent}% of your pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}.`,
+      text: `About ${rate.percent}% of your take-home pay goes to savings through your bank: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`,
     })
   }
   const contributions = profile.savings.contributions

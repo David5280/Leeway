@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
+import { accountNames } from './accounts.js'
 import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
@@ -34,12 +35,13 @@ export interface Transaction {
 }
 
 /** A transaction as stored, with the bank codes that only reading `person` needs. */
-type StoredTransaction = Omit<Transaction, 'person'> &
+type StoredTransaction = Omit<Transaction, 'person' | 'accountName'> &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
 
-function present(row: StoredTransaction): Transaction {
+/** A stored transaction as the app shows it, its account named as everywhere else. */
+function present(row: StoredTransaction, names: Map<string, string>): Transaction {
   const { providerCategoryPrimary: _primary, providerCategoryDetailed: _detailed, ...tx } = row
-  return { ...tx, person: personPayment(row) }
+  return { ...tx, accountName: names.get(row.accountId)!, person: personPayment(row) }
 }
 
 export const transactionFilterSchema = z.object({
@@ -63,7 +65,7 @@ export const transactionFilterSchema = z.object({
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>
 
 const SELECT = `
-  SELECT t.id, t.account_id AS "accountId", coalesce(a.display_name, a.name) AS "accountName",
+  SELECT t.id, t.account_id AS "accountId",
     t.date, t.name, t.merchant_name AS "merchantName", t.amount_cents AS "amountCents",
     t.currency, t.pending, t.category_id AS "categoryId", t.category_source AS "categorySource",
     coalesce(t.provider_category_detailed, t.provider_category_primary) AS "bankCategory",
@@ -72,7 +74,7 @@ const SELECT = `
       WHEN t.import_id IS NOT NULL THEN 'import' ELSE 'manual' END AS source,
     t.provider_category_primary AS "providerCategoryPrimary",
     t.provider_category_detailed AS "providerCategoryDetailed"
-  FROM transactions t JOIN accounts a ON a.id = t.account_id`
+  FROM transactions t`
 
 export async function listTransactions(
   db: Db,
@@ -101,7 +103,7 @@ export async function listTransactions(
   if (!filter.includeExcluded) where.push('NOT t.excluded')
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const [list, count] = await Promise.all([
+  const [list, count, names] = await Promise.all([
     db.query<StoredTransaction>(
       `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -111,14 +113,18 @@ export async function listTransactions(
       `SELECT count(*)::int AS total FROM transactions t ${whereSql}`,
       params,
     ),
+    accountNames(db),
   ])
-  return { transactions: list.rows.map(present), total: count.rows[0]!.total }
+  return {
+    transactions: list.rows.map((row) => present(row, names)),
+    total: count.rows[0]!.total,
+  }
 }
 
 async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
-  return present(rows[0])
+  return present(rows[0], await accountNames(db))
 }
 
 /**

@@ -19,7 +19,7 @@ test('a wrong password is refused, the right one signs in, and signing out ends 
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
 
-  await page.goto('/customize#account')
+  await page.goto('/settings/sign-in')
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
   // The session is gone on the server too, not just hidden in the page.

@@ -81,7 +81,7 @@ const ICONS = {
       <path d="M4 10h16M9 3v4M15 3v4" />
     </>
   ),
-  customize: (
+  sliders: (
     <>
       <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" />
       <circle cx="16" cy="6" r="2" />
@@ -152,6 +152,20 @@ export function Switch({
   )
 }
 
+/** About how many characters of option labels fit across a phone in one row. */
+const ONE_ROW_CHARACTERS = 26
+
+/**
+ * How many columns a segmented control takes on a phone (styles.css), so its
+ * options sit in even rows: all in one row when the labels fit, otherwise rows
+ * of at most three, so four make two rows of two, never three and one alone.
+ */
+export function phoneColumns(labels: readonly string[]): number {
+  const characters = labels.reduce((sum, label) => sum + label.length, 0)
+  if (characters <= ONE_ROW_CHARACTERS) return labels.length
+  return Math.ceil(labels.length / Math.ceil(labels.length / 3))
+}
+
 export function Segmented<T extends string>({
   value,
   options,
@@ -163,8 +177,11 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void
   label: string
 }) {
+  const style = {
+    '--columns': phoneColumns(options.map((option) => option.label)),
+  } as CSSProperties
   return (
-    <div className="seg" role="group" aria-label={label}>
+    <div className="seg" role="group" aria-label={label} style={style}>
       {options.map((option) => (
         <button
           key={option.value}

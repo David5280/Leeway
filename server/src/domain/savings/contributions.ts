@@ -1,22 +1,47 @@
 // Money the owner put into savings and investments, found where it can be
-// seen honestly: transfers out of their everyday accounts that the bank
-// labeled as going to savings or to investments. Pure.
+// seen honestly: transfers between their everyday accounts and savings or
+// investments, as the bank labeled them. Pure.
+//
+// Contributions are net: money moved back out of savings (a withdrawal the
+// bank labels as a transfer in from savings) takes away from what went in, so
+// shuffling money back and forth never inflates the savings rate or the
+// emergency fund's pace.
 //
 // What this cannot see, and so never guesses at: which savings account a
 // transfer reached (banks rarely say), payroll deductions such as a 401(k)
-// taken before the paycheck lands, and market gains. Transfers into a tracked
-// savings account are read from the sending side only, so none counts twice.
+// taken before the paycheck lands, and market gains. Transfers are read from
+// the everyday side only, so none counts twice.
 
 import { addDays, daysBetween, maxDate, type IsoDate } from '../../lib/dates.js'
 
 /** Where contributions went, as far as the bank's labels tell. */
 export type ContributionDestination = 'cash' | 'invested'
 
-// Plaid's codes for money sent from an everyday account to savings, and to an
-// investment or retirement account (personal finance categories).
+// Plaid's codes (personal finance categories) for money moved between an
+// everyday account and savings, or an investment or retirement account. Out
+// is money put in; in is money taken back out, which arrives as a negative
+// amount, so adding up signed amounts nets the two.
 const DESTINATION_BY_CODE: Record<string, ContributionDestination> = {
   TRANSFER_OUT_SAVINGS: 'cash',
+  TRANSFER_IN_SAVINGS: 'cash',
   TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: 'invested',
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: 'invested',
+}
+
+/** Every bank category that moves money into or out of savings and investments. */
+export const CONTRIBUTION_CODES = Object.keys(DESTINATION_BY_CODE)
+
+/**
+ * Whether a bank category is money moved between everyday accounts and
+ * savings or investments, and which side it reached; null for anything else.
+ * This is the one place that decides it. Leeway's general "internal transfer"
+ * test (spending reports leave those out) answers a wider question; a savings
+ * transfer is always internal, but it is counted here, net, never dropped.
+ */
+export function savingsTransferDestination(
+  providerCategoryDetailed: string | null,
+): ContributionDestination | null {
+  return DESTINATION_BY_CODE[providerCategoryDetailed ?? ''] ?? null
 }
 
 /** How far back contributions are counted. */
@@ -67,14 +92,14 @@ export function bankContributions(
   const totalCents: Record<ContributionDestination, number> = { cash: 0, invested: 0 }
   let transferCount = 0
   for (const tx of transactions) {
-    const destination = DESTINATION_BY_CODE[tx.providerCategoryDetailed ?? '']
+    const destination = savingsTransferDestination(tx.providerCategoryDetailed)
     if (!destination || tx.date < since || tx.date > today) continue
-    // A reversed transfer comes back as money in with the same code, so it subtracts.
+    // Money out is positive and money back is negative, so the total is net.
     totalCents[destination] += tx.amountCents
     if (tx.amountCents > 0) transferCount += 1
   }
   if (transferCount === 0) return null
-  // Reversals never make a contribution negative.
+  // Taking out more than went in is not negative saving Leeway can stand behind.
   totalCents.cash = Math.max(0, totalCents.cash)
   totalCents.invested = Math.max(0, totalCents.invested)
   const days = daysBetween(since, today) + 1

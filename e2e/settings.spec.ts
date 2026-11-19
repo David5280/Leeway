@@ -1,4 +1,5 @@
-// Customizing the look and the dashboard, connecting an AI assistant, and the weekly email.
+// Settings: its groups and their addresses, the look and the dashboard,
+// connecting an AI assistant, and the weekly email.
 
 import { expect, test } from '@playwright/test'
 
@@ -20,8 +21,55 @@ test('the theme switch changes the look and sticks after a reload', async ({ pag
   await expect(html).toHaveAttribute('data-mode', 'dark')
 })
 
-test('an accent color applies right away', async ({ page }) => {
+test('each Settings group has its own address, and the menu switches between them', async ({
+  page,
+}) => {
+  await page.goto('/settings/banks')
+  const menu = page.getByRole('navigation', { name: 'Settings groups' })
+  await expect(page.getByRole('heading', { level: 2, name: 'Banks' })).toBeVisible()
+  await expect(menu.getByRole('link', { name: 'Banks' })).toHaveAttribute('aria-current', 'page')
+
+  await menu.getByRole('link', { name: 'Budgeting' }).click()
+  await expect(page).toHaveURL(/\/settings\/budgeting$/)
+  await expect(page.getByRole('heading', { level: 3, name: 'Period and warnings' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Banks' })).toHaveCount(0)
+
+  // Back returns to the group before, as with any page.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/settings\/banks$/)
+
+  // From the keyboard: Tab to a group and press Enter.
+  await menu.getByRole('link', { name: 'Data' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { level: 2, name: 'Data' })).toBeVisible()
+})
+
+test('old Customize addresses and unknown groups land on a real group', async ({ page }) => {
   await page.goto('/customize')
+  await expect(page).toHaveURL(/\/settings\/[a-z-]+$/)
+  await page.goto('/customize/email')
+  await expect(page).toHaveURL(/\/settings\/email$/)
+  await page.goto('/customize#region')
+  await expect(page).toHaveURL(/\/settings\/budgeting#region$/)
+  await expect(page.getByRole('region', { name: 'Region' })).toBeInViewport()
+  // A group this version does not have opens the one last opened here instead.
+  await page.goto('/settings/nowhere')
+  await expect(page).toHaveURL(/\/settings\/budgeting$/)
+  // The main menu calls it Settings.
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Settings' }),
+  ).toHaveAttribute('aria-current', 'page')
+})
+
+test('Settings reopens the group last opened on this device', async ({ page }) => {
+  await page.goto('/settings/data')
+  await expect(page.getByRole('heading', { level: 2, name: 'Data' })).toBeVisible()
+  await page.goto('/settings')
+  await expect(page).toHaveURL(/\/settings\/data$/)
+})
+
+test('an accent color applies right away', async ({ page }) => {
+  await page.goto('/settings/appearance')
   const accent = () =>
     page.evaluate(() => document.documentElement.style.getPropertyValue('--accent'))
   await page.getByRole('radio', { name: 'Teal' }).click()
@@ -39,21 +87,21 @@ test('a dashboard card can be hidden and shown again', async ({ page }) => {
     expect((await saved).ok()).toBe(true)
   }
 
-  await page.goto('/customize')
+  await page.goto('/settings/appearance')
   await toggleHeadsUp()
   await expect(page.getByRole('switch', { name: 'Show Heads up' })).not.toBeChecked()
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Heads up' })).toHaveCount(0)
 
-  await page.goto('/customize')
+  await page.goto('/settings/appearance')
   await toggleHeadsUp()
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Heads up' })).toBeVisible()
 })
 
 test('a key for an AI assistant is shown once, ready to copy', async ({ page }) => {
-  await page.goto('/customize#agent')
+  await page.goto('/settings/assistant')
   const agent = page.getByRole('region', { name: 'AI assistant' })
   await agent.getByRole('textbox', { name: 'Key name' }).fill('Test assistant')
   await agent.getByRole('button', { name: 'Create a key' }).click()
@@ -70,7 +118,7 @@ test('the dashboard summary says how to have Claude write it, and what a missing
   const summary = page.getByRole('region', { name: 'Summary' })
   await expect(summary).toContainText('Want Claude to write this?')
 
-  await summary.getByRole('link', { name: 'Customize' }).click()
+  await summary.getByRole('link', { name: 'Settings, then AI assistant' }).click()
   const toggle = page.getByRole('switch', { name: 'Have Claude write the dashboard summary' })
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
@@ -81,7 +129,7 @@ test('the dashboard summary says how to have Claude write it, and what a missing
   await expect(summary).toContainText('Claude needs an Anthropic key on your server first.')
 
   // Put it back for the other tests.
-  await page.goto('/customize#agent')
+  await page.goto('/settings/assistant')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
 })
@@ -89,7 +137,7 @@ test('the dashboard summary says how to have Claude write it, and what a missing
 test('the weekly email says what the server needs, and keeps its choices for later', async ({
   page,
 }) => {
-  await page.goto('/customize#email')
+  await page.goto('/settings/email')
   const email = page.getByRole('region', { name: 'Email' })
   const day = email.getByRole('combobox', { name: 'Day' })
   // The test server has no Resend key, so nothing can be sent or turned on yet.

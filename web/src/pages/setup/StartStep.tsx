@@ -100,7 +100,7 @@ function StartChoices({
     {
       id: 'import',
       title: 'Copy from another Leeway',
-      text: 'Use a leeway.json file saved from its Customize, Data',
+      text: 'Use a leeway.json file saved from its Settings (or Customize), then Data',
     },
   ]
   return (

@@ -1,9 +1,23 @@
 // The savings rate: the share of pay that goes to savings, from every source
 // Leeway can see. Pure. Sources are listed one by one so the owner (and an
 // assistant) can see exactly what was counted and what was not.
+//
+// Payroll deductions (a pension, a 401(k)) leave pay before it reaches the
+// bank, so a rate built from bank transfers alone can read low. Every place
+// that shows the rate says so, with SEEN_AT_BANK. There is no target until the
+// owner sets one, and no progress bar toward it, so a partial rate never
+// reads as falling short.
 
-/** The common rule of thumb (save a fifth of pay), until the owner sets their own. */
-export const DEFAULT_SAVINGS_RATE_TARGET = 20
+/** Said to the owner beside every savings rate built from bank transfers alone. */
+export const SEEN_AT_BANK = 'Payroll deductions, such as a pension or a 401(k), are not counted.'
+
+/**
+ * Said to an assistant wherever it reads the rate, so the guard travels with
+ * the number: a rate the bank only partly sees is never grounds to say the
+ * owner saves too little.
+ */
+export const RATE_GUARD_FOR_AI =
+  'Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {
@@ -12,7 +26,8 @@ export interface SavingSource {
   monthlyCents: number
   /**
    * Taken from pay before it reaches the bank (a pension or 401k deduction),
-   * so it is added back to take-home pay to get the pay it came out of.
+   * so it is added back to take-home pay to get the pay it came out of. No
+   * source sets it yet: the pension and retirement plan work will feed it.
    */
   beforePaycheck: boolean
 }

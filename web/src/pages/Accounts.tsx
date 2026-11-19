@@ -13,6 +13,7 @@ import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, LoadingOrError } from '../components/ui'
 import { activePick } from '../lib/accounts'
 import { useApp } from '../lib/app'
+import { settingsPath } from './settings/paths'
 import { AccountPicker } from './accounts/AccountPicker'
 import { Balances } from './accounts/Balances'
 import { Flows } from './accounts/Flows'
@@ -73,8 +74,8 @@ function AccountsBody({ view }: { view: AccountsView }) {
   if (view.accounts.length === 0) {
     return (
       <p className="empty">
-        No accounts yet. <Link to="/customize#banks">Connect a bank</Link> or{' '}
-        <Link to="/customize#accounts">add one by hand</Link>.
+        No accounts yet. <Link to={settingsPath('banks')}>Connect a bank</Link> or{' '}
+        <Link to={settingsPath('accounts')}>add one by hand</Link>.
       </p>
     )
   }

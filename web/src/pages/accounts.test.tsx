@@ -233,7 +233,7 @@ describe('Accounts dashboard', () => {
     expect(await screen.findByText(/No accounts yet/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Connect a bank' })).toHaveAttribute(
       'href',
-      '/customize#banks',
+      '/settings/banks',
     )
     expect(screen.queryByRole('group', { name: 'Accounts to show' })).not.toBeInTheDocument()
   })

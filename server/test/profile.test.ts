@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { findAction } from '../src/actions/index.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { getSettings } from '../src/domain/settings.js'
+import { MCP_INSTRUCTIONS } from '../src/mcp/server.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -29,9 +31,13 @@ beforeEach(async () => {
 const profile = async () => getFinancialProfile(ctx.db, await getSettings(ctx.db), TODAY)
 
 /** Inserts a transaction filed under a category, as rules or the owner would file it. */
+/** A transaction filed by hand, so recategorizing (after a delete, say) leaves it be. */
 async function filed(accountId: string, categoryId: string, date: string, amountCents: number) {
   const id = await insertBankTransaction(ctx.db, accountId, { date, name: 'Entry', amountCents })
-  await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [id, categoryId])
+  await ctx.db.query(
+    `UPDATE transactions SET category_id = $2, category_source = 'manual' WHERE id = $1`,
+    [id, categoryId],
+  )
 }
 
 /**
@@ -65,7 +71,10 @@ async function steadyOwner() {
       amountCents: 50_000,
       detailed: 'TRANSFER_OUT_SAVINGS',
     })
-    await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [id, transfers.id])
+    await ctx.db.query(
+      `UPDATE transactions SET category_id = $2, category_source = 'manual' WHERE id = $1`,
+      [id, transfers.id],
+    )
   }
   // The trigger dated balances by the real clock; these tests need none before today.
   await ctx.db.query('DELETE FROM balance_history')
@@ -85,8 +94,7 @@ describe('getFinancialProfile', () => {
       savings: expect.objectContaining({ hasSavings: false, kinds: [] }),
       emergencyFund: null,
       savingsRate: null,
-      savingsRateTargetPercent: 20,
-      retirement: expect.objectContaining({ projection: null, hasPension: false }),
+      savingsRateTargetPercent: null,
       goals: [],
       userContext: [],
     })
@@ -128,6 +136,56 @@ describe('getFinancialProfile', () => {
     const { emergencyFund, monthly } = await profile()
     expect(monthly.essentialSpendingCents).toBe(200_000)
     expect(emergencyFund).toMatchObject({ monthsCovered: 4.5, targetMonths: 4, status: 'met' })
+  })
+
+  it('counts every spending category as essential when the pick is an empty list', async () => {
+    await steadyOwner()
+    // An empty pick would make essentials zero, and any savings endless cover.
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: [] } })
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
+    const { monthly, emergencyFund } = await profile()
+    expect(monthly.essentialSpendingCents).toBe(300_000)
+    expect(emergencyFund).toMatchObject({ monthsCovered: 3 })
+
+    // A list stored that way by an earlier version reads the same.
+    await ctx.db.query(`UPDATE settings SET data = '{"savingsPlan": {"essentialCategoryIds": []}}'`)
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
+  })
+
+  it('takes a deleted category out of the essentials, and counts all spending once none is left', async () => {
+    const { rent, fun } = await steadyOwner()
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: [rent.id, fun.id] } })
+    expect((await profile()).monthly.essentialSpendingCents).toBe(300_000)
+
+    // Deleting one keeps the other picked.
+    await call('delete_category', { id: fun.id })
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toEqual([rent.id])
+    expect((await profile()).monthly.essentialSpendingCents).toBe(200_000)
+
+    // Deleting the last one goes back to all spending, rather than essentials of zero.
+    await call('delete_category', { id: rent.id })
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
+    expect((await profile()).monthly.essentialSpendingCents).toBe(300_000)
+  })
+
+  it('ignores picked ids that no longer name a spending category when reading', async () => {
+    const { rent } = await steadyOwner()
+    const gone = '00000000-0000-4000-8000-000000000000'
+    // Stored by an earlier version, before deletes kept the pick tidy.
+    await ctx.db.query(
+      `UPDATE settings SET data = jsonb_build_object('savingsPlan',
+      jsonb_build_object('essentialCategoryIds', jsonb_build_array($1::text, $2::text)))`,
+      [rent.id, gone],
+    )
+    expect((await profile()).monthly.essentialSpendingCents).toBe(200_000)
+    await ctx.db.query(
+      `UPDATE settings SET data = jsonb_build_object('savingsPlan',
+      jsonb_build_object('essentialCategoryIds', jsonb_build_array($1::text)))`,
+      [gone],
+    )
+    const { monthly, emergencyFund } = await profile()
+    expect(monthly.essentialSpendingCents).toBe(300_000)
+    expect(emergencyFund).toMatchObject({ monthsCovered: 3 })
   })
 
   it('refuses an emergency fund target outside one to 24 whole months', async () => {
@@ -224,8 +282,26 @@ describe('get_financial_profile', () => {
     expect(digest).toContain(
       'Emergency fund: savings cover 3 months of essentials ($3,000 a month)',
     )
-    expect(digest).toContain('Savings rate: about 8% of pay')
+    // The guard travels with the number, on the same line.
+    expect(digest).toMatch(
+      /^Savings rate seen at the bank: about 8% of take-home pay .*never say this rate is too little\.$/m,
+    )
     expect(digest).not.toContain('Test Bank')
+  })
+
+  it('warns an assistant, in its descriptions and instructions, that the rate leaves out payroll', () => {
+    expect(findAction('get_financial_profile')!.description).toContain(
+      'payroll deductions, such as a pension or a 401(k), are not counted, so never say it is too little',
+    )
+    expect(findAction('summarize_savings')!.description).toMatch(
+      /never tell the owner they save too little/,
+    )
+    expect(findAction('get_checkin')!.description).toContain(
+      'bankSeenSavingsRatePercent counts only money moved through the bank',
+    )
+    expect(MCP_INSTRUCTIONS).toContain(
+      'Payroll deductions, such as a pension or a 401(k), are never counted, so never tell the owner they save too little.',
+    )
   })
 })
 
@@ -240,7 +316,7 @@ describe('summarize_savings', () => {
     const view = await call('summarize_savings')
     expect(view.savingsRate?.percent).toBe(8)
     expect(view.insights.map((i) => i.text)).toEqual([
-      'You save about 8% of your pay: $411 a month of $5,000.',
+      'About 8% of your take-home pay goes to savings through your bank: $411 a month of $5,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
     ])
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({

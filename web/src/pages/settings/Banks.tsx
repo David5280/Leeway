@@ -24,7 +24,7 @@ export function BanksSection() {
     )
   }
   return (
-    <Section id="banks" title="Banks" hint="Read-only: Leeway never moves money">
+    <Section id="banks" title="Banks">
       {connections.data?.map((c) => (
         <div key={c.id} className="list-row wrap">
           <span className="grow">

@@ -1,6 +1,7 @@
 // The form for adding a transaction by hand.
 
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { CategorySelect } from '../../components/CategorySelect'
@@ -8,6 +9,7 @@ import { ErrorNote, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
 import { parseMoney } from '../../lib/format'
+import { settingsPath } from '../settings/paths'
 
 const DIRECTIONS = [
   { value: 'out', label: 'Spent' },
@@ -54,7 +56,8 @@ export function AddTransaction({
   if (accounts.data?.length === 0) {
     return (
       <p className="notice">
-        Add an account first, in Customize under Accounts, then record cash spending here.
+        Add an account first, in <Link to={settingsPath('accounts')}>Settings, then Accounts</Link>,
+        then record cash spending here.
       </p>
     )
   }

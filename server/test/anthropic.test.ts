@@ -57,6 +57,14 @@ describe('AnthropicSummaryWriter', () => {
     expect(SYSTEM_PROMPT).toContain('fixedHeadline')
   })
 
+  it('tells Claude never to say the person saves too little', () => {
+    // The bank never sees payroll saving such as a pension, so any such claim could be wrong.
+    expect(SYSTEM_PROMPT).toContain('never payroll deductions such as a pension or a 401(k)')
+    expect(SYSTEM_PROMPT).toContain(
+      'never say or imply that the person saves too little or should save more',
+    )
+  })
+
   it('throws when Claude declines, so the dashboard falls back to Leeway’s words', async () => {
     const { writer } = writerWith({ stop_reason: 'refusal', parsed_output: null })
     await expect(writer.write(facts)).rejects.toThrow('declined')

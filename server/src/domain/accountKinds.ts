@@ -38,7 +38,7 @@ export const KIND_INFO: Record<AccountKind, KindInfo> = {
   other: { label: 'Other', noun: 'account', side: 'either' },
 }
 
-/** The kinds that hold money put away for later, shown on the Savings page in this order. */
+/** The kinds that hold money put away for later, in the order they are listed. */
 export const SAVINGS_KINDS = ['savings', 'retirement', 'investment'] as const
 export type SavingsKind = (typeof SAVINGS_KINDS)[number]
 
@@ -88,17 +88,37 @@ const NOT_INVESTED_SUBTYPES = new Set([
 
 // Bank (depository) subtypes that hold savings rather than spending money.
 // Anything else at a bank, including no subtype at all, reads as checking.
-const SAVINGS_SUBTYPES = new Set(['cd', 'cash isa', 'hsa', 'money market', 'savings'])
+const SAVINGS_SUBTYPES = new Set(['cd', 'cash isa', 'money market', 'savings'])
+
+// A health savings account is kept for medical costs, with a tax penalty on
+// anything else, so it is no emergency fund even when it sits at a bank as
+// cash. It counts with investing, where an HSA at a broker already lands.
+const HEALTH_SAVINGS_SUBTYPE = 'hsa'
 
 // Account names that say "retirement" when the bank's subtype does not, such
 // as a Rollover IRA reported with subtype "other". Matched as whole words.
 const RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|ira|roth|rollover|pension)\b/i
 
+// The same for a bank account, read more strictly, since a bank account named
+// for retirement is rare and an ordinary one named after a person is not:
+// "IRA" only in capitals, so "Ira's Savings" stays savings, and no bare
+// "rollover", which a bank may call a savings account that rolls over.
+const BANK_IRA_NAME = /\bIRA\b/
+const BANK_RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|roth|pension)\b/i
+
+/** Whether a bank account's name says it is held for retirement, like "IRA CD" or "Roth IRA Savings". */
+function bankNameSaysRetirement(bankName: string): boolean {
+  return BANK_IRA_NAME.test(bankName) || BANK_RETIREMENT_NAME.test(bankName)
+}
+
 /** What classifying reads from an account. */
 export interface ClassifiableAccount {
   type: string
   subtype: string | null
-  /** The bank's name for the account, used only when the subtype says nothing. */
+  /**
+   * The bank's name for the account (or the name typed for one added by hand),
+   * read for retirement when the subtype does not settle the kind.
+   */
   bankName: string
 }
 
@@ -111,6 +131,10 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
     case 'loan':
       return 'loan'
     case 'depository':
+      if (sub === HEALTH_SAVINGS_SUBTYPE) return 'investment'
+      // A CD, savings or cash account held as an IRA is retirement money, not an
+      // emergency fund. Only an account the bank calls checking is never read so.
+      if (sub !== 'checking' && bankNameSaysRetirement(bankName)) return 'retirement'
       return SAVINGS_SUBTYPES.has(sub) ? 'savings' : 'checking'
     case 'investment':
       if (RETIREMENT_SUBTYPES.has(sub)) return 'retirement'
@@ -121,6 +145,23 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
     default:
       return 'other'
   }
+}
+
+// Savings subtypes whose money is locked up until a date, so it is no cash to spend.
+const LOCKED_SUBTYPES = new Set(['cd'])
+
+/**
+ * Whether an account's money is cash the owner can spend before payday: a
+ * checking or savings account, by its kind, that is not locked up like a CD.
+ * A bank HSA, IRA or anything else the owner calls retirement or investing
+ * is not.
+ */
+export function isSpendableCash(
+  account: ClassifiableAccount & { kindChoice: AccountKind | null },
+): boolean {
+  const kind = kindOf(account)
+  if (kind === 'checking') return true
+  return kind === 'savings' && !LOCKED_SUBTYPES.has(account.subtype?.trim().toLowerCase() ?? '')
 }
 
 /** Card and loan accounts are owed; their balance counts against net worth. */
@@ -143,13 +184,16 @@ export function kindsForType(type: string): AccountKind[] {
   return ACCOUNT_KINDS.filter((kind) => kindFitsType(kind, type))
 }
 
+/** The owner's pick of kind if it fits an account of this type, otherwise none. */
+export function choiceThatFits(choice: AccountKind | null, type: string): AccountKind | null {
+  return choice && kindFitsType(choice, type) ? choice : null
+}
+
 /**
  * The kind an account counts as: the owner's pick when it fits the account,
- * otherwise the automatic one. A pick that no longer fits (a manual account
- * changed from savings to loan) quietly falls back rather than misleading.
+ * otherwise the automatic one. A pick that no longer fits quietly falls back
+ * rather than misleading; changing a manual account's type also clears it.
  */
 export function kindOf(account: ClassifiableAccount & { kindChoice: AccountKind | null }) {
-  const { kindChoice } = account
-  if (kindChoice && kindFitsType(kindChoice, account.type)) return kindChoice
-  return automaticKind(account)
+  return choiceThatFits(account.kindChoice, account.type) ?? automaticKind(account)
 }

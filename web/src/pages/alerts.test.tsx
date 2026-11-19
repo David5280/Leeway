@@ -69,9 +69,9 @@ describe('the Alerts page', () => {
     expect(screen.getByRole('region', { name: 'About alerts' })).toHaveTextContent(
       '$100 for checking accounts',
     )
-    expect(screen.getByRole('link', { name: 'Customize, then Accounts' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
       'href',
-      '/customize#accounts',
+      '/settings/accounts',
     )
     // Accounts is in the main menu, beside the Overview it came from.
     const menu = screen.getAllByRole('navigation', { name: 'Main' })[0]!

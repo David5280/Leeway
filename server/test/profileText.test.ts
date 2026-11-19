@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
-import { profileDigest } from '../src/domain/profile/digest.js'
+import { DIGEST_GOALS, nearestGoals, profileDigest } from '../src/domain/profile/digest.js'
 import {
   averageMonths,
   essentialSpending,
@@ -8,7 +8,13 @@ import {
 } from '../src/domain/profile/income.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
 import { savingsRate } from '../src/domain/savings/rate.js'
-import { dollars, emptyProfile, kindReport, savingsReport } from './fixtures/profile.js'
+import {
+  dollars,
+  emptyProfile,
+  kindReport,
+  profileGoal,
+  savingsReport,
+} from './fixtures/profile.js'
 
 const TODAY = '2026-11-19'
 
@@ -134,8 +140,21 @@ describe('monthly averages', () => {
     })
     // With no essentials picked, all spending counts, uncategorized included.
     expect(essentialSpending(categories, totals[0]!, null)).toBe(251_000)
-    // An income category picked as essential is not spending.
-    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(0)
+    // Picks that are no longer expense categories (income, or deleted) are ignored,
+    // and none left means all spending, as if nothing had been picked.
+    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(251_000)
+    // A partly stale pick keeps the categories that still exist.
+    expect(essentialSpending(categories, totals[0]!, ['rent', 'gone'])).toBe(200_000)
+  })
+
+  it('reads take-home pay as unknown when no income was categorized', () => {
+    const noPay = [[{ categoryId: 'rent', amountCents: 200_000, count: 1 }]]
+    expect(averageMonths(categories, noPay, null)).toEqual({
+      months: 1,
+      incomeCents: null,
+      spendingCents: 200_000,
+      essentialSpendingCents: 200_000,
+    })
   })
 
   it('knows nothing without a whole month', () => {
@@ -232,7 +251,7 @@ describe('profileDigest', () => {
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19.',
       'Emergency fund: savings cover 2.6 months of essentials ($3,000 a month); target 6 months ($18,000), $10,000 to go, reached around July 2028 at the recent pace.',
-      'Savings rate: about 10% of pay ($500 of $5,200 a month: transfers to savings $500).',
+      'Savings rate seen at the bank: about 10% of take-home pay ($500 of $5,200 a month: transfers to savings $500). Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.',
       'Goals: Japan trip 40% ($3,000 to go by Jun 1, on track).',
       'The owner says: I am saving for a sailboat.',
     ])
@@ -309,7 +328,84 @@ describe('profileDigest', () => {
       'Typical month (last 1 whole month): $5,000 take-home pay in, $3,000 spent.',
       'Saved and invested: $3,000 (savings $3,000), down $200 since Nov 1.',
       'Emergency fund: savings cover 1 month of essentials ($3,000 a month); target 1 month ($3,000), met.',
-      'Goals: Bike 5% ($950 to go); Car 20% ($800 to go by Mar 1, behind pace).',
+      // The dated goal comes first: it is the nearer one.
+      'Goals: Car 20% ($800 to go by Mar 1, behind pace); Bike 5% ($950 to go).',
     ])
+  })
+
+  it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
+    const profile = emptyProfile({
+      pay: { cadence: 'month', source: 'pay_period', typicalPayCents: null, nextPayday: null },
+      monthly: {
+        months: 2,
+        incomeCents: null,
+        spendingCents: 300_000,
+        essentialSpendingCents: 300_000,
+      },
+      savings: savingsReport([kindReport('savings', 300_000)], { historyStartsOn: null }),
+      emergencyFund: null,
+    })
+    const digest = profileDigest(profile, dollars)
+    expect(digest).toContain('Typical month (last 2 whole months): $3,000 spent.')
+    expect(digest).not.toMatch(/\$0 take-home/)
+    expect(digest.split('\n').at(-1)).toBe(
+      'Not known yet: take-home pay, emergency fund, savings rate.',
+    )
+  })
+
+  describe('goals', () => {
+    /** Goals due a month apart from January, each with a name this long. */
+    const dueMonthly = (count: number, name = (n: number) => `Goal ${n}`) =>
+      Array.from({ length: count }, (_, i) =>
+        profileGoal({
+          id: `g${i}`,
+          name: name(i + 1),
+          targetDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-01`,
+        }),
+      )
+    const goalsLine = (goals: ReturnType<typeof profileGoal>[]) =>
+      profileDigest(emptyProfile({ goals }), dollars)
+        .split('\n')
+        .find((line) => line.startsWith('Goals:'))
+
+    it('names every goal up to the cap', () => {
+      expect(DIGEST_GOALS).toBe(5)
+      expect(goalsLine(dueMonthly(5))).toBe(
+        'Goals: Goal 1 40% ($3,000 to go by Jan 1); Goal 2 40% ($3,000 to go by Feb 1); ' +
+          'Goal 3 40% ($3,000 to go by Mar 1); Goal 4 40% ($3,000 to go by Apr 1); ' +
+          'Goal 5 40% ($3,000 to go by May 1).',
+      )
+    })
+
+    it('names the nearest five past the cap and counts the rest', () => {
+      // Listed latest first, to show the digest picks by date, not by order given.
+      const line = goalsLine(dueMonthly(6).reverse())
+      expect(line).toMatch(/^Goals: Goal 1 .*Goal 5 40% \(\$3,000 to go by May 1\); and 1 more\.$/)
+      expect(line).not.toContain('Goal 6')
+    })
+
+    it('stays under 2,000 characters however many long-named goals there are', () => {
+      const goals = dueMonthly(40, (n) => `${'A very long goal name '.repeat(3)}${n}`)
+      const digest = profileDigest(emptyProfile({ goals }), dollars)
+      expect(digest).toContain('; and 35 more.')
+      expect(digest.length).toBeLessThan(2000)
+    })
+
+    it('puts open goals before reached ones, and dated before undated', () => {
+      const order = nearestGoals([
+        profileGoal({ id: 'reached', targetDate: '2026-12-01', status: 'reached' }),
+        profileGoal({ id: 'undated' }),
+        profileGoal({ id: 'later', targetDate: '2027-06-01' }),
+        profileGoal({ id: 'past', targetDate: '2026-10-01', status: 'past_due' }),
+        profileGoal({ id: 'also undated' }),
+      ])
+      expect(order.map((goal) => goal.id)).toEqual([
+        'past',
+        'later',
+        'undated',
+        'also undated',
+        'reached',
+      ])
+    })
   })
 })

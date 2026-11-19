@@ -1,21 +1,23 @@
 /**
- * Savings and investments: the one place Leeway works out what the owner has
- * saved and invested, how it moved, and what went into it. The financial
- * profile (profile/) builds on this report, and everything that shows or
- * speaks of savings reads it there, so no savings figure is worked out twice.
+ * Savings and investments: where Leeway works out what the owner has saved
+ * and invested, how it moved, and what went into it. Two reads share the same
+ * rules: the full report, which the financial profile (profile/) builds on,
+ * and a glance (this month only) for the check-in, which runs on every
+ * dashboard load and so reads only the history a month's change needs.
  *
  * How the parts fit:
  * - Accounts come from the bank or are added by hand. accountKinds.ts says
  *   what kind each is; the savings kinds are savings, retirement and
- *   investment, unless the owner picked another kind for an account.
+ *   investment, unless the owner picked another kind for an account. The
+ *   caller passes the counted (not hidden) accounts it already listed.
  * - Balance history is one balance per account per day, written by a database
  *   trigger whenever a balance changes (sync, webhook or hand edit), dated by
  *   the owner's time zone. history.ts turns it into changes and a total over
  *   time. History starts the day Leeway first saw an account; nothing earlier
  *   is invented.
- * - Contributions are transfers the bank labeled as going to savings or
- *   investments (contributions.ts). What cannot be seen is left out, not
- *   guessed.
+ * - Contributions are net transfers, in the owner's currency, that the bank
+ *   labeled as going to or coming back from savings or investments
+ *   (contributions.ts). What cannot be seen is left out, not guessed.
  * - Only accounts in the owner's currency with a known balance are added up;
  *   the rest are listed and labeled as not counted.
  */
@@ -27,20 +29,19 @@ import type { Account } from '../accounts.js'
 import type { Settings } from '../settings.js'
 import { bankContributions, type BankContributions } from './contributions.js'
 import {
+  baseDay,
+  changeOver,
   changesOf,
   combineAll,
+  combineChanges,
   totalSeries,
+  windowStart,
   type BalancePoint,
   type ChangeWindow,
   type Changes,
   type CombinedChange,
 } from './history.js'
-import {
-  balanceHistory,
-  countedAccounts,
-  firstTransactionDate,
-  transferCandidates,
-} from './store.js'
+import { balanceHistory, firstTransactionDate, transferCandidates } from './store.js'
 
 /** Why an account is listed but not added into the totals. */
 export type NotCountedReason = 'no_balance' | 'other_currency'
@@ -49,7 +50,6 @@ export interface SavingsAccount {
   id: string
   name: string
   institutionName: string | null
-  mask: string | null
   subtype: string | null
   manual: boolean
   kind: SavingsKind
@@ -77,7 +77,7 @@ export interface SavingsKindReport {
 }
 
 export interface SavingsReport {
-  /** Whether any account counts as savings; the page and card hide without one. */
+  /** Whether any account counts as savings; with none, there is nothing to report. */
   hasSavings: boolean
   currency: string
   totalCents: number
@@ -112,7 +112,6 @@ function toSavingsAccount(
     id: account.id,
     name: account.name,
     institutionName: account.institutionName,
-    mask: account.mask,
     subtype: account.subtype,
     manual: account.manual,
     kind: account.kind,
@@ -158,56 +157,139 @@ function kindReport(
     kind,
     label: KIND_INFO[kind].label,
     totalCents: totalOf(accounts),
-    changes: combineAll(counted.map((a) => a.changes)),
+    changes: combineAll(
+      counted.map((a) => a.changes),
+      today,
+    ),
     history: seriesOf(history, accounts, today).points,
     accounts,
   }
 }
 
-/** The whole savings picture as of today. */
+/** A savings account, with the kind that makes it one. */
+type SavingsKindAccount = Account & { kind: SavingsKind }
+
+/**
+ * The savings accounts among the counted ones, and the everyday accounts
+ * contributions are read from: only those outside savings, so a transfer is
+ * never counted from both ends.
+ */
+function splitAccounts(accounts: Account[]) {
+  return {
+    savings: accounts.filter((a): a is SavingsKindAccount => isSavingsKind(a.kind)),
+    everydayIds: accounts.filter((a) => !isSavingsKind(a.kind)).map((a) => a.id),
+  }
+}
+
+/** Contributions over the last year, read from the everyday accounts. */
+async function readContributions(
+  db: Db,
+  everydayIds: string[],
+  currency: string,
+  today: IsoDate,
+): Promise<BankContributions | null> {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const candidates = await transferCandidates(db, everydayIds, currency, today)
+  const firstTransaction = await firstTransactionDate(db, everydayIds)
+  return bankContributions(candidates, firstTransaction, today)
+}
+
+/** What the cash in savings accounts adds up to, or null without any savings account. */
+export function cashSaved(report: Pick<SavingsReport, 'kinds'>): number | null {
+  return report.kinds.find((k) => k.kind === 'savings')?.totalCents ?? null
+}
+
+/**
+ * The whole savings picture as of today. `accounts` are the counted (not
+ * hidden) accounts, as listAccounts(db, false) gives them.
+ */
 export async function getSavingsReport(
   db: Db,
   settings: Pick<Settings, 'currency'>,
   today: IsoDate,
+  accounts: Account[],
 ): Promise<SavingsReport> {
-  const all = await countedAccounts(db)
-  const savings = all.filter((a): a is Account & { kind: SavingsKind } => isSavingsKind(a.kind))
-  // Contributions are read from the sending side only: accounts outside savings.
-  const everyday = all.filter((a) => !isSavingsKind(a.kind)).map((a) => a.id)
+  const { savings, everydayIds } = splitAccounts(accounts)
   // One at a time: db may be a transaction's client, which runs one query at once.
   const history = await balanceHistory(
     db,
     savings.map((a) => a.id),
     today,
   )
-  const candidates = await transferCandidates(db, everyday, today)
-  const firstTransaction = await firstTransactionDate(db, everyday)
+  const contributions = await readContributions(db, everydayIds, settings.currency, today)
 
-  const accounts = savings.map((a) =>
+  const shown = savings.map((a) =>
     toSavingsAccount(a, settings.currency, history.get(a.id)!, today),
   )
-  const counted = accounts.filter((a) => !a.notCounted)
+  const counted = shown.filter((a) => !a.notCounted)
   // Today's point is each account's current balance, so each line ends where the totals stand.
   const countedHistory = new Map(
     counted.map((a) => [a.id, [...history.get(a.id)!, { day: today, cents: a.balanceCents! }]]),
   )
-  const whole = seriesOf(countedHistory, accounts, today)
+  const whole = seriesOf(countedHistory, shown, today)
 
   return {
-    hasSavings: accounts.length > 0,
+    hasSavings: shown.length > 0,
     currency: settings.currency,
-    totalCents: totalOf(accounts),
-    changes: combineAll(counted.map((a) => a.changes)),
+    totalCents: totalOf(shown),
+    changes: combineAll(
+      counted.map((a) => a.changes),
+      today,
+    ),
     historyStartsOn: whole.startsOn,
     history: whole.points,
     kinds: SAVINGS_KINDS.map((kind) =>
       kindReport(
         kind,
-        accounts.filter((a) => a.kind === kind),
+        shown.filter((a) => a.kind === kind),
         countedHistory,
         today,
       ),
     ).filter((report) => report.accounts.length > 0),
-    contributions: bankContributions(candidates, firstTransaction, today),
+    contributions,
+  }
+}
+
+/** Savings this month at a glance: what the check-in shows, and no more. */
+export interface SavingsGlance {
+  hasSavings: boolean
+  totalCents: number
+  /** Cash in savings accounts, or null without any savings account. */
+  cashCents: number | null
+  /** The change this month, combined as the full report combines it. */
+  month: CombinedChange | null
+  contributions: BankContributions | null
+}
+
+/**
+ * The glance: the same figures the full report gives for this month, read
+ * with only each account's history from the close of last month on.
+ */
+export async function getSavingsGlance(
+  db: Db,
+  settings: Pick<Settings, 'currency'>,
+  today: IsoDate,
+  accounts: Account[],
+): Promise<SavingsGlance> {
+  const { savings, everydayIds } = splitAccounts(accounts)
+  const counted = savings.filter((a) => !notCountedReason(a, settings.currency))
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const history = await balanceHistory(
+    db,
+    counted.map((a) => a.id),
+    today,
+    baseDay('month', today),
+  )
+  const contributions = await readContributions(db, everydayIds, settings.currency, today)
+
+  const months = counted.map((a) => changeOver('month', history.get(a.id)!, a.balanceCents!, today))
+  const sum = (list: Account[]) => list.reduce((total, a) => total + a.balanceCents!, 0)
+  const cash = counted.filter((a) => a.kind === 'savings')
+  return {
+    hasSavings: savings.length > 0,
+    totalCents: sum(counted),
+    cashCents: savings.some((a) => a.kind === 'savings') ? sum(cash) : null,
+    month: combineChanges(months, windowStart('month', today)),
+    contributions,
   }
 }

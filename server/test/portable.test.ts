@@ -18,6 +18,21 @@ beforeEach(async () => {
   await resetData(ctx.db)
 })
 
+/** An expense category with nothing but a name. */
+const plainCategory = (name: string) =>
+  createCategory(ctx.db, categoryInputSchema.parse({ name, providerCategories: [] }))
+
+/** Picks the essential spending categories, by id. */
+async function pickEssentials(ids: string[] | null) {
+  const settings = await getSettings(ctx.db)
+  await saveSettings(
+    ctx.db,
+    mergeSettings(settings, { savingsPlan: { essentialCategoryIds: ids } }),
+  )
+}
+
+const essentialIds = async () => (await getSettings(ctx.db)).savingsPlan.essentialCategoryIds
+
 async function seed() {
   const coffee = await createCategory(
     ctx.db,
@@ -44,6 +59,7 @@ async function seed() {
     ctx.db,
     mergeSettings(await getSettings(ctx.db), { appearance: { theme: 'neon' } }),
   )
+  return { coffee }
 }
 
 describe('config export and import', () => {
@@ -78,5 +94,65 @@ describe('config export and import', () => {
     await expect(importConfig(ctx.db, file, 'replace')).rejects.toThrow(/amount/i)
     expect((await listCategories(ctx.db)).map((c) => c.name)).toEqual(['Coffee'])
     expect(await listRules(ctx.db)).toHaveLength(1)
+  })
+
+  describe('essential categories', () => {
+    it('go by name, so a pick survives a move to an install with other ids', async () => {
+      const { coffee } = await seed()
+      const rent = await plainCategory('Rent')
+      await pickEssentials([coffee.id, rent.id])
+      const exported = await exportConfig(ctx.db)
+      expect(exported.essentialCategories).toEqual(['Coffee', 'Rent'])
+      // This install's ids stay out of the file.
+      expect(JSON.stringify(exported)).not.toContain(coffee.id)
+      const file = portableConfigSchema.parse(JSON.parse(JSON.stringify(exported)))
+
+      await resetData(ctx.db)
+      await importConfig(ctx.db, file, 'merge')
+      const byName = new Map((await listCategories(ctx.db)).map((c) => [c.name, c.id]))
+      expect(await essentialIds()).toEqual([byName.get('Coffee'), byName.get('Rent')])
+    })
+
+    it('export only categories that still exist, and none when nothing current is picked', async () => {
+      const { coffee } = await seed()
+      // A pick stored before deletes kept it tidy, pointing at a category that is gone.
+      await pickEssentials([coffee.id, '00000000-0000-4000-8000-000000000000'])
+      expect((await exportConfig(ctx.db)).essentialCategories).toEqual(['Coffee'])
+      await pickEssentials(['00000000-0000-4000-8000-000000000000'])
+      expect((await exportConfig(ctx.db)).essentialCategories).toBeNull()
+    })
+
+    it('are set afresh by a replace, since the old ids go with the old categories', async () => {
+      const { coffee } = await seed()
+      await pickEssentials([coffee.id])
+      const base = { app: 'leeway', version: 1, categories: [{ name: 'Tea' }, { name: 'Rent' }] }
+
+      await importConfig(ctx.db, portableConfigSchema.parse(base), 'replace')
+      // The file did not say, and the old pick is gone: all spending counts again.
+      expect(await essentialIds()).toBeNull()
+
+      const picked = { ...base, essentialCategories: ['rent', 'Not in the file'] }
+      await importConfig(ctx.db, portableConfigSchema.parse(picked), 'replace')
+      const rent = (await listCategories(ctx.db)).find((c) => c.name === 'Rent')!
+      // Names match whatever their case; one that names no category is skipped.
+      expect(await essentialIds()).toEqual([rent.id])
+    })
+
+    it('stay as they are on a merge of a file that does not mention them', async () => {
+      const { coffee } = await seed()
+      await pickEssentials([coffee.id])
+      const file = portableConfigSchema.parse({ app: 'leeway', version: 1 })
+      await importConfig(ctx.db, file, 'merge')
+      expect(await essentialIds()).toEqual([coffee.id])
+      // Ids written into a file's settings belong to another install and are ignored.
+      const withIds = portableConfigSchema.parse({
+        app: 'leeway',
+        version: 1,
+        settings: { savingsPlan: { essentialCategoryIds: [crypto.randomUUID()] } },
+        essentialCategories: null,
+      })
+      await importConfig(ctx.db, withIds, 'merge')
+      expect(await essentialIds()).toBeNull()
+    })
   })
 })

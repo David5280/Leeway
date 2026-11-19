@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   bankContributions,
   perMonth,
+  savingsTransferDestination,
   type TransferCandidate,
 } from '../src/domain/savings/contributions.js'
 import {
   balanceOn,
+  baseDay,
   changeOver,
   changesOf,
+  combineAll,
   combineChanges,
   totalSeries,
   windowStart,
@@ -20,6 +23,15 @@ describe('windowStart', () => {
     expect(windowStart('month', TODAY)).toBe('2026-11-01')
     expect(windowStart('days30', TODAY)).toBe('2026-10-20')
     expect(windowStart('year', TODAY)).toBe('2025-11-19')
+  })
+})
+
+describe('baseDay', () => {
+  it('measures this month from the close of the day before the 1st, the others from their first day', () => {
+    expect(baseDay('month', TODAY)).toBe('2026-10-31')
+    expect(baseDay('month', '2026-01-05')).toBe('2025-12-31')
+    expect(baseDay('days30', TODAY)).toBe('2026-10-20')
+    expect(baseDay('year', TODAY)).toBe('2025-11-19')
   })
 })
 
@@ -65,6 +77,18 @@ describe('changeOver', () => {
     })
   })
 
+  it('counts a balance change on the 1st as this month’s', () => {
+    // A paycheck moved to savings on the 1st: the month starts before it.
+    const paydayFirst = [
+      { day: '2026-10-20', cents: 1000 },
+      { day: '2026-11-01', cents: 3000 },
+    ]
+    expect(changeOver('month', paydayFirst, 3500, TODAY)).toEqual({
+      changeCents: 2500,
+      since: '2026-11-01',
+    })
+  })
+
   it('reports a fall as a negative change', () => {
     expect(changeOver('days30', points, 80000, TODAY)?.changeCents).toBe(-10000)
   })
@@ -102,9 +126,57 @@ describe('combineChanges', () => {
     ).toEqual({ changeCents: 70, since: '2026-11-02', accountsLeftOut: 1 })
   })
 
+  it('adds only changes from the window’s first day, leaving out accounts measured from later', () => {
+    const changes = [
+      { changeCents: 100, since: '2026-11-01' },
+      { changeCents: 50, since: '2026-11-10' },
+      null,
+    ]
+    expect(combineChanges(changes, '2026-11-01')).toEqual({
+      changeCents: 100,
+      since: '2026-11-01',
+      accountsLeftOut: 2,
+    })
+  })
+
+  it('falls back to the earliest start when no account reaches the window’s first day', () => {
+    const changes = [
+      { changeCents: 50, since: '2026-11-10' },
+      { changeCents: 20, since: '2026-11-05' },
+      { changeCents: 30, since: '2026-11-05' },
+      null,
+    ]
+    // Only the two seen since Nov 5 are added; the one seen from Nov 10 is left out.
+    expect(combineChanges(changes, '2026-11-01')).toEqual({
+      changeCents: 50,
+      since: '2026-11-05',
+      accountsLeftOut: 2,
+    })
+  })
+
   it('is null when no account has a change', () => {
     expect(combineChanges([null, null])).toBeNull()
+    expect(combineChanges([null, null], '2026-11-01')).toBeNull()
     expect(combineChanges([])).toBeNull()
+  })
+})
+
+describe('combineAll', () => {
+  it('combines each window from its own first day, and all history from wherever it starts', () => {
+    const old = changesOf(
+      [
+        { day: '2025-06-01', cents: 1000 },
+        { day: '2026-10-31', cents: 2000 },
+      ],
+      2600,
+      TODAY,
+    )
+    // Seen only since the 10th: this month's fallback is left out beside `old`.
+    const recent = changesOf([{ day: '2026-11-10', cents: 500 }], 700, TODAY)
+    const combined = combineAll([old, recent], TODAY)
+    expect(combined.month).toEqual({ changeCents: 600, since: '2026-11-01', accountsLeftOut: 1 })
+    expect(combined.year).toEqual({ changeCents: 1600, since: '2025-11-19', accountsLeftOut: 1 })
+    expect(combined.all).toEqual({ changeCents: 1800, since: '2026-11-10', accountsLeftOut: 0 })
   })
 })
 
@@ -131,6 +203,21 @@ describe('totalSeries', () => {
       { day: '2026-11-10', cents: 1500 },
       { day: TODAY, cents: 1700 },
     ])
+  })
+})
+
+describe('savingsTransferDestination', () => {
+  it('names where a savings or investment transfer went, either way, and nothing else', () => {
+    expect(savingsTransferDestination('TRANSFER_OUT_SAVINGS')).toBe('cash')
+    expect(savingsTransferDestination('TRANSFER_IN_SAVINGS')).toBe('cash')
+    expect(savingsTransferDestination('TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS')).toBe(
+      'invested',
+    )
+    expect(savingsTransferDestination('TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS')).toBe(
+      'invested',
+    )
+    expect(savingsTransferDestination('TRANSFER_OUT_ACCOUNT_TRANSFER')).toBeNull()
+    expect(savingsTransferDestination(null)).toBeNull()
   })
 })
 
@@ -181,6 +268,32 @@ describe('bankContributions', () => {
     )
     expect(result!.totalCents.cash).toBe(30000)
     expect(result!.monthlyCents).toBeNull()
+  })
+
+  it('nets money moved back out of savings and investments against what went in', () => {
+    const result = bankContributions(
+      [
+        transfer('2026-10-01', 100000, TO_SAVINGS),
+        // A withdrawal lands in checking as money in, labeled as from savings.
+        transfer('2026-10-15', -60000, 'TRANSFER_IN_SAVINGS'),
+        transfer('2026-10-02', 50000, TO_INVESTMENTS),
+        transfer('2026-10-20', -20000, 'TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS'),
+      ],
+      '2024-01-01',
+      TODAY,
+    )
+    expect(result).toMatchObject({
+      totalCents: { cash: 40000, invested: 30000 },
+      monthlyCents: { cash: perMonth(40000, 365), invested: perMonth(30000, 365) },
+      // Only money put in counts as a transfer made.
+      transferCount: 2,
+    })
+  })
+
+  it('finds nothing to report from withdrawals alone', () => {
+    expect(
+      bankContributions([transfer('2026-11-01', -20000, 'TRANSFER_IN_SAVINGS')], null, TODAY),
+    ).toBeNull()
   })
 
   it('subtracts a reversed transfer but never goes below zero', () => {
