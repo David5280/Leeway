@@ -6,7 +6,6 @@ import { centsOfMicros, MICROS_PER_CENT } from '../../../../../server/src/ai/mod
 import { MAX_MONTHLY_CAP_CENTS } from '../../../../../server/src/domain/ai/settings'
 import type { Output } from '../../../api/client'
 import { parseMoney, shortDate } from '../../../lib/format'
-import { money } from '../../../lib/money'
 
 export type AiUsage = Output<'get_ai_usage'>
 export type JobReport = AiUsage['jobs'][number]
@@ -14,11 +13,6 @@ export type ModelChoice = AiUsage['models'][number]
 
 /** The currency Anthropic bills in, whatever the owner's own. */
 export const AI_CURRENCY = 'USD'
-
-/** Dollars and cents as the limit field holds them, for typing over: "$5.00". */
-export function dollars(cents: number, locale: string): string {
-  return money(cents, { currency: AI_CURRENCY, locale }, true)
-}
 
 /**
  * A spend to the cent, rounded up as the limit counts it. A sliver under a

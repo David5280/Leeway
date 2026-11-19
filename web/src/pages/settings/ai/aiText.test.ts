@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { MODEL_CHOICES } from '../../../../../server/src/ai/models'
 import {
   callsText,
-  dollars,
   modelPrices,
   percentUsed,
   readCap,
@@ -16,12 +15,6 @@ import {
 const [haiku, sonnet, opus] = MODEL_CHOICES
 
 describe('money', () => {
-  it('writes the limit for its field in dollars and cents, in the owner style, always in US dollars', () => {
-    expect(dollars(500, 'en-US')).toBe('$5.00')
-    expect(dollars(100_000, 'en-US')).toBe('$1,000.00')
-    expect(dollars(500, 'en-GB')).toBe('US$5.00')
-  })
-
   it('rounds a spend up to the cent, as the limit counts it, and marks a sliver', () => {
     expect(spentCents(0)).toEqual({ cents: 0, under: false })
     expect(spentCents(1)).toEqual({ cents: 1, under: true })

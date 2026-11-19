@@ -1,15 +1,18 @@
 // The monthly AI limit, typed in dollars. A call that could pass it is
-// refused, and the feature falls back to what Leeway does by itself.
+// refused, and the feature falls back to what Leeway does by itself. The
+// field holds a plain amount ("1000.00") beside a "$", never one written in
+// the owner's number style: "1.000,00 $" would not read back as an amount.
 
 import { useId, useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting } from '../../../components/ui'
-import { dollars, readCap, type CapProblem } from './aiText'
+import { typedAmount } from '../../../lib/money'
+import { readCap, type CapProblem } from './aiText'
 import { CapProblemText } from './Dollars'
 
-export function LimitField({ capCents, locale }: { capCents: number; locale: string }) {
+export function LimitField({ capCents }: { capCents: number }) {
   const set = useActionMutation('set_ai_limit')
-  const [text, setText] = useState(() => dollars(capCents, locale))
+  const [text, setText] = useState(() => typedAmount(capCents))
   const [problem, setProblem] = useState<CapProblem | null>(null)
   const hintId = useId()
 
@@ -20,7 +23,7 @@ export function LimitField({ capCents, locale }: { capCents: number; locale: str
     if (!read.ok) return
     set.mutate(
       { monthlyCapCents: read.cents },
-      { onSuccess: (usage) => setText(dollars(usage.monthlyCapCents, locale)) },
+      { onSuccess: (usage) => setText(typedAmount(usage.monthlyCapCents)) },
     )
   }
 
@@ -32,6 +35,10 @@ export function LimitField({ capCents, locale }: { capCents: number; locale: str
         hintId={hintId}
       >
         <div className="row ai-limit">
+          {/* The label already says US dollars, so the sign is for the eye only. */}
+          <span className="ai-limit-unit" aria-hidden="true">
+            $
+          </span>
           <input
             className="input num"
             inputMode="decimal"

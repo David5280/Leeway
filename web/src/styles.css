@@ -1449,13 +1449,17 @@ details.more[open] summary {
   white-space: nowrap;
 }
 
+/* The "$" sits just before the amount, which has room for "1000.00" and no more. */
 .ai-limit {
   flex-wrap: nowrap;
 }
 
-/* Room for "$1,000.00", and no more. */
+.ai-limit-unit {
+  color: var(--muted);
+}
+
 .ai-limit .input {
-  width: 130px;
+  width: 110px;
 }
 
 .ai-job {

@@ -35,7 +35,7 @@ test('without a key it says one is needed, and the choices still save', async ({
       name: /^Claude Haiku/,
     }),
   ).toBeChecked()
-  await expect(limit).toHaveValue('$12.50')
+  await expect(limit).toHaveValue('12.50')
   await expect(section).toContainText('$0.00 of $12.50')
 })
 

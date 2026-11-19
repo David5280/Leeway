@@ -33,7 +33,7 @@ function AiModels({ usage }: { usage: AiUsage }) {
       {usage.alert && <AiSpendAlert alert={usage.alert} />}
       <h3>This month</h3>
       <UsageSummary usage={usage} locale={locale} />
-      <LimitField capCents={usage.monthlyCapCents} locale={locale} />
+      <LimitField capCents={usage.monthlyCapCents} />
       <h3>Models</h3>
       {usage.jobs.map((job) => (
         <ModelPicker key={job.job} job={job} models={usage.models} locale={locale} />

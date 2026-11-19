@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { MODEL_CHOICES } from '../../../../../server/src/ai/models'
 import { ProgressRing } from '../../../components/ProgressRing'
-import { failing, fakeServer, holdRequest, renderSignedIn } from '../../../test/fake'
+import { failing, fakeServer, holdRequest, renderSignedIn, settingsWith } from '../../../test/fake'
 import { AiModelsSection } from '../AiModels'
 import type { AiUsage, JobReport } from './aiText'
 
@@ -262,10 +262,10 @@ describe('Settings > AI models', () => {
 })
 
 describe('the monthly limit', () => {
-  it('shows the limit in dollars and saves a new one in cents', async () => {
+  it('shows the limit as a plain amount and saves a new one in cents', async () => {
     const server = serve()
     renderSignedIn(<AiModelsSection />)
-    expect(await screen.findByDisplayValue('$5.00')).toBe(limitInput())
+    expect(await screen.findByDisplayValue('5.00')).toBe(limitInput())
     await userEvent.clear(limitInput())
     await userEvent.type(limitInput(), '12.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -273,17 +273,42 @@ describe('the monthly limit', () => {
       expect(server.actions('set_ai_limit')).toEqual([{ monthlyCapCents: 1_250 }]),
     )
     expect(await screen.findByText('Limit saved.')).toBeInTheDocument()
-    expect(limitInput()).toHaveValue('$12.50')
+    expect(limitInput()).toHaveValue('12.50')
     expect(total()).toHaveTextContent('$1.06 of $12.50')
     // Typing again clears the note.
     await userEvent.type(limitInput(), '0')
     expect(screen.queryByText('Limit saved.')).not.toBeInTheDocument()
   })
 
+  it.each(['de-DE', 'pt-BR', 'nl-NL'])(
+    'saves the highest limit as it stands for a %s owner, whose amounts read 1.000,00',
+    async (locale) => {
+      const server = serve(usage({ monthlyCapCents: 100_000 }))
+      renderSignedIn(<AiModelsSection />, { settings: settingsWith({ locale, currency: 'EUR' }) })
+      // A plain amount, which reads back the same in any number style.
+      expect(await screen.findByDisplayValue('1000.00')).toBe(limitInput())
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() =>
+        expect(server.actions('set_ai_limit')).toEqual([{ monthlyCapCents: 100_000 }]),
+      )
+      expect(await screen.findByText('Limit saved.')).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(limitInput()).toHaveValue('1000.00')
+    },
+  )
+
+  it('shows a dollar sign beside the amount, for the eye only', async () => {
+    serve()
+    renderSignedIn(<AiModelsSection />)
+    await screen.findByDisplayValue('5.00')
+    const sign = screen.getByText('$', { selector: '.ai-limit-unit' })
+    expect(sign).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('turns away a limit it cannot take, saying why, and sends nothing', async () => {
     const server = serve()
     renderSignedIn(<AiModelsSection />)
-    await screen.findByDisplayValue('$5.00')
+    await screen.findByDisplayValue('5.00')
     await userEvent.clear(limitInput())
     await userEvent.type(limitInput(), '2000')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -298,7 +323,7 @@ describe('the monthly limit', () => {
       { '/api/actions/set_ai_limit': failing('Use $1,000 or less') },
     )
     renderSignedIn(<AiModelsSection />)
-    await screen.findByDisplayValue('$5.00')
+    await screen.findByDisplayValue('5.00')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Use $1,000 or less')).toBeInTheDocument()
   })
