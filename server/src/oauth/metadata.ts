@@ -28,7 +28,7 @@ export function oauthUrls(base: string): OAuthUrls {
   }
 }
 
-const DOCUMENTATION = 'https://github.com/David5280/Leeway#connect-your-ai-assistant'
+const DOCUMENTATION = 'https://github.com/David5280/Leeway#connect-an-ai-assistant'
 
 /** Protected resource metadata for the MCP endpoint (RFC 9728). */
 export function protectedResourceMetadata(urls: OAuthUrls) {
