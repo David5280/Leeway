@@ -22,6 +22,7 @@ import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 import { proxyTrustFunction } from './proxyTrust.js'
 import { registerSecurityHeaders } from './securityHeaders.js'
 import { registerWebhookRoutes } from './webhooks.js'
+import { findWidgetScript, registerWidgetRoutes } from './widget.js'
 
 export const VERSION = '0.1.0'
 /** The largest body any other route takes; the action API allows more for CSV imports. */
@@ -49,6 +50,8 @@ export async function buildApp(
   ctx: AppContext,
   options: {
     webDir?: string | null
+    /** The Scriptable widget script; found in the repository by default, null for none. */
+    widgetScript?: string | null
     logger?: boolean
     /** Fetches apps' client metadata documents; tests pass a fake instead of the network. */
     loadClientDocument?: LoadClientDocument
@@ -109,6 +112,12 @@ export async function buildApp(
   })
   registerActionRoutes(app, ctx, sessionGuard(ctx))
   await registerPaystubRoutes(app, ctx, sessionGuard(ctx))
+  registerWidgetRoutes(
+    app,
+    ctx,
+    sessionGuard(ctx),
+    options.widgetScript === undefined ? findWidgetScript() : options.widgetScript,
+  )
   await registerWebhookRoutes(app, ctx)
 
   allowCrossOrigin(app)

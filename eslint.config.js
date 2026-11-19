@@ -71,6 +71,18 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
+    // The Scriptable widget runs as one plain script with Scriptable's globals.
+    files: ['widget/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: Object.fromEntries(
+        ['args', 'config', 'Keychain', 'Request', 'ListWidget', 'Color', 'Font', 'Alert', 'Script']
+          .map((name) => [name, 'readonly'])
+          .concat([['module', 'writable']]),
+      ),
+    },
+  },
+  {
     files: ['web/public/sw.js'],
     languageOptions: { globals: globals.serviceworker },
   },
@@ -126,6 +138,11 @@ export default tseslint.config(
     // Command-line scripts talk to the person running them.
     files: ['server/src/cli/**', 'server/src/db/migrate-cli.ts'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    // Scriptable runs a single file, so the widget script cannot be split up.
+    files: ['widget/leeway-widget.js'],
+    rules: { 'max-lines': 'off' },
   },
   {
     // Tests read best as one story per file.

@@ -13,6 +13,7 @@ import { LayoutSection } from './Layout'
 import { LookSection } from './Look'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
+import { WidgetSection } from './Widget'
 
 export interface SettingsGroup {
   /** The last part of the group's address: lowercase words joined by hyphens. */
@@ -61,6 +62,12 @@ export const SETTINGS_GROUPS = [
     title: 'AI assistant',
     description: 'Connect Claude or another assistant, manage its keys, and the AI summary.',
     sections: [AgentSection],
+  },
+  {
+    id: 'widget',
+    title: 'Widget',
+    description: 'Your leeway on your iPhone home screen or Mac desktop, through Scriptable.',
+    sections: [WidgetSection],
   },
   {
     id: 'data',
