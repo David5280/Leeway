@@ -54,6 +54,38 @@ describe('Sheet', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
+  it('gives focus to its fallback when what opened it has left the page', async () => {
+    /** A sheet whose button takes away the one that opened it, as filing a row elsewhere does. */
+    function Gone({ fallback }: { fallback?: () => HTMLElement | null }) {
+      const [open, setOpen] = useState(false)
+      const [gone, setGone] = useState(false)
+      return (
+        <>
+          {!gone && <button onClick={() => setOpen(true)}>Open</button>}
+          <h1 tabIndex={-1}>Heading</h1>
+          {open && (
+            <Sheet title="Gone" focusOnClose={fallback} onClose={() => setOpen(false)}>
+              <button onClick={() => setGone(true)}>File elsewhere</button>
+            </Sheet>
+          )}
+        </>
+      )
+    }
+    const { unmount } = render(<Gone fallback={() => screen.getByRole('heading')} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    await userEvent.click(screen.getByRole('button', { name: 'File elsewhere' }))
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('heading', { name: 'Heading' })).toHaveFocus()
+    unmount()
+
+    // With no fallback, closing leaves focus where the browser puts it, and nothing breaks.
+    render(<Gone />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    await userEvent.click(screen.getByRole('button', { name: 'File elsewhere' }))
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('closes from its close button and from a press on the dimmed page', async () => {
     const { onClose } = await openSheet()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))

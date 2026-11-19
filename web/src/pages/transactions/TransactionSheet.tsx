@@ -25,6 +25,7 @@ export function TransactionSheet({
   categories,
   onOpen,
   onClose,
+  focusOnClose,
 }: {
   /** The transaction as the list had it, shown until the fresh copy arrives. */
   initial: Transaction
@@ -32,6 +33,8 @@ export function TransactionSheet({
   /** Opens another transaction in the sheet, like a transfer's other side. */
   onOpen: (tx: Transaction) => void
   onClose: () => void
+  /** Where focus goes on close if the row that opened the sheet left the list. */
+  focusOnClose?: () => HTMLElement | null | undefined
 }) {
   const { settings } = useApp()
   const tx = useTransaction(initial) ?? initial
@@ -62,6 +65,7 @@ export function TransactionSheet({
       subtitle={`${relativeDay(tx.date, today, settings.locale)} · ${tx.accountName}`}
       leading={<CategoryIcon category={category} transfer={moved} size="lg" />}
       focusKey={view}
+      focusOnClose={focusOnClose}
       onClose={onClose}
     >
       {view === 'details' && (

@@ -3,7 +3,7 @@
 // where its category, rule, note and the rest are changed. Adding by hand
 // and importing sit behind the "+" menu, and rules are listed below.
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Category, Output, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
@@ -17,7 +17,7 @@ import { Shell } from '../components/Shell'
 import { ErrorNote, Icon } from '../components/ui'
 import { useApp } from '../lib/app'
 import { byName } from '../lib/sort'
-import { ActivityList } from './transactions/ActivityList'
+import { ActivityList, rowAfter } from './transactions/ActivityList'
 import { AddTransaction } from './transactions/AddTransaction'
 import { FilterBar } from './transactions/FilterBar'
 import { PeriodSpent } from './transactions/PeriodSpent'
@@ -39,6 +39,9 @@ export function Transactions() {
   const { settings } = useApp()
   const navigate = useNavigate()
   const [opened, setOpened] = useState<Transaction | null>(null)
+  // The rows after the one opened, for focus to land on if it leaves the list.
+  const [following, setFollowing] = useState<string[]>([])
+  const heading = useRef<HTMLHeadingElement>(null)
   const [adding, setAdding] = useState(false)
   const [rule, setRule] = useState<RuleDraft | null>(null)
 
@@ -60,7 +63,10 @@ export function Transactions() {
     <Shell>
       <div className="act-page">
         <div className="act-head">
-          <h1>Transactions</h1>
+          {/* Focusable from code only: where focus lands when nothing nearer is left. */}
+          <h1 ref={heading} tabIndex={-1}>
+            Transactions
+          </h1>
           <Menu
             label="Add or import"
             buttonClassName="iconbtn act-add"
@@ -91,7 +97,17 @@ export function Transactions() {
             </div>
           )}
           {list.data && (
-            <ListBody result={list.data} filters={filters} categories={byId} onOpen={setOpened} />
+            <ListBody
+              result={list.data}
+              filters={filters}
+              categories={byId}
+              onOpen={(tx) => {
+                const shown = list.data.transactions
+                const at = shown.findIndex((row) => row.id === tx.id)
+                setFollowing(shown.slice(at + 1).map((row) => row.id))
+                setOpened(tx)
+              }}
+            />
           )}
         </section>
 
@@ -105,6 +121,7 @@ export function Transactions() {
           categories={all}
           onOpen={setOpened}
           onClose={() => setOpened(null)}
+          focusOnClose={() => rowAfter(following, heading.current)}
         />
       )}
       {adding && (

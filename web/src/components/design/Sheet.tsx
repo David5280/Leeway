@@ -2,7 +2,7 @@
 // on a wider screen. It is a proper modal: focus moves into it and cannot
 // leave while it is open, Escape closes it, a swipe down on its handle
 // closes it on a phone (and slides it back when the swipe falls short), and
-// focus goes back to what opened it. Keys are
+// focus goes back to what opened it, or to a fallback when that is gone. Keys are
 // heard on the whole document, so Escape and Tab still work when the
 // element that had focus was taken away (a view inside the sheet changed).
 
@@ -83,6 +83,7 @@ export function Sheet({
   leading,
   trailing,
   focusKey,
+  focusOnClose,
   onClose,
   children,
 }: {
@@ -99,12 +100,22 @@ export function Sheet({
    * the sheet, so it is never left on an element that is gone.
    */
   focusKey?: string
+  /**
+   * Where focus goes on close when what opened the sheet has left the page
+   * meanwhile, like a list row filed out of the list from inside the sheet.
+   */
+  focusOnClose?: () => HTMLElement | null | undefined
   onClose: () => void
   children: ReactNode
 }) {
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const swipe = useSwipeDown(onClose)
+  // The latest fallback, read on close, after the sheet's last render.
+  const fallback = useRef(focusOnClose)
+  useEffect(() => {
+    fallback.current = focusOnClose
+  })
 
   // Focus moves in on open and back to what opened the sheet on close; the
   // page behind does not scroll while it is open.
@@ -114,7 +125,8 @@ export function Sheet({
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = overflow
-      opener?.focus()
+      if (opener?.isConnected) opener.focus()
+      else fallback.current?.()?.focus()
     }
   }, [])
 

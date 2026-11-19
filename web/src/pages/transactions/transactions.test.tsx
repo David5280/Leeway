@@ -120,6 +120,31 @@ describe('Transactions list', () => {
     expect(figure).toHaveTextContent('Spent this month$240$40 more than this point last month')
   })
 
+  it.each([
+    ['the next row', costco, /^Sweet Cow/i],
+    ['the heading, with no row after it', payroll, null],
+  ])('gives focus to %s when the opened row leaves the list', async (_where, opened, next) => {
+    let rows = [costco, unfiled, payroll]
+    serve({
+      list_transactions: () => ({ transactions: rows, total: rows.length }),
+      update_transaction: (input) => ({ ...opened, ...input }),
+    })
+    renderTransactions()
+    const user = userEvent.setup()
+    const row = await screen.findByRole('button', { name: new RegExp(`^${opened.displayName},`) })
+    await user.click(row)
+    // Left out of totals here, it drops out of the list behind the sheet.
+    rows = rows.filter((tx) => tx !== opened)
+    await user.click(screen.getByRole('switch', { name: 'Leave out of totals' }))
+    await waitFor(() => expect(row).not.toBeInTheDocument())
+    await user.keyboard('{Escape}')
+    expect(
+      next
+        ? screen.getByRole('button', { name: next })
+        : screen.getByRole('heading', { name: 'Transactions', level: 1 }),
+    ).toHaveFocus()
+  })
+
   it('asks for everything in the period, including transactions left out of totals', async () => {
     const server = serve()
     renderTransactions()

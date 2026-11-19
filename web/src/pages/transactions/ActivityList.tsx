@@ -99,6 +99,7 @@ export function ActivityRow({
       <button
         type="button"
         className="act-row"
+        data-id={tx.id}
         aria-label={rowLabel(tx, category, exact(Math.abs(tx.amountCents)))}
         onClick={onOpen}
       >
@@ -115,4 +116,17 @@ export function ActivityRow({
       </button>
     </li>
   )
+}
+
+/**
+ * Where focus goes when the row a sheet was opened from has left the list:
+ * the first of the rows that followed it that is still there, or else the
+ * given heading.
+ */
+export function rowAfter(following: string[], heading: HTMLElement | null): HTMLElement | null {
+  for (const id of following) {
+    const row = document.querySelector<HTMLElement>(`.act-row[data-id="${id}"]`)
+    if (row) return row
+  }
+  return heading
 }
