@@ -2,7 +2,7 @@
 // document reader returns one, and a fake reader that records every file it
 // is given. No test ever sends a file to a real model.
 
-import { ReaderError, type DocumentReader, type ReaderUsage } from '../../src/ai/documents.js'
+import type { DocumentReader, ReaderError, ReaderUsage } from '../../src/ai/documents.js'
 import type { PaystubFile } from '../../src/domain/paystubs/files.js'
 import {
   CURRENT_FIELDS,
