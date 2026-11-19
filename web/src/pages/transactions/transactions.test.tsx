@@ -144,7 +144,8 @@ describe('Transactions list', () => {
     const user = userEvent.setup()
     expect(await screen.findByText('Nothing matches these filters.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
-    expect(screen.getByText('Address: none')).toBeInTheDocument()
+    // Every filter goes, and the range opens to all time.
+    expect(screen.getByText('Address: ?range=all')).toBeInTheDocument()
     await waitFor(() => expect(lastList(server)).toEqual({ includeExcluded: true, limit: 100 }))
   })
 
@@ -176,7 +177,7 @@ describe('Transactions filters', () => {
     await waitFor(() => expect(lastList(server)).toMatchObject({ search: 'costco', limit: 100 }))
   })
 
-  it('picks a date range from its chip', async () => {
+  it('picks a date range from its chip, and keeps it in the address', async () => {
     const server = serve()
     renderTransactions()
     const user = userEvent.setup()
@@ -184,7 +185,27 @@ describe('Transactions filters', () => {
     await user.click(screen.getByRole('button', { name: 'Dates: This period' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Last 30 days' }))
     expect(screen.getByRole('button', { name: 'Dates: Last 30 days' })).toBeInTheDocument()
+    expect(screen.getByText('Address: ?range=30')).toBeInTheDocument()
     await waitFor(() => expect(lastList(server)).toMatchObject({ start: '2026-10-18' }))
+    // Back to the default, the address says nothing of it.
+    await user.click(screen.getByRole('button', { name: 'Dates: Last 30 days' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'This period' }))
+    expect(screen.getByText('Address: none')).toBeInTheDocument()
+  })
+
+  it('opens on the date range the address names', async () => {
+    const server = serve()
+    renderTransactions('/transactions?range=all')
+    await screen.findByText('Costco')
+    expect(screen.getByRole('button', { name: 'Dates: All' })).toBeInTheDocument()
+    expect(lastList(server)?.start).toBeUndefined()
+  })
+
+  it('reads a range it does not know as this period', async () => {
+    serve()
+    renderTransactions('/transactions?range=forever')
+    await screen.findByText('Costco')
+    expect(screen.getByRole('button', { name: 'Dates: This period' })).toBeInTheDocument()
   })
 
   it('filters by a category picked A to Z, and keeps it in the address', async () => {

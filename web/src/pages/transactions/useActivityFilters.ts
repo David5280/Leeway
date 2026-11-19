@@ -1,12 +1,13 @@
 // What the transaction list is narrowed to: a search, a date range, a
-// category and an account. Category and account live in the address
-// (?category=, ?account=) so other screens can link straight to them.
+// category and an account. The range, category and account live in the
+// address (?range=, ?category=, ?account=), so other screens can link
+// straight to them and a reload or Back keeps them.
 
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Input } from '../../api/client'
 import { useDebounced } from '../../lib/useDebounced'
-import { rangeStart, type Range } from './filters'
+import { parseRange, rangeParam, rangeStart, type Range } from './filters'
 
 /** How many transactions load at first, and how many more each "Show more" adds. */
 export const PAGE = 100
@@ -16,7 +17,7 @@ export const MAX_SHOWN = 500
 export const UNCATEGORIZED = 'uncategorized'
 
 /** The filters kept in the address. */
-type AddressFilter = 'category' | 'account'
+type AddressFilter = 'category' | 'account' | 'range'
 
 /**
  * Filters kept in the address, replaced in place so Back leaves the screen.
@@ -37,7 +38,12 @@ function useAddressFilters() {
       },
       { replace: true },
     )
-  return { category: params.get('category'), account: params.get('account'), set }
+  return {
+    category: params.get('category'),
+    account: params.get('account'),
+    range: parseRange(params.get('range')),
+    set,
+  }
 }
 
 export function useActivityFilters({
@@ -49,8 +55,8 @@ export function useActivityFilters({
   timeZone: string
 }) {
   const [search, setSearchText] = useState('')
-  const [range, setRangeValue] = useState<Range>('period')
   const address = useAddressFilters()
+  const range = address.range
   const categoryId = address.category
   const accountId = address.account
   const [limit, setLimit] = useState(PAGE)
@@ -86,14 +92,13 @@ export function useActivityFilters({
     /** Whether anything narrows the list, so an empty list says "Nothing matches". */
     filtered: Boolean(query || categoryId || accountId || range !== 'all'),
     setSearch: restart(setSearchText),
-    setRange: restart(setRangeValue),
+    setRange: restart((value: Range) => address.set({ range: rangeParam(value) })),
     setCategoryId: restart((category: string | null) => address.set({ category })),
     setAccountId: restart((account: string | null) => address.set({ account })),
     showMore: () => setLimit((shown) => Math.min(MAX_SHOWN, shown + PAGE)),
     clear: () => {
       setSearchText('')
-      setRangeValue('all')
-      address.set({ category: null, account: null })
+      address.set({ category: null, account: null, range: rangeParam('all') })
       setLimit(PAGE)
     },
   }
