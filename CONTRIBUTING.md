@@ -192,9 +192,10 @@ one), breaks a word across lines, scrolls the page sideways, comes to rest
 under a fixed bar, or shows under the status bar, notch or home indicator
 with nothing opaque over it. It also fails on any control a finger's 44px tap
 can miss: drawn smaller with no label or invisible hit area to make up the
-size, covered by a neighbour, or placed where no scrolling reaches it. Links
-inside a sentence are the one exception. A few screens run again in Neon's
-wider font at compact density. A failure names each element and what is
+size, covered by a neighbour or by another control's hit area, or placed
+where no scrolling reaches it. Links that share their line with a sentence's
+other words are the one exception. Every screen runs again in Neon's wider
+font at compact density. A failure names each element and what is
 wrong with it.
 
 The checks live in `e2e/layout/`, one file per check, and run inside the

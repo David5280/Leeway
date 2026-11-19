@@ -414,22 +414,19 @@ button.list-row:hover {
 }
 
 /* On a touch screen each dot keeps its 28px look but takes a 44px tap: an
-   invisible hit area centred on it. The dots move 16px apart so the hit areas
-   meet without overlapping, and the 40px bar sits in the 44px header row, so
-   they reach nothing else. */
+   invisible hit area centred on it, 45px across so that lining it up to
+   whole pixels never leaves it short (see the taps block at the end). The
+   dots move 17px apart so the hit areas meet without overlapping, and the
+   bar sits in the 44px header row, so they reach nothing else. */
 @media (pointer: coarse) {
   .theme-dots {
-    gap: 16px;
+    gap: 17px;
   }
 
   .theme-dot::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 44px;
-    height: 44px;
-    transform: translate(-50%, -50%);
+    inset: calc(50% - 22.5px);
   }
 }
 
@@ -2083,16 +2080,21 @@ details.more[open] summary {
     position: relative;
   }
 
+  /* Swatches sit 13px apart, so their 45px hit areas meet without overlapping. */
+  .swatches {
+    gap: 13px;
+  }
+
+  /* An invisible hit area, never smaller than the control's own box. It is
+     45px across, half a pixel more each side than a finger needs, because
+     a control placed between whole pixels (one on a line of text, say) is
+     hit-tested lined up to them, which can take that half pixel away. */
   .linkbtn::before,
   .swatch::before,
   a.cat-name::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: max(100%, 44px);
-    height: max(100%, 44px);
-    transform: translate(-50%, -50%);
+    inset: min(0px, calc(50% - 22.5px));
   }
 
   /* A small link on a line of its own takes its 44px as a real box, so links
