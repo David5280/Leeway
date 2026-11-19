@@ -10,7 +10,7 @@
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
-import { SCREENS, SETTINGS_GROUPS } from './guarded-screens'
+import { SCREENS, SETTINGS_GROUPS, type Screen } from './guarded-screens'
 import {
   describeProblems,
   findProblems,
@@ -19,7 +19,7 @@ import {
   type LayoutProblem,
 } from './layout'
 import { OWNER, SETUP_CODE } from './owner'
-import { GUARDED_PHONES, simulateInsets, type Insets } from './phone'
+import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 /** Waits until the screen has its data, fonts and final layout. */
@@ -86,6 +86,17 @@ async function load(page: Page, path: string, insets: Insets): Promise<void> {
   await settle(page)
 }
 
+/** The screens guarded on this phone. */
+const screensFor = (phone: GuardedPhone) => SCREENS.filter((screen) => screen.on?.(phone) ?? true)
+
+/** Loads a screen at its address on this phone, with any form it opens open. */
+async function open(page: Page, screen: Screen, phone: GuardedPhone, path: string): Promise<void> {
+  await load(page, path, phone.insets)
+  if (!screen.then) return
+  await screen.then(page)
+  await settle(page)
+}
+
 for (const phone of GUARDED_PHONES) {
   test.describe(`on ${phone.name}`, () => {
     test.use(phone.screen)
@@ -101,13 +112,9 @@ for (const phone of GUARDED_PHONES) {
         Object.assign(seeded, emptySeed())
       })
 
-      for (const screen of SCREENS.filter((one) => one.on?.(phone) ?? true)) {
+      for (const screen of screensFor(phone)) {
         test(`${screen.name} lays out cleanly`, async ({ page, request }) => {
-          await load(page, await screen.path(seeded, request), phone.insets)
-          if (screen.then) {
-            await screen.then(page)
-            await settle(page)
-          }
+          await open(page, screen, phone, await screen.path(seeded, request))
           expect(await problemsOn(page)).toEqual([])
         })
       }
@@ -247,17 +254,9 @@ test('every route the app answers has a screen in the guard', () => {
 
 test.describe('in the widest theme, packed tight', () => {
   // Neon's Space Grotesk runs wider than the other themes' fonts, and compact
-  // density takes away padding: together, the likeliest look to crowd a row.
+  // density takes away padding: together, the likeliest look to crowd a row,
+  // so every screen and form runs again in it.
   const phone = GUARDED_PHONES[0]!
-  const NARROW_LOOK = [
-    '/',
-    '/accounts',
-    '/transactions',
-    '/budgets',
-    '/plan',
-    '/plan/goals',
-    '/plan/retirement',
-  ]
   test.use(phone.screen)
 
   const seeded: Seeded = emptySeed()
@@ -269,20 +268,20 @@ test.describe('in the widest theme, packed tight', () => {
     Object.assign(seeded, emptySeed())
   })
 
-  const screens = [...NARROW_LOOK, ...SETTINGS_GROUPS.map((group) => `/settings/${group}`)].map(
-    (path) => ({ name: path, path: () => path }),
-  )
-  screens.push({ name: 'a category page', path: () => `/budgets/${seeded.categories[0]}` })
-
-  for (const screen of screens) {
-    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page }) => {
-      // The look is changed on its way to the page, so the install keeps its own.
-      await page.route('**/api/actions/get_settings', async (route) => {
-        const { result } = await (await route.fetch()).json()
-        const appearance = { ...result.appearance, theme: 'neon', density: 'compact' }
-        await route.fulfill({ json: { result: { ...result, appearance } } })
-      })
-      await load(page, screen.path(), phone.insets)
+  for (const screen of screensFor(phone)) {
+    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request }) => {
+      // The look is changed on its way to the page, so the install keeps its
+      // own. Saving any setting answers with them all, so that answer too.
+      for (const action of ['get_settings', 'update_settings']) {
+        await page.route(`**/api/actions/${action}`, async (route) => {
+          const response = await route.fetch()
+          if (!response.ok()) return route.fulfill({ response })
+          const { result } = await response.json()
+          const appearance = { ...result.appearance, theme: 'neon', density: 'compact' }
+          await route.fulfill({ response, json: { result: { ...result, appearance } } })
+        })
+      }
+      await open(page, screen, phone, await screen.path(seeded, request))
       await expect(page.locator('html')).toHaveCSS('--pad', '16px')
       expect(await problemsOn(page)).toEqual([])
     })
