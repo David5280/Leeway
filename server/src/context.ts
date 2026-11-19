@@ -6,6 +6,7 @@ import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
 import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
+import type { PushSender } from './push/sender.js'
 
 /**
  * Everything an action needs to do its work. The web app and the MCP endpoint
@@ -23,5 +24,7 @@ export interface AppContext {
   paystubs: PaystubReader | null
   /** Null until RESEND_API_KEY and MAIL_FROM are set; the weekly email is then unavailable. */
   mailer: EmailSender | null
+  /** Sends Web Push to the owner's devices. Always there: push needs no configuration. */
+  push: PushSender
   now: () => Date
 }

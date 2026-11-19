@@ -1,5 +1,5 @@
 // Starts Leeway: migrates the database, serves the app, and on timers syncs
-// banks and sends the weekly email.
+// banks, sends notifications and sends the weekly email.
 
 import { AnthropicSummaryWriter } from './ai/anthropic.js'
 import { AnthropicDocumentReader } from './ai/anthropicDocuments.js'
@@ -10,6 +10,7 @@ import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
+import { NOTIFIER_MINUTES, runNotifier } from './domain/notifications/notifier.js'
 import { getOwner } from './domain/owner.js'
 import { PaystubReader } from './domain/paystubs/reader.js'
 import { getSettings } from './domain/settings.js'
@@ -23,6 +24,9 @@ import { repeatEvery } from './lib/repeat.js'
 import { generateSetupCode, setupReminder, type SetupCode } from './lib/setupCode.js'
 import { MINUTE_MS } from './lib/time.js'
 import { ResendSender } from './mail/resend.js'
+import { loadVapidKeys } from './push/keys.js'
+import { WebPushSender } from './push/sender.js'
+import { vapidSubject } from './push/vapid.js'
 import { configWarnings, explainConfigError } from './startupMessages.js'
 
 /** The configuration, or a plain explanation in the log and an exit when a setting is wrong. */
@@ -46,6 +50,8 @@ await migrate(db)
 // One-time data upgrades run after the schema is current and before serving.
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
+// The push key pair is made on first start and kept encrypted; nothing to configure.
+await loadVapidKeys(db, config.encryptionKey)
 
 const ctx: AppContext = {
   db,
@@ -56,6 +62,10 @@ const ctx: AppContext = {
     ? new PaystubReader(new AnthropicDocumentReader(config.anthropic))
     : null,
   mailer: config.mail ? new ResendSender(config.mail) : null,
+  push: new WebPushSender({
+    keys: () => loadVapidKeys(db, config.encryptionKey),
+    subject: vapidSubject(config.publicUrl),
+  }),
   now: () => new Date(),
 }
 
@@ -84,6 +94,21 @@ async function logAlerts(): Promise<void> {
   logChangedAlerts(await alertLogLine(db, settings, todayIn(settings.timeZone, ctx.now())))
 }
 
+/** Brings the inbox up to date and sends any push owed; logs only what went out. */
+async function notify(): Promise<void> {
+  const outcome = await runNotifier(ctx)
+  if (outcome === 'sent') app.log.info('Sent a push notification')
+}
+
+// The inbox follows the data, and pushes wait out quiet hours, so the notifier
+// runs on its own timer as well as after each sync. The first run is at start.
+repeatEvery(
+  NOTIFIER_MINUTES * MINUTE_MS,
+  notify,
+  (error) => app.log.error({ err: error }, 'Notifications check failed'),
+  { runNow: true },
+)
+
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
 if (ctx.bank && config.syncIntervalMinutes > 0) {
@@ -93,6 +118,8 @@ if (ctx.bank && config.syncIntervalMinutes > 0) {
       await syncAll(ctx)
       await catchUpDates()
       await logAlerts()
+      // Fresh balances may be news: tell the owner now, not at the next tick.
+      await notify()
     },
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
