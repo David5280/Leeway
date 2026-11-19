@@ -147,6 +147,13 @@ describe('redactSource and redactEmployer', () => {
       'City of Example',
     )
     expect(redactEmployer('City of Example 1437 Bannock St')).toBe('City of Example')
+    // The city and state after a street address on the same line go with it.
+    expect(redactEmployer('City of Example 1437 Bannock St Denver CO 80202')).toBe(
+      'City of Example',
+    )
+    expect(redactEmployer('Acme Corp PO Box 12 Aurora CO 80012')).toBe('Acme Corp')
+    // A line that starts with something taken out keeps the name after it.
+    expect(redactEmployer('80202-1234 City of Example')).toBe('City of Example')
     expect(redactEmployer('Acme\nPO Box 12')).toBe('Acme')
     expect(redactEmployer('123-45-6789')).toBeNull()
     expect(redactEmployer('A'.repeat(200))).toHaveLength(MAX_EMPLOYER_LENGTH)

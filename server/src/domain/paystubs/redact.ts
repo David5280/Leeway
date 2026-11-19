@@ -89,10 +89,14 @@ export function redactSource(text: string | null): string | null {
 
 /**
  * The employer's name, redacted and cut to length. Only the name is kept: an
- * address printed after it, on the same line or after a comma, is dropped.
+ * address printed after it, on the same line or after a comma, is dropped,
+ * and so is everything after the first thing taken out, since a city and
+ * state follow a street address ("1437 Bannock St Denver CO").
  */
 export function redactEmployer(text: string | null): string | null {
   if (text === null) return null
-  const name = redact(text.split(/[\n,]/)[0]!).replaceAll(REMOVED, '').replace(/\s+/g, ' ').trim()
+  const parts = redact(text.split(/[\n,]/)[0]!).split(REMOVED)
+  // The name is what comes before the first removal, or after it when the line began with one.
+  const name = parts.map((part) => part.trim()).find((part) => part !== '') ?? ''
   return name === '' ? null : name.slice(0, MAX_EMPLOYER_LENGTH).trim()
 }
