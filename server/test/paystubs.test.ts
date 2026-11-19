@@ -295,6 +295,35 @@ describe('save_paystub', () => {
     expect((await call('project_retirement')).plan.assumptions.monthlyContributionCents).toBeNull()
   })
 
+  it('refuses a monthly contribution above the limit plainly, saving nothing', async () => {
+    // $50,000 a week into a 401(k) is about $217,411 a month, at 52.18 weeks a year.
+    const weekly = confirmedPaystub({ payCadence: 'week' })
+    weekly.current = { ...weekly.current, plan401k: 5_000_000, plan457: null }
+    const refused = await callError('save_paystub', {
+      paystub: weekly,
+      setRetirementContribution: true,
+    })
+    expect(refused).toMatchObject({
+      code: 'invalid_input',
+      message:
+        'The 401(k), 457 and 403(b) figures come to $217,411 a month, more than the $100,000 a month Leeway takes as a contribution. Check them against your paystub.',
+    })
+    expect((await call('get_paystub')).latest).toBeNull()
+  })
+
+  it('holds a paycheck figure to what a pension takes, so none can pass it on too large', async () => {
+    const pera = await call('create_pension', { name: 'Colorado PERA' })
+    const huge = confirmedPaystub()
+    huge.current = { ...huge.current, pension: 50_000_000 }
+    const refused = await callError('save_paystub', {
+      paystub: huge,
+      pensionAccountId: pera.accountId,
+    })
+    expect(refused.message).toBe('paystub.current.pension: Use $100,000 or less')
+    const [pension] = (await call('project_retirement')).plan.pensions
+    expect(pension!.plan.contribution).toBeNull()
+  })
+
   it('refuses figures no paystub has', async () => {
     const backwards = confirmedPaystub()
     backwards.current = { ...backwards.current, netPay: 400_000 }
@@ -324,6 +353,41 @@ describe('save_paystub', () => {
       `SELECT count(*)::int AS n, min(pay_date)::text AS oldest FROM paystubs`,
     )
     expect(rows[0]).toEqual({ n: MAX_PAYSTUBS, oldest: '2025-11-08' })
+  })
+
+  it(`keeps the one just saved past ${MAX_PAYSTUBS}, even with no pay date or an older one`, async () => {
+    const pera = await call('create_pension', { name: 'Colorado PERA' })
+    for (let n = 0; n < MAX_PAYSTUBS; n++) {
+      const day = new Date(Date.UTC(2026, 0, 1 + n)).toISOString().slice(0, 10)
+      await call('save_paystub', { paystub: confirmedPaystub({ payDate: day }) })
+    }
+    const kept = async () =>
+      (
+        await ctx.db.query<{ id: string }>(
+          'SELECT id FROM paystubs ORDER BY pay_date NULLS FIRST LIMIT 1',
+        )
+      ).rows[0]!.id
+    // With no pay date it sorts as the oldest, yet it is kept, and its pension updated.
+    const undated = await call('save_paystub', {
+      paystub: confirmedPaystub({ payDate: null }),
+      pensionAccountId: pera.accountId,
+    })
+    expect(undated.paystub.payDate).toBeNull()
+    expect(undated.pension!.plan.contribution).toEqual({ kind: 'amount', cents: 42_295 })
+    expect(await kept()).toBe(undated.paystub.id)
+    // A paystub older than every other one is kept the same way.
+    const backDated = await call('save_paystub', {
+      paystub: confirmedPaystub({ payDate: '2020-01-15' }),
+    })
+    expect(backDated.paystub.payDate).toBe('2020-01-15')
+    const { rows } = await ctx.db.query<{ n: number }>('SELECT count(*)::int AS n FROM paystubs')
+    expect(rows[0]!.n).toBe(MAX_PAYSTUBS)
+    const ids = (await ctx.db.query<{ id: string }>('SELECT id FROM paystubs')).rows.map(
+      (row) => row.id,
+    )
+    expect(ids).toContain(backDated.paystub.id)
+    // The undated one is now the oldest kept, so it gave way to the newer back-dated one.
+    expect(ids).not.toContain(undated.paystub.id)
   })
 
   it('keeps a paystub when its pension goes, and deletes one on request', async () => {

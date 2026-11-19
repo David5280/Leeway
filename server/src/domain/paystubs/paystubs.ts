@@ -7,14 +7,18 @@ import type pg from 'pg'
 import { z } from 'zod'
 import { withTransaction, type Db } from '../../db/pool.js'
 import { AppError, notFound } from '../../errors.js'
+import { formatWholeCents } from '../../lib/money.js'
 import { convertCadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
+import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
 import { PAY_CADENCES, type Pension, type PensionPlanPatch } from '../retirement/pensions.js'
 import { patchPension } from '../retirement/pensionStore.js'
 import { getSettings, mergeSettings, saveSettings } from '../settings.js'
 import { MAX_EMPLOYER_LENGTH } from './redact.js'
 import {
   CURRENT_FIELDS,
+  MAX_PERIOD_CENTS,
+  MAX_YEAR_CENTS,
   YEAR_TO_DATE_FIELDS,
   type CurrentField,
   type PayCadence,
@@ -24,21 +28,23 @@ import {
 /** Paystubs kept: a year of weekly pay. Older ones are let go as new ones come in. */
 export const MAX_PAYSTUBS = 52
 
-/** One confirmed figure in cents, or null when the paystub did not show it. */
-const figureCents = z
-  .number()
-  .int('Use whole cents')
-  .min(0, 'A figure cannot be negative')
-  .max(100_000_000, 'Use $1,000,000 or less')
-  .nullable()
+/** One confirmed figure in cents up to `max`, or null when the paystub did not show it. */
+const figureCents = (max: number) =>
+  z
+    .number()
+    .int('Use whole cents')
+    .min(0, 'A figure cannot be negative')
+    .max(max, `Use ${formatWholeCents(max)} or less`)
+    .nullable()
 
-/** An object with one figure for each field named, every one required so nothing is left out by mistake. */
-function figuresSchema<F extends string>(fields: readonly F[]) {
+/**
+ * An object with one figure for each field named, each up to `max`, every
+ * one required so nothing is left out by mistake.
+ */
+function figuresSchema<F extends string>(fields: readonly F[], max: number) {
+  const figure = figureCents(max)
   return z.object(
-    Object.fromEntries(fields.map((field) => [field, figureCents])) as Record<
-      F,
-      typeof figureCents
-    >,
+    Object.fromEntries(fields.map((field) => [field, figure])) as Record<F, typeof figure>,
   )
 }
 
@@ -50,8 +56,9 @@ export const paystubSchema = z
     periodStart: isoDateSchema.nullable(),
     periodEnd: isoDateSchema.nullable(),
     payCadence: z.enum(PAY_CADENCES).nullable(),
-    current: figuresSchema(CURRENT_FIELDS),
-    yearToDate: figuresSchema(YEAR_TO_DATE_FIELDS),
+    // A paycheck's figures share the review's limit, which a pension also takes.
+    current: figuresSchema(CURRENT_FIELDS, MAX_PERIOD_CENTS),
+    yearToDate: figuresSchema(YEAR_TO_DATE_FIELDS, MAX_YEAR_CENTS),
   })
   .refine(
     ({ current }) =>
@@ -128,7 +135,15 @@ export function monthlyPlanContribution(paystub: Paystub): number {
     throw new AppError('invalid_input', 'Choose how often you are paid to work out a month of it.')
   }
   const perPaycheck = shown.reduce((sum, cents) => sum + cents, 0)
-  return convertCadence(perPaycheck, paystub.payCadence, 'month')
+  const monthly = convertCadence(perPaycheck, paystub.payCadence, 'month')
+  // The same limit the retirement settings hold a contribution to, said plainly here.
+  if (monthly > MAX_MONTHLY_CENTS) {
+    throw new AppError(
+      'invalid_input',
+      `The 401(k), 457 and 403(b) figures come to ${formatWholeCents(monthly)} a month, more than the ${formatWholeCents(MAX_MONTHLY_CENTS)} a month Leeway takes as a contribution. Check them against your paystub.`,
+    )
+  }
+  return monthly
 }
 
 interface PaystubRow {
@@ -189,12 +204,15 @@ async function insertPaystub(db: Db, paystub: Paystub, pensionAccountId: string 
       pensionAccountId,
     ],
   )
-  // Past the limit, the oldest paystubs go.
+  const id = rows[0]!.id
+  // Past the limit, the oldest paystubs go, but never the one just saved, even
+  // when it has no pay date or is older than every other.
   await db.query(
-    `DELETE FROM paystubs WHERE id NOT IN (SELECT id FROM paystubs ${NEWEST_FIRST} LIMIT $1)`,
-    [MAX_PAYSTUBS],
+    `DELETE FROM paystubs WHERE id <> $1 AND id NOT IN (
+       SELECT id FROM paystubs WHERE id <> $1 ${NEWEST_FIRST} LIMIT $2)`,
+    [id, MAX_PAYSTUBS - 1],
   )
-  const saved = await db.query<PaystubRow>(`${SELECT_PAYSTUB} WHERE id = $1`, [rows[0]!.id])
+  const saved = await db.query<PaystubRow>(`${SELECT_PAYSTUB} WHERE id = $1`, [id])
   return paystubFromRow(saved.rows[0]!)
 }
 
