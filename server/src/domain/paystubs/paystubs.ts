@@ -9,12 +9,8 @@ import { withTransaction, type Db } from '../../db/pool.js'
 import { AppError, notFound } from '../../errors.js'
 import { convertCadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
-import {
-  updatePension,
-  PAY_CADENCES,
-  type Pension,
-  type PensionPlanPatch,
-} from '../retirement/pensions.js'
+import { PAY_CADENCES, type Pension, type PensionPlanPatch } from '../retirement/pensions.js'
+import { patchPension } from '../retirement/pensionStore.js'
 import { getSettings, mergeSettings, saveSettings } from '../settings.js'
 import { MAX_EMPLOYER_LENGTH } from './redact.js'
 import {
@@ -220,7 +216,7 @@ export async function savePaystub(pool: pg.Pool, input: SavePaystub): Promise<Pa
     const pension =
       pensionAccountId === null
         ? null
-        : await updatePension(db, pensionAccountId, pensionPatchFrom(paystub))
+        : await patchPension(db, pensionAccountId, pensionPatchFrom(paystub))
     if (contribution !== null) await setRetirementContribution(db, contribution)
     return {
       paystub: await insertPaystub(db, paystub, pensionAccountId),
