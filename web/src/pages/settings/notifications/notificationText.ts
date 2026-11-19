@@ -27,7 +27,7 @@ export const KIND_TEXT: Record<NotificationKind, { label: string; hint: string }
     hint: 'A single charge of at least the amount below',
   },
   bank_login: { label: 'Bank sign-in', hint: 'A bank that needs you to sign in again' },
-  ai_limit: { label: 'AI limit', hint: "This month's AI spending reaching its limit" },
+  ai_limit: { label: 'AI limit', hint: "This month's AI spending nearing or reaching its limit" },
 }
 
 /** The shares of a budget offered: from half to double. */

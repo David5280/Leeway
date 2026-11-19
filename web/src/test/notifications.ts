@@ -62,7 +62,7 @@ export function notificationSettingsHandlers(
   const others = push.devices ?? 0
   const view = (endpoint: unknown): NotificationsView => ({
     settings,
-    available: NOTIFICATION_KINDS.filter((kind) => kind !== 'ai_limit'),
+    available: NOTIFICATION_KINDS,
     push: {
       publicKey: PUBLIC_KEY,
       devices: others + endpoints.size,

@@ -77,11 +77,16 @@ export const notificationSettingsSchema = z.object(fields)
 
 export type NotificationSettings = z.output<typeof notificationSettingsSchema>
 
+/**
+ * Kinds that start off, for the owner to opt into. AI spending already shows
+ * in Settings and on the dashboard, and only matters once a key is set.
+ */
+const OPT_IN_KINDS: readonly NotificationKind[] = ['ai_limit']
+
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  kinds: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, true])) as Record<
-    NotificationKind,
-    boolean
-  >,
+  kinds: Object.fromEntries(
+    NOTIFICATION_KINDS.map((kind) => [kind, !OPT_IN_KINDS.includes(kind)]),
+  ) as Record<NotificationKind, boolean>,
   overBudgetPercent: 100,
   billDueDays: 2,
   largeTransactionCents: 50_000,

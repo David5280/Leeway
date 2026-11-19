@@ -1,5 +1,5 @@
-// The rules, as pure functions: given alerts, budgets, bills, charges and
-// banks, the notifications they call for and how each is worded. No AI, and
+// The rules, as pure functions: given alerts, budgets, bills, charges, banks
+// and AI spending, the notifications they call for and how each is worded. No AI, and
 // no database, so every rule reads and tests on its own.
 //
 // Each notification has two wordings. The message, shown only in the app,
@@ -9,6 +9,7 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
+import type { SpendAlertLevel } from '../ai/alerts.js'
 import type { CategoryBudget } from '../budgetCategory.js'
 import type { NotificationKind } from './settings.js'
 
@@ -187,4 +188,34 @@ export function bankLoginCandidates(connections: BankLogin[]): Candidate[] {
         link: '/settings/banks',
       }
     })
+}
+
+/** An AI spending alert, as it was raised. */
+export interface AiLimitNews {
+  /** The first day of the month it is for. */
+  month: IsoDate
+  level: SpendAlertLevel
+  /** The limit it was raised against. */
+  capCents: number
+  /** The alert's own words, as Settings shows them, amounts included. */
+  message: string
+}
+
+/**
+ * The AI spending warning, or the limit reached. Kept once per month, level
+ * and limit: changing the limit raises each alert afresh against the new
+ * one, which is news again. The push names no amount.
+ */
+export function aiLimitCandidate(news: AiLimitNews): Candidate {
+  const reached = news.level === 'limit'
+  return {
+    kind: 'ai_limit',
+    subject: `${news.month}:${news.level}:${news.capCents}`,
+    title: reached ? 'AI limit reached' : 'AI limit near',
+    message: news.message,
+    pushBody: reached
+      ? "AI is paused until this month's limit resets."
+      : "AI has spent most of this month's limit.",
+    link: '/settings/ai',
+  }
 }

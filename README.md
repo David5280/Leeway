@@ -352,7 +352,10 @@ sync, and tells you about:
 - a bill not on autopay coming due (2 days before, by default), until it is
   paid;
 - a single charge of at least an amount you choose ($500 by default);
-- a bank that needs you to sign in again.
+- a bank that needs you to sign in again;
+- AI spending near or at this month's limit, once each as it happens (see
+  [AI models](#ai-models-and-the-monthly-limit)). This one is off until you
+  turn it on.
 
 Each is the same alert you already see in the app, worked out by plain rules,
 with no AI involved. The same alert is never stored twice: a condition that

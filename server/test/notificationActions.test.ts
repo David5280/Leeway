@@ -119,7 +119,9 @@ describe('settings', () => {
   it("shows the owner's choices, the kinds this server raises, and push state", async () => {
     const view = await call('get_notification_settings')
     expect(view.settings.kinds.overdrawn).toBe(true)
-    expect(view.available).toEqual(NOTIFICATION_KINDS.filter((kind) => kind !== 'ai_limit'))
+    // The AI limit is offered too, and starts off.
+    expect(view.settings.kinds.ai_limit).toBe(false)
+    expect(view.available).toEqual(NOTIFICATION_KINDS)
     expect(view.push).toEqual({
       publicKey: expect.stringMatching(/^B[\w-]{86}$/),
       devices: 0,

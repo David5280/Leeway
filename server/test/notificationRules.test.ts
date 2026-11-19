@@ -7,6 +7,7 @@ import type { CategoryBudget } from '../src/domain/budgetCategory.js'
 import { isQuiet, localHour } from '../src/domain/notifications/quietHours.js'
 import {
   accountCandidates,
+  aiLimitCandidate,
   bankLoginCandidates,
   billCandidates,
   budgetCandidates,
@@ -254,6 +255,39 @@ describe('bank sign-ins', () => {
       ['c2', 'A bank needs you to sign in again.'],
     ])
     expect(found[0]).toMatchObject({ title: 'Bank needs you', link: '/settings/banks' })
+  })
+})
+
+describe('AI spending', () => {
+  const news = { month: '2026-11-01', capCents: 500 }
+
+  it('words the warning and the limit, keeping the amounts to the app', () => {
+    const warning = aiLimitCandidate({ ...news, level: 'warning', message: 'AI has spent $4.10.' })
+    expect(warning).toEqual({
+      kind: 'ai_limit',
+      subject: '2026-11-01:warning:500',
+      title: 'AI limit near',
+      message: 'AI has spent $4.10.',
+      pushBody: "AI has spent most of this month's limit.",
+      link: '/settings/ai',
+    })
+    const limit = aiLimitCandidate({ ...news, level: 'limit', message: 'Limit of $5.00 reached.' })
+    expect(limit).toMatchObject({
+      subject: '2026-11-01:limit:500',
+      title: 'AI limit reached',
+      pushBody: "AI is paused until this month's limit resets.",
+    })
+    // The push may show on a locked screen: no amount, and no digit at all.
+    for (const one of [warning, limit]) expect(one.pushBody).not.toMatch(/[\d$]/)
+  })
+
+  it('keeps each alert once per month, level and limit', () => {
+    const subject = (month: string, capCents: number) =>
+      aiLimitCandidate({ month, capCents, level: 'warning', message: '' }).subject
+    expect(
+      new Set([subject('2026-11-01', 500), subject('2026-12-01', 500), subject('2026-11-01', 900)])
+        .size,
+    ).toBe(3)
   })
 })
 

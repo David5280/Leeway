@@ -252,7 +252,9 @@ export class AiGateway {
       // The month-long alert is for a month that is used up. One dear call
       // turned away with room left says so in its own message only.
       if (spent + this.reservedMicros >= cap) {
-        await raiseSpendAlert(this.deps.db, month.start, 'limit', this.deps.now())
+        const spentMicros = spent + this.reservedMicros
+        const raise = { month, level: 'limit', spentMicros, settings } as const
+        await raiseSpendAlert(this.deps.db, raise, this.deps.now())
       }
       throw new AiLimitError(
         limitMessage(settings, spent + this.reservedMicros, worst, month.resetsOn),
@@ -267,7 +269,8 @@ export class AiGateway {
     const spent = (await monthSpend(this.deps.db, month)).totalMicros
     const cap = settings.ai.monthlyCapCents * MICROS_PER_CENT
     if (spent * 100 >= cap * WARN_AT_PERCENT) {
-      await raiseSpendAlert(this.deps.db, month.start, 'warning', this.deps.now())
+      const raise = { month, level: 'warning', spentMicros: spent, settings } as const
+      await raiseSpendAlert(this.deps.db, raise, this.deps.now())
     }
   }
 

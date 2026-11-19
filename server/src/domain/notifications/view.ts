@@ -11,17 +11,12 @@ import {
   type NotificationSettings,
 } from './settings.js'
 
-/**
- * The kinds this server raises. The AI limit is stored and listed in the
- * schema already; it joins this list once the AI usage limits are in.
- */
-export const AVAILABLE_KINDS: NotificationKind[] = NOTIFICATION_KINDS.filter(
-  (kind) => kind !== 'ai_limit',
-)
+/** The kinds this server raises, which Settings offers a switch for: every one. */
+export const AVAILABLE_KINDS: readonly NotificationKind[] = NOTIFICATION_KINDS
 
 export interface NotificationSettingsView {
   settings: NotificationSettings
-  available: NotificationKind[]
+  available: readonly NotificationKind[]
   push: {
     /** The server's public VAPID key: what a browser subscribes with. */
     publicKey: string
