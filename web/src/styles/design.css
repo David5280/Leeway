@@ -366,6 +366,8 @@ tspan.money-neutral {
   box-shadow: var(--elev-2), var(--hi);
   outline: none;
   animation: sheet-rise var(--duration-sheet) var(--ease-out);
+  /* A swipe let go short slides back up rather than jumping (Sheet.tsx). */
+  transition: transform var(--duration-sheet) var(--ease-out);
 }
 
 .sheet-bar {
@@ -786,6 +788,10 @@ tspan.money-neutral {
   .sheet,
   .sheet-scrim {
     animation: none;
+  }
+
+  .sheet {
+    transition: none;
   }
 
   .ring-fill {

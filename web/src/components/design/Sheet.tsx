@@ -1,7 +1,8 @@
 // A dialog that slides up from the bottom on a phone and in from the right
 // on a wider screen. It is a proper modal: focus moves into it and cannot
 // leave while it is open, Escape closes it, a swipe down on its handle
-// closes it on a phone, and focus goes back to what opened it. Keys are
+// closes it on a phone (and slides it back when the swipe falls short), and
+// focus goes back to what opened it. Keys are
 // heard on the whole document, so Escape and Tab still work when the
 // element that had focus was taken away (a view inside the sheet changed).
 
@@ -22,31 +23,36 @@ function focusables(root: HTMLElement): HTMLElement[] {
 
 /**
  * Follows a drag down from the sheet's handle: how far it has gone, and
- * whether letting go there closes the sheet. Upward drags are ignored.
+ * whether letting go there closes the sheet. Upward drags are ignored. The
+ * handle captures the pointer, so a finger that slides off it still drags;
+ * a drag let go short, cancelled or taken by the browser slides back up
+ * (the .sheet transition in design.css).
  */
 function useSwipeDown(onClose: () => void) {
-  const start = useRef<number | null>(null)
+  const [start, setStart] = useState<number | null>(null)
   const [offset, setOffset] = useState(0)
+  const release = () => {
+    setStart(null)
+    setOffset(0)
+  }
   return {
     offset,
+    dragging: start !== null,
     handlers: {
-      onPointerDown(event: PointerEvent) {
-        start.current = event.clientY
+      onPointerDown(event: PointerEvent<HTMLElement>) {
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setStart(event.clientY)
       },
       onPointerMove(event: PointerEvent) {
-        if (start.current === null) return
-        setOffset(Math.max(0, event.clientY - start.current))
+        if (start === null) return
+        setOffset(Math.max(0, event.clientY - start))
       },
       onPointerUp() {
-        const travelled = offset
-        start.current = null
-        setOffset(0)
-        if (travelled >= SWIPE_CLOSE_PX) onClose()
+        release()
+        if (offset >= SWIPE_CLOSE_PX) onClose()
       },
-      onPointerCancel() {
-        start.current = null
-        setOffset(0)
-      },
+      onPointerCancel: release,
+      onLostPointerCapture: release,
     },
   }
 }
@@ -133,7 +139,12 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        style={swipe.offset ? { transform: `translateY(${swipe.offset}px)` } : undefined}
+        // While dragged it follows the finger at once; let go, it eases back.
+        style={
+          swipe.dragging
+            ? { transform: `translateY(${swipe.offset}px)`, transition: 'none' }
+            : undefined
+        }
       >
         <div className="sheet-bar">
           <div className="sheet-handle" {...swipe.handlers} aria-hidden="true">

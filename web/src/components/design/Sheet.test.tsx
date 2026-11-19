@@ -119,7 +119,8 @@ describe('Sheet', () => {
 
     fireEvent.pointerDown(handle, { clientY: 100 })
     fireEvent.pointerMove(handle, { clientY: 60 })
-    expect(dialog.style.transform).toBe('')
+    // Upward goes nowhere: the sheet stays put under the finger.
+    expect(dialog.style.transform).toBe('translateY(0px)')
     fireEvent.pointerMove(handle, { clientY: 140 })
     expect(dialog.style.transform).toBe('translateY(40px)')
     fireEvent.pointerUp(handle)
@@ -132,14 +133,34 @@ describe('Sheet', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it('lets go without closing when the pointer is cancelled', async () => {
+  it('keeps the pointer while dragging, so a finger that slides off the handle still drags', async () => {
+    const capture = vi.spyOn(Element.prototype, 'setPointerCapture')
+    const { dialog } = await openSheet()
+    const handle = document.querySelector('.sheet-handle')!
+    fireEvent.pointerDown(handle, { clientY: 100, pointerId: 7 })
+    expect(capture).toHaveBeenCalledOnce()
+    expect(capture.mock.contexts[0]).toBe(handle)
+    // Dragged, the sheet follows at once; let go, its transition slides it back.
+    fireEvent.pointerMove(handle, { clientY: 130 })
+    expect(dialog.style.transition).toBe('none')
+    fireEvent.pointerUp(handle)
+    expect(dialog.style.transition).toBe('')
+    capture.mockRestore()
+  })
+
+  it.each([
+    ['the pointer is cancelled', (handle: Element) => fireEvent.pointerCancel(handle)],
+    ['the browser takes the pointer', (handle: Element) => fireEvent.lostPointerCapture(handle)],
+  ])('slides back without closing when %s', async (_how, letGo) => {
     const { onClose, dialog } = await openSheet()
     const handle = document.querySelector('.sheet-handle')!
     fireEvent.pointerDown(handle, { clientY: 100 })
     fireEvent.pointerMove(handle, { clientY: 300 })
-    fireEvent.pointerCancel(handle)
+    letGo(handle)
     expect(dialog.style.transform).toBe('')
+    fireEvent.pointerMove(handle, { clientY: 400 })
     fireEvent.pointerUp(handle)
+    expect(dialog.style.transform).toBe('')
     expect(onClose).not.toHaveBeenCalled()
   })
 
