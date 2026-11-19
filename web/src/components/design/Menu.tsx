@@ -16,18 +16,47 @@ import {
 /** The space kept between the menu and the screen's edges, in pixels. */
 const EDGE = 8
 
+/** The space between the menu and its button, in pixels. */
+const GAP = 6
+
+/** The part of the screen clear of the notch, the status bar and the home indicator. */
+export interface SafeArea {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
 /**
- * Places the menu under its button, moved left if it would run off the
- * right edge, and no taller than the room below.
+ * Places the menu under its button, or over it when it fits only there or
+ * has more room there (a button low on a phone turned sideways), moved left
+ * if it would run off the right edge, all inside the safe area. It is no
+ * taller than the room on its side, and scrolls past that.
  */
 export function placeMenu(
   button: DOMRect,
-  menuWidth: number,
-  screen: { width: number; height: number },
+  menu: { width: number; height: number },
+  safe: SafeArea,
 ): { top: number; left: number; maxHeight: number } {
-  const top = button.bottom + 6
-  const left = Math.max(EDGE, Math.min(button.left, screen.width - menuWidth - EDGE))
-  return { top, left, maxHeight: screen.height - top - EDGE }
+  const left = Math.max(safe.left + EDGE, Math.min(button.left, safe.right - menu.width - EDGE))
+  const below = safe.bottom - EDGE - (button.bottom + GAP)
+  const above = button.top - GAP - (safe.top + EDGE)
+  if (menu.height <= below || below >= above) {
+    return { top: button.bottom + GAP, left, maxHeight: Math.max(0, below) }
+  }
+  const maxHeight = Math.min(menu.height, above)
+  return { top: button.top - GAP - maxHeight, left, maxHeight }
+}
+
+/** The safe area now, measured from the insets the page is given (--sat and the rest). */
+function safeArea(): SafeArea {
+  const probe = document.createElement('div')
+  probe.style.cssText =
+    'position:fixed;visibility:hidden;pointer-events:none;inset:var(--sat) var(--sar) var(--sab) var(--sal)'
+  document.body.append(probe)
+  const { top, right, bottom, left } = probe.getBoundingClientRect()
+  probe.remove()
+  return { top, right, bottom, left }
 }
 
 export interface MenuItem {
@@ -62,10 +91,8 @@ export function Menu({
   useLayoutEffect(() => {
     if (!open) return
     const menu = list.current!
-    const place = placeMenu(trigger.current!.getBoundingClientRect(), menu.offsetWidth, {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    })
+    const size = { width: menu.offsetWidth, height: menu.scrollHeight }
+    const place = placeMenu(trigger.current!.getBoundingClientRect(), size, safeArea())
     menu.style.top = `${place.top}px`
     menu.style.left = `${place.left}px`
     menu.style.maxHeight = `${place.maxHeight}px`

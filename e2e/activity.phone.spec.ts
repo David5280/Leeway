@@ -1,27 +1,29 @@
-// The Transactions screen on a phone, upright and sideways: rows never
-// overlap each other or their day headers, nothing in a row is cut off or
-// runs into the amount, no words anywhere on the screen (rules included) are
-// drawn over others, a transaction's sheet stays clear of the notch, and
-// everything pressed in the filters and the sheet is a finger (--tap) tall.
+// The Transactions screen on a phone, upright, sideways and at its narrowest,
+// with names and rules of every length: rows never overlap each other or
+// their day headers, nothing in a row is cut off or runs into the amount, no
+// words anywhere on the screen (rules included) are drawn over others or
+// split, a transaction's sheet stays clear of the notch, and every control in
+// the list and the sheet takes a finger's tap. The layout guard
+// (layout-guard.phone.spec.ts) checks the same screen with its own seed.
 
 import { expect, test, type Page } from '@playwright/test'
+import { describeProblems, findProblems, missedTaps } from './layout'
 import { action, addAccount, addSpending, removeAccount } from './manual'
-import {
-  brokenWords,
-  NARROWEST,
-  overflow,
-  shortTargets,
-  simulateInsets,
-  SIDEWAYS_INSETS,
-  textOverlaps,
-  UPRIGHT_INSETS,
-} from './phone'
+import { GUARDED_PHONES, overflow, simulateInsets } from './phone'
 
-/** An iPhone's 390 by 844 screen, upright, and the same turned sideways. */
-const UPRIGHT = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
-const SIDEWAYS = { ...UPRIGHT, viewport: { width: 844, height: 390 } }
-/** The narrowest phone still in use, an iPhone SE, with only its status bar to keep clear of. */
-const SE_INSETS = { top: 20, right: 0, bottom: 0, left: 0 }
+/** The common iPhone upright and sideways, and the narrowest screen supported. */
+const PHONES = GUARDED_PHONES.filter((phone) =>
+  ['an iPhone', 'an iPhone turned sideways', 'the first iPhone SE'].includes(phone.name),
+)
+
+/** Words drawn over others, or split across lines, anywhere on the screen. */
+async function textProblems(page: Page): Promise<string[]> {
+  const found = [
+    ...(await findProblems(page, 'overlap')),
+    ...(await findProblems(page, 'broken-word')),
+  ]
+  return describeProblems(found)
+}
 
 const ACCOUNT = 'Layout checking with a longer name'
 
@@ -111,12 +113,9 @@ test.describe('the Transactions list on a phone', () => {
     await page.close()
   })
 
-  for (const [orientation, screen, insets] of [
-    ['upright', UPRIGHT, UPRIGHT_INSETS],
-    ['sideways', SIDEWAYS, SIDEWAYS_INSETS],
-    ['on the narrowest phone', NARROWEST, SE_INSETS],
-  ] as const) {
-    test.describe(orientation, () => {
+  for (const phone of PHONES) {
+    const { screen, insets } = phone
+    test.describe(`on ${phone.name}`, () => {
       test.use(screen)
 
       test('rows neither overlap nor cut anything off', async ({ page }) => {
@@ -131,11 +130,10 @@ test.describe('the Transactions list on a phone', () => {
         await page.goto('/transactions')
         await simulateInsets(page, insets)
         await expect(page.getByText(RULES[0]!.pattern, { exact: false })).toBeVisible()
-        expect(await textOverlaps(page, '.act-page')).toEqual([])
-        // A rule's words wrap between words, never inside one ("Streami / ng").
         const rules = page.getByRole('region', { name: 'Rules' })
         await expect(rules.getByText('Streaming and apps', { exact: true }).first()).toBeVisible()
-        expect(await brokenWords(page, '.rule-text')).toEqual([])
+        // A rule's words wrap between words, never inside one ("Streami / ng").
+        expect(await textProblems(page)).toEqual([])
         expect(await overflow(page)).toBeLessThanOrEqual(0)
       })
 
@@ -160,18 +158,15 @@ test.describe('the Transactions list on a phone', () => {
         await expect(sheet).toHaveCount(0)
       })
 
-      test('everything pressed is a finger each way, in the filters, rules and sheet', async ({
-        page,
-      }) => {
+      test('every control takes a finger, in the filters, rules and sheet', async ({ page }) => {
         await page.goto('/transactions')
+        await simulateInsets(page, insets)
         // The guard only means something where the page sees a finger.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
         await expect(page.getByRole('button', { name: /^Snooze, spent/ })).toBeVisible()
-        expect(await shortTargets(page, '.act-filters')).toEqual([])
-        // Each rule's move and delete buttons, and the button that starts a new rule.
+        // Each rule's move and delete buttons are on the screen too.
         await expect(page.getByRole('button', { name: 'Delete rule 1' }).first()).toBeVisible()
-        expect(await shortTargets(page, '.rule-row')).toEqual([])
-        expect(await shortTargets(page, '.rules-list > .row-between')).toEqual([])
+        expect(await missedTaps(page)).toEqual([])
 
         await page.getByRole('button', { name: /^King Soopers, spent/ }).click()
         const sheet = page.getByRole('dialog', { name: 'King Soopers' })
@@ -180,7 +175,7 @@ test.describe('the Transactions list on a phone', () => {
         await expect(sheet.getByRole('switch', { name: 'Leave out of totals' })).toBeVisible()
         await expect(sheet.getByRole('button', { name: 'Delete transaction' })).toBeVisible()
         await expect.poll(() => sheet.evaluate((element) => element.getAnimations().length)).toBe(0)
-        expect(await shortTargets(page, '.sheet')).toEqual([])
+        expect(await missedTaps(page)).toEqual([])
       })
     })
   }

@@ -1,5 +1,7 @@
 // Category groups: the headings a long list of categories is shown under.
 
+import { sortByName } from './alphabetical'
+
 export interface Grouped<T> {
   /** The heading, or null for items without a group. */
   group: string | null
@@ -23,7 +25,8 @@ export function groupBy<T>(items: T[], groupOf: (item: T) => string | null): Gro
   return [...grouped.filter((g) => g.group !== null), ...grouped.filter((g) => g.group === null)]
 }
 
-/** The distinct group names among categories, in order, for suggesting one. */
-export function groupNames(categories: { group: string | null }[]): string[] {
-  return [...new Set(categories.flatMap((c) => (c.group ? [c.group] : [])))]
+/** The distinct group names among categories, A to Z in a locale's order, for suggesting one. */
+export function groupNames(categories: { group: string | null }[], locale: string): string[] {
+  const names = new Set(categories.flatMap((c) => (c.group ? [c.group] : [])))
+  return sortByName([...names], (name) => name, locale)
 }

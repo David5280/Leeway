@@ -393,11 +393,12 @@ textarea.input.sheet-note {
     flex: 1 1 100%;
   }
 
-  /* The chips scroll to the screen's edge instead of stopping at the gutter. */
+  /* The chips scroll on through the gutter instead of stopping at it, up to
+     the notch's inset turned sideways, never under the notch. */
   .act-filters .fchips {
     flex-basis: 100%;
-    margin-right: calc(-16px - var(--sar));
-    padding-right: calc(16px + var(--sar));
+    margin-right: -16px;
+    padding-right: 16px;
   }
 }
 

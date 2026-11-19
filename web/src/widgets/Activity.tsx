@@ -18,7 +18,7 @@ export function RecentWidget({ budget }: WidgetProps) {
     <Card label="Recent transactions" className="stack-sm">
       <div className="row-between">
         <h2>Recent</h2>
-        <Link to="/transactions" className="linkbtn">
+        <Link to="/transactions" className="linkbtn tap">
           All transactions
         </Link>
       </div>
@@ -44,7 +44,7 @@ export function AccountsWidget() {
     <Card label="Accounts" className="stack-sm">
       <div className="row-between">
         <h2>Accounts</h2>
-        <Link to="/accounts" className="linkbtn">
+        <Link to="/accounts" className="linkbtn tap">
           All accounts
         </Link>
       </div>

@@ -137,7 +137,7 @@ function AddAccount({ onDone }: { onDone: () => void }) {
     <form className="card soft stack-sm" onSubmit={submit} aria-label="New account">
       <div className="row wrap">
         <input
-          className="input grow"
+          className="input grow name-field"
           placeholder="Name, like Cash or Car loan"
           aria-label="Account name"
           required

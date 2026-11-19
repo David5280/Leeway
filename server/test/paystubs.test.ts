@@ -28,6 +28,7 @@ import {
   png,
 } from './fixtures/paystub.js'
 import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -90,7 +91,7 @@ describe('POST /api/paystubs/read', () => {
     })
     // What left the server: the file's own bytes, and nothing of the owner's beside them.
     expect(fake.files).toEqual([{ bytes: pdf(), mediaType: 'application/pdf' }])
-    expect(response.body).not.toMatch(/6789|004417|Bannock/)
+    expect(withoutUuids(response.body)).not.toMatch(/6789|004417|Bannock/)
     // Reading saves nothing: only what the owner confirms is kept.
     const { rows } = await ctx.db.query('SELECT count(*)::int AS n FROM paystubs')
     expect(rows[0].n).toBe(0)
@@ -440,7 +441,7 @@ describe('what an assistant sees of paystubs', () => {
 
   it("never puts a saved paystub's figures into the profile an assistant reads", async () => {
     await call('save_paystub', { paystub: confirmedPaystub() })
-    const profile = JSON.stringify(await call('get_financial_profile'))
+    const profile = withoutUuids(JSON.stringify(await call('get_financial_profile')))
     expect(profile).not.toMatch(/City of Example|384500|261142|paystub/i)
   })
 })

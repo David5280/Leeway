@@ -92,6 +92,12 @@ describe('axisIndices', () => {
     expect(axisIndices(14, 5)).toEqual([0, 4, 8, 13])
   })
 
+  it('drops the label before the last when closer than a given gap', () => {
+    // Every other bar is labeled, but the last two are neighbors.
+    expect(axisIndices(4, 3)).toEqual([0, 2, 3])
+    expect(axisIndices(4, 3, 1.5)).toEqual([0, 3])
+  })
+
   it('labels both ends even when asked for fewer than two', () => {
     expect(axisIndices(5, 1)).toEqual([0, 4])
   })

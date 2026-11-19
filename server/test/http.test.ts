@@ -18,6 +18,7 @@ import {
   resetData,
   TEST_SETUP_CODE,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -347,7 +348,7 @@ describe('MCP endpoint', () => {
       const result = response.json().result
       expect(result.isError, name).toBeFalsy()
       const text = result.content[0].text as string
-      expect(text, name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
+      expect(withoutUuids(text), name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
       expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
     }
     const people = await rpc(token, 'tools/call', { name: 'list_transactions', arguments: {} })
@@ -367,7 +368,7 @@ describe('MCP endpoint', () => {
     for (const response of [imported, listed]) {
       const text = response.json().result.content[0].text as string
       expect(text).toContain('Test Savings')
-      expect(text).not.toMatch(/4417|"(mask|bankName|fileName)"/)
+      expect(withoutUuids(text)).not.toMatch(/4417|"(mask|bankName|fileName)"/)
     }
 
     // The owner's own app still has the bank's text, for a transaction's details.
@@ -603,7 +604,7 @@ describe('MCP endpoint', () => {
       ]),
     )
     for (const result of [...bare, ...named]) {
-      expect(result.text, result.name).not.toMatch(/9876|4321/)
+      expect(withoutUuids(result.text), result.name).not.toMatch(/9876|4321/)
       expect(result.text, result.name).not.toMatch(/"(mask|bankName)"/)
     }
 

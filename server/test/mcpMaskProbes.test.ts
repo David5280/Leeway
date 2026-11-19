@@ -16,6 +16,7 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -92,7 +93,7 @@ describe("an account's mask, through MCP", () => {
       recurring: await tool('find_recurring'),
     })
     const before = await everything()
-    expect(JSON.stringify(before)).not.toMatch(/\bab\b/i)
+    expect(withoutUuids(JSON.stringify(before))).not.toMatch(/\bab\b/i)
 
     /** Runs a probe with the mask's letters, then with letters found nowhere. */
     async function both<T>(probe: (letters: string) => Promise<T>): Promise<[T, T]> {
@@ -161,6 +162,6 @@ describe("an account's mask, through MCP", () => {
     const tool = await assistant()
     const { body } = await tool('list_transactions')
     expect(body).toMatchObject({ transactions: [{ displayName: 'Store' }] })
-    expect(JSON.stringify(body)).not.toMatch(/44l7/i)
+    expect(withoutUuids(JSON.stringify(body))).not.toMatch(/44l7/i)
   })
 })
