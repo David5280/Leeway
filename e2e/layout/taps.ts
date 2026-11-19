@@ -10,7 +10,7 @@
 // and so are links in running text, which a sentence carries and no layout
 // can enlarge.
 
-import { blockOf, CONTROLS, describe, isHiddenByDesign, layerOf } from './elements'
+import { blockOf, CONTROLS, describe, floatOf, isHiddenByDesign } from './elements'
 
 /** The smallest comfortable tap for a finger, in CSS pixels (Apple's 44pt). */
 export const TAP = 44
@@ -163,8 +163,8 @@ function stealerOf(control: Element): Element | null {
  * reaching out past the bar itself is still theft.
  */
 function underBar(found: Element, control: Element, x: number, y: number): boolean {
-  const bar = layerOf(found)
-  if (!bar || bar === layerOf(control)) return false
+  const bar = floatOf(found)
+  if (!bar || bar === floatOf(control)) return false
   const box = bar.getBoundingClientRect()
   return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
 }

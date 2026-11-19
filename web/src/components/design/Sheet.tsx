@@ -22,6 +22,22 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * Makes everything on the page but the sheet inert while it is open, so
+ * nothing behind it can be tapped, focused or read, as a modal dialog must.
+ * Returns how to undo it, leaving alone anything that was inert already
+ * (the page behind a sheet opened from another).
+ */
+function inertBehind(layer: HTMLElement): () => void {
+  const behind = [...document.body.children].filter(
+    (element) => element !== layer && !element.hasAttribute('inert'),
+  )
+  for (const element of behind) element.setAttribute('inert', '')
+  return () => {
+    for (const element of behind) element.removeAttribute('inert')
+  }
+}
+
+/**
  * Follows a drag down from the sheet's handle: how far it has gone, and
  * whether letting go there closes the sheet. Upward drags are ignored. The
  * handle captures the pointer, so a finger that slides off it still drags;
@@ -108,6 +124,7 @@ export function Sheet({
   onClose: () => void
   children: ReactNode
 }) {
+  const layer = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const swipe = useSwipeDown(onClose)
@@ -118,13 +135,17 @@ export function Sheet({
   })
 
   // Focus moves in on open and back to what opened the sheet on close; the
-  // page behind does not scroll while it is open.
+  // page behind is inert and does not scroll while it is open. Only up and
+  // down are locked, so nothing wider than the screen is ever cut off unseen.
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
-    const overflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const overflowY = document.body.style.overflowY
+    document.body.style.overflowY = 'hidden'
+    const restore = inertBehind(layer.current!)
     return () => {
-      document.body.style.overflow = overflow
+      // The page comes back first: an inert opener cannot take focus.
+      restore()
+      document.body.style.overflowY = overflowY
       if (opener?.isConnected) opener.focus()
       else fallback.current?.()?.focus()
     }
@@ -142,7 +163,7 @@ export function Sheet({
   }, [onClose])
 
   return createPortal(
-    <div className="sheet-layer">
+    <div ref={layer} className="sheet-layer">
       <div className="sheet-scrim" aria-hidden="true" onClick={onClose} />
       <div
         ref={panel}

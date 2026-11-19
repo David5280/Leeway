@@ -7,6 +7,7 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 // The test clock reads 2026-11-17, in UTC.
 let ctx: AppContext
@@ -263,7 +264,7 @@ describe('recurring charges', () => {
     const [series] = await assistant.call('find_recurring')
     // The shown name leaves the mask out, and so does the key made from it.
     expect(series!.key).toBe('acct gym')
-    expect(JSON.stringify(series)).not.toMatch(/\bab\b/i)
+    expect(withoutUuids(JSON.stringify(series))).not.toMatch(/\bab\b/i)
     // A bill on the mask's letters tracks nothing, so the charge is still suggested.
     await assistant.call('create_bill', { ...netflix, matchPattern: 'acct gym ab' })
     expect(await assistant.call('find_recurring')).toHaveLength(1)

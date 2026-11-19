@@ -3,11 +3,17 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Menu, placeMenu, type MenuItem } from './Menu'
 
-const button = (left: number, bottom: number) => ({ left, bottom }) as DOMRect
+/** A button 36px tall, its left edge and bottom where given. */
+const button = (left: number, bottom: number) => ({ left, bottom, top: bottom - 36 }) as DOMRect
+
+/** A menu of this size. */
+const menu = (width: number, height = 140) => ({ width, height })
 
 describe('placeMenu', () => {
+  const phone = { top: 0, left: 0, right: 390, bottom: 844 }
+
   it('sits just under its button, using the room below', () => {
-    expect(placeMenu(button(20, 100), 200, { width: 390, height: 844 })).toEqual({
+    expect(placeMenu(button(20, 100), menu(200), phone)).toEqual({
       top: 106,
       left: 20,
       maxHeight: 730,
@@ -15,8 +21,37 @@ describe('placeMenu', () => {
   })
 
   it('moves left rather than running off the right edge, but never off the left', () => {
-    expect(placeMenu(button(300, 100), 200, { width: 390, height: 844 }).left).toBe(182)
-    expect(placeMenu(button(300, 100), 500, { width: 390, height: 844 }).left).toBe(8)
+    expect(placeMenu(button(300, 100), menu(200), phone).left).toBe(182)
+    expect(placeMenu(button(300, 100), menu(500), phone).left).toBe(8)
+  })
+
+  it('stays clear of the home indicator and a notch at either side', () => {
+    // An iPhone turned sideways: notches at both sides, the home indicator below.
+    const sideways = { top: 0, left: 47, right: 797, bottom: 369 }
+    const place = placeMenu(button(700, 100), menu(200), sideways)
+    expect(place.left).toBe(589)
+    expect(place.maxHeight).toBe(255)
+    expect(placeMenu(button(10, 100), menu(200), sideways).left).toBe(55)
+  })
+
+  it('opens over a button low on the screen, where there is more room', () => {
+    const sideways = { top: 0, left: 47, right: 620, bottom: 354 }
+    // 140px fits over a button whose top is at 304, ending 6px above it.
+    expect(placeMenu(button(63, 340), menu(200), sideways)).toEqual({
+      top: 158,
+      left: 63,
+      maxHeight: 140,
+    })
+    // A taller menu takes the room there is above, and scrolls.
+    expect(placeMenu(button(63, 340), menu(200, 400), sideways)).toMatchObject({
+      top: 8,
+      maxHeight: 290,
+    })
+  })
+
+  it('stays under its button when it fits there, however much room is above', () => {
+    const tall = { top: 0, left: 0, right: 390, bottom: 844 }
+    expect(placeMenu(button(20, 600), menu(200), tall).top).toBe(606)
   })
 })
 

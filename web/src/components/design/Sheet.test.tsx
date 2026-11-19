@@ -42,7 +42,24 @@ describe('Sheet', () => {
     expect(dialog).toHaveFocus()
     expect(screen.getByText('Today, Chase checking')).toHaveClass('sheet-subtitle')
     expect(screen.getByText('$5.75')).toBeInTheDocument()
-    expect(document.body.style.overflow).toBe('hidden')
+    // Only up and down: sideways overflow is never hidden.
+    expect(document.body.style.overflowY).toBe('hidden')
+    expect(document.body.style.overflowX).toBe('')
+  })
+
+  it('makes the page behind it inert while open, and only what it made so', async () => {
+    const already = document.createElement('div')
+    already.setAttribute('inert', '')
+    document.body.append(already)
+    const { dialog } = await openSheet()
+    const page = screen.getByRole('button', { name: 'Open' }).closest('body > *')!
+    expect(page).toHaveAttribute('inert')
+    expect(dialog.closest('[inert]')).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    expect(page).not.toHaveAttribute('inert')
+    // Something inert before the sheet opened stays so.
+    expect(already).toHaveAttribute('inert')
+    already.remove()
   })
 
   it('closes on Escape, giving focus back to what opened it and letting the page scroll', async () => {
@@ -51,7 +68,7 @@ describe('Sheet', () => {
     expect(onClose).toHaveBeenCalledOnce()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus()
-    expect(document.body.style.overflow).toBe('')
+    expect(document.body.style.overflowY).toBe('')
   })
 
   it('gives focus to its fallback when what opened it has left the page', async () => {

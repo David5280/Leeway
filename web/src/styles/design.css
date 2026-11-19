@@ -353,9 +353,13 @@ tspan.money-neutral {
 }
 
 /* On a phone: a bottom sheet, rounded on top, no taller than the screen
-   below the status bar, its content clear of the home indicator. */
+   below the status bar. Its own padding keeps the scrolling body above the
+   home indicator, so nothing scrolls under it; the background runs on down. */
 .sheet {
+  /* The close button's corner: its 32px circle, 12px in from the edge. */
+  --close-room: calc(12px + 32px);
   position: relative;
+  padding-bottom: var(--sab);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -420,7 +424,8 @@ tspan.money-neutral {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) calc(var(--space-5) + var(--sar)) var(--space-4)
+  /* A long title wraps short of the close button rather than running under it. */
+  padding: var(--space-2) calc(var(--close-room) + var(--space-2) + var(--sar)) var(--space-4)
     calc(var(--space-5) + var(--sal));
 }
 
@@ -446,8 +451,7 @@ tspan.money-neutral {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 calc(var(--space-5) + var(--sar)) calc(var(--space-6) + var(--sab))
-    calc(var(--space-5) + var(--sal));
+  padding: 0 calc(var(--space-5) + var(--sar)) var(--space-6) calc(var(--space-5) + var(--sal));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -657,14 +661,17 @@ tspan.money-neutral {
   position: relative;
 }
 
-/* Fixed to the screen; Menu.tsx sets top, left and max-height from its button. */
+/* Fixed to the screen; Menu.tsx sets top, left and max-height from its button.
+   It opens at the corner first, so it is measured at its full width there. */
 .menu {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: var(--layer-menu);
   display: flex;
   flex-direction: column;
   min-width: 200px;
-  max-width: calc(100vw - 16px);
+  max-width: calc(100vw - 16px - var(--sal) - var(--sar));
   overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--line);
@@ -673,8 +680,10 @@ tspan.money-neutral {
   box-shadow: var(--elev-2);
 }
 
+/* Each item keeps its full height, however many lines a long name takes. */
 .menu-item {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-3);
   min-height: var(--tap);

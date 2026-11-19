@@ -348,7 +348,7 @@ describe('MCP endpoint', () => {
       const result = response.json().result
       expect(result.isError, name).toBeFalsy()
       const text = result.content[0].text as string
-      expect(text, name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
+      expect(withoutUuids(text), name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
       expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
     }
     const people = await rpc(token, 'tools/call', { name: 'list_transactions', arguments: {} })
@@ -368,7 +368,7 @@ describe('MCP endpoint', () => {
     for (const response of [imported, listed]) {
       const text = response.json().result.content[0].text as string
       expect(text).toContain('Test Savings')
-      expect(text).not.toMatch(/4417|"(mask|bankName|fileName)"/)
+      expect(withoutUuids(text)).not.toMatch(/4417|"(mask|bankName|fileName)"/)
     }
 
     // The owner's own app still has the bank's text, for a transaction's details.

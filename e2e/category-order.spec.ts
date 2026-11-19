@@ -1,6 +1,6 @@
-// Category pickers read A to Z: the Transactions filter lists "All
-// categories" first, then its groups A to Z, each group's categories A to Z,
-// even though the starter budget keeps them in its own custom order.
+// Category pickers read A to Z: the Transactions category filter lists "All
+// categories" and "Needs a category" first, then every category A to Z, even
+// though the starter budget keeps them in its own custom order.
 
 import { expect, test } from '@playwright/test'
 
@@ -8,30 +8,17 @@ import { expect, test } from '@playwright/test'
 const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 const alphabetical = (names: string[]) => [...names].sort(collator.compare)
 
-test('the Transactions category filter lists categories A to Z under A to Z groups', async ({
-  page,
-}) => {
+test('the Transactions category filter lists categories A to Z', async ({ page }) => {
   await page.goto('/transactions')
-  const filter = page.getByRole('combobox', { name: 'Category filter' })
-  await expect(filter).toBeVisible()
+  await page.getByRole('button', { name: 'Category: all' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Filter by category' })
+  const options = sheet.getByRole('list', { name: 'Categories' }).getByRole('button')
+  await expect(options.first()).toBeVisible()
 
-  const listed = await filter.evaluate((select: HTMLSelectElement) => ({
-    first: select.options[0]?.text,
-    groups: [...select.querySelectorAll('optgroup')].map((group) => ({
-      label: group.label,
-      names: [...group.querySelectorAll('option')].map((option) => option.text),
-    })),
-  }))
-
-  expect(listed.first).toBe('All categories')
-  // Setup's starter categories come under group headings.
-  expect(listed.groups.length).toBeGreaterThan(1)
-  const headed = listed.groups.filter((group) => group.label !== 'No group')
-  expect(headed.map((g) => g.label)).toEqual(alphabetical(headed.map((g) => g.label)))
-  for (const group of listed.groups) {
-    expect(group.names, `${group.label} is A to Z`).toEqual(alphabetical(group.names))
-  }
-  // Ungrouped categories, if any, come last.
-  const ungrouped = listed.groups.findIndex((group) => group.label === 'No group')
-  expect(ungrouped === -1 || ungrouped === listed.groups.length - 1).toBe(true)
+  const names = await options.allInnerTexts()
+  expect(names.slice(0, 2)).toEqual(['All categories', 'Needs a category'])
+  // Setup's starter categories, more than a few of them.
+  const categories = names.slice(2)
+  expect(categories.length).toBeGreaterThan(5)
+  expect(categories).toEqual(alphabetical(categories))
 })

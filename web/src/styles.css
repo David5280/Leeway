@@ -684,28 +684,6 @@ select.input {
   color: var(--ink);
 }
 
-/* A rule in a rules list: its number, what it matches over where matches
-   go, then its buttons. When the row is too narrow for the text beside the
-   buttons, they drop to a line of their own under it, at the right, so the
-   text keeps the row's width; a long pattern with no spaces wraps rather
-   than widening the row. */
-.rule-row {
-  flex-wrap: wrap;
-}
-
-.rule-text {
-  flex: 1 1 12em;
-  min-width: 0;
-  gap: 2px;
-  overflow-wrap: break-word;
-}
-
-.rule-actions {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
 /* A starter category in setup: its amount drops under its name on a narrow phone. */
 .starter-item {
   flex-wrap: wrap;

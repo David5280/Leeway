@@ -5,8 +5,8 @@ import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
-import { useApp } from '../../lib/app'
 import { alphabeticalGroups } from '../../lib/alphabetical'
+import { useApp } from '../../lib/app'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,

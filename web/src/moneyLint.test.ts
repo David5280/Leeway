@@ -13,9 +13,13 @@ const RULE_MESSAGE = 'Show an amount with <Money cents={...} />, not as formatte
 
 let eslint: ESLint
 
-beforeAll(() => {
+// The first lint loads the config, its plugins and the TypeScript parser,
+// which can take longer than a test is given on a busy machine, so it is
+// done once here, with time to spare.
+beforeAll(async () => {
   eslint = new ESLint({ cwd: ROOT })
-})
+  await eslint.lintText('export {}\n', { filePath: `${ROOT}web/src/pages/Fixture.tsx` })
+}, 60_000)
 
 /**
  * How many times the rule fires on a component file that runs `setup`, then
