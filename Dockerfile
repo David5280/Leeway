@@ -34,6 +34,8 @@ COPY --from=build /app/server/package.json server/
 COPY --from=build /app/server/dist server/dist
 COPY server/migrations server/migrations
 COPY --from=build /app/web/dist web/dist
+# The Scriptable widget script, which Settings > Widget serves to the owner.
+COPY widget/leeway-widget.js widget/
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
