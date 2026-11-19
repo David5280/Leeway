@@ -1845,3 +1845,11 @@ details.more[open] summary {
     flex-basis: 100%;
   }
 }
+
+/*
+ * The home-screen widget's setup (Settings > Widget). Every control is at
+ * least 44px tall, so each is easy to hit with a thumb.
+ */
+.widget-setup .btn {
+  min-height: 44px;
+}
