@@ -85,11 +85,49 @@ describe('pairTransfers', () => {
     ).toEqual(['out:in'])
   })
 
-  it('pairs a transfer with a side that has no words either way', () => {
+  it('never pairs a side that says nothing either way, even with a transfer', () => {
     expect(
       pairsOf([
         tx('out', { accountId: 'checking', amountCents: 2500 }),
         tx('in', { accountId: 'card', amountCents: -2500, name: 'Thanks' }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('does not pair an imported purchase with a friend paying in by transfer', () => {
+    // A line from a file has no code; its store number says nothing about a transfer.
+    expect(
+      pairsOf([
+        tx('target', { accountId: 'imported-card', amountCents: 5000, name: 'TARGET 00012345' }),
+        tx('friend', {
+          accountId: 'checking',
+          amountCents: -5000,
+          name: 'ONLINE TRANSFER FROM A FRIEND',
+          providerCategoryPrimary: 'TRANSFER_IN',
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('does not pair an imported refund with rent sent out by transfer', () => {
+    expect(
+      pairsOf([
+        tx('rent', {
+          accountId: 'checking',
+          amountCents: 2500,
+          name: 'ONLINE TRANSFER TO LANDLORD',
+          providerCategoryPrimary: 'TRANSFER_OUT',
+        }),
+        tx('refund', { accountId: 'imported-card', amountCents: -2500, name: 'REFUND' }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('pairs imported or hand-added lines when both say they are a transfer', () => {
+    expect(
+      pairsOf([
+        tx('out', { accountId: 'manual-checking', amountCents: 2500, name: 'Transfer to savings' }),
+        tx('in', { accountId: 'imported-savings', amountCents: -2500, name: 'XFER FROM CHK' }),
       ]),
     ).toEqual(['out:in'])
   })

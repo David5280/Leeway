@@ -222,7 +222,7 @@ describe('transactions as listed', () => {
     const savings = await insertBankAccount(ctx.db, { name: 'Savings' })
     const arrival = await insertBankTransaction(ctx.db, savings.accountId, {
       date: '2026-11-11',
-      name: 'Deposit',
+      name: 'Transfer from checking',
       amountCents: -2500,
     })
     const added = await call('create_transaction', {

@@ -6,10 +6,15 @@
 // transactions always pair the same way. A pair needs all of:
 // - the same amount, out of one account and into a different one;
 // - dates at most PAIR_WINDOW_DAYS apart;
-// - at least one side that says it is a transfer (Plaid's transfer or card
-//   payment codes, or words like "transfer" in a line with no code), and no
-//   side that says it is something else (a paycheck, a purchase, or a payment
-//   to another person through an app like Zelle).
+// - both sides saying they are a transfer: Plaid's transfer or card payment
+//   codes, or words like "transfer" in a line with no code. A side that says
+//   nothing either way never pairs, since a line imported from a file or added
+//   by hand has no code, and its silence is as true of a refund, a paycheck or
+//   a friend paying back as of a transfer. A side that says it is something
+//   else (a purchase, a paycheck, a payment to another person through an app
+//   like Zelle) never pairs either.
+// Every account Leeway knows is the owner's, so both sides are always the
+// owner's own money.
 // Closest dates pair first, and each transaction pairs at most once.
 //
 // A paired transfer only moves money between the owner's accounts, so it is
@@ -64,11 +69,10 @@ interface Match<T> {
   gap: number
 }
 
-/** Whether two transactions may be the two sides of one transfer. */
+/** Whether two transactions may be the two sides of one transfer: both must say they are one. */
 function mayPair(out: PairCandidate, arrival: PairCandidate, hints: Map<string, TransferHint>) {
   if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) return false
-  const sides = [hints.get(out.id), hints.get(arrival.id)]
-  return !sides.includes('other') && sides.includes('transfer')
+  return hints.get(out.id) === 'transfer' && hints.get(arrival.id) === 'transfer'
 }
 
 /** Closest dates first; then by date and id, so equal gaps always pair the same way. */
