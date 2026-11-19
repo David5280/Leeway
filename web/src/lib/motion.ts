@@ -49,23 +49,19 @@ export function countAt(from: number, to: number, elapsed: number, duration: num
 export function useCountUp(target: number, duration = 700): number {
   const reduced = useReducedMotion()
   const [shown, setShown] = useState(reduced ? target : 0)
-  // Where the next count starts: the value on screen when the target changed.
-  const current = useRef(shown)
-  current.current = shown
+  // The value on screen, where the next count starts when the target changes.
+  const onScreen = useRef(shown)
 
   useEffect(() => {
-    if (reduced) {
-      setShown(target)
-      return
-    }
-    const from = current.current
-    if (from === target) return
+    if (reduced || onScreen.current === target) return
+    const from = onScreen.current
     let frame = 0
     let start: number | null = null
     const step = (now: number) => {
       start ??= now
       const elapsed = now - start
-      setShown(countAt(from, target, elapsed, duration))
+      onScreen.current = countAt(from, target, elapsed, duration)
+      setShown(onScreen.current)
       if (elapsed < duration) frame = requestAnimationFrame(step)
     }
     frame = requestAnimationFrame(step)

@@ -71,80 +71,108 @@ export function goalsOn(account: Pick<Account, 'id'>, goals: readonly Goal[]): G
   return goals.filter((goal) => goal.accountId === account.id)
 }
 
+/** The 30-day change as a fact; a rise is money in, so it is green with a +. */
+function changeFacts(balances: readonly number[]): AccountFact[] {
+  const change = balanceChange(balances)
+  if (change === null) return []
+  return [
+    {
+      kind: 'money',
+      label: 'in 30 days',
+      cents: change,
+      sign: 'change',
+      tone: change > 0 ? 'in' : undefined,
+    },
+  ]
+}
+
+/** Checking: overdrawn in words, else what is available after pending charges. */
+function checkingFacts(account: Account, balances: readonly number[]): AccountFact[] {
+  if (overdrawn(account)) {
+    return [{ kind: 'text', label: 'Status', text: 'Overdrawn', tone: 'problem' }]
+  }
+  const { availableCents, balanceCents } = account
+  if (availableCents !== null && balanceCents !== null && availableCents !== balanceCents) {
+    return [{ kind: 'money', label: 'available', cents: availableCents }]
+  }
+  return changeFacts(balances)
+}
+
+/** How a card's use of its limit reads: over it, above the score-friendly share, or fine. */
+export function utilizationStatus(percent: number): 'ok' | 'watch' | 'over' {
+  if (percent > 100) return 'over'
+  return percent > UTILIZATION_WATCH ? 'watch' : 'ok'
+}
+
+/** Credit card: how much of the limit is used, and the minimum payment. */
+function creditFacts(account: Account): AccountFact[] {
+  const facts: AccountFact[] = []
+  const used = utilization(account)
+  if (used !== null) {
+    facts.push({
+      kind: 'ring',
+      label: 'of limit used',
+      percent: used,
+      status: utilizationStatus(used),
+    })
+  }
+  if (account.minimumPaymentCents !== null) {
+    facts.push({ kind: 'money', label: 'minimum due', cents: account.minimumPaymentCents })
+  }
+  return facts
+}
+
+/** Savings: the first goal's progress, else the change over the last 30 days. */
+function savingsFacts(balances: readonly number[], goals: readonly Goal[]): AccountFact[] {
+  const goal = goals.find((one) => one.targetCents > 0)
+  if (!goal) return changeFacts(balances)
+  return [{ kind: 'ring', label: goal.name, percent: goal.percent, status: 'ok' }]
+}
+
+/** Investment and retirement: the 30-day change and the line of it. */
+function growthFacts(balances: readonly number[]): AccountFact[] {
+  if (balances.length < 2) return []
+  return [
+    ...changeFacts(balances),
+    { kind: 'spark', label: 'Balance over 30 days', values: [...balances] },
+  ]
+}
+
+/** Loan: the rate and the monthly payment. */
+function loanFacts(account: Account): AccountFact[] {
+  const facts: AccountFact[] = []
+  if (account.aprPercent !== null) {
+    facts.push({ kind: 'text', label: 'rate', text: `${account.aprPercent}% APR` })
+  }
+  if (account.minimumPaymentCents !== null) {
+    facts.push({ kind: 'money', label: 'a month', cents: account.minimumPaymentCents })
+  }
+  return facts
+}
+
 /**
- * The one or two facts that matter for an account of its kind:
- * - checking: overdrawn in words, else what is available after pending charges;
- * - credit card: how much of the limit is used, and the minimum payment;
- * - savings: a goal's progress, else the change over the last 30 days;
- * - investment and retirement: the 30-day change and its line;
- * - loan: the rate and the monthly payment.
+ * The one or two facts that matter for an account of its kind. `balances`
+ * are its daily balances for the last 30 days, oldest first; `goals` are the
+ * goals that track it (goalsOn).
  */
 export function accountFacts(
   account: Account,
   { balances = [], goals = [] }: { balances?: readonly number[]; goals?: readonly Goal[] } = {},
 ): AccountFact[] {
-  const change = balanceChange(balances)
-  const changeFact = (): AccountFact[] =>
-    change === null
-      ? []
-      : [
-          {
-            kind: 'money',
-            label: 'in 30 days',
-            cents: change,
-            sign: 'change',
-            tone: change > 0 ? 'in' : undefined,
-          },
-        ]
-
   switch (account.kind) {
-    case 'checking': {
-      if (overdrawn(account))
-        return [{ kind: 'text', label: 'Status', text: 'Overdrawn', tone: 'problem' }]
-      const pending =
-        account.availableCents !== null && account.balanceCents !== null
-          ? account.balanceCents - account.availableCents
-          : 0
-      return account.availableCents !== null && pending !== 0
-        ? [{ kind: 'money', label: 'available', cents: account.availableCents }]
-        : changeFact()
-    }
-    case 'credit_card': {
-      const used = utilization(account)
-      const facts: AccountFact[] = []
-      if (used !== null) {
-        const status = used > 100 ? 'over' : used > UTILIZATION_WATCH ? 'watch' : 'ok'
-        facts.push({ kind: 'ring', label: 'of limit used', percent: used, status })
-      }
-      if (account.minimumPaymentCents !== null) {
-        facts.push({ kind: 'money', label: 'minimum due', cents: account.minimumPaymentCents })
-      }
-      return facts
-    }
-    case 'savings': {
-      const goal = goals.find((one) => one.targetCents > 0)
-      if (goal) {
-        return [{ kind: 'ring', label: goal.name, percent: goal.percent, status: 'ok' }]
-      }
-      return changeFact()
-    }
+    case 'checking':
+      return checkingFacts(account, balances)
+    case 'credit_card':
+      return creditFacts(account)
+    case 'savings':
+      return savingsFacts(balances, goals)
     case 'investment':
     case 'retirement':
-      return balances.length > 1
-        ? [...changeFact(), { kind: 'spark', label: 'Balance over 30 days', values: [...balances] }]
-        : []
-    case 'loan': {
-      const facts: AccountFact[] = []
-      if (account.aprPercent !== null) {
-        facts.push({ kind: 'text', label: 'rate', text: `${account.aprPercent}% APR` })
-      }
-      if (account.minimumPaymentCents !== null) {
-        facts.push({ kind: 'money', label: 'a month', cents: account.minimumPaymentCents })
-      }
-      return facts
-    }
+      return growthFacts(balances)
+    case 'loan':
+      return loanFacts(account)
     default:
-      return changeFact()
+      return changeFacts(balances)
   }
 }
 
