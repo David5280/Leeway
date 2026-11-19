@@ -104,8 +104,8 @@ function SetupNotice() {
     <p className="notice">
       To send email, add <code>RESEND_API_KEY</code> and <code>MAIL_FROM</code> to your
       server&apos;s variables (on Railway: the Leeway service, then Variables). Make the key at
-      resend.com, and verify the domain of the MAIL_FROM address there. Nothing is sent until you
-      turn the email on here.
+      resend.com, and verify the domain of the <code>MAIL_FROM</code> address there. Nothing is sent
+      until you turn the email on here.
     </p>
   )
 }
