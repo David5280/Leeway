@@ -214,7 +214,7 @@ with a note.
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
 | `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary.                               |
-| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-opus-5-5`.           |
+| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-haiku-5-5`.          |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
