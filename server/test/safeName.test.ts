@@ -59,6 +59,24 @@ describe('safeName', () => {
     expect(safeName('٤x٤x١x٧', mask, 'Shopping')).toBe('Shopping')
   })
 
+  it('reads letters that pass for digits as digits, in a word that holds digits', () => {
+    expect(safeName('Store 44l7', masks, 'Shopping')).toBe('Store')
+    expect(safeName('Store 44I7', masks, 'Shopping')).toBe('Store')
+    expect(safeName('Gym 98o6', ['9806'], 'Fitness')).toBe('Gym')
+    expect(safeName('Gym 98O6', ['9806'], 'Fitness')).toBe('Gym')
+    // Its end alone is enough, as with digits: "l7" reads as 17 of 4417.
+    expect(safeName('Store l7', masks, 'Shopping')).toBe('Store')
+    // Only a mask's digits are read that way; the letters are never a number of their own.
+    expect(safeName('Store 44l7', ['5555'], 'Shopping')).toBe('Store 44l7')
+  })
+
+  it('leaves words with no digit alone, though their letters could pass for digits', () => {
+    const lookalikes = ['1001', '0110', '1010']
+    expect(safeName('Hello', lookalikes, 'Shopping')).toBe('Hello')
+    expect(safeName('IOU Bar', lookalikes, 'Dining out')).toBe('IOU Bar')
+    expect(safeName('Lollo Rosso Oil', lookalikes, 'Groceries')).toBe('Lollo Rosso Oil')
+  })
+
   it('leaves an ordinary name as it is', () => {
     expect(safeName('Blue Bottle Coffee', masks, 'Coffee')).toBe('Blue Bottle Coffee')
     expect(safeName('Route 66 Diner', [], 'Dining out')).toBe('Route 66 Diner')

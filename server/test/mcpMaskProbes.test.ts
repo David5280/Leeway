@@ -150,4 +150,17 @@ describe("an account's mask, through MCP", () => {
     expect(dismissMask).toEqual(dismissNowhere)
     expect(await everything()).toEqual(before)
   })
+  it('is not shown with letters standing in for its digits', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '4417' })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-02',
+      name: 'POS STORE 44L7',
+      merchantName: 'Store 44l7',
+      amountCents: 1200,
+    })
+    const tool = await assistant()
+    const { body } = await tool('list_transactions')
+    expect(body).toMatchObject({ transactions: [{ displayName: 'Store' }] })
+    expect(JSON.stringify(body)).not.toMatch(/44l7/i)
+  })
 })

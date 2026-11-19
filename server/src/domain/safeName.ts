@@ -13,6 +13,9 @@
 //    "4a4b1c7" still spells 4417 to a reader. A word goes when it holds four
 //    digits or more ("TRANSACTION#:3167"), or when its digits joined spell
 //    any account's mask or the mask's last two digits or more ("41X7").
+//    In a word that holds a digit, l and I are read as 1 and O and o as 0 for
+//    that check too, since "44l7" reads as 4417; a word with no digit, like
+//    "Hello" or "IOU", is never read that way.
 // 3. carriesMask is the guarantee: a name that still shows any account's mask
 //    is replaced by a plain fallback, like "Transfer".
 
@@ -30,6 +33,19 @@ const LOOSE_ENDS = /^[\s,:;#*.\-–]+|[\s,:;#*\-–]+$/g
 /** A word's digits in ASCII, in order, with every letter and mark between them taken out. */
 function digitsIn(word: string): string {
   return asciiDigits(word).replace(/\D/g, '')
+}
+
+/** Letters a reader takes for digits beside other digits: "44l7" is 4417, "44O7" is 4407. */
+const LOOKALIKE_DIGITS: Readonly<Record<string, string>> = { l: '1', I: '1', O: '0', o: '0' }
+
+/**
+ * A word's digits as digitsIn reads them, with each look-alike letter read as
+ * its digit, or '' when the word holds no digit to stand beside.
+ */
+function lookalikeDigitsIn(word: string): string {
+  const ascii = asciiDigits(word)
+  if (!/\d/.test(ascii)) return ''
+  return digitsIn(ascii.replace(/[lIOo]/g, (letter) => LOOKALIKE_DIGITS[letter]!))
 }
 
 /** The digits of a mask made only of digits, two or more; '' for one with letters. */
@@ -53,7 +69,8 @@ function spellsMask(digits: string, mask: string): boolean {
 function readsAsNumber(word: string, masks: readonly string[]): boolean {
   const digits = digitsIn(word)
   if (digits.length > MOST_DIGITS_IN_A_WORD) return true
-  return masks.some((mask) => spellsMask(digits, mask))
+  const lookalikes = lookalikeDigitsIn(word)
+  return masks.some((mask) => spellsMask(digits, mask) || spellsMask(lookalikes, mask))
 }
 
 /** The name without any word that could be read as a number (see the top of this file). */
