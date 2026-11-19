@@ -217,7 +217,7 @@ describe('the savings lens', () => {
       parts: [{ label: 'Savings account', cents: 600_000 }],
     })
     expect(saving).toMatchObject({
-      question: 'How much of my take-home pay goes to savings?',
+      question: 'How much of my pay goes to savings?',
       headline: '8%',
       detail:
         'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
@@ -305,12 +305,12 @@ describe('the retirement and investing lenses', () => {
       ],
       { contributions },
     ).lenses
-    // Without a birth year there is no projection: the lens asks for one.
+    // Without a birth year there is no projection: the lens shows what is held and asks for one.
     expect(retirement!.question).toBe('Can I stop working on time?')
     expect(retirement!.answer).toEqual({
-      headline: null,
+      headline: '$50,000',
       detail:
-        'Add your birth year to see whether your savings and pension can cover the income you want.',
+        'in retirement across 1 account. -$1,200 since Nov 19. Add your birth year to see what your savings and any pension could pay.',
       tone: 'neutral',
       progress: null,
     })

@@ -9,15 +9,7 @@ import { FORMULA_NOTE } from '../retirement/pensions.js'
 import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
 import type { Band } from '../retirement/projection.js'
 import type { InsightFormat } from './insights.js'
-import {
-  CONTRIBUTION_NOT_SET,
-  growthMeter,
-  LENS_QUESTIONS,
-  PENSION_LABEL,
-  type Lens,
-  type LensAnswer,
-  type Meter,
-} from './lens.js'
+import { growthMeter, LENS_QUESTIONS, type Lens, type LensAnswer, type Meter } from './lens.js'
 import { balanceAnswer, contributionsMeter, pick, type LensInput } from './lenses.js'
 
 /** Each pension as its card shows it, in words. */
@@ -40,6 +32,12 @@ export interface PensionCard {
   counted: boolean
   checkedOn: string | null
 }
+
+/** The label every pension figure carries: Leeway never finds a pension on its own. */
+export const PENSION_LABEL = 'Pension, entered by you'
+
+/** What a pension card says while its contribution is blank. */
+export const CONTRIBUTION_NOT_SET = 'Contribution not entered yet. Your paystub shows it.'
 
 const ON_TRACK_WORDS = { on_track: 'On track', close: 'Close', below_target: 'Below target' }
 

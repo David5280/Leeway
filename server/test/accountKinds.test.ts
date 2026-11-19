@@ -117,6 +117,7 @@ describe('kinds the owner may pick', () => {
       'checking',
       'savings',
       'retirement',
+      'pension',
       'investment',
       'other',
     ])

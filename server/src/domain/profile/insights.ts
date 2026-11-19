@@ -174,9 +174,9 @@ function goalInsight(
 }
 
 /**
- * What the middle projection means for the target: the gap savings need to
- * fill on top of any pension, and a later age that closes it, or the room to
- * spare. It states figures and choices, never that the owner should save more.
+ * What the middle projection means for the target: what the pension and
+ * savings each give, and a later age that would meet it, or the room to spare.
+ * It states figures and a choice, never that the owner should save more.
  */
 export function retirementInsight(
   profile: FinancialProfile,
@@ -186,7 +186,6 @@ export function retirementInsight(
   if (!projection?.target || projection.onTrack === null) return null
   const { income, target, retirementAge, laterAge } = projection
   const pension = income.pension.mid
-  const onTopOf = pension > 0 ? ' on top of your pension' : ''
   if (projection.gapMonthlyCents === 0) {
     const spare = income.total.mid - target.monthlyCents
     return {
@@ -196,15 +195,18 @@ export function retirementInsight(
       text: `In the middle case you would have about ${money(income.total.mid)} a month at ${retirementAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
     }
   }
-  const needed = Math.max(0, target.monthlyCents - pension)
+  const parts =
+    pension > 0
+      ? `your pension gives about ${money(pension)} a month and savings about ${money(income.savings.mid)}`
+      : `savings give about ${money(income.savings.mid)} a month`
   const later = laterAge
-    ? ` Retiring at ${laterAge} instead of ${retirementAge} closes that gap in the middle case, with no change to what you put in.`
+    ? ` Retiring at ${laterAge} instead of ${retirementAge} would meet it, with no change to what you put in.`
     : ''
   return {
     about: 'retirement',
     topic: 'retirement',
     tone: 'neutral',
-    text: `Savings need to give about ${money(needed)} a month${onTopOf}. The middle projection gives ${money(income.savings.mid)}.${later}`,
+    text: `Of the ${money(target.monthlyCents)} a month you want at ${retirementAge}, ${parts} in the middle case.${later}`,
   }
 }
 

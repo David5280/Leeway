@@ -95,6 +95,8 @@ describe('getFinancialProfile', () => {
       emergencyFund: null,
       savingsRate: null,
       savingsRateTargetPercent: null,
+      pensionPay: { memberCents: null, employerCents: null },
+      retirement: expect.objectContaining({ projection: null, hasPension: false, pensions: [] }),
       goals: [],
       userContext: [],
     })
@@ -284,14 +286,14 @@ describe('get_financial_profile', () => {
     )
     // The guard travels with the number, on the same line.
     expect(digest).toMatch(
-      /^Savings rate seen at the bank: about 8% of take-home pay .*never say this rate is too little\.$/m,
+      /^Savings rate seen at the bank: about 8% of take-home pay .*never say this rate is too little\. A pension is retirement saving: .*\.$/m,
     )
     expect(digest).not.toContain('Test Bank')
   })
 
   it('warns an assistant, in its descriptions and instructions, that the rate leaves out payroll', () => {
     expect(findAction('get_financial_profile')!.description).toContain(
-      'payroll deductions, such as a pension or a 401(k), are not counted, so never say it is too little',
+      'never other payroll deductions such as a 401(k), so never say it is too little',
     )
     expect(findAction('summarize_savings')!.description).toMatch(
       /never tell the owner they save too little/,
@@ -300,8 +302,20 @@ describe('get_financial_profile', () => {
       'bankSeenSavingsRatePercent counts only money moved through the bank',
     )
     expect(MCP_INSTRUCTIONS).toContain(
-      'Payroll deductions, such as a pension or a 401(k), are never counted, so never tell the owner they save too little.',
+      'never other payroll deductions such as a 401(k), so never tell the owner they save too little.',
     )
+  })
+
+  it('tells an assistant, everywhere it reads about saving, that a pension is retirement saving', () => {
+    const underSaving = /never call .*under-saving/
+    for (const name of ['get_checkin', 'summarize_savings', 'project_retirement']) {
+      expect(findAction(name)!.description).toMatch(underSaving)
+    }
+    expect(MCP_INSTRUCTIONS).toMatch(underSaving)
+    expect(MCP_INSTRUCTIONS).toContain("never a plan's rules from what you know")
+    for (const name of ['create_pension', 'update_pension']) {
+      expect(findAction(name)!.description).toContain('Enter only figures the owner gives you')
+    }
   })
 })
 

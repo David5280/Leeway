@@ -89,12 +89,6 @@ export const LENS_QUESTIONS: Record<
   loan: { title: 'Loans', question: 'When will it be gone?' },
 }
 
-/** The label every pension figure carries: Leeway never finds a pension on its own. */
-export const PENSION_LABEL = 'Pension, entered by you'
-
-/** What a pension card and the savings rate say while a pension contribution is blank. */
-export const CONTRIBUTION_NOT_SET = 'Contribution not set yet. Add a paystub or enter it.'
-
 /** Money with its sign, for a change: "+$1,200", "-$300", "$0". */
 export function signedMoney(cents: number, money: InsightFormat['money']): string {
   if (cents > 0) return `+${money(cents)}`
