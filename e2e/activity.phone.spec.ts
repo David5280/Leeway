@@ -5,13 +5,7 @@
 
 import { expect, test, type Page } from '@playwright/test'
 import { addAccount, addSpending, removeAccount } from './manual'
-import {
-  overflow,
-  shortTargets,
-  simulateInsets,
-  SIDEWAYS_INSETS,
-  UPRIGHT_INSETS,
-} from './phone'
+import { overflow, shortTargets, simulateInsets, SIDEWAYS_INSETS, UPRIGHT_INSETS } from './phone'
 
 /** An iPhone's 390 by 844 screen, upright, and the same turned sideways. */
 const UPRIGHT = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
