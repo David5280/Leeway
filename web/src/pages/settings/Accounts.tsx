@@ -45,7 +45,10 @@ export function AccountSection() {
 
 function AccountRow({ account }: { account: Account }) {
   const { exact } = useApp()
-  const [name, setName] = useState(account.name)
+  // What the owner is typing, held only while they edit and save. Otherwise the
+  // field shows the server's name, so a rename made elsewhere (a bank's new name
+  // for the account) is never saved back as the owner's own.
+  const [draft, setDraft] = useState<string | null>(null)
   const update = useActionMutation('update_account')
   const remove = useActionMutation('delete_account')
   const owed = isOwed(account)
@@ -59,17 +62,23 @@ function AccountRow({ account }: { account: Account }) {
       <span className="grow stack-sm" style={{ gap: 0, minWidth: 180 }}>
         <input
           className="input"
-          aria-label={`Name for ${account.bankName}`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          aria-label={`Name for ${account.name}`}
+          value={draft ?? account.name}
+          onChange={(e) => setDraft(e.target.value)}
           onBlur={() => {
-            const next = name.trim()
-            setName(next)
-            if (next === account.name) return
-            // The server names the account, so cleared, it shows the name Leeway gives it.
+            // Only typing starts a draft, so a field merely tabbed through saves nothing.
+            if (draft === null) return
+            const next = draft.trim()
+            if (next === account.name) {
+              setDraft(null)
+              return
+            }
+            setDraft(next)
+            // Cleared, the server names it as Leeway would; the list has the new
+            // name before onSuccess, so the draft goes without a flash of the old.
             update.mutate(
               { id: account.id, displayName: next || null },
-              { onSuccess: (saved) => setName(saved.name) },
+              { onSuccess: () => setDraft(null) },
             )
           }}
         />

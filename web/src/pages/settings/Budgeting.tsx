@@ -39,7 +39,6 @@ export function BudgetingSection() {
       <Setting label="Warn at" hint="Each category can override this">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Warn at"
           value={settings.defaultWarnAtPercent}
           onChange={(e) => save.settings({ defaultWarnAtPercent: Number(e.target.value) })}

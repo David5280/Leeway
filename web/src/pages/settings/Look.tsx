@@ -56,7 +56,6 @@ export function LookSection() {
       <Setting label="Font">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Font"
           value={a.font}
           onChange={(e) =>

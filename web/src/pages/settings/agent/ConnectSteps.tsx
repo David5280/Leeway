@@ -41,8 +41,8 @@ export function ConnectSteps({ address }: { address: string }) {
       />
       <ol className="how-to" start={2}>
         <li>
-          In Claude Code, run <code className="num">/mcp</code>, pick leeway and sign in. Approve in
-          the Leeway page that opens.
+          In Claude Code, run <code>/mcp</code>, pick leeway and sign in. Approve in the Leeway page
+          that opens.
         </li>
       </ol>
 

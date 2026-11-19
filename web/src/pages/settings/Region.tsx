@@ -63,7 +63,6 @@ export function RegionSection() {
       <Setting label="Currency">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Currency"
           value={settings.currency}
           onChange={(e) => save.settings({ currency: e.target.value })}
@@ -78,7 +77,6 @@ export function RegionSection() {
       <Setting label="Number format">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Number format"
           value={settings.locale}
           onChange={(e) => save.settings({ locale: e.target.value })}
@@ -93,7 +91,6 @@ export function RegionSection() {
       <Setting label="Time zone" hint="Decides when a day, and a period, begins">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Time zone"
           value={settings.timeZone}
           onChange={(e) => save.settings({ timeZone: e.target.value })}

@@ -200,7 +200,7 @@ export async function listImports(db: Db): Promise<PastImport[]> {
   const { rows } = await db.query<Omit<PastImport, 'accountName'>>(
     `SELECT i.id, i.account_id AS "accountId",
        i.file_name AS "fileName", i.added, i.created_at AS "createdAt"
-     FROM imports i JOIN accounts a ON a.id = i.account_id
+     FROM imports i
      ORDER BY i.created_at DESC, i.id
      LIMIT 50`,
   )
