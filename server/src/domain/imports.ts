@@ -15,6 +15,7 @@ import { isoDateSchema } from '../lib/schemas.js'
 import {
   createManualAccount,
   getAccount,
+  accountNames,
   manualAccountInputSchema,
   type Account,
 } from './accounts.js'
@@ -196,14 +197,15 @@ export async function importTransactions(
 
 /** Past imports, newest first, for undoing one. */
 export async function listImports(db: Db): Promise<PastImport[]> {
-  const { rows } = await db.query<PastImport>(
-    `SELECT i.id, i.account_id AS "accountId", coalesce(a.display_name, a.name) AS "accountName",
+  const { rows } = await db.query<Omit<PastImport, 'accountName'>>(
+    `SELECT i.id, i.account_id AS "accountId",
        i.file_name AS "fileName", i.added, i.created_at AS "createdAt"
-     FROM imports i JOIN accounts a ON a.id = i.account_id
+     FROM imports i
      ORDER BY i.created_at DESC, i.id
      LIMIT 50`,
   )
-  return rows
+  const names = await accountNames(db)
+  return rows.map((row) => ({ ...row, accountName: names.get(row.accountId)! }))
 }
 
 /**

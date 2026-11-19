@@ -31,11 +31,11 @@ export interface AccountAlert {
   count: number
   /** The latest fee's date, for an overdraft fee alert; null for every other kind. */
   date: IsoDate | null
-  /** The alert in a sentence that names the account, for the app and assistants. */
+  /** The alert in a sentence, for the app and assistants. */
   message: string
   /**
-   * The same alert without the account's name, for the weekly email and the AI
-   * summary writer, which only ever see the bank and the kind of account.
+   * The alert in fewer words, for the dashboard summary, the weekly email and
+   * the AI summary writer. Both name the account the same way (accountName.ts).
    */
   summary: string
 }
@@ -109,30 +109,9 @@ export function lowBalanceThreshold(
   return threshold === 0 ? null : threshold
 }
 
-/**
- * The account in words that do not name it: "your Chase checking account",
- * "your credit card". Banks already appear in the weekly email; account names
- * and numbers never do.
- */
-export function unnamedAccount(
-  account: Pick<AlertAccount, 'institutionName' | 'type' | 'subtype'>,
-): string {
-  const kind = kindOfAccount(account)
-  return account.institutionName ? `your ${account.institutionName} ${kind}` : `your ${kind}`
-}
-
-/** "credit card", "checking account", or plain "account" when the bank gives no kind. */
-function kindOfAccount({ type, subtype }: Pick<AlertAccount, 'type' | 'subtype'>): string {
-  if (type === 'credit') return 'credit card'
-  return subtype ? `${subtype} account` : 'account'
-}
-
-const capitalized = (text: string) => text[0]!.toUpperCase() + text.slice(1)
-
 /** The balance alerts for one account: overdrawn, over its limit, or low. At most one. */
 function balanceAlert(account: AlertAccount, { money }: AlertFormat): AccountAlert | null {
   const base = { accountId: account.id, accountName: account.name, count: 1, date: null }
-  const unnamed = capitalized(unnamedAccount(account))
 
   if (account.type === 'credit') {
     // A card's balance is what is owed, so it is never "overdrawn"; going past its limit is.
@@ -145,7 +124,7 @@ function balanceAlert(account: AlertAccount, { money }: AlertFormat): AccountAle
       severity: 'urgent',
       amountCents: over,
       message: `${account.name} is ${money(over)} over its ${money(limit)} limit.`,
-      summary: `${unnamed} is ${money(over)} over its limit.`,
+      summary: `${account.name} is ${money(over)} over its limit.`,
     }
   }
   if (account.type !== 'depository') return null
@@ -157,13 +136,14 @@ function balanceAlert(account: AlertAccount, { money }: AlertFormat): AccountAle
   )
   const lowest = known.length ? Math.min(...known) : null
   if (lowest !== null && lowest < 0) {
+    const sentence = `${account.name} is overdrawn by ${money(-lowest)}.`
     return {
       ...base,
       kind: 'overdrawn',
       severity: 'urgent',
       amountCents: -lowest,
-      message: `${account.name} is overdrawn by ${money(-lowest)}.`,
-      summary: `${unnamed} is overdrawn by ${money(-lowest)}.`,
+      message: sentence,
+      summary: sentence,
     }
   }
 
@@ -177,7 +157,7 @@ function balanceAlert(account: AlertAccount, { money }: AlertFormat): AccountAle
     severity: 'warning',
     amountCents: spendable,
     message: `${account.name} is down to ${money(spendable)}, below your ${money(threshold)} warning.`,
-    summary: `${unnamed} is down to ${money(spendable)}.`,
+    summary: `${account.name} is down to ${money(spendable)}.`,
   }
 }
 
@@ -195,6 +175,7 @@ function feeAlert(
       ? `an overdraft fee of ${money(total)}`
       : `${fees.length} overdraft fees, ${money(total)} in all,`
   const when = `in the last ${FEE_DAYS} days, most recently ${date(latest)}`
+  const sentence = `${account.name} was charged ${what} ${when}.`
   return {
     kind: 'overdraft_fee',
     severity: 'warning',
@@ -203,8 +184,8 @@ function feeAlert(
     amountCents: total,
     count: fees.length,
     date: latest,
-    message: `${account.name} was charged ${what} ${when}.`,
-    summary: `${capitalized(unnamedAccount(account))} was charged ${what} ${when}.`,
+    message: sentence,
+    summary: sentence,
   }
 }
 

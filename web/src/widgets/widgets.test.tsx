@@ -268,7 +268,7 @@ describe('GlanceWidget', () => {
     expect(await screen.findByText('No banks yet')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Connect a bank' })).toHaveAttribute(
       'href',
-      '/customize#banks',
+      '/settings/banks',
     )
   })
 
@@ -335,7 +335,7 @@ describe('AlertsWidget', () => {
     await screen.findByText('Chase needs you to log in again to keep syncing.')
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/customize#banks',
+      '/settings/banks',
       '/budgets/cat-dining-out',
       '/budgets/cat-groceries',
       '/budgets/cat-fun',
@@ -399,7 +399,7 @@ describe('AlertsWidget', () => {
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/accounts?select=short',
       '/accounts?select=low',
-      '/customize#banks',
+      '/settings/banks',
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
     expect(links[1]).toHaveTextContent('Low')
@@ -744,6 +744,7 @@ describe('AccountsWidget', () => {
     return {
       connectionId: null,
       institutionName: null,
+      nickname: null,
       bankName: fields.name,
       mask: null,
       type: 'depository',
@@ -800,36 +801,29 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('$50.00')).not.toHaveClass('over')
   })
 
-  it('tells two similar cards apart by bank and last four digits, in readable casing', async () => {
+  it('shows the name the server gives each account, with its bank and last four digits', async () => {
     fakeServer({
       list_accounts: () => [
         account({
           id: 'a',
-          name: 'Credit Card',
+          name: 'Chase Credit Card',
+          bankName: 'CREDIT CARD',
           institutionName: 'Chase',
           mask: '0388',
           type: 'credit',
         }),
-        account({
-          id: 'b',
-          name: 'CREDIT CARD',
-          institutionName: 'Capital One',
-          mask: '7712',
-          type: 'credit',
-        }),
         account({ id: 'c', name: 'Car', manual: true, type: 'property' }),
-        // The owner's own label is shown as typed, capitals and all.
-        account({ id: 'd', name: 'MY HSA', bankName: 'HEALTH SAVINGS', mask: '5555' }),
+        account({ id: 'd', name: 'MY HSA', nickname: 'MY HSA', mask: '5555' }),
       ],
     })
     renderSignedIn(<AccountsWidget />)
     expect(await screen.findByText('Chase ··0388')).toBeInTheDocument()
-    expect(screen.getByText('Capital One ··7712').closest('.list-row')).toHaveTextContent(
-      'Credit Card',
+    expect(screen.getByText('Chase ··0388').closest('.list-row')).toHaveTextContent(
+      'Chase Credit Card',
     )
     expect(screen.queryByText('CREDIT CARD')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Credit Card')).toHaveLength(2)
     expect(screen.getByText('Added by hand')).toBeInTheDocument()
+    // The owner's own name is shown as typed, capitals and all.
     expect(screen.getByText('MY HSA')).toBeInTheDocument()
     expect(screen.getByText('··5555')).toBeInTheDocument()
   })

@@ -56,7 +56,7 @@ export function PeriodStep({ onNext }: { onNext: () => void }) {
             %
           </div>
         </Setting>
-        <p className="small muted">You can change all of this later in Customize.</p>
+        <p className="small muted">You can change all of this later in Settings.</p>
         <ErrorNote error={update.error} />
         <Nav next="Continue" busy={update.isPending} />
       </form>

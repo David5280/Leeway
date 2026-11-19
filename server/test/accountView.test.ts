@@ -52,7 +52,7 @@ describe('summarize_accounts', () => {
       recent: [],
       alerts: [],
       summary: {
-        headline: 'No accounts yet. Connect a bank or add one in Customize.',
+        headline: 'No accounts yet. Connect a bank or add one in Settings.',
         points: [],
       },
     })
@@ -89,7 +89,7 @@ describe('summarize_accounts', () => {
     const view = await call('summarize_accounts', { accountIds: [everyday] })
 
     expect(view.allAccounts).toBe(false)
-    expect(view.accounts.map((a) => a.name)).toEqual(['Everyday'])
+    expect(view.accounts.map((a) => a.name)).toEqual(['Test Everyday'])
     expect(view.balances).toMatchObject({ cashCents: -4210, owedCents: 0, cashAccounts: 1 })
     expect(view.flows.map((f) => [f.start, f.end, f.inCents, f.outCents])).toEqual([
       ['2026-08-01', '2026-08-31', 0, 0],
@@ -109,7 +109,7 @@ describe('summarize_accounts', () => {
       'MARKET',
     ])
     expect(view.alerts.map((a) => a.kind)).toEqual(['overdrawn'])
-    expect(view.summary.headline).toBe('Everyday is overdrawn by $42.10.')
+    expect(view.summary.headline).toBe('Test Everyday is overdrawn by $42.10.')
 
     const both = await call('summarize_accounts', { accountIds: [everyday, card] })
     expect(both.allAccounts).toBe(true)

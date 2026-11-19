@@ -62,7 +62,7 @@ export function Login() {
         </button>
         <p className="small muted">
           Forgot your password? Whoever runs this server can reset it with{' '}
-          <code className="num">npm run reset-password</code>.
+          <code>npm run reset-password</code>.
         </p>
       </form>
     </main>

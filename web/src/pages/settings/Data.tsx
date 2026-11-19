@@ -45,7 +45,7 @@ export function DataSection() {
   }
 
   return (
-    <Section id="data" title="Data" hint="Bring in transaction history, and back up your setup.">
+    <Section id="data" title="Data">
       <div className="stack-sm">
         <h3>Import transactions</h3>
         <span className="small muted">

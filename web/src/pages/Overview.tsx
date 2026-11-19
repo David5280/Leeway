@@ -39,7 +39,7 @@ export function Overview() {
           aria-pressed={editing}
           onClick={() => setEditing(!editing)}
         >
-          <Icon name="customize" size={16} />
+          <Icon name="sliders" size={16} />
           {editing ? 'Done' : 'Edit layout'}
         </button>
       }

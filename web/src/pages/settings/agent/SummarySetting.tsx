@@ -28,14 +28,15 @@ export function SummarySetting() {
       </Setting>
       <span className="small muted">
         When on, Leeway sends Anthropic this period&apos;s totals, cash until payday, the Heads up
-        list, and your bill and goal names, a few times a day at most. Never your accounts or
-        transactions. Each summary costs a few cents on your own Anthropic account.
+        list, your bill and goal names, and any account alerts by account name, a few times a day at
+        most. Never account numbers or transactions. Each summary costs a few cents on your own
+        Anthropic account.
       </span>
       {on && summary.data?.ai === 'no_key' && (
         <p className="notice">
-          Add <code className="code">ANTHROPIC_API_KEY</code> to your server&apos;s variables (on
-          Railway: the Leeway service, then Variables). You can make a key at console.anthropic.com.
-          Until then, Leeway writes the summary.
+          Add <code>ANTHROPIC_API_KEY</code> to your server&apos;s variables (on Railway: the Leeway
+          service, then Variables). You can make a key at console.anthropic.com. Until then, Leeway
+          writes the summary.
         </p>
       )}
       <ErrorNote error={toggle.error} />

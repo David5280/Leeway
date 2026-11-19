@@ -311,7 +311,7 @@ describe('done', () => {
     expect(screen.getByRole('button', { name: /Add an account by hand/ })).toBeInTheDocument()
   })
 
-  it('takes the owner to Customize, Accounts, to add an account by hand', async () => {
+  it('takes the owner to Settings, Accounts, to add an account by hand', async () => {
     serve()
     /** Shows where the router is, as the address bar would. */
     function Address() {
@@ -329,7 +329,7 @@ describe('done', () => {
     await user.click(screen.getByRole('button', { name: /Start empty/ }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(await screen.findByRole('button', { name: /Add an account by hand/ }))
-    expect(screen.getByLabelText('Address')).toHaveTextContent('/customize#accounts')
+    expect(screen.getByLabelText('Address')).toHaveTextContent('/settings/accounts')
   })
 
   it('says the bank keeps itself current once one is synced', async () => {

@@ -12,11 +12,12 @@ import { Alerts } from './pages/Alerts'
 import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
 import { Connect, ConnectProblem } from './pages/Connect'
-import { Customize } from './pages/Customize'
 import { ImportTransactions } from './pages/ImportTransactions'
 import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
 import { Plan } from './pages/Plan'
+import { OldSettingsAddress, SettingsPage } from './pages/Settings'
+import { OLD_SETTINGS_ROUTE, SETTINGS_ROUTE } from './pages/settings/paths'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
 
@@ -37,7 +38,8 @@ function Screens() {
       <Route path="/budgets/:id" element={<CategoryPage />} />
       <Route path="/plan" element={<Plan />} />
       <Route path="/plan/:section" element={<Plan />} />
-      <Route path="/customize" element={<Customize />} />
+      <Route path={SETTINGS_ROUTE} element={<SettingsPage />} />
+      <Route path={OLD_SETTINGS_ROUTE} element={<OldSettingsAddress />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

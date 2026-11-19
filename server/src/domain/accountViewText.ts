@@ -137,7 +137,7 @@ function headline(input: AccountsSummaryInput, money: Money): string {
   const urgent = input.alerts.find((alert) => alert.severity === 'urgent')
   if (urgent) return urgent.message
   const { balances, accounts } = input
-  if (accounts.length === 0) return 'No accounts yet. Connect a bank or add one in Customize.'
+  if (accounts.length === 0) return 'No accounts yet. Connect a bank or add one in Settings.'
   const only = accounts.length === 1 ? accounts[0]!.name : null
   if (balances.cashAccounts > 0) {
     const where =

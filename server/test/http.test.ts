@@ -263,6 +263,7 @@ describe('MCP endpoint', () => {
     })
     expect(write.json().result).toMatchObject({ isError: true })
     expect(write.json().result.content[0].text).toMatch(/read-only/)
+    expect(write.json().result.content[0].text).toMatch(/under Settings > AI assistant\.$/)
   })
 
   it('runs the same actions as the app with a write token', async () => {

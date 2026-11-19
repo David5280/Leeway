@@ -48,9 +48,7 @@ describe('Data', () => {
   it('leads to importing transactions from a file', () => {
     fakeServer({})
     renderSignedIn(<DataSection />)
-    expect(screen.getByRole('region', { name: 'Data' })).toHaveTextContent(
-      'Bring in transaction history, and back up your setup.',
-    )
+    expect(screen.getByRole('region', { name: 'Data' })).toHaveTextContent('Import transactions')
     expect(screen.getByRole('link', { name: 'Import a CSV file' })).toHaveAttribute(
       'href',
       '/transactions/import',

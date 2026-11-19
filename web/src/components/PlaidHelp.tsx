@@ -1,6 +1,6 @@
 // Plain-words help for bank sync: what Plaid is, where its keys come from,
 // where they go, and what it takes to reach real banks. Shared by setup and
-// Customize. Plaid's terms (Sandbox, Trial plan, Production) follow its own
+// Settings. Plaid's terms (Sandbox, Trial plan, Production) follow its own
 // docs, so what someone reads here matches what they see in Plaid's dashboard.
 
 import type { Status } from '../api/client'
@@ -60,7 +60,7 @@ export function PlaidKeySteps({ platform }: { platform: Platform }) {
       </li>
       <li>{whereKeysGo(platform)} They are server settings, so this page never asks for them.</li>
       <li>
-        Reload Leeway, then connect a bank in <strong>Customize</strong>, under{' '}
+        Reload Leeway, then connect a bank in <strong>Settings</strong>, under{' '}
         <strong>Banks</strong>.
       </li>
     </ol>

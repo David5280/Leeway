@@ -1,7 +1,7 @@
 // Which accounts the Accounts dashboard shows: every one, or any few.
 
 import type { Account } from '../../api/client'
-import { accountName, toggleAccount } from '../../lib/accounts'
+import { toggleAccount } from '../../lib/accounts'
 
 export function AccountPicker({
   accounts,
@@ -35,7 +35,7 @@ export function AccountPicker({
             aria-pressed={on}
             onClick={() => onChange(toggleAccount(picked, account.id, allIds))}
           >
-            {accountName(account)}
+            {account.name}
             {account.mask && <span className="num chip-mask"> ··{account.mask}</span>}
           </button>
         )

@@ -156,7 +156,9 @@ function goalItems({ goals, cashFlow: { today } }: CoachSources, money: Money): 
 
 function debtItems({ debtGaps }: CoachSources): AttentionItem[] {
   if (debtGaps.length === 0) return []
-  const names = debtGaps.map((d) => d.name).join(', ')
+  // Joined by a word: digits run on across a comma (see carriesMask), so two
+  // safe names, "Loan 44, 17 Card", could read as 4417 between them.
+  const names = debtGaps.map((d) => d.name).join(' and ')
   return [
     {
       priority: 'fyi',

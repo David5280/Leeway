@@ -2,11 +2,13 @@
 
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAction } from '../../api/hooks'
 import { LineChart } from '../../components/charts/LineChart'
 import { Card, LoadingOrError, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { shortDate } from '../../lib/format'
+import { settingsPath } from '../settings/paths'
 
 const RANGES = [
   { value: '90', label: '3 months' },
@@ -59,7 +61,8 @@ export function NetWorthSection() {
           />
         )}
         <p className="small muted">
-          Add a house, car or other account by hand under Customize to count it here.
+          Add a house, car or other account by hand in{' '}
+          <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.
         </p>
       </Card>
     </>
