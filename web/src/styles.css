@@ -1420,6 +1420,134 @@ details.more[open] summary {
   }
 }
 
+/*
+ * Settings > AI models (settings/ai/): a ring for this month's spending, the
+ * limit, and a list of models per job. Every control is at least 44px tall,
+ * so each is easy to hit with a thumb.
+ */
+.ring {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring svg {
+  position: absolute;
+  inset: 0;
+}
+
+.ring-text {
+  position: relative;
+  font: 600 15px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-usage {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ai-usage-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-usage-total {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-models .btn,
+.ai-models .input,
+.ai-alert .btn {
+  min-height: 44px;
+}
+
+/* In the card the alert lines up with the rest; in Heads up it keeps the row's padding. */
+.ai-models .ai-alert {
+  padding: 0;
+}
+
+.ai-models .figures {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The "$" sits just before the amount, which has room for "1000.00" and no more. */
+.ai-limit {
+  flex-wrap: nowrap;
+}
+
+.ai-limit-unit {
+  color: var(--muted);
+}
+
+.ai-limit .input {
+  width: 110px;
+}
+
+.ai-job {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.ai-job legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.model-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.model-choice:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.model-choice:has(input:disabled) {
+  cursor: default;
+}
+
+.model-choice input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.model-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-choice-text .badge {
+  margin-left: 8px;
+}
+
 /* Phones */
 
 /* The narrowest phones (320pt, the first iPhone SE): cards give their

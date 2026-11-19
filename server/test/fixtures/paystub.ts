@@ -102,6 +102,8 @@ export class FakeReader implements DocumentReader {
   readonly name = 'Claude'
   readonly files: PaystubFile[] = []
   readonly counted: PaystubFile[] = []
+  /** The counted tokens each read was handed, so a file is never counted twice. */
+  readonly tokensGiven: number[] = []
   /** What a count gives, or the error it fails with. */
   tokens: number | Error = PAGE_TOKENS
 
@@ -114,8 +116,9 @@ export class FakeReader implements DocumentReader {
     return this.tokens
   }
 
-  async readPaystub(file: PaystubFile) {
+  async readPaystub(file: PaystubFile, inputTokens: number) {
     this.files.push(file)
+    this.tokensGiven.push(inputTokens)
     // A tick, as a network call takes, so reads at the same time overlap.
     await new Promise((resolve) => setImmediate(resolve))
     if (this.answer instanceof Error) throw this.answer

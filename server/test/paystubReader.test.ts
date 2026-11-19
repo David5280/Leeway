@@ -1,19 +1,11 @@
-// Reading a paystub: the one request sent to Claude and its free token count,
-// through a fake client so no test calls the API, and the reader around it
-// that caches by file hash, caps paid reads an hour, refuses a file too long
-// to be a paystub and logs token counts and nothing else.
+// The paystub reader around a document reader: it caches by file hash, caps
+// paid reads an hour, refuses a file too long to be a paystub, and logs token
+// counts and nothing else. The document reader is a fake (aiJobs.test.ts
+// tests the real one), so no test calls the API.
 
-import Anthropic from '@anthropic-ai/sdk'
 import { describe, expect, it } from 'vitest'
-import type { MessagesClient } from '../src/ai/anthropic.js'
-import {
-  AnthropicDocumentReader,
-  PAYSTUB_PROMPT,
-  readerErrorFrom,
-} from '../src/ai/anthropicDocuments.js'
 import { ReaderError } from '../src/ai/documents.js'
-import type { AnthropicConfig } from '../src/config.js'
-import { checkPaystubFile } from '../src/domain/paystubs/files.js'
+import { AiLimitError } from '../src/domain/ai/gateway.js'
 import {
   CACHE_SIZE,
   CACHE_TTL_MS,
@@ -24,207 +16,7 @@ import {
 } from '../src/domain/paystubs/reader.js'
 import { AppError } from '../src/errors.js'
 import { HOUR_MS, MINUTE_MS } from '../src/lib/time.js'
-import {
-  CITY_READING,
-  FakeReader,
-  jpeg,
-  NOT_A_PAYSTUB,
-  PAGE_TOKENS,
-  pdf,
-  png,
-  USAGE,
-} from './fixtures/paystub.js'
-
-const CONFIG: AnthropicConfig = {
-  apiKey: 'test-key',
-  model: 'claude-haiku-5-5',
-  paystubModel: 'claude-haiku-5-5',
-}
-
-/** What Claude's parse() answers: a stop reason, the parsed output and the tokens used. */
-interface FakeResponse {
-  stop_reason: string
-  parsed_output: unknown
-  usage: { input_tokens: number; output_tokens: number }
-}
-
-const ANSWER: FakeResponse = {
-  stop_reason: 'end_turn',
-  parsed_output: CITY_READING,
-  usage: { input_tokens: 1_850, output_tokens: 640 },
-}
-
-/**
- * A reader on a client that answers every request with the response, or
- * throws the error, and records each request; a count answers with the
- * tokens, or throws the count's error, and is recorded apart.
- */
-function fakeClient(
-  answer: FakeResponse | Error = ANSWER,
-  config = CONFIG,
-  count: number | Error = PAGE_TOKENS,
-) {
-  const requests: Record<string, unknown>[] = []
-  const counts: Record<string, unknown>[] = []
-  const client = {
-    messages: {
-      parse: (request: Record<string, unknown>) => {
-        requests.push(request)
-        return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)
-      },
-      countTokens: (request: Record<string, unknown>) => {
-        counts.push(request)
-        return count instanceof Error
-          ? Promise.reject(count)
-          : Promise.resolve({ input_tokens: count })
-      },
-    },
-  } as unknown as MessagesClient
-  return { reader: new AnthropicDocumentReader(config, client), requests, counts }
-}
-
-/** The ReaderError a read fails with. */
-async function readFailure(reader: AnthropicDocumentReader): Promise<ReaderError> {
-  const error: unknown = await reader.readPaystub(checkPaystubFile(pdf())).catch((e) => e)
-  expect(error).toBeInstanceOf(ReaderError)
-  return error as ReaderError
-}
-
-describe('AnthropicDocumentReader', () => {
-  it('sends one request: the paystub model, the prompt, the file and a fixed ask, nothing more', async () => {
-    const { reader, requests } = fakeClient()
-    const file = checkPaystubFile(pdf())
-    const read = await reader.readPaystub(file)
-    expect(read).toEqual({
-      reading: CITY_READING,
-      usage: { model: 'claude-haiku-5-5', inputTokens: 1_850, outputTokens: 640 },
-    })
-    expect(reader.name).toBe('Claude')
-    expect(requests).toHaveLength(1)
-    const request = requests[0]!
-    // Every key the request carries: nothing else of the owner's goes with the file.
-    expect(Object.keys(request).sort()).toEqual([
-      'max_tokens',
-      'messages',
-      'model',
-      'output_config',
-      'system',
-    ])
-    expect(request).toMatchObject({
-      model: 'claude-haiku-5-5',
-      max_tokens: 3000,
-      system: PAYSTUB_PROMPT,
-      output_config: { effort: 'low', format: expect.anything() },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: file.bytes.toString('base64'),
-              },
-            },
-            { type: 'text', text: 'Read this paystub.' },
-          ],
-        },
-      ],
-    })
-  })
-
-  it('sends a photo as an image, and uses the model the owner picked', async () => {
-    const { reader, requests } = fakeClient(ANSWER, {
-      ...CONFIG,
-      paystubModel: 'claude-sonnet-5-5',
-    })
-    for (const bytes of [png(), jpeg()]) {
-      const file = checkPaystubFile(bytes)
-      const { usage } = await reader.readPaystub(file)
-      expect(usage.model).toBe('claude-sonnet-5-5')
-      const [block] = (requests.at(-1)!.messages as { content: unknown[] }[])[0]!.content
-      expect(block).toEqual({
-        type: 'image',
-        source: { type: 'base64', media_type: file.mediaType, data: file.bytes.toString('base64') },
-      })
-    }
-    expect(requests.every((request) => request.model === 'claude-sonnet-5-5')).toBe(true)
-  })
-
-  it('asks the model never to copy an identifier, and never to do arithmetic', () => {
-    expect(PAYSTUB_PROMPT).toContain('Never copy a Social Security number')
-    expect(PAYSTUB_PROMPT).toContain('Never add, subtract or estimate')
-    expect(PAYSTUB_PROMPT).not.toMatch(/\d+(\.\d+)?%/)
-  })
-
-  it('refuses a declined, cut-off or misshapen reading', async () => {
-    const declined = fakeClient({ ...ANSWER, stop_reason: 'refusal', parsed_output: null })
-    expect((await readFailure(declined.reader)).message).toBe('Claude declined to read this file.')
-    const cut = fakeClient({ ...ANSWER, stop_reason: 'max_tokens', parsed_output: null })
-    expect((await readFailure(cut.reader)).message).toMatch(/^The reading was cut off\./)
-    const misshapen = fakeClient({ ...ANSWER, parsed_output: { isPaystub: 'yes' } })
-    expect((await readFailure(misshapen.reader)).message).toBe(
-      'The reading came back in an unexpected shape.',
-    )
-  })
-
-  it("turns the SDK's errors into messages the owner can act on, never the SDK's own words", async () => {
-    const secret = 'request quoted: Gross Pay 3,845.00'
-    const headers = new Headers()
-    const cases: [unknown, RegExp][] = [
-      [new Anthropic.AuthenticationError(401, {}, secret, headers), /API key was not accepted/],
-      [new Anthropic.PermissionDeniedError(403, {}, secret, headers), /API key was not accepted/],
-      [new Anthropic.RateLimitError(429, {}, secret, headers), /^Claude is busy right now/],
-      [new Anthropic.ContentTooLargeError(413, {}, secret, headers), /too large for Claude/],
-      [new Anthropic.BadRequestError(400, {}, secret, headers), /could not open this file/],
-      [new Anthropic.APIConnectionError({ message: secret }), /could not reach Claude/],
-      [new Anthropic.InternalServerError(500, {}, secret, headers), /had a problem reading/],
-      [new Error(secret), /^The paystub could not be read/],
-    ]
-    for (const [error, message] of cases) {
-      const mapped = readerErrorFrom(error)
-      expect(mapped).toBeInstanceOf(ReaderError)
-      expect(mapped.message).toMatch(message)
-      expect(mapped.message).not.toContain('3,845')
-    }
-    const failing = fakeClient(new Anthropic.RateLimitError(429, {}, secret, headers))
-    expect((await readFailure(failing.reader)).message).toMatch(/^Claude is busy/)
-  })
-
-  it('counts the tokens of exactly the request a read sends, without max_tokens', async () => {
-    const { reader, requests, counts } = fakeClient()
-    for (const bytes of [pdf(), png()]) {
-      const file = checkPaystubFile(bytes)
-      expect(await reader.countPaystubTokens(file)).toBe(PAGE_TOKENS)
-      await reader.readPaystub(file)
-    }
-    expect(counts).toHaveLength(2)
-    counts.forEach((count, n) => {
-      // The same model, prompt, file, effort and schema: only the cap on the answer is left out.
-      const { max_tokens, ...read } = requests[n]!
-      expect(max_tokens).toBe(3000)
-      // As JSON, since each request builds its own schema parser.
-      expect(JSON.stringify(count)).toBe(JSON.stringify(read))
-      expect(Object.keys(count).sort()).toEqual(['messages', 'model', 'output_config', 'system'])
-    })
-  })
-
-  it("fails a count in the owner's words, never the SDK's", async () => {
-    const secret = 'request quoted: Gross Pay 3,845.00'
-    const error = new Anthropic.APIConnectionError({ message: secret })
-    const { reader } = fakeClient(ANSWER, CONFIG, error)
-    const failed: unknown = await reader.countPaystubTokens(checkPaystubFile(pdf())).catch((e) => e)
-    expect(failed).toBeInstanceOf(ReaderError)
-    expect((failed as ReaderError).message).toBe(
-      'Leeway could not reach Claude. Try again in a moment.',
-    )
-  })
-
-  it('builds its own client from the key when given none, without calling it', () => {
-    expect(new AnthropicDocumentReader(CONFIG).name).toBe('Claude')
-  })
-})
+import { CITY_READING, FakeReader, NOT_A_PAYSTUB, pdf, USAGE } from './fixtures/paystub.js'
 
 /** A log that keeps every entry, to check what a read leaves in it. */
 function memoryLog() {
@@ -332,6 +124,8 @@ describe('PaystubReader', () => {
     await reader.read(pdf(), log)
     expect(fake.counted).toEqual([{ bytes: pdf(), mediaType: 'application/pdf' }])
     expect(fake.files).toEqual(fake.counted)
+    // The read is handed the count, so the file is not counted twice.
+    expect(fake.tokensGiven).toEqual([MAX_PAYSTUB_INPUT_TOKENS])
     // A kept reading needs no count.
     await reader.read(pdf(), log)
     expect(fake.counted).toHaveLength(1)
@@ -421,6 +215,19 @@ describe('PaystubReader', () => {
     expect((await reader.read(pdf(), log)).extraction.payDate).toBe('2026-11-13')
     expect(fake.files).toHaveLength(2)
     expect(log.entries).toHaveLength(1)
+  })
+
+  it('says plainly when the monthly AI limit stops a read, and tries again next time', async () => {
+    const limit = new AiLimitError("This month's AI limit of $5 is reached.", '2026-12-01')
+    const fake = new FakeReader(limit)
+    const { reader, log } = readerWith(fake)
+    expect(await failure(reader.read(pdf(), log))).toMatchObject({
+      code: 'ai_limit',
+      status: 429,
+      message: "This month's AI limit of $5 is reached.",
+    })
+    fake.answer = CITY_READING
+    expect((await reader.read(pdf(), log)).extraction.payDate).toBe('2026-11-13')
   })
 
   it('lets an unexpected error through as it is', async () => {

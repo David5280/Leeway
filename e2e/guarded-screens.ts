@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
+import * as ai from './ai'
 import { BANK_SCREENS } from './bank-screens'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
@@ -20,6 +21,7 @@ export const SETTINGS_GROUPS = [
   'banks',
   'email',
   'assistant',
+  'ai',
   'widget',
   'data',
   'sign-in',
@@ -137,6 +139,12 @@ export const SCREENS: Screen[] = [
     name: '/ while editing its layout in place',
     on: (phone) => phone.editsInPlace,
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
+  }),
+  at('overview', '/', {
+    name: "/ with Leeway's summary, as the AI model is gone",
+    // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
+    before: ai.pretendSummaryModelGone,
+    then: ai.seeSummaryModelGone,
   }),
   at('accounts', '/accounts'),
   ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
@@ -283,6 +291,18 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',
     then: revealKey,
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with a key set and a month near its limit',
+    // No model is called in the tests: the month's spending is stood in for (ai.ts).
+    before: ai.pretendBusyMonth,
+    then: (page) => expect(page.getByText(/AI has spent \$4\.10/).first()).toBeVisible(),
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with one model gone and unpriced, and one retiring',
+    // Only Anthropic can retire a model: its answer is stood in for (ai.ts).
+    before: ai.pretendModelTrouble,
+    then: ai.seeModelTrouble,
   }),
   at('settings', '/settings/widget', {
     name: '/settings/widget showing a new token',

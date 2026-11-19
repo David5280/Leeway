@@ -18,9 +18,14 @@ export interface DocumentReader {
   readonly name: string
   /**
    * Reads a paystub's figures in one request, sending the file and nothing
-   * else of the owner's, or throws a ReaderError.
+   * else of the owner's, or throws a ReaderError, or an AiLimitError when the
+   * monthly AI limit stops it. inputTokens is the count already made, so the
+   * file is not counted twice.
    */
-  readPaystub(file: PaystubFile): Promise<{ reading: PaystubReading; usage: ReaderUsage }>
+  readPaystub(
+    file: PaystubFile,
+    inputTokens: number,
+  ): Promise<{ reading: PaystubReading; usage: ReaderUsage }>
   /**
    * The input tokens readPaystub would send for this file, counted free of
    * charge with the same model, prompt and file, or throws a ReaderError.

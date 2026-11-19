@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SummaryWriter } from '../src/ai/writer.js'
 import { findAction } from '../src/actions/index.js'
+import { AiProviderError } from '../src/ai/provider.js'
+import { AiLimitError } from '../src/domain/ai/gateway.js'
 import { RETRY_AFTER_MINUTES, REUSE_HOURS } from '../src/domain/summary.js'
 import type { SummaryFacts, SummaryText } from '../src/domain/summaryText.js'
 import { actionCaller } from './actionCaller.js'
@@ -22,9 +24,13 @@ class FakeWriter implements SummaryWriter {
   /** Holds each write until release() runs, to test two loads at once. */
   gate: Promise<void> | null = null
 
+  /** Throws the monthly limit's or the provider's error instead of writing. */
+  limit: AiLimitError | AiProviderError | null = null
+
   async write(facts: SummaryFacts): Promise<SummaryText> {
     this.calls.push(facts)
     if (this.gate) await this.gate
+    if (this.limit) throw this.limit
     if (this.failWith && this.throwBareString) throw this.failWith
     if (this.failWith) throw new Error(this.failWith)
     return { headline: `Written from ${facts.period.spent} spent`, points: ['All good.'] }
@@ -49,6 +55,7 @@ beforeEach(async () => {
   writer.failWith = null
   writer.throwBareString = false
   writer.gate = null
+  writer.limit = null
 })
 
 const later = (minutes: number) => new Date(START.getTime() + minutes * 60_000)
@@ -84,6 +91,22 @@ describe('get_summary in Leeway’s own words', () => {
     } finally {
       ctx.writer = writer
     }
+  })
+})
+
+describe('get_summary and the monthly AI limit', () => {
+  it("falls back to Leeway's words, says when the limit resets, and asks again on the next load", async () => {
+    await call('set_ai_summary', { on: true })
+    writer.limit = new AiLimitError("This month's AI limit of $5 is reached.", '2026-12-01')
+    expect(await call('get_summary')).toMatchObject({
+      writtenBy: 'Leeway',
+      ai: 'limit',
+      limitResetsOn: '2026-12-01',
+    })
+    // Nothing is saved, so the next load asks again, and once the limit allows it, Claude writes.
+    writer.limit = null
+    expect(await call('get_summary')).toMatchObject({ writtenBy: 'Claude', ai: 'on' })
+    expect(writer.calls).toHaveLength(2)
   })
 })
 
@@ -190,6 +213,18 @@ describe('get_summary written by the AI', () => {
     expect(writer.calls).toHaveLength(1)
     ctx.setNow(later(RETRY_AFTER_MINUTES + 1))
     expect(await call('get_summary')).toMatchObject({ writtenBy: 'Claude', ai: 'on' })
+    expect(writer.calls).toHaveLength(2)
+  })
+
+  it('says the chosen model is not available, and keeps saying so until it tries again', async () => {
+    writer.limit = new AiProviderError('model')
+    expect(await call('get_summary')).toMatchObject({ writtenBy: 'Leeway', ai: 'no_model' })
+    ctx.setNow(later(RETRY_AFTER_MINUTES - 1))
+    expect(await call('get_summary')).toMatchObject({ ai: 'no_model' })
+    expect(writer.calls).toHaveLength(1)
+    writer.limit = new AiProviderError('rejected')
+    ctx.setNow(later(RETRY_AFTER_MINUTES + 1))
+    expect(await call('get_summary')).toMatchObject({ ai: 'unavailable' })
     expect(writer.calls).toHaveLength(2)
   })
 
