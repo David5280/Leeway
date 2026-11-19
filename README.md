@@ -297,9 +297,16 @@ How the limit works:
 - After the call, the tokens it really used (input, output, cache reads and
   writes) are priced and recorded. Prices are Anthropic's list prices,
   checked on 2026-11-19, so your Anthropic bill is the final word.
+- Each call is one attempt; Leeway never retries on its own. A call Anthropic
+  turns away before doing any work (the key refused, rate limited, a request
+  too large or unreadable) costs nothing and is not recorded. A call that
+  times out, loses its connection or meets a server error may still be
+  billed, so its most possible cost is recorded, marked as an estimate.
 - At 80% of the limit a warning shows once in **Heads up** and in Settings,
-  and a refused call raises a second alert. Either can be dismissed, and a
-  new limit starts the month's alerts over.
+  and once the month's spending reaches the limit, a second alert says so.
+  A single call turned away while some of the limit is left only says so
+  where it was asked for. Either alert can be dismissed, and a new limit
+  starts the month's alerts over.
 - Each record holds token counts and a cost, never what was asked or
   answered.
 

@@ -12,11 +12,24 @@
 // what the month has spent, plus the worst cost of calls still under way,
 // plus this one's worst cost, would pass the limit. So a call never takes the
 // month over by more than nothing: the real cost is at most the worst cost.
+//
+// A call that fails is settled one of two ways. An error the provider gives
+// before any work (the key refused, rate limited, a request too large or
+// unreadable) bills nothing, so its hold is released. Any other failure (a
+// timeout, a lost connection, a server error) may still be billed, so its
+// worst cost is recorded as an estimate. The provider makes one attempt per
+// call, never retrying on its own, so no attempt goes uncounted.
 
 import { z } from 'zod'
 import type { AiJob } from '../../ai/jobs.js'
 import { MICROS_PER_CENT, centsOfMicros, costMicros, worstCostMicros } from '../../ai/models.js'
-import type { AiProvider, AiReply, AiRequest } from '../../ai/provider.js'
+import {
+  AiProviderError,
+  type AiFailure,
+  type AiProvider,
+  type AiReply,
+  type AiRequest,
+} from '../../ai/provider.js'
 import type { Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
@@ -26,6 +39,14 @@ import { raiseSpendAlert } from './alerts.js'
 import { aiMonth, type AiMonth } from './month.js'
 import { resolveModel, WARN_AT_PERCENT } from './settings.js'
 import { monthSpend, recordUsage } from './usage.js'
+
+/** Failures the provider gives before doing any work, so nothing is billed. */
+const UNBILLED: ReadonlySet<AiFailure> = new Set(['key', 'busy', 'too_large', 'bad_request'])
+
+/** Whether a failed call is known to have cost nothing. */
+export function billedNothing(error: unknown): boolean {
+  return error instanceof AiProviderError && UNBILLED.has(error.failure)
+}
 
 /** What a job asks: a request without the model, which the job's settings choose. */
 export type AiAsk = Omit<AiRequest, 'model'>
@@ -124,7 +145,7 @@ export class AiGateway {
     try {
       reply = await this.provider.send(request)
     } catch (error) {
-      this.reservedMicros -= worst
+      await this.settleFailure(job, request, inputTokens, worst, error)
       throw error
     }
     // Recorded even when the model declined or was cut off: those tokens are billed too.
@@ -142,6 +163,37 @@ export class AiGateway {
     })
     await this.warnIfNear(month, settings)
     return { ...reply, model: request.model, costMicros: cost }
+  }
+
+  /**
+   * Releases a failed call's hold, after recording its worst cost as an
+   * estimate unless the failure proves nothing was billed.
+   */
+  private async settleFailure(
+    job: AiJob,
+    request: AiRequest,
+    inputTokens: number,
+    worst: number,
+    error: unknown,
+  ): Promise<void> {
+    await this.serially(async () => {
+      try {
+        if (billedNothing(error)) return
+        const usage = {
+          inputTokens,
+          outputTokens: request.maxTokens,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        }
+        await recordUsage(
+          this.deps.db,
+          { job, model: request.model, usage, costMicros: worst, estimated: true },
+          this.deps.now(),
+        )
+      } finally {
+        this.reservedMicros -= worst
+      }
+    })
   }
 
   private async prepare(
@@ -168,7 +220,11 @@ export class AiGateway {
     const spent = (await monthSpend(this.deps.db, month)).totalMicros
     const cap = settings.ai.monthlyCapCents * MICROS_PER_CENT
     if (spent + this.reservedMicros + worst > cap) {
-      await raiseSpendAlert(this.deps.db, month.start, 'limit', this.deps.now())
+      // The month-long alert is for a month that is used up. One dear call
+      // turned away with room left says so in its own message only.
+      if (spent + this.reservedMicros >= cap) {
+        await raiseSpendAlert(this.deps.db, month.start, 'limit', this.deps.now())
+      }
       throw new AiLimitError(
         limitMessage(settings, spent + this.reservedMicros, worst, month.resetsOn),
         month.resetsOn,

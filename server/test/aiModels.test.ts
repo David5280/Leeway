@@ -23,7 +23,7 @@ describe('model choices', () => {
     expect(inputPrices).toEqual([...inputPrices].sort((a, b) => a - b))
     for (const model of MODEL_CHOICES) {
       expect(model.description).toMatch(/^[A-Z].{20,90}\.$/)
-      expect(model.description).not.toMatch(/[–—]/)
+      expect(model.description).not.toMatch(/[\u2013\u2014]/)
     }
   })
 

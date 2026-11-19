@@ -12,6 +12,10 @@ CREATE TABLE ai_usage (
   cache_write_tokens integer NOT NULL CHECK (cache_write_tokens >= 0),
   -- In millionths of a US dollar, at the prices when the call was made.
   cost_micros bigint NOT NULL CHECK (cost_micros >= 0),
+  -- True when the call failed without an answer (a timeout, a lost connection,
+  -- a server error) and may still have been billed: the tokens and cost are
+  -- then the call's worst case, not what it used.
+  estimated boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

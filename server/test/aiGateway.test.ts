@@ -10,6 +10,7 @@ import { AiProviderError } from '../src/ai/provider.js'
 import { activeSpendAlert, dismissSpendAlerts } from '../src/domain/ai/alerts.js'
 import {
   AiLimitError,
+  billedNothing,
   estimateInputTokens,
   FRAMING_TOKENS,
   limitMessage,
@@ -150,6 +151,7 @@ describe('AiGateway: recording', () => {
         cache_read_tokens: 40,
         cache_write_tokens: 7,
         cost_micros: result.costMicros,
+        estimated: false,
         created_at: ctx.now(),
       },
     ])
@@ -164,6 +166,61 @@ describe('AiGateway: recording', () => {
     provider.reply = { stop: 'cut_off', output: null, usage: tokens() }
     expect((await ai.run('summary', ASK)).stop).toBe('cut_off')
     expect((await monthSpend(ctx.db, aiMonth(ctx.now(), 'UTC'))).calls).toBe(2)
+  })
+
+  it.each(['key', 'busy', 'too_large', 'bad_request'] as const)(
+    'records nothing for a call turned away before any work (%s)',
+    async (failure) => {
+      const { ai, provider } = gatewayFor(ctx)
+      provider.reply = new AiProviderError(failure)
+      await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+      expect(await spentThisMonth()).toBe(0)
+      expect(billedNothing(provider.reply)).toBe(true)
+    },
+  )
+
+  it.each(['unreachable', 'failed'] as const)(
+    'records the worst cost, marked as an estimate, for a call that may be billed (%s)',
+    async (failure) => {
+      const { ai, provider } = gatewayFor(ctx)
+      provider.reply = new AiProviderError(failure)
+      await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+      expect(await spentThisMonth()).toBe(ASK_WORST)
+      const { rows } = await ctx.db.query(
+        `SELECT job, model, input_tokens AS "inputTokens", output_tokens AS "outputTokens",
+           cost_micros::int AS "costMicros", estimated FROM ai_usage`,
+      )
+      expect(rows).toEqual([
+        {
+          job: 'summary',
+          model: 'claude-haiku-5-5',
+          inputTokens: estimateInputTokens(ASK),
+          outputTokens: ASK.maxTokens,
+          costMicros: ASK_WORST,
+          estimated: true,
+        },
+      ])
+    },
+  )
+
+  it("counts an error that is not the provider's own as possibly billed", () => {
+    expect(billedNothing(new Error('socket hang up'))).toBe(false)
+  })
+
+  it('holds nothing back after an estimated call is recorded', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    await setCap(1)
+    await spend(MICROS_PER_CENT - 2 * ASK_WORST)
+    provider.reply = new AiProviderError('unreachable')
+    await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+    // The estimate now counts as spent, leaving room for exactly one more call.
+    provider.reply = {
+      stop: 'done',
+      output: null,
+      usage: tokens({ inputTokens: 0, outputTokens: 0 }),
+    }
+    await ai.run('summary', ASK)
+    expect(provider.sent).toHaveLength(2)
   })
 
   it('records nothing for a call that failed, and holds nothing back for it after', async () => {
@@ -246,6 +303,36 @@ describe('AiGateway: the monthly limit', () => {
       "This could cost up to $0.18, and $0.02 of this month's AI limit of $5 is left. It resets on Dec 1, or you can raise it in Settings, then AI models.",
     )
     expect(provider.sent).toEqual([])
+    // One dear call turned away is not the month used up: no month-long alert.
+    expect(await activeSpendAlert(ctx.db, '2026-11-01')).toBeNull()
+  })
+
+  it('raises no limit alert for a single dear call on a small limit with almost nothing spent', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    await setCap(20)
+    await spend(300)
+    provider.inputTokens = 50_000
+    await changeSettings((s) => ({
+      ...s,
+      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5' } },
+    }))
+    await expect(ai.run('paystub', FILE_ASK)).rejects.toThrow(/could cost up to/)
+    expect(await activeSpendAlert(ctx.db, '2026-11-01')).toBeNull()
+  })
+
+  it('raises the limit alert when what is spent and held reaches the limit', async () => {
+    const provider = new FakeProvider()
+    let open = () => {}
+    provider.gate = new Promise((resolve) => (open = resolve))
+    const { ai } = gatewayFor(ctx, provider)
+    await setCap(1)
+    // Spent plus one call under way is exactly the limit; the next is turned away.
+    await spend(MICROS_PER_CENT - ASK_WORST)
+    const first = ai.run('summary', ASK)
+    await expect(ai.run('summary', ASK)).rejects.toThrow(AiLimitError)
+    expect(await activeSpendAlert(ctx.db, '2026-11-01')).toBe('limit')
+    open()
+    await first
   })
 
   it('refuses every call with a limit of $0', async () => {

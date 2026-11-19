@@ -1,6 +1,6 @@
 // The owner's AI choices: the model for each job, the monthly spending
-// limit, and this month's usage against it. All of it is the owner's alone;
-// an assistant can neither see nor change it.
+// limit, and this month's usage against it. An assistant can't change any of
+// it, and sees only the chosen models and the limit, in get_settings.
 
 import { useAction } from '../../api/hooks'
 import { AiSpendAlert } from '../../components/AiSpendAlert'

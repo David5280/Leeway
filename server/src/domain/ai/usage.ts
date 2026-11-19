@@ -10,6 +10,8 @@ export interface UsageRecord {
   model: string
   usage: TokenUsage
   costMicros: number
+  /** The worst case recorded for a call that failed and may have been billed. */
+  estimated?: boolean
 }
 
 /** What one job spent in a month. */
@@ -28,8 +30,8 @@ export async function recordUsage(db: Db, record: UsageRecord, at: Date): Promis
   const { usage } = record
   await db.query(
     `INSERT INTO ai_usage (job, model, input_tokens, output_tokens, cache_read_tokens,
-       cache_write_tokens, cost_micros, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       cache_write_tokens, cost_micros, estimated, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       record.job,
       record.model,
@@ -38,6 +40,7 @@ export async function recordUsage(db: Db, record: UsageRecord, at: Date): Promis
       usage.cacheReadTokens,
       usage.cacheWriteTokens,
       record.costMicros,
+      record.estimated ?? false,
       at,
     ],
   )

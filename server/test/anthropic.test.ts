@@ -167,6 +167,7 @@ describe('AnthropicProvider', () => {
       [new Anthropic.ContentTooLargeError(413, {}, secret, headers), 'too_large'],
       [new Anthropic.BadRequestError(400, {}, secret, headers), 'bad_request'],
       [new Anthropic.APIConnectionError({ message: secret }), 'unreachable'],
+      [new Anthropic.APIConnectionTimeoutError({ message: secret }), 'unreachable'],
       [new Anthropic.InternalServerError(500, {}, secret, headers), 'failed'],
       [new Error(secret), 'failed'],
     ]
@@ -184,5 +185,11 @@ describe('AnthropicProvider', () => {
 
   it('builds its own SDK client from the key when given none, without calling it', () => {
     expect(new AnthropicProvider('test-key').name).toBe('Claude')
+  })
+
+  it('never retries: a timed-out attempt may be billed, and each call is counted once', () => {
+    const { client } = new AnthropicProvider('test-key') as unknown as { client: Anthropic }
+    expect(client.maxRetries).toBe(0)
+    expect(client.timeout).toBe(60_000)
   })
 })

@@ -68,8 +68,9 @@ export class AnthropicProvider implements AiProvider {
 
   constructor(
     apiKey: string,
-    // One retry and a minute's wait: every job falls back or lets the owner try again.
-    client: MessagesClient = new Anthropic({ apiKey, maxRetries: 1, timeout: MINUTE_MS }),
+    // No retries: a timed-out attempt may still be billed, and the usage layer
+    // counts one attempt per call. Every job falls back or lets the owner try again.
+    client: MessagesClient = new Anthropic({ apiKey, maxRetries: 0, timeout: MINUTE_MS }),
   ) {
     this.client = client
   }
