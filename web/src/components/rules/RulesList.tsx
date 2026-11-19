@@ -2,6 +2,7 @@
 
 import type { Category, Rule } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
+import { Card } from '../design/Card'
 import { Dot, ErrorNote, Icon } from '../ui'
 import { describeRule } from './rules'
 
@@ -32,7 +33,7 @@ export function RulesList({
   }
 
   return (
-    <section className="card stack-sm rules-list" aria-label="Rules">
+    <Card static="list" label="Rules" className="stack-sm rules-list">
       <div className="row-between">
         <h2>{categoryId ? 'Rules' : 'Your rules'}</h2>
         <button type="button" className="linkbtn rules-new" onClick={onNew}>
@@ -101,6 +102,6 @@ export function RulesList({
         )
       })}
       <ErrorNote error={rules.error ?? reorder.error ?? remove.error} />
-    </section>
+    </Card>
   )
 }
