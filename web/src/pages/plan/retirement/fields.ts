@@ -122,14 +122,16 @@ function convertedContribution(text: PlanText, next: ContributionKind): string {
 /**
  * The accounts a pension's plan can be attached to: ones Leeway already has
  * that hold retirement money but are not counted as a pension yet, such as a
- * plan linked from the bank. Never one owed, such as a card.
+ * plan linked from the bank. Never one owed, such as a card, and never a
+ * hidden one, which stays out of every total, so its pension would vanish.
  */
 export function pensionCandidates(accounts: Account[]): Account[] {
   return accounts.filter(
     (account) =>
-      account.kind === 'retirement' ||
-      account.kind === 'investment' ||
-      (account.kind === 'other' && account.type !== 'credit' && account.type !== 'loan'),
+      !account.hidden &&
+      (account.kind === 'retirement' ||
+        account.kind === 'investment' ||
+        (account.kind === 'other' && account.type !== 'credit' && account.type !== 'loan')),
   )
 }
 

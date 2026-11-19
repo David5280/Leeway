@@ -393,8 +393,27 @@ describe('retirement in the digest', () => {
       'a month including pensions started by then; returns',
     )
     expect(verdict(profileWith([pera], { birthYear: 1955, retirementAge: 65 }))).toMatch(
-      /^Retirement now, at 71 \(past the planned 65\): savings \$72,000 to \$72,000,/,
+      /^Retirement now, at 71 \(past the planned 65\): savings \$72,000, income \$2,420 a month/,
     )
+  })
+
+  it('gives a range whose ends agree as one figure, in the lens and the digest alike', () => {
+    // Past the planned age, savings are what is held today, and the pension's figure is fixed.
+    const now = profileWith([pera], {
+      birthYear: 1955,
+      retirementAge: 65,
+      targetMonthlyIncomeCents: 200_000,
+    })
+    const { lens } = retirementView(now, format)
+    expect(lens.answer.detail).toBe(
+      'Your pension and savings should cover 121% of the $2,000 a month you want.',
+    )
+    const line = profileDigest(now, dollars)
+      .split('\n')
+      .find((text) => text.startsWith('Retirement'))!
+    expect(line).toContain('savings $72,000, income $2,420 a month')
+    expect(line).toContain('against a $2,000 target (121%);')
+    expect(line).not.toMatch(/(\$[\d,]+) to \1|(\d+%) to \2|most likely/)
   })
 
   it('says a target waits on an unknown benefit, and asks for a birth year when it matters', () => {

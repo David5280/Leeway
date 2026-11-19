@@ -168,6 +168,7 @@ describe('pensionCandidates', () => {
       account({ id: 'card', name: 'Card', type: 'credit', subtype: 'credit card', kind: 'other' }),
       account({ id: 'loan', name: 'Loan', type: 'loan', kind: 'other' }),
       account({ id: 'pera', name: 'PERA', type: 'investment', subtype: 'pension' }),
+      account({ id: 'hidden', name: 'Old IRA', type: 'investment', subtype: 'ira', hidden: true }),
     ]
     expect(pensionCandidates(accounts).map((candidate) => candidate.id)).toEqual([
       '401k',

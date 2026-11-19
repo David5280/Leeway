@@ -185,11 +185,13 @@ export const accountPatchSchema = z
   })
   .partial()
 
+export type AccountPatch = z.infer<typeof accountPatchSchema>
+
 /**
  * Refuses a patch the account cannot take: bank-owned fields on a linked
  * account, or a kind that does not fit its type (a card marked as savings).
  */
-function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSchema>): void {
+function assertPatchFits(account: Account, patch: AccountPatch): void {
   const manualOnly = (['balanceCents', 'creditLimitCents', 'type', 'subtype'] as const).filter(
     (key) => patch[key] !== undefined,
   )
@@ -212,19 +214,12 @@ function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSch
  * type drops a pick that no longer fits it, such as savings on a loan, so the
  * old pick cannot come back later. Undefined leaves the stored pick as it is.
  */
-function kindToStore(
-  account: Account,
-  patch: z.infer<typeof accountPatchSchema>,
-): AccountKind | null | undefined {
+function kindToStore(account: Account, patch: AccountPatch): AccountKind | null | undefined {
   if (patch.kind !== undefined || !patch.type) return patch.kind
   return choiceThatFits(account.kindChoice, patch.type)
 }
 
-export async function updateAccount(
-  db: Db,
-  id: string,
-  patch: z.infer<typeof accountPatchSchema>,
-): Promise<Account> {
+export async function updateAccount(db: Db, id: string, patch: AccountPatch): Promise<Account> {
   const account = await getAccount(db, id)
   assertPatchFits(account, patch)
   const kind = kindToStore(account, patch)

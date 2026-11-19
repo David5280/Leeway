@@ -8,11 +8,11 @@ import {
   deleteManualAccount,
   listAccounts,
   manualAccountInputSchema,
-  updateAccount,
 } from '../domain/accounts.js'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../domain/accountAlerts.js'
 import { getAccountsView } from '../domain/accountView.js'
 import { listAlerts } from '../domain/alerts.js'
+import { updateAccountWithinPensionLimit } from '../domain/retirement/pensionStore.js'
 import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
@@ -50,7 +50,8 @@ export const updateAccountAction = defineAction({
   input: accountPatchSchema.extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
-  run: (ctx, { id, ...patch }) => updateAccount(ctx.db, id, patch),
+  // Marking an account a pension counts against the pension limit (pensionStore.ts).
+  run: (ctx, { id, ...patch }) => updateAccountWithinPensionLimit(ctx.db, id, patch),
 })
 
 export const deleteAccountAction = defineAction({

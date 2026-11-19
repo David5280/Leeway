@@ -11,6 +11,7 @@ import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/pl
 import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
+import { middleCase, percent, range } from './rangeWords.js'
 
 type Money = (cents: number) => string
 
@@ -132,7 +133,7 @@ function benefitWords(pension: PensionInPlan, money: Money): string {
   if (benefit.source === 'statement') {
     return `about ${money(benefit.mid)} a month from age ${startsAge}, from the plan's statement`
   }
-  return `${money(benefit.low)} to ${money(benefit.high)} a month from age ${startsAge}, worked out from the salary, multiplier and service the owner entered (no plan rules applied)`
+  return `${range(benefit, money)} a month from age ${startsAge}, worked out from the salary, multiplier and service the owner entered (no plan rules applied)`
 }
 
 /** What a pension takes from pay, and what the employer adds, as far as the owner entered. */
@@ -167,7 +168,7 @@ function againstTarget(retirement: RetirementPlan, projection: Projection, money
   const { target, coverage, laterPensionAge, atAge } = projection
   if (!target) return ''
   if (coverage) {
-    return ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
+    return ` against a ${money(target.monthlyCents)} target (${range(coverage, percent)}${middleCase(coverage, percent)})`
   }
   if (retirement.pensionsWithoutBenefit > 0) {
     return `; not compared with the ${money(target.monthlyCents)} target until the pension benefit is known`
@@ -187,7 +188,7 @@ function projectionLine({ retirement }: FinancialProfile, money: Money): string 
     atAge > retirementAge
       ? `Retirement now, at ${atAge} (past the planned ${retirementAge})`
       : `Retirement at ${atAge} (now about ${projection.age})`
-  return `${when}: savings ${money(at.low)} to ${money(at.high)}, income ${money(income.total.low)} to ${money(income.total.high)} a month including pensions started by then${againstTarget(retirement, projection, money)}; returns ${realReturns.low}% to ${realReturns.high}% after inflation. ${retirement.note}`
+  return `${when}: savings ${range(at, money)}, income ${range(income.total, money)} a month including pensions started by then${againstTarget(retirement, projection, money)}; returns ${range(realReturns, percent)} after inflation. ${retirement.note}`
 }
 
 /** What an assistant must not say when a pension is recorded. */

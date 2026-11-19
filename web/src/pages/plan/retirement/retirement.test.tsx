@@ -269,6 +269,8 @@ describe('pensions', () => {
     await user.type(form.getByRole('textbox', { name: 'Years of service' }), '8')
     await user.click(form.getByRole('button', { name: 'Add pension' }))
 
+    // Only accounts the owner shows are asked for, since a hidden one counts in no total.
+    expect(server.actions('list_accounts')).toContainEqual({ includeHidden: false })
     await waitFor(() => expect(server.actions('attach_pension')).toHaveLength(1))
     expect(server.actions('attach_pension')[0]).toEqual({
       ...pension().plan,
