@@ -1,7 +1,8 @@
 // What the home-screen widget shows: a handful of numbers the app already
 // works out, read from the same domain code and cut down to the least a
-// glance needs. No account names, numbers or masks, and no bank text: bills
-// go by the names the app shows, and alerts only as counts.
+// glance needs. No account names, numbers or masks, and no transaction text:
+// bills go by the names the app shows (one made from a recurring charge starts
+// with the bank's name for it), and alerts only as counts.
 
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'

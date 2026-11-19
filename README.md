@@ -358,11 +358,13 @@ Scriptable's Keychain instead.
 
 The widget token can only read this summary, at `GET /api/widget`, and
 nothing else; no other key or session can read the summary. The summary
-names bills by the names Leeway shows and counts account alerts without
-naming the accounts, and it never holds an account number or bank text. The
-widget only sends the token over `https`, so it needs Leeway at a public
-address, as Railway gives you. Making a new token replaces the old one, and
-**Revoke** stops it at once.
+names bills by the names Leeway shows, counts account alerts without naming
+the accounts, and never holds an account number, mask or transaction text. A
+bill you made from a recurring charge starts out named as the bank wrote it,
+so rename it under Bills in **Plan** if you'd rather the widget said
+something else. The widget only sends the token over `https`, so it needs
+Leeway at a public address, as Railway gives you. Making a new token
+replaces the old one, and **Revoke** stops it at once.
 
 ## Security
 
