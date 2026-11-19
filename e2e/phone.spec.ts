@@ -14,7 +14,14 @@ for (const path of [
   '/transactions',
   '/budgets',
   '/plan',
-  '/customize',
+  '/settings/appearance',
+  '/settings/budgeting',
+  '/settings/accounts',
+  '/settings/banks',
+  '/settings/email',
+  '/settings/assistant',
+  '/settings/data',
+  '/settings/sign-in',
 ]) {
   test(`${path} fits a phone screen`, async ({ page }) => {
     await page.goto(path)
@@ -37,7 +44,27 @@ test('an account alert and its account fit a phone screen', async ({ page }) => 
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
   // Removed again, so the other tests see the install as before.
-  await page.goto('/customize#accounts')
+  await page.goto('/settings/accounts')
   await page.getByRole('button', { name: 'Delete Phone checking with a long name' }).click()
   await expect(page.getByRole('button', { name: /^Delete Phone checking/ })).toHaveCount(0)
+})
+
+test('Settings groups are a row of pills that scrolls sideways, not the page', async ({ page }) => {
+  // An old address from when Settings was called Customize lands on its group.
+  await page.goto('/customize#agent')
+  await expect(page).toHaveURL(/\/settings\/assistant$/)
+  const menu = page.getByRole('navigation', { name: 'Settings groups' })
+  const assistant = menu.getByRole('link', { name: 'AI assistant' })
+  await expect(assistant).toHaveAttribute('aria-current', 'page')
+  // The open group's pill is scrolled into view, even when it sits far along the row.
+  await expect(assistant).toBeInViewport()
+  const row = await menu.evaluate((nav) => ({ scroll: nav.scrollWidth, shown: nav.clientWidth }))
+  expect(row.scroll).toBeGreaterThan(row.shown)
+  expect(await overflow(page)).toBeLessThanOrEqual(0)
+
+  await menu.getByRole('link', { name: 'Sign-in' }).click()
+  await expect(page).toHaveURL(/\/settings\/sign-in$/)
+  await expect(page.getByRole('heading', { level: 2, name: 'Sign-in' })).toBeVisible()
+  await expect(menu.getByRole('link', { name: 'Sign-in' })).toBeInViewport()
+  expect(await overflow(page)).toBeLessThanOrEqual(0)
 })

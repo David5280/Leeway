@@ -29,7 +29,7 @@ import type { Account, AccountAlert, AccountsView, Settings, Status } from '../a
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
 import { AppProvider } from '../lib/app'
-import type { WeeklyEmailView } from '../pages/customize/email/emailText'
+import type { WeeklyEmailView } from '../pages/settings/email/emailText'
 import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
 
 /** A stand-in for the Leeway server: action handlers by name, plus the auth routes. */
@@ -301,12 +301,15 @@ export function failing(message: string, httpStatus = 400): () => Response {
   return () => Response.json({ error: 'invalid_input', message }, { status: httpStatus })
 }
 
-/** Renders with a query client and router but no settings or sign-in, like the sign-in screens. */
-export function renderPlain(ui: ReactNode) {
+/**
+ * Renders with a query client and router but no settings or sign-in, like the
+ * sign-in screens, or the whole app at `route`.
+ */
+export function renderPlain(ui: ReactNode, route = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   )
 }

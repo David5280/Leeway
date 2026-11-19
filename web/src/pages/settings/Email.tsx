@@ -20,11 +20,7 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 export function EmailSection() {
   const view = useAction('get_weekly_email')
   return (
-    <Section
-      id="email"
-      title="Email"
-      hint="A summary of your week in your inbox, with anything that needs you"
-    >
+    <Section id="email" title="Email">
       {view.data && <EmailSettings view={view.data} />}
       {view.isPending && <Loading label="Loading email settings" />}
       <ErrorNote error={view.error} />

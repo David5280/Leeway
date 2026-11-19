@@ -7,6 +7,7 @@ import { useAction } from '../api/hooks'
 import { Dot } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodWord, timeAgo } from '../lib/format'
+import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
 
 export function GlanceWidget({ budget }: WidgetProps) {
@@ -84,7 +85,7 @@ function BankSyncCard() {
     return (
       <GlanceCard title="Bank sync">
         <span style={{ fontSize: 18, fontWeight: 600 }}>No banks yet</span>
-        <Link to="/customize#banks" className="linkbtn small">
+        <Link to={settingsPath('banks')} className="linkbtn small">
           Connect a bank
         </Link>
       </GlanceCard>

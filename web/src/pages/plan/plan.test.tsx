@@ -273,6 +273,11 @@ describe('Net worth', () => {
     expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
       'Net worth from -$500 on Jun 1 to $7,000 on Nov 17.',
     )
+    // A house or a car counts once it is added by hand, in Settings.
+    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
+      'href',
+      '/settings/accounts',
+    )
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))

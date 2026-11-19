@@ -185,26 +185,34 @@ export const ACCENTS = {
 
 export type FontId = Exclude<Appearance['font'], 'theme'>
 
+/**
+ * Lends money its commas and points from a proportional font, ahead of each
+ * monospaced number font, which would give them a whole digit's width and turn
+ * "$2,485" into "$2 , 485". The face covers only those marks (see styles.css),
+ * so the digits still come from the theme's number font.
+ */
+export const NUMBER_MARKS = "'Leeway Number Marks'"
+
 export const FONTS: Record<FontId, { name: string; ui: string; num: string }> = {
   geist: {
     name: 'Geist',
     ui: "'Geist', system-ui, sans-serif",
-    num: "'Geist Mono', ui-monospace, monospace",
+    num: `${NUMBER_MARKS}, 'Geist Mono', ui-monospace, monospace`,
   },
   'space-grotesk': {
     name: 'Space Grotesk',
     ui: "'Space Grotesk', system-ui, sans-serif",
-    num: "'JetBrains Mono', ui-monospace, monospace",
+    num: `${NUMBER_MARKS}, 'JetBrains Mono', ui-monospace, monospace`,
   },
   'ibm-plex': {
     name: 'IBM Plex',
     ui: "'IBM Plex Sans', system-ui, sans-serif",
-    num: "'IBM Plex Mono', ui-monospace, monospace",
+    num: `${NUMBER_MARKS}, 'IBM Plex Mono', ui-monospace, monospace`,
   },
   system: {
     name: 'System',
     ui: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-    num: 'ui-monospace, "SF Mono", Menlo, monospace',
+    num: `${NUMBER_MARKS}, ui-monospace, "SF Mono", Menlo, monospace`,
   },
 }
 

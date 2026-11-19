@@ -153,7 +153,7 @@ Leeway prints at startup that starts `No account yet`.
 
 Bank sync is optional. Without it, import CSV files from your bank
 (**Transactions**, then **Import a file**) or add accounts by hand
-(**Customize**, then **Accounts**). [Plaid](https://plaid.com) is the service
+(**Settings**, then **Accounts**). [Plaid](https://plaid.com) is the service
 many budgeting apps use to reach banks. Leeway uses it only to read balances
 and transactions.
 
@@ -165,7 +165,7 @@ and transactions.
 3. Set `PLAID_CLIENT_ID` and `PLAID_SECRET` where Leeway runs: in the Leeway
    service's **Variables** on Railway, or in `.env` followed by
    `docker compose up -d` with Docker. The app never asks for these keys.
-4. In Leeway, open **Customize**, then **Banks**, and choose **Connect a
+4. In Leeway, open **Settings**, then **Banks**, and choose **Connect a
    bank**.
 
 **Sandbox has only test banks.** Sign in to any of them with `user_good` and
@@ -197,7 +197,7 @@ read November 2026.
 
 The server reads environment variables (`.env` with Docker or from source,
 **Variables** on Railway). Everything else, from your budget period to themes,
-is chosen in the app under **Customize**. `.env.example` lists every variable
+is chosen in the app under **Settings**. `.env.example` lists every variable
 with a note.
 
 | Variable                | Needed   | What it does                                                           |
@@ -228,7 +228,7 @@ On Railway, `PUBLIC_URL` is filled in from the generated domain.
 Leeway writes the dashboard summary from your numbers on its own. To have
 Claude write it instead, set `ANTHROPIC_API_KEY` (from the
 [Anthropic Console](https://console.anthropic.com)), then turn on **Have Claude
-write it** in **Customize**, then **AI assistant**. Nothing is sent until you
+write it** in **Settings**, then **AI assistant**. Nothing is sent until you
 turn it on. Claude then gets this period's totals, the Heads up list, bill and
 goal names, and any account alerts named only by bank and kind of account,
 like "Your Chase checking account". It never gets account names, account
@@ -246,7 +246,7 @@ what's left this period, bills before payday and your goals. It sends through
 2. Make an API key under **API Keys** (sending access is enough).
 3. Set `RESEND_API_KEY` to that key and `MAIL_FROM` to an address on the
    verified domain.
-4. In **Customize**, then **Email**, turn it on and choose the day, the hour
+4. In **Settings**, then **Email**, turn it on and choose the day, the hour
    and the address. **Send a test email now** shows you one straight away.
 
 Only you can turn it on, in the app. Connected assistants can neither see nor
@@ -255,7 +255,7 @@ change the email or its address.
 ## Connect an AI assistant
 
 Your connector address is your Leeway address followed by `/mcp`, like
-`https://leeway-yourname.up.railway.app/mcp`. **Customize**, then **AI
+`https://leeway-yourname.up.railway.app/mcp`. **Settings**, then **AI
 assistant**, shows it with a Copy button.
 
 - **Claude (web, desktop or phone).** In Claude, open **Customize**, then
@@ -271,7 +271,7 @@ assistant**, shows it with a Copy button.
 
 - **Other assistants.** Any assistant that speaks MCP over HTTP can connect.
   If it can sign in with OAuth, give it the address. If it needs a bearer
-  token, create a key in **Customize**, then **AI assistant**.
+  token, create a key in **Settings**, then **AI assistant**.
 
 When an assistant signs in, Leeway asks you to approve it and choose what it
 may do:
@@ -280,7 +280,7 @@ may do:
 - **Look and change:** also edit budgets, categories, rules and goals.
 
 Neither can move money, pay a bill or cancel a subscription. Every connected
-app and key is listed in **Customize**, then **AI assistant**, where you can
+app and key is listed in **Settings**, then **AI assistant**, where you can
 revoke it at once.
 
 Then ask for a money check-in, or whether you can afford something.
@@ -354,7 +354,7 @@ The database is upgraded automatically when Leeway starts.
   ```
 
 - Keep `ENCRYPTION_KEY` with your backups, but stored apart from them.
-- **Customize**, then **Data**, exports your categories, rules and settings to
+- **Settings**, then **Data**, exports your categories, rules and settings to
   a file you can import into another Leeway.
 
 **Forgot your password?** On the server, run `npm run reset-password` (from

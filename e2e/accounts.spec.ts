@@ -1,14 +1,14 @@
 // Account health: an overdrawn account warns at the top of the dashboard and
-// opens on the Accounts dashboard, and a low-balance warning set in Customize
+// opens on the Accounts dashboard, and a low-balance warning set in Settings
 // becomes an alert. Each test removes its accounts, since later specs share
 // this install.
 
 import { expect, test, type Page } from '@playwright/test'
 import { addAccount } from './manual'
 
-/** Deletes accounts added by hand, from Customize. */
+/** Deletes accounts added by hand, from Settings. */
 async function removeAccounts(page: Page, names: string[]): Promise<void> {
-  await page.goto('/customize#accounts')
+  await page.goto('/settings/accounts')
   for (const name of names) {
     await page.getByRole('button', { name: `Delete ${name}` }).click()
     await expect(page.getByRole('textbox', { name: `Name for ${name}` })).toHaveCount(0)
@@ -67,13 +67,13 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await expect(page.getByRole('region', { name: 'Account alerts' })).toHaveCount(0)
 })
 
-test('a low-balance warning set in Customize becomes an alert', async ({ page }) => {
+test('a low-balance warning set in Settings becomes an alert', async ({ page }) => {
   await addAccount(page, { name: 'Bills', balance: '50' })
   // A cash account other than checking has no warning until one is set.
   await page.goto('/alerts')
   await expect(page.getByText(/Every account is fine/)).toBeVisible()
 
-  await page.goto('/customize#accounts')
+  await page.goto('/settings/accounts')
   const warning = page.getByRole('textbox', { name: 'Low balance warning for Bills' })
   await expect(warning).toHaveAttribute('placeholder', 'Off')
   await warning.fill('100')

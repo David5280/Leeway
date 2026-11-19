@@ -84,8 +84,8 @@ test('an assistant signs in with the owner approval and can be disconnected', as
   expect(tokens.scope).toBe('read')
   expect((await mcp(request, tokens.access_token)).status()).toBe(200)
 
-  // The connected app shows in Customize, and disconnecting it cuts it off at once.
-  await page.goto('/customize#agent')
+  // The connected app shows in Settings, and disconnecting it cuts it off at once.
+  await page.goto('/settings/assistant')
   const agent = page.getByRole('region', { name: 'AI assistant' })
   const disconnect = agent.getByRole('button', { name: 'Disconnect Test app' })
   await expect(agent.locator('.list-row').filter({ hasText: 'Test app' })).toContainText(

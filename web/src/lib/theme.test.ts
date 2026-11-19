@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settings } from '../test/fake'
 import { useAppearance } from './app'
-import { applyAppearance, inkOn, THEMES, themeVariables } from './theme'
+import { applyAppearance, FONTS, inkOn, NUMBER_MARKS, THEMES, themeVariables } from './theme'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -31,6 +31,16 @@ describe('theme', () => {
     expect(vars['--radius']).toBe('2px')
     expect(vars['--pad']).toBe('16px')
     expect(vars['--font-ui']).toContain('system-ui')
+  })
+
+  it('sets money in each font with tight commas and points ahead of its monospaced digits', () => {
+    for (const font of Object.values(FONTS))
+      expect(font.num.startsWith(`${NUMBER_MARKS}, `)).toBe(true)
+    // The face is declared in styles.css under this very name.
+    expect(NUMBER_MARKS).toBe("'Leeway Number Marks'")
+    expect(themeVariables({ ...base, font: 'ibm-plex' }, true).vars['--font-num']).toBe(
+      `${NUMBER_MARKS}, 'IBM Plex Mono', ui-monospace, monospace`,
+    )
   })
 
   it('picks readable text for a color', () => {

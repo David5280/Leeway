@@ -183,7 +183,7 @@ export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent 
 
 function footer(writtenBy: string): string {
   const why =
-    'You get this because the weekly email is on in Leeway. To stop it or change its day, open Customize, then Email.'
+    'You get this because the weekly email is on in Leeway. To stop it or change its day, open Settings, then Email.'
   // Leeway's own words need no credit; an AI's are named, as on the dashboard.
   return writtenBy === 'Leeway' ? why : `${why} Summary written by ${writtenBy}.`
 }

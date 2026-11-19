@@ -101,7 +101,7 @@ if (ctx.mailer) {
     async () => {
       const outcome = await sendWeeklyEmailIfDue(ctx)
       if (outcome === 'sent') app.log.info('Sent the weekly email')
-      if (outcome === 'failed') app.log.warn('The weekly email failed; see Customize, then Email')
+      if (outcome === 'failed') app.log.warn('The weekly email failed; see Settings, then Email')
     },
     (error) => app.log.error({ err: error }, 'Weekly email check failed'),
     { runNow: true },

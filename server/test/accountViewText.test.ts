@@ -184,7 +184,7 @@ describe('accountsSummary', () => {
   it('says nothing is there without accounts', () => {
     expect(
       accountsSummary(input({ accounts: [], balances: combineBalances([]) }), money).headline,
-    ).toBe('No accounts yet. Connect a bank or add one in Customize.')
+    ).toBe('No accounts yet. Connect a bank or add one in Settings.')
   })
 
   it('adds debt, unused credit, money in and out, and the top category', () => {

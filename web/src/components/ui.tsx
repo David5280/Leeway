@@ -81,7 +81,7 @@ const ICONS = {
       <path d="M4 10h16M9 3v4M15 3v4" />
     </>
   ),
-  customize: (
+  sliders: (
     <>
       <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" />
       <circle cx="16" cy="6" r="2" />

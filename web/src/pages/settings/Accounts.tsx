@@ -22,7 +22,9 @@ export function AccountSection() {
       hint="Hidden accounts stay out of every total. Checking and savings accounts warn when they run low: leave the amount empty for the default, or 0 for no warning."
     >
       {accounts.data?.length === 0 && (
-        <p className="empty small">No accounts yet. Connect a bank below or add one by hand.</p>
+        <p className="empty small">
+          No accounts yet. Connect a bank under Banks, or add one by hand below.
+        </p>
       )}
       {accounts.data?.map((account) => (
         <AccountRow key={account.id} account={account} />

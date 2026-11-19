@@ -27,7 +27,7 @@ export function BudgetingSection() {
     ? WARN_AT
     : [...WARN_AT, warnAt].sort((a, b) => a - b)
   return (
-    <Section id="budgeting" title="Budgeting">
+    <Section id="budgeting" title="Period and warnings">
       <PeriodEditor value={settings.period} onChange={(period) => save.settings({ period })} />
       <Setting label="Count pending transactions" hint="Money is spent even before it posts">
         <Switch

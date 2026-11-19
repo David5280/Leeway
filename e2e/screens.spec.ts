@@ -14,7 +14,10 @@ const SCREENS = [
   { path: '/plan/goals', heading: 'Plan' },
   { path: '/plan/debts', heading: 'Plan' },
   { path: '/plan/net-worth', heading: 'Plan' },
-  { path: '/customize', heading: 'Make it yours' },
+  { path: '/settings/appearance', heading: 'Settings' },
+  { path: '/settings/budgeting', heading: 'Settings' },
+  { path: '/settings/banks', heading: 'Settings' },
+  { path: '/settings/assistant', heading: 'Settings' },
 ]
 
 for (const { path, heading } of SCREENS) {

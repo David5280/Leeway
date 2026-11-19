@@ -268,7 +268,7 @@ describe('GlanceWidget', () => {
     expect(await screen.findByText('No banks yet')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Connect a bank' })).toHaveAttribute(
       'href',
-      '/customize#banks',
+      '/settings/banks',
     )
   })
 
@@ -335,7 +335,7 @@ describe('AlertsWidget', () => {
     await screen.findByText('Chase needs you to log in again to keep syncing.')
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/customize#banks',
+      '/settings/banks',
       '/budgets/cat-dining-out',
       '/budgets/cat-groceries',
       '/budgets/cat-fun',
@@ -399,7 +399,7 @@ describe('AlertsWidget', () => {
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/accounts?select=short',
       '/accounts?select=low',
-      '/customize#banks',
+      '/settings/banks',
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
     expect(links[1]).toHaveTextContent('Low')

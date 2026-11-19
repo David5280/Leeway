@@ -1,4 +1,4 @@
-// The weekly email settings in Customize.
+// The weekly email settings in Settings, under Email.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

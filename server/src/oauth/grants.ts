@@ -1,4 +1,4 @@
-// Connected apps as the owner sees them in Customize: what each may do, and disconnecting.
+// Connected apps as the owner sees them in Settings: what each may do, and disconnecting.
 
 import type { Db } from '../db/pool.js'
 import { notFound } from '../errors.js'

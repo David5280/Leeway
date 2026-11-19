@@ -52,7 +52,7 @@ describe('summarize_accounts', () => {
       recent: [],
       alerts: [],
       summary: {
-        headline: 'No accounts yet. Connect a bank or add one in Customize.',
+        headline: 'No accounts yet. Connect a bank or add one in Settings.',
         points: [],
       },
     })
