@@ -139,6 +139,17 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('LINKED …0417', '9921')).toBe('LINKED')
   })
 
+  it('takes out a run that a word or a spaced x marks as a number', () => {
+    expect(withoutAccountNumber('LINKED ACCT 850', '9921')).toBe('LINKED')
+    expect(withoutAccountNumber('LINKED X 89', '9921')).toBe('LINKED')
+    expect(withoutAccountNumber('SAVINGS ENDING IN 89', '9921')).toBe('SAVINGS')
+    expect(withoutAccountNumber('CHECKING XXXX 89', '9921')).toBe('CHECKING')
+    // Split across words, it is left whole to the guarantee rather than leave its "17".
+    expect(withoutAccountNumber('CHECKING X 44 17', '9921')).toBe('CHECKING X 44 17')
+    // "IN" alone marks nothing: "TERM IN 12 MONTHS" keeps its 12.
+    expect(withoutAccountNumber('TERM IN 12 MONTHS', '9921')).toBe('TERM IN 12 MONTHS')
+  })
+
   it('keeps a lone marked digit, a decimal and an x inside a word', () => {
     expect(withoutAccountNumber('PLATINUM X2', '9921')).toBe('PLATINUM X2')
     expect(withoutAccountNumber('#1 REWARDS', '9921')).toBe('#1 REWARDS')
@@ -208,6 +219,18 @@ describe('asciiDigits', () => {
     expect(asciiDigits('Checking ٠٩')).toBe('Checking 09')
   })
 
+  it('reads the other enclosed numbers Unicode folds to nothing', () => {
+    expect(asciiDigits('⓵⓶⓷⓸⓹⓺⓻⓼⓽⓾')).toBe('12345678910')
+    expect(asciiDigits('⓫ ⓬ ⓴')).toBe('11 12 20')
+    expect(asciiDigits('⓿ 🄋 🄌')).toBe('0 0 0')
+    expect(asciiDigits('㉈ ㉉ ㉏')).toBe('10 20 80')
+  })
+
+  it('leaves a number it has no digits for, and folds Roman numerals to letters', () => {
+    expect(asciiDigits('ↂ')).toBe('ↂ')
+    expect(asciiDigits('Ⅻ')).toBe('XII')
+  })
+
   it('reads the dingbat digits, which Unicode folds to nothing', () => {
     expect(asciiDigits('❹❹❶❼')).toBe('4417')
     expect(asciiDigits('➃➃➀➆')).toBe('4417')
@@ -263,6 +286,22 @@ describe('carriesMask', () => {
     expect(carriesMask('CHECKING ⁴¹⁷', '4417')).toBe(true)
     expect(carriesMask('CHECKING ④①⑦', '4417')).toBe(true)
     expect(carriesMask('CHECKING 4417', '４４１７')).toBe(true)
+  })
+
+  it('reads every enclosed number', () => {
+    expect(carriesMask('Checking ❺❽❺⓿', '5850')).toBe(true)
+    expect(carriesMask('Checking ⓸⓸⓵⓻', '4417')).toBe(true)
+    expect(carriesMask('Checking ⓱', '4417')).toBe(true)
+    expect(carriesMask('Checking ㉎', '0070')).toBe(true)
+    expect(carriesMask('Checking 4🄋', '0040')).toBe(true)
+  })
+
+  it('fails closed on a number it cannot read, for a mask with a digit', () => {
+    expect(carriesMask('Checking ↂ', '4417')).toBe(true)
+    expect(carriesMask('Checking 𐄇', 'X9Z1')).toBe(true)
+    expect(carriesMask('Checking ↂ', 'AB')).toBe(false)
+    expect(carriesAnotherMask('Checking ↂ', '4417')).toBe(true)
+    expect(carriesAnotherMask('Checking ↂ', 'AB')).toBe(false)
   })
 
   it('reads dingbat digits and accented letters', () => {
@@ -352,6 +391,18 @@ describe('carriesAnotherMask', () => {
     expect(carriesAnotherMask('Card 2AB', '12AB')).toBe(false)
   })
 
+  it('finds its end after a word or an x that marks it', () => {
+    expect(carriesAnotherMask('Linked X 89', '389')).toBe(true)
+    expect(carriesAnotherMask('Linked X 8 9', '389')).toBe(true)
+    expect(carriesAnotherMask('Linked Acct 850', '5850')).toBe(true)
+    expect(carriesAnotherMask('Linked Account: 850', '5850')).toBe(true)
+    expect(carriesAnotherMask('Linked No. 850', '5850')).toBe(true)
+    expect(carriesAnotherMask('Savings Ending In 89', '389')).toBe(true)
+    expect(carriesAnotherMask('Savings Ending 89', '389')).toBe(true)
+    expect(carriesAnotherMask('Savings 89', '389')).toBe(false)
+    expect(carriesAnotherMask('Tax 89', '389')).toBe(false)
+  })
+
   it('never counts a mask of letters alone, a mask too short or none', () => {
     expect(carriesAnotherMask('Total Checking', 'AL')).toBe(false)
     expect(carriesAnotherMask('Checking 7', '7')).toBe(false)
@@ -383,10 +434,31 @@ function inDigits(mask: string, zero: number): string {
 /** The three sets of dingbat digits, 1 to 10 each. */
 const DINGBATS = ['❶❷❸❹❺❻❼❽❾❿', '➀➁➂➃➄➅➆➇➈➉', '➊➋➌➍➎➏➐➑➒➓']
 
+/** Enclosed numbers NFKC leaves, written out by hand: each list counts up from its first value. */
+const ENCLOSED = new Map<string, string>(
+  (
+    [
+      ...DINGBATS.map((set) => [set, 1, 1] as const),
+      ['⓵⓶⓷⓸⓹⓺⓻⓼⓽⓾', 1, 1],
+      ['⓫⓬⓭⓮⓯⓰⓱⓲⓳⓴', 11, 1],
+      ['⓿🄋🄌', 0, 0],
+      ['㉈㉉㉊㉋㉌㉍㉎㉏', 10, 10],
+    ] as const
+  ).flatMap(([set, first, step]) =>
+    [...set].map((character, at) => [character, String(first + at * step)] as const),
+  ),
+)
+
 /** A digit from 1 to 9 as a dingbat, from the set its place picks; anything else as it is. */
 function inDingbats(character: string, place: number): string {
   if (!/[1-9]/.test(character)) return character
   return [...DINGBATS[place % DINGBATS.length]!][Number(character) - 1]!
+}
+
+/** A digit as double-circled, or 0 as one of the three enclosed zeros by its place; letters as they are. */
+function inEnclosed(character: string, place: number): string {
+  if (character === '0') return [...'⓿🄋🄌'][place % 3]!
+  return /[1-9]/.test(character) ? [...'⓵⓶⓷⓸⓹⓺⓻⓼⓽'][Number(character) - 1]! : character
 }
 
 /** Each way a bank might write the mask into "CHECKING", as a whole name. */
@@ -452,6 +524,7 @@ function placements(mask: string): Record<string, string> {
     circled: `CHECKING ${written((d) => '⓪①②③④⑤⑥⑦⑧⑨'[Number(d)]!)}`,
     // Each set of dingbats in turn, and 0, which they lack, as it is.
     dingbat: `CHECKING ${[...mask].map((character, index) => inDingbats(character, index)).join('')}`,
+    enclosed: `CHECKING ${[...mask].map((character, index) => inEnclosed(character, index)).join('')}`,
     accented: `CHECKING ${[...mask].map((character) => `${character}\u0301`).join('')}`,
     ...Object.fromEntries(
       Object.entries(ZEROS).map(([script, zero]) => [script, `CHECKING ${inDigits(mask, zero)}`]),
@@ -467,6 +540,7 @@ const GUARANTEE_ONLY = new Set([
   'superscript',
   'circled',
   'dingbat',
+  'enclosed',
   'accented',
   ...Object.keys(ZEROS),
 ])
@@ -494,12 +568,8 @@ const REAL_WORDS = [
  */
 function plainDigits(text: string): string {
   const zeros = [0x30, ...Object.values(ZEROS)]
-  const dingbats = DINGBATS.join('')
   const unaccented = [...text]
-    .map((character) => {
-      const at = [...dingbats].indexOf(character)
-      return at < 0 ? character : String((at % 10) + 1)
-    })
+    .map((character) => ENCLOSED.get(character) ?? character)
     .join('')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -661,7 +731,7 @@ describe('the guarantee, across masks, placements and real words', () => {
 
   it('covers every pairing', () => {
     const perMask = Object.keys(placements('4417')).length
-    expect(perMask).toBe(67)
+    expect(perMask).toBe(68)
     expect(cases).toHaveLength(MASKS.length * perMask * (1 + REAL_WORDS.length * 2))
   })
 

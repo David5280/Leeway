@@ -481,6 +481,21 @@ describe('distinctAccountNames', () => {
     )
   })
 
+  it("never shows the end of another account's mask after a word or an x that marks it", () => {
+    const named = (bankName: string, otherMask: string) =>
+      distinctAccountNames([
+        account('other', { mask: otherMask }),
+        account('this', { bankName, mask: '9921', subtype: 'savings' }),
+      ]).get('this')
+    // Tidied out where it can be.
+    expect(named('LINKED ACCT 850', '5850')).toBe('Chase Linked')
+    expect(named('LINKED X 89', '389')).toBe('Chase Linked')
+    expect(named('SAVINGS ENDING IN 89', '389')).toBe('Chase Savings')
+    // Split up, it is left to the guarantee, which reads it whole.
+    expect(named('LINKED X 8 9', '389')).toBe('Chase Savings')
+    expect(named('LINKED ACCT 85 0', '5850')).toBe('Chase Savings')
+  })
+
   it("never shows another account's mask of 52 marked with a #", () => {
     const names = distinctAccountNames([
       account('checking', { mask: '52' }),
