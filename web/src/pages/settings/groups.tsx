@@ -11,6 +11,7 @@ import { DataSection } from './Data'
 import { EmailSection } from './Email'
 import { LayoutSection } from './Layout'
 import { LookSection } from './Look'
+import { NotificationsSection } from './Notifications'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
 
@@ -55,6 +56,12 @@ export const SETTINGS_GROUPS = [
     title: 'Email',
     description: 'A summary of your week in your inbox, with anything that needs you.',
     sections: [EmailSection],
+  },
+  {
+    id: 'notifications',
+    title: 'Notifications',
+    description: 'What reaches the inbox and your devices, its thresholds, and quiet hours.',
+    sections: [NotificationsSection],
   },
   {
     id: 'assistant',
