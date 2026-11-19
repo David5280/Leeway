@@ -44,6 +44,14 @@ describe('budgetStatus', () => {
     )
   })
 
+  it('leaves out the daily amount when it is less than one a day', () => {
+    // $10 over 14 days rounds down to $0 a day, which would read as nothing left.
+    const { budget, row } = rowOf({ [dining.id]: 29000 })
+    expect(budgetStatus(row, budget.period, money).text).toBe(
+      '$10 left for 14 days, spending ahead of pace',
+    )
+  })
+
   it('says over by how much, all used, or no budget', () => {
     const over = rowOf({ [dining.id]: 31200 })
     expect(budgetStatus(over.row, over.budget.period, money)).toEqual({

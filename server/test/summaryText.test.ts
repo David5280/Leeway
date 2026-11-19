@@ -148,6 +148,49 @@ describe('the points', () => {
   })
 })
 
+describe('an overdrawn account or a card over its limit', () => {
+  const overLimit = accountAlert({
+    kind: 'over_limit',
+    summary: 'Your Capital One credit card is $80.00 over its limit.',
+  })
+
+  it('takes the headline, even when the budget is on track', () => {
+    const summary = summarize(checkin({ alerts: [accountAlert()] }))
+    expect(summary.headline).toBe('Your Chase checking account is overdrawn by $42.10.')
+    // The budget still gets its say, as the first point, without "You're on track".
+    expect(summary.points).toEqual([
+      'Your budgets are on track: $1,200 left, about $85.71 a day for 15 days.',
+    ])
+  })
+
+  it('leads with a card over its limit the same way', () => {
+    expect(summarize(checkin({ alerts: [overLimit] })).headline).toBe(overLimit.summary)
+  })
+
+  it('counts the other alerts first, then says how the budget is going', () => {
+    const lowAlert = accountAlert({ kind: 'low_balance', severity: 'warning' })
+    const over = checkin({
+      alerts: [accountAlert(), overLimit, lowAlert],
+      budget: { projectedBudgetedCents: 230000 },
+    })
+    expect(summarize(over).points).toEqual([
+      '2 more account alerts are at the top of the dashboard.',
+      "At this pace you'd finish the month $300 over budget.",
+    ])
+  })
+
+  it('leaves the headline to the budget for a warning such as a fee or a low balance', () => {
+    const fee = accountAlert({
+      kind: 'overdraft_fee',
+      severity: 'warning',
+      summary: 'Your Chase checking account was charged an overdraft fee of $35.00.',
+    })
+    const summary = summarize(checkin({ alerts: [fee] }))
+    expect(summary.headline).toMatch(/^You're on track/)
+    expect(summary.points[0]).toBe(fee.summary)
+  })
+})
+
 describe('the account alert point', () => {
   const lowAlert = accountAlert({
     kind: 'low_balance',
@@ -161,18 +204,22 @@ describe('the account alert point', () => {
     tool: 'list_alerts',
   }
 
+  const feeAlert = accountAlert({
+    kind: 'overdraft_fee',
+    severity: 'warning',
+    summary: 'Your Chase checking account was charged an overdraft fee of $35.00.',
+  })
+
   it('leads with the worst alert, without naming the account', () => {
-    const points = summarize(checkin({ alerts: [accountAlert()], attention: [accountItem] })).points
+    const points = summarize(checkin({ alerts: [feeAlert], attention: [accountItem] })).points
     // The alert is its own point, so it is not counted again as a thing needing you today.
-    expect(points).toEqual(['Your Chase checking account is overdrawn by $42.10.'])
+    expect(points).toEqual([feeAlert.summary])
   })
 
   it('counts the other alerts after the worst one', () => {
-    const one = summarize(checkin({ alerts: [accountAlert(), lowAlert] })).points[0]
-    expect(one).toBe(
-      'Your Chase checking account is overdrawn by $42.10. 1 more account alert is at the top of the dashboard.',
-    )
-    const two = summarize(checkin({ alerts: [accountAlert(), lowAlert, lowAlert] })).points[0]
+    const one = summarize(checkin({ alerts: [feeAlert, lowAlert] })).points[0]
+    expect(one).toBe(`${feeAlert.summary} 1 more account alert is at the top of the dashboard.`)
+    const two = summarize(checkin({ alerts: [feeAlert, lowAlert, lowAlert] })).points[0]
     expect(two).toContain('2 more account alerts are at the top of the dashboard.')
   })
 })
@@ -196,6 +243,7 @@ describe('summaryFacts', () => {
     )
     expect(facts.headsUp).toEqual([])
     expect(facts.accountAlerts).toEqual(['Your Chase checking account is overdrawn by $42.10.'])
+    expect(facts.fixedHeadline).toBe('Your Chase checking account is overdrawn by $42.10.')
     expect(JSON.stringify(facts)).not.toContain('Everyday')
   })
 
@@ -215,6 +263,7 @@ describe('summaryFacts', () => {
       untilPayday: { payday: 'Dec 1' },
       headsUp: [{ priority: 'soon', message: 'Rent is due' }],
       debts: null,
+      fixedHeadline: null,
       netWorthChangeLast30Days: '$0',
     })
     expect(JSON.stringify(facts)).not.toContain('list_bills')

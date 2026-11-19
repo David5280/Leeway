@@ -1,9 +1,24 @@
+# Dependencies and build output
 node_modules
 dist
 coverage
+
+# Local settings and secrets: only the example is shared
 .env
-*.log
-.DS_Store
+.env.*
+!.env.example
+
+# Local data: database dumps and backups
+*.sql
+!server/migrations/*.sql
+*.dump
+backups/
+
+# Test output
 e2e/.auth/
 playwright-report/
 test-results/
+
+# Logs and system files
+*.log
+.DS_Store

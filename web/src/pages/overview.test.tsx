@@ -156,7 +156,7 @@ function sentLayouts(server: ReturnType<typeof fakeServer>) {
 async function startEditing() {
   const user = userEvent.setup()
   await screen.findByRole('region', { name: 'Your leeway' })
-  await user.click(screen.getByRole('button', { name: 'Customize' }))
+  await user.click(screen.getByRole('button', { name: 'Edit layout' }))
   return user
 }
 
@@ -225,7 +225,7 @@ describe('Overview widgets', () => {
     expect(slot('Spending by period')).toHaveStyle({ order: '2' })
 
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Customize' }))
+    await user.click(screen.getByRole('button', { name: 'Edit layout' }))
     await user.click(
       toolsFor('Top merchants').getByRole('button', { name: 'Move Top merchants down' }),
     )
@@ -331,7 +331,7 @@ describe('Overview edit mode', () => {
     expect(screen.getByText(/Move, resize or hide widgets/)).toBeInTheDocument()
     expect(document.querySelector('.board.editing')).not.toBeNull()
     await user.click(toggle)
-    expect(screen.getByRole('button', { name: 'Customize' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Edit layout' })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -449,7 +449,7 @@ describe('Overview edit mode', () => {
     renderOverview(custom)
     const user = userEvent.setup()
     await screen.findByRole('region', { name: 'Spending by period' })
-    await user.click(screen.getByRole('button', { name: 'Customize' }))
+    await user.click(screen.getByRole('button', { name: 'Edit layout' }))
     await user.click(screen.getByRole('button', { name: 'Reset layout' }))
     await waitFor(() => expect(sentLayouts(server)).toEqual([DEFAULT_LAYOUT]))
     await user.click(screen.getByRole('button', { name: 'Done' }))

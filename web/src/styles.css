@@ -865,6 +865,15 @@ code.code {
   padding: calc(var(--pad) * 0.75);
 }
 
+/* Exact balances run to many digits, so they shrink with their card instead of spilling out of it. */
+.balance-figures > .card {
+  container-type: inline-size;
+}
+
+.balance-figures .mid-number {
+  font-size: clamp(20px, 12cqi, 30px);
+}
+
 .add-widget {
   border: 2px dashed var(--line);
   background: transparent;

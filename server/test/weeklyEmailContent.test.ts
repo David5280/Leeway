@@ -193,6 +193,34 @@ describe('account alerts in the weekly email', () => {
     )
   })
 
+  it("puts the budget line in the headline when Leeway's headline was the alert", () => {
+    const email = content({
+      checkin: checkin({ alerts: [overdrawn, overdrawn] }),
+      summary: {
+        headline: overdrawn.summary,
+        points: [
+          '1 more account alert is at the top of the dashboard.',
+          'Your budgets are on track: $1,200 left.',
+          'Payday is Dec 1.',
+        ],
+        writtenBy: 'Leeway',
+      },
+    })
+    // The alert block lists every alert, so neither the alert nor the count repeats.
+    expect(email.headline).toBe('Your budgets are on track: $1,200 left.')
+    expect(email.preview).toBe(email.headline)
+    expect(email.points).toEqual(['Payday is Dec 1.'])
+  })
+
+  it('keeps the alert as the headline when nothing else is left to say', () => {
+    const email = content({
+      checkin: checkin({ alerts: [overdrawn] }),
+      summary: { headline: overdrawn.summary, points: [], writtenBy: 'Leeway' },
+    })
+    expect(email.headline).toBe(overdrawn.summary)
+    expect(email.points).toEqual([])
+  })
+
   it('names a card over its limit in the subject, and keeps it plain for warnings', () => {
     const overLimit = accountAlert({
       kind: 'over_limit',

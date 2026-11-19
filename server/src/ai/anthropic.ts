@@ -29,7 +29,7 @@ export const SYSTEM_PROMPT = `You write the short summary at the top of a person
 Write a headline: one sentence, at most 15 words, on how this budget period is going.
 Then write 2 to 4 points, most useful first, each one sentence of at most 20 words.
 
-Use only the facts you are given, and copy amounts and dates exactly as written. Do not guess at causes the facts do not show. Speak to the person as "you", warmly and plainly, like a sharp friend who is good with money. Lead with anything that needs them today. When things are fine, say so briefly. The heads-up messages are written for an assistant, so put them in your own words for the person, and never mention tools. Do not use dashes as punctuation.`
+Use only the facts you are given, and copy amounts and dates exactly as written. Do not guess at causes the facts do not show. Speak to the person as "you", warmly and plainly, like a sharp friend who is good with money. Lead with anything that needs them today. When fixedHeadline is set, use it as the headline word for word, and do not repeat it in the points. When things are fine, say so briefly. The heads-up messages are written for an assistant, so put them in your own words for the person, and never mention tools. Do not use dashes as punctuation.`
 
 /** Thinking always runs on this model; low effort keeps a short summary quick and cheap. */
 const EFFORT = 'low'
@@ -69,6 +69,7 @@ export class AnthropicSummaryWriter implements SummaryWriter {
     if (response.stop_reason === 'max_tokens') throw new Error('The summary was cut off')
     const result = checked.safeParse(response.parsed_output)
     if (!result.success) throw new Error('The summary came back in an unexpected shape')
-    return result.data
+    // An urgent account alert always leads, whatever the model wrote.
+    return { ...result.data, headline: facts.fixedHeadline ?? result.data.headline }
   }
 }

@@ -46,6 +46,17 @@ describe('AnthropicSummaryWriter', () => {
     expect(JSON.stringify(request.messages)).toContain('$1,200')
   })
 
+  it('keeps an urgent account alert as the headline, whatever Claude wrote', async () => {
+    const { writer } = writerWith({
+      stop_reason: 'end_turn',
+      parsed_output: { headline: 'You are on track.', points: ['Payday is Dec 1.'] },
+    })
+    const overdrawn = 'Your Chase checking account is overdrawn by $42.10.'
+    const summary = await writer.write({ ...facts, fixedHeadline: overdrawn })
+    expect(summary).toEqual({ headline: overdrawn, points: ['Payday is Dec 1.'] })
+    expect(SYSTEM_PROMPT).toContain('fixedHeadline')
+  })
+
   it('throws when Claude declines, so the dashboard falls back to Leeway’s words', async () => {
     const { writer } = writerWith({ stop_reason: 'refusal', parsed_output: null })
     await expect(writer.write(facts)).rejects.toThrow('declined')

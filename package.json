@@ -3,7 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Self-hosted personal finance manager with bank sync, a live dashboard, and an MCP endpoint so your AI assistant can coach you.",
+  "description": "A free, self-hosted budget tracker with bank sync, account alerts, and a secure MCP link for your AI assistant.",
+  "homepage": "https://github.com/David5280/Leeway#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/David5280/Leeway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/David5280/Leeway/issues"
+  },
+  "author": "David Engel",
+  "keywords": [
+    "budget",
+    "personal-finance",
+    "self-hosted",
+    "plaid",
+    "mcp"
+  ],
   "type": "module",
   "workspaces": [
     "server",
