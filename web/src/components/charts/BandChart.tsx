@@ -2,6 +2,7 @@
 // with the middle case drawn as a line, by age. Used for a retirement
 // projection, where one line would read as a promise.
 
+import { range } from '../../../../server/src/domain/profile/rangeWords'
 import type { BandPoint } from '../../../../server/src/domain/retirement/projection'
 import { useApp } from '../../lib/app'
 import { axisFormat, niceTicks, textWidth } from '../../lib/chartScale'
@@ -10,11 +11,6 @@ import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from 
 
 /** One year on the chart, as the server's projection gives it. */
 export type { BandPoint }
-
-/** A range in words, or one figure when the cases agree: "$1,200 to $1,800", "$72,000". */
-export function rangeText(low: number, high: number, money: (cents: number) => string): string {
-  return low === high ? money(low) : `${money(low)} to ${money(high)}`
-}
 
 /**
  * Every year's figures as a table only a screen reader reads, since the
@@ -43,7 +39,7 @@ function YearTable({
         {points.map((point) => (
           <tr key={point.age}>
             <th scope="row">{point.age}</th>
-            <td>{rangeText(point.low, point.high, money)}</td>
+            <td>{range(point, money)}</td>
             <td>{money(point.mid)}</td>
           </tr>
         ))}
@@ -123,7 +119,7 @@ export function BandChart({
               lines={
                 hovered.low === hovered.high
                   ? [money(hovered.mid)]
-                  : [rangeText(hovered.low, hovered.high, money), `Middle ${money(hovered.mid)}`]
+                  : [range(hovered, money), `Middle ${money(hovered.mid)}`]
               }
             />
           )

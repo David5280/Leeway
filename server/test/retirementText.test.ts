@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { profileDigest } from '../src/domain/profile/digest.js'
 import type { FinancialProfile } from '../src/domain/profile/profile.js'
 import { retirementInsight } from '../src/domain/profile/insights.js'
+import { middleCase, middleFigure, percent, range } from '../src/domain/profile/rangeWords.js'
 import { CONTRIBUTION_NOT_SET, PENSION_LABEL } from '../src/domain/profile/retirementLens.js'
 import { lensKinds, retirementView, savingsView } from '../src/domain/profile/views.js'
 import { FORMULA_NOTE, pensionMonthlyTotals } from '../src/domain/retirement/pensions.js'
@@ -258,9 +259,8 @@ describe('the retirement lens', () => {
     })
     const { lens } = retirementView(spending, format)
     expect(lens.question).toBe('Can I retire now?')
-    expect(lens.meters[1]!.detail).toBe(
-      'most likely about $0. Your target is $3,000 a month, your recent spending.',
-    )
+    // Nothing saved gives $0 in every case, so there is no middle case to name.
+    expect(lens.meters[1]!.detail).toBe('Your target is $3,000 a month, your recent spending.')
     expect(lens.meters[0]).toMatchObject({
       question: 'Savings now',
       detail: 'the savings you have to draw on today.',
@@ -408,6 +408,17 @@ describe('retirement in the digest', () => {
     expect(lens.answer.detail).toBe(
       'Your pension and savings should cover 121% of the $2,000 a month you want.',
     )
+    const [savings, income] = lens.meters
+    expect(savings).toMatchObject({ question: 'Savings now', headline: '$72,000' })
+    expect(income).toMatchObject({
+      question: 'Monthly income now',
+      headline: '$2,420',
+      detail: 'Your pension gives about $2,180 of it, and the $2,000 you want is met.',
+    })
+    // No meter or answer says one figure twice, as a range or as its middle case.
+    for (const words of [lens.answer, ...lens.meters]) {
+      expect(`${words.headline} ${words.detail}`).not.toMatch(/(\$[\d,]+) to \1|most likely/)
+    }
     const line = profileDigest(now, dollars)
       .split('\n')
       .find((text) => text.startsWith('Retirement'))!
@@ -482,5 +493,23 @@ describe('a savings rate that counts a pension', () => {
       'Pension, entered by the owner: benefit not known yet; the owner pays $423 a paycheck; the employer adds 20% of pay.',
     )
     expect(digest).toMatch(/^Not known yet: .*birth year, for retirement projections\.$/m)
+  })
+})
+
+describe('range words', () => {
+  const spread = { low: 81, mid: 100, high: 136 }
+  const fixed = { low: 121, mid: 121, high: 121 }
+
+  it('give a range, or one figure when its ends agree', () => {
+    expect(range(spread, percent)).toBe('81% to 136%')
+    expect(range(fixed, percent)).toBe('121%')
+  })
+
+  it('name the middle case only under a range', () => {
+    expect(middleFigure(spread, percent)).toBe('100%')
+    expect(middleFigure(fixed, percent)).toBeNull()
+    expect(middleCase(spread, percent)).toBe(', most likely 100%')
+    expect(middleCase(spread, dollars, 'most likely about')).toBe(', most likely about $1')
+    expect(middleCase(fixed, percent)).toBe('')
   })
 })
