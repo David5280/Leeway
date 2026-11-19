@@ -149,13 +149,20 @@ function savingsSection({ savings }: Checkin, money: Money, locale: string): Ema
     change === null || changeSince === null
       ? ''
       : `, ${change < 0 ? '-' : '+'}${money(Math.abs(change))} since ${shortDate(changeSince, locale)}`
-  const items: EmailItem[] = [
-    { text: 'Saved and invested', detail: `${money(savings.totalCents)}${moved}` },
-  ]
+  const items: EmailItem[] = savings.hasSavingsAccounts
+    ? [{ text: 'Saved and invested', detail: `${money(savings.totalCents)}${moved}` }]
+    : []
   if (savings.emergencyFundMonths !== null) {
     items.push({
       text: 'Emergency fund',
       detail: `${savings.emergencyFundMonths} of ${savings.emergencyFundTargetMonths} months`,
+    })
+  }
+  const coverage = savings.retirementCoverage
+  if (coverage) {
+    items.push({
+      text: 'Retirement',
+      detail: `${coverage.low}% to ${coverage.high}% of the income you want${savings.pensionRecorded ? ', pension included' : ''}`,
     })
   }
   return [{ title: 'Savings and investments', items, empty: '' }]

@@ -19,6 +19,7 @@ export type InsightTopic =
   | 'change'
   | 'savings_rate'
   | 'contributions'
+  | 'retirement'
 
 export interface Insight {
   /** The lens it belongs to: one savings kind, or the whole picture. */
@@ -171,6 +172,40 @@ function goalInsight(
 }
 
 /**
+ * What the middle projection means for the target: the gap savings need to
+ * fill on top of any pension, and a later age that closes it, or the room to
+ * spare. It states figures and choices, never that the owner should save more.
+ */
+export function retirementInsight(
+  profile: FinancialProfile,
+  { money }: InsightFormat,
+): Insight | null {
+  const projection = profile.retirement.projection
+  if (!projection?.target || projection.onTrack === null) return null
+  const { income, target, retirementAge, laterAge } = projection
+  const onTopOf = income.pensionCents > 0 ? ' on top of your pension' : ''
+  if (projection.gapMonthlyCents === 0) {
+    const spare = income.total.mid - target.monthlyCents
+    return {
+      about: 'retirement',
+      topic: 'retirement',
+      tone: 'good',
+      text: `In the middle case you would have about ${money(income.total.mid)} a month at ${retirementAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
+    }
+  }
+  const needed = Math.max(0, target.monthlyCents - income.pensionCents)
+  const later = laterAge
+    ? ` Retiring at ${laterAge} instead of ${retirementAge} closes that gap in the middle case, with no change to what you put in.`
+    : ''
+  return {
+    about: 'retirement',
+    topic: 'retirement',
+    tone: 'neutral',
+    text: `Savings need to give about ${money(needed)} a month${onTopOf}. The middle projection gives ${money(income.savings.mid)}.${later}`,
+  }
+}
+
+/**
  * Every insight for the savings lenses and an assistant: overall ones first,
  * then each kind's. A lens picks among them by topic. goalsOf says which
  * goals belong to a kind (see goalLens in views.ts).
@@ -184,9 +219,11 @@ export function savingsInsights(
     k.kind === 'savings' ? null : changeInsight(k.kind, k.label, k.changes, format),
     goalInsight(goalsOf(k.kind), k.kind, format),
   ])
-  return [
+  const all = [
     ...overallInsights(profile, format),
+    retirementInsight(profile, format),
     ...emergencyInsights(profile, format),
-    ...byKind.filter((insight): insight is Insight => insight !== null),
+    ...byKind,
   ]
+  return all.filter((insight): insight is Insight => insight !== null)
 }

@@ -236,6 +236,8 @@ export function summaryFacts(
       emergencyFundMonthsCovered: checkin.savings.emergencyFundMonths,
       emergencyFundTargetMonths: checkin.savings.emergencyFundTargetMonths,
       savingsRatePercentOfPay: checkin.savings.savingsRatePercent,
+      hasDefinedBenefitPension: checkin.savings.pensionRecorded,
+      retirementIncomePercentOfTarget: checkin.savings.retirementCoverage,
     },
   }
 }

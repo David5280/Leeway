@@ -2,6 +2,13 @@
 // them: the insights, the per-kind views and the assistant's digest.
 
 import type { FinancialProfile } from '../../src/domain/profile/profile.js'
+import { retirementSchema, type RetirementPatch } from '../../src/domain/retirement/assumptions.js'
+import type { Pension } from '../../src/domain/retirement/pensions.js'
+import {
+  retirementPlan,
+  type RetirementInput,
+  type RetirementPlan,
+} from '../../src/domain/retirement/plan.js'
 import type { SavingsKindReport, SavingsReport } from '../../src/domain/savings/report.js'
 
 const NO_CHANGES = { month: null, days30: null, year: null, all: null }
@@ -71,8 +78,43 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
     emergencyFund: null,
     savingsRate: null,
     savingsRateTargetPercent: 20,
+    retirement: retirement(),
     goals: [],
     userContext: [],
+    ...fields,
+  }
+}
+
+/** A retirement plan from these inputs; with none, no birth year and no pension. */
+export function retirement(
+  fields: Partial<RetirementInput> = {},
+  assumptions: RetirementPatch = {},
+): RetirementPlan {
+  return retirementPlan({
+    today: '2026-11-19',
+    assumptions: retirementSchema.parse(assumptions),
+    balanceCents: 0,
+    foundMonthlyContributionCents: null,
+    recentMonthlySpendingCents: null,
+    pensions: [],
+    payCadence: null,
+    ...fields,
+  })
+}
+
+/** A pension as stored, with every field blank unless given. */
+export function pension(fields: Partial<Pension> = {}): Pension {
+  return {
+    id: 'pension-1',
+    planName: 'Colorado PERA',
+    contribution: null,
+    grossPayCents: null,
+    payCadence: null,
+    serviceYears: null,
+    monthlyBenefitCents: null,
+    benefitSource: null,
+    benefitAge: null,
+    checkedOn: null,
     ...fields,
   }
 }

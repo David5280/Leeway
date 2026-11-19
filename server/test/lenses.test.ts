@@ -291,9 +291,14 @@ describe('the retirement and investing lenses', () => {
       ],
       { contributions },
     ).lenses
-    expect(retirement!.answer).toMatchObject({
-      headline: '$50,000',
-      detail: 'in retirement across 1 account. -$1,200 since Nov 19.',
+    // Without a birth year there is no projection: the lens asks for one.
+    expect(retirement!.question).toBe('Can I stop working on time?')
+    expect(retirement!.answer).toEqual({
+      headline: null,
+      detail:
+        'Add your birth year to see whether your savings and pension can cover the income you want.',
+      tone: 'neutral',
+      progress: null,
     })
     expect(retirement!.meters.map((m) => [m.id, m.headline])).toEqual([
       ['growth', '-$1,200'],
@@ -310,9 +315,12 @@ describe('the retirement and investing lenses', () => {
   })
 
   it('say where history starts, and that payroll deductions are unseen, when there is nothing yet', () => {
-    const [retirement] = view([kindReport('retirement', 100)], { historyStartsOn: TODAY }).lenses
-    expect(retirement!.answer.detail).toBe(
-      'in retirement across 1 account. History starts Nov 19, so changes show from the next day on.',
+    const [retirement, investing] = view(
+      [kindReport('retirement', 100), kindReport('investment', 100)],
+      { historyStartsOn: TODAY },
+    ).lenses
+    expect(investing!.answer.detail).toBe(
+      'in investing across 1 account. History starts Nov 19, so changes show from the next day on.',
     )
     expect(retirement!.meters.map((m) => [m.headline, m.detail])).toEqual([
       [null, 'History starts Nov 19, so changes show from the next day on.'],
@@ -322,8 +330,8 @@ describe('the retirement and investing lenses', () => {
       ],
     ])
     expect(retirement!.insight).toBeNull()
-    const [investing] = view([kindReport('investment', 100)], { historyStartsOn: null }).lenses
-    expect(investing!.answer.detail).toMatch(
+    const [fresh] = view([kindReport('investment', 100)], { historyStartsOn: null }).lenses
+    expect(fresh!.answer.detail).toMatch(
       /Changes show once Leeway has a balance from an earlier day\.$/,
     )
   })

@@ -94,12 +94,50 @@ function goalsLine({ goals, locale }: FinancialProfile, money: Money): string | 
   return `Goals: ${parts.join('; ')}.`
 }
 
+/** Each pension, as the owner entered it. */
+function pensionLines({ retirement }: FinancialProfile, money: Money): string[] {
+  return retirement.pensions.map((pension) => {
+    const age = pension.benefitAge ?? retirement.assumptions.retirementAge
+    const benefit =
+      pension.monthlyBenefitCents === null
+        ? 'benefit not entered yet'
+        : `about ${money(pension.monthlyBenefitCents)} a month from age ${age} (${pension.benefitSource ?? 'source not given'})`
+    const perPaycheck = pension.payIn.perPaycheckCents
+    const pays =
+      perPaycheck === null ? 'contribution not set yet' : `pays ${money(perPaycheck)} a paycheck`
+    return `Pension, entered by the owner: ${pension.planName}, ${benefit}; ${pays}.`
+  })
+}
+
+/** The projection in one line, with the plain note that goes with it. */
+function projectionLine({ retirement }: FinancialProfile, money: Money): string | null {
+  const projection = retirement.projection
+  if (!projection) return null
+  const { savingsAtRetirement: at, income, target, coverage, realReturns } = projection
+  const against =
+    target && coverage
+      ? ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
+      : ''
+  return `Retirement at ${projection.retirementAge} (now about ${projection.age}): savings ${money(at.low)} to ${money(at.high)}, income ${money(income.total.low)} to ${money(income.total.high)} a month including pensions${against}; returns ${realReturns.low}% to ${realReturns.high}% after inflation. ${retirement.note}`
+}
+
+/** What an assistant must not say when a pension is recorded. */
+function pensionRule({ retirement }: FinancialProfile): string | null {
+  if (!retirement.hasPension) return null
+  return 'A defined-benefit pension is retirement saving: never call low or missing IRA, 401(k) or brokerage contributions under-saving.'
+}
+
 /** What Leeway could not work out, so an assistant knows to ask. */
 function unknownsLine(profile: FinancialProfile): string | null {
   const unknown: string[] = []
   if (!profile.pay.cadence) unknown.push('pay schedule')
   if (profile.monthly.months === 0) unknown.push('a typical month of income and spending')
   if (!profile.savingsRate) unknown.push('savings rate')
+  const retirementMatters =
+    profile.retirement.hasPension || profile.savings.kinds.some((k) => k.kind === 'retirement')
+  if (retirementMatters && !profile.retirement.projection) {
+    unknown.push('birth year, for retirement projections')
+  }
   if (unknown.length === 0) return null
   return `Not known yet: ${unknown.join(', ')}.`
 }
@@ -118,6 +156,9 @@ export function profileDigest(profile: FinancialProfile, money: Money): string {
     emergencyLine(profile, money),
     rateLine(profile, money),
     goalsLine(profile, money),
+    ...pensionLines(profile, money),
+    projectionLine(profile, money),
+    pensionRule(profile),
     ...profile.userContext.map((fact) => `The owner says: ${fact}`),
     unknownsLine(profile),
   ]

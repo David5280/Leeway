@@ -116,11 +116,15 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
 
 /**
  * Savings at a glance, from the financial profile: the total and how it moved
- * this month, the emergency fund and the savings rate. Null without any savings.
+ * this month, the emergency fund, the savings rate and retirement. Null with
+ * no savings account and no pension.
  */
-function savingsGlance({ savings, emergencyFund, savingsRate }: FinancialProfile) {
-  if (!savings.hasSavings) return null
+function savingsGlance({ savings, emergencyFund, savingsRate, retirement }: FinancialProfile) {
+  if (!savings.hasSavings && !retirement.hasPension) return null
+  const projection = retirement.projection
   return {
+    /** False when only a pension is recorded. */
+    hasSavingsAccounts: savings.hasSavings,
     totalCents: savings.totalCents,
     /** Measured from the first of the month, or from the first day of history when later. */
     changeThisMonthCents: savings.changes.month?.changeCents ?? null,
@@ -129,6 +133,11 @@ function savingsGlance({ savings, emergencyFund, savingsRate }: FinancialProfile
     emergencyFundTargetMonths: emergencyFund?.targetMonths ?? null,
     /** Null when pay or saving is unknown, never a guess of zero. */
     savingsRatePercent: savingsRate?.percent ?? null,
+    /** A pension is retirement saving: no coaching calls its owner under-saving. */
+    pensionRecorded: retirement.hasPension,
+    /** Retirement income as a percent of the target, low to high; null without a projection. */
+    retirementCoverage: projection?.onTrack ? projection.coverage : null,
+    retirementOnTrack: projection?.onTrack ?? null,
   }
 }
 
