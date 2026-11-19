@@ -133,6 +133,15 @@ export const SCREENS: Screen[] = [
     name: '/plan/goals adding a goal',
     then: open('Add a goal', (page) => page.getByRole('region', { name: 'New goal' })),
   }),
+  at('planSection', '/plan/retirement'),
+  at('planSection', '/plan/retirement', {
+    name: '/plan/retirement adding a pension',
+    then: open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' })),
+  }),
+  at('planSection', '/plan/retirement', {
+    name: "/plan/retirement changing a pension's figures",
+    then: open('Edit figures', (page) => page.getByRole('form', { name: 'Pension figures' })),
+  }),
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),

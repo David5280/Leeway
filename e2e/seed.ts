@@ -59,12 +59,13 @@ export const LONG = {
   bill: 'Renters insurance with the extra coverage for bikes and cameras',
   goal: 'Emergency fund for unexpected car repairs, vet bills and travel',
   token: 'Claude on the laptop in the home office upstairs, by window',
+  pension: 'Public Employees Retirement Association of Colorado, the defined benefit plan',
 } as const
 
 /**
  * Adds four accounts (checking, savings, a credit card and a loan, in that
- * order in `seeded.accounts`), a category, spending, bills, goals, a rule and
- * an assistant key.
+ * order in `seeded.accounts`), a category, spending, bills, goals, a rule, an
+ * assistant key, and a pension with the birth year a projection needs.
  */
 export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded): Promise<void> {
   /**
@@ -187,10 +188,35 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
     (result: { rule: { id: string } }) => result.rule,
   )
   await create('tokens', 'create_token', { name: LONG.token, scope: 'read' })
+
+  // A pension with every figure a statement and a paystub give, and the birth
+  // year and income wanted, so the Retirement section draws its projection.
+  await create(
+    'accounts',
+    'create_pension',
+    {
+      name: LONG.pension,
+      balanceCents: 6_500_000,
+      contribution: { kind: 'percent', percent: 11 },
+      grossPayCents: 250_000,
+      payCadence: 'biweek',
+      employerContributionPercent: 21.4,
+      serviceYears: 8,
+      salaryBasisMonthlyCents: 600_000,
+      multiplierPercent: 2.5,
+    },
+    (result: { accountId: string }) => ({ id: result.accountId }),
+  )
+  await action(request, 'update_settings', {
+    retirement: { birthYear: 1986, targetMonthlyIncomeCents: 400_000 },
+  })
 }
 
 /** Removes everything seedEveryScreen added, however far it got. */
 export async function removeSeed(request: APIRequestContext, seeded: Seeded): Promise<void> {
+  await action(request, 'update_settings', {
+    retirement: { birthYear: null, targetMonthlyIncomeCents: null },
+  })
   for (const [kind, deleteAction] of Object.entries(DELETED_BY)) {
     for (const id of seeded[kind as keyof Seeded]) await action(request, deleteAction, { id })
   }

@@ -259,7 +259,15 @@ test.describe('in the widest theme, packed tight', () => {
   // Neon's Space Grotesk runs wider than the other themes' fonts, and compact
   // density takes away padding: together, the likeliest look to crowd a row.
   const phone = GUARDED_PHONES[0]!
-  const NARROW_LOOK = ['/', '/accounts', '/transactions', '/budgets', '/plan', '/plan/goals']
+  const NARROW_LOOK = [
+    '/',
+    '/accounts',
+    '/transactions',
+    '/budgets',
+    '/plan',
+    '/plan/goals',
+    '/plan/retirement',
+  ]
   test.use(phone.screen)
 
   const seeded: Seeded = emptySeed()
