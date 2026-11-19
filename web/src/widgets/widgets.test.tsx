@@ -759,6 +759,8 @@ describe('AccountsWidget', () => {
       aprPercent: null,
       minimumPaymentCents: null,
       lowBalanceCents: null,
+      kindChoice: null,
+      kind: 'checking',
       ...fields,
     }
   }

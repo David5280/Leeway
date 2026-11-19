@@ -24,6 +24,10 @@ bank, and nothing in Leeway can ever move money.
   balance is low or an overdraft fee was charged.
 - **Planning**: bills and subscriptions, recurring charges found for you,
   savings goals, debt payoff plans, cash until payday and net worth.
+- **Savings and investments**: savings, retirement and investing accounts
+  sorted for you (or as you mark them), daily balance history, an emergency
+  fund counted in months of essential spending, and your savings rate. An AI
+  assistant can read all of it today.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or
   also change budgets.

@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { resetPassword } from '../src/domain/owner.js'
+import { createSession, resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
-import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+  TEST_SETUP_CODE,
+} from './helpers.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -282,6 +288,78 @@ describe('MCP endpoint', () => {
 
     const bad = await rpc(token, 'tools/call', { name: 'create_category', arguments: {} })
     expect(bad.json().result).toMatchObject({ isError: true })
+  })
+
+  it('never hands an agent an account mask, from any tool, error results included', async () => {
+    // A bank name that repeats the number, overdrawn so alerts and summaries name it too.
+    const { accountId } = await insertBankAccount(ctx.db, {
+      name: 'SAVINGS ...9876',
+      subtype: 'savings',
+      mask: '9876',
+      balanceCents: -2_500,
+    })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-02',
+      name: 'Coffee',
+      amountCents: 1_000,
+    })
+    const { token } = await createToken(ctx.db, 'Coach', 'write')
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      const result = response.json().result as { isError?: boolean; content: { text: string }[] }
+      return { name, isError: result.isError === true, text: result.content[0]!.text }
+    }
+
+    // Every tool with no input. Those that need some fail, and must say nothing
+    // either. Syncing is left out: it calls the bank.
+    const everyTool = agentTools('write')
+      .map((action) => action.name)
+      .filter((name) => name !== 'sync_banks')
+    const bare = await Promise.all(everyTool.map((name) => tool(name)))
+
+    // Then the tools that name this account, one after another, with real input.
+    const goal = await tool('create_goal', { name: 'Trip', targetCents: 100_000, accountId })
+    const goalId = JSON.parse(goal.text).id as string
+    const named = [
+      goal,
+      // Refused: a goal that follows an account's balance cannot take money by hand.
+      await tool('add_to_goal', { id: goalId, amountCents: 1_000 }),
+      await tool('list_goal_contributions', { id: goalId }),
+      await tool('list_transactions', { accountIds: [accountId] }),
+      await tool('summarize_accounts', { accountIds: [accountId] }),
+      await tool('update_account', { id: accountId, kind: 'savings' }),
+      await tool('list_accounts'),
+      await tool('list_alerts'),
+      await tool('get_checkin'),
+    ]
+    const byName = new Map(named.map((result) => [result.name, result]))
+    expect(byName.get('add_to_goal')).toMatchObject({
+      isError: true,
+      text: expect.stringContaining('Trip follows the balance of'),
+    })
+    expect(byName.get('list_alerts')!.text).toContain('is overdrawn by')
+    for (const name of ['create_goal', 'list_accounts', 'update_account', 'get_checkin']) {
+      expect(byName.get(name)!.isError, name).toBe(false)
+    }
+    // Agents get the clean name, and neither the mask nor the bank's raw name.
+    expect(JSON.parse(byName.get('list_accounts')!.text)).toEqual([
+      expect.objectContaining({ id: accountId, kind: 'savings', name: 'Test Savings' }),
+    ])
+    for (const result of [...bare, ...named]) {
+      expect(result.text, result.name).not.toContain('9876')
+      expect(result.text, result.name).not.toMatch(/"(mask|bankName)"/)
+    }
+
+    const ownApp = await app.inject({
+      method: 'POST',
+      url: '/api/actions/list_accounts',
+      // A session made directly, so this test spends none of the sign-in rate limit.
+      headers: { cookie: `leeway_session=${await createSession(ctx.db)}` },
+      payload: {},
+    })
+    expect(ownApp.json().result).toEqual([
+      expect.objectContaining({ name: 'Test Savings', mask: '9876', bankName: 'SAVINGS ...9876' }),
+    ])
   })
 
   it('offers coaching prompts, filled in with their arguments', async () => {

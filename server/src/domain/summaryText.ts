@@ -225,6 +225,18 @@ export function summaryFacts(
       debtFreeDate: checkin.debts.debtFreeDate,
     },
     netWorthChangeLast30Days: money(checkin.netWorth.changeCents),
+    savingsAndInvestments: checkin.savings && {
+      total: money(checkin.savings.totalCents),
+      changeThisMonth:
+        checkin.savings.changeThisMonthCents === null
+          ? null
+          : money(checkin.savings.changeThisMonthCents),
+      changeMeasuredSince: checkin.savings.changeSince && date(checkin.savings.changeSince),
+      emergencyFundMonthsCovered: checkin.savings.emergencyFundMonths,
+      emergencyFundTargetMonths: checkin.savings.emergencyFundTargetMonths,
+      // No savings rate: the bank sees only part of what is saved (never payroll
+      // deductions such as a pension), and the summary needs none to say how things are going.
+    },
   }
 }
 

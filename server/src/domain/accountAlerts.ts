@@ -48,6 +48,8 @@ export type AlertAccount = Pick<
   | 'institutionName'
   | 'type'
   | 'subtype'
+  | 'kind'
+  | 'kindChoice'
   | 'balanceCents'
   | 'availableCents'
   | 'creditLimitCents'
@@ -95,18 +97,28 @@ export function isOverdraftFee(charge: Omit<FeeCandidate, 'accountId' | 'date'>)
 
 /**
  * The balance below which an account gets a low-balance warning, or null for
- * none. Only cash accounts have one; by default only checking accounts, which
+ * none. Only bank accounts have one; by default only checking accounts, which
  * bills and card payments come out of. A savings account kept small on purpose
  * would only nag, so it warns only when the owner sets an amount.
  */
 export function lowBalanceThreshold(
-  account: Pick<AlertAccount, 'type' | 'subtype' | 'lowBalanceCents'>,
+  account: Pick<AlertAccount, 'type' | 'subtype' | 'kind' | 'kindChoice' | 'lowBalanceCents'>,
 ): number | null {
   if (account.type !== 'depository') return null
   const threshold =
-    account.lowBalanceCents ?? (account.subtype === 'checking' ? DEFAULT_LOW_BALANCE_CENTS : null)
+    account.lowBalanceCents ?? (warnsByDefault(account) ? DEFAULT_LOW_BALANCE_CENTS : null)
   // Zero means the owner turned it off: being overdrawn is flagged on its own.
   return threshold === 0 ? null : threshold
+}
+
+/**
+ * Whether an account warns without an amount set: one the owner marked as
+ * checking or, when they chose no kind, one the bank calls checking. A bank
+ * account with no subtype (often one added by hand) stays quiet until the
+ * owner says, as it always has.
+ */
+function warnsByDefault(account: Pick<AlertAccount, 'subtype' | 'kind' | 'kindChoice'>): boolean {
+  return account.kindChoice ? account.kind === 'checking' : account.subtype === 'checking'
 }
 
 /** The balance alerts for one account: overdrawn, over its limit, or low. At most one. */

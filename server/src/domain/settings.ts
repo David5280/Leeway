@@ -6,6 +6,7 @@ import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import type { PeriodConfig } from '../lib/periods.js'
+import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
 
 const periodSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -101,6 +102,45 @@ const widgetsSchema = z
 const accountSelectionSchema = z.array(z.uuid()).max(100)
 
 /**
+ * How savings are judged: the emergency fund's target, what counts as
+ * essential spending and the savings rate to aim for.
+ */
+const savingsPlanFields = {
+  /** Months of essential spending the emergency fund should cover. */
+  emergencyFundMonths: z
+    .number()
+    .int('Use a whole number of months')
+    .min(1, 'Aim for at least one month')
+    .max(24, 'Use 24 months or fewer'),
+  /**
+   * Spending categories that count as essential. Null counts every spending
+   * category, and so does an empty list: no essentials at all would make any
+   * savings balance look like endless cover.
+   */
+  essentialCategoryIds: z
+    .array(z.uuid())
+    .max(200)
+    .nullable()
+    .transform((ids) => (ids?.length ? ids : null)),
+  /** Percent of pay to aim to save. Null sets no target. */
+  savingsRateTargetPercent: z
+    .number()
+    .int('Use a whole percent')
+    .min(1, 'Aim for at least 1%')
+    .max(90, 'Use 90% or less')
+    .nullable(),
+}
+
+const savingsPlanSchema = z.object({
+  emergencyFundMonths: savingsPlanFields.emergencyFundMonths.default(DEFAULT_EMERGENCY_MONTHS),
+  essentialCategoryIds: savingsPlanFields.essentialCategoryIds.default(null),
+  // No target until the owner sets one: the rate counts only what the bank
+  // shows, so a default would call a pension member short of a goal they
+  // may well meet through payroll.
+  savingsRateTargetPercent: savingsPlanFields.savingsRateTargetPercent.default(null),
+})
+
+/**
  * Every preference in one validated document. Defaults fill anything missing,
  * so an empty document is a complete, sensible setup.
  */
@@ -131,11 +171,12 @@ export const settingsSchema = z.object({
    * so it is left out of settingsPatchSchema, and of imports and agents with it.
    */
   aiSummary: z.boolean().default(false),
+  savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
 })
 
 export type Settings = z.infer<typeof settingsSchema>
 
-/** What a caller may change: any subset; appearance merges, period and widgets replace. */
+/** What a caller may change: any subset; appearance and savingsPlan merge, period and widgets replace. */
 export const settingsPatchSchema = z
   .object({
     period: periodSchema,
@@ -149,6 +190,7 @@ export const settingsPatchSchema = z
     appearance: z.object(appearanceFields).partial(),
     dashboard: z.object({ widgets: widgetsSchema }),
     accountSelection: accountSelectionSchema,
+    savingsPlan: z.object(savingsPlanFields).partial(),
   })
   .partial()
   .strict()
@@ -188,7 +230,21 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     ...current,
     ...patch,
     appearance: { ...current.appearance, ...patch.appearance },
+    savingsPlan: { ...current.savingsPlan, ...patch.savingsPlan },
   })
+}
+
+/**
+ * Takes deleted categories out of the essential ones the owner picked, so the
+ * stored pick never points at a category that is gone. A pick left empty goes
+ * back to counting every spending category.
+ */
+export async function forgetEssentialCategories(db: Db, deletedIds: string[]): Promise<void> {
+  const settings = await getSettings(db)
+  const picked = settings.savingsPlan.essentialCategoryIds
+  if (!picked?.some((id) => deletedIds.includes(id))) return
+  const kept = picked.filter((id) => !deletedIds.includes(id))
+  await saveSettings(db, mergeSettings(settings, { savingsPlan: { essentialCategoryIds: kept } }))
 }
 
 export async function saveSettings(db: Db, settings: Settings): Promise<Settings> {
