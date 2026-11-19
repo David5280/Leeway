@@ -297,6 +297,27 @@ describe('Transactions filters', () => {
     expect(screen.getByText('Address: ?from=overview')).toBeInTheDocument()
   })
 
+  it('counts what needs a category within the dates and account the list shows', async () => {
+    const server = serve({
+      list_transactions: (input) =>
+        input.categoryId === 'uncategorized'
+          ? { transactions: [], total: input.accountId ? 2 : 5 }
+          : { transactions: [costco], total: 1 },
+    })
+    renderTransactions('/transactions?account=acct-1')
+    expect(await screen.findByRole('button', { name: '2 need a category' })).toBeInTheDocument()
+    const counted = server
+      .actions('list_transactions')
+      .find((input) => (input as { limit: number }).limit === 1)
+    expect(counted).toEqual({
+      categoryId: 'uncategorized',
+      accountId: 'acct-1',
+      start: '2026-11-01',
+      includeExcluded: true,
+      limit: 1,
+    })
+  })
+
   it('hides the need-a-category chip when everything has one', async () => {
     serve({
       list_transactions: (input) =>

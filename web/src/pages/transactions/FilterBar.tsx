@@ -146,10 +146,18 @@ function AccountChip({ filters }: { filters: ActivityFilters }) {
   )
 }
 
-/** "N need a category", shown only while some do; tapping it filters to them. */
+/**
+ * "N need a category", shown only while some do; tapping it filters to them.
+ * It counts within the list's other filters (dates, account, search), so the
+ * number is how many rows tapping it shows.
+ */
 function UncategorizedChip({ filters }: { filters: ActivityFilters }) {
   const count =
-    useAction('list_transactions', { categoryId: UNCATEGORIZED, limit: 1 }).data?.total ?? 0
+    useAction(
+      'list_transactions',
+      { ...filters.input, categoryId: UNCATEGORIZED, limit: 1 },
+      { enabled: filters.ready },
+    ).data?.total ?? 0
   const selected = filters.categoryId === UNCATEGORIZED
   if (count === 0 && !selected) return null
   return (
