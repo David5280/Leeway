@@ -1,9 +1,11 @@
 // "Heads up": everything that needs the owner, worst first: account alerts,
-// banks that stopped syncing, budgets, then transactions to sort.
+// banks that stopped syncing, budgets, transactions to sort, then this
+// month's AI spending alert.
 
 import { Link } from 'react-router-dom'
 import type { Connection } from '../api/client'
 import { useAction } from '../api/hooks'
+import { AiSpendAlert } from '../components/AiSpendAlert'
 import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
 import { Card, Icon } from '../components/ui'
 import { accountPath } from '../lib/accounts'
@@ -21,6 +23,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
   const accountAlerts = useAction('list_alerts')
+  const aiAlert = useAction('get_ai_usage').data?.alert
   const items: {
     key: string
     tone: 'over' | 'warn' | 'info'
@@ -72,7 +75,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
   }
   return (
     <Card label="Heads up" className="tight">
-      {items.length === 0 ? (
+      {items.length === 0 && !aiAlert ? (
         <div className="alert-row">
           <span className="alert-icon info">
             <Icon name="info" size={16} />
@@ -80,25 +83,28 @@ export function AlertsWidget({ budget }: WidgetProps) {
           <span className="grow">Nothing needs you right now. Every budget is on track.</span>
         </div>
       ) : (
-        items.map((item) => (
-          <Link
-            key={item.key}
-            to={item.to ?? '/'}
-            className="alert-row clickrow"
-            style={{ margin: 0, flexDirection: 'row' }}
-          >
-            <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
-              <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
-            </span>
-            <span className="grow">{item.text}</span>
-            <span
-              className="small muted strong hide-sm"
-              style={{ textTransform: 'uppercase', letterSpacing: '.06em' }}
+        <>
+          {items.map((item) => (
+            <Link
+              key={item.key}
+              to={item.to ?? '/'}
+              className="alert-row clickrow"
+              style={{ margin: 0, flexDirection: 'row' }}
             >
-              {item.level}
-            </span>
-          </Link>
-        ))
+              <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
+                <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
+              </span>
+              <span className="grow">{item.text}</span>
+              <span
+                className="small muted strong hide-sm"
+                style={{ textTransform: 'uppercase', letterSpacing: '.06em' }}
+              >
+                {item.level}
+              </span>
+            </Link>
+          ))}
+          {aiAlert && <AiSpendAlert alert={aiAlert} linked />}
+        </>
       )}
     </Card>
   )

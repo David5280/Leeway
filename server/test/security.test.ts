@@ -104,24 +104,23 @@ describe('config', () => {
     expect(loadConfig({ ...base, DATABASE_SSL: 'false' }).databaseSsl).toBe(false)
   })
 
-  it('turns Claude on with a key, on the default models unless one is named', () => {
+  it('turns Claude on with a key, and fixes a model only where a variable names one', () => {
     expect(loadConfig(base).anthropic).toBeNull()
-    // The small model is the default on purpose: it keeps each use to fractions of a cent.
-    expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({
-      apiKey: 'key',
-      model: 'claude-haiku-5-5',
-      paystubModel: 'claude-haiku-5-5',
-    })
+    expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({ apiKey: 'key' })
+    // Unset, each job follows the owner's pick in Settings, or its small default.
+    expect(loadConfig(base).modelOverrides).toEqual({ summary: null, paystub: null })
     const named = loadConfig({
       ...base,
       ANTHROPIC_API_KEY: 'key',
       SUMMARY_MODEL: 'claude-sonnet-5-5',
       PAYSTUB_MODEL: 'claude-opus-5-5',
     })
-    expect(named.anthropic).toMatchObject({
-      model: 'claude-sonnet-5-5',
-      paystubModel: 'claude-opus-5-5',
+    expect(named.modelOverrides).toEqual({
+      summary: 'claude-sonnet-5-5',
+      paystub: 'claude-opus-5-5',
     })
+    // Left blank in a .env file, a variable is not set.
+    expect(loadConfig({ ...base, PAYSTUB_MODEL: ' ' }).modelOverrides.paystub).toBeNull()
   })
 
   it('turns email on only once both the Resend key and a sender are set', () => {

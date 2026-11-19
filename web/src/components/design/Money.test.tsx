@@ -45,6 +45,14 @@ describe('Money', () => {
     expect(screen.getByText('1.235 €')).toBeInTheDocument()
   })
 
+  it('takes another currency, still in the owner locale', () => {
+    renderMoney(
+      <Money cents={500} currency="USD" precision="cents" />,
+      settingsWith({ currency: 'EUR', locale: 'de-DE' }),
+    )
+    expect(screen.getByText('5,00 $')).toBeInTheDocument()
+  })
+
   it('draws inside an SVG text as a tspan', () => {
     renderMoney(
       <svg>

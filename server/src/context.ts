@@ -4,6 +4,7 @@ import type pg from 'pg'
 import type { Config } from './config.js'
 import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
+import type { AiGateway } from './domain/ai/gateway.js'
 import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
 
@@ -17,6 +18,11 @@ export interface AppContext {
   config: Config
   /** Null until Plaid keys are configured. */
   bank: BankProvider | null
+  /**
+   * The AI usage layer every paid model call goes through. Null until
+   * ANTHROPIC_API_KEY is set, and so are the writer and the paystub reader.
+   */
+  ai: AiGateway | null
   /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
   writer: SummaryWriter | null
   /** Null until ANTHROPIC_API_KEY is set; paystub import is then hidden. */
