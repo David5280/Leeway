@@ -32,7 +32,7 @@ describe('the activity under the cards', () => {
     await userEvent.click(within(flows).getByRole('button'))
     const sheet = screen.getByRole('dialog', { name: 'Money in and out' })
     expect(within(sheet).getByRole('region', { name: 'Compared with usual' })).toHaveTextContent(
-      '$1,600 less than the average of the last 1 periods',
+      '$1,600 less than the last period',
     )
   })
 
@@ -68,6 +68,15 @@ describe('the activity under the cards', () => {
       'href',
       '/transactions?category=uncategorized',
     )
+  })
+
+  it('leaves out money in and out before there is a period of it', async () => {
+    server(everyAccount, {
+      summarize_accounts: () => accountsViewFor(everyAccount, { flows: [] }),
+    })
+    renderAccounts()
+    await screen.findByRole('region', { name: 'Spending by category' })
+    expect(screen.queryByRole('region', { name: 'Money in and out' })).not.toBeInTheDocument()
   })
 
   it('says when nothing has been spent yet', async () => {

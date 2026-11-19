@@ -24,6 +24,10 @@ export function usualOut(flows: readonly Flow[]): number | null {
   return Math.round(earlier.reduce((sum, flow) => sum + flow.outCents, 0) / earlier.length)
 }
 
+/** What the usual is drawn from: "the last period", or "the average of the last 3 periods". */
+export const earlierPeriods = (count: number) =>
+  count === 1 ? 'the last period' : `the average of the last ${count} periods`
+
 /**
  * Money in and out of these accounts this period, against the periods before.
  * `flows` run oldest first and end with the current period so far.
@@ -65,7 +69,7 @@ export function flowsDrill(
             currentCents: current.outCents,
             usualCents: usual,
             goodWhen: 'down',
-            basis: `the average of the last ${flows.length - 1} periods`,
+            basis: earlierPeriods(flows.length - 1),
             subject: 'out',
           },
     items: { title: 'Each period, newest first', rows },

@@ -4,7 +4,7 @@ import { account, transaction } from '../../test/fake'
 import { mathSentence } from '../drill'
 import { money as formatMoney } from '../money'
 import { accountDrill, allAccountsDrill, averageOf, balanceTrend, selectionDrill } from './accounts'
-import { flowsDrill, leftOver, spendingDrill, usualOut } from './accountView'
+import { earlierPeriods, flowsDrill, leftOver, spendingDrill, usualOut } from './accountView'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
 const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: 'en-US' })
@@ -167,6 +167,11 @@ describe('flowsDrill', () => {
     expect(flowsDrill([], range, money)).toBeNull()
     expect(leftOver(november)).toBe(130000)
     expect(usualOut([november])).toBeNull()
+  })
+
+  it('names one earlier period plainly, and several as their average', () => {
+    expect(earlierPeriods(1)).toBe('the last period')
+    expect(earlierPeriods(5)).toBe('the average of the last 5 periods')
   })
 })
 

@@ -53,6 +53,7 @@ const charges = [
   transaction({ id: 'r', date: '2026-11-01', name: 'MAPLE COURT APTS', amountCents: 180000 }),
   transaction({ id: 'n', date: '2026-11-03', name: 'NETFLIX.COM', amountCents: 1549 }),
   transaction({ id: 'f', date: '2026-11-04', name: 'OVERDRAFT FEE', amountCents: 3400 }),
+  transaction({ id: 'g', date: '2026-11-05', name: 'GYM CO', amountCents: 4000 }),
 ]
 
 /** A server that knows these accounts, with this account's history and plans. */
@@ -79,7 +80,10 @@ function server(accounts: Account[] = [checking, card, savings], extra: Handlers
       return accountsViewFor(accounts.filter((one) => ids.includes(one.id)))
     },
     list_bills: () => ({ bills: [rent, power] }),
-    find_recurring: () => [series({ name: 'Netflix', key: 'netflix com' })],
+    find_recurring: () => [
+      series({ name: 'Netflix', key: 'netflix com' }),
+      series({ name: 'Gym', key: 'gym co', suggestedKind: 'bill' }),
+    ],
     list_transactions: () => ({ transactions: charges, total: charges.length }),
     ...extra,
   })
@@ -146,6 +150,9 @@ describe("an account's own page", () => {
     const repeating = screen.getByRole('region', { name: 'Repeating charges' })
     expect(within(repeating).getByRole('link', { name: /Netflix/ })).toHaveTextContent(
       'Subscription, next about Nov 20',
+    )
+    expect(within(repeating).getByRole('link', { name: /Gym/ })).toHaveTextContent(
+      'Repeats, next about Nov 20',
     )
 
     const fees = screen.getByRole('region', { name: 'Fees charged' })

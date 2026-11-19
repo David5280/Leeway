@@ -31,6 +31,24 @@ describe('Accounts screen', () => {
     )
   })
 
+  it("draws an investment's month as a line beside how far it moved", async () => {
+    const brokerage = account({
+      id: 'inv',
+      name: 'Brokerage',
+      type: 'investment',
+      kind: 'investment',
+      balanceCents: 1_000_000,
+    })
+    const month = Array.from({ length: 30 }, (_, day) => 970_000 + day * 1000)
+    server([brokerage], {
+      list_recent_balances: () => [{ accountId: 'inv', balancesCents: month }],
+    })
+    renderAccounts()
+    await screen.findByRole('region', { name: 'Investments' })
+    const card = within(group('Investments')).getByRole('link', { name: /Brokerage/ })
+    expect(within(card).getByRole('img', { name: 'Balance over 30 days' })).toBeInTheDocument()
+  })
+
   it('leads with what every counted account comes to, opening how it adds up', async () => {
     server()
     renderAccounts()
