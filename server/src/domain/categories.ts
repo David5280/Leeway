@@ -5,6 +5,7 @@ import type { Db } from '../db/pool.js'
 import { AppError, isUniqueViolation, notFound } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { patchOf } from '../lib/schemas.js'
+import { forgetEssentialCategories } from './settings.js'
 
 const CADENCES = ['week', 'biweek', 'semimonth', 'month', 'year'] as const
 
@@ -176,6 +177,7 @@ export async function updateCategory(
 export async function deleteCategory(db: Db, id: string): Promise<void> {
   const { rowCount } = await db.query('DELETE FROM categories WHERE id = $1', [id])
   if (!rowCount) throw notFound('Category')
+  await forgetEssentialCategories(db, [id])
 }
 
 /** Puts categories in the given order. Ids not listed keep their place after the listed ones. */

@@ -65,6 +65,7 @@ import {
   removeConnectionAction,
   syncBanksAction,
 } from './connections.js'
+import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
 import { getSummaryAction, setAiSummaryAction } from './summary.js'
 import {
@@ -132,6 +133,8 @@ export const actionList = [
   createAccountAction,
   updateAccountAction,
   deleteAccountAction,
+  summarizeSavingsAction,
+  getFinancialProfileAction,
   listBillsAction,
   createBillAction,
   updateBillAction,

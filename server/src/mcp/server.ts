@@ -15,10 +15,13 @@ import { runAction, type AnyAction } from '../actions/action.js'
 import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
 import { AppError, messageOf } from '../errors.js'
+import { agentJson } from './agentOutput.js'
 import { getPrompt, listPrompts } from './prompts.js'
 
-const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
+export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
 - Start with get_checkin. It lists what needs attention, most urgent first, with the numbers.
+- Before advice about saving, investing or the bigger picture, read get_financial_profile: a short digest of pay, typical spending, bills, accounts by kind, the emergency fund, the savings rate and goals. summarize_savings has the detail.
+- The savings rate counts only money moved through the bank. Payroll deductions, such as a pension or a 401(k), are never counted, so never tell the owner they save too little.
 - For "can I afford this?", use can_i_afford; for "when can I afford it?", use when_can_i_afford.
 - To save for a purchase, use create_goal with kind "purchase" (the item, its price, by when). Its plan says what to set aside each budget period and when recent progress gets there.
 - Coach plainly: lead with what matters, use real numbers, and suggest one next step. Never shame; spending choices are the owner's.
@@ -92,7 +95,7 @@ export function createMcpServer(
     }
     try {
       const result = await runAction(ctx, action, request.params.arguments ?? {})
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      return { content: [{ type: 'text', text: agentJson(result) }] }
     } catch (error) {
       if (error instanceof AppError) return errorResult(error.message)
       onError(error)

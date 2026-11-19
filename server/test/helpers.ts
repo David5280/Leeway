@@ -73,7 +73,9 @@ export async function insertBankAccount(
   fields: {
     name?: string
     type?: string
-    balanceCents?: number
+    subtype?: string | null
+    balanceCents?: number | null
+    currency?: string
     hidden?: boolean
     /** The account number's last digits, as Plaid sends them. */
     mask?: string
@@ -87,14 +89,17 @@ export async function insertBankAccount(
   )
   const connectionId = rows[0]!.id
   const account = await db.query<{ id: string }>(
-    `INSERT INTO accounts (connection_id, provider_account_id, name, type, balance_cents, hidden, mask)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    `INSERT INTO accounts (connection_id, provider_account_id, name, type, subtype, balance_cents,
+       currency, hidden, mask)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
     [
       connectionId,
       `acct-${counter}`,
       fields.name ?? 'Checking',
       fields.type ?? 'depository',
-      fields.balanceCents ?? 100000,
+      fields.subtype ?? null,
+      fields.balanceCents === undefined ? 100000 : fields.balanceCents,
+      fields.currency ?? 'USD',
       fields.hidden ?? false,
       fields.mask ?? null,
     ],

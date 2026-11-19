@@ -15,6 +15,7 @@ import {
   type PeriodFlow,
 } from '../../../server/src/domain/accountViewText'
 import { computeBudget, type SetAside } from '../../../server/src/domain/budget'
+import { kindOf } from '../../../server/src/domain/accountKinds'
 import type { Category } from '../../../server/src/domain/categories'
 import type { Transaction } from '../../../server/src/domain/transactions'
 import {
@@ -150,9 +151,12 @@ export function category(name: string, fields: Partial<Category> = {}): Category
   }
 }
 
-/** A linked checking account at First Bank holding $1,234.56, unless told otherwise. */
+/**
+ * A linked checking account at First Bank holding $1,234.56, unless told
+ * otherwise. Its kind is worked out with the server's own code.
+ */
 export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>): Account {
-  return {
+  const row: Omit<Account, 'kind'> = {
     connectionId: 'conn-1',
     institutionName: 'First Bank',
     nickname: null,
@@ -170,8 +174,10 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
     aprPercent: null,
     minimumPaymentCents: null,
     lowBalanceCents: null,
+    kindChoice: null,
     ...fields,
   }
+  return { ...row, kind: fields.kind ?? kindOf(row) }
 }
 
 /** Money as the server words alerts and summaries, in US dollars. */

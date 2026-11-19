@@ -268,4 +268,44 @@ describe('summaryFacts', () => {
     })
     expect(JSON.stringify(facts)).not.toContain('list_bills')
   })
+
+  it('gives an AI savings at a glance, with unknowns left null rather than zero', () => {
+    const savings = {
+      totalCents: 5_800_000,
+      changeThisMonthCents: -12_000,
+      changeSince: '2026-11-05',
+      emergencyFundMonths: 2.5,
+      emergencyFundTargetMonths: 6,
+      // Known, but never handed to the summary writer (see the next test).
+      bankSeenSavingsRatePercent: 4,
+    }
+    expect(summaryFacts(checkin({ savings }), monthly, money).savingsAndInvestments).toEqual({
+      total: '$58,000',
+      changeThisMonth: '-$120',
+      changeMeasuredSince: 'Nov 5',
+      emergencyFundMonthsCovered: 2.5,
+      emergencyFundTargetMonths: 6,
+    })
+    const unmoved = { ...savings, changeThisMonthCents: null, changeSince: null }
+    expect(
+      summaryFacts(checkin({ savings: unmoved }), monthly, money).savingsAndInvestments,
+    ).toMatchObject({
+      changeThisMonth: null,
+      changeMeasuredSince: null,
+    })
+    expect(summaryFacts(checkin(), monthly, money).savingsAndInvestments).toBeNull()
+  })
+
+  it('never gives the summary writer a savings rate it could call too low', () => {
+    const savings = {
+      totalCents: 5_800_000,
+      changeThisMonthCents: null,
+      changeSince: null,
+      emergencyFundMonths: null,
+      emergencyFundTargetMonths: null,
+      bankSeenSavingsRatePercent: 4,
+    }
+    const facts = JSON.stringify(summaryFacts(checkin({ savings }), monthly, money))
+    expect(facts).not.toMatch(/savingsRate|ofPay/i)
+  })
 })
