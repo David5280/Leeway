@@ -131,7 +131,7 @@ describe('choosing a file', () => {
     // Plain that the file goes as it is: identifiers come out only of what Leeway keeps.
     expect(
       form.getByText(
-        'The whole file goes to Anthropic to be read, once, as it is, including any Social Security number or address printed on it. Nothing else of yours goes with it.',
+        'The whole file goes to Anthropic as it is, including any Social Security number or address printed on it: first to check its length, then to be read once. Nothing else of yours goes with it.',
       ),
     ).toBeVisible()
     expect(form.getByText('Leeway never keeps the file, only the figures you save.')).toBeVisible()
@@ -141,6 +141,12 @@ describe('choosing a file', () => {
       ),
     ).toBeVisible()
     expect(form.queryByText(/Only the file is sent|are taken out\.$/)).toBeNull()
+    // Plain that a long file is refused, not read at a cost.
+    expect(
+      form.getByText(
+        'A paystub is a page or two. A longer file is turned away before it is read, so save just the pages with your pay figures.',
+      ),
+    ).toBeVisible()
     await user.upload(form.getByLabelText('Choose a paystub'), file)
 
     await review()

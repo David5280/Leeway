@@ -21,6 +21,12 @@ export interface DocumentReader {
    * else of the owner's, or throws a ReaderError.
    */
   readPaystub(file: PaystubFile): Promise<{ reading: PaystubReading; usage: ReaderUsage }>
+  /**
+   * The input tokens readPaystub would send for this file, counted free of
+   * charge with the same model, prompt and file, or throws a ReaderError.
+   * Lets a file too long to be a paystub be turned away before it costs anything.
+   */
+  countPaystubTokens(file: PaystubFile): Promise<number>
 }
 
 /** A failed read, with a message the owner can act on. */

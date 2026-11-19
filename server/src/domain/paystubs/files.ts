@@ -21,12 +21,6 @@ export const MAX_PAYSTUB_BYTES: Record<PaystubMediaType, number> = {
   'image/jpeg': 5 * MEGABYTE,
 }
 
-/**
- * The most pages a PDF may have. A paystub is a page or two; Claude reads
- * every page sent, so a long statement would cost many times as much.
- */
-export const MAX_PDF_PAGES = 5
-
 /** The largest upload of any type, which the server refuses before reading further. */
 export const MAX_UPLOAD_BYTES = Math.max(...Object.values(MAX_PAYSTUB_BYTES))
 

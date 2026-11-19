@@ -1,6 +1,7 @@
-// Reads a paystub with Claude, through Anthropic's official SDK, in one
-// request: the file and a fixed prompt, nothing else of the owner's. Only
-// used when the owner sets ANTHROPIC_API_KEY themselves.
+// Reads a paystub with Claude, through Anthropic's official SDK, in one paid
+// request: the file and a fixed prompt, nothing else of the owner's. The same
+// request is counted first, free of charge, so a long file is never read.
+// Only used when the owner sets ANTHROPIC_API_KEY themselves.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
@@ -116,18 +117,38 @@ export class AnthropicDocumentReader implements DocumentReader {
     }
   }
 
-  /** The one request: the file first, as Claude reads documents best, then the ask. */
+  /** The input tokens the read would use: the same request, counted free of charge. */
+  async countPaystubTokens(file: PaystubFile): Promise<number> {
+    try {
+      const { input_tokens } = await this.client.messages.countTokens(this.paystubRequest(file))
+      return input_tokens
+    } catch (error) {
+      throw readerErrorFrom(error)
+    }
+  }
+
+  /** The one paid request. */
   private async request(file: PaystubFile) {
     try {
       return await this.client.messages.parse({
-        model: this.config.paystubModel,
+        ...this.paystubRequest(file),
         max_tokens: MAX_TOKENS,
-        system: PAYSTUB_PROMPT,
-        messages: [{ role: 'user', content: [fileBlock(file), { type: 'text', text: ASK }] }],
-        output_config: { effort: EFFORT, format: zodOutputFormat(paystubReadingSchema) },
       })
     } catch (error) {
       throw readerErrorFrom(error)
     }
+  }
+
+  /**
+   * What the read sends, shared with the count so the count can't miss a
+   * token: the file first, as Claude reads documents best, then the ask.
+   */
+  private paystubRequest(file: PaystubFile) {
+    return {
+      model: this.config.paystubModel,
+      system: PAYSTUB_PROMPT,
+      messages: [{ role: 'user', content: [fileBlock(file), { type: 'text', text: ASK }] }],
+      output_config: { effort: EFFORT, format: zodOutputFormat(paystubReadingSchema) },
+    } satisfies Anthropic.MessageCountTokensParams
   }
 }

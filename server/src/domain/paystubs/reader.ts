@@ -9,7 +9,6 @@ import { AppError } from '../../errors.js'
 import { AttemptLimiter } from '../../lib/attemptLimiter.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../lib/time.js'
 import { checkPaystubFile, type PaystubFile } from './files.js'
-import { checkPdfPages } from './pdfPages.js'
 import { extractionFrom, foundAnything, type PaystubExtraction } from './reading.js'
 
 /** Paid reads allowed an hour: plenty for a few paystubs and a retry or two. */
@@ -20,6 +19,23 @@ export const CACHE_SIZE = 50
 
 /** How long a reading is kept: long enough to come back to it, short enough to forget. */
 export const CACHE_TTL_MS = DAY_MS
+
+/**
+ * The most input tokens one read may send, counted before it is paid for.
+ * Anthropic's docs put a PDF page at 1,500 to 3,000 text tokens plus at most
+ * 1,568 for its picture, so a dense page is about 4,600 tokens, and a photo
+ * at most 4,784. The prompt and the output schema add about 1,500. A dense
+ * two-page stub is then about 10,700 tokens: 16,000 leaves half again as
+ * much for headroom, takes three dense pages, and refuses a long statement
+ * that would cost many times a paystub.
+ */
+export const MAX_PAYSTUB_INPUT_TOKENS = 16_000
+
+const TOO_LONG =
+  'This file is too long to read as a paystub. Save just the page or two with your pay figures and try again.'
+
+const NOT_COUNTED =
+  'Leeway could not check the length of this file, so it was not sent. Try again in a moment.'
 
 const NOT_A_PAYSTUB =
   'This does not look like a paystub, or Leeway could not find any figures on it. Try a clearer photo or the PDF itself.'
@@ -65,12 +81,11 @@ export class PaystubReader {
 
   /**
    * The figures on a paystub, or a plain error: a file Leeway does not read,
-   * a PDF too long to be a paystub, too many reads this hour, a failed read,
+   * too many reads this hour, a file too long to be a paystub, a failed read,
    * or no paystub found.
    */
   async read(bytes: Buffer, log: UsageLog): Promise<PaystubRead> {
     const file = checkPaystubFile(bytes)
-    if (file.mediaType === 'application/pdf') checkPdfPages(bytes)
     const hash = fileHash(bytes)
     // A kept "not a paystub" is null, so only undefined means nothing is kept.
     const kept = this.cached(hash)
@@ -110,10 +125,15 @@ export class PaystubReader {
     if (this.cache.size > CACHE_SIZE) this.cache.delete(this.cache.keys().next().value!)
   }
 
-  /** One paid read: counted against the hourly cap, with its token counts logged and nothing else. */
+  /**
+   * One paid read: counted against the hourly cap, measured before it is
+   * sent, with its token counts logged and nothing else.
+   */
   private async ask(file: PaystubFile, log: UsageLog): Promise<Outcome> {
     this.checkNotPaused()
+    // Recorded before the count, so counting can't be used to call the API without limit.
     this.limiter.record()
+    await this.checkLength(file, log)
     try {
       const { reading, usage } = await this.reader.readPaystub(file)
       log.info({ reader: this.reader.name, ...usage }, 'paystub read')
@@ -123,6 +143,24 @@ export class PaystubReader {
       if (error instanceof ReaderError) throw new AppError('reader_error', error.message)
       throw error
     }
+  }
+
+  /**
+   * Refuses a file whose read would send more than MAX_PAYSTUB_INPUT_TOKENS.
+   * Fails closed: when the count can't be had, the file is not sent.
+   */
+  private async checkLength(file: PaystubFile, log: UsageLog): Promise<void> {
+    let inputTokens: number
+    try {
+      inputTokens = await this.reader.countPaystubTokens(file)
+    } catch (error) {
+      const message = error instanceof ReaderError ? error.message : NOT_COUNTED
+      throw new AppError('reader_error', message)
+    }
+    // Written so a count that is not a number refuses too.
+    if (inputTokens <= MAX_PAYSTUB_INPUT_TOKENS) return
+    log.info({ reader: this.reader.name, inputTokens }, 'paystub too long')
+    throw new AppError('file_too_large', TOO_LONG)
   }
 
   private checkNotPaused(): void {

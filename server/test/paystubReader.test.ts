@@ -1,6 +1,7 @@
-// Reading a paystub: the one request sent to Claude, through a fake client so
-// no test calls the API, and the reader around it that caches by file hash,
-// caps paid reads an hour and logs token counts and nothing else.
+// Reading a paystub: the one request sent to Claude and its free token count,
+// through a fake client so no test calls the API, and the reader around it
+// that caches by file hash, caps paid reads an hour, refuses a file too long
+// to be a paystub and logs token counts and nothing else.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { describe, expect, it } from 'vitest'
@@ -12,11 +13,12 @@ import {
 } from '../src/ai/anthropicDocuments.js'
 import { ReaderError } from '../src/ai/documents.js'
 import type { AnthropicConfig } from '../src/config.js'
-import { checkPaystubFile, MAX_PDF_PAGES } from '../src/domain/paystubs/files.js'
+import { checkPaystubFile } from '../src/domain/paystubs/files.js'
 import {
   CACHE_SIZE,
   CACHE_TTL_MS,
   fileHash,
+  MAX_PAYSTUB_INPUT_TOKENS,
   PaystubReader,
   READS_PER_HOUR,
 } from '../src/domain/paystubs/reader.js'
@@ -27,8 +29,8 @@ import {
   FakeReader,
   jpeg,
   NOT_A_PAYSTUB,
+  PAGE_TOKENS,
   pdf,
-  pdfOfPages,
   png,
   USAGE,
 } from './fixtures/paystub.js'
@@ -54,19 +56,31 @@ const ANSWER: FakeResponse = {
 
 /**
  * A reader on a client that answers every request with the response, or
- * throws the error, and records each request.
+ * throws the error, and records each request; a count answers with the
+ * tokens, or throws the count's error, and is recorded apart.
  */
-function fakeClient(answer: FakeResponse | Error = ANSWER, config = CONFIG) {
+function fakeClient(
+  answer: FakeResponse | Error = ANSWER,
+  config = CONFIG,
+  count: number | Error = PAGE_TOKENS,
+) {
   const requests: Record<string, unknown>[] = []
+  const counts: Record<string, unknown>[] = []
   const client = {
     messages: {
       parse: (request: Record<string, unknown>) => {
         requests.push(request)
         return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)
       },
+      countTokens: (request: Record<string, unknown>) => {
+        counts.push(request)
+        return count instanceof Error
+          ? Promise.reject(count)
+          : Promise.resolve({ input_tokens: count })
+      },
     },
   } as unknown as MessagesClient
-  return { reader: new AnthropicDocumentReader(config, client), requests }
+  return { reader: new AnthropicDocumentReader(config, client), requests, counts }
 }
 
 /** The ReaderError a read fails with. */
@@ -178,6 +192,35 @@ describe('AnthropicDocumentReader', () => {
     expect((await readFailure(failing.reader)).message).toMatch(/^Claude is busy/)
   })
 
+  it('counts the tokens of exactly the request a read sends, without max_tokens', async () => {
+    const { reader, requests, counts } = fakeClient()
+    for (const bytes of [pdf(), png()]) {
+      const file = checkPaystubFile(bytes)
+      expect(await reader.countPaystubTokens(file)).toBe(PAGE_TOKENS)
+      await reader.readPaystub(file)
+    }
+    expect(counts).toHaveLength(2)
+    counts.forEach((count, n) => {
+      // The same model, prompt, file, effort and schema: only the cap on the answer is left out.
+      const { max_tokens, ...read } = requests[n]!
+      expect(max_tokens).toBe(3000)
+      // As JSON, since each request builds its own schema parser.
+      expect(JSON.stringify(count)).toBe(JSON.stringify(read))
+      expect(Object.keys(count).sort()).toEqual(['messages', 'model', 'output_config', 'system'])
+    })
+  })
+
+  it("fails a count in the owner's words, never the SDK's", async () => {
+    const secret = 'request quoted: Gross Pay 3,845.00'
+    const error = new Anthropic.APIConnectionError({ message: secret })
+    const { reader } = fakeClient(ANSWER, CONFIG, error)
+    const failed: unknown = await reader.countPaystubTokens(checkPaystubFile(pdf())).catch((e) => e)
+    expect(failed).toBeInstanceOf(ReaderError)
+    expect((failed as ReaderError).message).toBe(
+      'Leeway could not reach Claude. Try again in a moment.',
+    )
+  })
+
   it('builds its own client from the key when given none, without calling it', () => {
     expect(new AnthropicDocumentReader(CONFIG).name).toBe('Claude')
   })
@@ -283,16 +326,66 @@ describe('PaystubReader', () => {
     expect(log.entries).toEqual([])
   })
 
-  it('refuses a PDF too long to be a paystub before anything is sent or counted', async () => {
+  it('counts a file before reading it, and reads one a paystub could be', async () => {
     const { reader, fake, log } = readerWith()
-    const refused = await failure(reader.read(pdfOfPages(MAX_PDF_PAGES + 1), log))
-    expect(refused.code).toBe('file_too_large')
-    expect(refused.message).toMatch(/^A PDF can be up to 5 pages, and this one has 6\./)
+    fake.tokens = MAX_PAYSTUB_INPUT_TOKENS
+    await reader.read(pdf(), log)
+    expect(fake.counted).toEqual([{ bytes: pdf(), mediaType: 'application/pdf' }])
+    expect(fake.files).toEqual(fake.counted)
+    // A kept reading needs no count.
+    await reader.read(pdf(), log)
+    expect(fake.counted).toHaveLength(1)
+  })
+
+  it('refuses a file too long to be a paystub, logging only its count, and never sends it', async () => {
+    const { reader, fake, log } = readerWith()
+    fake.tokens = MAX_PAYSTUB_INPUT_TOKENS + 1
+    const refused = await failure(reader.read(pdf(), log))
+    expect(refused).toMatchObject({
+      code: 'file_too_large',
+      message:
+        'This file is too long to read as a paystub. Save just the page or two with your pay figures and try again.',
+    })
+    expect(fake.files).toEqual([])
+    expect(log.entries).toEqual([
+      {
+        fields: { reader: 'Claude', inputTokens: MAX_PAYSTUB_INPUT_TOKENS + 1 },
+        message: 'paystub too long',
+      },
+    ])
+    // A count that is not a number is refused the same way.
+    fake.tokens = Number.NaN
+    expect((await failure(reader.read(pdf(), log))).code).toBe('file_too_large')
+    expect(fake.files).toEqual([])
+  })
+
+  it('never sends a file it could not count, saying why in plain words', async () => {
+    const { reader, fake, log } = readerWith()
+    fake.tokens = new ReaderError('Claude is busy right now. Try again in a minute.')
+    expect(await failure(reader.read(pdf(), log))).toMatchObject({
+      code: 'reader_error',
+      message: 'Claude is busy right now. Try again in a minute.',
+    })
+    // An unexpected failure is refused too, in words of Leeway's own.
+    fake.tokens = new TypeError('bug')
+    expect(await failure(reader.read(pdf(), log))).toMatchObject({
+      code: 'reader_error',
+      message:
+        'Leeway could not check the length of this file, so it was not sent. Try again in a moment.',
+    })
+    expect(fake.counted).toHaveLength(2)
     expect(fake.files).toEqual([])
     expect(log.entries).toEqual([])
-    // A short one goes through as usual.
-    await reader.read(pdfOfPages(2), log)
-    expect(fake.files).toHaveLength(1)
+  })
+
+  it('counts against the hourly cap, so counting cannot be used to call without limit', async () => {
+    const { reader, fake, log } = readerWith()
+    fake.tokens = MAX_PAYSTUB_INPUT_TOKENS + 1
+    for (let n = 0; n < READS_PER_HOUR; n++) await failure(reader.read(nthFile(n), log))
+    expect((await failure(reader.read(nthFile(READS_PER_HOUR), log))).code).toBe(
+      'too_many_attempts',
+    )
+    expect(fake.counted).toHaveLength(READS_PER_HOUR)
   })
 
   it(`stops after ${READS_PER_HOUR} paid reads an hour, still giving readings it has`, async () => {

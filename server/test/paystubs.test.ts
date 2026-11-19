@@ -9,7 +9,11 @@ import { actionList } from '../src/actions/index.js'
 import type { AppContext } from '../src/context.js'
 import { MAX_PAYSTUB_BYTES, MAX_UPLOAD_BYTES } from '../src/domain/paystubs/files.js'
 import { MAX_PAYSTUBS } from '../src/domain/paystubs/paystubs.js'
-import { PaystubReader, READS_PER_HOUR } from '../src/domain/paystubs/reader.js'
+import {
+  MAX_PAYSTUB_INPUT_TOKENS,
+  PaystubReader,
+  READS_PER_HOUR,
+} from '../src/domain/paystubs/reader.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { agentTools } from '../src/mcp/server.js'
@@ -148,6 +152,11 @@ describe('POST /api/paystubs/read', () => {
       error: 'file_too_large',
       message: 'A paystub can be up to 10 MB. Try a smaller file, such as one page of the paystub.',
     })
+    // Small enough, but too many pages to be a paystub.
+    fake.tokens = MAX_PAYSTUB_INPUT_TOKENS + 1
+    const long = await upload(pdf())
+    expect(long.statusCode).toBe(413)
+    expect(long.json().message).toMatch(/^This file is too long to read as a paystub\./)
     expect(fake.files).toEqual([])
   })
 
