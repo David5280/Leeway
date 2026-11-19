@@ -77,7 +77,7 @@ export function AccountsWidget() {
             <Icon name={kindIcon(account.kind)} size={16} />
           </span>
           <span className="grow stack-sm" style={{ gap: 0 }}>
-            <span className="ellipsis">{account.name}</span>
+            <span className="account-name">{account.name}</span>
             <span className="small muted">
               {accountDetail(account)}
               {account.hidden && ' · ignored for budgets'}

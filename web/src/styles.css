@@ -1008,6 +1008,21 @@ button.chip {
   align-items: center;
 }
 
+/* A long account name takes a second line before it is cut short. */
+.account-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* On a phone the line of the balance gives its width to the name. */
+@media (max-width: 480px) {
+  .account-row .spark {
+    width: 44px;
+  }
+}
+
 .alert-icon {
   width: 32px;
   height: 32px;
