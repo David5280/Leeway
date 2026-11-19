@@ -2,7 +2,7 @@
 // and everything it imports into one script for the browser.
 
 import { findBrokenWords } from './broken-word'
-import { findClippedText } from './clipped'
+import { findClipped } from './clipped'
 import { findOverlaps } from './overlap'
 import { findPageOverflow } from './page-overflow'
 import { findUncoveredInsets } from './safe-area'
@@ -11,7 +11,7 @@ import { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem } from './types'
 /** Each check's finder, one for every name in LAYOUT_CHECKS (the type makes sure). */
 const CHECKS: Record<LayoutCheck, () => LayoutProblem[]> = {
   overlap: findOverlaps,
-  clipped: findClippedText,
+  clipped: findClipped,
   'broken-word': findBrokenWords,
   'page-overflow': findPageOverflow,
   'safe-area': findUncoveredInsets,

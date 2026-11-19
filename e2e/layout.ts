@@ -1,9 +1,11 @@
 // Layout checks for the phone layout guard (layout-guard.phone.spec.ts):
 // each finds one kind of broken layout on the page as it is drawn, and says
-// where. layout-checks.spec.ts proves each one on a page broken on purpose.
+// where. layout-checks.spec.ts and layout-clipped.spec.ts prove each one on a
+// page broken on purpose.
 //
 //   overlap        text drawn over other text or over a control
-//   clipped        text cut off, or spilling out of its box, with no ellipsis
+//   clipped        text cut off, or spilling out of its box, with no ellipsis;
+//                  a control cut off by a box that clips it
 //   broken-word    a short word split across two lines ("Sur" / "plus")
 //   page-overflow  the page is wider than the screen, so it scrolls sideways
 //   safe-area      something drawn under the status bar, the notch or the home

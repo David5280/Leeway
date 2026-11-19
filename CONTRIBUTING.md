@@ -195,8 +195,9 @@ compact density. A failure names each element and what is wrong with it.
 
 The checks live in `e2e/layout/`, one file per check, and run inside the
 page: `e2e/layout.ts` bundles them with esbuild into one script for
-Playwright to run there. `layout-checks.spec.ts` proves each one on small
-pages broken on purpose, and on the same pages fixed; when a check changes,
+Playwright to run there. `layout-checks.spec.ts` (and, for the clipped
+check, `layout-clipped.spec.ts`) proves each one on small pages broken on
+purpose, and on the same pages fixed; when a check changes,
 add a fixture that fails without the change.
 
 They need a database with `e2e` in its name, which every run wipes. The

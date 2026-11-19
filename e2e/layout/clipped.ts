@@ -4,10 +4,20 @@
 // line ends early on purpose, and a line clamp how a paragraph does, but only
 // when enough of the text is left to read: a name squeezed to "S..." is cut
 // off all the same. Text in a box that scrolls (a row of pills, a wide table)
-// is a swipe away, so it is fine.
+// is a swipe away, so it is fine. Controls are held to the same edges, since
+// an icon button pushed out of a row that clips it has no text to report.
 
-import { blockOf, describe, isShown, isSvg, lineWidth, paddingBox } from './elements'
-import { height, TOUCHING, union, width, type Box } from './geometry'
+import {
+  blockOf,
+  CONTROLS,
+  describe,
+  isHiddenByDesign,
+  isShown,
+  isSvg,
+  lineWidth,
+  paddingBox,
+} from './elements'
+import { height, toBox, TOUCHING, union, width, type Box } from './geometry'
 import { LINE_TRIM, texts } from './text'
 import type { LayoutProblem } from './types'
 
@@ -57,7 +67,8 @@ function clipVerdict(owner: Element, box: Element, axis: Axis): string | null {
  * What is wrong with one element's text, if anything: walking out from it,
  * the first box its text does not fit in either scrolls (fine), clips (fine
  * only when it ends on purpose with room to read), or is the block it sits in
- * (a spill, checked sideways only, since a block grows downward to fit).
+ * (a spill, checked sideways only, since a block grows downward to fit). The
+ * walk ends at a fixed box, which its ancestors do not clip.
  */
 function cutOff(owner: Element, lines: Box[]): string | null {
   const text = union(lines)
@@ -65,7 +76,6 @@ function cutOff(owner: Element, lines: Box[]): string | null {
   const container = blockOf(owner)
   for (let box: Element | null = owner; box && box !== document.body; box = box.parentElement) {
     const axes = overflowsOf(text, paddingBox(box), trim)
-    if (axes.length === 0) continue
     const style = getComputedStyle(box)
     for (const axis of axes) {
       const overflow = axis === 'sideways' ? style.overflowX : style.overflowY
@@ -73,6 +83,8 @@ function cutOff(owner: Element, lines: Box[]): string | null {
       if (CLIPS.has(overflow)) return clipVerdict(owner, box, axis)
     }
     if (box === container && axes.includes('sideways')) return 'spills out of its box'
+    // A fixed box floats free of the boxes around it, which clip none of it.
+    if (style.position === 'fixed') return null
   }
   return null
 }
@@ -91,7 +103,42 @@ function cutOffPickers(): LayoutProblem[] {
   })
 }
 
-export function findClippedText(): LayoutProblem[] {
+/**
+ * The first ancestor that hides part of a control's box, if any. Walking out
+ * from the control, a box it sticks out of that scrolls lets it be swiped
+ * into view; one that clips cuts it off. A fixed control escapes them all.
+ */
+function clipperOf(control: Element, box: Box): Element | null {
+  let node = control
+  while (getComputedStyle(node).position !== 'fixed') {
+    const parent = node.parentElement
+    if (!parent || parent === document.body) return null
+    node = parent
+    const style = getComputedStyle(node)
+    for (const axis of overflowsOf(box, paddingBox(node), 0)) {
+      const overflow = axis === 'sideways' ? style.overflowX : style.overflowY
+      if (SCROLLS.has(overflow)) return null
+      if (CLIPS.has(overflow)) return node
+    }
+  }
+  return null
+}
+
+/** Controls a box that hides its overflow has cut short, or cut out of view entirely. */
+function cutOffControls(): LayoutProblem[] {
+  return [...document.querySelectorAll(CONTROLS)].flatMap((control) => {
+    if (isHiddenByDesign(control)) return []
+    const box = toBox(control.getBoundingClientRect())
+    // A control with no size of its own is laid out away, not cut off.
+    if (width(box) <= 1 || height(box) <= 1) return []
+    const by = clipperOf(control, box)
+    return by
+      ? [{ check: 'clipped', message: `${describe(control)} is cut off by ${describe(by)}` }]
+      : []
+  })
+}
+
+export function findClipped(): LayoutProblem[] {
   const problems: LayoutProblem[] = texts()
     // Charts place their own labels, outside their boxes on purpose.
     .filter(({ owner }) => !isSvg(owner))
@@ -99,5 +146,7 @@ export function findClippedText(): LayoutProblem[] {
       const wrong = cutOff(owner, lines)
       return wrong ? [{ check: 'clipped', message: `${describe(owner)} ${wrong}` }] : []
     })
-  return [...problems, ...cutOffPickers()]
+  // A button with a label cut off is found by its text and its box: report it once.
+  const all = [...problems, ...cutOffPickers(), ...cutOffControls()]
+  return [...new Map(all.map((problem) => [problem.message, problem])).values()]
 }
