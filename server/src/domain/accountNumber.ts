@@ -50,20 +50,34 @@ const ENCLOSED_NUMBERS: readonly (readonly [number, number, number, number])[] =
 /** Words that mark the number after them, as in "ACCT 4417" or "ENDING IN 89". */
 const MARKING_WORDS = 'acct|account|no|num|number|ending(?:\\s+in)?'
 
+/** Spaces and opening brackets between a mark and its digits: "... (850)". */
+const MARK_GAP = String.raw`[\s(\[]*$`
+
 /**
- * What comes before a run of digits when it marks the run as an account
- * number: dots, a star or a "#" not after a digit ("...", "# ", but not the
- * "3." of "3.25"), an x on its own ("X417", "X 89", but not the X of "MAX" or
- * "12X18"), or a word like "ACCT", "NO." or "ENDING IN".
+ * What comes before a run of digits when it plainly marks the run as an
+ * account number: dots, a star or a "#" not after a digit ("...", "# (", but
+ * not the "3." of "3.25"), an x glued on ("X417", but not the X of "MAX" or
+ * "12X18"), two x's or more ("XXXX 89"), or a word like "ACCT", "NO." or
+ * "ENDING IN".
  */
-const MARKED_AS_NUMBER = new RegExp(
+const PLAIN_MARK = new RegExp(
   [
-    String.raw`(?:^|\P{N})[*•·.…#]+\s*$`,
-    String.raw`(?:^|[^\p{L}\p{N}])x+\s*$`,
-    String.raw`(?:^|\P{L})(?:${MARKING_WORDS})[.:]?\s*$`,
+    String.raw`(?:^|\P{N})[*•·.…#]+${MARK_GAP}`,
+    String.raw`(?:^|[^\p{L}\p{N}])x[(\[]*$`,
+    String.raw`(?:^|[^\p{L}\p{N}])xx+${MARK_GAP}`,
+    String.raw`(?:^|\P{L})(?:${MARKING_WORDS})[.:]?${MARK_GAP}`,
   ].join('|'),
   'iu',
 )
+
+/** One x with a space after it, "X 89", which may as well be a product's name, "VENTURE X 2025". */
+const SPACED_X_MARK = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])x\s${MARK_GAP}`, 'iu')
+
+/** A hyphen not after a digit, "CHECKING-863", so "1-2 YEAR" is a range. */
+const HYPHEN_MARK = new RegExp(String.raw`(?:^|\D)-${MARK_GAP}`, 'u')
+
+/** How what comes before a run of digits marks it as a number, if it does. */
+type NumberMark = 'plain' | 'spacedX' | 'hyphen'
 
 /** Words that lead up to an account number, as in "ENDING IN 4417" or "(ACCT 4417)". */
 const NUMBER_LEAD_INS = new Set(['account', 'acct', 'ending', 'in', 'no', 'num', 'number'])
@@ -206,7 +220,7 @@ function digitRuns(text: string): { digits: string; marked: boolean }[] {
     const firstDigit = run[0].search(/\d/)
     if (firstDigit < 0) return []
     const before = text.slice(0, run.index + firstDigit)
-    return [{ digits: run[0].replace(/\D/g, ''), marked: isMarkedAsNumber(before) }]
+    return [{ digits: run[0].replace(/\D/g, ''), marked: numberMark(before) !== null }]
   })
 }
 
@@ -322,7 +336,7 @@ function withoutNumber(
   }
   for (const run of bare.matchAll(/\d+(?:x\d+)*/gi)) {
     const joined = run[0].replace(/x/gi, '')
-    const markedAsNumber = isMarkedAsNumber(preceding + bare.slice(0, run.index))
+    const markedAsNumber = numberMark(preceding + bare.slice(0, run.index)) === 'plain'
     if (joined !== run[0] && joinsAtX(joined, maskDigits, markedAsNumber)) {
       return withoutRun(run.index, run[0].length)
     }
@@ -330,14 +344,14 @@ function withoutNumber(
       const digits = part[0]
       const index = run.index + part.index
       const before = bare.slice(0, index)
+      const mark = numberMark(preceding + before)
       const how = {
         marked: MASK_CHARACTERS_AT_END.test(before),
         markedPlainly: PLAIN_MASK_CHARACTERS_AT_END.test(before),
         // Split across words, "X 44 17", it is not taken in part, which would
         // leave the "17"; carriesMask reads it whole.
-        markedAsNumber:
-          isMarkedAsNumber(preceding + before) &&
-          !(runsOn && index + digits.length === bare.length),
+        markedAsNumber: mark === 'plain' && !(runsOn && index + digits.length === bare.length),
+        markedBySpacedX: mark === 'spacedX',
         alone: bare === digits && !bracketed,
         standsAsNumber,
       }
@@ -357,9 +371,17 @@ function joinsAtX(joined: string, maskDigits: string, markedAsNumber: boolean): 
   return markedAsNumber || (maskDigits.length >= 2 && (joined.includes(maskDigits) || isMask))
 }
 
-/** Whether what comes before a run marks it as an account number; see MARKED_AS_NUMBER. */
-function isMarkedAsNumber(before: string): boolean {
-  return MARKED_AS_NUMBER.test(before)
+/**
+ * How what comes before a run marks it as a number. The guarantee counts
+ * every mark. The tidying takes a run out after a plain mark only; after a
+ * spaced x only when it is the mask or its end (see isNumber), and never
+ * after a hyphen alone, which joins words as often as it marks.
+ */
+function numberMark(before: string): NumberMark | null {
+  if (PLAIN_MARK.test(before)) return 'plain'
+  if (SPACED_X_MARK.test(before)) return 'spacedX'
+  if (HYPHEN_MARK.test(before)) return 'hyphen'
+  return null
 }
 
 /** How a run of digits sits in its word, for isNumber. */
@@ -367,6 +389,7 @@ interface RunPlace {
   marked: boolean
   markedPlainly: boolean
   markedAsNumber: boolean
+  markedBySpacedX: boolean
   alone: boolean
   standsAsNumber: boolean
 }
@@ -380,7 +403,8 @@ function isNumber(digits: string, maskDigits: string, how: RunPlace): boolean {
   }
   // Marked as a number, it may be another account's mask; a lone digit identifies nothing.
   if (how.markedAsNumber && digits.length >= 2) return true
-  if (how.marked && maskDigits.length >= 2) {
+  // After mask characters, or an x and a space, it goes only if it is the mask's: "X 417" for 4417.
+  if ((how.marked || how.markedBySpacedX) && maskDigits.length >= 2) {
     const endOfMask = digits.length >= 2 && maskDigits.endsWith(digits)
     if (digits.endsWith(maskDigits) || endOfMask) return true
   }

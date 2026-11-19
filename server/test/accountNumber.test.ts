@@ -139,15 +139,38 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('LINKED …0417', '9921')).toBe('LINKED')
   })
 
-  it('takes out a run that a word or a spaced x marks as a number', () => {
+  it('takes out a run that a word marks as a number', () => {
     expect(withoutAccountNumber('LINKED ACCT 850', '9921')).toBe('LINKED')
-    expect(withoutAccountNumber('LINKED X 89', '9921')).toBe('LINKED')
+    expect(withoutAccountNumber('LINKED ...(850)', '9921')).toBe('LINKED')
     expect(withoutAccountNumber('SAVINGS ENDING IN 89', '9921')).toBe('SAVINGS')
     expect(withoutAccountNumber('CHECKING XXXX 89', '9921')).toBe('CHECKING')
     // Split across words, it is left whole to the guarantee rather than leave its "17".
     expect(withoutAccountNumber('CHECKING X 44 17', '9921')).toBe('CHECKING X 44 17')
     // "IN" alone marks nothing: "TERM IN 12 MONTHS" keeps its 12.
     expect(withoutAccountNumber('TERM IN 12 MONTHS', '9921')).toBe('TERM IN 12 MONTHS')
+  })
+
+  it('trims a number after ACCOUNT, ACCT or NO, whatever it is, for privacy over looks', () => {
+    // A number marked this way may be another account's mask, so it goes even where it is not.
+    expect(withoutAccountNumber('SAVINGS ACCOUNT 12', '9921')).toBe('SAVINGS')
+    expect(withoutAccountNumber('CHECKING ACCT 77', '9921')).toBe('CHECKING')
+    expect(withoutAccountNumber('PLAN NO. 30', '9921')).toBe('PLAN')
+  })
+
+  it('reads a spaced x as a product name, and takes the number after it only as the mask', () => {
+    expect(withoutAccountNumber('VENTURE X 2025', '9921')).toBe('VENTURE X 2025')
+    expect(withoutAccountNumber('BUSINESS X 10', '9921')).toBe('BUSINESS X 10')
+    expect(withoutAccountNumber('LINKED X 89', '9921')).toBe('LINKED X 89')
+    expect(withoutAccountNumber('VENTURE X 2025', '2025')).toBe('VENTURE')
+    expect(withoutAccountNumber('CHECKING X 417', '4417')).toBe('CHECKING')
+    // Glued on, the x marks any number.
+    expect(withoutAccountNumber('CARD X2025', '9921')).toBe('CARD')
+  })
+
+  it('reads a hyphen as a word joiner, not a mark', () => {
+    expect(withoutAccountNumber('1-2 YEAR CD', '9921')).toBe('1-2 YEAR CD')
+    expect(withoutAccountNumber('7-ELEVEN CARD', '9921')).toBe('7-ELEVEN CARD')
+    expect(withoutAccountNumber('CHECKING - 863', '9921')).toBe('CHECKING - 863')
   })
 
   it('keeps a lone marked digit, a decimal and an x inside a word', () => {
@@ -389,6 +412,19 @@ describe('carriesAnotherMask', () => {
     expect(carriesAnotherMask('Checking x9-z1', 'X9Z1')).toBe(true)
     expect(carriesAnotherMask('Card AB1x2', 'AB12')).toBe(true)
     expect(carriesAnotherMask('Card 2AB', '12AB')).toBe(false)
+  })
+
+  it('finds its end after a mark, brackets and spaces between', () => {
+    expect(carriesAnotherMask('Linked ...(850)', '5850')).toBe(true)
+    expect(carriesAnotherMask('Linked # [850]', '5850')).toBe(true)
+    expect(carriesAnotherMask('Linked ...⑻⑼', '889')).toBe(true)
+  })
+
+  it('finds its end after a hyphen, but not one that follows a digit', () => {
+    expect(carriesAnotherMask('Checking - 863', '8863')).toBe(true)
+    expect(carriesAnotherMask('Checking-863', '8863')).toBe(true)
+    expect(carriesAnotherMask('1-2 Year CD', '4412')).toBe(false)
+    expect(carriesAnotherMask('7-Eleven Card', '4477')).toBe(false)
   })
 
   it('finds its end after a word or an x that marks it', () => {
