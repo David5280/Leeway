@@ -1,5 +1,6 @@
 // Word by word tidying of the names banks send, for accountName.ts: plain case
-// for a name sent in capitals, and an account number taken out. Pure.
+// for a name sent in capitals. Pure. Taking out account numbers is in
+// accountNumber.ts.
 
 /**
  * Short words that stay uppercase: acronyms people know in an account's or
@@ -92,6 +93,8 @@ export function coreOf(word: string): string {
 function quieterWord(word: string, first: boolean, acronyms: ReadonlySet<string>): string {
   // Brackets around a word don't change what it is: "(IRA)" is still an acronym.
   const core = coreOf(word)
+  // An ordinal reads "3rd", not "3RD".
+  if (/^\d+(ST|ND|RD|TH)$/.test(core)) return word.replace(core, core.toLowerCase())
   if (/\d/.test(core) || ACRONYMS.has(core) || acronyms.has(core)) return word
   // Initials, "U.S." or "N.A.", and names joined by "&", "M&T", stay as sent.
   if (/^(\p{L}\.)+\p{L}?$/u.test(core) || core.includes('&')) return word
@@ -103,100 +106,4 @@ function quieterWord(word: string, first: boolean, acronyms: ReadonlySet<string>
   return lower.replace(/(^|[^\p{L}'’])(\p{L})/gu, (_match, before: string, letter: string) => {
     return before + letter.toUpperCase()
   })
-}
-
-/** Words that lead up to an account number, as in "ENDING IN 4417" or "(ACCT 4417)". */
-const NUMBER_LEAD_INS = new Set(['account', 'acct', 'ending', 'in', 'no', 'num', 'number'])
-
-/**
- * A bank's name for an account without the account number some banks put in
- * it, "CHECKING ...4417", "CREDIT CARD (X4417)" or "CHK417", and without the
- * words that led up to the number.
- */
-export function withoutAccountNumber(bankName: string, mask: string | null): string {
-  const maskDigits = mask?.replace(/\D/g, '') ?? ''
-  const words = joinedMask(bankName, maskDigits).split(/\s+/).filter(Boolean)
-  const kept: string[] = []
-  words.forEach((word, index) => {
-    const rest = withoutNumber(word, maskDigits, index === words.length - 1)
-    if (rest === null) {
-      kept.push(word)
-      return
-    }
-    // The number goes, and so do the words that led up to it.
-    while (kept.length > 0 && isLeadIn(kept.at(-1)!)) kept.pop()
-    if (rest && !isLeadIn(rest)) kept.push(rest)
-  })
-  return balanced(kept.join(' '))
-}
-
-/**
- * The name with the mask written whole where a bank split it, "44-17" or
- * "44 17" for 4417, so it is found like any other. Only for a mask of three
- * digits or more: a shorter one split up is more likely a range, "1-2 YEAR CD".
- */
-function joinedMask(bankName: string, maskDigits: string): string {
-  if (maskDigits.length < 3) return bankName
-  const split = new RegExp(`(?<!\\d)${[...maskDigits].join('[-\\s]?')}(?!\\d)`, 'g')
-  return bankName.replace(split, maskDigits)
-}
-
-/**
- * What is left of a word once its account number is taken out, or null when
- * it has none: "CHECKING-417" is CHECKING, and "(X4417)" is ''. A run of four
- * digits or more is always a number. A shorter run is one when it is exactly
- * the mask, unless it stands bare with more of the name after it, so "12 MONTH
- * CD" keeps its 12 while "SAVINGS 12" and "CHK12" lose theirs.
- */
-function withoutNumber(word: string, maskDigits: string, last: boolean): string | null {
-  const core = coreOf(word)
-  // "XXXX" or "****" stands for digits too; the stars leave no core at all.
-  if (/^[x*•]{2,}$/i.test(core || word)) return ''
-  // Brackets around the number go, but not the mask characters before it: "(...417)" is "...417".
-  const bare = word.replace(/[^\p{L}\p{N}]+$/u, '').replace(/^[([{"']+/, '')
-  const bracketed = bare !== word
-  for (const run of bare.matchAll(/\d+/g)) {
-    const digits = run[0]
-    const before = bare.slice(0, run.index)
-    const alone = bare === digits && !bracketed
-    const isMask = maskDigits.length >= 2 && digits === maskDigits && (!alone || last)
-    if (digits.length >= 4 || isMask) return withoutMaskCharacters(before)
-  }
-  return null
-}
-
-/**
- * Text without the mask characters it ends with: "ACCT#" is ACCT, and
- * "XXXX-XXXX-" is ''. An x counts only on its own, so "CHECKINGX" keeps it.
- */
-function withoutMaskCharacters(text: string): string {
-  let rest = text
-  for (;;) {
-    const next = rest.replace(/[*•·.…#-]+$/, '').replace(/(^|[^\p{L}])x+$/iu, '$1')
-    if (next === rest) return rest
-    rest = next
-  }
-}
-
-/** Punctuation alone, like "#:", a lone x, or a word like "ENDING" that leads up to a number. */
-function isLeadIn(word: string): boolean {
-  const core = coreOf(word)
-  return core === '' || /^x$/i.test(core) || NUMBER_LEAD_INS.has(core.toLowerCase())
-}
-
-/**
- * Text without brackets of a kind that no longer pair up, like the "(" left
- * when "(ACCT" goes with its number.
- */
-function balanced(text: string): string {
-  let result = text
-  for (const [open, close] of [
-    ['(', ')'],
-    ['[', ']'],
-  ] as const) {
-    const opens = result.split(open).length
-    const closes = result.split(close).length
-    if (opens !== closes) result = result.replaceAll(open, '').replaceAll(close, '')
-  }
-  return result.replace(/\s+/g, ' ').trim()
 }
