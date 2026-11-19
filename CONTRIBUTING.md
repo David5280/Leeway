@@ -35,7 +35,7 @@ cents; dates are `YYYY-MM-DD` strings. Nothing ever moves money.
 ## How the code is organized
 
 Leeway is two npm workspaces, `server` and `web`, plus browser tests in
-`e2e/`. The web app imports the server's action definitions for its types,
+`e2e/` and the Scriptable home-screen widget in `widget/`. The web app imports the server's action definitions for its types,
 and a few pure server modules (dates, period words, the import's duplicate
 check) for their code, so both sides always agree.
 
@@ -139,6 +139,17 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   actions from a fake server and renders a screen signed in; tests find
   things by role and label, as a person would.
 - `e2e/`: Playwright, against a real build and database (see below).
+- `widget/leeway-widget.js`: the Scriptable script is one plain JavaScript
+  file, since Scriptable runs a single file, type-checked with JSDoc by
+  `tsc -p widget` against `widget/scriptable.d.ts` and the server's
+  `WidgetSummary` type. Everything above its "Scriptable" section is pure
+  (connecting, formatting, and layouts as plain data) and is tested as it is
+  in `web/src/widget/leeway-widget.test.ts`, including a check that its
+  colors match `web/src/lib/theme.ts`. The thin Scriptable part takes
+  Scriptable's globals as an argument, so `scriptable.test.ts` runs it
+  against stand-ins that record what it draws, sends and saves, and
+  `autorun.test.ts` checks the last line starts it when those globals exist.
+  The web coverage floors include the script.
 - Name tests as sentences about behavior ("refuses a rule whose minimum is
   above its maximum"), and control time through the context's clock
   (`ctx.setNow`) rather than waiting on real timers.
@@ -174,7 +185,12 @@ first-run setup, signing in and out, the overview, the accounts dashboard and
 account alerts, transactions, budgets, the Plan tab, importing a CSV file,
 the Settings groups and their addresses, switching themes, the dashboard
 summary switch, the weekly email settings, an assistant connecting through
-the consent screen, and a phone-sized screen.
+the consent screen, the home-screen widget's token and script, and
+phone-sized screens.
+`widget-preview.spec.ts` draws the widget's three sizes from the script's own
+layouts as HTML previews and checks nothing spills out; with
+`WIDGET_SCREENSHOTS` set to a folder, the widget specs also save pictures of
+Settings > Widget and the previews there.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
 The test server runs with no Anthropic key, so no browser test can reach a
