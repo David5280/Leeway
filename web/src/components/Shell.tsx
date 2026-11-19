@@ -13,7 +13,7 @@ const LINKS: { to: string; label: string; short: string; icon: IconName }[] = [
   { to: '/transactions', label: 'Transactions', short: 'Activity', icon: 'activity' },
   { to: '/budgets', label: 'Budgets', short: 'Budgets', icon: 'budgets' },
   { to: '/plan', label: 'Plan', short: 'Plan', icon: 'plan' },
-  { to: '/customize', label: 'Customize', short: 'Customize', icon: 'customize' },
+  { to: '/settings', label: 'Settings', short: 'Settings', icon: 'sliders' },
 ]
 
 /** Quick theme switch: one dot per theme, painted in that theme's colors. */

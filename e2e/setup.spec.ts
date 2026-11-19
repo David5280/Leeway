@@ -91,7 +91,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page).toHaveURL(/\/transactions\/import$/)
 
   // Setup is over: the app's own navigation is there, and accounts can be added by hand.
-  await page.goto('/customize#accounts')
+  await page.goto('/settings/accounts')
   await expect(page.getByRole('button', { name: 'Add an account by hand' })).toBeInViewport()
   await expect(page.getByRole('navigation').first()).toBeVisible()
   await page.context().storageState({ path: OWNER_STATE })

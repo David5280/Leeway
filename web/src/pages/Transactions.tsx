@@ -10,7 +10,6 @@ import { RulesList } from '../components/rules/RulesList'
 import type { RuleDraft } from '../components/rules/rules'
 import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, Loading, Segmented } from '../components/ui'
-import { accountName } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { dayLabel } from '../lib/format'
 import { pairTransfers } from '../lib/transactions'
@@ -191,7 +190,7 @@ function AccountChip({ id, onClear }: { id: string; onClear: () => void }) {
   const account = accounts.data?.find((a) => a.id === id)
   return (
     <button type="button" className="chip on" aria-pressed onClick={onClear}>
-      {account ? accountName(account) : 'One account'}
+      {account ? account.name : 'One account'}
       <Icon name="close" size={14} />
     </button>
   )

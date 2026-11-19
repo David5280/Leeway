@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settings } from '../test/fake'
 import { useAppearance } from './app'
-import { applyAppearance, inkOn, THEMES, themeVariables } from './theme'
+import { applyAppearance, FONTS, inkOn, NUMBER_MARKS, THEMES, themeVariables } from './theme'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -31,6 +31,26 @@ describe('theme', () => {
     expect(vars['--radius']).toBe('2px')
     expect(vars['--pad']).toBe('16px')
     expect(vars['--font-ui']).toContain('system-ui')
+  })
+
+  it('sets money in each font with tight commas and points ahead of its monospaced digits', () => {
+    // The face is declared in styles.css under this very name.
+    expect(NUMBER_MARKS).toBe("'Leeway Number Marks'")
+    for (const id of Object.keys(FONTS) as (keyof typeof FONTS)[]) {
+      const { vars } = themeVariables({ ...base, font: id }, true)
+      expect(vars['--font-num']).toBe(`${NUMBER_MARKS}, ${FONTS[id].mono}`)
+    }
+  })
+
+  it('keeps code on the plain monospaced font, every character the same width', () => {
+    for (const id of Object.keys(FONTS) as (keyof typeof FONTS)[]) {
+      const { vars } = themeVariables({ ...base, font: id }, true)
+      expect(vars['--font-mono']).toBe(FONTS[id].mono)
+      expect(vars['--font-mono']).not.toContain(NUMBER_MARKS)
+    }
+    expect(themeVariables({ ...base, font: 'ibm-plex' }, true).vars['--font-mono']).toBe(
+      "'IBM Plex Mono', ui-monospace, monospace",
+    )
   })
 
   it('picks readable text for a color', () => {

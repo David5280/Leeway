@@ -12,11 +12,7 @@ export function AgentSection() {
   const address = `${status.publicUrl ?? window.location.origin}/mcp`
 
   return (
-    <Section
-      id="agent"
-      title="AI assistant"
-      hint="Connect Claude or another assistant so it can check in and coach you"
-    >
+    <Section id="agent" title="AI assistant">
       <ConnectSteps address={address} />
       <ConnectedApps />
       <AgentKeys />

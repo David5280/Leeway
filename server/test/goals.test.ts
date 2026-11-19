@@ -93,14 +93,14 @@ describe('goal actions', () => {
     })
     const goal = await call('create_goal', { name: 'House', targetCents: 4000000, accountId })
     expect(goal).toMatchObject({
-      accountName: 'High yield savings',
+      accountName: 'Test High yield savings',
       currentCents: 240000,
       percent: 6,
     })
 
     const error = await callError('add_to_goal', { id: goal.id, amountCents: 1000 })
     expect(error.message).toBe(
-      'House follows the balance of High yield savings, so its progress updates on its own',
+      'House follows the balance of Test High yield savings, so its progress updates on its own',
     )
     // Unlinking goes back to counting by hand.
     expect((await call('update_goal', { id: goal.id, accountId: null })).currentCents).toBe(0)

@@ -75,7 +75,7 @@ describe('get_checkin', () => {
       {
         priority: 'now',
         topic: 'account',
-        message: 'Everyday is overdrawn by $42.10.',
+        message: 'Test Everyday is overdrawn by $42.10.',
         tool: 'list_alerts',
       },
       expect.objectContaining({ priority: 'soon', topic: 'account', tool: 'list_alerts' }),
@@ -176,7 +176,9 @@ describe('get_checkin', () => {
 
     const messages = (await call('get_checkin')).attention.map((a) => a.message)
     expect(messages).toEqual([
-      expect.stringContaining('leave out Car loan, Store card until they have an interest rate'),
+      expect.stringContaining(
+        'leave out Test Car loan, Test Store card until they have an interest rate',
+      ),
       '3 transactions need a category this period.',
       '2 repeating charges or deposits are not tracked yet. Tracking bills makes cash flow to payday accurate.',
     ])

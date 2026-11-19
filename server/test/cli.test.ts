@@ -46,6 +46,7 @@ describe('reset-password command', () => {
 
     expect(process.exitCode).toBeUndefined()
     expect(printed[0]).toBe('Password for me@example.com reset. Every device is signed out.')
+    expect(printed[1]).toMatch(/then change it in Settings, under Sign-in:/)
     const password = /\n\n {2}(\S+)\n$/.exec(printed[1] ?? '')?.[1]
     expect(password).toBeDefined()
     expect(await checkLogin(ctx.db, 'me@example.com', password ?? '')).toBe(true)

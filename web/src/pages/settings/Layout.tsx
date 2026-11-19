@@ -24,7 +24,7 @@ export function LayoutSection() {
   const saveWidgets = (next: Widget[]) => save.settings({ dashboard: { widgets: next } })
 
   return (
-    <Section id="layout" title="Dashboard" hint="Or press Customize on the overview">
+    <Section id="layout" title="Dashboard" hint="Or press Edit layout on the overview">
       <p className="small muted">
         Wide widgets stack on the left and half widgets on the right; full widgets span the page. On
         a phone they all follow this order.
@@ -33,13 +33,13 @@ export function LayoutSection() {
         const index = all.indexOf(widget)
         const name = WIDGET_LIBRARY[widget.type]!.name
         return (
-          <div key={widget.type} className="list-row wrap">
+          <div key={widget.type} className="list-row wrap layout-row">
             <Switch
               label={`Show ${name}`}
               checked={widget.visible}
               onChange={(visible) => saveWidgets(changeWidget(all, widget.type, { visible }))}
             />
-            <span className={widget.visible ? 'grow' : 'grow muted'}>{name}</span>
+            <span className={widget.visible ? 'grow ellipsis' : 'grow ellipsis muted'}>{name}</span>
             <Segmented
               label={`${name} size`}
               value={widget.size}

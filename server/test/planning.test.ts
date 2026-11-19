@@ -140,10 +140,10 @@ describe('plan_debt_payoff', () => {
     expect(terms).toMatchObject({ aprPercent: 9.99, minimumPaymentCents: null })
 
     let plans = await call('plan_debt_payoff', { extraCents: 10000 })
-    expect(plans.debts.map((d) => d.name)).toEqual(['Rewards card'])
+    expect(plans.debts.map((d) => d.name)).toEqual(['Test Rewards card'])
     expect(plans.needsDetails).toEqual([
-      { id: loan.accountId, name: 'Personal loan', missing: ['minimumPaymentCents'] },
-      { id: expect.any(String), name: 'Store card', missing: ['aprPercent'] },
+      { id: loan.accountId, name: 'Test Personal loan', missing: ['minimumPaymentCents'] },
+      { id: expect.any(String), name: 'Test Store card', missing: ['aprPercent'] },
     ])
 
     await call('update_account', { id: loan.accountId, minimumPaymentCents: 2500 })

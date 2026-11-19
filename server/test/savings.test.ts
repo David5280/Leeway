@@ -108,7 +108,8 @@ describe('summarize_savings', () => {
       ['investment', 'Investing', 1_200_000],
     ])
     expect(report.lenses[1]!.accounts[0]).toMatchObject({
-      name: 'Rollover IRA',
+      // The name shown everywhere: the bank's short name, then the account's.
+      name: 'Test Rollover IRA',
       institutionName: 'Test Bank',
       kind: 'retirement',
       kindChosen: false,
@@ -218,7 +219,7 @@ describe('summarize_savings', () => {
       balanceCents: null,
     })
     await insertBankAccount(ctx.db, {
-      name: 'ISA',
+      name: 'Global stocks',
       type: 'investment',
       subtype: 'isa',
       balanceCents: 900_000,
@@ -227,8 +228,8 @@ describe('summarize_savings', () => {
     const report = await call('summarize_savings')
     const accounts = report.lenses.flatMap((v) => v.accounts)
     expect(accounts.map((a) => [a.name, a.notCounted])).toEqual([
-      ['New IRA', 'no_balance'],
-      ['ISA', 'other_currency'],
+      ['Test New IRA', 'no_balance'],
+      ['Test Global stocks', 'other_currency'],
     ])
     expect(report.totalCents).toBe(0)
     expect(report.historyStartsOn).toBeNull()
@@ -319,13 +320,13 @@ describe('update_account kind', () => {
     expect(
       report.lenses.map((v) => [v.kind, v.accounts.map((a) => [a.name, a.kindChosen])]),
     ).toEqual([
-      ['savings', [['Checking', true]]],
-      ['retirement', [['Rollover IRA', false]]],
+      ['savings', [['Test Checking', true]]],
+      ['retirement', [['Test Rollover IRA', false]]],
       [
         'investment',
         [
-          ['High yield savings', true],
-          ['Individual', false],
+          ['Test High yield savings', true],
+          ['Test Individual', false],
         ],
       ],
     ])
@@ -335,7 +336,7 @@ describe('update_account kind', () => {
     report = await call('summarize_savings')
     expect(report.lenses.map((v) => v.kind)).toEqual(['retirement', 'investment'])
     const accounts = await call('list_accounts')
-    expect(accounts.find((a) => a.name === 'Checking')).toMatchObject({
+    expect(accounts.find((a) => a.id === checking.accountId)).toMatchObject({
       kindChoice: null,
       kind: 'checking',
     })
@@ -555,8 +556,10 @@ describe('the savings glance', () => {
     expect(glance).toMatchObject({ hasSavings: true, totalCents: 5_000, cashCents: 0 })
   })
 
-  it('lists the accounts once when the financial profile is built', async () => {
+  it('reuses the accounts it is given, rather than listing them again', async () => {
     await fidelity()
+    const settings = await getSettings(ctx.db)
+    const accounts = await listAccounts(ctx.db, false)
     const queries: string[] = []
     const watched = {
       query: (text: string, values?: unknown[]) => {
@@ -564,11 +567,10 @@ describe('the savings glance', () => {
         return ctx.db.query(text, values)
       },
     } as unknown as Db
-    await getFinancialProfile(watched, await getSettings(ctx.db), '2026-11-19')
-    const accountLists = queries.filter((text) =>
-      /FROM accounts a LEFT JOIN connections/.test(text),
-    )
-    expect(accountLists).toHaveLength(1)
+    await getSavingsReport(watched, settings, '2026-11-19', accounts)
+    await getSavingsGlance(watched, settings, '2026-11-19', accounts)
+    expect(queries.length).toBeGreaterThan(0)
+    expect(queries.filter((text) => /FROM accounts\b/.test(text))).toEqual([])
   })
 })
 

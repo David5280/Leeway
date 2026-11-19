@@ -144,7 +144,10 @@ describe('discovery', () => {
     expect(response.headers['www-authenticate']).toBe(
       `Bearer resource_metadata="${BASE}/.well-known/oauth-protected-resource/mcp", scope="read write"`,
     )
-    expect(response.json()).toMatchObject({ error: 'invalid_token' })
+    expect(response.json()).toEqual({
+      error: 'invalid_token',
+      error_description: 'Sign in to Leeway, or use a key from Settings > AI assistant',
+    })
   })
 
   it('serves the resource metadata at both well-known paths', async () => {
@@ -685,7 +688,7 @@ describe('revoking and disconnecting', () => {
     expect((await revoke({})).json().error).toBe('invalid_request')
   })
 
-  it('disconnects an app from Customize, ending its tokens at once', async () => {
+  it('disconnects an app from Settings, ending its tokens at once', async () => {
     const tokens = await signIn()
     const [connected] = (await action('list_connected_apps', {})).json().result
     expect((await action('disconnect_app', { id: connected.id })).json().result).toEqual({
@@ -790,7 +793,7 @@ describe('rate limits', () => {
 })
 
 describe('agent keys keep working beside sign-in', () => {
-  it('accepts a key made in Customize', async () => {
+  it('accepts a key made in Settings', async () => {
     const { token: key } = await createToken(ctx.db, 'Coach', 'read')
     expect((await mcp(key, 'tools/list')).statusCode).toBe(200)
     const revoked = await mcp('lw_not-a-key', 'tools/list')

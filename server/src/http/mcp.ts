@@ -1,5 +1,5 @@
 // The MCP endpoint for AI agents. It accepts an agent key (lw_...) made in
-// Customize, or an access token from signing in with OAuth, like Claude does.
+// Settings, or an access token from signing in with OAuth, like Claude does.
 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { FastifyInstance, FastifyReply } from 'fastify'
@@ -13,7 +13,7 @@ import { verifyAccessToken } from '../oauth/tokens.js'
 import { urlsFor } from './base.js'
 import { perMinute } from './rateLimit.js'
 
-/** Agent keys made in Customize start with this; anything else is an OAuth access token. */
+/** Agent keys made in Settings start with this; anything else is an OAuth access token. */
 const AGENT_KEY_PREFIX = 'lw_'
 
 /**
@@ -22,7 +22,7 @@ const AGENT_KEY_PREFIX = 'lw_'
  */
 export const MCP_LIMIT = perMinute(120)
 
-const NO_TOKEN = 'Sign in to Leeway, or use a key from Customize > AI assistant'
+const NO_TOKEN = 'Sign in to Leeway, or use a key from Settings > AI assistant'
 const BAD_TOKEN = 'That token is not valid or has expired. Sign in to Leeway again'
 
 /** Whether a JSON-RPC body (one message or a batch) calls a tool that changes data. */

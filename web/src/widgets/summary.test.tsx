@@ -71,11 +71,11 @@ describe('Byline', () => {
     expect(byline({ ai: 'unavailable' })).toHaveTextContent("Claude couldn't write it just now")
   })
 
-  it('points to Customize when the key is missing or the AI summary is off', () => {
+  it('points to Settings when the key is missing or the AI summary is off', () => {
     expect(byline({ ai: 'no_key' })).toHaveTextContent('needs an Anthropic key')
-    expect(screen.getByRole('link', { name: 'Customize' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Settings, then AI assistant' })).toHaveAttribute(
       'href',
-      '/customize#agent',
+      '/settings/assistant',
     )
   })
 

@@ -78,9 +78,8 @@ export function headline(checkin: Checkin, money: Money, word: string): string {
 }
 
 /**
- * The most serious account alert, in words that name the bank but not the
- * account, since this summary also goes in the weekly email and to an AI writer.
- * When the headline already carries that alert, this only counts the rest.
+ * The most serious account alert, naming the account the way the rest of the
+ * app does. When the headline already carries that alert, this only counts the rest.
  */
 function alertPoint(checkin: Checkin): string | null {
   const [first, ...rest] = checkin.alerts
@@ -171,8 +170,8 @@ export function plainSummary(
 /**
  * What an AI writer is told: the check-in's numbers, already formatted as
  * money and dates so nothing has to be converted from cents. Only totals,
- * the heads-up list, account alerts naming only the bank and the kind of
- * account, and bill and goal names: no account names, numbers or transactions.
+ * the heads-up list, account alerts with the account's display name, and
+ * bill and goal names: no account numbers or transactions.
  */
 export function summaryFacts(
   checkin: Checkin,
@@ -203,7 +202,7 @@ export function summaryFacts(
       billsDueBeforePayday: money(cashFlow.billsDueCents),
       leftAfterBills: money(cashFlow.leftAfterBillsCents),
     },
-    // Account alerts go without account names, so they are not in the heads-up list.
+    // Account alerts have their own list below, so the heads-up list leaves them out.
     headsUp: checkin.attention
       .filter((item) => item.topic !== 'account')
       .map(({ priority, message }) => ({ priority, message })),

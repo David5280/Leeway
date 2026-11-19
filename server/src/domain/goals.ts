@@ -9,6 +9,7 @@ import { dateParts, type IsoDate } from '../lib/dates.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
+import { accountNames } from './accounts.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import { planOf, type GoalPlan, type GoalProgressFacts } from './goalPlan.js'
 
@@ -109,8 +110,19 @@ const SELECT = `
   SELECT g.id, g.kind, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
     g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
     g.created_at::date AS "createdOn",
-    coalesce(a.display_name, a.name) AS "accountName", a.balance_cents AS "accountBalanceCents"
+    a.balance_cents AS "accountBalanceCents"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
+
+type StoredGoal = Omit<GoalRow, 'accountName'>
+
+/** Goals as read, with the account each follows named as everywhere else. */
+async function namedGoals(db: Db, rows: StoredGoal[]): Promise<GoalRow[]> {
+  const names = await accountNames(db)
+  return rows.map((row) => ({
+    ...row,
+    accountName: row.accountId === null ? null : (names.get(row.accountId) ?? null),
+  }))
+}
 
 async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goal[]> {
   const period = periodContaining(clock.today, clock.period)
@@ -120,14 +132,14 @@ async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goa
 }
 
 export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
-  const { rows } = await db.query<GoalRow>(`${SELECT} ORDER BY g.created_at, g.name`)
-  return withPlans(db, rows, clock)
+  const { rows } = await db.query<StoredGoal>(`${SELECT} ORDER BY g.created_at, g.name`)
+  return withPlans(db, await namedGoals(db, rows), clock)
 }
 
 async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
-  const { rows } = await db.query<GoalRow>(`${SELECT} WHERE g.id = $1`, [id])
+  const { rows } = await db.query<StoredGoal>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
-  return (await withPlans(db, rows, clock))[0]!
+  return (await withPlans(db, await namedGoals(db, rows), clock))[0]!
 }
 
 /** The checks a goal must pass however it was made or changed. */

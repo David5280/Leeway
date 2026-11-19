@@ -9,7 +9,7 @@ import { accessTokenOf, bankFailure, requireBank } from './bank.js'
 import { recategorize } from './categorize.js'
 import { syncConnection, type SyncResult } from './sync.js'
 
-/** One login at one bank, as the owner sees it in Customize. */
+/** One login at one bank, as the owner sees it in Settings. */
 export interface Connection {
   id: string
   provider: string

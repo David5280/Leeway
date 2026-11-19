@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
+import { distinctAccountNames } from './accountName.js'
 import { recategorize } from './categorize.js'
 import {
   ACCOUNT_KINDS,
@@ -29,8 +30,14 @@ export interface Account {
   id: string
   connectionId: string | null
   institutionName: string | null
-  /** The owner's label if set, otherwise the bank's name for the account. */
+  /**
+   * The name shown everywhere: the owner's own, or the bank's short name and
+   * the account's in plain case, like "Chase Total Checking" (see accountName.ts).
+   */
   name: string
+  /** The owner's own name for the account, or null for none. */
+  nickname: string | null
+  /** The account's name as the bank sends it, or as typed for one added by hand. */
   bankName: string
   mask: string | null
   type: AccountType
@@ -58,14 +65,9 @@ export interface Account {
   kind: AccountKind
 }
 
-/** An account as stored, before its kind is worked out. */
-type AccountRow = Omit<Account, 'kind'>
-
-const withKind = (row: AccountRow): Account => ({ ...row, kind: kindOf(row) })
-
 const SELECT = `
   SELECT a.id, a.connection_id AS "connectionId", c.institution_name AS "institutionName",
-    coalesce(a.display_name, a.name) AS name, a.name AS "bankName", a.mask, a.type, a.subtype,
+    a.display_name AS nickname, a.name AS "bankName", a.mask, a.type, a.subtype,
     a.balance_cents AS "balanceCents", a.available_cents AS "availableCents",
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
@@ -73,18 +75,42 @@ const SELECT = `
     a.low_balance_cents AS "lowBalanceCents", a.kind AS "kindChoice"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
+/** An account as stored, before its name and kind are worked out. */
+type AccountRow = Omit<Account, 'name' | 'kind'>
+
+/**
+ * Every account, hidden ones too, named side by side so no two share a name
+ * (see accountName.ts) and with its kind worked out (see accountKinds.ts).
+ * Oldest first, so adding an account never renames another.
+ */
+async function namedAccounts(db: Db): Promise<Account[]> {
+  const { rows } = await db.query<AccountRow>(`${SELECT} ORDER BY a.created_at, a.id`)
+  const names = distinctAccountNames(rows)
+  return rows.map((row) => ({ ...row, name: names.get(row.id)!, kind: kindOf(row) }))
+}
+
+/** By kind of account, then by the name shown. Names are worked out here, so SQL cannot sort them. */
+const inListOrder = (a: Account, b: Account) =>
+  a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
+
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
-  const { rows } = await db.query<AccountRow>(
-    `${SELECT} ${includeHidden ? '' : 'WHERE NOT a.hidden'}
-     ORDER BY a.type, coalesce(a.display_name, a.name)`,
-  )
-  return rows.map(withKind)
+  const accounts = await namedAccounts(db)
+  return accounts.filter((account) => includeHidden || !account.hidden).sort(inListOrder)
 }
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
-  const { rows } = await db.query<AccountRow>(`${SELECT} WHERE a.id = $1`, [id])
-  if (!rows[0]) throw notFound('Account')
-  return withKind(rows[0])
+  const account = (await namedAccounts(db)).find((one) => one.id === id)
+  if (!account) throw notFound('Account')
+  return account
+}
+
+/**
+ * Each account's name by id, for anything that shows an account beside other
+ * data: transactions, goals, debts, imports. The same names listAccounts gives.
+ */
+export async function accountNames(db: Db): Promise<Map<string, string>> {
+  const accounts = await namedAccounts(db)
+  return new Map(accounts.map((account) => [account.id, account.name]))
 }
 
 export const manualAccountInputSchema = z.object({

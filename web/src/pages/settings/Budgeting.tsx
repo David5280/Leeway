@@ -27,7 +27,7 @@ export function BudgetingSection() {
     ? WARN_AT
     : [...WARN_AT, warnAt].sort((a, b) => a - b)
   return (
-    <Section id="budgeting" title="Budgeting">
+    <Section id="budgeting" title="Period and warnings">
       <PeriodEditor value={settings.period} onChange={(period) => save.settings({ period })} />
       <Setting label="Count pending transactions" hint="Money is spent even before it posts">
         <Switch
@@ -39,7 +39,6 @@ export function BudgetingSection() {
       <Setting label="Warn at" hint="Each category can override this">
         <select
           className="input"
-          style={{ width: 'auto' }}
           aria-label="Warn at"
           value={settings.defaultWarnAtPercent}
           onChange={(e) => save.settings({ defaultWarnAtPercent: Number(e.target.value) })}

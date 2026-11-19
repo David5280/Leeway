@@ -139,7 +139,8 @@ export function Connect() {
         {chosen === 'read'
           ? 'It can read your accounts, spending, budgets and goals.'
           : 'It can read everything and change budgets, categories, rules and goals.'}{' '}
-        Either way, it can never move money. You can disconnect it any time in Customize.
+        Either way, it can never move money. You can disconnect it any time in Settings, then AI
+        assistant.
       </p>
       <ErrorNote error={answer.error} />
       <div className="row wrap">
