@@ -48,6 +48,23 @@ export function placeMenu(
   return { top: button.top - GAP - maxHeight, left, maxHeight }
 }
 
+/** The bars fixed along the bottom of the screen that a menu stays above: the tab bar. */
+const BOTTOM_BARS = '.tabbar'
+
+/**
+ * The safe area cut short at the top of any bar along its bottom that shows,
+ * so a long menu low on a phone ends above the tab bar rather than over it.
+ * A hidden bar (the tab bar of a phone turned sideways) takes no room.
+ */
+export function aboveBars(safe: SafeArea, bars: Iterable<Element>): SafeArea {
+  let bottom = safe.bottom
+  for (const bar of bars) {
+    const box = bar.getBoundingClientRect()
+    if (box.height > 0) bottom = Math.min(bottom, box.top)
+  }
+  return { ...safe, bottom }
+}
+
 /** The safe area now, measured from the insets the page is given (--sat and the rest). */
 function safeArea(): SafeArea {
   const probe = document.createElement('div')
@@ -56,7 +73,7 @@ function safeArea(): SafeArea {
   document.body.append(probe)
   const { top, right, bottom, left } = probe.getBoundingClientRect()
   probe.remove()
-  return { top, right, bottom, left }
+  return aboveBars({ top, right, bottom, left }, document.querySelectorAll(BOTTOM_BARS))
 }
 
 export interface MenuItem {

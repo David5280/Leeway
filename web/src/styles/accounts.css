@@ -172,6 +172,14 @@
   }
 }
 
+/* A phone turned sideways hides the tab bar (styles.css), so the bar rides
+   just above the home indicator instead, off the cards it would cover. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .select-bar {
+    bottom: calc(8px + var(--sab));
+  }
+}
+
 .select-bar-total {
   display: flex;
   flex: 1;

@@ -1,13 +1,36 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { Menu, placeMenu, type MenuItem } from './Menu'
+import { aboveBars, Menu, placeMenu, type MenuItem } from './Menu'
 
 /** A button 36px tall, its left edge and bottom where given. */
 const button = (left: number, bottom: number) => ({ left, bottom, top: bottom - 36 }) as DOMRect
 
 /** A menu of this size. */
 const menu = (width: number, height = 140) => ({ width, height })
+
+describe('aboveBars', () => {
+  const phone = { top: 47, left: 0, right: 390, bottom: 810 }
+  /** A bar whose box starts at this height and runs this tall. */
+  const bar = (top: number, height: number) =>
+    ({ getBoundingClientRect: () => ({ top, height }) as DOMRect }) as Element
+
+  it('ends the room at the top of the tab bar, so a menu stays above it', () => {
+    expect(aboveBars(phone, [bar(761, 83)])).toEqual({ ...phone, bottom: 761 })
+    // Under a button low on the screen, the menu has 147px before the tabs: room enough.
+    const safe = aboveBars(phone, [bar(761, 83)])
+    expect(placeMenu(button(20, 600), menu(200), safe)).toEqual({
+      top: 606,
+      left: 20,
+      maxHeight: 147,
+    })
+  })
+
+  it('takes no room for a hidden bar, or none at all', () => {
+    expect(aboveBars(phone, [bar(0, 0)])).toEqual(phone)
+    expect(aboveBars(phone, [])).toEqual(phone)
+  })
+})
 
 describe('placeMenu', () => {
   const phone = { top: 0, left: 0, right: 390, bottom: 844 }
