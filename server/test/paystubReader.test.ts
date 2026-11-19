@@ -16,15 +16,7 @@ import {
 } from '../src/domain/paystubs/reader.js'
 import { AppError } from '../src/errors.js'
 import { HOUR_MS, MINUTE_MS } from '../src/lib/time.js'
-import {
-  CITY_READING,
-  FakeReader,
-  jpeg,
-  NOT_A_PAYSTUB,
-  PAGE_TOKENS,
-  pdf,
-  USAGE,
-} from './fixtures/paystub.js'
+import { CITY_READING, FakeReader, NOT_A_PAYSTUB, pdf, USAGE } from './fixtures/paystub.js'
 
 /** A log that keeps every entry, to check what a read leaves in it. */
 function memoryLog() {

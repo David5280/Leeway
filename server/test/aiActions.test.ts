@@ -200,6 +200,15 @@ describe('the AI actions and agents', () => {
     expect(tools.filter((name) => names.includes(name))).toEqual([])
   })
 
+  it('still lets an agent see the chosen models and the limit, in get_settings', async () => {
+    await call('set_ai_model', { job: 'paystub', model: 'claude-sonnet-5-5' })
+    expect(findAction('get_settings')).toMatchObject({ surface: 'all' })
+    expect((await call('get_settings')).ai).toEqual({
+      models: { summary: null, paystub: 'claude-sonnet-5-5' },
+      monthlyCapCents: 500,
+    })
+  })
+
   it('keeps the AI choices out of what an agent or an import may change', async () => {
     const error = await callError('update_settings', { ai: { monthlyCapCents: 100_000 } })
     expect(error.code).toBe('invalid_input')
