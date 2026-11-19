@@ -15,7 +15,7 @@ const eslint = new ESLint({ cwd: ROOT })
 async function routeProblems(route: string, file = 'web/src/App.tsx') {
   const code = `import { Route } from 'react-router-dom'\nexport const route = ${route}\n`
   const [result] = await eslint.lintText(code, { filePath: join(ROOT, file) })
-  return result.messages.filter((message) => message.ruleId === 'no-restricted-syntax')
+  return result!.messages.filter((message) => message.ruleId === 'no-restricted-syntax')
 }
 
 describe('a <Route> path', () => {
@@ -27,7 +27,7 @@ describe('a <Route> path', () => {
   ])('is refused when it is %s', async (_, route) => {
     const problems = await routeProblems(route)
     expect(problems).toHaveLength(1)
-    expect(problems[0].message).toMatch(/path from routes\.ts/)
+    expect(problems[0]!.message).toMatch(/path from routes\.ts/)
   })
 
   it.each([
