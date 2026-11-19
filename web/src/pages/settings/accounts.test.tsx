@@ -130,6 +130,20 @@ describe('Accounts', () => {
     expect(server.actions('update_account')).toEqual([])
   })
 
+  it('saves nothing for a field focused but never typed in, even if the server renames it meanwhile', async () => {
+    let current = account({ ...checking, name: 'Chase Checking', nickname: null })
+    const server = serve({ list_accounts: () => [current, card, cash] })
+    const { client } = renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for Chase Checking' })
+    await user.click(name)
+    current = { ...current, name: 'Chase Total Checking' }
+    await act(() => client.invalidateQueries({ queryKey: ['action'] }))
+    await waitFor(() => expect(name).toHaveValue('Chase Total Checking'))
+    await user.tab()
+    expect(server.actions('update_account')).toEqual([])
+  })
+
   it('keeps what the owner is typing when the server renames the account meanwhile', async () => {
     let current = checking
     const server = serve({ list_accounts: () => [current, card, cash] })

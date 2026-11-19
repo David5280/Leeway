@@ -64,10 +64,11 @@ function AccountRow({ account }: { account: Account }) {
           className="input"
           aria-label={`Name for ${account.name}`}
           value={draft ?? account.name}
-          onFocus={() => setDraft((typing) => typing ?? account.name)}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => {
-            const next = (draft ?? account.name).trim()
+            // Only typing starts a draft, so a field merely tabbed through saves nothing.
+            if (draft === null) return
+            const next = draft.trim()
             if (next === account.name) {
               setDraft(null)
               return
