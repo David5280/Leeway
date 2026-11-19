@@ -22,12 +22,7 @@ function ThemeDots() {
   const prefersDark = usePrefersDark()
   const update = useUpdateSettings()
   return (
-    <div
-      role="group"
-      aria-label="Theme"
-      className="pillbar theme-dots"
-      style={{ padding: 6, gap: 6 }}
-    >
+    <div role="group" aria-label="Theme" className="pillbar theme-dots">
       {(Object.keys(THEMES) as ThemeId[]).map((id) => {
         const { vars } = themeVariables({ ...settings.appearance, theme: id }, prefersDark)
         return (

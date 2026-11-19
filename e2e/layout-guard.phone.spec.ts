@@ -12,7 +12,7 @@ import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, SETTINGS_GROUPS } from './guarded-screens'
 import { describeProblems, findProblems, layoutProblems, type LayoutProblem } from './layout'
 import { OWNER, SETUP_CODE } from './owner'
-import { GUARDED_PHONES, simulateInsets, TAP, type Insets } from './phone'
+import { GUARDED_PHONES, missedTaps, simulateInsets, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 /** Waits until the screen has its data, fonts and final layout. */
@@ -91,7 +91,7 @@ for (const phone of GUARDED_PHONES) {
         })
       }
 
-      test('the header takes at most a fifth of the height, with links a finger can tap', async ({
+      test('the header takes at most a fifth of the height, with controls a finger can tap', async ({
         page,
       }) => {
         await load(page, '/transactions', phone.insets)
@@ -103,14 +103,9 @@ for (const phone of GUARDED_PHONES) {
         const tabs = page.locator('.tabbar')
         await (width > height ? expect(links).toBeVisible() : expect(links).toBeHidden())
         await (width > height ? expect(tabs).toBeHidden() : expect(tabs).toBeVisible())
-        // Every link in the header is a comfortable tap for a finger.
+        // Every control in the header, links and buttons, is a comfortable tap for a finger.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
-        for (const link of await page.getByRole('banner').getByRole('link').all()) {
-          if (!(await link.isVisible())) continue
-          const box = (await link.boundingBox())!
-          const name = (await link.getAttribute('aria-label')) ?? (await link.innerText())
-          expect(box.height, name).toBeGreaterThanOrEqual(TAP)
-        }
+        expect(await missedTaps(page.getByRole('banner'))).toEqual([])
       })
 
       test(`the overview is arranged ${phone.editsInPlace ? 'in place' : 'in Settings'}`, async ({

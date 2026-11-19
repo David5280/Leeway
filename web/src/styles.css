@@ -353,9 +353,11 @@ button.list-row:hover {
   text-decoration: none;
 }
 
-/* The logo takes a finger's tap home: 44px, Apple's smallest comfortable target. */
+/* The logo takes a finger's tap home: 44px each way, Apple's smallest
+   comfortable target, even when it is the icon alone (sideways). */
 @media (pointer: coarse) {
   .brand {
+    min-width: 44px;
     min-height: 44px;
   }
 }
@@ -391,13 +393,39 @@ button.list-row:hover {
   box-shadow: var(--shadow);
 }
 
+.theme-dots {
+  gap: 6px;
+  padding: 6px;
+}
+
 .theme-dot {
+  position: relative;
   width: 28px;
   height: 28px;
   border-radius: 99px;
   cursor: pointer;
   border: 2px solid var(--line);
   padding: 0;
+}
+
+/* On a touch screen each dot keeps its 28px look but takes a 44px tap: an
+   invisible hit area centred on it. The dots move 16px apart so the hit areas
+   meet without overlapping, and the 40px bar sits in the 44px header row, so
+   they reach nothing else. */
+@media (pointer: coarse) {
+  .theme-dots {
+    gap: 16px;
+  }
+
+  .theme-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .theme-dot[aria-pressed='true'] {
