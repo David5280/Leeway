@@ -2,6 +2,9 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 
+/** The logo on the sign-in, setup and connect screens, where it stands alone above a form. */
+export const AUTH_LOGO_SIZE = 44
+
 /** Where the wheel's eight handles end, clockwise from the top. */
 const WHEEL_KNOBS: [number, number][] = [
   [14, 2.4],
@@ -17,8 +20,9 @@ const WHEEL_KNOBS: [number, number][] = [
 /**
  * Leeway's logo: a ship's wheel, since leeway is a sailing word for room to
  * spare. Drawn in the theme's ink and accent, so it follows every theme.
+ * 34px sits beside the header's wordmark; the sign-in screens pass AUTH_LOGO_SIZE.
  */
-export function Logo({ size = 28 }: { size?: number }) {
+export function Logo({ size = 34 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden="true">
       {/* Spokes inside the rim, then the handles outside it. */}

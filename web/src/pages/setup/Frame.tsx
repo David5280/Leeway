@@ -1,7 +1,7 @@
 // The frame every setup step sits in, and the buttons at its foot.
 
 import type { ReactNode } from 'react'
-import { Logo } from '../../components/ui'
+import { AUTH_LOGO_SIZE, Logo } from '../../components/ui'
 
 /** The steps in order, as the step list names them. Step numbers count from 1. */
 export const STEPS = [
@@ -19,7 +19,7 @@ export function Frame({ step, children }: { step: number; children: ReactNode })
     <main className="setup">
       <aside className="stack">
         <div className="brand">
-          <Logo />
+          <Logo size={AUTH_LOGO_SIZE} />
           leeway
         </div>
         <ol className="steps" aria-label="Setup steps">

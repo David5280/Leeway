@@ -3,7 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { auth } from '../api/client'
-import { ErrorNote, Logo } from '../components/ui'
+import { AUTH_LOGO_SIZE, ErrorNote, Logo } from '../components/ui'
 
 export function Login() {
   const client = useQueryClient()
@@ -30,7 +30,7 @@ export function Login() {
     <main className="auth">
       <form className="card stack" onSubmit={submit} aria-label="Sign in">
         <div className="brand">
-          <Logo />
+          <Logo size={AUTH_LOGO_SIZE} />
           leeway
         </div>
         <h1>Welcome back</h1>
