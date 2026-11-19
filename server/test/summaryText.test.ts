@@ -276,7 +276,8 @@ describe('summaryFacts', () => {
       changeSince: '2026-11-05',
       emergencyFundMonths: 2.5,
       emergencyFundTargetMonths: 6,
-      savingsRatePercent: null,
+      // Known, but never handed to the summary writer (see the next test).
+      savingsRatePercent: 4,
     }
     expect(summaryFacts(checkin({ savings }), monthly, money).savingsAndInvestments).toEqual({
       total: '$58,000',
@@ -284,8 +285,6 @@ describe('summaryFacts', () => {
       changeMeasuredSince: 'Nov 5',
       emergencyFundMonthsCovered: 2.5,
       emergencyFundTargetMonths: 6,
-      savingsRatePercentOfPay: null,
-      savingsRateLeavesOut: 'Payroll deductions, such as a pension or a 401(k), are not counted.',
     })
     const unmoved = { ...savings, changeThisMonthCents: null, changeSince: null }
     expect(
@@ -295,5 +294,18 @@ describe('summaryFacts', () => {
       changeMeasuredSince: null,
     })
     expect(summaryFacts(checkin(), monthly, money).savingsAndInvestments).toBeNull()
+  })
+
+  it('never gives the summary writer a savings rate it could call too low', () => {
+    const savings = {
+      totalCents: 5_800_000,
+      changeThisMonthCents: null,
+      changeSince: null,
+      emergencyFundMonths: null,
+      emergencyFundTargetMonths: null,
+      savingsRatePercent: 4,
+    }
+    const facts = JSON.stringify(summaryFacts(checkin({ savings }), monthly, money))
+    expect(facts).not.toMatch(/savingsRate|ofPay/i)
   })
 })

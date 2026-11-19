@@ -3,12 +3,12 @@
  * one typed object, worked out fresh from the stored data on every read so it
  * is never out of date. Nothing here is stored.
  *
- * It is the single source for anything that speaks about the owner's whole
- * picture: the per-kind views on the Savings page (views.ts), the rule-based
- * insights (insights.ts), the short digest an AI assistant reads (digest.ts),
- * the check-in, the dashboard summary and the weekly email. Each of those
- * reads from here, so a number is worked out once and reads the same
- * everywhere.
+ * It is the source for what speaks about the owner's whole picture: the
+ * per-kind savings view (views.ts), the rule-based insights (insights.ts) and
+ * the short digest an AI assistant reads (digest.ts). The check-in, which the
+ * dashboard summary and the weekly email read, needs only a glance at savings,
+ * so it reads that much and works out the emergency fund and savings rate
+ * with the same savingsMeasures, and the numbers read the same everywhere.
  *
  * Sources, and where each is worked out:
  * - accounts and their kinds: accounts.ts and accountKinds.ts
@@ -30,7 +30,8 @@ import { listBills } from '../bills.js'
 import { listGoals, type Goal } from '../goals.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
 import { savingsRate, type SavingSource, type SavingsRate } from '../savings/rate.js'
-import { getSavingsReport, type SavingsReport } from '../savings/report.js'
+import type { BankContributions } from '../savings/contributions.js'
+import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import { periodConfig, type Settings } from '../settings.js'
 import { monthlyAverages, paySchedule, type MonthlyAverages, type PaySchedule } from './income.js'
 
@@ -119,9 +120,13 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
   }
 }
 
-/** The streams of saving Leeway can see, for the savings rate. */
-export function savingSources(savings: SavingsReport): SavingSource[] {
-  const monthly = savings.contributions?.monthlyCents
+/**
+ * The streams of saving Leeway can see, for the savings rate. Only bank
+ * transfers so far; payroll pensions join them, before the paycheck, once
+ * the owner can describe their plan.
+ */
+export function savingSources(contributions: BankContributions | null): SavingSource[] {
+  const monthly = contributions?.monthlyCents
   if (!monthly) return []
   return [
     { label: 'Transfers to savings', monthlyCents: monthly.cash, beforePaycheck: false },
@@ -135,7 +140,9 @@ export function savingSources(savings: SavingsReport): SavingSource[] {
 
 /** What the emergency fund and the savings rate are worked out from. */
 export interface SavingsMeasuresInput {
-  savings: SavingsReport
+  /** Cash in savings accounts, or null without any savings account. */
+  cashCents: number | null
+  contributions: BankContributions | null
   monthly: MonthlyAverages
   /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
   billsMonthlyCents: number
@@ -154,27 +161,28 @@ export interface SavingsMeasures {
  * whole profile.
  */
 export function savingsMeasures({
-  savings,
+  cashCents,
+  contributions,
   monthly,
   billsMonthlyCents,
   settings,
   today,
 }: SavingsMeasuresInput): SavingsMeasures {
-  const cash = savings.kinds.find((k) => k.kind === 'savings')
   // Without a whole month of spending, the bills are the best measure of essentials.
   const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
   return {
-    emergencyFund: cash
-      ? emergencyFund({
-          savedCents: cash.totalCents,
-          monthlyEssentialsCents: essentials,
-          essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
-          targetMonths: settings.savingsPlan.emergencyFundMonths,
-          monthlyPaceCents: savings.contributions?.monthlyCents?.cash ?? null,
-          today,
-        })
-      : null,
-    savingsRate: savingsRate(monthly.incomeCents, savingSources(savings)),
+    emergencyFund:
+      cashCents === null
+        ? null
+        : emergencyFund({
+            savedCents: cashCents,
+            monthlyEssentialsCents: essentials,
+            essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
+            targetMonths: settings.savingsPlan.emergencyFundMonths,
+            monthlyPaceCents: contributions?.monthlyCents?.cash ?? null,
+            today,
+          }),
+    savingsRate: savingsRate(monthly.incomeCents, savingSources(contributions)),
   }
 }
 
@@ -186,7 +194,7 @@ export async function getFinancialProfile(
 ): Promise<FinancialProfile> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const accounts = await listAccounts(db, false)
-  const savings = await getSavingsReport(db, settings, today)
+  const savings = await getSavingsReport(db, settings, today, accounts)
   const monthly = await monthlyAverages(db, settings, today)
   const pay = await paySchedule(db, settings, today)
   const bills = await listBills(db, today)
@@ -202,7 +210,14 @@ export async function getFinancialProfile(
     bills: { count: bills.length, monthlyCents: billsMonthlyCents },
     accounts: kindSummaries(accounts, settings.currency),
     savings,
-    ...savingsMeasures({ savings, monthly, billsMonthlyCents, settings, today }),
+    ...savingsMeasures({
+      cashCents: cashSaved(savings),
+      contributions: savings.contributions,
+      monthly,
+      billsMonthlyCents,
+      settings,
+      today,
+    }),
     savingsRateTargetPercent: settings.savingsPlan.savingsRateTargetPercent,
     goals: goals.map((goal) => profileGoal(goal, accounts)),
     userContext: [],

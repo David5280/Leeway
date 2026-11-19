@@ -153,7 +153,7 @@ export function category(name: string, fields: Partial<Category> = {}): Category
 
 /**
  * A linked checking account at First Bank holding $1,234.56, unless told
- * otherwise. Its savings group is worked out with the server's own code.
+ * otherwise. Its kind is worked out with the server's own code.
  */
 export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>): Account {
   const row: Omit<Account, 'kind'> = {

@@ -285,7 +285,11 @@ describe('MCP endpoint', () => {
 
   it('never hands an agent an account mask, which the owner’s own app still shows', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { subtype: 'savings' })
-    await ctx.db.query(`UPDATE accounts SET mask = '9876' WHERE id = $1`, [accountId])
+    // A bank name that repeats the number gives it away too.
+    await ctx.db.query(
+      `UPDATE accounts SET mask = '9876', name = 'SAVINGS ...9876' WHERE id = $1`,
+      [accountId],
+    )
     const { token } = await createToken(ctx.db, 'Coach', 'write')
     const tool = async (name: string, args: Record<string, unknown> = {}) => {
       const response = await rpc(token, 'tools/call', { name, arguments: args })
@@ -305,7 +309,7 @@ describe('MCP endpoint', () => {
       expect(byName.get(name)!.isError, name).toBeUndefined()
     }
     expect(JSON.parse(byName.get('list_accounts')!.content[0]!.text)).toEqual([
-      expect.objectContaining({ id: accountId, kind: 'savings' }),
+      expect.objectContaining({ id: accountId, kind: 'savings', bankName: 'SAVINGS' }),
     ])
     for (const [name, result] of byName) {
       expect(result.content[0]!.text, name).not.toContain('9876')
@@ -319,7 +323,9 @@ describe('MCP endpoint', () => {
       headers: { cookie: `leeway_session=${await createSession(ctx.db)}` },
       payload: {},
     })
-    expect(ownApp.json().result).toEqual([expect.objectContaining({ mask: '9876' })])
+    expect(ownApp.json().result).toEqual([
+      expect.objectContaining({ mask: '9876', bankName: 'SAVINGS ...9876' }),
+    ])
   })
 
   it('offers coaching prompts, filled in with their arguments', async () => {

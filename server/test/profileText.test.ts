@@ -140,8 +140,21 @@ describe('monthly averages', () => {
     })
     // With no essentials picked, all spending counts, uncategorized included.
     expect(essentialSpending(categories, totals[0]!, null)).toBe(251_000)
-    // An income category picked as essential is not spending.
-    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(0)
+    // Picks that are no longer expense categories (income, or deleted) are ignored,
+    // and none left means all spending, as if nothing had been picked.
+    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(251_000)
+    // A partly stale pick keeps the categories that still exist.
+    expect(essentialSpending(categories, totals[0]!, ['rent', 'gone'])).toBe(200_000)
+  })
+
+  it('reads take-home pay as unknown when no income was categorized', () => {
+    const noPay = [[{ categoryId: 'rent', amountCents: 200_000, count: 1 }]]
+    expect(averageMonths(categories, noPay, null)).toEqual({
+      months: 1,
+      incomeCents: null,
+      spendingCents: 200_000,
+      essentialSpendingCents: 200_000,
+    })
   })
 
   it('knows nothing without a whole month', () => {
@@ -238,7 +251,7 @@ describe('profileDigest', () => {
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19.',
       'Emergency fund: savings cover 2.6 months of essentials ($3,000 a month); target 6 months ($18,000), $10,000 to go, reached around July 2028 at the recent pace.',
-      'Savings rate: about 10% of pay ($500 of $5,200 a month: transfers to savings $500). Payroll deductions, such as a pension or a 401(k), are not counted.',
+      'Savings rate seen at the bank: about 10% of take-home pay ($500 of $5,200 a month: transfers to savings $500). Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.',
       'Goals: Japan trip 40% ($3,000 to go by Jun 1, on track).',
       'The owner says: I am saving for a sailboat.',
     ])
@@ -318,6 +331,26 @@ describe('profileDigest', () => {
       // The dated goal comes first: it is the nearer one.
       'Goals: Car 20% ($800 to go by Mar 1, behind pace); Bike 5% ($950 to go).',
     ])
+  })
+
+  it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
+    const profile = emptyProfile({
+      pay: { cadence: 'month', source: 'pay_period', typicalPayCents: null, nextPayday: null },
+      monthly: {
+        months: 2,
+        incomeCents: null,
+        spendingCents: 300_000,
+        essentialSpendingCents: 300_000,
+      },
+      savings: savingsReport([kindReport('savings', 300_000)], { historyStartsOn: null }),
+      emergencyFund: null,
+    })
+    const digest = profileDigest(profile, dollars)
+    expect(digest).toContain('Typical month (last 2 whole months): $3,000 spent.')
+    expect(digest).not.toMatch(/\$0 take-home/)
+    expect(digest.split('\n').at(-1)).toBe(
+      'Not known yet: take-home pay, emergency fund, savings rate.',
+    )
   })
 
   describe('goals', () => {

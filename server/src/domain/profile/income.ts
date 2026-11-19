@@ -27,7 +27,11 @@ export interface PaySchedule {
 export interface MonthlyAverages {
   /** Whole months averaged, up to AVERAGE_MONTHS; 0 when history is too short. */
   months: number
-  /** Money in through income categories, take-home. Null without a whole month. */
+  /**
+   * Money in through income categories, take-home. Null without a whole
+   * month, or when none came in: no income categorized is pay not seen,
+   * never pay of nothing.
+   */
   incomeCents: number | null
   /** Spending through expense categories (and uncategorized), transfers left out. */
   spendingCents: number | null
@@ -51,16 +55,30 @@ export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null):
   return ranges
 }
 
+/**
+ * The essential categories the owner picked that still exist as spending
+ * categories, or null for every spending category. Settings can hold ids of
+ * categories since deleted or replaced, so only current ones count, and a
+ * pick with none left counts all spending rather than none.
+ */
+export function currentEssentials(
+  categories: Category[],
+  essentialIds: string[] | null,
+): Set<string> | null {
+  if (essentialIds === null) return null
+  const picked = new Set(essentialIds)
+  const current = categories.filter((c) => c.kind === 'expense' && picked.has(c.id))
+  return current.length ? new Set(current.map((c) => c.id)) : null
+}
+
 /** Sums the essential categories' spending in one month's totals. Null ids count all spending. */
 export function essentialSpending(
   categories: Category[],
   totals: CategoryTotal[],
   essentialIds: string[] | null,
 ): number {
-  if (essentialIds === null) return sumTotals(categories, totals).spentCents
-  const essentials = new Set(
-    categories.filter((c) => c.kind === 'expense' && essentialIds.includes(c.id)).map((c) => c.id),
-  )
+  const essentials = currentEssentials(categories, essentialIds)
+  if (essentials === null) return sumTotals(categories, totals).spentCents
   return totals
     .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
     .reduce((sum, total) => sum + total.amountCents, 0)
@@ -87,7 +105,7 @@ export function averageMonths(
   }
   return {
     months,
-    incomeCents: Math.round(income / months),
+    incomeCents: income > 0 ? Math.round(income / months) : null,
     spendingCents: Math.round(spending / months),
     essentialSpendingCents: Math.round(essential / months),
   }

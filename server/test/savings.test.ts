@@ -6,8 +6,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { AppContext } from '../src/context.js'
 import { migrate } from '../src/db/migrate.js'
 import { getCheckin } from '../src/domain/checkin.js'
+import type { Db } from '../src/db/pool.js'
+import { listAccounts } from '../src/domain/accounts.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import type * as ProfileModule from '../src/domain/profile/profile.js'
+import { getSavingsGlance, getSavingsReport } from '../src/domain/savings/report.js'
+import { balanceHistory } from '../src/domain/savings/store.js'
 import { getSettings, saveSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -131,8 +135,9 @@ describe('summarize_savings', () => {
     await setHistory(savings.accountId, [['2026-11-10', 750_000]])
     const report = await call('summarize_savings')
     const [cash, retirement] = report.lenses
+    // The rise recorded on the 1st is this month's: the month is measured from Oct 31.
     expect(retirement!.accounts[0]!.changes).toEqual({
-      month: { changeCents: 100_000, since: '2026-11-01' },
+      month: { changeCents: 1_000_000, since: '2026-11-01' },
       days30: { changeCents: 1_000_000, since: '2026-10-20' },
       year: { changeCents: 1_000_000, since: '2025-11-19' },
       all: { changeCents: 1_000_000, since: '2025-10-01' },
@@ -462,6 +467,108 @@ describe('the savings migration', () => {
       [accountId, zone],
     )
     expect(rows).toEqual([{ cents: 4_200, owners: true, utc: false }])
+  })
+})
+
+describe('the savings glance', () => {
+  it('gives the same month, totals and contributions as the full report', async () => {
+    const { ira, brokerage, savings, checking } = await fidelity()
+    await setHistory(ira.accountId, [
+      ['2025-10-01', 4_000_000],
+      ['2026-10-20', 4_700_000],
+      ['2026-11-01', 4_900_000],
+    ])
+    // Seen only since the 10th: left out of this month beside the IRA, as the report does.
+    await setHistory(savings.accountId, [['2026-11-10', 750_000]])
+    await setHistory(brokerage.accountId, [['2026-09-01', 1_000_000]])
+    await insertBankTransaction(ctx.db, checking.accountId, {
+      date: '2026-09-01',
+      name: 'Online transfer',
+      amountCents: 30_000,
+      detailed: 'TRANSFER_OUT_SAVINGS',
+    })
+    const settings = await getSettings(ctx.db)
+    const accounts = await listAccounts(ctx.db, false)
+    const report = await getSavingsReport(ctx.db, settings, '2026-11-19', accounts)
+    const glance = await getSavingsGlance(ctx.db, settings, '2026-11-19', accounts)
+    expect(glance).toEqual({
+      hasSavings: true,
+      totalCents: report.totalCents,
+      cashCents: 800_000,
+      month: report.changes.month,
+      contributions: report.contributions,
+    })
+    // The IRA's $3,000 since Oct 20 and the brokerage's $2,000 since Sep 1.
+    expect(glance.month).toEqual({
+      changeCents: 500_000,
+      since: '2026-11-01',
+      accountsLeftOut: 1,
+    })
+  })
+
+  it('reads only the history this month needs', async () => {
+    const { ira, savings } = await fidelity()
+    await setHistory(ira.accountId, [
+      ['2025-10-01', 4_000_000],
+      ['2026-10-20', 4_700_000],
+      ['2026-11-01', 4_900_000],
+    ])
+    await setHistory(savings.accountId, [['2026-11-10', 750_000]])
+    const ids = [ira.accountId, savings.accountId]
+    // Each account keeps its last balance on or before Oct 31, and everything after.
+    const recent = await balanceHistory(ctx.db, ids, '2026-11-19', '2026-10-31')
+    expect(recent.get(ira.accountId)!.map((point) => point.day)).toEqual([
+      '2026-10-20',
+      '2026-11-01',
+    ])
+    expect(recent.get(savings.accountId)!.map((point) => point.day)).toEqual(['2026-11-10'])
+    // Without a day, all of it.
+    const all = await balanceHistory(ctx.db, ids, '2026-11-19')
+    expect(all.get(ira.accountId)).toHaveLength(3)
+  })
+
+  it('has nothing to show without savings, and no cash figure without a savings account', async () => {
+    await insertBankAccount(ctx.db, { subtype: 'checking' })
+    const settings = await getSettings(ctx.db)
+    const none = await getSavingsGlance(
+      ctx.db,
+      settings,
+      '2026-11-19',
+      await listAccounts(ctx.db, false),
+    )
+    expect(none).toEqual({
+      hasSavings: false,
+      totalCents: 0,
+      cashCents: null,
+      month: null,
+      contributions: null,
+    })
+    await insertBankAccount(ctx.db, { type: 'investment', subtype: 'ira', balanceCents: 5_000 })
+    // An account in another currency is listed as savings but never added up.
+    await insertBankAccount(ctx.db, { subtype: 'savings', currency: 'EUR', balanceCents: 9_000 })
+    const glance = await getSavingsGlance(
+      ctx.db,
+      settings,
+      '2026-11-19',
+      await listAccounts(ctx.db, false),
+    )
+    expect(glance).toMatchObject({ hasSavings: true, totalCents: 5_000, cashCents: 0 })
+  })
+
+  it('lists the accounts once when the financial profile is built', async () => {
+    await fidelity()
+    const queries: string[] = []
+    const watched = {
+      query: (text: string, values?: unknown[]) => {
+        queries.push(text)
+        return ctx.db.query(text, values)
+      },
+    } as unknown as Db
+    await getFinancialProfile(watched, await getSettings(ctx.db), '2026-11-19')
+    const accountLists = queries.filter((text) =>
+      /FROM accounts a LEFT JOIN connections/.test(text),
+    )
+    expect(accountLists).toHaveLength(1)
   })
 })
 

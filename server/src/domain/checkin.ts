@@ -3,6 +3,7 @@
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
 import { formatCents } from '../lib/money.js'
+import { listAccounts } from './accounts.js'
 import { listAlerts } from './alerts.js'
 import { listBills } from './bills.js'
 import { budgetReport } from './budgetReport.js'
@@ -15,7 +16,7 @@ import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
 import { monthlyAverages } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
-import { getSavingsReport, type SavingsReport } from './savings/report.js'
+import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
@@ -45,7 +46,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     getNetWorth(db, today, NET_WORTH_DAYS),
     listAlerts(db, settings, today),
     // Only what the savings glance needs beyond the reads above, not the whole profile.
-    getSavingsReport(db, settings, today),
+    listAccounts(db, false).then((accounts) => getSavingsGlance(db, settings, today, accounts)),
     monthlyAverages(db, settings, today),
   ])
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
@@ -125,7 +126,14 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     },
     savings: savingsGlance(
       savings,
-      savingsMeasures({ savings, monthly, billsMonthlyCents, settings, today }),
+      savingsMeasures({
+        cashCents: savings.cashCents,
+        contributions: savings.contributions,
+        monthly,
+        billsMonthlyCents,
+        settings,
+        today,
+      }),
     ),
   }
 }
@@ -135,13 +143,13 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
  * fund and the savings rate, worked out as the financial profile does. Null
  * without any savings.
  */
-function savingsGlance(savings: SavingsReport, { emergencyFund, savingsRate }: SavingsMeasures) {
+function savingsGlance(savings: SavingsGlance, { emergencyFund, savingsRate }: SavingsMeasures) {
   if (!savings.hasSavings) return null
   return {
     totalCents: savings.totalCents,
     /** Measured from the first of the month, or from the first day of history when later. */
-    changeThisMonthCents: savings.changes.month?.changeCents ?? null,
-    changeSince: savings.changes.month?.since ?? null,
+    changeThisMonthCents: savings.month?.changeCents ?? null,
+    changeSince: savings.month?.since ?? null,
     emergencyFundMonths: emergencyFund?.monthsCovered ?? null,
     emergencyFundTargetMonths: emergencyFund?.targetMonths ?? null,
     /** Null when pay or saving is unknown, never a guess of zero. */

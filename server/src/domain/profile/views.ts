@@ -1,7 +1,7 @@
-// The Savings, Retirement and Investing screens' data, built from the
-// financial profile: the whole picture, then one lens per savings kind (see
-// lens.ts for the four parts every lens shares). A screen renders a lens as
-// it comes; nothing here is worked out again in the browser.
+// The savings view that summarize_savings returns, built from the financial
+// profile: the whole picture, then one lens per savings kind (see lens.ts for
+// the four parts every lens shares). Each lens comes fully worked out, so
+// whatever shows it never has to work anything out again.
 
 import { isSavingsKind, type SavingsKind } from '../accountKinds.js'
 import type { BankContributions } from '../savings/contributions.js'
@@ -15,7 +15,7 @@ import type { Lens } from './lens.js'
 import { LENS_BUILDERS } from './lenses.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
-/** One savings kind's lens, with the detail its screen shows beside the four parts. */
+/** One savings kind's lens, with the detail that goes beside the four parts. */
 export interface SavingsLens extends Lens<SavingsKind> {
   totalCents: number
   changes: CombinedChanges

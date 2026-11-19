@@ -1,36 +1,39 @@
-// Reads what the savings report needs from Postgres: the accounts, their
-// balance history and the transfers that fed them. Queries only; the rules
-// live in the pure modules next to this one.
+// Reads what the savings report needs from Postgres: balance history and the
+// transfers that fed savings. Queries only; the rules live in the pure modules
+// next to this one.
 
 import type { Db } from '../../db/pool.js'
 import { addDays, type IsoDate } from '../../lib/dates.js'
-import { listAccounts, type Account } from '../accounts.js'
 import { CONTRIBUTION_CODES, CONTRIBUTION_DAYS, type TransferCandidate } from './contributions.js'
 import type { BalancePoint } from './history.js'
-
-/** Every counted (not hidden) account, savings or not. */
-export async function countedAccounts(db: Db): Promise<Account[]> {
-  return listAccounts(db, false)
-}
 
 /**
  * Each account's recorded balances before today, oldest first. Today's
  * balance is the account's current one, which the caller adds, so a day
  * recorded ahead of the owner's calendar (by an older server's clock) never
  * counts twice or as the future.
+ *
+ * With `through`, only what a change measured from the close of that day
+ * needs: each account's last balance on or before it, and everything after.
+ * An account with nothing that early keeps all its points, so its first day
+ * of history is still there to measure from.
  */
 export async function balanceHistory(
   db: Db,
   accountIds: string[],
   today: IsoDate,
+  through: IsoDate | null = null,
 ): Promise<Map<string, BalancePoint[]>> {
   const byAccount = new Map<string, BalancePoint[]>(accountIds.map((id) => [id, []]))
   if (accountIds.length === 0) return byAccount
   const { rows } = await db.query<BalancePoint & { accountId: string }>(
-    `SELECT account_id AS "accountId", day, balance_cents AS cents FROM balance_history
+    `SELECT account_id AS "accountId", day, balance_cents AS cents FROM balance_history h
      WHERE account_id = ANY($1::uuid[]) AND day < $2
+       AND ($3::date IS NULL OR day >= coalesce(
+         (SELECT max(day) FROM balance_history e WHERE e.account_id = h.account_id AND e.day <= $3),
+         '-infinity'))
      ORDER BY day`,
-    [accountIds, today],
+    [accountIds, today, through],
   )
   for (const { accountId, ...point } of rows) byAccount.get(accountId)!.push(point)
   return byAccount

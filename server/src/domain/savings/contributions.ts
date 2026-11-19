@@ -31,6 +31,19 @@ const DESTINATION_BY_CODE: Record<string, ContributionDestination> = {
 /** Every bank category that moves money into or out of savings and investments. */
 export const CONTRIBUTION_CODES = Object.keys(DESTINATION_BY_CODE)
 
+/**
+ * Whether a bank category is money moved between everyday accounts and
+ * savings or investments, and which side it reached; null for anything else.
+ * This is the one place that decides it. Leeway's general "internal transfer"
+ * test (spending reports leave those out) answers a wider question; a savings
+ * transfer is always internal, but it is counted here, net, never dropped.
+ */
+export function savingsTransferDestination(
+  providerCategoryDetailed: string | null,
+): ContributionDestination | null {
+  return DESTINATION_BY_CODE[providerCategoryDetailed ?? ''] ?? null
+}
+
 /** How far back contributions are counted. */
 export const CONTRIBUTION_DAYS = 365
 
@@ -79,7 +92,7 @@ export function bankContributions(
   const totalCents: Record<ContributionDestination, number> = { cash: 0, invested: 0 }
   let transferCount = 0
   for (const tx of transactions) {
-    const destination = DESTINATION_BY_CODE[tx.providerCategoryDetailed ?? '']
+    const destination = savingsTransferDestination(tx.providerCategoryDetailed)
     if (!destination || tx.date < since || tx.date > today) continue
     // Money out is positive and money back is negative, so the total is net.
     totalCents[destination] += tx.amountCents

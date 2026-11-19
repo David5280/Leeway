@@ -38,7 +38,7 @@ export const KIND_INFO: Record<AccountKind, KindInfo> = {
   other: { label: 'Other', noun: 'account', side: 'either' },
 }
 
-/** The kinds that hold money put away for later, shown on the Savings page in this order. */
+/** The kinds that hold money put away for later, in the order they are listed. */
 export const SAVINGS_KINDS = ['savings', 'retirement', 'investment'] as const
 export type SavingsKind = (typeof SAVINGS_KINDS)[number]
 
@@ -117,7 +117,9 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
       return 'loan'
     case 'depository':
       if (sub === HEALTH_SAVINGS_SUBTYPE) return 'investment'
-      return SAVINGS_SUBTYPES.has(sub) ? 'savings' : 'checking'
+      if (!SAVINGS_SUBTYPES.has(sub)) return 'checking'
+      // A CD or savings account held as an IRA is retirement money, not an emergency fund.
+      return RETIREMENT_NAME.test(bankName) ? 'retirement' : 'savings'
     case 'investment':
       if (RETIREMENT_SUBTYPES.has(sub)) return 'retirement'
       if (NOT_INVESTED_SUBTYPES.has(sub)) return 'other'
@@ -127,6 +129,23 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
     default:
       return 'other'
   }
+}
+
+// Savings subtypes whose money is locked up until a date, so it is no cash to spend.
+const LOCKED_SUBTYPES = new Set(['cd'])
+
+/**
+ * Whether an account's money is cash the owner can spend before payday: a
+ * checking or savings account, by its kind, that is not locked up like a CD.
+ * A bank HSA, IRA or anything else the owner calls retirement or investing
+ * is not.
+ */
+export function isSpendableCash(
+  account: ClassifiableAccount & { kindChoice: AccountKind | null },
+): boolean {
+  const kind = kindOf(account)
+  if (kind === 'checking') return true
+  return kind === 'savings' && !LOCKED_SUBTYPES.has(account.subtype?.trim().toLowerCase() ?? '')
 }
 
 /** Card and loan accounts are owed; their balance counts against net worth. */

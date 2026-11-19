@@ -131,7 +131,7 @@ function overallInsights(profile: FinancialProfile, { money, locale }: InsightFo
       about: 'overall',
       topic: 'savings_rate',
       tone: 'neutral',
-      text: `You save about ${rate.percent}% of your pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`,
+      text: `About ${rate.percent}% of your take-home pay goes to savings through your bank: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`,
     })
   }
   const contributions = profile.savings.contributions

@@ -80,7 +80,7 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
   const rate = profile.savingsRate
   const shared = {
     id: 'savings_rate' as const,
-    question: 'Am I saving enough?',
+    question: 'How much of my take-home pay goes to savings?',
     parts: [],
     series: [],
   }

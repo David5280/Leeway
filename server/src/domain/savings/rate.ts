@@ -8,8 +8,16 @@
 // owner sets one, and no progress bar toward it, so a partial rate never
 // reads as falling short.
 
-/** Said beside every savings rate built from bank transfers alone. */
+/** Said to the owner beside every savings rate built from bank transfers alone. */
 export const SEEN_AT_BANK = 'Payroll deductions, such as a pension or a 401(k), are not counted.'
+
+/**
+ * Said to an assistant wherever it reads the rate, so the guard travels with
+ * the number: a rate the bank only partly sees is never grounds to say the
+ * owner saves too little.
+ */
+export const RATE_GUARD_FOR_AI =
+  'Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {
@@ -18,7 +26,8 @@ export interface SavingSource {
   monthlyCents: number
   /**
    * Taken from pay before it reaches the bank (a pension or 401k deduction),
-   * so it is added back to take-home pay to get the pay it came out of.
+   * so it is added back to take-home pay to get the pay it came out of. No
+   * source sets it yet: the pension and retirement plan work will feed it.
    */
   beforePaycheck: boolean
 }

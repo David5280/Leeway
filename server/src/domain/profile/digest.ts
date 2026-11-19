@@ -7,7 +7,7 @@ import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
-import { SEEN_AT_BANK } from '../savings/rate.js'
+import { RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
@@ -42,7 +42,10 @@ function monthLine({ monthly }: FinancialProfile, money: Money): string | null {
     monthly.essentialSpendingCents === monthly.spendingCents
       ? ''
       : `, ${money(monthly.essentialSpendingCents!)} of it essential`
-  return `Typical month (last ${plural(monthly.months, 'whole month')}): ${money(monthly.incomeCents!)} take-home pay in, ${money(monthly.spendingCents!)} spent${essential}.`
+  // Pay not seen is left out here and listed as not known, never shown as $0.
+  const payIn =
+    monthly.incomeCents === null ? '' : `${money(monthly.incomeCents)} take-home pay in, `
+  return `Typical month (last ${plural(monthly.months, 'whole month')}): ${payIn}${money(monthly.spendingCents!)} spent${essential}.`
 }
 
 function accountsLine({ accounts }: FinancialProfile, money: Money): string | null {
@@ -83,7 +86,7 @@ function emergencyLine({ emergencyFund: fund, locale }: FinancialProfile, money:
 function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string | null {
   if (!rate) return null
   const parts = rate.sources.map((s) => `${s.label.toLowerCase()} ${money(s.monthlyCents)}`)
-  return `Savings rate: about ${rate.percent}% of pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${SEEN_AT_BANK}`
+  return `Savings rate seen at the bank: about ${rate.percent}% of take-home pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
 }
 
 /** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
@@ -123,6 +126,8 @@ function unknownsLine(profile: FinancialProfile): string | null {
   const unknown: string[] = []
   if (!profile.pay.cadence) unknown.push('pay schedule')
   if (profile.monthly.months === 0) unknown.push('a typical month of income and spending')
+  else if (profile.monthly.incomeCents === null) unknown.push('take-home pay')
+  if (profile.savings.hasSavings && !profile.emergencyFund) unknown.push('emergency fund')
   if (!profile.savingsRate) unknown.push('savings rate')
   if (unknown.length === 0) return null
   return `Not known yet: ${unknown.join(', ')}.`

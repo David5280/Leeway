@@ -130,7 +130,7 @@ describe('savingsInsights', () => {
       [
         'overall',
         'savings_rate',
-        'You save about 8% of your pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'About 8% of your take-home pay goes to savings through your bank: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
       ],
       [
         'overall',
@@ -217,7 +217,7 @@ describe('the savings lens', () => {
       parts: [{ label: 'Savings account', cents: 600_000 }],
     })
     expect(saving).toMatchObject({
-      question: 'Am I saving enough?',
+      question: 'How much of my take-home pay goes to savings?',
       headline: '8%',
       detail:
         'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',

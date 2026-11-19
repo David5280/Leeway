@@ -6,7 +6,6 @@ import { daysBetween, type IsoDate } from '../lib/dates.js'
 import { periodWord, shortDate } from '../lib/words.js'
 import type { AccountAlert } from './accountAlerts.js'
 import type { Checkin } from './checkin.js'
-import { SEEN_AT_BANK } from './savings/rate.js'
 import type { Settings } from './settings.js'
 
 /** A headline and a few short points, the shape every summary writer returns. */
@@ -236,8 +235,8 @@ export function summaryFacts(
       changeMeasuredSince: checkin.savings.changeSince && date(checkin.savings.changeSince),
       emergencyFundMonthsCovered: checkin.savings.emergencyFundMonths,
       emergencyFundTargetMonths: checkin.savings.emergencyFundTargetMonths,
-      savingsRatePercentOfPay: checkin.savings.savingsRatePercent,
-      savingsRateLeavesOut: SEEN_AT_BANK,
+      // No savings rate: the bank sees only part of what is saved (never payroll
+      // deductions such as a pension), and the summary needs none to say how things are going.
     },
   }
 }

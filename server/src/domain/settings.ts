@@ -234,6 +234,19 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   })
 }
 
+/**
+ * Takes deleted categories out of the essential ones the owner picked, so the
+ * stored pick never points at a category that is gone. A pick left empty goes
+ * back to counting every spending category.
+ */
+export async function forgetEssentialCategories(db: Db, deletedIds: string[]): Promise<void> {
+  const settings = await getSettings(db)
+  const picked = settings.savingsPlan.essentialCategoryIds
+  if (!picked?.some((id) => deletedIds.includes(id))) return
+  const kept = picked.filter((id) => !deletedIds.includes(id))
+  await saveSettings(db, mergeSettings(settings, { savingsPlan: { essentialCategoryIds: kept } }))
+}
+
 export async function saveSettings(db: Db, settings: Settings): Promise<Settings> {
   await db.query('UPDATE settings SET data = $1, updated_at = now()', [JSON.stringify(settings)])
   return settings
