@@ -30,6 +30,6 @@ describe('groupBy', () => {
 describe('groupNames', () => {
   it('lists each group once, A to Z, skipping categories without one', () => {
     const categories = [item('a', 'Home'), item('b', null), item('c', 'food'), item('d', 'Home')]
-    expect(groupNames(categories)).toEqual(['food', 'Home'])
+    expect(groupNames(categories, 'en-US')).toEqual(['food', 'Home'])
   })
 })

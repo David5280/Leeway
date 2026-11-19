@@ -43,7 +43,7 @@ export function Budgets() {
             {periodLabel(b.period.start, b.period.end, settings.locale)}
           </span>
         </div>
-        <div className="row">
+        <div className="row wrap">
           <button type="button" className="btn" onClick={() => setSuggesting((s) => !s)}>
             Suggest from my spending
           </button>
@@ -79,7 +79,7 @@ export function Budgets() {
         <Card label="New category" className="stack">
           <h2>New category</h2>
           <CategoryForm
-            groups={groupNames(categories.data)}
+            groups={groupNames(categories.data, settings.locale)}
             submitLabel="Add category"
             busy={create.isPending}
             error={create.error}

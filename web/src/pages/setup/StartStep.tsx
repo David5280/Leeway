@@ -5,7 +5,7 @@ import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
 import { useApp } from '../../lib/app'
-import { groupBy } from '../../lib/groups'
+import { alphabeticalGroups } from '../../lib/alphabetical'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
@@ -122,7 +122,11 @@ function StartChoices({
   )
 }
 
-/** The categories to create, under their group headings. */
+/**
+ * The categories to create, A to Z under their group headings A to Z, so a
+ * name is quick to find. They are still created in the starter set's own
+ * order, which becomes the budget's.
+ */
 function StarterList({
   rows,
   onEdit,
@@ -130,15 +134,21 @@ function StarterList({
   rows: StarterRow[]
   onEdit: (name: string, change: Edits[string]) => void
 }) {
+  const { settings } = useApp()
+  const named = rows.map((row) => ({
+    name: row.category.name,
+    group: row.category.group ?? null,
+    row,
+  }))
   return (
     <div className="stack-sm" aria-label="Categories to create">
       <p className="small muted">
         Monthly budgets. Leave an amount blank for no budget, or untick a category to leave it out.
       </p>
-      {groupBy(rows, (row) => row.category.group ?? null).map(({ group, items }) => (
+      {alphabeticalGroups(named, settings.locale).map(({ group, categories }) => (
         <Fragment key={group ?? ''}>
           {group && <span className="eyebrow">{group}</span>}
-          {items.map((row) => (
+          {categories.map(({ row }) => (
             <StarterItem key={row.category.name} row={row} onEdit={onEdit} />
           ))}
         </Fragment>
@@ -157,7 +167,7 @@ function StarterItem({
 }) {
   const { money } = useApp()
   return (
-    <div className="list-row">
+    <div className="list-row starter-item">
       <input
         type="checkbox"
         checked={include}

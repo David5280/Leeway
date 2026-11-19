@@ -25,8 +25,8 @@ export function groupBy<T>(items: T[], groupOf: (item: T) => string | null): Gro
   return [...grouped.filter((g) => g.group !== null), ...grouped.filter((g) => g.group === null)]
 }
 
-/** The distinct group names among categories, A to Z, for suggesting one. */
-export function groupNames(categories: { group: string | null }[]): string[] {
+/** The distinct group names among categories, A to Z in a locale's order, for suggesting one. */
+export function groupNames(categories: { group: string | null }[], locale: string): string[] {
   const names = new Set(categories.flatMap((c) => (c.group ? [c.group] : [])))
-  return sortByName([...names], (name) => name)
+  return sortByName([...names], (name) => name, locale)
 }

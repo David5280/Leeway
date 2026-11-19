@@ -26,12 +26,12 @@ test('the Transactions category filter lists categories A to Z under A to Z grou
   expect(listed.first).toBe('All categories')
   // Setup's starter categories come under group headings.
   expect(listed.groups.length).toBeGreaterThan(1)
-  const headed = listed.groups.filter((group) => group.label !== 'Other')
+  const headed = listed.groups.filter((group) => group.label !== 'No group')
   expect(headed.map((g) => g.label)).toEqual(alphabetical(headed.map((g) => g.label)))
   for (const group of listed.groups) {
     expect(group.names, `${group.label} is A to Z`).toEqual(alphabetical(group.names))
   }
   // Ungrouped categories, if any, come last.
-  const other = listed.groups.findIndex((group) => group.label === 'Other')
-  expect(other === -1 || other === listed.groups.length - 1).toBe(true)
+  const ungrouped = listed.groups.findIndex((group) => group.label === 'No group')
+  expect(ungrouped === -1 || ungrouped === listed.groups.length - 1).toBe(true)
 })
