@@ -49,6 +49,8 @@ describe('nameUnderBank', () => {
       'First Bankers checking',
     )
     expect(nameUnderBank({ ...bank, name: 'First Bank  ' })).toBe('First Bank  ')
+    expect(nameUnderBank({ ...bank, name: 'First Bank loan' })).toBe('First Bank loan')
+    expect(nameUnderBank({ ...bank, name: 'First Bank 457(b) plan' })).toBe('457(b) plan')
     expect(nameUnderBank({ ...bank, institutionName: null, name: 'First Bank card' })).toBe(
       'First Bank card',
     )

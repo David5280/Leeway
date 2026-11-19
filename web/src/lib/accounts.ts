@@ -32,14 +32,17 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
 /**
  * An account's name without its bank in front, for a tight row whose second
  * line already names the bank: "Everyday checking" under "First Bank ··4417".
- * A name the owner typed is kept as typed, and so is one that would be left empty.
+ * A name the owner typed is kept as typed, and so is one that would be left
+ * empty or start with a word in lower case.
  */
 export function nameUnderBank(
   account: Pick<Account, 'name' | 'institutionName' | 'manual' | 'nickname'>,
 ) {
   const bank = account.manual || account.nickname ? null : account.institutionName
   if (!bank || !account.name.startsWith(`${bank} `)) return account.name
-  return account.name.slice(bank.length + 1).trim() || account.name
+  const rest = account.name.slice(bank.length + 1).trim()
+  // A bare word in lower case ("loan") reads as part of the bank's name, not as a name.
+  return rest && rest[0] === rest[0]!.toUpperCase() ? rest : account.name
 }
 
 /** Where every link to an account opens: its own page, with everything Leeway knows about it. */
