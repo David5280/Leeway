@@ -483,6 +483,13 @@ button.list-row:hover {
   white-space: nowrap;
 }
 
+/* A finger's tap is 44px tall at the least, Apple's smallest comfortable target. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+  }
+}
+
 .btn:hover {
   border-color: var(--muted);
 }

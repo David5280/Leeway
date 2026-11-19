@@ -2,8 +2,9 @@
 // the iPhones in GUARDED_PHONES, upright and turned sideways, installed to the
 // home screen, with lists full of long names. Each screen must have no text
 // over other text or controls, no text cut off without an ellipsis (or squeezed
-// to a sliver with one), no word split across lines, no sideways scrolling, and
-// nothing showing under the status bar, the notch or the home indicator. The
+// to a sliver with one), no word split across lines, no sideways scrolling,
+// nothing showing under the status bar, the notch or the home indicator, and
+// no control in the header smaller than a finger's 44px tap. The layout
 // checks themselves are in layout.ts. Every route the app answers
 // (web/src/routes.ts) must have a screen here; a test below makes sure.
 
@@ -29,23 +30,39 @@ async function settle(page: Page): Promise<void> {
 
 /**
  * Scrolls a share of the way down the page (0 the top, 1 the end) at once,
- * stopping any smooth scroll a form started, and waits for the frame.
+ * and waits until the page stays there for a frame. A form that opens scrolls
+ * itself into view smoothly (FormCard), and that scroll can carry on past a
+ * single jump, so the jump repeats until the page holds still.
  */
 async function scrollTo(page: Page, share: number): Promise<void> {
-  await page.evaluate((to) => {
-    const end = document.documentElement.scrollHeight - window.innerHeight
-    window.scrollTo({ top: end * to, behavior: 'instant' })
-  }, share)
-  await page.evaluate(() => new Promise((done) => requestAnimationFrame(done)))
+  await expect
+    .poll(() =>
+      page.evaluate(async (to) => {
+        const target = Math.round((document.documentElement.scrollHeight - window.innerHeight) * to)
+        window.scrollTo({ top: target, behavior: 'instant' })
+        await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+        return Math.abs(window.scrollY - target) <= 1
+      }, share),
+    )
+    .toBe(true)
+}
+
+/** The header's controls a finger can miss, on screens that have a header. */
+async function headerTaps(page: Page): Promise<string[]> {
+  const banner = page.getByRole('banner')
+  if ((await banner.count()) === 0) return []
+  return (await missedTaps(banner)).map((name) => `tap: "${name}" in the header is under 44px`)
 }
 
 /**
- * Every layout problem on the screen: all checks at the top, then the safe
- * areas again scrolled halfway, where content has moved under the status bar,
- * and at the end, where the last content must also rest clear of the tab bar.
+ * Every layout problem on the screen: all checks at the top, with the
+ * header's tap sizes, then the safe areas again scrolled halfway, where
+ * content has moved under the status bar, and at the end, where the last
+ * content must also rest clear of the tab bar.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   await scrollTo(page, 0)
+  const taps = await headerTaps(page)
   const problems: LayoutProblem[] = await layoutProblems(page)
   for (const [share, checks] of [
     [0.5, ['safe-area']],
@@ -55,7 +72,7 @@ async function problemsOn(page: Page): Promise<string[]> {
     for (const check of checks) problems.push(...(await findProblems(page, check)))
   }
   // Each problem once, however many scroll positions found it.
-  return [...new Set(describeProblems(problems))]
+  return [...taps, ...new Set(describeProblems(problems))]
 }
 
 /** Loads a screen as an installed app on this phone draws it, ready to check. */
@@ -91,7 +108,7 @@ for (const phone of GUARDED_PHONES) {
         })
       }
 
-      test('the header takes at most a fifth of the height, with controls a finger can tap', async ({
+      test('the header takes at most a fifth of the height, on a screen tapped with a finger', async ({
         page,
       }) => {
         await load(page, '/transactions', phone.insets)
@@ -103,9 +120,9 @@ for (const phone of GUARDED_PHONES) {
         const tabs = page.locator('.tabbar')
         await (width > height ? expect(links).toBeVisible() : expect(links).toBeHidden())
         await (width > height ? expect(tabs).toBeHidden() : expect(tabs).toBeVisible())
-        // Every control in the header, links and buttons, is a comfortable tap for a finger.
+        // The header's tap sizes, checked on every screen (problemsOn), hold
+        // only where the phone reports a finger rather than a mouse.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
-        expect(await missedTaps(page.getByRole('banner'))).toEqual([])
       })
 
       test(`the overview is arranged ${phone.editsInPlace ? 'in place' : 'in Settings'}`, async ({
