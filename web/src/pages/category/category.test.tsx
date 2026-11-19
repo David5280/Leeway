@@ -413,6 +413,25 @@ describe('Category page', () => {
       expect(trend).toHaveClass('trend-bad')
     })
 
+    it('compares a category with no budget too, with nothing about what is left', async () => {
+      serve({
+        get_budget: () => ({
+          ...budgetFor(categories, [{ categoryId: coffee.id, amountCents: 1800 }]),
+          previous: {
+            spentCents: 0,
+            spentToDateCents: 0,
+            categories: [{ categoryId: coffee.id, spentToDateCents: 2400 }],
+          },
+        }),
+      })
+      renderCategory(coffee.id)
+      const trend = await screen.findByRole('img', {
+        name: 'Spending compared with this point last month: down 25%',
+      })
+      expect(trend).toHaveClass('trend-good')
+      expect(trend.closest('.key-figure-caption')).toHaveTextContent(/^▼ 25%$/)
+    })
+
     it('compares income with last period, up being good news', async () => {
       serve({
         get_budget: () => ({
