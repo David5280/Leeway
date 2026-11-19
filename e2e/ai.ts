@@ -4,7 +4,7 @@
 // model Anthropic no longer has) is stood in for at the network, by patching
 // what get_ai_usage and get_summary answer.
 
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 /**
  * A folder to save pictures of Settings > AI models in, for review. Unset in
@@ -90,9 +90,22 @@ export async function pretendModelTrouble(page: Page): Promise<void> {
   }))
 }
 
+/** Waits for the notices pretendModelTrouble brings: a model gone, unpriced, and retiring. */
+export async function seeModelTrouble(page: Page): Promise<void> {
+  await expect(page.getByText(/^Anthropic doesn.t have/)).toBeVisible()
+  await expect(page.getByText(/^Leeway has no prices for/)).toBeVisible()
+  await expect(page.getByText(/^Anthropic retires .+ on Nov 30/)).toBeVisible()
+}
+
 /** Makes get_summary answer as if Anthropic had no model for the summary, so Leeway wrote it. */
 export async function pretendSummaryModelGone(page: Page): Promise<void> {
   await patchAnswer(page, 'get_summary', (result) => ({ ...result, ai: 'no_model' }))
+}
+
+/** Waits for the summary card to say why Leeway wrote it, after pretendSummaryModelGone. */
+export async function seeSummaryModelGone(page: Page): Promise<void> {
+  const summary = page.getByRole('region', { name: 'Summary' })
+  await expect(summary.getByText(/isn.t available from Anthropic/)).toBeVisible()
 }
 
 /** Puts the models and the limit back as a new install has them, since later specs share it. */
