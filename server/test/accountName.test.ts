@@ -7,6 +7,7 @@ import {
   type AccountNameParts,
   type NamingAccount,
 } from '../src/domain/accountName.js'
+import { carriesMask } from '../src/domain/accountNumber.js'
 import { readableCase } from '../src/domain/nameWords.js'
 
 /** A linked account the bank calls TOTAL CHECKING at Chase, with no name of the owner's. */
@@ -114,7 +115,7 @@ describe('accountDisplayName', () => {
     )
   })
 
-  it('falls back to the type, then the bank alone, then "Account", whichever shows no mask', () => {
+  it('falls back to the type, the bank alone, then the kind alone, whichever shows no mask', () => {
     const named = (fields: Partial<AccountNameParts>) => accountDisplayName(parts(fields))
     // The name reads "0 1", and the kind itself, 401k, holds the mask 01 too.
     expect(
@@ -122,9 +123,36 @@ describe('accountDisplayName', () => {
     ).toBe('Chase Investment')
     expect(named({ bankName: 'CHECKING 417', mask: '417', institutionName: null })).toBe('Checking')
     // A bank named with the very digits, so nothing built from it can be shown.
-    expect(
-      named({ bankName: 'CHECKING 52', mask: '52', institutionName: 'Bank 52', type: 'other' }),
-    ).toBe('Account')
+    const bank52 = { bankName: 'CHECKING 52', mask: '52', institutionName: 'Bank 52' }
+    expect(named(bank52)).toBe('Checking')
+    expect(named({ ...bank52, type: 'other', subtype: null })).toBe('Account')
+  })
+
+  it('falls back past "Account" to "Money" for a mask of the letters "Account" ends with', () => {
+    const named = (fields: Partial<AccountNameParts>) => accountDisplayName(parts(fields))
+    const nothingElse = { institutionName: null, type: 'other', subtype: null }
+    expect(named({ ...nothingElse, bankName: 'ACCOUNT', mask: 'NT' })).toBe('Money')
+    expect(named({ ...nothingElse, bankName: 'ACCOUNT', mask: 'OUNT' })).toBe('Money')
+    // And "Money" itself is never needed for a mask "Account" leaves out.
+    expect(named({ ...nothingElse, bankName: 'MONEY', mask: 'EY' })).toBe('Account')
+  })
+
+  it('always finds a name without the mask, for every mask of two or three letters', () => {
+    const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+    const masks = letters.flatMap((first) =>
+      letters.flatMap((second) => [
+        first + second,
+        ...letters.map((third) => first + second + third),
+      ]),
+    )
+    // No bank, no kind of its own, and a name of the last resorts' letters.
+    const hardest = { institutionName: null, type: 'other', subtype: null }
+    for (const mask of masks) {
+      for (const bankName of ['ACCOUNT', 'MONEY', 'ACCOUNT MONEY']) {
+        const name = accountDisplayName(parts({ ...hardest, bankName, mask }))
+        expect(name === '' || carriesMask(name, mask), `${bankName} with ${mask}`).toBe(false)
+      }
+    }
   })
 
   it("shows the owner's own name as typed, digits and all", () => {
@@ -262,9 +290,20 @@ describe('readableCase', () => {
 
   it('keeps acronyms and codes with digits as sent', () => {
     expect(readableCase('ROTH IRA')).toBe('Roth IRA')
+    expect(readableCase('STOCKS AND SHARES ISA')).toBe('Stocks and Shares ISA')
     expect(readableCase('HELOC LINE')).toBe('HELOC Line')
     expect(readableCase('PLATINUM X2')).toBe('Platinum X2')
     expect(readableCase('4417')).toBe('4417')
+  })
+
+  it('keeps the well-known kinds of account in capitals', () => {
+    const kinds = ['CD', 'CMA', 'HSA', 'HYSA', 'IRA', 'ISA', 'MMA', 'RRSP', 'SEP', 'TFSA']
+    for (const kind of [...kinds, 'UGMA', 'UTMA']) {
+      expect(readableCase(`MY ${kind}`)).toBe(`My ${kind}`)
+    }
+    const isa = parts({ bankName: 'STOCKS AND SHARES ISA', subtype: 'isa' })
+    expect(accountDisplayName(isa)).toBe('Chase Stocks and Shares ISA')
+    expect(accountDisplayName({ ...isa, bankName: '', institutionName: null })).toBe('ISA')
   })
 
   it('writes ordinals in small letters', () => {
@@ -423,6 +462,27 @@ describe('distinctAccountNames', () => {
     expect(names[15]).toBe('Chase Total Checking (16th Checking)')
     expect(names[16]).toBe('Chase Total Checking (18th Checking)')
     expect(names.join(' ')).not.toMatch(/17/)
+  })
+
+  it('never shows the mask run on from the name into its suffix', () => {
+    const savings = { bankName: 'SAVINGS', subtype: 'savings', mask: 'SC' }
+    const names = distinctAccountNames([
+      account('a', savings),
+      account('b', { ...savings, subtype: 'checking' }),
+    ])
+    // "Chase Savings (Checking)" reads SAVINGSCHECKING, which holds SC.
+    expect(names.get('b')).toBe('Chase Savings (Second Checking)')
+  })
+
+  it('always finds a suffix without a mask of letters, however many share a name', () => {
+    for (const mask of ['NT', 'DM', 'TH', 'ST', 'ND', 'RD']) {
+      const many = Array.from({ length: 30 }, (_, index) =>
+        account(String(index), { bankName: 'ACCOUNT', type: 'other', subtype: null, mask }),
+      )
+      const names = [...distinctAccountNames(many).values()]
+      expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(30)
+      for (const name of names) expect(carriesMask(name, mask), `${name} with ${mask}`).toBe(false)
+    }
   })
 
   it('tells apart by type when the kind itself shows the mask', () => {

@@ -101,6 +101,14 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('CHK44*17', '4417')).toBe('CHK')
   })
 
+  it('reads an x between digits as one more digit of the number', () => {
+    expect(withoutAccountNumber('CHECKING 441x7', '4417')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING 3X9', '39')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING 5x2 PLUS', '52')).toBe('CHECKING PLUS')
+    // Not between digits, an x is a letter: "2X POINTS" keeps it.
+    expect(withoutAccountNumber('2X POINTS CARD', '4417')).toBe('2X POINTS CARD')
+  })
+
   it('takes a one-digit mask, once its zeros are off, only where plainly marked or led up to', () => {
     expect(withoutAccountNumber('1ST TIME CHECKING', '01')).toBe('1ST TIME CHECKING')
     expect(withoutAccountNumber('PLATINUM 2-IN-1 CARD', '0001')).toBe('PLATINUM 2-IN-1 CARD')
@@ -108,14 +116,44 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('CHECKING ENDING IN 1', '01')).toBe('CHECKING')
   })
 
+  it('takes a padded mask written in full however it is placed, even one digit unpadded', () => {
+    expect(withoutAccountNumber('CHK0005', '0005')).toBe('CHK')
+    expect(withoutAccountNumber('CHECKING (0001)', '0001')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING-0005', '0005')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHK00', '00')).toBe('CHK')
+    expect(withoutAccountNumber('CHECKING [00] TOP 10', '00')).toBe('CHECKING TOP 10')
+    // Written short, it still needs a plain mark: "1ST" is no mask of 0001.
+    expect(withoutAccountNumber('CHECKING 1ST', '0001')).toBe('CHECKING 1ST')
+  })
+
   it('takes out a mask with letters, whole or its end', () => {
     expect(withoutAccountNumber('CARD AB12', 'AB12')).toBe('CARD')
     expect(withoutAccountNumber('CARD ending 2AB', '12AB')).toBe('CARD')
     expect(withoutAccountNumber('CARD x2AB PLUS', '12AB')).toBe('CARD PLUS')
-    expect(withoutAccountNumber('CARDX9Z1', 'X9Z1')).toBe('CARD')
     expect(withoutAccountNumber('CARD (ab12)', 'AB12')).toBe('CARD')
     // Its end, unmarked and with more of the name after it, is left to the guarantee.
     expect(withoutAccountNumber('TAB CARD', '12AB')).toBe('TAB CARD')
+  })
+
+  it('takes out a mask with letters only where it plainly starts', () => {
+    expect(withoutAccountNumber('CHECKING AB', 'AB')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING #AB', 'AB')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING ...AB', 'AB')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING XXXXAB', 'AB')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING-AB', 'AB')).toBe('CHECKING')
+    expect(withoutAccountNumber('CHECKING 00AB', 'AB')).toBe('CHECKING')
+    // Starting with a digit, it starts plainly after letters too, like "CHK417".
+    expect(withoutAccountNumber('CHK12AB', '12AB')).toBe('CHK')
+  })
+
+  it("leaves a mask of letters that runs on from a word's own letters to the guarantee", () => {
+    expect(withoutAccountNumber('TOTAL CHECKING', 'NG')).toBe('TOTAL CHECKING')
+    expect(withoutAccountNumber('TOTAL CHECKING', 'CK')).toBe('TOTAL CHECKING')
+    expect(withoutAccountNumber('CABLE SAVINGS', 'AB')).toBe('CABLE SAVINGS')
+    expect(withoutAccountNumber('TEXAS CHECKING', 'AS')).toBe('TEXAS CHECKING')
+    expect(withoutAccountNumber('CARDX9Z1', 'X9Z1')).toBe('CARDX9Z1')
+    // Nor is a mask of letters taken by its end, which is any word's: "XBC" for ABC.
+    expect(withoutAccountNumber('CARD XBC', 'ABC')).toBe('CARD XBC')
   })
 })
 
@@ -130,6 +168,19 @@ describe('asciiDigits', () => {
     expect(asciiDigits('४४१७')).toBe('4417')
     expect(asciiDigits('๔๔๑๗')).toBe('4417')
     expect(asciiDigits('Checking ٠٩')).toBe('Checking 09')
+  })
+
+  it('reads the dingbat digits, which Unicode folds to nothing', () => {
+    expect(asciiDigits('❹❹❶❼')).toBe('4417')
+    expect(asciiDigits('➃➃➀➆')).toBe('4417')
+    expect(asciiDigits('➍➍➊➐')).toBe('4417')
+    expect(asciiDigits('❿ ➉ ➓')).toBe('10 10 10')
+  })
+
+  it('takes the accents off letters, composed or not', () => {
+    expect(asciiDigits('Á1')).toBe('A1')
+    expect(asciiDigits('A\u03011')).toBe('A1')
+    expect(asciiDigits('Épargne')).toBe('Epargne')
   })
 })
 
@@ -176,9 +227,25 @@ describe('carriesMask', () => {
     expect(carriesMask('CHECKING 4417', '４４１７')).toBe(true)
   })
 
+  it('reads dingbat digits and accented letters', () => {
+    expect(carriesMask('CHECKING ❹❹❶❼', '4417')).toBe(true)
+    expect(carriesMask('CHECKING ➀➆', '4417')).toBe(true)
+    expect(carriesMask('Card Á1', 'A1')).toBe(true)
+    expect(carriesMask('Card A1', 'Á1')).toBe(true)
+  })
+
   it('splits runs at letters, so a letter between digits never hides the end of the mask', () => {
     expect(carriesMask('Checking 44x17', '4417')).toBe(true)
     expect(carriesMask('Top 10 Checking', '4417')).toBe(false)
+  })
+
+  it('joins digits across an x, which stands for one more', () => {
+    expect(carriesMask('Checking 441x7', '4417')).toBe(true)
+    expect(carriesMask('Checking 3X9', '39')).toBe(true)
+    expect(carriesMask('Checking 4x4x1x7', '4417')).toBe(true)
+    expect(carriesMask('Card AB1x2', 'AB12')).toBe(true)
+    // Not between digits, it stays a letter.
+    expect(carriesMask('2X Points', '22')).toBe(false)
   })
 
   it('finds a mask with letters whole, split, or by its end', () => {
@@ -208,8 +275,11 @@ describe('carriesMask', () => {
 // The table: every mask crossed with every way a bank writes it and every real
 // word before or after, deterministic, with no randomness.
 
-/** Masks of two to four characters: a leading zero, a year, repeated digits, and letters. */
-const MASKS = ['52', '417', '4417', '0352', '2025', '1111', '12AB', 'X9Z1']
+/**
+ * Masks of two to four characters: leading zeros, down to one digit without
+ * them, a year, repeated digits, and letters, with digits or alone.
+ */
+const MASKS = ['52', '417', '4417', '0352', '0001', '2025', '1111', '12AB', 'X9Z1', 'AB']
 
 /** Characters a bank might put between the halves of a mask. */
 const SEPARATORS = ['/', '_', ',', ':', '+', '(', ')', '‐', '‑', '‒', '–', '−']
@@ -220,6 +290,15 @@ const ZEROS = { arabicIndic: 0x660, extendedArabicIndic: 0x6f0, devanagari: 0x96
 /** Each digit of a mask in another set of digits, letters as they are. */
 function inDigits(mask: string, zero: number): string {
   return mask.replace(/\d/g, (digit) => String.fromCodePoint(zero + Number(digit)))
+}
+
+/** The three sets of dingbat digits, 1 to 10 each. */
+const DINGBATS = ['❶❷❸❹❺❻❼❽❾❿', '➀➁➂➃➄➅➆➇➈➉', '➊➋➌➍➎➏➐➑➒➓']
+
+/** A digit from 1 to 9 as a dingbat, from the set its place picks; anything else as it is. */
+function inDingbats(character: string, place: number): string {
+  if (!/[1-9]/.test(character)) return character
+  return [...DINGBATS[place % DINGBATS.length]!][Number(character) - 1]!
 }
 
 /** Each way a bank might write the mask into "CHECKING", as a whole name. */
@@ -269,6 +348,8 @@ function placements(mask: string): Record<string, string> {
     mixedCase: `Checking ending in ${mask}`,
     mixedCaseAcct: `Checking acct ${mask}`,
     lettersInside: `CHECKING ${head}x${tail}`,
+    xBeforeLast: `CHECKING ${mask.slice(0, -1)}x${mask.slice(-1)}`,
+    upperXBeforeLast: `CHECKING ${mask.slice(0, -1)}X${mask.slice(-1)}`,
     ...Object.fromEntries(
       SEPARATORS.map((separator, index) => [
         `split${index}`,
@@ -279,6 +360,9 @@ function placements(mask: string): Record<string, string> {
     mathBold: `CHECKING ${written((d) => String.fromCodePoint(0x1d7ce + Number(d)))}`,
     superscript: `CHECKING ${written((d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)]!)}`,
     circled: `CHECKING ${written((d) => '⓪①②③④⑤⑥⑦⑧⑨'[Number(d)]!)}`,
+    // Each set of dingbats in turn, and 0, which they lack, as it is.
+    dingbat: `CHECKING ${[...mask].map((character, index) => inDingbats(character, index)).join('')}`,
+    accented: `CHECKING ${[...mask].map((character) => `${character}\u0301`).join('')}`,
     ...Object.fromEntries(
       Object.entries(ZEROS).map(([script, zero]) => [script, `CHECKING ${inDigits(mask, zero)}`]),
     ),
@@ -292,6 +376,8 @@ const GUARANTEE_ONLY = new Set([
   'mathBold',
   'superscript',
   'circled',
+  'dingbat',
+  'accented',
   ...Object.keys(ZEROS),
 ])
 
@@ -312,10 +398,22 @@ const REAL_WORDS = [
 // The oracle: whether a shown name reveals the mask, written on its own from
 // the rule, sharing no code with accountNumber.ts.
 
-/** Text with fullwidth, math, superscript and circled digits folded, and other scripts' read by ZEROS. */
+/**
+ * Text with fullwidth, math, superscript, circled and dingbat digits folded,
+ * other scripts' read by ZEROS, and accents taken off letters.
+ */
 function plainDigits(text: string): string {
   const zeros = [0x30, ...Object.values(ZEROS)]
-  return [...text.normalize('NFKC')]
+  const dingbats = DINGBATS.join('')
+  const unaccented = [...text]
+    .map((character) => {
+      const at = [...dingbats].indexOf(character)
+      return at < 0 ? character : String((at % 10) + 1)
+    })
+    .join('')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  return [...unaccented.normalize('NFKC')]
     .map((character) => {
       if (!/\p{Nd}/u.test(character)) return character
       const point = character.codePointAt(0)!
@@ -335,8 +433,13 @@ function endings(text: string): Set<string> {
 }
 
 function reveals(name: string, mask: string): boolean {
-  const key = plainDigits(mask).toUpperCase()
-  const text = plainDigits(name).toUpperCase()
+  // An x between digits stands for one more: "441x7" reads 4417.
+  const xJoined = (text: string) =>
+    plainDigits(text)
+      .toUpperCase()
+      .replace(/(\d)X(?=\d)/g, '$1')
+  const key = xJoined(mask)
+  const text = xJoined(name)
   if (/^\d+$/.test(key)) {
     // Runs of digits, split by letters alone.
     const unpadded = key.replace(/^0+/, '')
@@ -398,6 +501,15 @@ function splitLeftToGuarantee(mask: string, placement: string): boolean {
 }
 
 /**
+ * Whether the tidying leaves a mask glued to a word's letters to the
+ * guarantee: one starting with a letter, "CHECKINGAB", may be the word's own
+ * letters, as NG is in CHECKING.
+ */
+function gluedLeftToGuarantee(mask: string, placement: string): boolean {
+  return /^\D/.test(mask) && ['glued', 'gluedShort', 'gluedX'].includes(placement)
+}
+
+/**
  * Whether a real word's digits run straight on from the placement's, so the
  * two can spell the mask between them: "...111" then "1-2 YEAR" reads 1111.
  * The tidying rightly takes such digits for the number.
@@ -414,6 +526,10 @@ describe('the oracle', () => {
     expect(reveals('Chase Checking 44–17', '4417')).toBe(true)
     expect(reveals('Chase Checking ٤٤١٧', '4417')).toBe(true)
     expect(reveals('Chase Card 2AB', '12AB')).toBe(true)
+    expect(reveals('Chase Checking 441x7', '4417')).toBe(true)
+    expect(reveals('Chase Checking 3X9', '39')).toBe(true)
+    expect(reveals('Chase Checking ❹❹❶❼', '4417')).toBe(true)
+    expect(reveals('Chase Card Á1', 'A1')).toBe(true)
     expect(reveals('Chase Checking', '4417')).toBe(false)
     expect(reveals('Chase Top 10', '4417')).toBe(false)
   })
@@ -436,7 +552,7 @@ describe('the guarantee, across masks, placements and real words', () => {
 
   it('covers every pairing', () => {
     const perMask = Object.keys(placements('4417')).length
-    expect(perMask).toBe(61)
+    expect(perMask).toBe(65)
     expect(cases).toHaveLength(MASKS.length * perMask * (1 + REAL_WORDS.length * 2))
   })
 
@@ -453,6 +569,7 @@ describe('the guarantee, across masks, placements and real words', () => {
       .filter(({ placement }) => !GUARANTEE_ONLY.has(placement))
       .filter(({ placement, wordFirst }) => wordFirst || !AMBIGUOUS_BEFORE_WORDS.has(placement))
       .filter(({ placement, mask }) => !splitLeftToGuarantee(mask, placement))
+      .filter(({ placement, mask }) => !gluedLeftToGuarantee(mask, placement))
       .filter(
         ({ bankName, word, mask, wordFirst }) =>
           wordFirst || !touches(bankName.slice(0, -word.length - 1), word, mask),

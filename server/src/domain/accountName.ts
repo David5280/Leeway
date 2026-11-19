@@ -90,16 +90,28 @@ export function accountDisplayName(parts: AccountNameParts): string {
   const bank = institution ? shortBankName(institution) : ''
   // The guarantee: a name that still shows the mask (see carriesMask), however
   // the bank wrote it, gives way to one made only of the bank and the kind of
-  // account, "Chase Checking", and at worst to "Account", which has no digits
-  // and could only match a mask of the letters it ends with, like "NT".
+  // account, "Chase Checking", then to the kind alone, and at worst to one of
+  // LAST_RESORTS, one of which never carries it.
   const names = [
     withBank(bank, account),
     withBank(bank, kindOfAccount(parts)),
     withBank(bank, typeOfAccount(parts)),
     bank,
+    kindOfAccount(parts),
+    typeOfAccount(parts),
+    ...LAST_RESORTS,
   ]
-  return names.find((name) => name && !carriesMask(name, parts.mask)) ?? 'Account'
+  return names.find((name) => name && !carriesMask(name, parts.mask))!
 }
+
+/**
+ * Names for an account that leave out every mask: if one carries it, the
+ * other cannot. Neither has digits, so no mask of digits matches. A mask with
+ * letters matches a name only by being in it or by its last two characters
+ * ending it, and the two share no pair of letters and end differently, "NT"
+ * and "EY". So a mask like NT, which "Account" carries, never fits "Money".
+ */
+const LAST_RESORTS = ['Account', 'Money'] as const
 
 /**
  * Every account's name, by id, with no two alike, whatever their case. Of
@@ -115,9 +127,8 @@ export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<st
   const sharing = new Map<string, number>()
   for (const account of accounts) {
     const base = accountDisplayName(account)
-    const kind = [kindOfAccount(account), typeOfAccount(account), 'Account'].find(
-      (words) => !carriesMask(words, account.mask),
-    )!
+    const kinds = [kindOfAccount(account), typeOfAccount(account), ...LAST_RESORTS]
+    const kind = kinds.find((words) => !carriesMask(words, account.mask))!
     const key = `${base.toLowerCase()}\n${kind}`
     let count = sharing.get(key) ?? 0
     let name = base
@@ -125,8 +136,11 @@ export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<st
     while (taken.has(name.toLowerCase())) {
       count += 1
       const suffix = count <= 1 ? kind : `${ordinal(count)} ${kind}`
-      // Past eighth the order is in digits, "21st", which must not show the mask either.
-      if (!carriesMask(suffix, account.mask)) name = `${base} (${suffix})`
+      const suffixed = `${base} (${suffix})`
+      // Read whole, the suffix must not show the mask, alone or run on from the
+      // name: past eighth the order is in digits, "21st", and "Chase Savings
+      // (Checking)" carries the mask SC across the two.
+      if (!carriesMask(suffixed, account.mask)) name = suffixed
     }
     sharing.set(key, Math.max(count, 1))
     taken.add(name.toLowerCase())
