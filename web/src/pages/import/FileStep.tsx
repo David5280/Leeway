@@ -72,7 +72,7 @@ export function FileStep({
         )}
       </div>
       {file && (
-        <label className="row small">
+        <label className="check small">
           <input
             type="checkbox"
             checked={hasHeader}

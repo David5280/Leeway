@@ -221,7 +221,7 @@ function SignChoice({
 }) {
   if (mapping.amount?.kind !== 'signed') {
     return (
-      <label className="row small" style={{ alignSelf: 'end', minHeight: 44 }}>
+      <label className="check small" style={{ alignSelf: 'end', minHeight: 44 }}>
         <input
           type="checkbox"
           checked={mapping.flip}

@@ -10,7 +10,7 @@ export function ColorPicker({
   onChange: (hex: string) => void
 }) {
   return (
-    <div className="row wrap" role="radiogroup" aria-label="Color">
+    <div className="row wrap swatches" role="radiogroup" aria-label="Color">
       {CATEGORY_COLORS.map(([name, hex]) => (
         <button
           key={hex}

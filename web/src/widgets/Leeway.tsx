@@ -15,7 +15,7 @@ function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
     <ul className="plain-list small" aria-label="Set aside for goals">
       {setAsides.map((item) => (
         <li key={item.goalId} className="row-between">
-          <Link to="/plan/goals" className="row" style={{ gap: 8, color: 'inherit' }}>
+          <Link to="/plan/goals" className="row tap" style={{ gap: 8, color: 'inherit' }}>
             <Dot color={item.color} />
             Set aside for {item.name}
           </Link>
