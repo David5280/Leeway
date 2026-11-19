@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, Loading, Setting, Switch } from '../../components/ui'
+import type { NotificationKind } from '../../../../server/src/domain/notifications/settings'
 import { useApp } from '../../lib/app'
 import { browserEnvironment, currentEndpoint, pushSupport, type PushSupport } from '../../lib/push'
 import { hourLabel } from './email/emailText'
@@ -100,7 +101,7 @@ function Threshold({
   shown,
   save,
 }: {
-  kind: string
+  kind: NotificationKind
   shown: NotificationChoices
   save: Save
 }) {

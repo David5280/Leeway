@@ -34,8 +34,7 @@ export function inboxItem(fields: Partial<InboxItem> & Pick<InboxItem, 'id' | 't
 /** The inbox actions, keeping read and dismissed state like the server. */
 export function inboxHandlers(initial: InboxItem[]): Handlers {
   let items = initial
-  const unread = () =>
-    items.filter((item) => item.readAt === null && item.resolvedAt === null).length
+  const unread = () => items.filter((item) => item.readAt === null).length
   const read = (ids: unknown) => {
     const chosen = Array.isArray(ids) ? ids : items.map((item) => item.id)
     items = items.map((item) =>

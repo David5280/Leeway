@@ -1,18 +1,20 @@
-// The notifier: on a timer and after each sync, brings the inbox up to date
+// The notifier: on a timer and soon after any sync, brings the inbox up to date
 // with the data and sends any push owed. Every step can run again safely.
 
 import type { AppContext } from '../../context.js'
+import { SECOND_MS } from '../../lib/time.js'
 import { deliverPushes, type DeliveryResult } from './delivery.js'
 import { pruneInbox, recordCandidates, resolveCleared } from './inbox.js'
-import {
-  getNotificationSettings,
-  NOTIFICATION_KINDS,
-  type NotificationSettings,
-} from './settings.js'
+import { getNotificationSettings, kindsOn, type NotificationSettings } from './settings.js'
 import { gatherCandidates } from './sources.js'
 
 /** How often the notifier runs, besides right after a sync. */
 export const NOTIFIER_MINUTES = 5
+/**
+ * How soon after a sync the notifier runs: long enough that several banks
+ * syncing one after another make one check, and so one push.
+ */
+export const NOTIFY_AFTER_SYNC_MS = 5 * SECOND_MS
 
 /**
  * Adds new notifications, clears conditions that ended, and prunes old ones.
@@ -23,9 +25,9 @@ export async function refreshInbox(ctx: AppContext): Promise<NotificationSetting
   const now = ctx.now()
   const candidates = await gatherCandidates(ctx, choices)
   await recordCandidates(ctx.db, candidates, now)
-  const checked = NOTIFICATION_KINDS.filter((kind) => choices.kinds[kind])
-  await resolveCleared(ctx.db, checked, candidates, now)
-  await pruneInbox(ctx.db, now)
+  const on = kindsOn(choices)
+  await resolveCleared(ctx.db, on, candidates, now)
+  await pruneInbox(ctx.db, now, on)
   return choices
 }
 

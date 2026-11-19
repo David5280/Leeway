@@ -166,6 +166,7 @@ describe('NotificationsSection: push on this device', () => {
         endpoint: ENDPOINT,
         keys: { p256dh: 'device-key', auth: 'device-auth' },
         label: expect.any(String),
+        origin: window.location.origin,
       },
     ])
     expect(await screen.findByText('Push is on for this device.')).toBeInTheDocument()
@@ -220,11 +221,36 @@ describe('NotificationsSection: push on this device', () => {
     expect(server.actions('subscribe_push')).toEqual([])
   })
 
-  it('says why push could not be turned on', async () => {
-    serve({}, { '/api/actions/subscribe_push': failing('Use a push service address', 400) })
-    await renderSection()
+  it('says in one line why the server refused this browser, and leaves it unsubscribed', async () => {
+    serve(
+      {},
+      {
+        '/api/actions/subscribe_push': failing(
+          'endpoint: This browser uses a push service Leeway does not know',
+        ),
+      },
+    )
+    const browser = await renderSection()
     await userEvent.click(turnOn())
-    expect(await screen.findByRole('alert')).toHaveTextContent('Use a push service address')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Push stays off on this browser. This browser uses a push service Leeway does not know.',
+    )
+    expect(browser?.subscription.unsubscribe).toHaveBeenCalled()
+    expect(turnOn()).toBeEnabled()
+  })
+
+  it('says why push could not be turned on for any other reason, as the server says it', async () => {
+    serve(
+      {},
+      {
+        '/api/actions/subscribe_push': () =>
+          Response.json({ error: 'internal', message: 'The server is down' }, { status: 500 }),
+      },
+    )
+    const browser = await renderSection()
+    browser?.subscription.unsubscribe.mockRejectedValue(new Error('already gone'))
+    await userEvent.click(turnOn())
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^The server is down$/)
   })
 
   it('says why push could not be turned off', async () => {

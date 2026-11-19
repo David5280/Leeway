@@ -107,12 +107,50 @@ function screenOf(url) {
 // A tap on a notification opens its screen, in Leeway's window if one is open.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const path = screenOf(event.notification.data && event.notification.data.url)
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const open = windows.find((client) => new URL(client.url).origin === self.location.origin)
-      if (!open) return self.clients.openWindow(path)
-      return open.focus().then((client) => client.navigate(path))
-    }),
-  )
+  event.waitUntil(openScreen(screenOf(event.notification.data && event.notification.data.url)))
 })
+
+/**
+ * Shows a screen in Leeway's open window, or a new one. A window this worker
+ * does not control (opened before it took over) can't be sent elsewhere:
+ * navigate() fails or gives nothing back, so a new window opens instead.
+ */
+async function openScreen(path) {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  const open = windows.find((client) => new URL(client.url).origin === self.location.origin)
+  if (open) {
+    try {
+      const focused = await open.focus()
+      if (await focused.navigate(path)) return
+    } catch {
+      // Not ours to steer; a new window below.
+    }
+  }
+  await self.clients.openWindow(path)
+}
+
+// The browser renewed this device's push address (some do, now and then):
+// hand the server the new one, or pushes would stop with no word.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(renewSubscription(event.oldSubscription, event.newSubscription))
+})
+
+async function renewSubscription(old, renewed) {
+  const fresh = renewed || (old ? await self.registration.pushManager.subscribe(old.options) : null)
+  if (!fresh) return
+  const { endpoint, keys } = fresh.toJSON()
+  await callAction('subscribe_push', { endpoint, keys, origin: self.location.origin })
+  if (old && old.endpoint !== endpoint) {
+    await callAction('unsubscribe_push', { endpoint: old.endpoint })
+  }
+}
+
+/** Calls one of the server's actions as the signed-in owner, as the app does. */
+function callAction(name, input) {
+  return fetch(`/api/actions/${name}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}

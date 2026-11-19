@@ -180,6 +180,20 @@ describe('push on a device', () => {
     expect(error.message).toMatch(/push service Leeway does not know/)
   })
 
+  it('lets a browser on a push service it would not take load its settings and turn off', async () => {
+    const elsewhere = 'https://push.example.net/device-1'
+    const view = await call('get_notification_settings', { endpoint: elsewhere })
+    expect(view.push).toMatchObject({ devices: 0, thisDevice: false })
+    expect((await call('unsubscribe_push', { endpoint: elsewhere })).push.devices).toBe(0)
+    expect(await callError('send_test_push', { endpoint: elsewhere })).toMatchObject({
+      code: 'not_found',
+    })
+    // Still a well-formed address, though.
+    expect(
+      await callError('get_notification_settings', { endpoint: 'not an address' }),
+    ).toMatchObject({ code: 'invalid_input' })
+  })
+
   it('sends a test to this device only', async () => {
     await call('subscribe_push', subscriptionFor(PHONE))
     await call('subscribe_push', subscriptionFor('https://fcm.googleapis.com/fcm/send/laptop'))

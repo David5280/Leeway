@@ -18,6 +18,7 @@ import {
 import { getSettings, mergeSettings, saveSettings } from '../src/domain/settings.js'
 import { MINUTE_MS } from '../src/lib/time.js'
 import { listSubscriptions, saveSubscription } from '../src/push/subscriptions.js'
+import { actionCaller } from './actionCaller.js'
 import { FakePushSender } from './fakePush.js'
 import { subscriptionFor } from './fixtures/push.js'
 import {
@@ -54,6 +55,15 @@ beforeEach(async () => {
   )
   await saveSubscription(ctx.db, subscriptionFor(PHONE))
 })
+
+const { call } = actionCaller(() => ctx)
+
+async function setBalance(accountId: string, cents: number) {
+  await ctx.db.query('UPDATE accounts SET balance_cents = $2, available_cents = $2 WHERE id = $1', [
+    accountId,
+    cents,
+  ])
+}
 
 const overdrawn = (name = 'Everyday') =>
   insertBankAccount(ctx.db, { name, subtype: 'checking', balanceCents: -4210, mask: '6789' })
@@ -250,6 +260,156 @@ describe('delivering', () => {
     expect(await runNotifier(ctx)).toBe('quiet')
     await updateNotificationSettings(ctx.db, { quietHours: { on: false } })
   }
+})
+
+describe('a device that fails', () => {
+  it('sends the healthy devices one push when another throws, and never repeats it', async () => {
+    // As a browser key that is not a point on the curve once made encryption throw.
+    await saveSubscription(ctx.db, subscriptionFor(LAPTOP))
+    push.answers.set(PHONE, new Error('Public key is not valid for specified curve'))
+    await overdrawn()
+    expect(await runNotifier(ctx)).toBe('sent')
+    expect(push.sent.map((one) => one.endpoint)).toEqual([LAPTOP])
+    expect(await pushStates()).toEqual(['sent'])
+    for (let run = 0; run < 4; run++) {
+      ctx.setNow(later(MIN_PUSH_GAP_MS + MINUTE_MS))
+      expect(await runNotifier(ctx)).toBe('nothing')
+    }
+    expect(push.sent).toHaveLength(1)
+  })
+
+  it('lets the push go when the only device throws, rather than trying it all day', async () => {
+    push.answers.set(PHONE, new Error('broken'))
+    await overdrawn()
+    expect(await runNotifier(ctx)).toBe('dropped')
+    expect(await pushStates()).toEqual(['skipped'])
+  })
+
+  it('settles the push before noting each device, so a failure there never sends it twice', async () => {
+    await overdrawn()
+    // Noting a delivery fails: the database refuses any success time.
+    await ctx.db.query(
+      'ALTER TABLE push_subscriptions ADD CONSTRAINT no_success CHECK (last_success_at IS NULL)',
+    )
+    try {
+      await expect(runNotifier(ctx)).rejects.toThrow(/no_success/)
+    } finally {
+      await ctx.db.query('ALTER TABLE push_subscriptions DROP CONSTRAINT no_success')
+    }
+    expect(await pushStates()).toEqual(['sent'])
+    ctx.setNow(later(MIN_PUSH_GAP_MS))
+    expect(await runNotifier(ctx)).toBe('nothing')
+    expect(push.sent).toHaveLength(1)
+  })
+})
+
+describe('a condition that comes and goes', () => {
+  it('still pushes one that cleared and came back during quiet hours', async () => {
+    // 11 PM in Denver: overdrawn, its push held.
+    ctx.setNow(new Date('2026-11-18T06:00:00Z'))
+    const { accountId } = await overdrawn()
+    expect(await runNotifier(ctx)).toBe('quiet')
+    // 1 AM: a deposit clears it, and its push is let go.
+    ctx.setNow(new Date('2026-11-18T08:00:00Z'))
+    await setBalance(accountId, 500_000)
+    expect(await runNotifier(ctx)).toBe('nothing')
+    expect(await pushStates()).toEqual(['skipped'])
+    // 1:30 AM: overdrawn again, within the hour, so it picks up where it was, owed again.
+    ctx.setNow(new Date('2026-11-18T08:30:00Z'))
+    await setBalance(accountId, -4_210)
+    expect(await runNotifier(ctx)).toBe('quiet')
+    expect(await pushStates()).toEqual(['pending'])
+    // 8 AM: out it goes, once.
+    ctx.setNow(new Date('2026-11-18T15:00:00Z'))
+    expect(await runNotifier(ctx)).toBe('sent')
+    expect(push.sent.map((one) => one.message.title)).toEqual(['Overdrawn'])
+  })
+
+  it('still pushes one that flapped while waiting out the gap between pushes', async () => {
+    await overdrawn('Everyday')
+    expect(await runNotifier(ctx)).toBe('sent')
+    ctx.setNow(later(2 * MINUTE_MS))
+    const { accountId } = await overdrawn('Savings')
+    expect(await runNotifier(ctx)).toBe('waiting')
+    ctx.setNow(later(2 * MINUTE_MS))
+    await setBalance(accountId, 500_000)
+    expect(await runNotifier(ctx)).toBe('nothing')
+    ctx.setNow(later(2 * MINUTE_MS))
+    await setBalance(accountId, -4_210)
+    expect(await runNotifier(ctx)).toBe('waiting')
+    ctx.setNow(new Date(MORNING.getTime() + MIN_PUSH_GAP_MS))
+    expect(await runNotifier(ctx)).toBe('sent')
+    expect(push.sent.map((one) => one.message.body)).toEqual([
+      'Test Everyday is below zero.',
+      'Test Savings is below zero.',
+    ])
+  })
+
+  it('never sends one already sent, when it clears and comes back', async () => {
+    const { accountId } = await overdrawn()
+    expect(await runNotifier(ctx)).toBe('sent')
+    await setBalance(accountId, 500_000)
+    ctx.setNow(later(MIN_PUSH_GAP_MS))
+    await runNotifier(ctx)
+    await setBalance(accountId, -4_210)
+    ctx.setNow(later(MIN_PUSH_GAP_MS))
+    expect(await runNotifier(ctx)).toBe('nothing')
+    expect(push.sent).toHaveLength(1)
+  })
+})
+
+describe('bills and budgets that clear', () => {
+  /** Holds pushes until 7 AM, so a change can come before one goes out. */
+  const atNight = () => ctx.setNow(new Date('2026-11-18T06:00:00Z'))
+  const atSeven = () => ctx.setNow(new Date('2026-11-18T14:00:00Z'))
+
+  it('clears a bill once it is paid, and lets its push go', async () => {
+    // The payment is a large charge too; only the bill is looked at here.
+    await updateNotificationSettings(ctx.db, { kinds: { large_transaction: false } })
+    atNight()
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 180_000,
+      cadence: 'month',
+      anchorDate: '2026-11-19',
+      matchPattern: 'RENT',
+    })
+    expect(await runNotifier(ctx)).toBe('quiet')
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-17',
+      name: 'RENT PAYMENT',
+      amountCents: 180_000,
+    })
+    atSeven()
+    expect(await runNotifier(ctx)).toBe('nothing')
+    const { rows } = await ctx.db.query(
+      'SELECT kind, push_state, resolved_at IS NOT NULL AS cleared FROM notifications',
+    )
+    expect(rows).toEqual([{ kind: 'bill_due', push_state: 'skipped', cleared: true }])
+    expect(push.sent).toEqual([])
+  })
+
+  it('clears a category back under its budget, and lets its push go', async () => {
+    atNight()
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    const food = await call('create_category', { name: 'Groceries', budgetCents: 10_000 })
+    const tx = await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-10',
+      name: 'KING SOOPERS',
+      amountCents: 12_000,
+    })
+    await call('update_transaction', { id: tx, categoryId: food.id })
+    expect(await runNotifier(ctx)).toBe('quiet')
+    // A bigger budget brings it back under.
+    await call('update_category', { id: food.id, budgetCents: 20_000 })
+    atSeven()
+    expect(await runNotifier(ctx)).toBe('nothing')
+    const { rows } = await ctx.db.query(
+      'SELECT kind, push_state, resolved_at IS NOT NULL AS cleared FROM notifications',
+    )
+    expect(rows).toEqual([{ kind: 'over_budget', push_state: 'skipped', cleared: true }])
+  })
 })
 
 describe('what a push may say', () => {

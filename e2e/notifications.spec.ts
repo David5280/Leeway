@@ -32,7 +32,7 @@ test.describe('the inbox', () => {
     await expect(item).toContainText('Unread')
     await expect(page.getByRole('link', { name: /^Inbox, \d+ unread$/ })).toBeVisible()
 
-    await item.getByRole('link', { name: 'Open: Overdrawn' }).click()
+    await item.getByRole('link', { name: /^Open Overdrawn: / }).click()
     await expect(page).toHaveURL(/\/alerts$/)
     await page
       .getByRole('banner')
@@ -41,7 +41,7 @@ test.describe('the inbox', () => {
     await expect(page).toHaveURL(/\/inbox$/)
     await expect(item).not.toContainText('Unread')
 
-    await item.getByRole('button', { name: 'Dismiss: Overdrawn' }).click()
+    await item.getByRole('button', { name: /^Dismiss Overdrawn: / }).click()
     await expect(item).toHaveCount(0)
   })
 

@@ -22,11 +22,24 @@ function sealed(encryptionKey: Buffer): [string, string] {
   return [publicKey, encrypt(JSON.stringify(privateJwk), encryptionKey)]
 }
 
+/** Told how many devices lost push when the key pair had to be replaced. */
+export type OnKeysReplaced = (removedDevices: number) => void
+
+/** What the server log says when the key pair was replaced: a count, never key material. */
+export function keysReplacedLine(removedDevices: number): string {
+  const devices = removedDevices === 1 ? '1 device' : `${removedDevices} devices`
+  return `ENCRYPTION_KEY changed, so push has a new key pair. Push was turned off on ${devices}; turn it on again on each.`
+}
+
 /**
  * The key pair, made and stored the first time it is asked for. Two servers
  * starting at once both try to store one; the first wins and both use it.
  */
-export async function loadVapidKeys(db: pg.Pool, encryptionKey: Buffer): Promise<VapidKeys> {
+export async function loadVapidKeys(
+  db: pg.Pool,
+  encryptionKey: Buffer,
+  onReplaced?: OnKeysReplaced,
+): Promise<VapidKeys> {
   const row = await readRow(db)
   if (!row) {
     await db.query(
@@ -34,12 +47,14 @@ export async function loadVapidKeys(db: pg.Pool, encryptionKey: Buffer): Promise
        ON CONFLICT (id) DO NOTHING`,
       sealed(encryptionKey),
     )
-    return loadVapidKeys(db, encryptionKey)
+    return loadVapidKeys(db, encryptionKey, onReplaced)
   }
   try {
     return vapidKeysFromJwk(JSON.parse(decrypt(row.privateKeyEncrypted, encryptionKey)))
   } catch {
-    return replaceVapidKeys(db, encryptionKey)
+    const { keys, removedDevices } = await replaceVapidKeys(db, encryptionKey)
+    onReplaced?.(removedDevices)
+    return keys
   }
 }
 
@@ -49,14 +64,19 @@ export async function loadVapidKeys(db: pg.Pool, encryptionKey: Buffer): Promise
  * services would refuse messages signed with the new one: those
  * subscriptions are removed, and each device turns push on again.
  */
-async function replaceVapidKeys(db: pg.Pool, encryptionKey: Buffer): Promise<VapidKeys> {
+async function replaceVapidKeys(
+  db: pg.Pool,
+  encryptionKey: Buffer,
+): Promise<{ keys: VapidKeys; removedDevices: number }> {
   const [publicKey, privateKeyEncrypted] = sealed(encryptionKey)
-  await withTransaction(db, async (client) => {
-    await client.query('DELETE FROM push_subscriptions')
+  const removedDevices = await withTransaction(db, async (client) => {
+    const { rowCount } = await client.query('DELETE FROM push_subscriptions')
     await client.query(
       'UPDATE push_keys SET public_key = $1, private_key_encrypted = $2, created_at = now()',
       [publicKey, privateKeyEncrypted],
     )
+    return Number(rowCount)
   })
-  return vapidKeysFromJwk(JSON.parse(decrypt(privateKeyEncrypted, encryptionKey)))
+  const keys = vapidKeysFromJwk(JSON.parse(decrypt(privateKeyEncrypted, encryptionKey)))
+  return { keys, removedDevices }
 }

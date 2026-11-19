@@ -13,7 +13,13 @@ import {
 } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { encryptPayload, MAX_PLAINTEXT_BYTES, receiverKeyBytes } from '../src/push/encrypt.js'
-import { outcomeOf, PADDED_BYTES, WebPushSender, type PushMessage } from '../src/push/sender.js'
+import {
+  KEYS_REUSED_MS,
+  outcomeOf,
+  PADDED_BYTES,
+  WebPushSender,
+  type PushMessage,
+} from '../src/push/sender.js'
 import {
   generateVapidKeys,
   vapidAuthorization,
@@ -39,6 +45,9 @@ const RFC = {
 }
 
 const b64 = (text: string) => Buffer.from(text, 'base64url')
+
+/** 0x04 and 64 bytes: the shape of a P-256 point, but not one on the curve. */
+const OFF_CURVE = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString('base64url')
 
 function keyPair(privateKey?: string): ECDH {
   const pair = createECDH('prime256v1')
@@ -141,6 +150,12 @@ describe('encryptPayload', () => {
     expect(() => receiverKeyBytes({ ...keys, p256dh: 'BAAA' })).toThrow(/uncompressed/)
     expect(() => receiverKeyBytes({ ...keys, auth: 'c2hvcnQ' })).toThrow(/16 bytes/)
   })
+
+  it('refuses a key of the right shape that is not a point on the curve', () => {
+    const { keys } = browser()
+    expect(() => receiverKeyBytes({ ...keys, p256dh: OFF_CURVE })).toThrow(/P-256 point/)
+    expect(() => encryptPayload(Buffer.from('x'), { ...keys, p256dh: OFF_CURVE })).toThrow()
+  })
 })
 
 describe('VAPID', () => {
@@ -200,10 +215,16 @@ describe('VAPID', () => {
     expect(vapidKeysFromJwk(privateJwk).publicKey).toBe(publicKey)
   })
 
-  it("names the app's https address, or a mailto that reaches no one", () => {
-    expect(vapidSubject('https://leeway.example')).toBe('https://leeway.example')
-    expect(vapidSubject('http://localhost:3000')).toBe('mailto:leeway@localhost.invalid')
-    expect(vapidSubject(null)).toBe('mailto:leeway@localhost.invalid')
+  it('names PUBLIC_URL, else the https address the device subscribed from, as a contact', () => {
+    const device = 'https://leeway.home.example'
+    expect(vapidSubject('https://leeway.example', device)).toBe('https://leeway.example')
+    expect(vapidSubject(null, device)).toBe(device)
+    expect(vapidSubject('http://192.168.1.5:3000', device)).toBe(device)
+    // Push needs https except on a developer's own machine, where no one is contacted.
+    expect(vapidSubject('http://localhost:3000', 'http://localhost:3000')).toBe(
+      'mailto:leeway@localhost.invalid',
+    )
+    expect(vapidSubject(null, null)).toBe('mailto:leeway@localhost.invalid')
   })
 })
 
@@ -225,7 +246,7 @@ describe('WebPushSender', () => {
     }) as unknown as typeof fetch
     const sender = new WebPushSender({
       keys: async () => keys,
-      subject: 'https://leeway.example',
+      publicUrl: 'https://leeway.example',
       fetch: fakeFetch,
       now: () => new Date('2026-11-17T18:00:00Z'),
     })
@@ -234,7 +255,11 @@ describe('WebPushSender', () => {
 
   it('posts the message encrypted, padded and signed, with headers push services want', async () => {
     const device = browser()
-    const target = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', ...device.keys }
+    const target = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      ...device.keys,
+      origin: null,
+    }
     const { sender, requests } = senderAnswering(201)
     expect(await sender.send(target, MESSAGE)).toBe('sent')
     const [{ url, init }] = requests as [(typeof requests)[number]]
@@ -271,14 +296,90 @@ describe('WebPushSender', () => {
   ] as const)('reads %i as %s', async (status, outcome) => {
     expect(outcomeOf(status)).toBe(outcome)
     const { sender } = senderAnswering(status)
-    const target = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', ...browser().keys }
+    const target = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      ...browser().keys,
+      origin: null,
+    }
     expect(await sender.send(target, MESSAGE)).toBe(outcome)
   })
 
   it('tries again later when the push service cannot be reached', async () => {
     const { sender } = senderAnswering(new TypeError('fetch failed'))
-    const target = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', ...browser().keys }
+    const target = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      ...browser().keys,
+      origin: null,
+    }
     expect(await sender.send(target, MESSAGE)).toBe('retry')
+  })
+
+  it("refuses a device whose key can't be used, without asking the push service", async () => {
+    const { sender, requests } = senderAnswering(201)
+    const target = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      ...browser().keys,
+      p256dh: OFF_CURVE,
+      origin: null,
+    }
+    expect(await sender.send(target, MESSAGE)).toBe('rejected')
+    expect(requests).toEqual([])
+  })
+
+  it("tries again later when the server's own keys can't be loaded, then loads them afresh", async () => {
+    const load = vi.fn<() => Promise<typeof keys>>()
+    load.mockRejectedValueOnce(new Error('database down')).mockResolvedValue(keys)
+    const fakeFetch = (async () => new Response(null, { status: 201 })) as unknown as typeof fetch
+    const sender = new WebPushSender({ keys: load, publicUrl: null, fetch: fakeFetch })
+    const target = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      ...browser().keys,
+      origin: null,
+    }
+    expect(await sender.send(target, MESSAGE)).toBe('retry')
+    expect(await sender.send(target, MESSAGE)).toBe('sent')
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('loads the keys once for a push to every device, and again after a minute', async () => {
+    let now = new Date('2026-11-17T18:00:00Z')
+    const load = vi.fn(async () => keys)
+    const fakeFetch = (async () => new Response(null, { status: 201 })) as unknown as typeof fetch
+    const sender = new WebPushSender({
+      keys: load,
+      publicUrl: null,
+      fetch: fakeFetch,
+      now: () => now,
+    })
+    const devices = [browser(), browser(), browser()].map((device, index) => ({
+      endpoint: `https://fcm.googleapis.com/fcm/send/${index}`,
+      ...device.keys,
+      origin: null,
+    }))
+    await Promise.all(devices.map((device) => sender.send(device, MESSAGE)))
+    expect(load).toHaveBeenCalledTimes(1)
+    now = new Date(now.getTime() + KEYS_REUSED_MS)
+    await sender.send(devices[0]!, MESSAGE)
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it("signs with the device's own https address as the contact when PUBLIC_URL is not set", async () => {
+    const requests: RequestInit[] = []
+    const fakeFetch = (async (_: string, init: RequestInit) => {
+      requests.push(init)
+      return new Response(null, { status: 201 })
+    }) as unknown as typeof fetch
+    const sender = new WebPushSender({ keys: async () => keys, publicUrl: null, fetch: fakeFetch })
+    const target = {
+      endpoint: 'https://web.push.apple.com/abc',
+      ...browser().keys,
+      origin: 'https://leeway.home.example',
+    }
+    await sender.send(target, MESSAGE)
+    const header = (requests[0]!.headers as Record<string, string>).Authorization!
+    const token = /^vapid t=([^,]+),/.exec(header)![1]!
+    const claims = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString())
+    expect(claims.sub).toBe('https://leeway.home.example')
   })
 
   it('uses the global fetch and the real clock when given none', async () => {
@@ -288,8 +389,12 @@ describe('WebPushSender', () => {
       return new Response(null, { status: 201 })
     })
     try {
-      const sender = new WebPushSender({ keys: async () => keys, subject: 'mailto:a@b.invalid' })
-      const target = { endpoint: 'https://fcm.googleapis.com/fcm/send/xyz', ...browser().keys }
+      const sender = new WebPushSender({ keys: async () => keys, publicUrl: null })
+      const target = {
+        endpoint: 'https://fcm.googleapis.com/fcm/send/xyz',
+        ...browser().keys,
+        origin: null,
+      }
       expect(await sender.send(target, MESSAGE)).toBe('sent')
       expect(calls).toEqual([target.endpoint])
     } finally {

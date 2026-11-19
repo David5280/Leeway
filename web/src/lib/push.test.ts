@@ -128,14 +128,23 @@ describe('subscribing', () => {
       endpoint: ENDPOINT,
       keys: { p256dh: 'device-key', auth: 'device-auth' },
       label: deviceLabel(navigator.userAgent),
+      origin: window.location.origin,
     })
     expect(await currentEndpoint()).toBe(ENDPOINT)
   })
 
-  it('reuses a subscription the browser already has', async () => {
+  it('drops a stale subscription the browser still holds, and makes a fresh one', async () => {
+    // The server has none for this browser: its key changed, or the push service said gone.
     const browser = fakePushBrowser({ subscribed: true })
     expect((await subscribe(PUBLIC_KEY))?.endpoint).toBe(ENDPOINT)
-    expect(browser.pushManager.subscribe).not.toHaveBeenCalled()
+    expect(browser.subscription.unsubscribe).toHaveBeenCalled()
+    expect(browser.pushManager.subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: keyBytes(PUBLIC_KEY),
+    })
+    expect(browser.subscription.unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
+      browser.pushManager.subscribe.mock.invocationCallOrder[0]!,
+    )
   })
 
   it('registers the worker first when none runs yet', async () => {

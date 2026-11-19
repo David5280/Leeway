@@ -15,19 +15,27 @@ import {
 } from '../domain/notifications/inbox.js'
 import { refreshInbox } from '../domain/notifications/notifier.js'
 import {
+  getNotificationSettings,
+  kindsOn,
   notificationSettingsPatchSchema,
   updateNotificationSettings,
 } from '../domain/notifications/settings.js'
 import { notificationSettingsView } from '../domain/notifications/view.js'
 import {
-  endpointSchema,
+  endpointLookupSchema,
   findSubscription,
   listSubscriptions,
   removeSubscription,
   saveSubscription,
   subscriptionSchema,
 } from '../push/subscriptions.js'
+import type { AppContext } from '../context.js'
 import { defineAction } from './action.js'
+
+/** The bell's count, for the kinds the owner has on. */
+async function unread(ctx: AppContext): Promise<{ unread: number }> {
+  return { unread: await unreadCount(ctx.db, kindsOn(await getNotificationSettings(ctx.db))) }
+}
 
 export const countNotificationsAction = defineAction({
   name: 'count_notifications',
@@ -38,7 +46,7 @@ export const countNotificationsAction = defineAction({
   surface: 'app',
   run: async (ctx) => {
     if (await claimBellRefresh(ctx.db, ctx.now())) await refreshInbox(ctx)
-    return { unread: await unreadCount(ctx.db) }
+    return unread(ctx)
   },
 })
 
@@ -50,8 +58,11 @@ export const listNotificationsAction = defineAction({
   scope: 'read',
   surface: 'app',
   run: async (ctx) => {
-    await refreshInbox(ctx)
-    const [items, unread] = await Promise.all([listNotifications(ctx.db), unreadCount(ctx.db)])
+    const on = kindsOn(await refreshInbox(ctx))
+    const [items, unread] = await Promise.all([
+      listNotifications(ctx.db, on),
+      unreadCount(ctx.db, on),
+    ])
     return { items, unread }
   },
 })
@@ -65,7 +76,7 @@ export const markNotificationsReadAction = defineAction({
   surface: 'app',
   run: async (ctx, { ids }) => {
     await markRead(ctx.db, ids, ctx.now())
-    return { unread: await unreadCount(ctx.db) }
+    return unread(ctx)
   },
 })
 
@@ -78,12 +89,12 @@ export const dismissNotificationAction = defineAction({
   surface: 'app',
   run: async (ctx, { id }) => {
     await dismissNotification(ctx.db, id, ctx.now())
-    return { unread: await unreadCount(ctx.db) }
+    return unread(ctx)
   },
 })
 
 /** This browser's push address, when it has one, to say whether push is on here. */
-const deviceInput = z.object({ endpoint: endpointSchema.optional() }).strict()
+const deviceInput = z.object({ endpoint: endpointLookupSchema.optional() }).strict()
 
 export const getNotificationSettingsAction = defineAction({
   name: 'get_notification_settings',
@@ -122,7 +133,7 @@ export const unsubscribePushAction = defineAction({
   name: 'unsubscribe_push',
   title: 'Turn off push',
   description: 'Stop sending notifications to this device.',
-  input: z.object({ endpoint: endpointSchema }).strict(),
+  input: z.object({ endpoint: endpointLookupSchema }).strict(),
   scope: 'write',
   surface: 'app',
   run: async (ctx, { endpoint }) => {
@@ -135,7 +146,7 @@ export const sendTestPushAction = defineAction({
   name: 'send_test_push',
   title: 'Send a test notification',
   description: 'Send a test notification to this device.',
-  input: z.object({ endpoint: endpointSchema }).strict(),
+  input: z.object({ endpoint: endpointLookupSchema }).strict(),
   scope: 'write',
   surface: 'app',
   run: async (ctx, { endpoint }) => {

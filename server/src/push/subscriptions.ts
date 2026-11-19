@@ -37,6 +37,23 @@ export const endpointSchema = z
   .max(1000)
   .refine(isPushEndpoint, 'This browser uses a push service Leeway does not know')
 
+/**
+ * A push address to look up or forget, which is never posted to, so any
+ * well-formed one will do: a browser on a push service Leeway does not take
+ * can still load its settings and turn push off.
+ */
+export const endpointLookupSchema = z.url().max(1000)
+
+/** Whether a string is an address's origin and nothing more, like https://leeway.example. */
+function isOrigin(text: string): boolean {
+  try {
+    const url = new URL(text)
+    return /^https?:$/.test(url.protocol) && url.origin === text
+  } catch {
+    return false
+  }
+}
+
 function validKeys(keys: { p256dh: string; auth: string }): boolean {
   try {
     receiverKeyBytes(keys)
@@ -54,6 +71,8 @@ export const subscriptionSchema = z
       .object({ p256dh: z.string().max(200), auth: z.string().max(100) })
       .refine(validKeys, 'The browser sent keys Leeway cannot use'),
     label: z.string().trim().max(60).optional(),
+    /** Where the app was opened: a contact for push services when PUBLIC_URL is not set. */
+    origin: z.string().max(200).refine(isOrigin, 'Expected an origin').optional(),
   })
   .strict()
 
@@ -66,19 +85,21 @@ export interface Subscription {
   p256dh: string
   auth: string
   label: string | null
+  origin: string | null
   createdAt: Date
   lastSuccessAt: Date | null
 }
 
-const COLUMNS = `id, endpoint, p256dh, auth, label, created_at AS "createdAt",
+const COLUMNS = `id, endpoint, p256dh, auth, label, origin, created_at AS "createdAt",
   last_success_at AS "lastSuccessAt"`
 
 /** Saves a subscription; the same browser subscribing again updates its keys. */
 export async function saveSubscription(db: Db, input: SubscriptionInput): Promise<void> {
   await db.query(
-    `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (endpoint) DO UPDATE SET p256dh = $2, auth = $3, label = $4`,
-    [input.endpoint, input.keys.p256dh, input.keys.auth, input.label || null],
+    `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, origin)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (endpoint) DO UPDATE SET p256dh = $2, auth = $3, label = $4, origin = $5`,
+    [input.endpoint, input.keys.p256dh, input.keys.auth, input.label || null, input.origin ?? null],
   )
 }
 

@@ -2,7 +2,7 @@
 // turned push on (only real push services, removed when they expire).
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { loadVapidKeys } from '../src/push/keys.js'
+import { keysReplacedLine, loadVapidKeys } from '../src/push/keys.js'
 import {
   findSubscription,
   isPushEndpoint,
@@ -57,12 +57,24 @@ describe('VAPID keys', () => {
   it('starts over when ENCRYPTION_KEY changed, removing devices tied to the old key', async () => {
     const old = await loadVapidKeys(ctx.db, ctx.config.encryptionKey)
     await saveSubscription(ctx.db, subscriptionFor('https://fcm.googleapis.com/fcm/send/a'))
+    await saveSubscription(ctx.db, subscriptionFor('https://fcm.googleapis.com/fcm/send/b'))
     const otherKey = Buffer.alloc(32, 9)
-    const fresh = await loadVapidKeys(ctx.db, otherKey)
+    const told: number[] = []
+    const fresh = await loadVapidKeys(ctx.db, otherKey, (removed) => told.push(removed))
     expect(fresh.publicKey).not.toBe(old.publicKey)
     expect(await listSubscriptions(ctx.db)).toEqual([])
+    expect(told).toEqual([2])
     // And the new pair is the one kept.
     expect((await loadVapidKeys(ctx.db, otherKey)).publicKey).toBe(fresh.publicKey)
+  })
+})
+
+describe('the log line for a new key pair', () => {
+  it('counts the devices, and holds no key material', () => {
+    expect(keysReplacedLine(1)).toBe(
+      'ENCRYPTION_KEY changed, so push has a new key pair. Push was turned off on 1 device; turn it on again on each.',
+    )
+    expect(keysReplacedLine(3)).toMatch(/on 3 devices;/)
   })
 })
 
@@ -102,13 +114,35 @@ describe('push endpoints', () => {
         ?.issues[0]?.message,
     ).toBe('This browser uses a push service Leeway does not know')
   })
+
+  it('refuses a key of the right shape that is not a point on the curve', () => {
+    const offCurve = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString('base64url')
+    const keys = { ...deviceKeys(), p256dh: offCurve }
+    const parsed = subscriptionSchema.safeParse({ endpoint: 'https://fcm.googleapis.com/x', keys })
+    expect(parsed.error?.issues[0]?.message).toBe('The browser sent keys Leeway cannot use')
+  })
+
+  it('takes the address the app was opened at, as an origin only', () => {
+    const base = subscriptionFor('https://fcm.googleapis.com/fcm/send/abc')
+    for (const origin of ['https://leeway.example', 'http://localhost:5173']) {
+      expect(subscriptionSchema.safeParse({ ...base, origin }).success).toBe(true)
+    }
+    for (const origin of ['https://leeway.example/inbox', 'ftp://leeway.example', 'nonsense']) {
+      expect(subscriptionSchema.safeParse({ ...base, origin }).success).toBe(false)
+    }
+  })
 })
 
 describe('subscriptions', () => {
   const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1'
 
   it('saves a device once, updating its keys and name when it subscribes again', async () => {
-    await saveSubscription(ctx.db, { ...subscriptionFor(ENDPOINT), label: 'Phone' })
+    await saveSubscription(ctx.db, {
+      ...subscriptionFor(ENDPOINT),
+      label: 'Phone',
+      origin: 'https://leeway.example',
+    })
+    expect((await findSubscription(ctx.db, ENDPOINT))?.origin).toBe('https://leeway.example')
     const renewed = { ...subscriptionFor(ENDPOINT), label: '' }
     await saveSubscription(ctx.db, renewed)
     const devices = await listSubscriptions(ctx.db)
@@ -117,6 +151,7 @@ describe('subscriptions', () => {
       endpoint: ENDPOINT,
       p256dh: renewed.keys.p256dh,
       label: null,
+      origin: null,
       lastSuccessAt: null,
     })
   })

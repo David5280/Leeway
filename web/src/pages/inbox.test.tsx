@@ -84,7 +84,9 @@ describe('Inbox', () => {
 
   it('opens an alert on its screen, marking it read', async () => {
     const server = renderInbox([overdrawn])
-    const open = await screen.findByRole('link', { name: 'Open: Overdrawn' })
+    const open = await screen.findByRole('link', {
+      name: 'Open Overdrawn: Test Everyday is at -$40.',
+    })
     expect(open).toHaveAttribute('href', '/alerts')
     await userEvent.click(open)
     expect(await screen.findByText('Somewhere else')).toBeVisible()
@@ -95,14 +97,18 @@ describe('Inbox', () => {
 
   it('opens a read alert without marking it again', async () => {
     const server = renderInbox([bill])
-    await userEvent.click(await screen.findByRole('link', { name: 'Open: Bill due soon' }))
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Open Bill due soon: Rent is due tomorrow.' }),
+    )
     expect(await screen.findByText('Somewhere else')).toBeVisible()
     expect(server.actions('mark_notifications_read')).toEqual([])
   })
 
   it('dismisses an alert', async () => {
     const server = renderInbox([overdrawn, bill])
-    await userEvent.click(await screen.findByRole('button', { name: 'Dismiss: Bill due soon' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Dismiss Bill due soon: Rent is due tomorrow.' }),
+    )
     await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(1))
     expect(server.actions('dismiss_notification')).toEqual([{ id: 'n2' }])
   })
@@ -111,8 +117,33 @@ describe('Inbox', () => {
     renderInbox([overdrawn], {
       '/api/actions/dismiss_notification': failing('Notification not found', 404),
     })
-    await userEvent.click(await screen.findByRole('button', { name: 'Dismiss: Overdrawn' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Dismiss Overdrawn: Test Everyday is at -$40.' }),
+    )
     expect(await screen.findByRole('alert')).toHaveTextContent('Notification not found')
+  })
+
+  it('names what each row is about on its buttons, so two alike read apart', async () => {
+    const savings = inboxItem({ id: 'n4', title: 'Overdrawn', message: 'Savings is at -$5.' })
+    renderInbox([overdrawn, savings])
+    expect(
+      await screen.findByRole('link', { name: 'Open Overdrawn: Savings is at -$5.' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Dismiss Overdrawn: Test Everyday is at -$40.' }),
+    ).toBeVisible()
+  })
+
+  it('shows a cleared alert not yet read as unread, counts it, and offers Mark all read', async () => {
+    const unreadCleared = { ...cleared, readAt: null }
+    renderInbox([unreadCleared])
+    const [row] = await within(list()).findAllByRole('listitem')
+    expect(row).toHaveClass('unread')
+    expect(row).toHaveTextContent('Unread: Low balance')
+    expect(within(row!).getByText('Cleared')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Inbox, 1 unread' })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Mark all read' }))
+    await waitFor(() => expect(row).not.toHaveClass('unread'))
   })
 
   it('says why the inbox could not load', async () => {

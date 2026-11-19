@@ -2,7 +2,7 @@
 // push shows a notification, and a tap opens its screen in Leeway only.
 
 import workerSource from '../public/sw.js?raw'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 type Listener = (event: Record<string, unknown>) => void
 
@@ -18,7 +18,10 @@ function loadWorker(windows: FakeWindow[] = []) {
   const scope = {
     location: { origin: 'https://leeway.example.com' },
     addEventListener: (name: string, listener: Listener) => (listeners[name] = listener),
-    registration: { showNotification: vi.fn(async () => {}) },
+    registration: {
+      showNotification: vi.fn(async () => {}),
+      pushManager: { subscribe: vi.fn(async () => RENEWED) },
+    },
     clients: {
       matchAll: vi.fn(async () => windows),
       openWindow: vi.fn(async () => null),
@@ -36,6 +39,19 @@ async function dispatch(listener: Listener | undefined, fields: Record<string, u
   listener?.({ ...fields, waitUntil: (promise: Promise<unknown>) => (work = promise) })
   await work
 }
+
+/** A subscription as the Push API gives it. */
+function subscription(endpoint: string) {
+  return {
+    endpoint,
+    options: { userVisibleOnly: true, applicationServerKey: new Uint8Array([4]) },
+    toJSON: () => ({ endpoint, keys: { p256dh: `${endpoint}-key`, auth: 'auth' } }),
+  }
+}
+const OLD = subscription('https://fcm.googleapis.com/fcm/send/old')
+const RENEWED = subscription('https://fcm.googleapis.com/fcm/send/new')
+
+afterEach(() => vi.unstubAllGlobals())
 
 const pushData = (value: unknown) => ({
   json: () => (typeof value === 'string' ? JSON.parse(value) : value),
@@ -92,7 +108,7 @@ describe('service worker notification taps', () => {
     const open: FakeWindow = {
       url: 'https://leeway.example.com/',
       focus: async () => open,
-      navigate: vi.fn(),
+      navigate: vi.fn(async () => open),
     }
     const other: FakeWindow = {
       url: 'https://elsewhere.example/',
@@ -105,6 +121,23 @@ describe('service worker notification taps', () => {
     expect(other.navigate).not.toHaveBeenCalled()
     expect(scope.clients.openWindow).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['refuses', () => Promise.reject(new TypeError('This service worker is not the client'))],
+    ['gives nothing back', async () => null],
+  ])(
+    'opens a new window when the open one is not this worker’s to steer (navigate %s)',
+    async (_, navigate) => {
+      const open: FakeWindow = {
+        url: 'https://leeway.example.com/',
+        focus: async () => open,
+        navigate: vi.fn(navigate),
+      }
+      const { scope, listeners } = loadWorker([open])
+      await dispatch(listeners.notificationclick, tap('/alerts'))
+      expect(scope.clients.openWindow).toHaveBeenCalledWith('/alerts')
+    },
+  )
 
   it('never opens another site, whatever the push says', async () => {
     const { scope, listeners } = loadWorker()
@@ -120,5 +153,72 @@ describe('service worker notification taps', () => {
       ['/inbox'],
       ['/inbox'],
     ])
+  })
+})
+
+describe('service worker subscription renewal', () => {
+  /** Records each action the worker calls, answering as the server would. */
+  function serverCalls() {
+    const calls: { url: string; init: RequestInit }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, init })
+        return new Response('{}')
+      }),
+    )
+    return () =>
+      calls.map(({ url, init }) => ({
+        url,
+        credentials: init.credentials,
+        body: JSON.parse(String(init.body)),
+      }))
+  }
+
+  it('hands the server a renewed address and forgets the old one', async () => {
+    const sent = serverCalls()
+    const { listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, {
+      oldSubscription: OLD,
+      newSubscription: RENEWED,
+    })
+    expect(sent()).toEqual([
+      {
+        url: '/api/actions/subscribe_push',
+        credentials: 'same-origin',
+        body: {
+          endpoint: RENEWED.endpoint,
+          keys: { p256dh: `${RENEWED.endpoint}-key`, auth: 'auth' },
+          origin: 'https://leeway.example.com',
+        },
+      },
+      {
+        url: '/api/actions/unsubscribe_push',
+        credentials: 'same-origin',
+        body: { endpoint: OLD.endpoint },
+      },
+    ])
+  })
+
+  it('subscribes again with the old options when the browser gives no new one', async () => {
+    const sent = serverCalls()
+    const { scope, listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, { oldSubscription: OLD })
+    expect(scope.registration.pushManager.subscribe).toHaveBeenCalledWith(OLD.options)
+    expect(sent().map((call) => call.url)).toEqual([
+      '/api/actions/subscribe_push',
+      '/api/actions/unsubscribe_push',
+    ])
+  })
+
+  it('keeps the address when it did not change, and does nothing with neither', async () => {
+    const sent = serverCalls()
+    const { listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, {
+      oldSubscription: RENEWED,
+      newSubscription: RENEWED,
+    })
+    await dispatch(listeners.pushsubscriptionchange, {})
+    expect(sent().map((call) => call.url)).toEqual(['/api/actions/subscribe_push'])
   })
 })

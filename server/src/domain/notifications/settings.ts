@@ -20,13 +20,24 @@ export const NOTIFICATION_KINDS = [
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 
-/** Kinds that are a condition, like being overdrawn: they clear, and can come back. */
+/**
+ * Kinds that are a condition, like being overdrawn or a bill unpaid: they
+ * clear when the data no longer calls for them (a deposit, a payment, a
+ * refund), and can come back.
+ */
 export const STATE_KINDS: readonly NotificationKind[] = [
   'overdrawn',
   'over_limit',
   'low_balance',
+  'over_budget',
+  'bill_due',
   'bank_login',
 ]
+
+/** The kinds the owner has turned on. */
+export function kindsOn(choices: Pick<NotificationSettings, 'kinds'>): NotificationKind[] {
+  return NOTIFICATION_KINDS.filter((kind) => choices.kinds[kind])
+}
 
 const kindSwitches = Object.fromEntries(
   NOTIFICATION_KINDS.map((kind) => [kind, z.boolean()]),

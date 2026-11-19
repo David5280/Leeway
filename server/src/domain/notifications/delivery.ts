@@ -13,7 +13,7 @@ import {
 } from '../../push/subscriptions.js'
 import { getSettings } from '../settings.js'
 import { isQuiet } from './quietHours.js'
-import { NOTIFICATION_KINDS, type NotificationKind, type NotificationSettings } from './settings.js'
+import { kindsOn, type NotificationKind, type NotificationSettings } from './settings.js'
 
 /** The least time between two pushes; news in between is rolled into the next one. */
 export const MIN_PUSH_GAP_MS = 15 * MINUTE_MS
@@ -72,12 +72,12 @@ export function composePush(pending: PendingPush[]): PushMessage {
  * Drops pushes no longer worth sending: read or dismissed in the app already,
  * cleared, too old, or of a kind turned off since.
  */
-async function skipStale(db: Db, kindsOn: NotificationKind[], now: Date): Promise<void> {
+async function skipStale(db: Db, on: NotificationKind[], now: Date): Promise<void> {
   await db.query(
     `UPDATE notifications SET push_state = 'skipped'
      WHERE push_state = 'pending' AND (read_at IS NOT NULL OR dismissed_at IS NOT NULL
        OR resolved_at IS NOT NULL OR created_at < $1 OR kind <> ALL($2))`,
-    [new Date(now.getTime() - STALE_AFTER_MS), kindsOn],
+    [new Date(now.getTime() - STALE_AFTER_MS), on],
   )
 }
 
@@ -89,7 +89,12 @@ async function pendingPushes(db: Db): Promise<PendingPush[]> {
   return rows
 }
 
-async function settlePushes(db: Db, ids: string[], state: 'sent' | 'skipped', now: Date) {
+async function settlePushes(
+  db: Db,
+  ids: string[],
+  state: 'sent' | 'skipped',
+  now: Date,
+): Promise<void> {
   await db.query(
     `UPDATE notifications SET push_state = $2, pushed_at = CASE WHEN $2 = 'sent' THEN $3::timestamptz END
      WHERE id = ANY($1)`,
@@ -110,20 +115,42 @@ async function claimPushSlot(db: Db, now: Date): Promise<boolean> {
   return rowCount === 1
 }
 
-/** Sends to every device, removing the ones the push service says are gone. */
+/**
+ * Sends to every device at once. Each device stands alone: one that throws
+ * (keys a push can't be made for, say) counts as refused, and never keeps
+ * the others' outcome from being recorded.
+ */
 async function sendToAll(
   ctx: AppContext,
   devices: Subscription[],
   message: PushMessage,
 ): Promise<PushOutcome[]> {
-  return Promise.all(
-    devices.map(async (device) => {
-      const outcome = await ctx.push.send(device, message)
-      if (outcome === 'gone') await removeSubscriptionById(ctx.db, device.id)
-      if (outcome === 'sent') await recordDelivered(ctx.db, device.id, ctx.now())
-      return outcome
+  const settled = await Promise.allSettled(devices.map((device) => ctx.push.send(device, message)))
+  return settled.map((result) => (result.status === 'fulfilled' ? result.value : 'rejected'))
+}
+
+/** Forgets the devices that have gone and notes the ones a push reached, each on its own. */
+async function recordOutcomes(
+  db: Db,
+  devices: Subscription[],
+  outcomes: PushOutcome[],
+  now: Date,
+): Promise<void> {
+  const writes = await Promise.allSettled(
+    devices.map(async (device, index) => {
+      if (outcomes[index] === 'gone') await removeSubscriptionById(db, device.id)
+      if (outcomes[index] === 'sent') await recordDelivered(db, device.id, now)
     }),
   )
+  const failed = writes.find((write) => write.status === 'rejected')
+  if (failed) throw failed.reason
+}
+
+/** What the outcomes mean for the push owed. */
+function resultOf(outcomes: PushOutcome[]): 'sent' | 'retry' | 'dropped' {
+  if (outcomes.includes('sent')) return 'sent'
+  if (outcomes.includes('retry')) return 'retry'
+  return 'dropped'
 }
 
 /** Sends the push owed, if any, and if now is a good time. */
@@ -133,8 +160,7 @@ export async function deliverPushes(
 ): Promise<DeliveryResult> {
   const { db } = ctx
   const now = ctx.now()
-  const kindsOn = NOTIFICATION_KINDS.filter((kind) => choices.kinds[kind])
-  await skipStale(db, kindsOn, now)
+  await skipStale(db, kindsOn(choices), now)
   const pending = await pendingPushes(db)
   if (pending.length === 0) return 'nothing'
   const { timeZone } = await getSettings(db)
@@ -148,12 +174,10 @@ export async function deliverPushes(
   if (!(await claimPushSlot(db, now))) return 'waiting'
 
   const outcomes = await sendToAll(ctx, devices, composePush(pending))
-  if (outcomes.includes('sent')) {
-    await settlePushes(db, ids, 'sent', now)
-    return 'sent'
-  }
-  // Left owed: the slot just taken spaces out the next try.
-  if (outcomes.includes('retry')) return 'retry'
-  await settlePushes(db, ids, 'skipped', now)
-  return 'dropped'
+  const result = resultOf(outcomes)
+  // Settled before anything else is written, so a push that went out is
+  // never sent again. A retry is left owed: the slot just taken spaces it out.
+  if (result !== 'retry') await settlePushes(db, ids, result === 'sent' ? 'sent' : 'skipped', now)
+  await recordOutcomes(db, devices, outcomes, ctx.now())
+  return result
 }

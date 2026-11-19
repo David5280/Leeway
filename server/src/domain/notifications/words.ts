@@ -50,7 +50,10 @@ export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
   }))
 }
 
-/** Spending categories that reached `percent` of their budget this period, once per period. */
+/**
+ * Spending categories that reached `percent` of their budget this period,
+ * once per period. One back under (a refund, a recategorized charge) clears.
+ */
 export function budgetCandidates(
   categories: CategoryBudget[],
   periodStart: IsoDate,
@@ -94,15 +97,17 @@ export interface DueBill {
   status: 'paid' | 'overdue' | 'due_soon' | 'upcoming'
 }
 
+/** "is due tomorrow", "is due in 3 days", "was due yesterday", "was due 3 days ago". */
 function dueWhen(days: number): string {
-  if (days === 0) return 'today'
-  if (days === 1) return 'tomorrow'
-  return `in ${days} days`
+  if (days === 0) return 'is due today'
+  if (days === 1) return 'is due tomorrow'
+  if (days === -1) return 'was due yesterday'
+  return days > 0 ? `is due in ${days} days` : `was due ${-days} days ago`
 }
 
 /**
- * Bills due within `days`, once per due date. Bills on autopay pay
- * themselves, so they are left out.
+ * Bills due within `days`, once per due date, and still there while overdue.
+ * Paying one clears it. Bills on autopay pay themselves, so they are left out.
  */
 export function billCandidates(bills: DueBill[], days: number, format: AlertFormat): Candidate[] {
   return bills
@@ -110,17 +115,17 @@ export function billCandidates(bills: DueBill[], days: number, format: AlertForm
       (bill) =>
         !bill.autopay &&
         bill.status !== 'paid' &&
-        bill.daysUntilDue >= 0 &&
-        bill.daysUntilDue <= days,
+        bill.daysUntilDue <= days &&
+        (bill.daysUntilDue >= 0 || bill.status === 'overdue'),
     )
     .map((bill) => {
       const when = dueWhen(bill.daysUntilDue)
       return {
         kind: 'bill_due',
         subject: `${bill.id}:${bill.nextDueDate}`,
-        title: 'Bill due soon',
-        message: `${bill.name} is due ${when} (${format.date(bill.nextDueDate)}), usually ${format.money(bill.amountCents)}.`,
-        pushBody: `${bill.name} is due ${when}.`,
+        title: bill.daysUntilDue < 0 ? 'Bill overdue' : 'Bill due soon',
+        message: `${bill.name} ${when} (${format.date(bill.nextDueDate)}), usually ${format.money(bill.amountCents)}.`,
+        pushBody: `${bill.name} ${when}.`,
         link: '/plan/bills',
       }
     })

@@ -2,9 +2,12 @@
 // choices for each threshold, and the line under push for this device.
 // Pure, no React.
 
-import type { Output } from '../../../api/client'
+import type {
+  NotificationKind,
+  NotificationSettingsPatch,
+} from '../../../../../server/src/domain/notifications/settings'
+import { ApiError, type Output } from '../../../api/client'
 import type { PushSupport } from '../../../lib/push'
-import type { NotificationKind } from '../../../../../server/src/domain/notifications/settings'
 
 export type NotificationsView = Output<'get_notification_settings'>
 export type NotificationChoices = NotificationsView['settings']
@@ -18,7 +21,7 @@ export const KIND_TEXT: Record<NotificationKind, { label: string; hint: string }
     hint: "Money available below an account's warning, set in Accounts",
   },
   over_budget: { label: 'Budgets', hint: 'A category reaching the share of its budget below' },
-  bill_due: { label: 'Bills due', hint: 'A bill not on autopay, coming due' },
+  bill_due: { label: 'Bills due', hint: 'A bill not on autopay, coming due, until it is paid' },
   large_transaction: {
     label: 'Large charges',
     hint: 'A single charge of at least the amount below',
@@ -63,16 +66,20 @@ export function devicesLine(devices: number, thisDevice: boolean): string {
   return `Push is on for ${devices} other device${devices === 1 ? '' : 's'}.`
 }
 
+/**
+ * Why the server would not take this browser's subscription, in one line.
+ * Its reason comes without the field it was about; other failures say their own.
+ */
+export function refusedLine(error: unknown): unknown {
+  if (!(error instanceof ApiError) || error.code !== 'invalid_input') return error
+  const reason = error.message.replace(/^[\w.]+: /, '')
+  return new Error(`Push stays off on this browser. ${reason.replace(/\.?$/, '.')}`)
+}
+
 /** A patch over the stored choices, as the screen shows them while the change saves. */
 export function withPatch(
   choices: NotificationChoices,
-  patch: Partial<{
-    kinds: Partial<NotificationChoices['kinds']>
-    quietHours: Partial<NotificationChoices['quietHours']>
-    overBudgetPercent: number
-    billDueDays: number
-    largeTransactionCents: number
-  }>,
+  patch: NotificationSettingsPatch,
 ): NotificationChoices {
   return {
     ...choices,

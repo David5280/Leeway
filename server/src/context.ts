@@ -26,5 +26,10 @@ export interface AppContext {
   mailer: EmailSender | null
   /** Sends Web Push to the owner's devices. Always there: push needs no configuration. */
   push: PushSender
+  /**
+   * Called when a bank's data changed (a sync, a new link, a webhook), so the
+   * inbox and pushes catch up soon after. Unset where nothing listens, as in tests.
+   */
+  afterBankUpdate?: () => void
   now: () => Date
 }

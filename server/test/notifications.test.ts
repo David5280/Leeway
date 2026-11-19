@@ -14,6 +14,7 @@ import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   getNotificationSettings,
+  kindsOn,
   NOTIFICATION_KINDS,
   updateNotificationSettings,
 } from '../src/domain/notifications/settings.js'
@@ -46,14 +47,20 @@ async function setBalance(accountId: string, cents: number) {
   await ctx.db.query('UPDATE accounts SET balance_cents = $2 WHERE id = $1', [accountId, cents])
 }
 
+/** The kinds the owner has on, as the inbox and the bell read them. */
+const on = async () => kindsOn(await getNotificationSettings(ctx.db))
+const unread = async () => unreadCount(ctx.db, await on())
+
 const inbox = async () =>
-  (await listNotifications(ctx.db)).map(({ kind, title, message, readAt, resolvedAt }) => ({
-    kind,
-    title,
-    message,
-    read: readAt !== null,
-    resolved: resolvedAt !== null,
-  }))
+  (await listNotifications(ctx.db, await on())).map(
+    ({ kind, title, message, readAt, resolvedAt }) => ({
+      kind,
+      title,
+      message,
+      read: readAt !== null,
+      resolved: resolvedAt !== null,
+    }),
+  )
 
 describe('the rules, from stored data', () => {
   it('adds an overdrawn account once, however often it is checked', async () => {
@@ -69,7 +76,7 @@ describe('the rules, from stored data', () => {
         resolved: false,
       },
     ])
-    expect(await unreadCount(ctx.db)).toBe(1)
+    expect(await unread()).toBe(1)
   })
 
   it('takes the latest wording without making it news again', async () => {
@@ -98,7 +105,7 @@ describe('the rules, from stored data', () => {
     await setBalance(accountId, 50_000)
     await refreshInbox(ctx)
     expect(await inbox()).toEqual([expect.objectContaining({ resolved: true, read: true })])
-    expect(await unreadCount(ctx.db)).toBe(0)
+    expect(await unread()).toBe(0)
 
     // Back within the hour: it picks up where it was, still read, no new push owed.
     ctx.setNow(later(REARM_AFTER_MS - MINUTE_MS))
@@ -117,19 +124,42 @@ describe('the rules, from stored data', () => {
     expect(rows).toEqual([{ push_state: 'pending', created_at: ctx.now() }])
   })
 
-  it('leaves a kind turned off as it was: nothing new, and nothing marked cleared', async () => {
+  it('hides a kind turned off and its count, adds nothing, and shows what is true when back on', async () => {
     const { accountId } = await insertBankAccount(ctx.db, {
       subtype: 'checking',
       balanceCents: -100,
     })
     await refreshInbox(ctx)
+    expect(await unread()).toBe(1)
     await updateNotificationSettings(ctx.db, { kinds: { overdrawn: false } })
     await setBalance(accountId, 50_000)
-    await refreshInbox(ctx)
-    expect(await inbox()).toEqual([expect.objectContaining({ kind: 'overdrawn', resolved: false })])
     await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: -500 })
     await refreshInbox(ctx)
-    expect(await inbox()).toHaveLength(1)
+    expect(await inbox()).toEqual([])
+    expect(await unread()).toBe(0)
+    // Nothing checked it while off, so it is not marked cleared, and nothing new was added.
+    const { rows } = await ctx.db.query('SELECT resolved_at FROM notifications')
+    expect(rows).toEqual([{ resolved_at: null }])
+
+    ctx.setNow(later(MINUTE_MS))
+    await updateNotificationSettings(ctx.db, { kinds: { overdrawn: true } })
+    await refreshInbox(ctx)
+    expect(await inbox()).toEqual([
+      expect.objectContaining({ kind: 'overdrawn', read: false, resolved: false }),
+      expect.objectContaining({ kind: 'overdrawn', read: false, resolved: true }),
+    ])
+  })
+
+  it('counts an unread notification on the bell even once it has cleared, as the inbox shows it', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, {
+      subtype: 'checking',
+      balanceCents: -100,
+    })
+    await refreshInbox(ctx)
+    await setBalance(accountId, 50_000)
+    await refreshInbox(ctx)
+    expect(await inbox()).toEqual([expect.objectContaining({ read: false, resolved: true })])
+    expect(await unread()).toBe(1)
   })
 
   it('adds a low balance, an over-limit card and an overdraft fee', async () => {
@@ -228,7 +258,10 @@ describe('kinds turned off', () => {
     await ctx.db.query('DELETE FROM accounts')
     await ctx.db.query('DELETE FROM connections')
     await refreshInbox(ctx)
-    expect((await inbox()).map((item) => item.resolved)).toEqual([false, false])
+    // Hidden while off, and not marked cleared, since nothing checked them.
+    expect(await inbox()).toEqual([])
+    const { rows } = await ctx.db.query('SELECT resolved_at FROM notifications')
+    expect(rows).toEqual([{ resolved_at: null }, { resolved_at: null }])
   })
 })
 
@@ -325,9 +358,13 @@ describe('keeping the inbox tidy', () => {
     })
     await refreshInbox(ctx)
     expect(await inbox()).toHaveLength(2)
-    expect(await pruneInbox(ctx.db, later((KEEP_DAYS - 1) * DAY_MS))).toBe(0)
-    expect(await pruneInbox(ctx.db, later((KEEP_DAYS + 1) * DAY_MS))).toBe(1)
+    const all = [...NOTIFICATION_KINDS]
+    expect(await pruneInbox(ctx.db, later((KEEP_DAYS - 1) * DAY_MS), all)).toBe(0)
+    expect(await pruneInbox(ctx.db, later((KEEP_DAYS + 1) * DAY_MS), all)).toBe(1)
     expect((await inbox()).map((item) => item.kind)).toEqual(['overdrawn'])
+    // A condition nothing checks any more, its kind turned off, goes too.
+    const notOverdrawn = all.filter((kind) => kind !== 'overdrawn')
+    expect(await pruneInbox(ctx.db, later((KEEP_DAYS + 1) * DAY_MS), notOverdrawn)).toBe(1)
   })
 })
 

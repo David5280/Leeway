@@ -73,7 +73,14 @@ export function vapidAuthorization(
   return `vapid t=${unsigned}.${signature.toString('base64url')}, k=${keys.publicKey}`
 }
 
-/** Where push services may write about problems: the app's https address when it has one. */
-export function vapidSubject(publicUrl: string | null): string {
-  return publicUrl?.startsWith('https://') ? publicUrl : 'mailto:leeway@localhost.invalid'
+/**
+ * Where push services may write about problems, which some (Apple's among
+ * them) require to be a real address: PUBLIC_URL when it is https, else the
+ * https address the device subscribed from, which is where the owner opens
+ * Leeway. Push needs https everywhere but a developer's own machine, so the
+ * mailto that reaches no one is left only for that.
+ */
+export function vapidSubject(publicUrl: string | null, deviceOrigin: string | null): string {
+  const https = [publicUrl, deviceOrigin].find((url) => url?.startsWith('https://'))
+  return https ?? 'mailto:leeway@localhost.invalid'
 }

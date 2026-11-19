@@ -40,7 +40,8 @@ const COLUMNS = `id, kind, title, message, link, created_at AS "createdAt", read
  * Stores what the data calls for. New news is added, unread, with a push
  * owed. News already stored keeps its read and push state and takes the
  * latest wording. A condition that cleared over an hour ago and is back
- * counts as new.
+ * counts as new. One back sooner whose push was let go while it was cleared,
+ * before it was ever sent, is owed its push again.
  */
 export async function recordCandidates(db: Db, candidates: Candidate[], now: Date): Promise<void> {
   // One row per key: a charge seen both pending and posted is one notification.
@@ -49,6 +50,9 @@ export async function recordCandidates(db: Db, candidates: Candidate[], now: Dat
   const column = (key: keyof Candidate) => unique.map((candidate) => candidate[key])
   // "fresh": a cleared condition that came back after the re-arm time.
   const fresh = `(notifications.resolved_at IS NOT NULL AND notifications.resolved_at <= $8)`
+  // "unsent": a cleared condition whose push was let go unsent; delivery skips it again if read.
+  const unsent = `(notifications.resolved_at IS NOT NULL AND notifications.push_state = 'skipped'
+    AND notifications.pushed_at IS NULL)`
   await db.query(
     `INSERT INTO notifications (kind, subject, title, message, push_body, link, created_at, push_state)
      SELECT k, s, t, m, p, l, $7, 'pending'
@@ -60,7 +64,8 @@ export async function recordCandidates(db: Db, candidates: Candidate[], now: Dat
        created_at = CASE WHEN ${fresh} THEN excluded.created_at ELSE notifications.created_at END,
        read_at = CASE WHEN ${fresh} THEN NULL ELSE notifications.read_at END,
        dismissed_at = CASE WHEN ${fresh} THEN NULL ELSE notifications.dismissed_at END,
-       push_state = CASE WHEN ${fresh} THEN 'pending' ELSE notifications.push_state END,
+       push_state = CASE WHEN ${fresh} OR ${unsent} THEN 'pending'
+         ELSE notifications.push_state END,
        pushed_at = CASE WHEN ${fresh} THEN NULL ELSE notifications.pushed_at END,
        resolved_at = NULL
      WHERE notifications.resolved_at IS NOT NULL
@@ -101,30 +106,42 @@ export async function resolveCleared(
   )
 }
 
-/** Deletes old notifications. A condition still going on stays, so it is not news again. */
-export async function pruneInbox(db: Db, now: Date): Promise<number> {
+/**
+ * Deletes old notifications. A condition still going on stays, so it is not
+ * news again, unless its kind is turned off: nothing then checks it.
+ */
+export async function pruneInbox(db: Db, now: Date, on: NotificationKind[]): Promise<number> {
   const { rowCount } = await db.query(
     `DELETE FROM notifications
-     WHERE created_at < $1 AND (resolved_at IS NOT NULL OR kind <> ALL($2))`,
-    [new Date(now.getTime() - KEEP_DAYS * DAY_MS), STATE_KINDS],
+     WHERE created_at < $1 AND (resolved_at IS NOT NULL OR kind <> ALL($2) OR kind <> ALL($3))`,
+    [new Date(now.getTime() - KEEP_DAYS * DAY_MS), STATE_KINDS, on],
   )
   return Number(rowCount)
 }
 
-/** The inbox, newest first, without dismissed notifications. */
-export async function listNotifications(db: Db): Promise<Notification[]> {
+/**
+ * The inbox, newest first, of the kinds turned on, without dismissed ones. A
+ * kind turned off is hidden, not cleared: turned on again, what is still true
+ * shows as it was.
+ */
+export async function listNotifications(db: Db, on: NotificationKind[]): Promise<Notification[]> {
   const { rows } = await db.query<Notification>(
-    `SELECT ${COLUMNS} FROM notifications WHERE dismissed_at IS NULL
+    `SELECT ${COLUMNS} FROM notifications WHERE dismissed_at IS NULL AND kind = ANY($1)
      ORDER BY created_at DESC, id LIMIT ${LIST_LIMIT}`,
+    [on],
   )
   return rows
 }
 
-/** Unread notifications about something still true: what the bell counts. */
-export async function unreadCount(db: Db): Promise<number> {
+/**
+ * What the bell counts: the inbox's unread notifications, cleared or not, as
+ * the inbox shows them unread until opened or marked read.
+ */
+export async function unreadCount(db: Db, on: NotificationKind[]): Promise<number> {
   const { rows } = await db.query<{ count: number }>(
     `SELECT count(*)::int AS count FROM notifications
-     WHERE read_at IS NULL AND dismissed_at IS NULL AND resolved_at IS NULL`,
+     WHERE read_at IS NULL AND dismissed_at IS NULL AND kind = ANY($1)`,
+    [on],
   )
   return rows[0]!.count
 }

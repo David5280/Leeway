@@ -81,6 +81,8 @@ export interface DeviceSubscription {
   endpoint: string
   keys: { p256dh: string; auth: string }
   label: string
+  /** Where Leeway is open, which push services may contact (see the server's vapidSubject). */
+  origin: string
 }
 
 /** A name for this device, like "iPhone" or "Mac", by its first match. */
@@ -92,15 +94,27 @@ export function deviceLabel(userAgent: string): string {
 /**
  * Asks the browser's permission, then subscribes with the server's key.
  * Returns null when the owner said no to notifications.
+ *
+ * Push is turned on only where the server has no subscription for this
+ * browser, so one the browser still holds is stale: made with a key the
+ * server has since replaced, or reported gone by its push service. It is
+ * dropped and a fresh one made, never handed back to the server.
  */
 export async function subscribe(publicKey: string): Promise<DeviceSubscription | null> {
   if ((await Notification.requestPermission()) !== 'granted') return null
   const manager = await pushManager()
-  const subscription =
-    (await manager.getSubscription()) ??
-    (await manager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }))
+  await (await manager.getSubscription())?.unsubscribe()
+  const subscription = await manager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: keyBytes(publicKey),
+  })
   const { keys } = subscription.toJSON() as { keys: { p256dh: string; auth: string } }
-  return { endpoint: subscription.endpoint, keys, label: deviceLabel(navigator.userAgent) }
+  return {
+    endpoint: subscription.endpoint,
+    keys,
+    label: deviceLabel(navigator.userAgent),
+    origin: window.location.origin,
+  }
 }
 
 /** Stops push in this browser; returns the address it had, to tell the server. */

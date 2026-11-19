@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { repeatEvery } from '../src/lib/repeat.js'
+import { coalesced, repeatEvery } from '../src/lib/repeat.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -47,5 +47,51 @@ describe('repeatEvery', () => {
     expect(onError).toHaveBeenCalledTimes(2)
     expect(onError.mock.calls[0]![0]).toEqual(new Error('down'))
     stop()
+  })
+})
+
+describe('coalesced', () => {
+  it('runs once a moment after a burst of pulls', async () => {
+    const task = vi.fn(() => Promise.resolve())
+    const pull = coalesced(task, () => {}, 1000)
+    pull()
+    pull()
+    await vi.advanceTimersByTimeAsync(500)
+    pull()
+    expect(task).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(task).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(task).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs once more after a run that was pulled while going, never two at once', async () => {
+    let finish = () => {}
+    const task = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)))
+    const pull = coalesced(task, () => {}, 1000)
+    pull()
+    await vi.advanceTimersByTimeAsync(1000)
+    pull()
+    pull()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(task).toHaveBeenCalledTimes(1)
+    finish()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(task).toHaveBeenCalledTimes(2)
+    finish()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(task).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a failure and still runs on the next pull', async () => {
+    const onError = vi.fn()
+    const task = vi.fn(() => Promise.reject(new Error('down')))
+    const pull = coalesced(task, onError, 10)
+    pull()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onError).toHaveBeenCalledWith(new Error('down'))
+    pull()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(task).toHaveBeenCalledTimes(2)
   })
 })

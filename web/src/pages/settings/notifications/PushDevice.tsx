@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting } from '../../../components/ui'
 import { subscribe, unsubscribe, type PushSupport } from '../../../lib/push'
-import { devicesLine, supportLine, type NotificationsView } from './notificationText'
+import { devicesLine, refusedLine, supportLine, type NotificationsView } from './notificationText'
 
 export function PushDevice({
   view,
@@ -32,7 +32,13 @@ export function PushDevice({
     try {
       const subscription = await subscribe(view.push.publicKey)
       if (!subscription) return setDeclined(true)
-      await on.mutateAsync(subscription)
+      try {
+        await on.mutateAsync(subscription)
+      } catch (error) {
+        // Refused: leave the browser no subscription the server doesn't hold.
+        await unsubscribe().catch(() => null)
+        return setFailure(refusedLine(error))
+      }
       onEndpoint(subscription.endpoint)
     } catch (error) {
       setFailure(error)

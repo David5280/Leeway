@@ -297,8 +297,10 @@ sync, and tells you about:
 
 - an account overdrawn, a card over its limit, an overdraft fee, or a balance
   under its low-balance warning;
-- a budget reaching a share you choose (100% by default);
-- a bill not on autopay coming due (2 days before, by default);
+- a budget reaching a share you choose (100% by default), until it is back
+  under;
+- a bill not on autopay coming due (2 days before, by default), until it is
+  paid;
 - a single charge of at least an amount you choose ($500 by default);
 - a bank that needs you to sign in again.
 
@@ -321,15 +323,21 @@ that should get pushes, and **Send a test notification** to see one.
 - **A burst becomes one push.** Leeway sends at most one push every 15
   minutes. Alerts that pile up meanwhile go out together as one, like "3 new
   alerts", and nothing is pushed for an alert you have already read,
-  dismissed or turned off.
+  dismissed or turned off, or one that has cleared. One that clears and comes
+  back before its push went out is still pushed.
 - **What a push says.** Browsers carry every push through their maker's push
   service (Apple, Google, Mozilla or Microsoft), encrypted end to end, and the
   words then show on your lock screen. So a push holds a short title and the
   account, category or bill name as you see it in Leeway: never an amount,
   account number, merchant or bank text. The detail is in the inbox.
 - A device whose push service says it is gone is forgotten. If you change
-  `ENCRYPTION_KEY`, Leeway makes new push keys, and each device needs
-  **Turn on** again.
+  `ENCRYPTION_KEY`, Leeway makes new push keys and forgets every device. In
+  both cases the device's Settings show **Turn on** again, and pressing it
+  replaces the browser's old subscription with a new one.
+- **Who a push is from.** Each push names your Leeway address to the push
+  service: `PUBLIC_URL` when it is `https`, otherwise the `https` address the
+  device turned push on from. Apple refuses pushes without one, so on iPhone
+  turn push on from your `https` address, not a local one.
 
 Each kind of alert has its own switch, and turns it off in the inbox and for
 push alike. Only you can see the inbox or change these settings: connected

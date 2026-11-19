@@ -6,6 +6,7 @@ import {
   LIMITS,
   NOTIFICATION_KINDS,
 } from '../../../../../server/src/domain/notifications/settings'
+import { ApiError } from '../../../api/client'
 import { chargeCents } from './LargeChargeField'
 import {
   BILL_DAYS,
@@ -13,6 +14,7 @@ import {
   BUDGET_PERCENTS,
   devicesLine,
   KIND_TEXT,
+  refusedLine,
   supportLine,
   withPatch,
 } from './notificationText'
@@ -76,5 +78,25 @@ describe('notification words', () => {
     expect(chargeCents('0.50')).toBeNull()
     expect(chargeCents('2000000')).toBeNull()
     expect(chargeCents('lots')).toBeNull()
+  })
+})
+
+describe('refusedLine', () => {
+  it("says the server's reason in one line, without the field it was about", () => {
+    const refused = new ApiError(
+      400,
+      'invalid_input',
+      'keys: The browser sent keys Leeway cannot use',
+    )
+    expect((refusedLine(refused) as Error).message).toBe(
+      'Push stays off on this browser. The browser sent keys Leeway cannot use.',
+    )
+  })
+
+  it('passes any other failure on as it is', () => {
+    const down = new ApiError(500, 'internal', 'The server is down')
+    const offline = new TypeError('Failed to fetch')
+    expect(refusedLine(down)).toBe(down)
+    expect(refusedLine(offline)).toBe(offline)
   })
 })

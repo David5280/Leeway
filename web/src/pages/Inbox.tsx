@@ -1,5 +1,7 @@
 // The inbox: every alert as it happened, newest first. Opening one marks it
 // read and goes to the screen that explains it; dismissing takes it away.
+// Unread means not yet opened or marked read, cleared or not: the bell counts
+// the same, and Mark all read shows while any is.
 
 import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
@@ -68,6 +70,8 @@ function InboxRow({ item }: { item: InboxItem }) {
   const dismiss = useActionMutation('dismiss_notification')
   const unread = item.readAt === null
   const when = timeAgo(new Date(item.createdAt).toISOString())
+  // The message names the account, budget or bill, so each row's buttons read apart.
+  const about = `${item.title}: ${item.message}`
   return (
     <li className={unread ? 'inbox-item unread' : 'inbox-item'}>
       <div className="inbox-text">
@@ -83,7 +87,7 @@ function InboxRow({ item }: { item: InboxItem }) {
         <Link
           to={item.link}
           className="btn ghost small"
-          aria-label={`Open: ${item.title}`}
+          aria-label={`Open ${about}`}
           onClick={() => {
             if (unread) markRead.mutate({ ids: [item.id] })
           }}
@@ -93,7 +97,7 @@ function InboxRow({ item }: { item: InboxItem }) {
         <button
           type="button"
           className="btn ghost small"
-          aria-label={`Dismiss: ${item.title}`}
+          aria-label={`Dismiss ${about}`}
           disabled={dismiss.isPending}
           onClick={() => dismiss.mutate({ id: item.id })}
         >

@@ -39,11 +39,29 @@ function hkdf(ikm: Buffer, salt: Buffer, info: Buffer, length: number): Buffer {
   return Buffer.from(hkdfSync('sha256', ikm, salt, info, length))
 }
 
-/** Checks a browser's keys are the sizes the standard sets, before any math with them. */
+/** A key pair of the server's own, only to check a browser's key is a point on the curve. */
+let checker: ECDH | null = null
+
+/** Whether a 65-byte key is a real P-256 point, which the key exchange needs. */
+function onCurve(publicKey: Buffer): boolean {
+  checker ??= newSenderKeys()
+  try {
+    checker.computeSecret(publicKey)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Checks a browser's keys before any math with them: the sizes the standard
+ * sets, and a public key on the curve, so a bad key is refused when a device
+ * subscribes rather than failing every send to it.
+ */
 export function receiverKeyBytes(keys: ReceiverKeys): { publicKey: Buffer; auth: Buffer } {
   const publicKey = fromBase64Url(keys.p256dh)
   const auth = fromBase64Url(keys.auth)
-  if (publicKey.length !== PUBLIC_KEY_BYTES || publicKey[0] !== 0x04) {
+  if (publicKey.length !== PUBLIC_KEY_BYTES || publicKey[0] !== 0x04 || !onCurve(publicKey)) {
     throw new Error('The browser key must be an uncompressed P-256 point')
   }
   if (auth.length !== 16) throw new Error('The browser auth secret must be 16 bytes')

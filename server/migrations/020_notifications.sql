@@ -37,6 +37,8 @@ CREATE TABLE push_subscriptions (
   p256dh text NOT NULL,
   auth text NOT NULL,
   label text,
+  -- The address the device subscribed from, which push services may contact.
+  origin text CHECK (char_length(origin) <= 200),
   created_at timestamptz NOT NULL DEFAULT now(),
   last_success_at timestamptz
 );

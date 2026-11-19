@@ -186,17 +186,33 @@ describe('bills', () => {
     })
   })
 
-  it('leaves out bills on autopay, paid, or already overdue', () => {
+  it('leaves out bills on autopay, paid, or past a due date with no payment to look for', () => {
     const found = billCandidates(
       [
         bill({ autopay: true }),
         bill({ status: 'paid' }),
-        bill({ daysUntilDue: -1, status: 'overdue' }),
+        bill({ daysUntilDue: -1, status: 'upcoming' }),
       ],
       7,
       FORMAT,
     )
     expect(found).toEqual([])
+  })
+
+  it('keeps an overdue bill, by the same due date, until it is paid', () => {
+    const found = billCandidates(
+      [
+        bill({ daysUntilDue: -1, nextDueDate: '2026-11-16', status: 'overdue' }),
+        bill({ id: 'b2', name: 'Power', daysUntilDue: -3, status: 'overdue' }),
+      ],
+      0,
+      FORMAT,
+    )
+    expect(found.map((one) => [one.subject, one.title, one.pushBody])).toEqual([
+      ['bill-1:2026-11-16', 'Bill overdue', 'Rent was due yesterday.'],
+      ['b2:2026-11-19', 'Bill overdue', 'Power was due 3 days ago.'],
+    ])
+    expect(found[0]!.message).toBe('Rent was due yesterday (on 2026-11-16), usually $1800.00.')
   })
 })
 

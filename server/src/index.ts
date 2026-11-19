@@ -10,7 +10,11 @@ import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
-import { NOTIFIER_MINUTES, runNotifier } from './domain/notifications/notifier.js'
+import {
+  NOTIFIER_MINUTES,
+  NOTIFY_AFTER_SYNC_MS,
+  runNotifier,
+} from './domain/notifications/notifier.js'
 import { getOwner } from './domain/owner.js'
 import { PaystubReader } from './domain/paystubs/reader.js'
 import { getSettings } from './domain/settings.js'
@@ -20,13 +24,12 @@ import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weeklyEmail/send.js'
 import { buildApp } from './http/app.js'
 import { todayIn } from './lib/dates.js'
-import { repeatEvery } from './lib/repeat.js'
+import { coalesced, repeatEvery } from './lib/repeat.js'
 import { generateSetupCode, setupReminder, type SetupCode } from './lib/setupCode.js'
 import { MINUTE_MS } from './lib/time.js'
 import { ResendSender } from './mail/resend.js'
-import { loadVapidKeys } from './push/keys.js'
+import { keysReplacedLine, loadVapidKeys } from './push/keys.js'
 import { WebPushSender } from './push/sender.js'
-import { vapidSubject } from './push/vapid.js'
 import { configWarnings, explainConfigError } from './startupMessages.js'
 
 /** The configuration, or a plain explanation in the log and an exit when a setting is wrong. */
@@ -50,8 +53,6 @@ await migrate(db)
 // One-time data upgrades run after the schema is current and before serving.
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
-// The push key pair is made on first start and kept encrypted; nothing to configure.
-await loadVapidKeys(db, config.encryptionKey)
 
 const ctx: AppContext = {
   db,
@@ -64,7 +65,7 @@ const ctx: AppContext = {
   mailer: config.mail ? new ResendSender(config.mail) : null,
   push: new WebPushSender({
     keys: () => loadVapidKeys(db, config.encryptionKey),
-    subject: vapidSubject(config.publicUrl),
+    publicUrl: config.publicUrl,
   }),
   now: () => new Date(),
 }
@@ -76,6 +77,8 @@ const setup: SetupCode = config.setupCode
   ? { code: config.setupCode, from: 'variable' }
   : { code: generateSetupCode(), from: 'log' }
 const app = await buildApp(ctx, { logger: true, setupCode: setup.code })
+// The push key pair is made on first start and kept encrypted; nothing to configure.
+await loadVapidKeys(db, config.encryptionKey, (removed) => app.log.warn(keysReplacedLine(removed)))
 
 /**
  * Moves transactions from banks linked before Leeway used purchase dates onto
@@ -100,6 +103,14 @@ async function notify(): Promise<void> {
   if (outcome === 'sent') app.log.info('Sent a push notification')
 }
 
+/** After any sync (on a timer, from a webhook, by hand or from a new link), one check soon. */
+const notifySoon = coalesced(
+  notify,
+  (error) => app.log.error({ err: error }, 'Notifications check failed'),
+  NOTIFY_AFTER_SYNC_MS,
+)
+ctx.afterBankUpdate = notifySoon
+
 // The inbox follows the data, and pushes wait out quiet hours, so the notifier
 // runs on its own timer as well as after each sync. The first run is at start.
 repeatEvery(
@@ -119,7 +130,7 @@ if (ctx.bank && config.syncIntervalMinutes > 0) {
       await catchUpDates()
       await logAlerts()
       // Fresh balances may be news: tell the owner now, not at the next tick.
-      await notify()
+      notifySoon()
     },
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
