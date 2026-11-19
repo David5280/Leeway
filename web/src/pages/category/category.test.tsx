@@ -9,6 +9,7 @@ import {
   failing,
   fakeServer,
   renderSignedIn,
+  sentence,
   settingsWith,
   transaction,
   type Handlers,
@@ -346,7 +347,9 @@ describe('Category page', () => {
       serve()
       renderCategory()
       expect(
-        await screen.findByText('Steady spending would be at $340 by today. You warn at 80%.'),
+        await screen.findByText(
+          sentence('Steady spending would be at $340 by today. You warn at 80%.'),
+        ),
       ).toBeInTheDocument()
     })
 
@@ -416,7 +419,7 @@ describe('Category page', () => {
       expect(within(history).getByRole('heading', { name: 'Last six months' })).toBeInTheDocument()
       // (500 + 620 + 580 + 550 + 600) / 5 = 570
       expect(
-        await within(history).findByText('Average $570 against a $600 budget'),
+        await within(history).findByText(sentence('Average $570 against a $600 budget')),
       ).toBeInTheDocument()
       const chart = within(history).getByRole('img', { name: 'Groceries by period' })
       expect(chart).toHaveAccessibleDescription(
@@ -429,7 +432,7 @@ describe('Category page', () => {
       serve()
       renderCategory(coffee.id)
       const history = await screen.findByRole('region', { name: 'Last six periods' })
-      expect(await within(history).findByText('Average $0')).toBeInTheDocument()
+      expect(await within(history).findByText(sentence('Average $0'))).toBeInTheDocument()
     })
 
     it('flips income history to positive amounts', async () => {
@@ -437,7 +440,7 @@ describe('Category page', () => {
       renderCategory(paycheck.id)
       const history = await screen.findByRole('region', { name: 'Last six periods' })
       expect(
-        await within(history).findByText('Average $5,020 against a $5,000 budget'),
+        await within(history).findByText(sentence('Average $5,020 against a $5,000 budget')),
       ).toBeInTheDocument()
     })
 
@@ -471,7 +474,7 @@ describe('Category page', () => {
       renderCategory()
       const list = await screen.findByRole('region', { name: 'In this category' })
       expect(await within(list).findByText('Costco')).toBeInTheDocument()
-      expect(within(list).getByText('KING SOOPERS 0042')).toBeInTheDocument()
+      expect(within(list).getByText('King Soopers')).toBeInTheDocument()
       expect(within(list).getByText('Nov 16')).toBeInTheDocument()
       expect(within(list).getByText('$84.50')).toBeInTheDocument()
       expect(within(list).getByText('+$15.00')).toBeInTheDocument()

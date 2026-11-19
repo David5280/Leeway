@@ -8,6 +8,7 @@ import { Dot, Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { budgetStatus, carriedText, overHint } from '../../lib/budgetText'
 import { InlineBudget } from './InlineBudget'
+import { Money } from '../../components/design/Money'
 
 export function BudgetRow({
   row,
@@ -42,7 +43,7 @@ export function BudgetRow({
         )}
       </span>
       <span className="cat-figures">
-        <span className="num">{money(row.spentCents)}</span>
+        <Money cents={row.spentCents} />
         <span className="muted">{row.budgetCents === null ? ' spent · ' : ' of '}</span>
         <InlineBudget
           category={category}

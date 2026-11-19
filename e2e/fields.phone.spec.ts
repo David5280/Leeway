@@ -3,7 +3,7 @@
 
 import { expect, test } from '@playwright/test'
 import { smallFields } from './fields'
-import { addAccount, removeAccount } from './manual'
+import { addAccount, openAddForm, removeAccount } from './manual'
 import { IPHONE } from './phone'
 
 test.use(IPHONE)
@@ -21,9 +21,7 @@ test.describe('signed out', () => {
 test('the transaction fields are big enough not to zoom', async ({ page }) => {
   // Adding by hand needs an account to add to.
   await addAccount(page, { name: 'Field size checking', balance: '100' })
-  await page.goto('/transactions')
-  await page.getByRole('button', { name: 'Add by hand' }).click()
-  await expect(page.getByRole('form', { name: 'Add a transaction' })).toBeVisible()
+  await expect(await openAddForm(page)).toBeVisible()
   expect(await smallFields(page)).toEqual([])
 
   await removeAccount(page, 'Field size checking')

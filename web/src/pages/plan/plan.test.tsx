@@ -295,7 +295,7 @@ describe('Net worth', () => {
     })
     renderPlan('/plan/net-worth')
     const card = await screen.findByRole('region', { name: 'Net worth' })
-    expect(within(card).getByText('-$50')).toHaveClass('over')
+    expect(within(card).getByText('-$50')).toHaveClass('money-problem')
     expect(screen.getByText(/History builds as balances change/)).toBeInTheDocument()
   })
 

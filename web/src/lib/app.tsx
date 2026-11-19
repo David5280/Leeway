@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Settings, Status } from '../api/client'
-import { money, signedAmount, type MoneyOptions } from './format'
+import { money, signedAmount, type MoneyOptions } from './money'
 import { applyAppearance } from './theme'
 
 interface AppValue {

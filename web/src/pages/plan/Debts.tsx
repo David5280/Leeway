@@ -11,6 +11,7 @@ import { monthYear, parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
 import { DebtTerms } from './DebtTerms'
 import { durationText } from './text'
+import { Money } from '../../components/design/Money'
 
 type Strategy = 'avalanche' | 'snowball' | 'minimumsOnly'
 
@@ -30,7 +31,7 @@ const STRATEGIES = [
 
 /** One strategy's result: when it is all paid off and the interest it costs. */
 function StrategyTile({ plans, strategy }: { plans: DebtPlans; strategy: Strategy }) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const plan = plans[strategy]
   const { label } = STRATEGIES.find((s) => s.value === strategy)!
   return (
@@ -40,15 +41,13 @@ function StrategyTile({ plans, strategy }: { plans: DebtPlans; strategy: Strateg
         {plan.debtFreeDate ? monthYear(plan.debtFreeDate, settings.locale) : 'Never'}
       </span>
       <span className="small muted">
-        {durationText(plan.months)}, <span className="num">{money(plan.totalInterestCents)}</span>{' '}
-        interest
+        {durationText(plan.months)}, <Money cents={plan.totalInterestCents} /> interest
       </span>
     </div>
   )
 }
 
 function PayoffPlan({ extraCents }: { extraCents: number }) {
-  const { money } = useApp()
   const [strategy, setStrategy] = useState<Strategy>('avalanche')
   const plans = useAction('plan_debt_payoff', { extraCents }, { placeholderData: keepPreviousData })
   if (!plans.data) return <LoadingOrError error={plans.error} />
@@ -67,7 +66,7 @@ function PayoffPlan({ extraCents }: { extraCents: number }) {
         ))}
       </div>
       <span className="small muted">
-        Paying <span className="num">{money(plan.monthlyPaymentCents)}</span> a month in all.
+        Paying <Money cents={plan.monthlyPaymentCents} /> a month in all.
       </span>
       <Segmented label="Strategy" value={strategy} options={STRATEGIES} onChange={setStrategy} />
       <span className="small">{STRATEGIES.find((s) => s.value === strategy)!.about}</span>

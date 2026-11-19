@@ -4,6 +4,7 @@ import type { AccountsView } from '../../api/client'
 import { Card, Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
+import { Money } from '../../components/design/Money'
 
 export function Flows({ flows }: { flows: AccountsView['flows'] }) {
   const { money, settings } = useApp()
@@ -58,7 +59,7 @@ function FlowBar({
         className={good ? 'num small good' : 'num small'}
         style={{ minWidth: 72, textAlign: 'right' }}
       >
-        {money(cents)}
+        <Money cents={cents} />
       </span>
     </div>
   )

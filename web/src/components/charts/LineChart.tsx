@@ -3,7 +3,14 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, niceTicks, textWidth, timeTicks, type TimeTick } from '../../lib/chartScale'
+import {
+  axisFormat,
+  niceTicks,
+  svgNumber,
+  textWidth,
+  type TimeTick,
+  timeTicks,
+} from '../../lib/chartScale'
 import { toDayNumber } from '../../lib/dates'
 import { monthYear, shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
@@ -183,7 +190,7 @@ function ShadedLine({
   fill: string
 }) {
   if (points.length < 2) return null
-  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
+  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
   return (
     <>
       <path

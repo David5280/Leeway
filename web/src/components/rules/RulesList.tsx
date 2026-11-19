@@ -41,7 +41,8 @@ export function RulesList({
       </div>
       {rules.isSuccess && shown.length === 0 && (
         <p className="empty small">
-          No rules yet. Pick "Make a rule" on any transaction to file ones like it automatically.
+          No rules yet. Open any transaction and pick "Always categorize" to file ones like it
+          automatically.
         </p>
       )}
       {shown.map((rule) => {

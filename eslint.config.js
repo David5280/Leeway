@@ -4,6 +4,10 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
+
+/** A call to one of the money formatters, however it is reached: money(x) or app.money(x). */
+const MONEY_CALL =
+  ':matches([callee.name=/^(money|exact|signed|formatMoney|signedAmount|compactMoney)$/], [callee.property.name=/^(money|exact|signed)$/])'
 export default tseslint.config(
   { ignores: ['**/dist', '**/coverage', '**/node_modules', 'playwright-report', 'test-results'] },
   js.configs.recommended,
@@ -53,6 +57,35 @@ export default tseslint.config(
       'no-implicit-coercion': 'error',
       'prefer-template': 'error',
       'no-throw-literal': 'error',
+    },
+  },
+  {
+    // One way to show money (web/src/lib/money.ts and <Money>), so every
+    // screen reads amounts alike: no number formatting of its own, and no
+    // amount dropped into the page as bare text.
+    files: ['web/src/**/*.{ts,tsx}'],
+    ignores: ['web/src/lib/money.ts', 'web/src/**/*.test.{ts,tsx}', 'web/src/test/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.object.name='Intl'][callee.property.name='NumberFormat']",
+          message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='toFixed']",
+          message: 'Round with Math.round, or format money in web/src/lib/money.ts.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='toLocaleString'] Property[key.name='currency']",
+          message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
+        },
+        {
+          selector: `:matches(JSXElement, JSXFragment) > JSXExpressionContainer > CallExpression${MONEY_CALL}`,
+          message: 'Show an amount with <Money cents={...} />, not as formatted text.',
+        },
+      ],
     },
   },
   {

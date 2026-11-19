@@ -6,6 +6,7 @@ import { PaceChart } from '../components/charts/PaceChart'
 import { Card, ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
+import { Money } from '../components/design/Money'
 
 export function PaceWidget({ budget, offset }: WidgetProps) {
   const pace = useAction('get_spending_pace', { offset })
@@ -63,14 +64,24 @@ function PaceSummary({ pace, isCurrent }: { pace: SpendingPace; isCurrent: boole
   return (
     <p style={{ fontSize: 14 }}>
       {isCurrent ? 'At this rate you land near ' : 'You spent '}
-      <strong>{money(landing)}</strong>
+      <strong>
+        <Money cents={landing} />
+      </strong>
       {gap > 0 ? (
         <>
-          , about <span className="over strong">{money(gap)} over</span> the {budget} budget.
+          , about{' '}
+          <span className="over strong">
+            <Money cents={gap} /> over
+          </span>{' '}
+          the {budget} budget.
         </>
       ) : (
         <>
-          , <span className="good strong">{money(-gap)} under</span> the {budget} budget.
+          ,{' '}
+          <span className="good strong">
+            <Money cents={-gap} /> under
+          </span>{' '}
+          the {budget} budget.
         </>
       )}
     </p>

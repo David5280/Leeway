@@ -6,10 +6,10 @@ import type { Budget } from '../api/client'
 import { Card, Dot, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
+import { Money } from '../components/design/Money'
 
 /** Each goal's share held back this period, linked to the goals it is for. */
 function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
-  const { money } = useApp()
   if (setAsides.length === 0) return null
   return (
     <ul className="plain-list small" aria-label="Set aside for goals">
@@ -19,7 +19,7 @@ function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
             <Dot color={item.color} />
             Set aside for {item.name}
           </Link>
-          <span className="num muted">{money(item.amountCents)}</span>
+          <Money cents={item.amountCents} tone="muted" />
         </li>
       ))}
     </ul>
@@ -55,10 +55,10 @@ export function LeewayWidget({ budget }: WidgetProps) {
       <p className="eyebrow">Your leeway</p>
       <div className="row wrap" style={{ alignItems: 'baseline' }}>
         <span className={`num big-number ${leeway < 0 ? 'over' : ''}`}>
-          {money(Math.abs(leeway))}
+          <Money cents={Math.abs(leeway)} />
         </span>
         <span className="muted" style={{ fontSize: 16 }}>
-          {leeway < 0 ? 'over' : 'left of'} {money(totals.budgetedCents)}
+          {leeway < 0 ? 'over' : 'left of'} <Money cents={totals.budgetedCents} />
           {totals.setAsideCents > 0 && `, after ${money(totals.setAsideCents)} set aside`}
         </span>
       </div>
@@ -66,8 +66,11 @@ export function LeewayWidget({ budget }: WidgetProps) {
         <p style={{ fontSize: 17 }}>
           {leeway > 0 ? (
             <>
-              About <strong className="num">{money(totals.safePerDayCents)}</strong> a day for the
-              next {daysToSpend} {daysToSpend === 1 ? 'day' : 'days'}.
+              About{' '}
+              <strong>
+                <Money cents={totals.safePerDayCents} />
+              </strong>{' '}
+              a day for the next {daysToSpend} {daysToSpend === 1 ? 'day' : 'days'}.
             </>
           ) : (
             'Nothing left to spend this period.'
@@ -87,8 +90,7 @@ export function LeewayWidget({ budget }: WidgetProps) {
         />
         <div className="row-between small muted">
           <span>
-            <span className="num">{money(totals.budgetedSpentCents)}</span> spent,{' '}
-            {Math.round(used)}%
+            <Money cents={totals.budgetedSpentCents} /> spent, {Math.round(used)}%
           </span>
           {isCurrent && (
             <span className="hide-sm">Marker: where steady spending would be today</span>

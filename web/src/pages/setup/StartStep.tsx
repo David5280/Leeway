@@ -4,7 +4,6 @@ import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
-import { useApp } from '../../lib/app'
 import { groupBy } from '../../lib/groups'
 import { Frame, Nav } from './Frame'
 import {
@@ -15,6 +14,7 @@ import {
   type Start,
   type StarterRow,
 } from './starters'
+import { Money } from '../../components/design/Money'
 
 export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const hasBank = useAction('list_connections').data?.some((c) => c.accountCount > 0)
@@ -155,7 +155,6 @@ function StarterItem({
   row: StarterRow
   onEdit: (name: string, change: Edits[string]) => void
 }) {
-  const { money } = useApp()
   return (
     <div className="list-row">
       <input
@@ -168,7 +167,10 @@ function StarterItem({
       <span className="grow">
         {category.name}
         {averageCents !== null && (
-          <span className="small muted"> · you average {money(averageCents)}</span>
+          <span className="small muted">
+            {' '}
+            · you average <Money cents={averageCents} />
+          </span>
         )}
       </span>
       {category.kind === 'expense' ? (

@@ -9,6 +9,7 @@ import { monthYear, periodWord, shortDate } from '../lib/format'
 import { shortPlan } from '../lib/goalText'
 import { CashFlowSummary } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
+import { Money } from '../components/design/Money'
 
 /** A widget's title row, with a link to its full section on the Plan screen. */
 function Header({ title, to, link }: { title: string; to: string; link: string }) {
@@ -33,7 +34,7 @@ export function CashFlowWidget() {
 
 /** The next few bills, soonest first. */
 export function BillsWidget() {
-  const { exact, settings } = useApp()
+  const { settings } = useApp()
   const bills = useAction('list_bills')
   return (
     <Card label="Bills" className="stack-sm">
@@ -46,7 +47,7 @@ export function BillsWidget() {
           <div key={bill.id} className="list-row">
             <span className="grow">{bill.name}</span>
             <span className={`small ${status.tone || 'muted'}`}>{status.text}</span>
-            <span className="num">{exact(bill.amountCents)}</span>
+            <Money cents={bill.amountCents} precision="cents" />
           </div>
         )
       })}
@@ -71,7 +72,7 @@ export function GoalsWidget() {
             <div className="row-between small">
               <span>{goal.name}</span>
               <span className="num muted">
-                {money(goal.currentCents)} of {money(goal.targetCents)}
+                <Money cents={goal.currentCents} /> of <Money cents={goal.targetCents} />
               </span>
             </div>
             <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
@@ -90,7 +91,7 @@ export function GoalsWidget() {
 
 /** When the debts are gone with the cheapest strategy and no extra payment. */
 export function DebtsWidget() {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const plans = useAction('plan_debt_payoff', { extraCents: 0 })
   const plan = plans.data?.avalanche
   const owed = plans.data?.debts.reduce((sum, d) => sum + d.balanceCents, 0) ?? 0
@@ -114,8 +115,7 @@ export function DebtsWidget() {
           </span>
           <span className="small muted">
             Debt free in {durationText(plan.months).toLowerCase()}, paying{' '}
-            <span className="num">{money(plan.monthlyPaymentCents)}</span> a month on{' '}
-            <span className="num">{money(owed)}</span> owed.
+            <Money cents={plan.monthlyPaymentCents} /> a month on <Money cents={owed} /> owed.
           </span>
         </>
       )}
@@ -132,9 +132,11 @@ export function NetWorthWidget() {
       <Header title="Net worth" to="/plan/net-worth" link="Details" />
       {!worth.data && <LoadingOrError error={worth.error} />}
       {worth.data && (
-        <span className={`num mid-number ${worth.data.netWorthCents < 0 ? 'over' : ''}`}>
-          {money(worth.data.netWorthCents)}
-        </span>
+        <Money
+          cents={worth.data.netWorthCents}
+          tone={worth.data.netWorthCents < 0 ? 'problem' : undefined}
+          className="mid-number"
+        />
       )}
       {points.length > 1 && (
         <>

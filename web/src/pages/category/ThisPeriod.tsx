@@ -3,6 +3,7 @@
 import type { Budget, Category, CategoryBudget } from '../../api/client'
 import { Card, Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
+import { Money } from '../../components/design/Money'
 
 type Period = Budget['period']
 
@@ -49,7 +50,7 @@ export function ThisPeriod({
       <CarriedNote carriedCents={row.carriedCents} />
       {row.expectedByNowCents !== null && row.pace !== null && (
         <span className="small muted">
-          Steady spending would be at {money(row.expectedByNowCents)} by today. You warn at{' '}
+          Steady spending would be at <Money cents={row.expectedByNowCents} /> by today. You warn at{' '}
           {row.warnAtPercent}%.
         </span>
       )}

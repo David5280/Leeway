@@ -6,12 +6,11 @@ import { useAction } from '../api/hooks'
 import { AlertRows } from '../components/AccountAlerts'
 import { Shell } from '../components/Shell'
 import { Card, Icon, LoadingOrError } from '../components/ui'
-import { useApp } from '../lib/app'
 import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
+import { Money } from '../components/design/Money'
 
 export function Alerts() {
-  const { money } = useApp()
   return (
     <Shell>
       <Link to="/" className="linkbtn row" style={{ gap: 4 }}>
@@ -31,8 +30,9 @@ export function Alerts() {
           <li>A credit card past its credit limit.</li>
           <li>Overdraft and insufficient funds fees in the last {FEE_DAYS} days.</li>
           <li>
-            Money available below your warning: {money(DEFAULT_LOW_BALANCE_CENTS)} for checking
-            accounts unless you set another amount, and off for other accounts until you set one.
+            Money available below your warning: <Money cents={DEFAULT_LOW_BALANCE_CENTS} /> for
+            checking accounts unless you set another amount, and off for other accounts until you
+            set one.
           </li>
         </ul>
         <p className="small muted">

@@ -1,42 +1,9 @@
-// Formatting for money and dates. Money is integer cents, dates are YYYY-MM-DD.
+// Formatting for dates and reading typed amounts. Dates are YYYY-MM-DD.
+// Money is formatted in lib/money.ts, the one place amounts are written.
 
-import { addDays, dateParts } from './dates'
+import { addDays, dateParts, daysBetween } from './dates'
 
 export { periodWord } from '../../../server/src/lib/words'
-
-export interface MoneyOptions {
-  currency: string
-  locale: string
-}
-
-const formatters = new Map<string, Intl.NumberFormat>()
-
-function formatter(options: MoneyOptions, cents: boolean): Intl.NumberFormat {
-  const key = `${options.locale}|${options.currency}|${cents}`
-  let found = formatters.get(key)
-  if (!found) {
-    found = new Intl.NumberFormat(options.locale, {
-      style: 'currency',
-      currency: options.currency,
-      minimumFractionDigits: cents ? 2 : 0,
-      maximumFractionDigits: cents ? 2 : 0,
-    })
-    formatters.set(key, found)
-  }
-  return found
-}
-
-/** "$1,234" (whole units) or "$1,234.56" with exact: true. */
-export function money(amountCents: number, options: MoneyOptions, exact = false): string {
-  const units = amountCents / 100
-  return formatter(options, exact).format(exact ? units : Math.round(units))
-}
-
-/** A transaction amount: spending as "$12.00", money in as "+$12.00". */
-export function signedAmount(amountCents: number, options: MoneyOptions): string {
-  const text = money(Math.abs(amountCents), options, true)
-  return amountCents < 0 ? `+${text}` : text
-}
 
 /** Parses "12.50", "$1,200" or "1200" into cents; null if it is not a number. */
 export function parseMoney(text: string): number | null {
@@ -54,6 +21,26 @@ function asDate(iso: string): Date {
 /** "Nov 17" */
 export function shortDate(iso: string, locale = 'en-US'): string {
   return asDate(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/**
+ * A day as people say it: "Today", "Yesterday", "Tomorrow", then "Tue, Nov 17",
+ * with the year when it is not this year ("Tue, Nov 17, 2025"). `today` is the
+ * date in the owner's time zone. The one helper every relative date uses.
+ */
+export function relativeDay(iso: string, today: string, locale = 'en-US'): string {
+  const gap = daysBetween(iso, today)
+  if (gap === 0) return 'Today'
+  if (gap === 1) return 'Yesterday'
+  if (gap === -1) return 'Tomorrow'
+  const sameYear = dateParts(iso).year === dateParts(today).year
+  return asDate(iso).toLocaleDateString(locale, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone: 'UTC',
+  })
 }
 
 /** "Nov 17, 2026", for dates that can be a year or more away, like a goal's. */
@@ -100,10 +87,6 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
   const hours = Math.round(minutes / 60)
   if (hours < 24) return `${hours} h ago`
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-export function percent(value: number): string {
-  return `${Math.round(value)}%`
 }
 
 /** A short label for a period's bar in a chart: "Mar" for months, "Mar 4" otherwise. */

@@ -680,15 +680,14 @@ describe('RecentWidget', () => {
     fakeServer({ list_transactions: () => ({ transactions: txs, total: txs.length }) })
     renderSignedIn(<RecentWidget budget={budgetFor([...categories, transfer], [])} offset={0} />)
     expect(await screen.findByText('Costco')).toBeInTheDocument()
-    expect(screen.getByText('Nov 17')).toBeInTheDocument()
-    expect(screen.getByText('Groceries')).toBeInTheDocument()
+    expect(screen.getByText('Nov 17 · Groceries')).toBeInTheDocument()
     expect(screen.getByText('$84.50')).toBeInTheDocument()
-    // No merchant name falls back to the bank's description.
-    expect(screen.getByText('SWEET COW')).toBeInTheDocument()
-    expect(screen.getByText('Needs a category, pending')).toBeInTheDocument()
-    // Transfers are left out of the budget, so their category has no row there.
-    expect(screen.getByText('Transfer')).toBeInTheDocument()
-    expect(screen.getByText('+$2,500.00')).toBeInTheDocument()
+    // No merchant name: the bank's description, cleaned.
+    expect(screen.getByText('Sweet Cow')).toBeInTheDocument()
+    expect(screen.getByText('Nov 16 · Needs a category, pending')).toBeInTheDocument()
+    // A transfer only moved money, so it has no sign and a quiet tone.
+    expect(screen.getByText('Nov 9 · Transfer')).toBeInTheDocument()
+    expect(screen.getByText('$2,500.00')).toHaveClass('money-muted')
     expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute(
       'href',
       '/transactions',
@@ -706,9 +705,9 @@ describe('RecentWidget', () => {
     })
     fakeServer({ list_transactions: () => ({ transactions: [arrival], total: 1 }) })
     renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
-    expect(await screen.findByText('Card payment')).toBeInTheDocument()
-    expect(screen.getByText('+$409.30')).toHaveClass('muted')
-    expect(screen.getByText('+$409.30')).not.toHaveClass('good')
+    expect(await screen.findByText('Nov 4 · Card payment')).toBeInTheDocument()
+    expect(screen.getByText('$409.30')).toHaveClass('money-muted')
+    expect(screen.queryByText('+$409.30')).not.toBeInTheDocument()
   })
 
   it('names the person a Zelle came from, as money in', async () => {
@@ -722,7 +721,7 @@ describe('RecentWidget', () => {
     fakeServer({ list_transactions: () => ({ transactions: [zelle], total: 1 }) })
     renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(await screen.findByText('From Jane Doe')).toBeInTheDocument()
-    expect(screen.getByText('+$125.00')).toHaveClass('good')
+    expect(screen.getByText('+$125.00')).toHaveClass('money-in')
   })
 
   it('says when there are no transactions', async () => {

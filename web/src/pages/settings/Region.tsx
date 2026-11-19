@@ -3,6 +3,7 @@
 import { timeZones } from '../../components/PeriodEditor'
 import { Setting } from '../../components/ui'
 import { useApp } from '../../lib/app'
+import { currencySample } from '../../lib/money'
 import { Section, useSave } from './Section'
 
 const CURRENCIES = [
@@ -54,10 +55,7 @@ export function RegionSection() {
     ? CURRENCIES
     : [settings.currency, ...CURRENCIES]
   const locales = LOCALES.includes(settings.locale) ? LOCALES : [settings.locale, ...LOCALES]
-  const sample = (locale: string) =>
-    new Intl.NumberFormat(locale, { style: 'currency', currency: settings.currency }).format(
-      1234.56,
-    )
+  const sample = (locale: string) => currencySample({ locale, currency: settings.currency })
   return (
     <Section id="region" title="Region">
       <Setting label="Currency">

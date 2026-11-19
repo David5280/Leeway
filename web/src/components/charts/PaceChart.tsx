@@ -3,7 +3,7 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, spreadLabels, textWidth } from '../../lib/chartScale'
+import { axisFormat, axisIndices, spreadLabels, svgNumber, textWidth } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
@@ -198,7 +198,7 @@ function DateAxis({
 /** Spending so far, shaded beneath. */
 function ActualLine({ points, bottom, fill }: { points: Point[]; bottom: number; fill: string }) {
   if (points.length === 0) return null
-  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
+  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
   return (
     <>
       {points.length > 1 && (
@@ -253,7 +253,7 @@ function SteadyPace({
         x={at.x}
         y={at.y + offset}
         textAnchor="middle"
-        transform={`rotate(${angle.toFixed(1)} ${at.x} ${at.y})`}
+        transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
         className="chart-axis"
       >
         Steady pace

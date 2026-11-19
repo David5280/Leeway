@@ -9,15 +9,16 @@ import { useApp } from '../lib/app'
 import { periodWord, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
+import { Money } from '../components/design/Money'
 
 export function GlanceWidget({ budget }: WidgetProps) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const word = periodWord(settings.period.kind)
   return (
     <section aria-label="This period at a glance" className="glance">
       <SpentCard budget={budget} word={word} />
       <GlanceCard title="Income">
-        <span className="num mid-number">{money(budget.totals.incomeCents)}</span>
+        <Money cents={budget.totals.incomeCents} className="mid-number" />
         <span className="small muted">Money in this {word}</span>
       </GlanceCard>
       <UncategorizedCard budget={budget} />
@@ -43,7 +44,7 @@ function SpentCard({ budget, word }: { budget: Budget; word: string }) {
   const nothingYet = previous.spentToDateCents === 0 && diff === 0
   return (
     <GlanceCard title="Spent">
-      <span className="num mid-number">{money(totals.spentCents)}</span>
+      <Money cents={totals.spentCents} className="mid-number" />
       <span className="small muted">
         {nothingYet
           ? 'Nothing yet'
@@ -54,14 +55,13 @@ function SpentCard({ budget, word }: { budget: Budget; word: string }) {
 }
 
 function UncategorizedCard({ budget }: { budget: Budget }) {
-  const { money } = useApp()
   const { uncategorizedCount, uncategorizedCents } = budget.totals
   return (
     <GlanceCard title="Needs a category">
       <span className="num mid-number">{uncategorizedCount}</span>
       {uncategorizedCount > 0 ? (
         <Link to="/transactions?category=uncategorized" className="linkbtn small">
-          Sort {money(uncategorizedCents)} of spending
+          Sort <Money cents={uncategorizedCents} /> of spending
         </Link>
       ) : (
         <span className="small muted">All sorted</span>

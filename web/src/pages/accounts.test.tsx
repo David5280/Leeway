@@ -221,10 +221,10 @@ describe('Accounts dashboard', () => {
     server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { recent }) })
     renderSignedIn(<Accounts />)
     const card = await screen.findByRole('region', { name: 'Recent transactions' })
-    expect(await within(card).findByText('Groceries')).toBeInTheDocument()
+    expect(await within(card).findByText('Nov 12 · Groceries')).toBeInTheDocument()
     // A category the list does not know is a transfer.
-    expect(within(card).getByText('Transfer')).toBeInTheDocument()
-    expect(within(card).getByText('Needs a category')).toBeInTheDocument()
+    expect(within(card).getByText('Nov 10 · Transfer')).toBeInTheDocument()
+    expect(within(card).getByText('Nov 9 · Needs a category')).toBeInTheDocument()
   })
 
   it('says how to start when there are no accounts', async () => {

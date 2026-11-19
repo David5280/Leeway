@@ -7,6 +7,7 @@ import { Card, ErrorNote, Progress } from '../components/ui'
 import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
+import { Money } from '../components/design/Money'
 
 export function RecentWidget({ budget }: WidgetProps) {
   const recent = useAction('list_transactions', { limit: 6, end: budget.period.end })
@@ -85,7 +86,7 @@ export function MerchantsWidget({ offset }: WidgetProps) {
         <div key={m.merchant} className="stack-sm" style={{ padding: '6px 0' }}>
           <div className="row-between">
             <span>{m.merchant}</span>
-            <span className="num">{money(m.spentCents)}</span>
+            <Money cents={m.spentCents} />
           </div>
           <Progress
             percent={(m.spentCents / top) * 100}

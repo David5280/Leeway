@@ -1,15 +1,8 @@
 // Bars per budget period, each labeled with its amount, against the budget.
 
 import { useApp } from '../../lib/app'
-import {
-  axisFormat,
-  axisIndices,
-  compactMoney,
-  niceTicks,
-  textWidth,
-  type Ticks,
-} from '../../lib/chartScale'
-import { money as formatMoney, type MoneyOptions } from '../../lib/format'
+import { axisFormat, axisIndices, niceTicks, textWidth, type Ticks } from '../../lib/chartScale'
+import { compactMoney, money as formatMoney, type MoneyOptions } from '../../lib/money'
 import { useWidth } from '../../lib/useWidth'
 import { ChartFrame, EndLabel, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
 

@@ -8,17 +8,17 @@ import { useApp } from '../../../lib/app'
 import { periodWord } from '../../../lib/format'
 import { paceText, planText, thisPeriodText } from '../../../lib/goalText'
 import { AddMoney, History } from './Contributions'
+import { Money } from '../../../components/design/Money'
 
 /** Small labels by the name: what kind of goal, and whether the budget holds money for it. */
 function Badges({ goal, word }: { goal: Goal; word: string }) {
-  const { money } = useApp()
   if (goal.kind !== 'purchase' && goal.heldBackCents === 0) return null
   return (
     <div className="row wrap" style={{ gap: 6 }}>
       {goal.kind === 'purchase' && <span className="badge">Purchase</span>}
       {goal.heldBackCents > 0 && (
         <span className="badge accent">
-          {money(goal.heldBackCents)} held from this {word}&apos;s budget
+          <Money cents={goal.heldBackCents} /> held from this {word}&apos;s budget
         </span>
       )}
     </div>
@@ -48,8 +48,10 @@ export function GoalCard({
       </div>
       <Badges goal={goal} word={word} />
       <div className="row wrap" style={{ alignItems: 'baseline' }}>
-        <span className="num mid-number">{money(goal.currentCents)}</span>
-        <span className="muted">of {money(goal.targetCents)}</span>
+        <Money cents={goal.currentCents} className="mid-number" />
+        <span className="muted">
+          of <Money cents={goal.targetCents} />
+        </span>
       </div>
       <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
       <span className="small">{planText(goal, money, word, settings.locale)}</span>
