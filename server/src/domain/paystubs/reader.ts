@@ -22,14 +22,20 @@ export const CACHE_TTL_MS = DAY_MS
 
 /**
  * The most input tokens one read may send, counted before it is paid for.
- * Anthropic's docs put a PDF page at 1,500 to 3,000 text tokens plus at most
- * 1,568 for its picture, so a dense page is about 4,600 tokens, and a photo
- * at most 4,784. The prompt and the output schema add about 1,500. A dense
- * two-page stub is then about 10,700 tokens: 16,000 leaves half again as
- * much for headroom, takes three dense pages, and refuses a long statement
- * that would cost many times a paystub.
+ *
+ * A dense two-page stub on Claude Haiku 5.5, figured on the high side:
+ * - Text: Anthropic's docs put a page at 1,500 to 3,000 tokens, and Haiku
+ *   5.5's tokenizer counts about 30% more, so up to about 3,900 a page.
+ * - Picture: the docs cap a PDF page's picture at 1,568 tokens, but this
+ *   allows 4,784, the most a photo can use, in case that cap changes.
+ * - Prompt and output schema: about 1,500, or 1,950 with the newer tokenizer.
+ * That is 2 x (3,900 + 4,784) + 1,950, about 19,300 tokens.
+ *
+ * 32,000 leaves about two thirds again as much for headroom. At Haiku 5.5's
+ * $0.10 per million input tokens, a read that size costs about $0.003, and a
+ * long statement, many pages of figures, is still refused.
  */
-export const MAX_PAYSTUB_INPUT_TOKENS = 16_000
+export const MAX_PAYSTUB_INPUT_TOKENS = 32_000
 
 const TOO_LONG =
   'This file is too long to read as a paystub. Save just the page or two with your pay figures and try again.'
