@@ -148,7 +148,8 @@ describe('a paired transfer moves no totals', () => {
 })
 
 describe('a pair with no transfer category to go to', () => {
-  it('is filed as the bank says, since there is nowhere else to put it', async () => {
+  /** A card payment, both sides, that Bills also claims; filed after. */
+  async function cardPayment() {
     await createCategory(
       ctx.db,
       categoryInputSchema.parse({ name: 'Bills', providerCategories: ['LOAN_PAYMENTS'] }),
@@ -168,10 +169,43 @@ describe('a pair with no transfer category to go to', () => {
       })
     }
     await recategorize(ctx.db)
-    const { rows } = await ctx.db.query<{ category: string }>(
-      `SELECT c.name AS category FROM transactions t JOIN categories c ON c.id = t.category_id`,
+    const { rows } = await ctx.db.query<{ category: string | null; kind: string | null }>(
+      `SELECT c.name AS category, c.kind FROM transactions t
+       LEFT JOIN categories c ON c.id = t.category_id`,
     )
-    expect(rows).toEqual([{ category: 'Bills' }, { category: 'Bills' }])
+    return rows
+  }
+
+  it('makes a transfer category from the starter, never filing the pair as spending', async () => {
+    const filed = await cardPayment()
+    expect(filed).toEqual([
+      { category: 'Transfers', kind: 'transfer' },
+      { category: 'Transfers', kind: 'transfer' },
+    ])
+    const made = (await listCategories(ctx.db)).find((category) => category.kind === 'transfer')
+    expect(made).toMatchObject({ icon: 'swap', group: 'Transfers' })
+  })
+
+  it('gives the category it makes another name when Transfers is taken', async () => {
+    await createCategory(ctx.db, categoryInputSchema.parse({ name: 'transfers' }))
+    expect(await cardPayment()).toEqual([
+      { category: 'Transfers between accounts', kind: 'transfer' },
+      { category: 'Transfers between accounts', kind: 'transfer' },
+    ])
+  })
+
+  it('leaves the pair uncategorized when every name is taken', async () => {
+    await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Transfers' }))
+    await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Transfers between accounts' }))
+    expect(await cardPayment()).toEqual([
+      { category: null, kind: null },
+      { category: null, kind: null },
+    ])
+  })
+
+  it('makes none when nothing pairs', async () => {
+    await recategorize(ctx.db)
+    expect(await listCategories(ctx.db)).toEqual([])
   })
 })
 

@@ -2,7 +2,7 @@
 
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
-import { recategorize, ruleMatches } from '../domain/categorize.js'
+import { recategorize } from '../domain/categorize.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -11,6 +11,7 @@ import {
   listRules,
   reorderRules,
   ruleFieldsSchema,
+  ruleMatches,
   updateRule,
   type Rule,
 } from '../domain/rules.js'

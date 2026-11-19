@@ -41,11 +41,11 @@ export function TransactionDetails({
   onDeleted: () => void
 }) {
   const kind = category?.kind ?? null
-  const moved = isMove(tx, kind)
+  const moved = isMove(kind)
   return (
     <>
       <div className="sheet-amount">
-        <Money cents={tx.amountCents} sign={amountSign(tx, kind)} size="xl" />
+        <Money cents={tx.amountCents} sign={amountSign(kind)} size="xl" />
         <span className="sheet-amount-tags">
           {movementTag(tx, kind) && <StatusPill status="quiet" label={movementTag(tx, kind)!} />}
           {tx.excluded && <StatusPill status="quiet" label="Not counted in totals" />}

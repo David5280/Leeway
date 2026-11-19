@@ -42,7 +42,7 @@ export function TransactionSheet({
   const [picked, setPicked] = useState<{ id: string | null } | null>(null)
   const categoryId = picked && !update.isError ? picked.id : tx.categoryId
   const category = categories.find((c) => c.id === categoryId)
-  const moved = isMove(tx, category?.kind ?? null)
+  const moved = isMove(category?.kind ?? null)
 
   function pick(id: string | null) {
     setPicked({ id })

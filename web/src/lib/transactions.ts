@@ -9,12 +9,14 @@ import type { MoneySign } from './money'
 type CategoryKind = Category['kind'] | null
 
 /**
- * Whether a transaction only moved money between the owner's own accounts:
- * filed as a transfer, or paired by the server with its other side. A move
- * is neither money in nor money out.
+ * Whether a transaction only moved money between the owner's own accounts.
+ * The one test, as on the server (counted.ts): it is filed under a transfer
+ * category, which a paired transfer always is. The server shows a pair's
+ * other side only then, so the two never disagree. A move is neither money
+ * in nor money out.
  */
-export function isMove(tx: Pick<Transaction, 'transfer'>, kind: CategoryKind): boolean {
-  return kind === 'transfer' || tx.transfer !== null
+export function isMove(kind: CategoryKind): boolean {
+  return kind === 'transfer'
 }
 
 /**
@@ -22,18 +24,18 @@ export function isMove(tx: Pick<Transaction, 'transfer'>, kind: CategoryKind): b
  * quiet tone, so a card payment arriving on the card never reads as money
  * earned; anything else reads as a bank amount, "+" for money in.
  */
-export function amountSign(tx: Pick<Transaction, 'transfer'>, kind: CategoryKind): MoneySign {
-  return isMove(tx, kind) ? 'transfer' : 'transaction'
+export function amountSign(kind: CategoryKind): MoneySign {
+  return isMove(kind) ? 'transfer' : 'transaction'
 }
 
 const CARD_PAYMENT_CODE = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
 
 /** A few words on what kind of move a transaction is, or null for an ordinary one. */
 export function movementTag(
-  tx: Pick<Transaction, 'bankCategory' | 'person' | 'transfer'>,
+  tx: Pick<Transaction, 'bankCategory' | 'person'>,
   kind: CategoryKind,
 ): string | null {
-  if (isMove(tx, kind)) {
+  if (isMove(kind)) {
     return tx.bankCategory === CARD_PAYMENT_CODE ? 'Card payment' : 'Transfer'
   }
   if (tx.person) {
@@ -43,11 +45,8 @@ export function movementTag(
 }
 
 /** What happened to the money, as a word a screen reader says before the amount. */
-export function amountVerb(
-  tx: Pick<Transaction, 'amountCents' | 'transfer'>,
-  kind: CategoryKind,
-): string {
-  if (isMove(tx, kind)) return 'moved'
+export function amountVerb(tx: Pick<Transaction, 'amountCents'>, kind: CategoryKind): string {
+  if (isMove(kind)) return 'moved'
   return tx.amountCents < 0 ? 'received' : 'spent'
 }
 
@@ -57,10 +56,7 @@ export function amountVerb(
  * A transaction left out of totals says so at the end.
  */
 export function rowLabel(
-  tx: Pick<
-    Transaction,
-    'displayName' | 'accountName' | 'pending' | 'excluded' | 'amountCents' | 'transfer'
-  >,
+  tx: Pick<Transaction, 'displayName' | 'accountName' | 'pending' | 'excluded' | 'amountCents'>,
   category: Pick<Category, 'name' | 'kind'> | undefined,
   amount: string,
 ): string {
@@ -69,7 +65,7 @@ export function rowLabel(
     tx.displayName,
     `${amountVerb(tx, kind)} ${amount}`,
     tx.accountName,
-    category?.name ?? (isMove(tx, kind) ? 'Transfer' : 'needs a category'),
+    category?.name ?? 'needs a category',
     tx.pending ? 'pending' : '',
     tx.excluded ? 'not counted in totals' : '',
   ]
@@ -96,10 +92,10 @@ export function rulePattern(
  * is money out, like the amounts themselves.
  */
 export function dayNet(
-  transactions: Pick<Transaction, 'amountCents' | 'transfer' | 'excluded' | 'categoryId'>[],
+  transactions: Pick<Transaction, 'amountCents' | 'excluded' | 'categoryId'>[],
   kindOf: (categoryId: string | null) => CategoryKind,
 ): number {
   return transactions
-    .filter((tx) => !tx.excluded && !isMove(tx, kindOf(tx.categoryId)))
+    .filter((tx) => !tx.excluded && !isMove(kindOf(tx.categoryId)))
     .reduce((sum, tx) => sum + tx.amountCents, 0)
 }

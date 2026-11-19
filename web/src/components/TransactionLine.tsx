@@ -34,7 +34,7 @@ export function TransactionLine({
   const about = category?.name ?? movementTag(tx, kind) ?? 'Needs a category'
   return (
     <div className="list-row tx-line">
-      <CategoryIcon category={category} transfer={isMove(tx, kind)} size="sm" />
+      <CategoryIcon category={category} transfer={isMove(kind)} size="sm" />
       <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
         <span className="ellipsis" style={{ fontWeight: 500 }}>
           {tx.displayName}
@@ -44,7 +44,7 @@ export function TransactionLine({
           {tx.pending ? ', pending' : ''}
         </span>
       </span>
-      <Money cents={tx.amountCents} sign={amountSign(tx, kind)} size="md" />
+      <Money cents={tx.amountCents} sign={amountSign(kind)} size="md" />
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { Rule } from '../src/domain/rules.js'
 import {
+  filedElsewhere,
   pairTransfers,
   transferHint,
   PAIR_WINDOW_DAYS,
@@ -216,5 +218,39 @@ describe('pairTransfers', () => {
     const partners = pairTransfers([out, arrival])
     expect(partners.get('out')).toBe(arrival)
     expect(partners.get('in')).toBe(out)
+  })
+})
+
+describe('filedElsewhere', () => {
+  const kinds = new Map([
+    ['groceries', 'expense' as const],
+    ['transfers', 'transfer' as const],
+  ])
+  const rule = (categoryId: string): Rule => ({
+    id: `rule-${categoryId}`,
+    field: 'description',
+    matchType: 'contains',
+    pattern: 'transfer',
+    minAmountCents: null,
+    maxAmountCents: null,
+    categoryId,
+    position: 0,
+  })
+  const line = { name: 'ONLINE TRANSFER', merchantName: null, amountCents: 2500 }
+
+  it('says so for a transaction filed by hand under another kind', () => {
+    const byHand = { ...line, categorySource: 'manual' }
+    expect(filedElsewhere({ ...byHand, categoryKind: 'expense' }, [], kinds)).toBe(true)
+    expect(filedElsewhere({ ...byHand, categoryKind: null }, [], kinds)).toBe(true)
+    expect(filedElsewhere({ ...byHand, categoryKind: 'transfer' }, [], kinds)).toBe(false)
+  })
+
+  it('says so when a rule files it under another kind, unless filed by hand as a transfer', () => {
+    const filed = { ...line, categorySource: 'provider', categoryKind: 'transfer' as const }
+    expect(filedElsewhere(filed, [rule('groceries')], kinds)).toBe(true)
+    expect(filedElsewhere(filed, [rule('transfers')], kinds)).toBe(false)
+    expect(filedElsewhere(filed, [], kinds)).toBe(false)
+    const byHand = { ...filed, categorySource: 'manual' }
+    expect(filedElsewhere(byHand, [rule('groceries')], kinds)).toBe(false)
   })
 })

@@ -33,29 +33,27 @@ const tx = (overrides: Partial<Transaction>) =>
 const partner = { id: 'p', accountId: 'savings', accountName: 'BOK Savings', date: '2026-11-06' }
 
 describe('isMove and amountSign', () => {
-  it('treats a transfer category or a paired other side as money only moved', () => {
-    expect(isMove({ transfer: null }, 'transfer')).toBe(true)
-    expect(isMove({ transfer: partner }, null)).toBe(true)
-    expect(isMove({ transfer: null }, 'expense')).toBe(false)
+  it('treats only a transfer category as money moved, as the server does', () => {
+    expect(isMove('transfer')).toBe(true)
+    expect(isMove('expense')).toBe(false)
+    expect(isMove('income')).toBe(false)
+    expect(isMove(null)).toBe(false)
   })
 
   it('signs a move as a transfer and anything else as a bank amount', () => {
-    expect(amountSign({ transfer: partner }, 'expense')).toBe('transfer')
-    expect(amountSign({ transfer: null }, 'income')).toBe('transaction')
+    expect(amountSign('transfer')).toBe('transfer')
+    expect(amountSign('income')).toBe('transaction')
   })
 })
 
 describe('movementTag', () => {
   it('labels a card payment and any other transfer', () => {
-    const payment = {
-      bankCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-      person: null,
-      transfer: null,
-    }
-    const savings = { bankCategory: 'TRANSFER_OUT_SAVINGS', person: null, transfer: null }
+    const payment = { bankCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', person: null }
+    const savings = { bankCategory: 'TRANSFER_OUT_SAVINGS', person: null }
     expect(movementTag(payment, 'transfer')).toBe('Card payment')
     expect(movementTag(savings, 'transfer')).toBe('Transfer')
-    expect(movementTag({ ...savings, transfer: partner }, null)).toBe('Transfer')
+    // Filed as something else, it is not a transfer, whatever the bank's code.
+    expect(movementTag(savings, 'expense')).toBeNull()
   })
 
   it('says whether money was sent or received between people', () => {
@@ -64,7 +62,7 @@ describe('movementTag', () => {
   })
 
   it('says nothing about an ordinary purchase', () => {
-    const groceries = { bankCategory: 'FOOD_AND_DRINK_GROCERIES', person: null, transfer: null }
+    const groceries = { bankCategory: 'FOOD_AND_DRINK_GROCERIES', person: null }
     expect(movementTag(groceries, 'expense')).toBeNull()
   })
 })
@@ -73,7 +71,7 @@ describe('amountVerb and rowLabel', () => {
   it('says spent, received or moved', () => {
     expect(amountVerb(zelleOut, 'expense')).toBe('spent')
     expect(amountVerb(zelleIn, 'income')).toBe('received')
-    expect(amountVerb({ amountCents: -500, transfer: partner }, null)).toBe('moved')
+    expect(amountVerb({ amountCents: -500 }, 'transfer')).toBe('moved')
   })
 
   it('reads everything a row shows in one sentence', () => {
@@ -88,15 +86,15 @@ describe('amountVerb and rowLabel', () => {
     )
   })
 
-  it('names a missing category, and calls an uncategorized move a transfer', () => {
+  it('names a missing category, and a move by its transfer category', () => {
     const lunch = tx({ displayName: 'Lunch', accountName: 'Cash', amountCents: 1200 })
     expect(rowLabel(lunch, undefined, '$12.00')).toBe('Lunch, spent $12.00, Cash, needs a category')
     expect(rowLabel({ ...lunch, excluded: true }, undefined, '$12.00')).toBe(
       'Lunch, spent $12.00, Cash, needs a category, not counted in totals',
     )
     const moved = { ...lunch, displayName: 'Checking to Savings', transfer: partner }
-    expect(rowLabel(moved, undefined, '$12.00')).toBe(
-      'Checking to Savings, moved $12.00, Cash, Transfer',
+    expect(rowLabel(moved, { name: 'Transfers', kind: 'transfer' }, '$12.00')).toBe(
+      'Checking to Savings, moved $12.00, Cash, Transfers',
     )
   })
 })
@@ -135,7 +133,6 @@ describe('dayNet', () => {
       tx({ amountCents: 2000, categoryId: 'food' }),
       tx({ amountCents: -50000, categoryId: 'pay' }),
       tx({ amountCents: 10000, categoryId: 'move' }),
-      tx({ amountCents: 7000, categoryId: null, transfer: partner }),
       tx({ amountCents: 900, categoryId: 'food', excluded: true }),
       tx({ amountCents: 300, categoryId: null }),
     ]

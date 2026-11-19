@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
+import { recategorize } from '../src/domain/categorize.js'
 import { merchantDisplayName, transactionDisplayName } from '../src/domain/transactionName.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -159,7 +160,7 @@ describe('transactions as listed', () => {
     await resetData(ctx.db)
   })
 
-  /** Checking and savings, with a transfer between them. */
+  /** Checking and savings, with a transfer between them, filed as one. */
   async function transferBetween() {
     const checking = await insertBankAccount(ctx.db, { name: 'Total Checking' })
     const savings = await insertBankAccount(ctx.db, { name: 'Savings' })
@@ -173,6 +174,7 @@ describe('transactions as listed', () => {
       name: 'ONLINE TRANSFER FROM CHK ...9921',
       amountCents: -50000,
     })
+    await recategorize(ctx.db)
     return { checking, savings, out, arrival }
   }
 
@@ -196,6 +198,38 @@ describe('transactions as listed', () => {
     const { transactions } = await call('list_transactions', { accountId: checking.accountId })
     expect(transactions).toHaveLength(1)
     expect(transactions[0]!.transfer?.id).toBe(arrival)
+  })
+
+  it('unpairs a transfer whose side is filed as something else, and files the other again', async () => {
+    const { out, arrival } = await transferBetween()
+    const groceries = await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Groceries' }))
+    await call('update_transaction', { id: out, categoryId: groceries.id })
+    const byId = new Map((await call('list_transactions', {})).transactions.map((t) => [t.id, t]))
+    expect(byId.get(out)).toMatchObject({ categoryId: groceries.id, transfer: null })
+    expect(byId.get(out)?.displayName).toBe('Transfer to Savings')
+    expect(byId.get(arrival)).toMatchObject({ categoryId: null, transfer: null })
+  })
+
+  it('unpairs a transfer when a rule files one side as something else', async () => {
+    const { out, arrival } = await transferBetween()
+    const groceries = await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Groceries' }))
+    await call('create_rule', {
+      field: 'description',
+      pattern: 'transfer to sav',
+      categoryId: groceries.id,
+    })
+    const byId = new Map((await call('list_transactions', {})).transactions.map((t) => [t.id, t]))
+    expect(byId.get(out)).toMatchObject({ categoryId: groceries.id, transfer: null })
+    expect(byId.get(arrival)).toMatchObject({ categoryId: null, transfer: null })
+  })
+
+  it('shows no other side while a paired side is not filed as a transfer', async () => {
+    const { out, arrival } = await transferBetween()
+    // Taken out of its category straight in the table, so filing has not caught up.
+    await ctx.db.query('UPDATE transactions SET category_id = NULL WHERE id = $1', [out])
+    const byId = new Map((await call('list_transactions', {})).transactions.map((t) => [t.id, t]))
+    expect(byId.get(out)?.transfer).toBeNull()
+    expect(byId.get(arrival)?.transfer?.id).toBe(out)
   })
 
   it('gives a lone transfer its clean bank name and no other side', async () => {

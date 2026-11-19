@@ -5,7 +5,7 @@ import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { accountMasks, accountNames } from './accounts.js'
-import { assertCategoryExists } from './categories.js'
+import { assertCategoryExists, type Category } from './categories.js'
 import { recategorize } from './categorize.js'
 import { safeName, type AccountMasks } from './safeName.js'
 import { transactionDisplayName } from './transactionName.js'
@@ -61,6 +61,8 @@ export interface Transaction {
 type StoredTransaction = Omit<Transaction, 'person' | 'accountName' | 'displayName' | 'transfer'> &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'> & {
     categoryName: string | null
+    /** The kind of its category: only a transfer category's transactions show their other side. */
+    categoryKind: Category['kind'] | null
   }
 
 /** What presenting transactions needs to know about every account and pair. */
@@ -90,11 +92,14 @@ function present(row: StoredTransaction, { names, masks, partners }: Presenting)
     providerCategoryPrimary: _primary,
     providerCategoryDetailed: _detailed,
     categoryName,
+    categoryKind,
     ...tx
   } = row
   const accountName = names.get(row.accountId)!
   const person = safePerson(personPayment(row), masks)
-  const partner = partners.get(row.id)
+  // One test of a transfer everywhere: its category's kind (see counted.ts).
+  // A pair whose side is not, or not yet, filed as one shows as what it is filed as.
+  const partner = categoryKind === 'transfer' ? partners.get(row.id) : undefined
   const transfer = partner
     ? {
         id: partner.id,
@@ -160,8 +165,8 @@ const SELECT = `
       WHEN t.import_id IS NOT NULL THEN 'import' ELSE 'manual' END AS source,
     t.provider_category_primary AS "providerCategoryPrimary",
     t.provider_category_detailed AS "providerCategoryDetailed",
-    (SELECT c.name FROM categories c WHERE c.id = t.category_id) AS "categoryName"
-  FROM transactions t`
+    c.name AS "categoryName", c.kind AS "categoryKind"
+  FROM transactions t LEFT JOIN categories c ON c.id = t.category_id`
 
 export async function listTransactions(
   db: Db,
@@ -217,6 +222,8 @@ async function getTransaction(db: Db, id: string): Promise<Transaction> {
 /**
  * Sets the category of transactions by hand. A manual choice sticks: rules
  * and syncs never override it. Passing null hands them back to the rules.
+ * Either way the transactions around them are filed again, since a side of a
+ * transfer filed as something else no longer pairs (see transferPairs.ts).
  */
 export async function setCategory(
   db: Db,
@@ -229,9 +236,12 @@ export async function setCategory(
      WHERE id = ANY($1::uuid[])`,
     [ids, categoryId, categoryId ? 'manual' : null],
   )
-  if (!categoryId) await recategorize(db, ids)
+  await recategorize(db, ids)
   return rowCount ?? 0
 }
+
+/** The fields whose change can pair a transaction with another, or unpair it. */
+const PAIRING_FIELDS = ['date', 'name', 'amountCents', 'excluded'] as const
 
 export const transactionPatchSchema = z
   .object({
@@ -281,7 +291,10 @@ export async function updateTransaction(
     ],
   )
   if (patch.categoryId !== undefined) await setCategory(db, [id], patch.categoryId)
-  else if (patch.name !== undefined || patch.amountCents !== undefined) await recategorize(db, [id])
+  if (PAIRING_FIELDS.some((field) => patch[field] !== undefined)) {
+    // Its pairing may change, so it and the side it was paired with are filed again.
+    await recategorize(db, [id, ...(tx.transfer ? [tx.transfer.id] : [])])
+  }
   return getTransaction(db, id)
 }
 

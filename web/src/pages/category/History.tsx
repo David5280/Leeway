@@ -106,7 +106,7 @@ export function InThisCategory({
             {shortDate(tx.date, settings.locale)}
           </span>
           <span className="grow ellipsis">{tx.displayName}</span>
-          <Money cents={tx.amountCents} sign={amountSign(tx, category.kind)} />
+          <Money cents={tx.amountCents} sign={amountSign(category.kind)} />
         </div>
       ))}
       {total > SHOWN && (

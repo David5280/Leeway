@@ -17,12 +17,18 @@
 // owner's own money.
 // Closest dates pair first, and each transaction pairs at most once.
 //
+// A transaction the owner filed by hand, or a rule files, under a category
+// that is not a transfer never pairs: the owner has said what it is, and a
+// pair is only ever two transfers (see filedElsewhere).
+//
 // A paired transfer only moves money between the owner's accounts, so it is
 // filed under a transfer category (see categorize.ts) and counts toward no
 // spending, income or budget total (see counted.ts).
 
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
+import type { Category } from './categories.js'
+import { listRules, ruleMatches, type Rule } from './rules.js'
 import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
 
 /** How far apart, in days, the two sides of one transfer may post. */
@@ -117,28 +123,62 @@ export function pairTransfers<T extends PairCandidate>(transactions: readonly T[
   return partners
 }
 
+/** How a stored transaction is filed now, for filedElsewhere. */
+export interface Filing {
+  categorySource: string | null
+  /** The kind of the category it is filed under, or null for none. */
+  categoryKind: Category['kind'] | null
+}
+
+/**
+ * Whether the owner has said a transaction is something other than a
+ * transfer: filed by hand under another kind of category, or matched by a
+ * rule that files it under one. A choice by hand beats every rule, as in
+ * chooseCategory.
+ */
+export function filedElsewhere(
+  tx: Filing & Pick<Movement, 'name' | 'merchantName' | 'amountCents'>,
+  rules: readonly Rule[],
+  kinds: ReadonlyMap<string, Category['kind']>,
+): boolean {
+  if (tx.categorySource === 'manual') return tx.categoryKind !== 'transfer'
+  const rule = rules.find((candidate) => ruleMatches(candidate, tx))
+  return rule !== undefined && kinds.get(rule.categoryId) !== 'transfer'
+}
+
 /**
  * The transfer pairs among transactions dated from `start` to `end`, both
  * inclusive. Transactions up to a window either side are read too, so a
  * transfer whose other side posted just outside the dates still pairs.
- * Transactions left out of totals (duplicates, reimbursed costs) never pair.
- * Nor does a card or loan hidden from budgets: its purchases are not counted,
- * so paying it is the only trace of that spending, and must count (as in
- * loadOwnAccounts).
+ * Transactions left out of totals (duplicates, reimbursed costs) never pair,
+ * nor do those filed as something else (see filedElsewhere). Nor does a card
+ * or loan hidden from budgets: its purchases are not counted, so paying it is
+ * the only trace of that spending, and must count (as in loadOwnAccounts).
  */
 export async function loadTransferPairs(
   db: Db,
   start: IsoDate,
   end: IsoDate,
 ): Promise<Map<string, PairCandidate>> {
-  const { rows } = await db.query<PairCandidate>(
+  // One query at a time: db may be a transaction's client.
+  const rules = await listRules(db)
+  const { rows: categories } = await db.query<{ id: string; kind: Category['kind'] }>(
+    'SELECT id, kind FROM categories',
+  )
+  const kinds = new Map(categories.map((category) => [category.id, category.kind]))
+  const { rows } = await db.query<PairCandidate & Filing>(
     `SELECT t.id, t.account_id AS "accountId", t.date, t.name, t.merchant_name AS "merchantName",
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
-       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
+       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
+       t.category_source AS "categorySource", c.kind AS "categoryKind"
      FROM transactions t JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.date BETWEEN $1 AND $2 AND t.amount_cents <> 0 AND NOT t.excluded
        AND NOT (a.hidden AND a.type IN ('credit', 'loan'))`,
     [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS)],
   )
-  return pairTransfers(rows)
+  const candidates: PairCandidate[] = rows
+    .filter((row) => !filedElsewhere(row, rules, kinds))
+    .map(({ categorySource: _source, categoryKind: _kind, ...candidate }) => candidate)
+  return pairTransfers(candidates)
 }

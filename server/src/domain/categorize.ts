@@ -1,9 +1,11 @@
 // Decides each transaction's category: by hand, then rules, then the bank's category.
 
 import type { Db } from '../db/pool.js'
-import { listCategories, type Category } from './categories.js'
-import { listRules, type Rule } from './rules.js'
-import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
+import { addDays, type IsoDate } from '../lib/dates.js'
+import { createCategory, listCategories, type Category } from './categories.js'
+import { listRules, ruleMatches, type Rule } from './rules.js'
+import { TRANSFER_STARTER } from './starters.js'
+import { loadTransferPairs, PAIR_WINDOW_DAYS, type PairCandidate } from './transferPairs.js'
 import { isTransfer, NO_ACCOUNTS, type Movement, type OwnAccounts } from './transfers.js'
 
 /** The fields of a transaction that decide its category. */
@@ -12,25 +14,6 @@ export type Categorizable = Movement
 export interface CategoryChoice {
   categoryId: string
   source: 'rule' | 'provider'
-}
-
-/** Whether a rule matches a transaction; rules read only its text and amount. */
-export function ruleMatches(
-  rule: Rule,
-  tx: Pick<Categorizable, 'name' | 'merchantName' | 'amountCents'>,
-): boolean {
-  if (rule.minAmountCents !== null && tx.amountCents < rule.minAmountCents) return false
-  if (rule.maxAmountCents !== null && tx.amountCents > rule.maxAmountCents) return false
-  const text = (rule.field === 'merchant' ? (tx.merchantName ?? tx.name) : tx.name).toLowerCase()
-  const pattern = rule.pattern.toLowerCase()
-  switch (rule.matchType) {
-    case 'contains':
-      return text.includes(pattern)
-    case 'equals':
-      return text === pattern
-    case 'starts_with':
-      return text.startsWith(pattern)
-  }
 }
 
 /** Money in prefers an income category and money out a spending one; else the first. */
@@ -45,7 +28,9 @@ function byDirection(claimants: Category[], tx: Categorizable): Category | undef
  * 1. Rules win (first match, in order).
  * 2. One side of a transfer paired with another of the owner's accounts
  *    (see transferPairs.ts) goes to a transfer category: one claiming either
- *    bank code, or else the first transfer category.
+ *    bank code, or else the first transfer category. With none at all it is
+ *    left uncategorized, never filed as spending or income (recategorize
+ *    makes one first, so this only happens to a caller that does not).
  * 3. When the money only moves between the owner's own accounts (see
  *    isTransfer), a transfer category claiming either bank code wins.
  * 4. Otherwise transfer categories step aside, so a car payment or a Zelle to
@@ -77,7 +62,7 @@ export function chooseCategory(
       codes.some((code) => c.providerCategories.includes(code)),
     )
     const transfer = claiming ?? transfers[0]
-    if (transfer) return { categoryId: transfer.id, source: 'provider' }
+    return transfer ? { categoryId: transfer.id, source: 'provider' } : null
   }
 
   if (isTransfer(tx, accounts)) {
@@ -108,20 +93,23 @@ export async function loadOwnAccounts(db: Db): Promise<OwnAccounts> {
 
 /**
  * Re-applies rules and bank mappings to every transaction not categorized by
- * hand (or just the given ones). Run after rules, categories or the counted
- * credit cards change, and after a sync. Returns how many transactions
- * changed category.
+ * hand (or just the given ones and those posted near them). Run after rules,
+ * categories or the counted credit cards change, and after a sync. Returns
+ * how many transactions changed category.
+ *
+ * A new transaction can take a transfer's other side from the one it was
+ * paired with, so with given ones, every transaction posted within a pairing
+ * window of them is looked at again: the one left without a partner is filed
+ * as what it is, and the new pair as a transfer.
  */
 export async function recategorize(db: Db, transactionIds?: string[]): Promise<number> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const rules = await listRules(db)
-  const categories = await listCategories(db)
   const accounts = await loadOwnAccounts(db)
-  const partners = await pairsFor(db, transactionIds)
-  // A transaction's other side may change category with it, so it is looked at too.
-  const scope = transactionIds && [
-    ...new Set([...transactionIds, ...transactionIds.flatMap((id) => partners.get(id)?.id ?? [])]),
-  ]
+  const around = await datesAround(db, transactionIds)
+  if (!around) return 0 // no transactions to look at
+  const partners = await loadTransferPairs(db, around.first, around.last)
+  const categories = await withTransferCategory(db, partners)
   const { rows } = await db.query<
     Categorizable & { id: string; categoryId: string | null; categorySource: string | null }
   >(
@@ -132,8 +120,8 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
        t.category_id AS "categoryId", t.category_source AS "categorySource"
      FROM transactions t JOIN accounts a ON a.id = t.account_id
      WHERE t.category_source IS DISTINCT FROM 'manual'
-       AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]))`,
-    [scope ?? null],
+       AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]) OR t.date BETWEEN $2 AND $3)`,
+    [transactionIds ?? null, around.first, around.last],
   )
 
   const ids: string[] = []
@@ -160,14 +148,46 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
   return ids.length
 }
 
-/** The transfer pairs around the given transactions' dates, or around every transaction's. */
-async function pairsFor(db: Db, transactionIds?: string[]): Promise<Map<string, PairCandidate>> {
-  const { rows } = await db.query<{ first: string | null; last: string | null }>(
+/**
+ * The dates to look at again: those of the given transactions, widened by a
+ * pairing window either side, or of every transaction. Null when there are
+ * none.
+ */
+async function datesAround(
+  db: Db,
+  transactionIds: string[] | undefined,
+): Promise<{ first: IsoDate; last: IsoDate } | null> {
+  const { rows } = await db.query<{ first: IsoDate | null; last: IsoDate | null }>(
     `SELECT min(date) AS first, max(date) AS last FROM transactions
      WHERE $1::uuid[] IS NULL OR id = ANY($1::uuid[])`,
     [transactionIds ?? null],
   )
   const { first, last } = rows[0]!
-  if (!first || !last) return new Map()
-  return loadTransferPairs(db, first, last)
+  if (!first || !last) return null
+  return { first: addDays(first, -PAIR_WINDOW_DAYS), last: addDays(last, PAIR_WINDOW_DAYS) }
+}
+
+/** Names for a transfer category made by recategorize, the starter's first. */
+const TRANSFER_CATEGORY_NAMES = [TRANSFER_STARTER.name, 'Transfers between accounts']
+
+/**
+ * The categories, with a transfer category made from the starter's defaults
+ * when a transfer has paired and the owner has none, so a paired transfer is
+ * never filed as spending or income. A name already taken by a category of
+ * another kind gets a plainer one.
+ */
+async function withTransferCategory(
+  db: Db,
+  partners: ReadonlyMap<string, PairCandidate>,
+): Promise<Category[]> {
+  const categories = await listCategories(db)
+  if (partners.size === 0 || categories.some((category) => category.kind === 'transfer')) {
+    return categories
+  }
+  const taken = new Set(categories.map((category) => category.name.toLowerCase()))
+  const name = TRANSFER_CATEGORY_NAMES.find((candidate) => !taken.has(candidate.toLowerCase()))
+  // Every name taken: the pairs are left uncategorized for the owner to file.
+  if (!name) return categories
+  const { formerly: _formerly, ...defaults } = TRANSFER_STARTER
+  return [...categories, await createCategory(db, { ...defaults, name })]
 }

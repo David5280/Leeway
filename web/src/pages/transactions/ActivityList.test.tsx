@@ -32,6 +32,8 @@ const toSavings = transaction({
   name: 'ONLINE TRANSFER TO SAV ...9921',
   displayName: 'Chase Checking to Chase Savings',
   amountCents: 50000,
+  // The server pairs only transfers filed under a transfer category.
+  categoryId: moves.id,
   transfer: { id: 'other', accountId: 'savings', accountName: 'Chase Savings', date: '2026-11-16' },
 })
 const leftOut = transaction({

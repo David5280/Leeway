@@ -93,7 +93,7 @@ export function ActivityRow({
 }) {
   const { exact } = useApp()
   const kind = category?.kind ?? null
-  const moved = isMove(tx, kind)
+  const moved = isMove(kind)
   return (
     <li>
       <button
@@ -111,7 +111,7 @@ export function ActivityRow({
             {tx.excluded && <StatusPill status="quiet" label="Not counted" />}
           </span>
         </span>
-        <Money cents={tx.amountCents} sign={amountSign(tx, kind)} className="act-row-amount" />
+        <Money cents={tx.amountCents} sign={amountSign(kind)} className="act-row-amount" />
       </button>
     </li>
   )

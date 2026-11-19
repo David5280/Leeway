@@ -25,6 +25,25 @@ export const ruleFieldsSchema = z.object({
   categoryId: z.uuid(),
 })
 
+/** Whether a rule matches a transaction; rules read only its text and amount. */
+export function ruleMatches(
+  rule: Rule,
+  tx: { name: string; merchantName: string | null; amountCents: number },
+): boolean {
+  if (rule.minAmountCents !== null && tx.amountCents < rule.minAmountCents) return false
+  if (rule.maxAmountCents !== null && tx.amountCents > rule.maxAmountCents) return false
+  const text = (rule.field === 'merchant' ? (tx.merchantName ?? tx.name) : tx.name).toLowerCase()
+  const pattern = rule.pattern.toLowerCase()
+  switch (rule.matchType) {
+    case 'contains':
+      return text.includes(pattern)
+    case 'equals':
+      return text === pattern
+    case 'starts_with':
+      return text.startsWith(pattern)
+  }
+}
+
 export function amountBoundsValid(rule: {
   minAmountCents?: number | null
   maxAmountCents?: number | null
