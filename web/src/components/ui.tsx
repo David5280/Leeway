@@ -2,12 +2,42 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 
+/** Where the wheel's eight handles end, clockwise from the top. */
+const WHEEL_KNOBS: [number, number][] = [
+  [14, 2.4],
+  [22.2, 5.8],
+  [25.6, 14],
+  [22.2, 22.2],
+  [14, 25.6],
+  [5.8, 22.2],
+  [2.4, 14],
+  [5.8, 5.8],
+]
+
+/**
+ * Leeway's logo: a ship's wheel, since leeway is a sailing word for room to
+ * spare. Drawn in the theme's ink and accent, so it follows every theme.
+ */
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <path d="M14 3 L14 21 L4 21 Z" fill="var(--accent)" />
-      <path d="M17 8 L24 21 L17 21 Z" fill="var(--ink)" opacity=".85" />
-      <path d="M3 24 H25" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" />
+      {/* Spokes inside the rim, then the handles outside it. */}
+      <path
+        d="M14 11.4L14 6.6M15.84 12.16L19.23 8.77M16.6 14L21.4 14M15.84 15.84L19.23 19.23M14 16.6L14 21.4M12.16 15.84L8.77 19.23M11.4 14L6.6 14M12.16 12.16L8.77 8.77"
+        stroke="var(--ink)"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M14 6.6L14 2.8M19.23 8.77L21.92 6.08M21.4 14L25.2 14M19.23 19.23L21.92 21.92M14 21.4L14 25.2M8.77 19.23L6.08 21.92M6.6 14L2.8 14M8.77 8.77L6.08 6.08"
+        stroke="var(--ink)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      {WHEEL_KNOBS.map(([cx, cy]) => (
+        <circle key={`${cx},${cy}`} cx={cx} cy={cy} r="1.7" fill="var(--ink)" />
+      ))}
+      <circle cx="14" cy="14" r="7.4" stroke="var(--ink)" strokeWidth="2.4" fill="none" />
+      <circle cx="14" cy="14" r="2.9" fill="var(--accent)" />
     </svg>
   )
 }
