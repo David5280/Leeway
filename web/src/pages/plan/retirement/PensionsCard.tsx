@@ -63,7 +63,7 @@ function PensionEditor({ pension, onClose }: { pension: PlanPension | null; onCl
   const attach = useActionMutation('attach_pension')
   const update = useActionMutation('update_pension')
   // A new pension may belong on an account Leeway already has, such as one linked from the bank.
-  const accounts = useAction('list_accounts', undefined, { enabled: !pension })
+  const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: !pension })
   const close = { onSuccess: onClose }
   function save(change: PlanChange, { accountId, ...created }: NewPensionFields) {
     if (pension) update.mutate({ accountId: pension.accountId, ...change }, close)

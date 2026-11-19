@@ -7,10 +7,10 @@
 
 import { FORMULA_NOTE } from '../retirement/pensions.js'
 import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
-import type { Band } from '../retirement/projection.js'
 import type { InsightFormat } from './insights.js'
 import { growthMeter, LENS_QUESTIONS, type Lens, type LensAnswer, type Meter } from './lens.js'
 import { balanceAnswer, contributionsMeter, pick, type LensInput } from './lenses.js'
+import { middleCase, percent, range } from './rangeWords.js'
 
 /** Each pension as its card shows it, in words. */
 export interface PensionCard {
@@ -43,11 +43,6 @@ const ON_TRACK_WORDS = { on_track: 'On track', close: 'Close', below_target: 'Be
 
 const ASK_FOR_BENEFIT =
   "Add the monthly benefit from your plan's statement, or the salary, multiplier and years of service its formula uses."
-
-/** "$1,200 to $1,800", or one figure when the cases agree. */
-function range(band: Band, money: InsightFormat['money']): string {
-  return band.low === band.high ? money(band.mid) : `${money(band.low)} to ${money(band.high)}`
-}
 
 /** When the projection is for, in words: "at 60", or "now" for an owner past the planned age. */
 function when(projection: Projection): string {
@@ -151,7 +146,7 @@ function onTrackAnswer(
     const who = whose(plan)
     return {
       headline: ON_TRACK_WORDS[onTrack],
-      detail: `${who} should cover ${coverage.low}% to ${coverage.high}% of the ${money(target.monthlyCents)} a month you want, most likely about ${coverage.mid}%.`,
+      detail: `${who} should cover ${range(coverage, percent)} of the ${money(target.monthlyCents)} a month you want${middleCase(coverage, percent, 'most likely about')}.`,
       // Below target is a fact to weigh, not an alarm.
       tone: onTrack === 'on_track' ? 'good' : 'neutral',
       progress: { value: coverage.mid, target: 100 },
@@ -193,7 +188,7 @@ function growthWords(projection: Projection, money: InsightFormat['money']): str
     found: ` and about ${money(contribution.monthlyCents)} a month going in`,
     none: '',
   }[contribution.source]
-  return `in today's dollars, from ${money(startingSavings.totalCents)} now${adding}, with returns of ${realReturns.low}% to ${realReturns.high}% after inflation.`
+  return `in today's dollars, from ${money(startingSavings.totalCents)} now${adding}, with returns of ${range(realReturns, percent)} after inflation.`
 }
 
 /** Savings at the age projected as a range, with the chart of how they get there. */

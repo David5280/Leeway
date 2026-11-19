@@ -340,6 +340,11 @@ describe('MCP endpoint', () => {
       await tool('list_alerts'),
       await tool('get_checkin'),
       await tool('update_account', { id: pension.accountId, kind: 'pension' }),
+      await tool('attach_pension', {
+        accountId: pension.accountId,
+        serviceYears: 9.5,
+        statementBenefitMonthlyCents: 218_000,
+      }),
       await tool('update_pension', {
         accountId: pension.accountId,
         contribution: { kind: 'amount', cents: 42_300 },
@@ -362,6 +367,7 @@ describe('MCP endpoint', () => {
       'list_accounts',
       'update_account',
       'get_checkin',
+      'attach_pension',
       'update_pension',
       'create_pension',
       'project_retirement',

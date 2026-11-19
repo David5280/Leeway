@@ -184,6 +184,27 @@ describe('create_pension and update_pension', () => {
     )
   })
 
+  it('asks for a hidden account to be shown before a pension goes on it, so it never vanishes', async () => {
+    const plan = await insertBankAccount(ctx.db, {
+      name: 'State Plan',
+      type: 'investment',
+      subtype: 'other',
+    })
+    await call('update_account', { id: plan.accountId, hidden: true })
+    const hidden = await callError('attach_pension', { accountId: plan.accountId })
+    expect(hidden.message).toBe(
+      'Test State Plan is hidden, so a pension on it would not count. Show it under Settings, Accounts first.',
+    )
+    // Nothing changed: the account is neither a pension nor shown.
+    const after = (await call('list_accounts')).find((account) => account.id === plan.accountId)!
+    expect(after).toMatchObject({ kind: 'investment', hidden: true })
+    await call('update_account', { id: plan.accountId, hidden: false })
+    expect((await call('attach_pension', { accountId: plan.accountId })).accountId).toBe(
+      plan.accountId,
+    )
+    expect((await profile()).retirement.pensions).toHaveLength(1)
+  })
+
   it('refuses a figure no plan has, and an unknown account', async () => {
     const tooMuch = await callError('create_pension', { name: 'Plan', multiplierPercent: 40 })
     expect(tooMuch.message).toContain('Use 10% or less')
@@ -201,6 +222,29 @@ describe('create_pension and update_pension', () => {
     const linked = await insertBankAccount(ctx.db, { type: 'investment', subtype: 'other' })
     const attached = await callError('attach_pension', { accountId: linked.accountId })
     expect(attached.message).toBe(`Leeway keeps up to ${MAX_PENSIONS} pensions`)
+    // Marking an account as a pension by its kind counts the same.
+    const marked = await callError('update_account', { id: linked.accountId, kind: 'pension' })
+    expect(marked.message).toBe(`Leeway keeps up to ${MAX_PENSIONS} pensions`)
+    expect((await call('list_accounts')).filter((a) => a.kind === 'pension')).toHaveLength(
+      MAX_PENSIONS,
+    )
+    // One already a pension takes no new place, and any other change goes through.
+    const [first] = (await call('list_accounts')).filter((a) => a.kind === 'pension')
+    await call('update_account', { id: first!.id, kind: 'pension', displayName: 'Main plan' })
+    await call('update_account', { id: linked.accountId, kind: 'retirement' })
+  })
+
+  it('takes the same lock when an account is marked a pension, so racing cannot pass the limit', async () => {
+    for (let n = 0; n < MAX_PENSIONS - 1; n++) await call('create_pension', { name: `Plan ${n}` })
+    const linked = await insertBankAccount(ctx.db, { type: 'investment', subtype: 'other' })
+    const racing = await Promise.allSettled([
+      call('update_account', { id: linked.accountId, kind: 'pension' }),
+      call('create_pension', { name: 'Second' }),
+    ])
+    expect(racing.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect((await call('list_accounts')).filter((a) => a.kind === 'pension')).toHaveLength(
+      MAX_PENSIONS,
+    )
   })
 
   it('counts pensions one request at a time, so two at once cannot pass the limit', async () => {

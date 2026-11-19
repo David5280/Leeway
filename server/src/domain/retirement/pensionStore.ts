@@ -13,6 +13,7 @@ import {
   listAccounts,
   updateAccount,
   type Account,
+  type AccountPatch,
 } from '../accounts.js'
 import {
   EMPTY_PLAN,
@@ -225,12 +226,39 @@ export async function attachPension(pool: pg.Pool, input: AttachPension): Promis
         `A ${KIND_INFO[account.kind].noun} cannot be a pension. Choose a retirement or investment account.`,
       )
     }
+    // A hidden account stays out of every total, so a pension on it would vanish.
+    // The owner hid it on purpose, so Leeway asks rather than showing it again.
+    if (account.hidden) {
+      throw new AppError(
+        'invalid_input',
+        `${account.name} is hidden, so a pension on it would not count. Show it under Settings, Accounts first.`,
+      )
+    }
     if (account.kind !== 'pension') {
       checkRoomForPension(await listAccounts(db))
       await updateAccount(db, accountId, { kind: 'pension' })
     }
     await savePlan(db, accountId, plan)
     return getPension(db, accountId)
+  })
+}
+
+/**
+ * Changes an account, as update_account does. Marking one a pension takes the
+ * pensions lock and a free place, as adding one does, so the limit holds
+ * however a pension is made.
+ */
+export async function updateAccountWithinPensionLimit(
+  pool: pg.Pool,
+  id: string,
+  patch: AccountPatch,
+): Promise<Account> {
+  if (patch.kind !== 'pension') return updateAccount(pool, id, patch)
+  return withTransaction(pool, async (db) => {
+    await lockPensions(db)
+    // One counted as a pension already, such as one linked from the bank, takes no new place.
+    if ((await getAccount(db, id)).kind !== 'pension') checkRoomForPension(await listAccounts(db))
+    return updateAccount(db, id, patch)
   })
 }
 
