@@ -372,6 +372,54 @@ describe('MCP endpoint', () => {
     expect(own.transactions.map((tx) => tx.name)).toContain('ONLINE TRANSFER FROM CHK XXXXXX9876')
   })
 
+  it("finds nothing for an assistant by an account's digits, which only the bank's text holds", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '9876' })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    for (const back of [2, 3, 4]) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date: day(back),
+        name: 'GYM DUES 9876',
+        merchantName: 'Iron Gym',
+        amountCents: 4000,
+      })
+    }
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const tool = async (name: string, args: Record<string, unknown>) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      return JSON.parse(response.json().result.content[0].text)
+    }
+
+    // The digits match no display name, so a search and a rule preview find nothing.
+    expect(await tool('list_transactions', { search: '9876' })).toEqual({
+      transactions: [],
+      total: 0,
+    })
+    const preview = { field: 'description', matchType: 'contains', pattern: '9876' }
+    expect(await tool('preview_rule', preview)).toMatchObject({ matchCount: 0 })
+    // What the assistant can read still matches, a page at a time.
+    const gym = await tool('list_transactions', { search: 'iron', limit: 2, offset: 1 })
+    expect(gym.total).toBe(3)
+    expect(gym.transactions.map((tx: { date: string }) => tx.date)).toEqual([day(3), day(4)])
+    expect(await tool('preview_rule', { ...preview, pattern: 'iron gym' })).toMatchObject({
+      matchCount: 3,
+    })
+    await ctx.db.query(`UPDATE transactions SET note = 'Paid for the year' WHERE date = $1`, [
+      day(4),
+    ])
+    expect((await tool('list_transactions', { search: 'the year' })).total).toBe(1)
+
+    // The owner's own app searches the bank's text, as the details show it.
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({ search: '9876' }))
+    expect(own.total).toBe(4)
+  })
+
   it('never hands an agent an account mask, from any tool, error results included', async () => {
     // A bank name that repeats the number, overdrawn so alerts and summaries name it too.
     const { accountId } = await insertBankAccount(ctx.db, {

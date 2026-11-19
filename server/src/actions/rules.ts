@@ -116,7 +116,12 @@ export const previewRuleAction = defineAction({
       offset: 0,
       includeExcluded: false,
     })
-    const matches = transactions.filter((tx) => ruleMatches(rule, tx))
+    // An agent's preview matches only the display name it can read, never the
+    // bank's text, so a pattern like "4417" cannot find an account's digits.
+    const readable = ctx.agent
+      ? transactions.map((tx) => ({ ...tx, name: tx.displayName, merchantName: null }))
+      : transactions
+    const matches = readable.filter((tx) => ruleMatches(rule, tx))
     const moving = target
       ? matches.filter((tx) => tx.categorySource !== 'manual' && tx.categoryId !== target)
       : []

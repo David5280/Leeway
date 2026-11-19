@@ -95,7 +95,11 @@ export function createMcpServer(
       )
     }
     try {
-      const result = await runAction(ctx, action, request.params.arguments ?? {})
+      const result = await runAction(
+        { ...ctx, agent: true },
+        action,
+        request.params.arguments ?? {},
+      )
       // The bank's text and every owner-only field stay out of what an agent reads.
       return { content: [{ type: 'text', text: agentJson(withoutBankText(result)) }] }
     } catch (error) {

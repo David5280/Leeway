@@ -1,4 +1,4 @@
-// Transactions: searching, editing, and adding them by hand.
+// Transactions: listing and searching them, and changing their category, note and more.
 
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
@@ -168,33 +168,19 @@ const SELECT = `
     c.name AS "categoryName", c.kind AS "categoryKind"
   FROM transactions t LEFT JOIN categories c ON c.id = t.category_id`
 
+/**
+ * Transactions matching a filter, newest first. A search matches the bank's
+ * description and merchant name or the note, unless `searchBankText` is
+ * false: then it matches only what the caller can read, the display name and
+ * the note. Agents search that way (see context.ts).
+ */
 export async function listTransactions(
   db: Db,
   filter: TransactionFilter,
+  { searchBankText = true }: { searchBankText?: boolean } = {},
 ): Promise<{ transactions: Transaction[]; total: number }> {
-  const where: string[] = []
-  const params: unknown[] = []
-  const add = (sql: string, value: unknown) => {
-    params.push(value)
-    where.push(sql.replace('?', `$${params.length}`))
-  }
-  if (filter.start) add('t.date >= ?', filter.start)
-  if (filter.end) add('t.date <= ?', filter.end)
-  if (filter.categoryId === 'uncategorized') where.push('t.category_id IS NULL')
-  else if (filter.categoryId) add('t.category_id = ?', filter.categoryId)
-  if (filter.accountId) add('t.account_id = ?', filter.accountId)
-  if (filter.accountIds) add('t.account_id = ANY(?::uuid[])', filter.accountIds)
-  if (filter.search) {
-    add(
-      `(t.name ILIKE ? OR t.merchant_name ILIKE $${params.length + 1} OR t.note ILIKE $${params.length + 1})`,
-      `%${filter.search.replace(/[%_\\]/g, '\\$&')}%`,
-    )
-  }
-  if (filter.minAmountCents !== undefined) add('t.amount_cents >= ?', filter.minAmountCents)
-  if (filter.maxAmountCents !== undefined) add('t.amount_cents <= ?', filter.maxAmountCents)
-  if (!filter.includeExcluded) where.push('NOT t.excluded')
-
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  if (filter.search && !searchBankText) return searchDisplayNames(db, filter)
+  const { whereSql, params } = filterSql(filter)
   const [list, count] = await Promise.all([
     db.query<StoredTransaction>(
       `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id
@@ -213,7 +199,65 @@ export async function listTransactions(
   }
 }
 
-async function getTransaction(db: Db, id: string): Promise<Transaction> {
+/**
+ * The WHERE clause for a filter, with its parameters. With `withSearch` false
+ * the search is left out, for a caller that matches it in code.
+ */
+function filterSql(filter: TransactionFilter, withSearch = true) {
+  const where: string[] = []
+  const params: unknown[] = []
+  const add = (sql: string, value: unknown) => {
+    params.push(value)
+    where.push(sql.replace('?', `$${params.length}`))
+  }
+  if (filter.start) add('t.date >= ?', filter.start)
+  if (filter.end) add('t.date <= ?', filter.end)
+  if (filter.categoryId === 'uncategorized') where.push('t.category_id IS NULL')
+  else if (filter.categoryId) add('t.category_id = ?', filter.categoryId)
+  if (filter.accountId) add('t.account_id = ?', filter.accountId)
+  if (filter.accountIds) add('t.account_id = ANY(?::uuid[])', filter.accountIds)
+  if (filter.search && withSearch) {
+    add(
+      `(t.name ILIKE ? OR t.merchant_name ILIKE $${params.length + 1} OR t.note ILIKE $${params.length + 1})`,
+      `%${filter.search.replace(/[%_\\]/g, '\\$&')}%`,
+    )
+  }
+  if (filter.minAmountCents !== undefined) add('t.amount_cents >= ?', filter.minAmountCents)
+  if (filter.maxAmountCents !== undefined) add('t.amount_cents <= ?', filter.maxAmountCents)
+  if (!filter.includeExcluded) where.push('NOT t.excluded')
+
+  return { whereSql: where.length ? `WHERE ${where.join(' AND ')}` : '', params }
+}
+
+/**
+ * A search matched against what an agent can read: the display name and the
+ * note, never the bank's own text. Display names are worked out in code, so
+ * every transaction the other filters allow is read, then matched and paged.
+ */
+async function searchDisplayNames(
+  db: Db,
+  filter: TransactionFilter,
+): Promise<{ transactions: Transaction[]; total: number }> {
+  const { whereSql, params } = filterSql(filter, false)
+  const { rows } = await db.query<StoredTransaction>(
+    `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id`,
+    params,
+  )
+  const context = await presenting(db, rows)
+  const term = filter.search!.toLowerCase()
+  const matches = rows
+    .map((row) => present(row, context))
+    .filter((tx) =>
+      [tx.displayName, tx.note ?? ''].some((text) => text.toLowerCase().includes(term)),
+    )
+  return {
+    transactions: matches.slice(filter.offset, filter.offset + filter.limit),
+    total: matches.length,
+  }
+}
+
+/** One transaction as the app shows it; not found when it is gone. */
+export async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
   return present(rows[0], await presenting(db, rows))
@@ -296,57 +340,4 @@ export async function updateTransaction(
     await recategorize(db, [id, ...(tx.transfer ? [tx.transfer.id] : [])])
   }
   return getTransaction(db, id)
-}
-
-export const manualTransactionInputSchema = z.object({
-  accountId: z.uuid(),
-  date: isoDateSchema,
-  name: z.string().trim().min(1).max(200),
-  /** Positive is money out, negative is money in. */
-  amountCents: z.number().int(),
-  categoryId: z.uuid().nullable().default(null),
-  note: z.string().max(500).nullable().default(null),
-})
-
-/** Cash spending, or anything on an account the bank feed does not cover. */
-export async function createManualTransaction(
-  db: Db,
-  input: z.infer<typeof manualTransactionInputSchema>,
-): Promise<Transaction> {
-  if (input.categoryId) await assertCategoryExists(db, input.categoryId)
-  const { rows: accounts } = await db.query<{ currency: string }>(
-    'SELECT currency FROM accounts WHERE id = $1',
-    [input.accountId],
-  )
-  if (!accounts[0]) throw new AppError('invalid_input', 'That account does not exist')
-  const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO transactions (account_id, date, name, amount_cents, currency, category_id, category_source, note)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [
-      input.accountId,
-      input.date,
-      input.name,
-      input.amountCents,
-      accounts[0].currency,
-      input.categoryId,
-      input.categoryId ? 'manual' : null,
-      input.note,
-    ],
-  )
-  const id = rows[0]!.id
-  if (!input.categoryId) await recategorize(db, [id])
-  return getTransaction(db, id)
-}
-
-export async function deleteManualTransaction(db: Db, id: string): Promise<void> {
-  const tx = await getTransaction(db, id)
-  if (!tx.manual) {
-    throw new AppError(
-      'invalid_input',
-      'Bank transactions cannot be deleted; exclude it instead so it counts toward nothing',
-    )
-  }
-  await db.query('DELETE FROM transactions WHERE id = $1', [id])
-  // Its other side may have been filed as a transfer only because of this one.
-  if (tx.transfer) await recategorize(db, [tx.transfer.id])
 }

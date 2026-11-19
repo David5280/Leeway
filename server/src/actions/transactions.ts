@@ -5,8 +5,10 @@ import { withTransaction } from '../db/pool.js'
 import {
   createManualTransaction,
   deleteManualTransaction,
-  listTransactions,
   manualTransactionInputSchema,
+} from '../domain/manualTransactions.js'
+import {
+  listTransactions,
   setCategory,
   transactionFilterSchema,
   transactionPatchSchema,
@@ -22,7 +24,8 @@ export const listTransactionsAction = defineAction({
   input: transactionFilterSchema,
   scope: 'read',
   surface: 'all',
-  run: (ctx, filter) => listTransactions(ctx.db, filter),
+  // An agent's search matches only the display name and note it can read.
+  run: (ctx, filter) => listTransactions(ctx.db, filter, { searchBankText: !ctx.agent }),
 })
 
 export const updateTransactionAction = defineAction({
