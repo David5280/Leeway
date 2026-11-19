@@ -7,7 +7,6 @@ import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import type { PeriodConfig } from '../lib/periods.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
-import { DEFAULT_SAVINGS_RATE_TARGET } from './savings/rate.js'
 
 const periodSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -113,8 +112,16 @@ const savingsPlanFields = {
     .int('Use a whole number of months')
     .min(1, 'Aim for at least one month')
     .max(24, 'Use 24 months or fewer'),
-  /** Spending categories that count as essential. Null counts every spending category. */
-  essentialCategoryIds: z.array(z.uuid()).max(200).nullable(),
+  /**
+   * Spending categories that count as essential. Null counts every spending
+   * category, and so does an empty list: no essentials at all would make any
+   * savings balance look like endless cover.
+   */
+  essentialCategoryIds: z
+    .array(z.uuid())
+    .max(200)
+    .nullable()
+    .transform((ids) => (ids?.length ? ids : null)),
   /** Percent of pay to aim to save. Null sets no target. */
   savingsRateTargetPercent: z
     .number()
@@ -127,9 +134,10 @@ const savingsPlanFields = {
 const savingsPlanSchema = z.object({
   emergencyFundMonths: savingsPlanFields.emergencyFundMonths.default(DEFAULT_EMERGENCY_MONTHS),
   essentialCategoryIds: savingsPlanFields.essentialCategoryIds.default(null),
-  savingsRateTargetPercent: savingsPlanFields.savingsRateTargetPercent.default(
-    DEFAULT_SAVINGS_RATE_TARGET,
-  ),
+  // No target until the owner sets one: the rate counts only what the bank
+  // shows, so a default would call a pension member short of a goal they
+  // may well meet through payroll.
+  savingsRateTargetPercent: savingsPlanFields.savingsRateTargetPercent.default(null),
 })
 
 /**

@@ -127,7 +127,11 @@ describe('savingsInsights', () => {
       savingsRate: rate,
     })
     expect(savingsInsights(profile, format).map((i) => [i.about, i.topic, i.text])).toEqual([
-      ['overall', 'savings_rate', 'You save about 8% of your pay: $500 a month of $6,000.'],
+      [
+        'overall',
+        'savings_rate',
+        'You save about 8% of your pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+      ],
       [
         'overall',
         'contributions',
@@ -215,9 +219,11 @@ describe('the savings lens', () => {
     expect(saving).toMatchObject({
       question: 'Am I saving enough?',
       headline: '8%',
-      detail: 'of pay: $500 a month of $6,000. Your target is 20%.',
+      detail:
+        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
       tone: 'neutral',
-      progress: { value: 8, target: 20 },
+      // No bar and no target by default: payroll saving never reaches the bank.
+      progress: null,
     })
     // The answer gives coverage already, so the insight is the forecast.
     expect(lens.insight?.topic).toBe('emergency_pace')
@@ -261,7 +267,7 @@ describe('the savings lens', () => {
     expect(paid.meters[1]!.detail).toMatch(/has not seen a month of transfers/)
   })
 
-  it('praises a rate above the target and leaves out a target the owner turned off', () => {
+  it('says plainly where a target the owner set stands, with no bar toward it', () => {
     const saving = (target: number | null) =>
       lensOf({
         savings: savingsReport([kindReport('savings', 1)]),
@@ -271,9 +277,17 @@ describe('the savings lens', () => {
     expect(saving(5)).toMatchObject({
       detail: expect.stringMatching(/Above your 5% target\.$/),
       tone: 'good',
+      progress: null,
+    })
+    expect(saving(20)).toMatchObject({
+      detail:
+        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted. Your target is 20%.',
+      tone: 'neutral',
+      progress: null,
     })
     expect(saving(null)).toMatchObject({
-      detail: 'of pay: $500 a month of $6,000.',
+      detail:
+        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
       progress: null,
     })
   })

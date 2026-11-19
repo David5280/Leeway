@@ -1,7 +1,7 @@
 // Financial profiles built by hand, for tests of the pure code that words
 // them: the insights, the per-kind views and the assistant's digest.
 
-import type { FinancialProfile } from '../../src/domain/profile/profile.js'
+import type { FinancialProfile, ProfileGoal } from '../../src/domain/profile/profile.js'
 import type { SavingsKindReport, SavingsReport } from '../../src/domain/savings/report.js'
 
 const NO_CHANGES = { month: null, days30: null, year: null, all: null }
@@ -24,7 +24,6 @@ export function kindReport(
         id: `acct-${kind}`,
         name: `${label} account`,
         institutionName: 'Test Bank',
-        mask: '0001',
         subtype: null,
         manual: false,
         kind,
@@ -70,9 +69,28 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
     savings: savingsReport([]),
     emergencyFund: null,
     savingsRate: null,
-    savingsRateTargetPercent: 20,
+    savingsRateTargetPercent: null,
     goals: [],
     userContext: [],
+    ...fields,
+  }
+}
+
+/** An open savings goal, 40% of $5,000, with no target date unless given one. */
+export function profileGoal(fields: Partial<ProfileGoal> = {}): ProfileGoal {
+  return {
+    id: 'goal',
+    name: 'Goal',
+    kind: 'savings',
+    accountKind: null,
+    percent: 40,
+    currentCents: 200_000,
+    targetCents: 500_000,
+    remainingCents: 300_000,
+    targetDate: null,
+    projectedDate: null,
+    onTrack: null,
+    status: 'in_progress',
     ...fields,
   }
 }

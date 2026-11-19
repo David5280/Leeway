@@ -4,7 +4,13 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { recategorize } from './categorize.js'
-import { ACCOUNT_KINDS, kindFitsType, kindOf, type AccountKind } from './accountKinds.js'
+import {
+  ACCOUNT_KINDS,
+  choiceThatFits,
+  kindFitsType,
+  kindOf,
+  type AccountKind,
+} from './accountKinds.js'
 
 export const ACCOUNT_TYPES = [
   'depository',
@@ -155,6 +161,19 @@ function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSch
   }
 }
 
+/**
+ * The pick of kind a patch stores: the one it gives, if any. Otherwise a new
+ * type drops a pick that no longer fits it, such as savings on a loan, so the
+ * old pick cannot come back later. Undefined leaves the stored pick as it is.
+ */
+function kindToStore(
+  account: Account,
+  patch: z.infer<typeof accountPatchSchema>,
+): AccountKind | null | undefined {
+  if (patch.kind !== undefined || !patch.type) return patch.kind
+  return choiceThatFits(account.kindChoice, patch.type)
+}
+
 export async function updateAccount(
   db: Db,
   id: string,
@@ -162,6 +181,7 @@ export async function updateAccount(
 ): Promise<Account> {
   const account = await getAccount(db, id)
   assertPatchFits(account, patch)
+  const kind = kindToStore(account, patch)
   await db.query(
     `UPDATE accounts SET
        display_name = CASE WHEN $2 THEN $3 ELSE display_name END,
@@ -194,8 +214,8 @@ export async function updateAccount(
       patch.minimumPaymentCents ?? null,
       patch.lowBalanceCents !== undefined,
       patch.lowBalanceCents ?? null,
-      patch.kind !== undefined,
-      patch.kind ?? null,
+      kind !== undefined,
+      kind ?? null,
     ],
   )
   // A card counted or left out changes whether payments to it are transfers.

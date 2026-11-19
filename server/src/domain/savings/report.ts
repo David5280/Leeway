@@ -13,9 +13,9 @@
  *   the owner's time zone. history.ts turns it into changes and a total over
  *   time. History starts the day Leeway first saw an account; nothing earlier
  *   is invented.
- * - Contributions are transfers the bank labeled as going to savings or
- *   investments (contributions.ts). What cannot be seen is left out, not
- *   guessed.
+ * - Contributions are net transfers, in the owner's currency, that the bank
+ *   labeled as going to or coming back from savings or investments
+ *   (contributions.ts). What cannot be seen is left out, not guessed.
  * - Only accounts in the owner's currency with a known balance are added up;
  *   the rest are listed and labeled as not counted.
  */
@@ -49,7 +49,6 @@ export interface SavingsAccount {
   id: string
   name: string
   institutionName: string | null
-  mask: string | null
   subtype: string | null
   manual: boolean
   kind: SavingsKind
@@ -112,7 +111,6 @@ function toSavingsAccount(
     id: account.id,
     name: account.name,
     institutionName: account.institutionName,
-    mask: account.mask,
     subtype: account.subtype,
     manual: account.manual,
     kind: account.kind,
@@ -172,7 +170,7 @@ export async function getSavingsReport(
 ): Promise<SavingsReport> {
   const all = await countedAccounts(db)
   const savings = all.filter((a): a is Account & { kind: SavingsKind } => isSavingsKind(a.kind))
-  // Contributions are read from the sending side only: accounts outside savings.
+  // Contributions are read from the everyday side only: accounts outside savings.
   const everyday = all.filter((a) => !isSavingsKind(a.kind)).map((a) => a.id)
   // One at a time: db may be a transaction's client, which runs one query at once.
   const history = await balanceHistory(
@@ -180,7 +178,7 @@ export async function getSavingsReport(
     savings.map((a) => a.id),
     today,
   )
-  const candidates = await transferCandidates(db, everyday, today)
+  const candidates = await transferCandidates(db, everyday, settings.currency, today)
   const firstTransaction = await firstTransactionDate(db, everyday)
 
   const accounts = savings.map((a) =>

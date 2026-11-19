@@ -13,26 +13,42 @@ import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
-import { getFinancialProfile, type FinancialProfile } from './profile/profile.js'
+import { monthlyAverages } from './profile/income.js'
+import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
+import { getSavingsReport, type SavingsReport } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
 const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
-  const [budget, cashFlow, bills, goals, plans, connections, recurring, worth, alerts, profile] =
-    await Promise.all([
-      budgetReport(db, settings, now),
-      getCashFlow(db, settings, today),
-      listBills(db, today),
-      listGoals(db, { today, period: periodConfig(settings) }),
-      debtPlans(db, 0, today),
-      listConnections(db),
-      untrackedRecurring(db, today),
-      getNetWorth(db, today, NET_WORTH_DAYS),
-      listAlerts(db, settings, today),
-      getFinancialProfile(db, settings, today),
-    ])
+  const [
+    budget,
+    cashFlow,
+    bills,
+    goals,
+    plans,
+    connections,
+    recurring,
+    worth,
+    alerts,
+    savings,
+    monthly,
+  ] = await Promise.all([
+    budgetReport(db, settings, now),
+    getCashFlow(db, settings, today),
+    listBills(db, today),
+    listGoals(db, { today, period: periodConfig(settings) }),
+    debtPlans(db, 0, today),
+    listConnections(db),
+    untrackedRecurring(db, today),
+    getNetWorth(db, today, NET_WORTH_DAYS),
+    listAlerts(db, settings, today),
+    // Only what the savings glance needs beyond the reads above, not the whole profile.
+    getSavingsReport(db, settings, today),
+    monthlyAverages(db, settings, today),
+  ])
+  const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
     {
@@ -79,10 +95,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       leftAfterBillsCents: cashFlow.leftAfterBillsCents,
       perDayCents: cashFlow.perDayCents,
     },
-    bills: {
-      count: bills.length,
-      monthlyCents: bills.reduce((sum, b) => sum + b.monthlyCents, 0),
-    },
+    bills: { count: bills.length, monthlyCents: billsMonthlyCents },
     goals: goals.map((g) => ({
       name: g.name,
       kind: g.kind,
@@ -110,15 +123,19 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       changeCents: worth.netWorthCents - startWorth,
       sinceDays: NET_WORTH_DAYS,
     },
-    savings: savingsGlance(profile),
+    savings: savingsGlance(
+      savings,
+      savingsMeasures({ savings, monthly, billsMonthlyCents, settings, today }),
+    ),
   }
 }
 
 /**
- * Savings at a glance, from the financial profile: the total and how it moved
- * this month, the emergency fund and the savings rate. Null without any savings.
+ * Savings at a glance: the total and how it moved this month, the emergency
+ * fund and the savings rate, worked out as the financial profile does. Null
+ * without any savings.
  */
-function savingsGlance({ savings, emergencyFund, savingsRate }: FinancialProfile) {
+function savingsGlance(savings: SavingsReport, { emergencyFund, savingsRate }: SavingsMeasures) {
   if (!savings.hasSavings) return null
   return {
     totalCents: savings.totalCents,

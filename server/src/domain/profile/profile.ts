@@ -133,6 +133,51 @@ export function savingSources(savings: SavingsReport): SavingSource[] {
   ]
 }
 
+/** What the emergency fund and the savings rate are worked out from. */
+export interface SavingsMeasuresInput {
+  savings: SavingsReport
+  monthly: MonthlyAverages
+  /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
+  billsMonthlyCents: number
+  settings: Pick<Settings, 'savingsPlan'>
+  today: IsoDate
+}
+
+export interface SavingsMeasures {
+  emergencyFund: EmergencyFund | null
+  savingsRate: SavingsRate | null
+}
+
+/**
+ * The emergency fund and the savings rate, from data already read. Pure, so
+ * the check-in can work them out from its own reads without building the
+ * whole profile.
+ */
+export function savingsMeasures({
+  savings,
+  monthly,
+  billsMonthlyCents,
+  settings,
+  today,
+}: SavingsMeasuresInput): SavingsMeasures {
+  const cash = savings.kinds.find((k) => k.kind === 'savings')
+  // Without a whole month of spending, the bills are the best measure of essentials.
+  const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
+  return {
+    emergencyFund: cash
+      ? emergencyFund({
+          savedCents: cash.totalCents,
+          monthlyEssentialsCents: essentials,
+          essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
+          targetMonths: settings.savingsPlan.emergencyFundMonths,
+          monthlyPaceCents: savings.contributions?.monthlyCents?.cash ?? null,
+          today,
+        })
+      : null,
+    savingsRate: savingsRate(monthly.incomeCents, savingSources(savings)),
+  }
+}
+
 /** The whole financial picture as of today. */
 export async function getFinancialProfile(
   db: Db,
@@ -148,10 +193,6 @@ export async function getFinancialProfile(
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
 
   const billsMonthlyCents = bills.reduce((sum, bill) => sum + bill.monthlyCents, 0)
-  const cash = savings.kinds.find((k) => k.kind === 'savings')
-  // Without a whole month of spending, the bills are the best measure of essentials.
-  const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
-
   return {
     asOf: today,
     currency: settings.currency,
@@ -161,17 +202,7 @@ export async function getFinancialProfile(
     bills: { count: bills.length, monthlyCents: billsMonthlyCents },
     accounts: kindSummaries(accounts, settings.currency),
     savings,
-    emergencyFund: cash
-      ? emergencyFund({
-          savedCents: cash.totalCents,
-          monthlyEssentialsCents: essentials,
-          essentialsFrom: monthly.essentialSpendingCents === null ? 'bills' : 'spending',
-          targetMonths: settings.savingsPlan.emergencyFundMonths,
-          monthlyPaceCents: savings.contributions?.monthlyCents?.cash ?? null,
-          today,
-        })
-      : null,
-    savingsRate: savingsRate(monthly.incomeCents, savingSources(savings)),
+    ...savingsMeasures({ savings, monthly, billsMonthlyCents, settings, today }),
     savingsRateTargetPercent: settings.savingsPlan.savingsRateTargetPercent,
     goals: goals.map((goal) => profileGoal(goal, accounts)),
     userContext: [],

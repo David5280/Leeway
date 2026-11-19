@@ -5,6 +5,7 @@
 import { shortDate } from '../../lib/words.js'
 import type { SavingsKind } from '../accountKinds.js'
 import type { EmergencyFund } from '../savings/emergency.js'
+import { SEEN_AT_BANK } from '../savings/rate.js'
 import type { SavingsKindReport } from '../savings/report.js'
 import { monthYear, type Insight, type InsightFormat, type InsightTopic } from './insights.js'
 import {
@@ -68,7 +69,12 @@ function protectionAnswer(
   }
 }
 
-/** The share of pay saved, against the owner's target when they keep one. */
+/**
+ * The share of pay saved, as far as the bank shows it, and the owner's target
+ * when they set one. There is no bar toward the target: pension and 401(k)
+ * contributions come out of pay before the bank sees it, so a bar would make
+ * a partial rate look like falling short.
+ */
 function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): Meter {
   const target = profile.savingsRateTargetPercent
   const rate = profile.savingsRate
@@ -85,7 +91,7 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
         : 'Leeway has not seen a month of transfers to savings or investments yet, so it cannot work out your savings rate.'
     return { ...shared, headline: null, detail: needs, tone: 'neutral', progress: null }
   }
-  const of = `of pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}.`
+  const of = `of pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`
   // Below target is said plainly, never as a warning: the bank cannot see everything saved.
   let against = ''
   if (target !== null) {
@@ -97,7 +103,7 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
     headline: `${rate.percent}%`,
     detail: `${of}${against}`,
     tone: target !== null && rate.percent >= target ? 'good' : 'neutral',
-    progress: target === null ? null : { value: rate.percent, target },
+    progress: null,
   }
 }
 

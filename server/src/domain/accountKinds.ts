@@ -88,7 +88,12 @@ const NOT_INVESTED_SUBTYPES = new Set([
 
 // Bank (depository) subtypes that hold savings rather than spending money.
 // Anything else at a bank, including no subtype at all, reads as checking.
-const SAVINGS_SUBTYPES = new Set(['cd', 'cash isa', 'hsa', 'money market', 'savings'])
+const SAVINGS_SUBTYPES = new Set(['cd', 'cash isa', 'money market', 'savings'])
+
+// A health savings account is kept for medical costs, with a tax penalty on
+// anything else, so it is no emergency fund even when it sits at a bank as
+// cash. It counts with investing, where an HSA at a broker already lands.
+const HEALTH_SAVINGS_SUBTYPE = 'hsa'
 
 // Account names that say "retirement" when the bank's subtype does not, such
 // as a Rollover IRA reported with subtype "other". Matched as whole words.
@@ -111,6 +116,7 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
     case 'loan':
       return 'loan'
     case 'depository':
+      if (sub === HEALTH_SAVINGS_SUBTYPE) return 'investment'
       return SAVINGS_SUBTYPES.has(sub) ? 'savings' : 'checking'
     case 'investment':
       if (RETIREMENT_SUBTYPES.has(sub)) return 'retirement'
@@ -143,13 +149,16 @@ export function kindsForType(type: string): AccountKind[] {
   return ACCOUNT_KINDS.filter((kind) => kindFitsType(kind, type))
 }
 
+/** The owner's pick of kind if it fits an account of this type, otherwise none. */
+export function choiceThatFits(choice: AccountKind | null, type: string): AccountKind | null {
+  return choice && kindFitsType(choice, type) ? choice : null
+}
+
 /**
  * The kind an account counts as: the owner's pick when it fits the account,
- * otherwise the automatic one. A pick that no longer fits (a manual account
- * changed from savings to loan) quietly falls back rather than misleading.
+ * otherwise the automatic one. A pick that no longer fits quietly falls back
+ * rather than misleading; changing a manual account's type also clears it.
  */
 export function kindOf(account: ClassifiableAccount & { kindChoice: AccountKind | null }) {
-  const { kindChoice } = account
-  if (kindChoice && kindFitsType(kindChoice, account.type)) return kindChoice
-  return automaticKind(account)
+  return choiceThatFits(account.kindChoice, account.type) ?? automaticKind(account)
 }

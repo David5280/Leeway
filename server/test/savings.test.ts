@@ -1,6 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { copyFile, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { migrate } from '../src/db/migrate.js'
 import { getCheckin } from '../src/domain/checkin.js'
+import { getFinancialProfile } from '../src/domain/profile/profile.js'
+import type * as ProfileModule from '../src/domain/profile/profile.js'
 import { getSettings, saveSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -9,6 +16,12 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+
+// The real profile, watched, so a test can tell when something builds it whole.
+vi.mock('../src/domain/profile/profile.js', async (importOriginal) => {
+  const original = await importOriginal<typeof ProfileModule>()
+  return { ...original, getFinancialProfile: vi.fn(original.getFinancialProfile) }
+})
 
 // The test clock reads 2026-11-19 at noon in Denver; balance history before
 // today is written by hand, because the trigger dates rows by the real clock.
@@ -97,6 +110,10 @@ describe('summarize_savings', () => {
       kindChosen: false,
       notCounted: null,
     })
+    // An assistant reads this report, so no account carries its number's last digits.
+    for (const lens of report.lenses) {
+      for (const account of lens.accounts) expect(account).not.toHaveProperty('mask')
+    }
     // Every lens asks its question and fills the same parts, so a screen draws each kind alike.
     expect(report.lenses.map((v) => [v.question, v.meters.map((m) => m.id)])).toEqual([
       ['How protected am I?', ['building', 'savings_rate']],
@@ -260,6 +277,33 @@ describe('summarize_savings', () => {
   })
 })
 
+describe('net contributions', () => {
+  it('nets withdrawals from savings, and counts only the owner’s currency', async () => {
+    const { checking } = await fidelity()
+    const transfer = (date: string, amountCents: number, detailed: string) =>
+      insertBankTransaction(ctx.db, checking.accountId, {
+        date,
+        name: 'Online transfer',
+        amountCents,
+        detailed,
+      })
+    await transfer('2026-10-01', 100_000, 'TRANSFER_OUT_SAVINGS')
+    await transfer('2026-10-15', -60_000, 'TRANSFER_IN_SAVINGS')
+    await transfer('2026-10-02', 50_000, 'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS')
+    await transfer('2026-10-20', -20_000, 'TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS')
+    // A transfer in another currency cannot be added to dollars.
+    const euros = await transfer('2026-10-05', 900_000, 'TRANSFER_OUT_SAVINGS')
+    await ctx.db.query(`UPDATE transactions SET currency = 'EUR' WHERE id = $1`, [euros])
+
+    const { contributions } = await call('summarize_savings')
+    expect(contributions).toMatchObject({
+      since: '2026-10-01',
+      totalCents: { cash: 40_000, invested: 30_000 },
+      transferCount: 2,
+    })
+  })
+})
+
 describe('update_account kind', () => {
   it('changes an account kind, and goes back to the automatic one', async () => {
     const { savings, checking } = await fidelity()
@@ -325,7 +369,7 @@ describe('update_account kind', () => {
     expect(loan.kind).toBe('loan')
   })
 
-  it('falls back to the automatic kind when a pick no longer fits the account', async () => {
+  it('clears a pick that no longer fits when a manual account changes type', async () => {
     const account = await call('create_account', {
       name: 'Rainy day',
       type: 'depository',
@@ -333,7 +377,31 @@ describe('update_account kind', () => {
     })
     await call('update_account', { id: account.id, kind: 'savings' })
     const loan = await call('update_account', { id: account.id, type: 'loan' })
-    expect(loan).toMatchObject({ kindChoice: 'savings', kind: 'loan' })
+    expect(loan).toMatchObject({ kindChoice: null, kind: 'loan' })
+    // Changing it back does not bring an old pick back with it.
+    const back = await call('update_account', { id: account.id, type: 'depository' })
+    expect(back).toMatchObject({ kindChoice: null, kind: 'checking' })
+  })
+
+  it('keeps a pick that still fits the new type', async () => {
+    const account = await call('create_account', {
+      name: 'Gold coins',
+      type: 'other',
+      balanceCents: 5000,
+    })
+    await call('update_account', { id: account.id, kind: 'other' })
+    const loan = await call('update_account', { id: account.id, type: 'loan' })
+    expect(loan).toMatchObject({ kindChoice: 'other', kind: 'other' })
+    const property = await call('update_account', { id: account.id, type: 'property' })
+    expect(property).toMatchObject({ kindChoice: 'other', kind: 'other' })
+  })
+
+  it('falls back to the automatic kind for a stored pick that does not fit', async () => {
+    // Only possible for rows written before a type change cleared the pick.
+    const account = await call('create_account', { name: 'Old', type: 'loan', balanceCents: 5 })
+    await ctx.db.query(`UPDATE accounts SET kind = 'savings' WHERE id = $1`, [account.id])
+    const [listed] = await call('list_accounts')
+    expect(listed).toMatchObject({ kindChoice: 'savings', kind: 'loan' })
   })
 })
 
@@ -363,7 +431,64 @@ describe('balance history dates', () => {
   })
 })
 
+describe('the savings migration', () => {
+  let dir: string
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('backfills an account with no history on the owner’s day, not the database’s', async () => {
+    // A zone whose date differs from UTC's right now, whatever the hour.
+    const zone = new Date().getUTCHours() < 10 ? 'Pacific/Pago_Pago' : 'Pacific/Kiritimati'
+    // Rebuild the database as it stood before this migration.
+    dir = await mkdtemp(join(tmpdir(), 'leeway-before-013-'))
+    const migrations = fileURLToPath(new URL('../migrations', import.meta.url))
+    for (const file of await readdir(migrations)) {
+      if (file < '013') await copyFile(join(migrations, file), join(dir, file))
+    }
+    await ctx.db.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+    await migrate(ctx.db, dir)
+    await ctx.db.query(`UPDATE settings SET data = jsonb_build_object('timeZone', $1::text)`, [
+      zone,
+    ])
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 4_200 })
+    await ctx.db.query('DELETE FROM balance_history')
+
+    expect(await migrate(ctx.db)).toEqual(['013_savings.sql'])
+    const { rows } = await ctx.db.query<{ cents: number; owners: boolean; utc: boolean }>(
+      `SELECT balance_cents AS cents, day = (now() AT TIME ZONE $2)::date AS owners,
+         day = (now() AT TIME ZONE 'UTC')::date AS utc
+       FROM balance_history WHERE account_id = $1`,
+      [accountId, zone],
+    )
+    expect(rows).toEqual([{ cents: 4_200, owners: true, utc: false }])
+  })
+})
+
 describe('the check-in', () => {
+  it('agrees with the profile on savings, without building the whole profile', async () => {
+    const { checking } = await fidelity()
+    await insertBankTransaction(ctx.db, checking.accountId, {
+      date: '2026-09-01',
+      name: 'Online transfer',
+      amountCents: 30_000,
+      detailed: 'TRANSFER_OUT_SAVINGS',
+    })
+    const settings = await getSettings(ctx.db)
+    const profile = await getFinancialProfile(ctx.db, settings, '2026-11-19')
+    // Two whole months of history: enough for the emergency fund to be known.
+    expect(profile.emergencyFund?.monthsCovered).toEqual(expect.any(Number))
+    vi.mocked(getFinancialProfile).mockClear()
+
+    const { savings } = await getCheckin(ctx.db, settings, ctx.now(), '2026-11-19')
+    expect(getFinancialProfile).not.toHaveBeenCalled()
+    expect(savings).toMatchObject({
+      totalCents: profile.savings.totalCents,
+      emergencyFundMonths: profile.emergencyFund?.monthsCovered ?? null,
+      savingsRatePercent: profile.savingsRate?.percent ?? null,
+    })
+  })
+
   it('carries savings at a glance, or null without any', async () => {
     const settings = await getSettings(ctx.db)
     const now = ctx.now()

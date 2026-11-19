@@ -85,7 +85,7 @@ describe('getFinancialProfile', () => {
       savings: expect.objectContaining({ hasSavings: false, kinds: [] }),
       emergencyFund: null,
       savingsRate: null,
-      savingsRateTargetPercent: 20,
+      savingsRateTargetPercent: null,
       goals: [],
       userContext: [],
     })
@@ -127,6 +127,20 @@ describe('getFinancialProfile', () => {
     const { emergencyFund, monthly } = await profile()
     expect(monthly.essentialSpendingCents).toBe(200_000)
     expect(emergencyFund).toMatchObject({ monthsCovered: 4.5, targetMonths: 4, status: 'met' })
+  })
+
+  it('counts every spending category as essential when the pick is an empty list', async () => {
+    await steadyOwner()
+    // An empty pick would make essentials zero, and any savings endless cover.
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: [] } })
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
+    const { monthly, emergencyFund } = await profile()
+    expect(monthly.essentialSpendingCents).toBe(300_000)
+    expect(emergencyFund).toMatchObject({ monthsCovered: 3 })
+
+    // A list stored that way by an earlier version reads the same.
+    await ctx.db.query(`UPDATE settings SET data = '{"savingsPlan": {"essentialCategoryIds": []}}'`)
+    expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
   })
 
   it('refuses an emergency fund target outside one to 24 whole months', async () => {
@@ -239,7 +253,7 @@ describe('summarize_savings', () => {
     const view = await call('summarize_savings')
     expect(view.savingsRate?.percent).toBe(8)
     expect(view.insights.map((i) => i.text)).toEqual([
-      'You save about 8% of your pay: $411 a month of $5,000.',
+      'You save about 8% of your pay: $411 a month of $5,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
     ])
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({

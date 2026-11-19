@@ -285,6 +285,7 @@ describe('summaryFacts', () => {
       emergencyFundMonthsCovered: 2.5,
       emergencyFundTargetMonths: 6,
       savingsRatePercentOfPay: null,
+      savingsRateLeavesOut: 'Payroll deductions, such as a pension or a 401(k), are not counted.',
     })
     const unmoved = { ...savings, changeThisMonthCents: null, changeSince: null }
     expect(

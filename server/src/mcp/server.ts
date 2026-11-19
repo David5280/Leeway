@@ -15,6 +15,7 @@ import { runAction, type AnyAction } from '../actions/action.js'
 import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
 import { AppError, messageOf } from '../errors.js'
+import { agentJson } from './agentOutput.js'
 import { getPrompt, listPrompts } from './prompts.js'
 
 const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
@@ -93,7 +94,7 @@ export function createMcpServer(
     }
     try {
       const result = await runAction(ctx, action, request.params.arguments ?? {})
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      return { content: [{ type: 'text', text: agentJson(result) }] }
     } catch (error) {
       if (error instanceof AppError) return errorResult(error.message)
       onError(error)

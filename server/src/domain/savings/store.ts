@@ -5,7 +5,7 @@
 import type { Db } from '../../db/pool.js'
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import { listAccounts, type Account } from '../accounts.js'
-import { CONTRIBUTION_DAYS, type TransferCandidate } from './contributions.js'
+import { CONTRIBUTION_CODES, CONTRIBUTION_DAYS, type TransferCandidate } from './contributions.js'
 import type { BalancePoint } from './history.js'
 
 /** Every counted (not hidden) account, savings or not. */
@@ -38,11 +38,13 @@ export async function balanceHistory(
 
 /**
  * Posted transactions in the last year on counted accounts outside savings,
- * that the bank labeled as a transfer to savings or investments.
+ * in the owner's currency, that the bank labeled as money moved to or from
+ * savings or investments.
  */
 export async function transferCandidates(
   db: Db,
   everydayAccountIds: string[],
+  currency: string,
   today: IsoDate,
 ): Promise<TransferCandidate[]> {
   if (everydayAccountIds.length === 0) return []
@@ -52,9 +54,14 @@ export async function transferCandidates(
      FROM transactions
      WHERE account_id = ANY($1::uuid[]) AND date BETWEEN $2 AND $3
        AND NOT excluded AND NOT pending
-       AND provider_category_detailed IN
-         ('TRANSFER_OUT_SAVINGS', 'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS')`,
-    [everydayAccountIds, addDays(today, -(CONTRIBUTION_DAYS - 1)), today],
+       AND currency = $4 AND provider_category_detailed = ANY($5::text[])`,
+    [
+      everydayAccountIds,
+      addDays(today, -(CONTRIBUTION_DAYS - 1)),
+      today,
+      currency,
+      CONTRIBUTION_CODES,
+    ],
   )
   return rows
 }

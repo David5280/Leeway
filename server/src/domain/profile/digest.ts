@@ -3,11 +3,13 @@
 // no transactions, account names or numbers, or bank identifiers. What
 // Leeway does not know is said too, so an assistant asks rather than assumes.
 
+import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
+import { SEEN_AT_BANK } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
-import type { FinancialProfile } from './profile.js'
+import type { FinancialProfile, ProfileGoal } from './profile.js'
 
 type Money = (cents: number) => string
 
@@ -81,17 +83,39 @@ function emergencyLine({ emergencyFund: fund, locale }: FinancialProfile, money:
 function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string | null {
   if (!rate) return null
   const parts = rate.sources.map((s) => `${s.label.toLowerCase()} ${money(s.monthlyCents)}`)
-  return `Savings rate: about ${rate.percent}% of pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}).`
+  return `Savings rate: about ${rate.percent}% of pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${SEEN_AT_BANK}`
+}
+
+/** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
+export const DIGEST_GOALS = 5
+
+/**
+ * Goals in the order they matter soonest: open ones before reached ones,
+ * then by target date, with undated goals after dated ones. Stable, so ties
+ * keep the order the goals came in.
+ */
+export function nearestGoals(goals: ProfileGoal[]): ProfileGoal[] {
+  const reached = (goal: ProfileGoal) => (goal.status === 'reached' ? 1 : 0)
+  const byDate = (a: IsoDate | null, b: IsoDate | null) => {
+    if (a === b) return 0
+    if (a === null || b === null) return a === null ? 1 : -1
+    return a < b ? -1 : 1
+  }
+  return [...goals].sort((a, b) => reached(a) - reached(b) || byDate(a.targetDate, b.targetDate))
 }
 
 function goalsLine({ goals, locale }: FinancialProfile, money: Money): string | null {
   if (goals.length === 0) return null
-  const parts = goals.map((goal) => {
-    const by = goal.targetDate ? ` by ${shortDate(goal.targetDate, locale)}` : ''
-    const pace = paceWords(goal.onTrack)
-    return `${goal.name} ${goal.percent}% (${money(goal.remainingCents)} to go${by}${pace})`
-  })
-  return `Goals: ${parts.join('; ')}.`
+  const parts = nearestGoals(goals)
+    .slice(0, DIGEST_GOALS)
+    .map((goal) => {
+      const by = goal.targetDate ? ` by ${shortDate(goal.targetDate, locale)}` : ''
+      const pace = paceWords(goal.onTrack)
+      return `${goal.name} ${goal.percent}% (${money(goal.remainingCents)} to go${by}${pace})`
+    })
+  const more = goals.length - parts.length
+  const rest = more > 0 ? `; and ${more} more` : ''
+  return `Goals: ${parts.join('; ')}${rest}.`
 }
 
 /** What Leeway could not work out, so an assistant knows to ask. */

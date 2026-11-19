@@ -183,6 +183,32 @@ describe('bankContributions', () => {
     expect(result!.monthlyCents).toBeNull()
   })
 
+  it('nets money moved back out of savings and investments against what went in', () => {
+    const result = bankContributions(
+      [
+        transfer('2026-10-01', 100000, TO_SAVINGS),
+        // A withdrawal lands in checking as money in, labeled as from savings.
+        transfer('2026-10-15', -60000, 'TRANSFER_IN_SAVINGS'),
+        transfer('2026-10-02', 50000, TO_INVESTMENTS),
+        transfer('2026-10-20', -20000, 'TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS'),
+      ],
+      '2024-01-01',
+      TODAY,
+    )
+    expect(result).toMatchObject({
+      totalCents: { cash: 40000, invested: 30000 },
+      monthlyCents: { cash: perMonth(40000, 365), invested: perMonth(30000, 365) },
+      // Only money put in counts as a transfer made.
+      transferCount: 2,
+    })
+  })
+
+  it('finds nothing to report from withdrawals alone', () => {
+    expect(
+      bankContributions([transfer('2026-11-01', -20000, 'TRANSFER_IN_SAVINGS')], null, TODAY),
+    ).toBeNull()
+  })
+
   it('subtracts a reversed transfer but never goes below zero', () => {
     const result = bankContributions(
       [transfer('2026-11-01', 20000, TO_SAVINGS), transfer('2026-11-03', -25000, TO_SAVINGS)],

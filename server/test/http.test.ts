@@ -1,13 +1,13 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { resetPassword } from '../src/domain/owner.js'
+import { createSession, resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
 import { buildApp } from '../src/http/app.js'
 import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
-import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
+import { createTestContext, insertBankAccount, resetData, TEST_SETUP_CODE } from './helpers.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -281,6 +281,45 @@ describe('MCP endpoint', () => {
 
     const bad = await rpc(token, 'tools/call', { name: 'create_category', arguments: {} })
     expect(bad.json().result).toMatchObject({ isError: true })
+  })
+
+  it('never hands an agent an account mask, which the owner’s own app still shows', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'savings' })
+    await ctx.db.query(`UPDATE accounts SET mask = '9876' WHERE id = $1`, [accountId])
+    const { token } = await createToken(ctx.db, 'Coach', 'write')
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      return response.json().result as { isError?: boolean; content: { text: string }[] }
+    }
+
+    // Every read tool, called with no input (those that need some fail, and say
+    // nothing), and a write that returns the account.
+    const names = [...agentTools('read').map((action) => action.name), 'update_account']
+    const results = await Promise.all(
+      names.map((name) =>
+        tool(name, name === 'update_account' ? { id: accountId, displayName: 'Rainy day' } : {}),
+      ),
+    )
+    const byName = new Map(names.map((name, i) => [name, results[i]!]))
+    for (const name of ['list_accounts', 'summarize_savings', 'get_checkin', 'update_account']) {
+      expect(byName.get(name)!.isError, name).toBeUndefined()
+    }
+    expect(JSON.parse(byName.get('list_accounts')!.content[0]!.text)).toEqual([
+      expect.objectContaining({ id: accountId, kind: 'savings' }),
+    ])
+    for (const [name, result] of byName) {
+      expect(result.content[0]!.text, name).not.toContain('9876')
+      expect(result.content[0]!.text, name).not.toMatch(/"mask"/)
+    }
+
+    const ownApp = await app.inject({
+      method: 'POST',
+      url: '/api/actions/list_accounts',
+      // A session made directly, so this test spends none of the sign-in rate limit.
+      headers: { cookie: `leeway_session=${await createSession(ctx.db)}` },
+      payload: {},
+    })
+    expect(ownApp.json().result).toEqual([expect.objectContaining({ mask: '9876' })])
   })
 
   it('offers coaching prompts, filled in with their arguments', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ACCOUNT_KINDS,
   automaticKind,
+  choiceThatFits,
   isSavingsKind,
   kindFitsType,
   kindOf,
@@ -37,12 +38,23 @@ describe('automaticKind', () => {
     expect(automaticKind(investment(null, 'Mirage Fund'))).toBe('investment')
   })
 
-  it.each(['savings', 'money market', 'cd', 'hsa', 'Savings '])(
+  it.each(['savings', 'money market', 'cd', 'cash isa', 'Savings '])(
     'reads a bank %s account as savings',
     (subtype) => {
       expect(automaticKind({ type: 'depository', subtype, bankName: 'Bank' })).toBe('savings')
     },
   )
+
+  it('keeps a health savings account out of savings, at a bank or a broker', () => {
+    // Savings is what the emergency fund counts, and HSA money is for medical costs.
+    expect(automaticKind({ type: 'depository', subtype: 'hsa', bankName: 'Bank' })).toBe(
+      'investment',
+    )
+    expect(automaticKind({ type: 'depository', subtype: ' HSA', bankName: 'Bank' })).toBe(
+      'investment',
+    )
+    expect(automaticKind(investment('hsa'))).toBe('investment')
+  })
 
   it('reads other bank accounts, with or without a subtype, as checking', () => {
     for (const subtype of ['checking', 'prepaid', 'cash management', null]) {
@@ -80,6 +92,13 @@ describe('kinds the owner may pick', () => {
     expect(kindOf({ ...checking, kindChoice: 'savings' })).toBe('savings')
     expect(kindOf({ ...checking, kindChoice: null })).toBe('checking')
     expect(kindOf({ ...checking, type: 'credit', kindChoice: 'savings' })).toBe('credit_card')
+  })
+
+  it('keeps a pick only while it fits the account type', () => {
+    expect(choiceThatFits('savings', 'depository')).toBe('savings')
+    expect(choiceThatFits('savings', 'loan')).toBeNull()
+    expect(choiceThatFits('other', 'loan')).toBe('other')
+    expect(choiceThatFits(null, 'depository')).toBeNull()
   })
 
   it('names the savings kinds', () => {
