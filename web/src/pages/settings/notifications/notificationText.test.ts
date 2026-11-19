@@ -21,7 +21,7 @@ describe('notification words', () => {
   it('names every kind the server knows, without a dash', () => {
     expect(Object.keys(KIND_TEXT)).toEqual([...NOTIFICATION_KINDS])
     for (const { label, hint } of Object.values(KIND_TEXT)) {
-      expect(`${label} ${hint}`).not.toMatch(/[–—]/)
+      expect(`${label} ${hint}`).not.toMatch(/[\u2013\u2014]/)
     }
   })
 
