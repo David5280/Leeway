@@ -2,8 +2,14 @@
 // Amounts on screen are drawn with <Money> (components/design/Money.tsx),
 // which formats through this file; amounts inside a sentence ("$36 left")
 // use these functions directly, usually through useApp(). A lint rule
-// (eslint.config.js) fails the build when an amount is formatted anywhere
-// else, so every screen reads money the same way.
+// (eslint/moneyText.js) fails the build when a formatted amount reaches the
+// page as text, directly, through a variable or through another name for a
+// formatter, so every screen reads money the same way.
+//
+// The rule reads code without type information, so it cannot follow an
+// amount returned from a function, kept in an object or array, passed
+// through another function, or assigned to a variable after it was declared.
+// Don't build an amount for the page those ways; hand <Money> the cents.
 //
 // Money is integer cents. Amounts from the bank follow its convention:
 // positive is money out, negative is money in.

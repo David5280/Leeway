@@ -2,18 +2,12 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
+import { moneyText } from './eslint/moneyText.js'
 
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 
-/**
- * Attributes a screen reader reads as plain text, where an element can't go:
- * an amount is spelled out there ("Blue Bottle, spent $5.75"), never drawn.
- */
-const TEXT_ATTRIBUTES = '/^(aria-label|aria-valuetext|title|description)$/'
-
-/** A call to one of the money formatters, however it is reached: money(x) or app.money(x). */
-const MONEY_CALL =
-  ':matches([callee.name=/^(money|exact|signed|formatMoney|signedAmount|compactMoney)$/], [callee.property.name=/^(money|exact|signed)$/])'
+/** Leeway's own rules, in eslint/. */
+const leeway = { rules: { 'money-text': moneyText } }
 export default tseslint.config(
   { ignores: ['**/dist', '**/coverage', '**/node_modules', 'playwright-report', 'test-results'] },
   js.configs.recommended,
@@ -70,6 +64,7 @@ export default tseslint.config(
     // screen reads amounts alike: no number formatting of its own, and no
     // amount dropped into the page as bare text.
     files: ['web/src/**/*.{ts,tsx}'],
+    plugins: { leeway },
     ignores: [
       'web/src/lib/money.ts',
       'web/src/components/design/Money.tsx',
@@ -92,14 +87,9 @@ export default tseslint.config(
             "CallExpression[callee.property.name='toLocaleString'] Property[key.name='currency']",
           message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
         },
-        {
-          // Anywhere inside a JSX expression or attribute value: a child, a
-          // prop, a ternary, an && or a template string. Only text a screen
-          // reader reads is spelled out (TEXT_ATTRIBUTES).
-          selector: `JSXExpressionContainer CallExpression${MONEY_CALL}:not(JSXAttribute[name.name=${TEXT_ATTRIBUTES}] CallExpression)`,
-          message: 'Show an amount with <Money cents={...} />, not as formatted text.',
-        },
       ],
+      // A formatted amount reaching the page, however it gets there (eslint/moneyText.js).
+      'leeway/money-text': 'error',
     },
   },
   {

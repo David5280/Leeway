@@ -3,10 +3,9 @@
 import type { SpendingPace } from '../api/client'
 import { useAction } from '../api/hooks'
 import { PaceChart } from '../components/charts/PaceChart'
-import { Card, ErrorNote, Loading } from '../components/ui'
-import { useApp } from '../lib/app'
-import type { WidgetProps } from './types'
 import { Money } from '../components/design/Money'
+import { Card, ErrorNote, Loading } from '../components/ui'
+import type { WidgetProps } from './types'
 
 export function PaceWidget({ budget, offset }: WidgetProps) {
   const pace = useAction('get_spending_pace', { offset })
@@ -57,10 +56,8 @@ function PaceBody({ pace, isCurrent }: { pace: SpendingPace | undefined; isCurre
 
 /** One sentence: where spending lands (projected now, actual for a past period) against budget. */
 function PaceSummary({ pace, isCurrent }: { pace: SpendingPace; isCurrent: boolean }) {
-  const { money } = useApp()
   const landing = isCurrent ? pace.projectedCents : (pace.cumulative.at(-1)?.cents ?? 0)
   const gap = landing - pace.budgetCents
-  const budget = money(pace.budgetCents)
   return (
     <p style={{ fontSize: 14 }}>
       {isCurrent ? 'At this rate you land near ' : 'You spent '}
@@ -73,7 +70,7 @@ function PaceSummary({ pace, isCurrent }: { pace: SpendingPace; isCurrent: boole
           <span className="over strong">
             <Money cents={gap} /> over
           </span>{' '}
-          the {budget} budget.
+          the <Money cents={pace.budgetCents} /> budget.
         </>
       ) : (
         <>
@@ -81,7 +78,7 @@ function PaceSummary({ pace, isCurrent }: { pace: SpendingPace; isCurrent: boole
           <span className="good strong">
             <Money cents={-gap} /> under
           </span>{' '}
-          the {budget} budget.
+          the <Money cents={pace.budgetCents} /> budget.
         </>
       )}
     </p>

@@ -1,6 +1,7 @@
-// The lint rule that keeps amounts on screen drawn by <Money> (eslint.config.js):
-// every way a formatted amount could slip into the page is caught, and the
-// places that must spell an amount out as text are left alone.
+// The lint rule that keeps amounts on screen drawn by <Money> (eslint/moneyText.js):
+// every way a formatted amount could slip into the page is caught, directly,
+// through a variable or through another name for a formatter, and the places
+// that must spell an amount out as text are left alone.
 
 import { resolve } from 'node:path'
 import { ESLint } from 'eslint'
@@ -16,16 +17,24 @@ beforeAll(() => {
   eslint = new ESLint({ cwd: ROOT })
 })
 
-/** How many times the rule fires on a component file holding this JSX. */
-async function hits(jsx: string, file = 'web/src/pages/Fixture.tsx'): Promise<number> {
+/**
+ * How many times the rule fires on a component file that runs `setup`, then
+ * returns this JSX.
+ */
+async function hits(
+  jsx: string,
+  { file = 'web/src/pages/Fixture.tsx', setup = '' } = {},
+): Promise<number> {
   const code = `
     declare const money: (cents: number) => string
     declare const exact: (cents: number) => string
     declare const compactMoney: (cents: number, options: object) => string
     declare const app: { money: (cents: number) => string }
+    declare const textWidth: (text: string, size: number) => number
     declare const Pill: (props: { label: string }) => null
     declare const shown: boolean
     export function Fixture() {
+      ${setup}
       return ${jsx}
     }
   `
@@ -63,6 +72,37 @@ describe('the money lint rule', () => {
   })
 
   it('leaves <Money> itself alone, which is where amounts are drawn', async () => {
-    expect(await hits('<p>{money(500)}</p>', 'web/src/components/design/Money.tsx')).toBe(0)
+    expect(await hits('<p>{money(500)}</p>', { file: 'web/src/components/design/Money.tsx' })).toBe(
+      0,
+    )
+  })
+
+  it.each([
+    ['a variable', 'const budget = money(500)', '<p>The {budget} budget</p>'],
+    ['a variable as a prop', 'const budget = money(500)', '<Pill label={budget} />'],
+    [
+      'a variable made from one',
+      'const left = money(500); const line = `${left} left`',
+      '<p>{line}</p>',
+    ],
+    ['either side of a ternary', 'const text = shown ? exact(500) : "none"', '<p>{text}</p>'],
+    ['another name for a formatter', 'const fmt = money', '<p>{fmt(500)}</p>'],
+    ['a formatter taken as a method', 'const fmt = app.money', '<p>{fmt(500)}</p>'],
+    ['a formatter renamed as it is taken', 'const { money: fmt } = app', '<p>{fmt(500)}</p>'],
+    ['another name for another name', 'const fmt = money; const show = fmt', '<p>{show(500)}</p>'],
+  ])('catches an amount reaching the page through %s', async (_form, setup, jsx) => {
+    expect(await hits(jsx, { setup })).toBe(1)
+  })
+
+  it.each([
+    [
+      'spelled out for a screen reader',
+      'const label = `Spent ${money(500)}`',
+      '<p aria-label={label} />',
+    ],
+    ['measured, not shown', 'const x = textWidth(money(500), 13)', '<Pill label={String(x)} />'],
+    ['kept but never shown', 'const budget = money(500); void budget', '<p>Budget</p>'],
+  ])('leaves an amount alone when it is %s', async (_form, setup, jsx) => {
+    expect(await hits(jsx, { setup })).toBe(0)
   })
 })
