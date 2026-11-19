@@ -20,13 +20,14 @@ import {
 type Latest = NonNullable<ImportStatus['latest']>
 
 /**
- * Which way each figure moves for the owner: pay, and what the employer puts
- * in, comes to them; their own contributions leave their pay.
+ * Which way each figure moves for the owner. Only take-home pay reaches them,
+ * so it alone reads as money in. Gross pay stands plain, since take-home is
+ * part of it and two figures in green would read as both coming in. The
+ * employer's pension share stands plain too: it funds the pension and never
+ * reaches the owner. Their own contributions leave their pay.
  */
-const FLOWS: Record<CurrentField, Flow> = {
-  grossPay: 'in',
+const FLOWS: Partial<Record<CurrentField, Flow>> = {
   netPay: 'in',
-  pensionEmployer: 'in',
   pension: 'out',
   plan401k: 'out',
   plan457: 'out',

@@ -46,7 +46,7 @@ export const CURRENT_LABELS: Record<CurrentField, string> = {
   grossPay: 'Gross pay',
   netPay: 'Take-home pay',
   pension: 'Pension, your share',
-  pensionEmployer: "Pension, employer's share",
+  pensionEmployer: 'Pension, paid by your employer',
   plan401k: '401(k)',
   plan457: '457',
   plan403b: '403(b)',

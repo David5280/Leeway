@@ -88,9 +88,18 @@ describe('the Paystub card', () => {
     renderPlan('/plan/retirement')
     const kept = within(await card())
     expect(kept.getByText('From City of Example, paid Nov 13, 2026')).toBeVisible()
-    // Pay comes in, marked with a plus and its color; a contribution leaves pay, plain.
-    expect(kept.getByText('Gross pay').nextSibling).toHaveTextContent('+$3,845.00')
-    expect(kept.getByText('Gross pay').nextSibling).toHaveClass('money-in')
+    // Only take-home pay reaches the owner, so it alone is money in: a plus and its color.
+    expect(kept.getByText('Take-home pay').nextSibling).toHaveTextContent('+$2,611.42')
+    expect(kept.getByText('Take-home pay').nextSibling).toHaveClass('money-in')
+    // Gross pay holds take-home, and the employer's share funds the pension, so both stand plain.
+    expect(kept.getByText('Gross pay').nextSibling).toHaveTextContent(/^\$3,845\.00$/)
+    expect(kept.getByText('Gross pay').nextSibling).toHaveClass('money-neutral')
+    expect(kept.getByText('Pension, paid by your employer').nextSibling).toHaveTextContent(
+      /^\$822\.83$/,
+    )
+    expect(kept.getByText('Pension, paid by your employer').nextSibling).toHaveClass(
+      'money-neutral',
+    )
     expect(kept.getByText('457').nextSibling).toHaveTextContent(/^\$200\.00$/)
     expect(kept.getByText('457').nextSibling).toHaveClass('money-neutral')
     expect(kept.queryByText('HSA')).toBeNull()
@@ -239,7 +248,7 @@ describe('the review screen', () => {
     expect(form.getByRole('textbox', { name: 'Year to date: Gross pay' })).toHaveValue('80745.00')
 
     // The hard-to-read figure stands out; the others say how sure Claude was.
-    const employer = form.getByText("Pension, employer's share").closest('.review-figure')!
+    const employer = form.getByText('Pension, paid by your employer').closest('.review-figure')!
     expect(within(employer as HTMLElement).getByText('Check closely')).toHaveClass('badge warn')
     expect(form.getAllByText('Read clearly').length).toBeGreaterThan(0)
     expect(form.getByText('Check this')).toHaveClass('badge')
