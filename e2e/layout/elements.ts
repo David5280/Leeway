@@ -188,6 +188,28 @@ export function describe(el: Element): string {
   return `<${el.tagName.toLowerCase()}${id}${classes}>${text ? ` "${text}"` : ''}`
 }
 
+/** Elements that are a picture of their own, covering what is under them. */
+const MEDIA = new Set(['IMG', 'VIDEO', 'CANVAS', 'IFRAME', 'EMBED', 'OBJECT'])
+
+/**
+ * Whether an element fills its box with something that hides what is drawn
+ * under it: a background color or image, a picture, or the fill of a chart's
+ * shape (a bar, an area). A border or a chart's stroke alone does not.
+ */
+export function fills(el: Element): boolean {
+  if (isHiddenByDesign(el)) return false
+  const style = getComputedStyle(el)
+  if (el instanceof SVGElement) {
+    if (!(el instanceof SVGGeometryElement) || style.fill === 'none') return false
+    return alphaOf(style.fill) > 0 && Number(style.fillOpacity) > 0
+  }
+  if (MEDIA.has(el.tagName)) return true
+  return alphaOf(style.backgroundColor) > 0 || style.backgroundImage !== 'none'
+}
+
+/** Whether neither element is inside the other. */
+export const apart = (a: Element, b: Element) => a !== b && !a.contains(b) && !b.contains(a)
+
 /** How see-through a CSS color is: 0 clear, 1 solid. */
 export function alphaOf(color: string): number {
   if (color === 'transparent') return 0

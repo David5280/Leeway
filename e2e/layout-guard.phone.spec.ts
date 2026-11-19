@@ -68,15 +68,17 @@ async function scrollTo(page: Page, share: number): Promise<void> {
 
 /**
  * Every problem on the screen: all layout checks at the top, then the safe
- * areas again scrolled halfway, where content has moved under the status bar,
- * and at the end, where the last content must also rest clear of the tab bar.
+ * areas and overlaps again scrolled halfway, where content has moved under the
+ * status bar and the middle of the page is on screen (what covers text is
+ * found only on screen), and at the end, where the last content must also
+ * rest clear of the tab bar.
  * Last, every control's tap, which scrolls each one into view to probe it.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   await scrollTo(page, 0)
   const problems: LayoutProblem[] = await layoutProblems(page)
   for (const [share, checks] of [
-    [0.5, ['safe-area']],
+    [0.5, ['safe-area', 'overlap']],
     [1, ['safe-area', 'overlap']],
   ] as const) {
     await scrollTo(page, share)

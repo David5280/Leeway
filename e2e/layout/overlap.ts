@@ -1,8 +1,11 @@
-// (a) Text drawn over other text, or over a control it is not part of; and
-// page text or controls coming to rest under a fixed bar, like the last row
-// of a page left under the tab bar.
+// (a) Text drawn over other text, over a control it is not part of, or under
+// a box that fills over it (covered.ts); page text or controls coming to rest
+// under a fixed bar, like the last row of a page left under the tab bar; and
+// two floating layers (fixed bars, held sticky headers) drawn over each other,
+// like a bar held over the tab bar.
 
-import { CONTROLS, clipArea, describe, floatOf, isShown, shownBox } from './elements'
+import { findCoveredText } from './covered'
+import { apart, CONTROLS, clipArea, describe, fills, floatOf, isShown, shownBox } from './elements'
 import {
   boxAround,
   cornersOf,
@@ -72,8 +75,9 @@ function collide(a: Piece, b: Piece): boolean {
   // An element and its own parts (a button and its label) always share space.
   if (a.owner === b.owner || a.owner.contains(b.owner) || b.owner.contains(a.owner)) return false
   // A fixed bar or a held sticky header floats over the page as it scrolls;
-  // that is what it is for.
-  if (a.layer !== b.layer) return false
+  // that is what it is for. Two floating layers apart from each other are
+  // both on top, so neither may cover the other (layersOverLayers).
+  if (a.layer !== b.layer && !(a.layer && b.layer && apart(a.layer, b.layer))) return false
   return overlaps(a.box, b.box) && shapesOverlap(a.corners, b.corners)
 }
 
@@ -106,15 +110,62 @@ function underBars(pieces: Piece[]): string[] {
     })
 }
 
+/**
+ * Where a floating layer is drawn: its whole box when it fills it (a bar on
+ * its own background), or else only its text and controls (a bare wrapper
+ * around a floating button).
+ */
+function extentOf(layer: Element, pieces: Piece[]): Box[] {
+  if (fills(layer)) return [toBox(layer.getBoundingClientRect())]
+  return pieces.filter((p) => p.layer === layer).map((p) => p.box)
+}
+
+/**
+ * Floating layers drawn over each other, at any scroll: two fixed bars, or a
+ * held sticky bar and the tab bar. One inside the other (a sheet's own sticky
+ * header) is that layer's page, and passes under it by design.
+ */
+function layersOverLayers(pieces: Piece[]): string[] {
+  const layers = [...new Set(pieces.flatMap((p) => (p.layer ? [p.layer] : [])))]
+  const extents = new Map(layers.map((layer) => [layer, extentOf(layer, pieces)]))
+  return layers.flatMap((a, i) =>
+    layers
+      .slice(i + 1)
+      .filter((b) => apart(a, b))
+      .filter((b) =>
+        extents.get(a)!.some((box) => extents.get(b)!.some((other) => overlaps(box, other))),
+      )
+      .map((b) => `${describe(a)} is drawn over ${describe(b)}`),
+  )
+}
+
+/**
+ * Lines with a filled box over them, but not where text in that box is drawn
+ * over the line: that is already one overlap, and named once.
+ */
+function coveredText(texts: Piece[], collided: [Element, Element][]): string[] {
+  const textOver = (owner: Element, cover: Element) =>
+    collided.some(
+      ([a, b]) => (a === owner && cover.contains(b)) || (b === owner && cover.contains(a)),
+    )
+  return findCoveredText(texts)
+    .filter(({ owner, cover }) => !textOver(owner, cover))
+    .map(({ owner, cover }) => `${describe(owner)} is covered by ${describe(cover)}`)
+}
+
 export function findOverlaps(): LayoutProblem[] {
-  const pieces = [...textPieces(), ...controlPieces()]
+  const texts = textPieces()
+  const pieces = [...texts, ...controlPieces()]
   // Each pair of elements once, however many of their lines meet.
-  const messages = new Set<string>()
+  const collided: [Element, Element][] = []
   pieces.forEach((a, i) => {
-    for (const b of pieces.slice(i + 1)) {
-      if (collide(a, b)) messages.add(`${describe(a.owner)} overlaps ${describe(b.owner)}`)
-    }
+    for (const b of pieces.slice(i + 1)) if (collide(a, b)) collided.push([a.owner, b.owner])
   })
-  for (const message of underBars(pieces)) messages.add(message)
+  const messages = new Set([
+    ...collided.map(([a, b]) => `${describe(a)} overlaps ${describe(b)}`),
+    ...underBars(pieces),
+    ...layersOverLayers(pieces),
+    ...coveredText(texts, collided),
+  ])
   return [...messages].map((message) => ({ check: 'overlap', message }))
 }
