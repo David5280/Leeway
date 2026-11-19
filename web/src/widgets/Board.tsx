@@ -73,9 +73,10 @@ function Slot({
   const Component = entry.component
   return (
     <div
-      className="widget"
+      className="widget rise-in"
       data-size={widget.size}
-      style={{ order, opacity: widget.visible ? undefined : 0.5 }}
+      // --i staggers the cards rising in, in the owner's order (styles/motion.css).
+      style={{ order, opacity: widget.visible ? undefined : 0.5, ['--i' as string]: all.indexOf(widget) }}
     >
       {editing && <Tools widget={widget} name={entry.name} all={all} save={save} />}
       {widget.visible && <Component budget={budget} offset={offset} />}

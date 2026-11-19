@@ -1,10 +1,15 @@
 // Flexible spending so far against an even pace, with where it is heading.
+// The chart is drawn as it always has been; the card around it opens the
+// math behind where spending lands (lib/drills/pace.ts).
 
+import { Card } from '../components/design/Card'
 import type { SpendingPace } from '../api/client'
 import { useAction } from '../api/hooks'
 import { PaceChart } from '../components/charts/PaceChart'
 import { Money } from '../components/design/Money'
-import { Card, ErrorNote, Loading } from '../components/ui'
+import { SectionHead } from '../components/design/SectionHead'
+import { paceDrill } from '../lib/drills/pace'
+import { ErrorNote, Loading } from '../components/ui'
 import type { WidgetProps } from './types'
 
 export function PaceWidget({ budget, offset }: WidgetProps) {
@@ -12,21 +17,37 @@ export function PaceWidget({ budget, offset }: WidgetProps) {
   const names = budget.categories
     .filter((c) => pace.data?.categoryIds.includes(c.categoryId))
     .map((c) => c.name)
-  return (
-    <Card label="Spending pace" className="stack-sm">
-      <div className="stack-sm" style={{ gap: 2 }}>
-        <h2>Flexible spending pace</h2>
-        {names.length > 0 && (
-          <span className="small muted" title={names.join(', ')}>
-            {followedText(names)}
-          </span>
-        )}
-      </div>
-      {pace.error ? (
-        <ErrorNote error={pace.error} />
-      ) : (
-        <PaceBody pace={pace.data} isCurrent={offset === 0} />
+  const head = (
+    <div className="stack-sm" style={{ gap: 2 }}>
+      <SectionHead icon="pace" title="Flexible spending pace" />
+      {names.length > 0 && (
+        <span className="small muted" title={names.join(', ')}>
+          {followedText(names)}
+        </span>
       )}
+    </div>
+  )
+  // Only a pace with categories to follow has a figure to explain.
+  if (!pace.data || pace.data.categoryIds.length === 0) {
+    return (
+      <Card static="empty" label="Spending pace" className="stack-sm">
+        {head}
+        {pace.error ? (
+          <ErrorNote error={pace.error} />
+        ) : (
+          <PaceBody pace={pace.data} isCurrent={offset === 0} />
+        )}
+      </Card>
+    )
+  }
+  return (
+    <Card
+      drill={paceDrill(pace.data, budget, offset === 0)}
+      label="Spending pace"
+      className="stack-sm"
+    >
+      {head}
+      <PaceBody pace={pace.data} isCurrent={offset === 0} />
     </Card>
   )
 }
