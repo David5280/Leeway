@@ -21,7 +21,7 @@ export async function addAccount(
 
 /** Deletes an account, and its transactions with it, so other tests see the install as before. */
 export async function removeAccount(page: Page, name: string): Promise<void> {
-  await page.goto('/customize#accounts')
+  await page.goto('/settings/accounts')
   await page.getByRole('button', { name: `Delete ${name}` }).click()
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toHaveCount(0)
 }

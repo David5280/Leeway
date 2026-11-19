@@ -5,7 +5,7 @@ import type { SettingsGroup } from './groups'
 import { SectionTitlesShown } from './Section'
 
 export function GroupPanel({ group }: { group: SettingsGroup }) {
-  const heading = useRef<HTMLElement>(null)
+  const heading = useRef<HTMLDivElement>(null)
 
   // Switching groups from far down a long one would otherwise open the new
   // group partway down; this brings its heading back into view if it is not.
@@ -15,10 +15,11 @@ export function GroupPanel({ group }: { group: SettingsGroup }) {
 
   return (
     <div className="stack settings-panel">
-      <header ref={heading} className="settings-head">
+      {/* A div, not a header: outside a landmark, a header is the page's banner. */}
+      <div ref={heading} className="settings-head">
         <h2>{group.title}</h2>
         <p className="muted">{group.description}</p>
-      </header>
+      </div>
       <SectionTitlesShown.Provider value={group.sections.length > 1}>
         {group.sections.map((Section, index) => (
           // A group's sections never change order while it is open.

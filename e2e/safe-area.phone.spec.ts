@@ -14,7 +14,16 @@ import {
 } from './phone'
 
 const GUTTER = 16
-const SCREENS = ['/', '/accounts', '/transactions', '/budgets', '/plan', '/customize']
+const SCREENS = [
+  '/',
+  '/accounts',
+  '/transactions',
+  '/budgets',
+  '/plan',
+  // Settings runs its pill row edge to edge, so its gutters are worth a look.
+  '/settings/appearance',
+  '/settings/accounts',
+]
 
 /** The left and right edges of every block on the page, in screen pixels. */
 const blockEdges = (page: Page) =>

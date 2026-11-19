@@ -222,6 +222,15 @@ describe('Settings addresses', () => {
 })
 
 describe('Settings page', () => {
+  it("adds no banner landmark of its own beside the app's", () => {
+    fakeServer(quiet)
+    renderSettings('/settings/banks')
+    // The one banner is the app's top bar, with the main menu in it.
+    expect(screen.getAllByRole('banner')).toHaveLength(1)
+    expect(screen.getByRole('banner')).toHaveClass('topbar')
+    expect(groupHeading()).toHaveTextContent('Banks')
+  })
+
   it('shows a card hint under its title', () => {
     fakeServer(quiet)
     renderSettings('/settings/accounts')

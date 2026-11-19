@@ -29,9 +29,12 @@ test('the transaction fields are big enough not to zoom', async ({ page }) => {
   await removeAccount(page, 'Field size checking')
 })
 
-test('the settings fields are big enough not to zoom', async ({ page }) => {
-  await page.goto('/customize')
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-  await expect(page.locator('input, select, textarea').first()).toBeVisible()
-  expect(await smallFields(page)).toEqual([])
-})
+// Every Settings group that has fields, each at its own address.
+for (const group of ['appearance', 'budgeting', 'accounts', 'email', 'data', 'sign-in']) {
+  test(`the ${group} settings fields are big enough not to zoom`, async ({ page }) => {
+    await page.goto(`/settings/${group}`)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.locator('input, select, textarea').first()).toBeVisible()
+    expect(await smallFields(page)).toEqual([])
+  })
+}
