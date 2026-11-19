@@ -100,16 +100,52 @@ describe('accountDisplayName', () => {
     expect(named('SAVINGS NO. 4417')).toBe('Chase Savings')
   })
 
-  it('takes a short number out only when it is masked and is the mask', () => {
+  it('takes out a short number that is exactly the mask, however the bank marks it', () => {
     const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
-    expect(named('CHECKING X12', '12')).toBe('Chase Checking')
+    expect(named('CHECKING 417', '417')).toBe('Chase Checking')
+    expect(named('CHECKING-417', '417')).toBe('Chase Checking')
+    expect(named('CHECKING (417)', '417')).toBe('Chase Checking')
+    expect(named('CHK417', '417')).toBe('Chase Chk')
+    expect(named('CHECKING ACCT#417', '417')).toBe('Chase Checking')
     expect(named('CHECKING ...417', '417')).toBe('Chase Checking')
-    // The same digits as a word of the name, or masked but not the mask, stay.
+    expect(named('CHECKING #417 PLUS', '417')).toBe('Chase Checking Plus')
+    expect(named('SAVINGS 12', '12')).toBe('Chase Savings')
+    expect(named('CHECKING X12', '12')).toBe('Chase Checking')
+  })
+
+  it('takes out any run of four digits or more, and a mask the bank split', () => {
+    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
+    expect(named('CHECKING 4417A', '4417')).toBe('Chase Checking')
+    expect(named('CHECKING 44-17', '4417')).toBe('Chase Checking')
+    expect(named('CHECKING 44 17', '4417')).toBe('Chase Checking')
+    expect(named('CHECKING XXXX-XXXX-4417', '4417')).toBe('Chase Checking')
+    expect(named('CHECKINGX4417', '4417')).toBe('Chase Checkingx')
+  })
+
+  it('keeps digits that are only part of the name', () => {
+    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
+    // A bare number with more of the name after it is the name's own.
     expect(named('12 MONTH CD', '12')).toBe('Chase 12 Month CD')
+    // Only the whole mask counts, never a part of it.
     expect(named('ACME 401K', '01')).toBe('Chase Acme 401k')
     expect(named('ACME 401K', '40')).toBe('Chase Acme 401k')
     expect(named('PLAN 401', '01')).toBe('Chase Plan 401')
     expect(named('PLATINUM X2', '12')).toBe('Chase Platinum X2')
+    // A short mask split up is more likely a range than the account number.
+    expect(named('1-2 YEAR CD', '12')).toBe('Chase 1-2 Year CD')
+  })
+
+  it('takes out a lone x, star or # that led up to the number', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
+    expect(named('CHECKING X 4417')).toBe('Chase Checking')
+    expect(named('CHECKING * 4417')).toBe('Chase Checking')
+    expect(named('CHECKING # 4417')).toBe('Chase Checking')
+  })
+
+  it('drops a bracket left open once the number goes', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
+    expect(named('CHECKING [ACCT 4417')).toBe('Chase Checking')
+    expect(named('CHECKING (ACCT 4417')).toBe('Chase Checking')
   })
 
   it('keeps brackets that still pair up', () => {
@@ -206,7 +242,14 @@ describe('shortBankName', () => {
     expect(shortBankName('M&T BANK')).toBe('M&T Bank')
     expect(shortBankName('UMB BANK, N.A.')).toBe('UMB Bank')
     expect(shortBankName('BBVA USA')).toBe('BBVA USA')
+    expect(shortBankName('TIAA')).toBe('TIAA')
     expect(shortBankName('CHASE')).toBe('Chase')
+  })
+
+  it('quiets a short word in a name sent in capitals, unless it could only be letters', () => {
+    expect(shortBankName('KEY BANK')).toBe('Key Bank')
+    expect(shortBankName('ALLY BANK')).toBe('Ally')
+    expect(shortBankName('PNC BANK')).toBe('PNC Bank')
   })
 
   it('quiets a bank name sent in capitals', () => {
@@ -217,10 +260,10 @@ describe('shortBankName', () => {
 })
 
 describe('bankAcronyms', () => {
-  it('finds the short words a bank writes in capitals', () => {
-    expect([...bankAcronyms('TIAA')]).toEqual(['TIAA'])
+  it('finds the short words a bank styles in capitals', () => {
     expect([...bankAcronyms('BOK Financial - Online Banking')]).toEqual(['BOK'])
-    expect([...bankAcronyms('BBVA USA')]).toEqual(['BBVA', 'USA'])
+    expect([...bankAcronyms('BBVA Compass')]).toEqual(['BBVA'])
+    expect([...bankAcronyms('Key Bank')]).toEqual([])
   })
 
   it("adds a bank's initials when its name has three or four words", () => {
@@ -229,7 +272,10 @@ describe('bankAcronyms', () => {
     expect([...bankAcronyms('Bank of the Ozarks')]).toEqual([])
   })
 
-  it('trusts no word of a long name sent all in capitals', () => {
+  it('from a name sent all in capitals, trusts only words no one could say', () => {
+    expect([...bankAcronyms('PNC BANK')]).toEqual(['PNC'])
+    expect([...bankAcronyms('TD BANK, N.A.')]).toEqual(['TD'])
+    expect([...bankAcronyms('KEY BANK')]).toEqual([])
     expect([...bankAcronyms('CAPITAL ONE')]).toEqual([])
     expect([...bankAcronyms('WELLS FARGO BANK, N.A.')]).toEqual([])
     expect([...bankAcronyms('')]).toEqual([])

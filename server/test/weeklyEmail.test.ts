@@ -341,6 +341,14 @@ describe('send_test_weekly_email', () => {
     expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toContain('4417')
   })
 
+  it('never puts a short mask in the email, even glued to the bank name', async () => {
+    await insertBankAccount(ctx.db, { name: 'CHECKING-417', mask: '417', balanceCents: -4210 })
+    await call('send_test_weekly_email')
+    const [email] = mailer.sent
+    expect(email!.text).toContain('Test Checking is overdrawn by $42.10.')
+    expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toMatch(/\b417\b/)
+  })
+
   it('goes to the chosen address', async () => {
     await call('set_weekly_email', { sendTo: 'me@example.com' })
     expect(await call('send_test_weekly_email')).toEqual({ sentTo: 'me@example.com' })

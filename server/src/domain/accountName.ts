@@ -10,6 +10,7 @@
 import {
   coreOf,
   isInitials,
+  isKnownAcronym,
   isShouted,
   readableCase,
   SMALL_WORDS,
@@ -128,29 +129,44 @@ export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<st
 export function shortBankName(institution: string): string {
   const main = institution.split(/\s+-\s+/)[0]!
   const words = main.replaceAll(',', ' ').split(/\s+/).filter(Boolean)
+  const shouted = isShouted(main)
+  const acronyms = bankAcronyms(main)
   let end = words.length
   while (end > 0 && BOILERPLATE.has(words[end - 1]!.toLowerCase())) {
     const isBank = words[end - 1]!.toLowerCase() === 'bank'
-    if (isBank && needsBank(words.slice(0, end - 1))) break
+    if (isBank && needsBank(words.slice(0, end - 1), shouted, acronyms)) break
     end--
   }
   const kept = end > 0 ? words.slice(0, end) : words
-  return readableCase(kept.join(' '), { shouted: isShouted(main), acronyms: bankAcronyms(main) })
+  return readableCase(kept.join(' '), { shouted, acronyms })
 }
 
 /** Whether a bank's name without "Bank" would be too little: initials, one short word, or common words. */
-function needsBank(rest: readonly string[]): boolean {
+function needsBank(
+  rest: readonly string[],
+  shouted: boolean,
+  acronyms: ReadonlySet<string>,
+): boolean {
   if (rest.length === 0) return false
-  const [only] = rest
-  if (rest.length === 1 && (isInitials(only!) || coreOf(only!).length <= 3)) return true
+  if (rest.length === 1) {
+    const [word] = rest as [string]
+    if (coreOf(word).length <= 3) return true
+    if (isInitials(word)) {
+      // In a name sent in capitals, "ALLY" may be a word: only known or unsayable letters count.
+      const letters = /^\p{Lu}+$/u.test(word)
+      return !shouted || !letters || acronyms.has(word) || isKnownAcronym(word)
+    }
+  }
   return rest.every((word) => COMMON_BANK_WORDS.has(word.toLowerCase()))
 }
 
 /**
  * The words a bank writes in capitals, which stay that way in its accounts'
- * names too: "TIAA", "BBVA" and "USA" in "BBVA USA", and its initials, "NFCU"
- * for Navy Federal Credit Union. From a name sent all in capitals, only a
- * name made of short words, like "BBVA USA", counts: "CAPITAL ONE" does not.
+ * names too: "BOK" in "BOK Financial", and its initials, "NFCU" for Navy
+ * Federal Credit Union. A name sent all in capitals shows no styling, so of
+ * its words only those no one could say as a word count, like "PNC": "KEY" in
+ * "KEY BANK" is a word. Known acronyms with vowels, like TIAA, are listed in
+ * nameWords.ts.
  */
 export function bankAcronyms(institution: string): ReadonlySet<string> {
   const words = institution
@@ -158,8 +174,10 @@ export function bankAcronyms(institution: string): ReadonlySet<string> {
     .map(coreOf)
     .filter((word) => word && !SMALL_WORDS.has(word.toLowerCase()))
   const named = words.filter((word) => !BOILERPLATE.has(word.toLowerCase()))
-  const styled = !isShouted(institution) || named.every((word) => word.length <= 4)
-  const acronyms = new Set(styled ? named.filter((word) => /^\p{Lu}{2,4}$/u.test(word)) : [])
+  const shouted = isShouted(institution)
+  const acronyms = new Set(
+    named.filter((word) => /^\p{Lu}{2,4}$/u.test(word) && (!shouted || !/[AEIOUY]/.test(word))),
+  )
   const initials = initialsOf(named)
   if (initials) acronyms.add(initials)
   return acronyms
