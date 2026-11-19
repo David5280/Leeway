@@ -2,10 +2,11 @@
 // needs the owner, in a sentence and a few points. Leeway writes it from the
 // numbers, or Claude does when the owner turns that on in Settings.
 
+import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
 import { useAction } from '../api/hooks'
-import { Card, ErrorNote, Loading } from '../components/ui'
+import { ErrorNote, Loading } from '../components/ui'
 import { timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
 
@@ -13,7 +14,7 @@ type Summary = Output<'get_summary'>
 
 export function SummaryWidget() {
   return (
-    <Card label="Summary" className="summary stack-sm">
+    <Card static="words" label="Summary" className="summary stack-sm">
       <p className="eyebrow">Summary</p>
       <SummaryBody />
     </Card>

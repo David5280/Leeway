@@ -1,8 +1,9 @@
 // Suggested budgets from recent spending, applied one at a time or all at once.
 
+import { Card } from '../../components/design/Card'
 import { useState } from 'react'
 import { useAction, useActionMutation } from '../../api/hooks'
-import { Card, ErrorNote, Loading } from '../../components/ui'
+import { ErrorNote, Loading } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
 import { Money } from '../../components/design/Money'
@@ -36,7 +37,7 @@ export function Suggestions({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Card label="Suggested budgets" className="stack-sm">
+    <Card static="list" label="Suggested budgets" className="stack-sm">
       <div className="row-between">
         <h2>Suggested monthly budgets</h2>
         <button type="button" className="linkbtn" onClick={onClose}>

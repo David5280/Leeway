@@ -2,9 +2,10 @@
 // way to import one. Shown only when the server has an Anthropic key, since
 // nothing else can read a paystub.
 
+import { Card } from '../../../../components/design/Card'
 import { useState } from 'react'
 import { useAction, useActionMutation } from '../../../../api/hooks'
-import { Card, ErrorNote } from '../../../../components/ui'
+import { ErrorNote } from '../../../../components/ui'
 import { useApp } from '../../../../lib/app'
 import { longDate } from '../../../../lib/format'
 import { FormCard } from '../../FormCard'
@@ -96,7 +97,7 @@ export function PaystubCard({ pensions }: { pensions: PensionChoice[] }) {
 
   return (
     <>
-      <Card label="Paystub" className="stack paystub">
+      <Card static="form" label="Paystub" className="stack paystub">
         <div className="row-between wrap">
           <h2>Paystub</h2>
           <button

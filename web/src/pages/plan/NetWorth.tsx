@@ -1,11 +1,12 @@
 // Net worth: what is owned minus what is owed, and how that has moved.
 
+import { Card } from '../../components/design/Card'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAction } from '../../api/hooks'
 import { LineChart } from '../../components/charts/LineChart'
-import { Card, LoadingOrError, Segmented } from '../../components/ui'
+import { LoadingOrError, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { shortDate } from '../../lib/format'
 import { settingsPath } from '../settings/paths'
@@ -32,7 +33,7 @@ export function NetWorthSection() {
   return (
     <>
       <div className="grid">
-        <Card label="Net worth" className="span-4 stack-sm">
+        <Card static="pending" label="Net worth" className="span-4 stack-sm">
           <span className="eyebrow">Net worth</span>
           <Money
             cents={netWorthCents}
@@ -40,16 +41,16 @@ export function NetWorthSection() {
             className="mid-number"
           />
         </Card>
-        <Card label="Assets" className="span-4 stack-sm">
+        <Card static="pending" label="Assets" className="span-4 stack-sm">
           <span className="eyebrow">You own</span>
           <Money cents={assetsCents} className="mid-number" />
         </Card>
-        <Card label="Debts" className="span-4 stack-sm">
+        <Card static="pending" label="Debts" className="span-4 stack-sm">
           <span className="eyebrow">You owe</span>
           <Money cents={liabilitiesCents} className="mid-number" />
         </Card>
       </div>
-      <Card label="Net worth over time" className="stack">
+      <Card static="chart" label="Net worth over time" className="stack">
         <div className="row-between wrap">
           <h2>Over time</h2>
           <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />

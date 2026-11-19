@@ -29,13 +29,13 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   return parts.filter(Boolean).join(' ')
 }
 
-/**
- * Where one account opens: the Accounts dashboard with just that account
- * picked. One page serves one account or several, so every link goes there.
- */
-export function accountPath(id: string): string {
-  return `/accounts?select=${encodeURIComponent(id)}`
+/** Where one account opens: its own detail page, with everything Leeway knows about it. */
+export function accountDetailPath(id: string): string {
+  return `/accounts/${encodeURIComponent(id)}`
 }
+
+/** Every link to an account (alerts, lists, drill-downs) opens its detail page. */
+export const accountPath = accountDetailPath
 
 /**
  * The pick after tapping an account's chip. An empty pick means every

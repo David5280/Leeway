@@ -1,7 +1,8 @@
 // Money in and out of the picked accounts, period by period, newest first.
 
+import { Card } from '../../components/design/Card'
 import type { AccountsView } from '../../api/client'
-import { Card, Progress } from '../../components/ui'
+import { Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
 import { Money } from '../../components/design/Money'
@@ -11,7 +12,7 @@ export function Flows({ flows }: { flows: AccountsView['flows'] }) {
   // Every bar is measured against the biggest amount, in or out, so periods compare.
   const biggest = Math.max(1, ...flows.flatMap((f) => [f.inCents, f.outCents]))
   return (
-    <Card label="Money in and out" className="span-half stack">
+    <Card static="pending" label="Money in and out" className="span-half stack">
       <div className="stack-sm" style={{ gap: 2 }}>
         <h2>Money in and out</h2>
         <p className="small muted">Transfers between your accounts are left out.</p>

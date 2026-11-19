@@ -1,11 +1,12 @@
 // A category over the last six periods, and its transactions this period.
 
+import { Card } from '../../components/design/Card'
 import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget, Output } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { PeriodBars } from '../../components/charts/PeriodBars'
 import { Money } from '../../components/design/Money'
-import { Card, ErrorNote } from '../../components/ui'
+import { ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'
 import { amountSign } from '../../lib/transactions'
@@ -55,7 +56,7 @@ export function History({
   const average = pastAverage(history)
   const budget = row?.budgetCents ?? null
   return (
-    <Card label="Last six periods" className="span-wide stack-sm">
+    <Card static="chart" label="Last six periods" className="span-wide stack-sm">
       <h2>Last six {settings.period.kind === 'monthly' ? 'months' : 'periods'}</h2>
       {average !== null && (
         <span className="small muted">
@@ -98,7 +99,7 @@ export function InThisCategory({
   const transactions = list.data
   const total = transactions?.total ?? 0
   return (
-    <Card label="In this category" className="span-half stack-sm">
+    <Card static="list" label="In this category" className="span-half stack-sm">
       <div className="row-between">
         <h2>In this category</h2>
         {transactions && <span className="small muted">{total} this period</span>}

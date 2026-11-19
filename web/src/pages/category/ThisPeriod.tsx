@@ -2,13 +2,14 @@
 // against its budget and the last period, how much of the budget is used,
 // and what can still go each day.
 
+import { Card } from '../../components/design/Card'
 import type { ReactNode } from 'react'
 import type { Budget, CategoryBudget } from '../../api/client'
 import { KeyFigure } from '../../components/design/KeyFigure'
 import { Money } from '../../components/design/Money'
 import { ProgressRing } from '../../components/design/ProgressRing'
 import { Trend, trendPercent } from '../../components/design/Trend'
-import { Card } from '../../components/ui'
+
 import { useApp } from '../../lib/app'
 import { budgetTone } from '../../lib/budgetText'
 import { periodWord } from '../../lib/format'
@@ -44,7 +45,7 @@ export function ThisPeriod({
   // The tick on the ring shows how far through the period today is.
   const todayMarker = row.pace !== null ? (period.daysElapsed / period.days) * 100 : null
   return (
-    <Card label="This period" className="stack">
+    <Card static="pending" label="This period" className="stack">
       <div className="row-between">
         <KeyFigure
           label={`${isIncome ? 'Received' : 'Spent'} this ${word}`}

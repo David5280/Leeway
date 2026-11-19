@@ -3,9 +3,10 @@
 // working, returns, inflation, how fast savings are drawn, what they add each
 // month and the income they want. Saved to settings.
 
+import { Card } from '../../../components/design/Card'
 import { useId, useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
-import { Card, ErrorNote, Setting } from '../../../components/ui'
+import { ErrorNote, Setting } from '../../../components/ui'
 import { assumptionsText, readAssumptions, type Assumptions, type AssumptionsText } from './fields'
 
 /** Each field: its label and a hint. */
@@ -77,7 +78,7 @@ export function AssumptionsCard({ assumptions }: { assumptions: Assumptions }) {
   }
 
   return (
-    <Card label="Your assumptions" className="stack">
+    <Card static="form" label="Your assumptions" className="stack">
       <h2>Your assumptions</h2>
       <form className="stack" onSubmit={submit} aria-label="Retirement assumptions">
         {FIELDS.map(({ key, label, hint }) => (

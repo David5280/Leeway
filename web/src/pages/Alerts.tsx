@@ -1,11 +1,12 @@
 // Every account alert in one list, reached from the dashboard banner, with a
 // word on what each kind means and where the warnings are set.
 
+import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { AlertRows } from '../components/AccountAlerts'
 import { Shell } from '../components/Shell'
-import { Card, Icon, LoadingOrError } from '../components/ui'
+import { Icon, LoadingOrError } from '../components/ui'
 import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
 import { Money } from '../components/design/Money'
@@ -17,10 +18,10 @@ export function Alerts() {
         <Icon name="back" size={16} /> Overview
       </Link>
       <h1>Alerts</h1>
-      <Card label="Account alerts" className="tight">
+      <Card static="list" label="Account alerts" className="tight">
         <AlertList />
       </Card>
-      <Card label="About alerts" className="stack-sm">
+      <Card static="words" label="About alerts" className="stack-sm">
         <h2>What Leeway watches</h2>
         <ul className="summary-points small">
           <li>

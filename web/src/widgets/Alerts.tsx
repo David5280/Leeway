@@ -1,11 +1,12 @@
 // "Heads up": everything that needs the owner, worst first: account alerts,
 // banks that stopped syncing, budgets, then transactions to sort.
 
+import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
 import type { Connection } from '../api/client'
 import { useAction } from '../api/hooks'
 import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
-import { Card, Icon } from '../components/ui'
+import { Icon } from '../components/ui'
 import { accountPath } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { settingsPath } from '../pages/settings/paths'
@@ -71,7 +72,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
     })
   }
   return (
-    <Card label="Heads up" className="tight">
+    <Card static="list" label="Heads up" className="tight">
       {items.length === 0 ? (
         <div className="alert-row">
           <span className="alert-icon info">

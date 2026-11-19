@@ -1,8 +1,9 @@
 // Cash until payday: what is on hand, the bills due first, and what that leaves per day.
 
+import { Card } from '../../components/design/Card'
 import type { CashFlow } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { Card, LoadingOrError } from '../../components/ui'
+import { LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
@@ -74,7 +75,7 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
 /** The card at the top of the Plan screen. */
 export function CashFlowCard() {
   return (
-    <Card label="Until payday" className="stack-sm">
+    <Card static="pending" label="Until payday" className="stack-sm">
       <p className="eyebrow">Until payday</p>
       <CashFlowSummary />
     </Card>

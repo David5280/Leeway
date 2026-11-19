@@ -1,6 +1,7 @@
 // Small shared building blocks: icons, switches, progress bars, notices.
 
 import type { CSSProperties, ReactNode } from 'react'
+import { ICONS, type IconName } from './icons'
 
 /** The logo on the sign-in, setup and connect screens, where it stands alone above a form. */
 export const AUTH_LOGO_SIZE = 44
@@ -46,59 +47,7 @@ export function Logo({ size = 34 }: { size?: number }) {
   )
 }
 
-const ICONS = {
-  back: <path d="M15 6l-6 6 6 6" />,
-  forward: <path d="M9 6l6 6-6 6" />,
-  warn: (
-    <>
-      <path d="M12 4l9 16H3z" />
-      <path d="M12 10v4M12 17v.5" />
-    </>
-  ),
-  info: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 11v5M12 8v.5" />
-    </>
-  ),
-  overview: <path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 7h6V4h-6z" />,
-  activity: <path d="M4 7h16M4 12h16M4 17h10" />,
-  accounts: (
-    <>
-      <rect x="3" y="6" width="18" height="13" rx="2" />
-      <path d="M3 10h18M7 15h4" />
-    </>
-  ),
-  budgets: (
-    <>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 4v8l6 4" />
-    </>
-  ),
-  plan: (
-    <>
-      <rect x="4" y="5" width="16" height="15" rx="2" />
-      <path d="M4 10h16M9 3v4M15 3v4" />
-    </>
-  ),
-  sliders: (
-    <>
-      <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" />
-      <circle cx="16" cy="6" r="2" />
-      <circle cx="10" cy="12" r="2" />
-      <circle cx="18" cy="18" r="2" />
-    </>
-  ),
-  up: <path d="M6 15l6-6 6 6" />,
-  down: <path d="M6 9l6 6 6-6" />,
-  sync: (
-    <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4" />
-  ),
-  close: <path d="M6 6l12 12M18 6L6 18" />,
-  plus: <path d="M12 5v14M5 12h14" />,
-}
-
-export type IconName = keyof typeof ICONS
+export type { IconName }
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return (
@@ -288,22 +237,4 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
  */
 export function LoadingOrError({ error, label }: { error: unknown; label?: string }) {
   return error ? <ErrorNote error={error} /> : <Loading label={label} />
-}
-
-export function Card({
-  children,
-  className = '',
-  label,
-  style,
-}: {
-  children: ReactNode
-  className?: string
-  label?: string
-  style?: CSSProperties
-}) {
-  return (
-    <section className={`card ${className}`} aria-label={label} style={style}>
-      {children}
-    </section>
-  )
 }

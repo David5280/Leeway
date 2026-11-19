@@ -1,9 +1,10 @@
 // Dashboard widgets for the Plan screen: cash until payday, bills, goals, debts and net worth.
 
+import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { LineChart } from '../components/charts/LineChart'
-import { Card, LoadingOrError, Progress } from '../components/ui'
+import { LoadingOrError, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
 import { monthYear, periodWord, shortDate } from '../lib/format'
 import { shortPlan } from '../lib/goalText'
@@ -25,7 +26,7 @@ function Header({ title, to, link }: { title: string; to: string; link: string }
 
 export function CashFlowWidget() {
   return (
-    <Card label="Until payday" className="stack-sm">
+    <Card static="pending" label="Until payday" className="stack-sm">
       <Header title="Until payday" to="/plan" link="Plan" />
       <CashFlowSummary compact />
     </Card>
@@ -37,7 +38,7 @@ export function BillsWidget() {
   const { settings } = useApp()
   const bills = useAction('list_bills')
   return (
-    <Card label="Bills" className="stack-sm">
+    <Card static="list" label="Bills" className="stack-sm">
       <Header title="Bills" to="/plan/bills" link="All bills" />
       {!bills.data && <LoadingOrError error={bills.error} />}
       {bills.data?.bills.length === 0 && <p className="empty">No bills tracked yet.</p>}
@@ -61,7 +62,7 @@ export function GoalsWidget() {
   const goals = useAction('list_goals')
   const word = periodWord(settings.period.kind)
   return (
-    <Card label="Goals" className="stack-sm">
+    <Card static="pending" label="Goals" className="stack-sm">
       <Header title="Goals" to="/plan/goals" link="All goals" />
       {!goals.data && <LoadingOrError error={goals.error} />}
       {goals.data?.length === 0 && <p className="empty">No savings goals yet.</p>}
@@ -100,7 +101,7 @@ export function DebtsWidget() {
   const plan = plans.data?.avalanche
   const owed = plans.data?.debts.reduce((sum, d) => sum + d.balanceCents, 0) ?? 0
   return (
-    <Card label="Debt payoff" className="stack-sm">
+    <Card static="pending" label="Debt payoff" className="stack-sm">
       <Header title="Debt payoff" to="/plan/debts" link="Plan it" />
       {!plans.data && <LoadingOrError error={plans.error} />}
       {plans.data && !plan?.debts.length && (
@@ -132,7 +133,7 @@ export function NetWorthWidget() {
   const worth = useAction('get_net_worth', { days: 365 })
   const points = worth.data?.history.map((p) => ({ date: p.date, cents: p.netWorthCents })) ?? []
   return (
-    <Card label="Net worth" className="stack-sm">
+    <Card static="pending" label="Net worth" className="stack-sm">
       <Header title="Net worth" to="/plan/net-worth" link="Details" />
       {!worth.data && <LoadingOrError error={worth.error} />}
       {worth.data && (

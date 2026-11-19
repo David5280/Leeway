@@ -3,9 +3,10 @@
 // change its figures, or to fill them from a paystub. A pension is removed
 // like any account added by hand.
 
+import { Card } from '../../../components/design/Card'
 import { useState } from 'react'
 import { useAction, useActionMutation } from '../../../api/hooks'
-import { Card } from '../../../components/ui'
+
 import { useApp } from '../../../lib/app'
 import { longDate } from '../../../lib/format'
 import { FormCard } from '../FormCard'
@@ -151,7 +152,7 @@ export function PensionsCard({ view }: { view: RetirementView }) {
   const close = () => setEditing(undefined)
   return (
     <>
-      <Card label="Pensions" className="stack">
+      <Card static="list" label="Pensions" className="stack">
         <div className="row-between wrap">
           <h2>Pensions</h2>
           <button type="button" className="btn" onClick={() => setEditing(null)}>

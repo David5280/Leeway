@@ -1,5 +1,6 @@
 // Changing a category: its settings, its rules, and deleting it.
 
+import { Card } from '../../components/design/Card'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Category } from '../../api/client'
@@ -8,7 +9,7 @@ import { CategoryForm } from '../../components/CategoryForm'
 import { RuleBuilder } from '../../components/rules/RuleBuilder'
 import { RulesList } from '../../components/rules/RulesList'
 import type { RuleDraft } from '../../components/rules/rules'
-import { Card, ErrorNote, Setting, Switch } from '../../components/ui'
+import { ErrorNote, Setting, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { longDate } from '../../lib/format'
 
@@ -22,7 +23,7 @@ export function CategorySettings({
 }) {
   const update = useActionMutation('update_category')
   return (
-    <Card label="Settings" className="span-wide stack">
+    <Card static="form" label="Settings" className="span-wide stack">
       <h2>Settings</h2>
       <CategoryForm
         category={category}
@@ -46,7 +47,7 @@ export function CategoryRollover({ category }: { category: Category }) {
   const update = useActionMutation('update_category')
   const noBudget = category.budgetCents === null
   return (
-    <Card label="Rollover" className="stack-sm">
+    <Card static="form" label="Rollover" className="stack-sm">
       <Setting
         label="Roll over what is left"
         hint={
@@ -101,7 +102,7 @@ export function DeleteCategory({ category }: { category: Category }) {
   const [confirming, setConfirming] = useState(false)
   const remove = useActionMutation('delete_category')
   return (
-    <Card label="Delete category" className="stack-sm">
+    <Card static="form" label="Delete category" className="stack-sm">
       <h2>Delete</h2>
       <span className="small muted">
         Its rules go too. Its transactions fall back to your other rules and bank categories.

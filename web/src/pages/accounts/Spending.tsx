@@ -1,7 +1,8 @@
 // Where the picked accounts' money went this period, by category.
 
+import { Card } from '../../components/design/Card'
 import type { AccountsView } from '../../api/client'
-import { Card, Dot, Progress } from '../../components/ui'
+import { Dot, Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
 import { Money } from '../../components/design/Money'
@@ -21,7 +22,7 @@ export function Spending({
   const shown = spending.slice(0, SPENDING_ROWS)
   const rest = spending.slice(SPENDING_ROWS).reduce((sum, s) => sum + s.spentCents, 0)
   return (
-    <Card label="Spending by category" className="span-wide stack-sm">
+    <Card static="pending" label="Spending by category" className="span-wide stack-sm">
       <div className="stack-sm" style={{ gap: 2 }}>
         <h2>Spending by category</h2>
         <p className="small muted">{periodLabel(period.start, period.end, settings.locale)}</p>

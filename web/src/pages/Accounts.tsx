@@ -2,6 +2,7 @@
 // own. One account picked is that account's page, so every link to an
 // account opens here with just it picked (?select=id).
 
+import { Card } from '../components/design/Card'
 import { useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Account, AccountsView } from '../api/client'
@@ -10,7 +11,7 @@ import { useUpdateSettings } from '../api/settings'
 import { AlertRows } from '../components/AccountAlerts'
 import { Shell } from '../components/Shell'
 import { TransactionLine } from '../components/TransactionLine'
-import { Card, ErrorNote, LoadingOrError } from '../components/ui'
+import { ErrorNote, LoadingOrError } from '../components/ui'
 import { activePick } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { settingsPath } from './settings/paths'
@@ -83,13 +84,14 @@ function AccountsBody({ view }: { view: AccountsView }) {
     <>
       {view.alerts.length > 0 && (
         <Card
+          static="list"
           label="Alerts for these accounts"
           className={`tight ${view.alerts.some((a) => a.severity === 'urgent') ? 'over-card' : 'warn-card'}`}
         >
           <AlertRows alerts={view.alerts} />
         </Card>
       )}
-      <Card label="Summary" className="summary stack-sm">
+      <Card static="words" label="Summary" className="summary stack-sm">
         <p className="eyebrow">Summary</p>
         <p className="summary-headline">{view.summary.headline}</p>
         {view.summary.points.length > 0 && (
@@ -119,7 +121,7 @@ function Recent({ view }: { view: AccountsView }) {
   )
   const only: Account | undefined = view.accounts.length === 1 ? view.accounts[0] : undefined
   return (
-    <Card label="Recent transactions" className="stack-sm">
+    <Card static="list" label="Recent transactions" className="stack-sm">
       <div className="row-between">
         <h2>Recent</h2>
         <Link to={only ? `/transactions?account=${only.id}` : '/transactions'} className="linkbtn">

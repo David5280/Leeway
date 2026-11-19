@@ -11,6 +11,7 @@ import './styles/tokens.css'
 import './styles/design.css'
 import './styles/activity.css'
 import './styles/depth.css'
+import './styles/figures.css'
 import './styles/motion.css'
 
 const queryClient = new QueryClient({
