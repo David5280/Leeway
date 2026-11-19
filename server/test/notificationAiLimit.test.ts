@@ -157,7 +157,8 @@ describe('the AI limit notification', () => {
     await optIn()
     const ai = centCalls()
     for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
-    // A new limit of 9 cents: the 8 spent are past its warning, raised again against it.
+    // A minute on, a new limit of 9 cents: the 8 spent are past its warning, raised again.
+    ctx.setNow(new Date(ctx.now().getTime() + MINUTE_MS))
     await call('set_ai_limit', { monthlyCapCents: 9 })
     await ai.run('summary', ASK).catch(() => null)
     const messages = (await aiInbox()).map((item) => item.message)
