@@ -33,13 +33,13 @@ export function LayoutSection() {
         const index = all.indexOf(widget)
         const name = WIDGET_LIBRARY[widget.type]!.name
         return (
-          <div key={widget.type} className="list-row wrap">
+          <div key={widget.type} className="list-row wrap layout-row">
             <Switch
               label={`Show ${name}`}
               checked={widget.visible}
               onChange={(visible) => saveWidgets(changeWidget(all, widget.type, { visible }))}
             />
-            <span className={widget.visible ? 'grow' : 'grow muted'}>{name}</span>
+            <span className={widget.visible ? 'grow ellipsis' : 'grow ellipsis muted'}>{name}</span>
             <Segmented
               label={`${name} size`}
               value={widget.size}

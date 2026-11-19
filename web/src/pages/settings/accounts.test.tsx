@@ -9,7 +9,7 @@ import { AccountSection } from './Accounts'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Accounts', () => {
-  // Named by the owner; without that name it would be "First Checking 1234" (see accountName.ts).
+  // Named by the owner; the bank calls it CHECKING 1234.
   const checking = account({
     id: 'acct-1',
     name: 'Everyday',
@@ -73,7 +73,7 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
     await user.clear(name)
     await user.type(name, '  Bills account  ')
     expect(server.actions('update_account')).toEqual([])
@@ -89,24 +89,40 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
     await user.click(name)
     await user.type(name, ' ')
     await user.tab()
     expect(server.actions('update_account')).toEqual([])
   })
 
-  it("goes back to the name Leeway gives the account when the owner's is cleared", async () => {
-    const server = serve()
+  it("shows the name Leeway gives the account once the owner's is cleared", async () => {
+    // The server names an account with no name of the owner's (see accountName.ts).
+    const server = serve({
+      update_account: () => ({ ...checking, name: 'First Checking', nickname: null }),
+    })
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
     await user.clear(name)
     await user.tab()
-    await waitFor(() =>
-      expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: null }]),
+    await waitFor(() => expect(name).toHaveValue('First Checking'))
+    expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: null }])
+  })
+
+  it('keeps what was typed when renaming fails', async () => {
+    fakeServer(
+      { list_accounts: () => [checking] },
+      { '/api/actions/update_account': failing('Database is down', 500) },
     )
-    expect(name).toHaveValue('First Checking 1234')
+    renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    await user.clear(name)
+    await user.type(name, 'Bills')
+    await user.tab()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
+    expect(name).toHaveValue('Bills')
   })
 
   it('hides and shows accounts in totals', async () => {

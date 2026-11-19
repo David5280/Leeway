@@ -70,7 +70,14 @@ let counter = 0
 /** Inserts a bank connection and one account; returns the account id. */
 export async function insertBankAccount(
   db: pg.Pool,
-  fields: { name?: string; type?: string; balanceCents?: number; hidden?: boolean } = {},
+  fields: {
+    name?: string
+    type?: string
+    balanceCents?: number
+    hidden?: boolean
+    /** The account number's last digits, as Plaid sends them. */
+    mask?: string
+  } = {},
 ): Promise<{ accountId: string; connectionId: string }> {
   counter += 1
   const { rows } = await db.query<{ id: string }>(
@@ -80,8 +87,8 @@ export async function insertBankAccount(
   )
   const connectionId = rows[0]!.id
   const account = await db.query<{ id: string }>(
-    `INSERT INTO accounts (connection_id, provider_account_id, name, type, balance_cents, hidden)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO accounts (connection_id, provider_account_id, name, type, balance_cents, hidden, mask)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [
       connectionId,
       `acct-${counter}`,
@@ -89,6 +96,7 @@ export async function insertBankAccount(
       fields.type ?? 'depository',
       fields.balanceCents ?? 100000,
       fields.hidden ?? false,
+      fields.mask ?? null,
     ],
   )
   return { accountId: account.rows[0]!.id, connectionId }

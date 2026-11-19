@@ -1572,6 +1572,15 @@ details.more[open] summary {
     padding: 4px 16px;
     overflow-x: auto;
     scrollbar-width: none;
+    /* Pills fade out at the screen's edges, so one cut off there reads as more to scroll to.
+       The fade is as wide as the padding, so at either end no pill is faded. */
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 16px,
+      #000 calc(100% - 16px),
+      transparent
+    );
   }
 
   .settings-menu::-webkit-scrollbar {
@@ -1597,5 +1606,43 @@ details.more[open] summary {
 
   .settings-head h2 {
     font-size: 20px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* A setting's control goes under its label, full width, rather than wrapping beside it. */
+  .setting {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .setting-label {
+    min-width: 0;
+  }
+
+  /* Options sit in even rows (Segmented sets --columns), so none wraps alone onto a
+     row of its own; a long label wraps inside its option instead. */
+  .seg {
+    display: inline-grid;
+    grid-template-columns: repeat(var(--columns, 1), minmax(0, 1fr));
+    max-width: 100%;
+  }
+
+  .seg button {
+    padding: 6px;
+    line-height: 1.2;
+  }
+
+  /* Under a setting's label, the control spans the card. */
+  .setting > .seg,
+  .layout-row .seg {
+    display: grid;
+    align-self: stretch;
+  }
+
+  /* A dashboard row: switch, name and move buttons on one line, its size under them. */
+  .layout-row .seg {
+    order: 1;
+    flex-basis: 100%;
   }
 }

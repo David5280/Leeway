@@ -14,11 +14,13 @@ import { rememberedGroup, rememberGroup } from './settings/lastGroup'
 
 export function SettingsPage() {
   const { group: id } = useParams()
-  const { hash } = useLocation()
+  const { hash, search } = useLocation()
   const group = findGroup(id)
-  // No group, or one this version does not have: pick one, and say so in the address.
-  if (!group) return <Navigate to={landingPath(hash, rememberedGroup())} replace />
-  return <SettingsScreen group={group} />
+  if (group) return <SettingsScreen group={group} />
+  // No group, or one this version does not have: pick one, and say so in the
+  // address. The landing may name a section (#region); the query goes along too.
+  const [pathname, section] = landingPath(hash, rememberedGroup()).split('#')
+  return <Navigate to={{ pathname, search, hash: section ?? '' }} replace />
 }
 
 function SettingsScreen({ group }: { group: SettingsGroup }) {

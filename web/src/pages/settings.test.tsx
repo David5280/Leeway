@@ -31,8 +31,8 @@ const quiet = {
 
 /** Shows where the router is, as the address bar would. */
 function Address() {
-  const { pathname, hash } = useLocation()
-  return <output aria-label="Address">{pathname + hash}</output>
+  const { pathname, search, hash } = useLocation()
+  return <output aria-label="Address">{pathname + search + hash}</output>
 }
 
 /** Renders Settings at an address, with the app's routes for it and its old name. */
@@ -209,6 +209,11 @@ describe('Settings addresses', () => {
     ['/customize#agent', '/settings/assistant'],
     ['/customize#region', '/settings/budgeting#region'],
     ['/customize/nowhere', '/settings/appearance'],
+    // A query, like a link's tracking, goes along through both redirects.
+    ['/customize?from=email', '/settings/appearance?from=email'],
+    ['/customize/banks?from=email', '/settings/banks?from=email'],
+    ['/customize?from=email#region', '/settings/budgeting?from=email#region'],
+    ['/settings/nowhere?from=email', '/settings/appearance?from=email'],
   ])('sends %s, from when Settings was called Customize, to %s', (old, expected) => {
     fakeServer(quiet)
     renderSettings(old)

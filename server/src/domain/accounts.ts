@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { accountDisplayName } from './accountName.js'
+import { distinctAccountNames } from './accountName.js'
 import { recategorize } from './categorize.js'
 
 export const ACCOUNT_TYPES = [
@@ -66,23 +66,38 @@ const SELECT = `
 
 type AccountRow = Omit<Account, 'name'>
 
-const named = (row: AccountRow): Account => ({ ...row, name: accountDisplayName(row) })
+/**
+ * Every account, hidden ones too, named side by side so no two share a name
+ * (see accountName.ts). Oldest first, so adding an account never renames another.
+ */
+async function namedAccounts(db: Db): Promise<Account[]> {
+  const { rows } = await db.query<AccountRow>(`${SELECT} ORDER BY a.created_at, a.id`)
+  const names = distinctAccountNames(rows)
+  return rows.map((row) => ({ ...row, name: names.get(row.id)! }))
+}
 
 /** By kind of account, then by the name shown. Names are worked out here, so SQL cannot sort them. */
 const inListOrder = (a: Account, b: Account) =>
   a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
 
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
-  const { rows } = await db.query<AccountRow>(
-    `${SELECT} ${includeHidden ? '' : 'WHERE NOT a.hidden'}`,
-  )
-  return rows.map(named).sort(inListOrder)
+  const accounts = await namedAccounts(db)
+  return accounts.filter((account) => includeHidden || !account.hidden).sort(inListOrder)
 }
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
-  const { rows } = await db.query<AccountRow>(`${SELECT} WHERE a.id = $1`, [id])
-  if (!rows[0]) throw notFound('Account')
-  return named(rows[0])
+  const account = (await namedAccounts(db)).find((one) => one.id === id)
+  if (!account) throw notFound('Account')
+  return account
+}
+
+/**
+ * Each account's name by id, for anything that shows an account beside other
+ * data: transactions, goals, debts, imports. The same names listAccounts gives.
+ */
+export async function accountNames(db: Db): Promise<Map<string, string>> {
+  const accounts = await namedAccounts(db)
+  return new Map(accounts.map((account) => [account.id, account.name]))
 }
 
 export const manualAccountInputSchema = z.object({

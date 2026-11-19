@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { actionCaller } from './actionCaller.js'
-import { createTestContext, insertBankAccount, resetData } from './helpers.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+} from './helpers.js'
 
 let ctx: AppContext
 const { call, callError } = actionCaller(() => ctx)
@@ -18,6 +23,39 @@ beforeEach(async () => {
 
 // A well-formed id that matches no account.
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000'
+
+describe('account names', () => {
+  it('tells apart two accounts with the same name, the same way everywhere', async () => {
+    await insertBankAccount(ctx.db, { name: 'CHECKING', mask: '1111' })
+    const { accountId: second } = await insertBankAccount(ctx.db, {
+      name: 'CHECKING',
+      mask: '2222',
+      balanceCents: -500,
+    })
+    await insertBankTransaction(ctx.db, second, {
+      date: '2026-11-10',
+      name: 'Shop',
+      amountCents: 900,
+    })
+
+    const names = (await call('list_accounts')).map((account) => account.name)
+    expect(names.sort()).toEqual(['Test Checking', 'Test Checking (second bank account)'])
+    const [transaction] = (await call('list_transactions', {})).transactions
+    expect(transaction!.accountName).toBe('Test Checking (second bank account)')
+    const [alert] = await call('list_alerts')
+    expect(alert!.message).toBe('Test Checking (second bank account) is overdrawn by $5.')
+  })
+
+  it('keeps a name once given, when an account with the same name is added', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'CHECKING' })
+    const nameOf = async (id: string) =>
+      (await call('list_accounts')).find((account) => account.id === id)!.name
+    expect(await nameOf(accountId)).toBe('Test Checking')
+    const { accountId: added } = await insertBankAccount(ctx.db, { name: 'CHECKING' })
+    expect(await nameOf(accountId)).toBe('Test Checking')
+    expect(await nameOf(added)).toBe('Test Checking (second bank account)')
+  })
+})
 
 describe('account edge cases', () => {
   it("goes back to Leeway's name for the account when the owner's is cleared", async () => {

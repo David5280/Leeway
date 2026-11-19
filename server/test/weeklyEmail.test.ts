@@ -328,6 +328,19 @@ describe('send_test_weekly_email', () => {
     expect(mailer.sent[0]!.html).toContain('Test Total Checking is overdrawn by $42.10.')
   })
 
+  it('never puts an account number in the email, even one in the bank name', async () => {
+    await insertBankAccount(ctx.db, {
+      name: 'CREDIT CARD (X4417)',
+      mask: '4417',
+      type: 'depository',
+      balanceCents: -4210,
+    })
+    await call('send_test_weekly_email')
+    const [email] = mailer.sent
+    expect(email!.text).toContain('Test Credit Card is overdrawn by $42.10.')
+    expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toContain('4417')
+  })
+
   it('goes to the chosen address', async () => {
     await call('set_weekly_email', { sendTo: 'me@example.com' })
     expect(await call('send_test_weekly_email')).toEqual({ sentTo: 'me@example.com' })

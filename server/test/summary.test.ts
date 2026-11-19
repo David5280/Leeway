@@ -108,6 +108,18 @@ describe('get_summary and account names', () => {
     })
   })
 
+  it('never hands the AI writer an account number, even one in the bank name', async () => {
+    await insertBankAccount(ctx.db, {
+      name: 'CHECKING ...4417',
+      mask: '4417',
+      balanceCents: -4210,
+    })
+    await call('set_ai_summary', { on: true })
+    await call('get_summary')
+    expect(writer.calls[0]!.fixedHeadline).toBe('Test Checking is overdrawn by $42.10.')
+    expect(JSON.stringify(writer.calls[0])).not.toContain('4417')
+  })
+
   it("uses the owner's own name for the account when there is one", async () => {
     const { accountId } = await overdraw()
     await call('update_account', { id: accountId, displayName: 'Bills' })

@@ -3,7 +3,7 @@
 
 import type { Db } from '../db/pool.js'
 import { addMonths, type IsoDate } from '../lib/dates.js'
-import { ACCOUNT_NAME_COLUMNS, withAccountName, type AccountNameColumns } from './accountName.js'
+import { accountNames } from './accounts.js'
 import { planPayoff, startingMinimums, type Debt, type PayoffPlan } from './payoff.js'
 
 export interface DebtSummary extends Debt {
@@ -49,18 +49,16 @@ function missingTerms(row: DebtRow): DebtGap['missing'] {
 
 /** Counted cards and loans with a balance owed, split into plannable debts and gaps. */
 async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'needsDetails'>> {
-  const { rows } = await db.query<Omit<DebtRow, 'name'> & AccountNameColumns>(
-    `SELECT a.id, ${ACCOUNT_NAME_COLUMNS}, a.type, a.balance_cents AS "balanceCents",
+  const { rows } = await db.query<Omit<DebtRow, 'name'>>(
+    `SELECT a.id, a.type, a.balance_cents AS "balanceCents",
        a.apr_bps AS "aprBps", a.minimum_payment_cents AS "minimumCents"
      FROM accounts a
      WHERE a.type IN ('credit', 'loan') AND NOT a.hidden AND a.balance_cents > 0`,
   )
   // Sorted by the name shown, which is worked out here rather than in SQL.
+  const names = await accountNames(db)
   const named = rows
-    .map((read): DebtRow => {
-      const { accountName: name, ...rest } = withAccountName(read)
-      return { ...rest, name }
-    })
+    .map((row): DebtRow => ({ ...row, name: names.get(row.id)! }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const debts: DebtSummary[] = []
   const needsDetails: DebtGap[] = []
