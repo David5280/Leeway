@@ -5,6 +5,12 @@ import tseslint from 'typescript-eslint'
 
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 
+/**
+ * Attributes a screen reader reads as plain text, where an element can't go:
+ * an amount is spelled out there ("Blue Bottle, spent $5.75"), never drawn.
+ */
+const TEXT_ATTRIBUTES = '/^(aria-label|aria-valuetext|title|description)$/'
+
 /** A call to one of the money formatters, however it is reached: money(x) or app.money(x). */
 const MONEY_CALL =
   ':matches([callee.name=/^(money|exact|signed|formatMoney|signedAmount|compactMoney)$/], [callee.property.name=/^(money|exact|signed)$/])'
@@ -64,7 +70,12 @@ export default tseslint.config(
     // screen reads amounts alike: no number formatting of its own, and no
     // amount dropped into the page as bare text.
     files: ['web/src/**/*.{ts,tsx}'],
-    ignores: ['web/src/lib/money.ts', 'web/src/**/*.test.{ts,tsx}', 'web/src/test/**'],
+    ignores: [
+      'web/src/lib/money.ts',
+      'web/src/components/design/Money.tsx',
+      'web/src/**/*.test.{ts,tsx}',
+      'web/src/test/**',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',
@@ -82,7 +93,10 @@ export default tseslint.config(
           message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
         },
         {
-          selector: `:matches(JSXElement, JSXFragment) > JSXExpressionContainer > CallExpression${MONEY_CALL}`,
+          // Anywhere inside a JSX expression or attribute value: a child, a
+          // prop, a ternary, an && or a template string. Only text a screen
+          // reader reads is spelled out (TEXT_ATTRIBUTES).
+          selector: `JSXExpressionContainer CallExpression${MONEY_CALL}:not(JSXAttribute[name.name=${TEXT_ATTRIBUTES}] CallExpression)`,
           message: 'Show an amount with <Money cents={...} />, not as formatted text.',
         },
       ],

@@ -39,7 +39,7 @@ export function Spending({
           <Progress
             percent={(s.spentCents / top) * 100}
             color={s.color ?? 'var(--muted)'}
-            label={`${s.name}: ${money(s.spentCents)}`}
+            aria-label={`${s.name}: ${money(s.spentCents)}`}
           />
         </div>
       ))}

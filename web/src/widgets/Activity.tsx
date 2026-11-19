@@ -35,7 +35,6 @@ export function RecentWidget({ budget }: WidgetProps) {
 }
 
 export function AccountsWidget() {
-  const { exact } = useApp()
   const accounts = useAction('list_accounts')
   return (
     <Card label="Accounts" className="stack-sm">
@@ -61,9 +60,15 @@ export function AccountsWidget() {
             </span>
           </span>
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
-            <span className={overdrawn(account) ? 'num over' : 'num'}>
-              {account.balanceCents === null ? 'No balance' : exact(account.balanceCents)}
-            </span>
+            {account.balanceCents === null ? (
+              <span>No balance</span>
+            ) : (
+              <Money
+                cents={account.balanceCents}
+                precision="cents"
+                tone={overdrawn(account) ? 'problem' : undefined}
+              />
+            )}
             {isOwed(account) && account.balanceCents !== null && (
               <span className="small muted">owed</span>
             )}
@@ -90,7 +95,7 @@ export function MerchantsWidget({ offset }: WidgetProps) {
           </div>
           <Progress
             percent={(m.spentCents / top) * 100}
-            label={`${m.merchant}: ${money(m.spentCents)}`}
+            aria-label={`${m.merchant}: ${money(m.spentCents)}`}
           />
         </div>
       ))}

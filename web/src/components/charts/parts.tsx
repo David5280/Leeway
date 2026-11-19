@@ -101,7 +101,8 @@ export function EndLabel({
   x: number
   y: number
   name: string
-  value: string
+  /** Drawn inside an SVG <text>: an amount as <Money as="tspan" />. */
+  value: ReactNode
   tone?: 'muted' | 'accent' | 'ink'
 }) {
   return (
@@ -182,7 +183,8 @@ export function Readout({
   x: number
   chartWidth: number
   title: string
-  lines: string[]
+  /** Each line in order; an amount as <Money />. */
+  lines: ReactNode[]
 }) {
   // Kept inside the chart: centred on the point unless that would spill over an edge.
   const half = 80
@@ -190,8 +192,9 @@ export function Readout({
   return (
     <div className="chart-readout" style={{ left }} aria-hidden="true">
       <strong>{title}</strong>
-      {lines.map((line) => (
-        <span key={line}>{line}</span>
+      {lines.map((line, index) => (
+        // The lines never reorder, so their places are their keys.
+        <span key={index}>{line}</span>
       ))}
     </div>
   )

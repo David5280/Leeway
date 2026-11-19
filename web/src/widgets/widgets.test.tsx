@@ -798,8 +798,8 @@ describe('AccountsWidget', () => {
       ],
     })
     renderSignedIn(<AccountsWidget />)
-    expect(await screen.findByText('-$42.10')).toHaveClass('over')
-    expect(screen.getByText('$50.00')).not.toHaveClass('over')
+    expect(await screen.findByText('−$42.10')).toHaveClass('money-problem')
+    expect(screen.getByText('$50.00')).not.toHaveClass('money-problem')
   })
 
   it('shows the name the server gives each account, with its bank and last four digits', async () => {

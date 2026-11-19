@@ -38,7 +38,6 @@ function GlanceCard({ title, children }: { title: string; children: ReactNode })
 
 /** Spending so far, compared with the same point in the last period. */
 function SpentCard({ budget, word }: { budget: Budget; word: string }) {
-  const { money } = useApp()
   const { totals, previous } = budget
   const diff = totals.spentCents - previous.spentToDateCents
   const nothingYet = previous.spentToDateCents === 0 && diff === 0
@@ -46,9 +45,14 @@ function SpentCard({ budget, word }: { budget: Budget; word: string }) {
     <GlanceCard title="Spent">
       <Money cents={totals.spentCents} className="mid-number" />
       <span className="small muted">
-        {nothingYet
-          ? 'Nothing yet'
-          : `${money(Math.abs(diff))} ${diff >= 0 ? 'more' : 'less'} than this point last ${word}`}
+        {nothingYet ? (
+          'Nothing yet'
+        ) : (
+          <>
+            <Money cents={Math.abs(diff)} /> {diff >= 0 ? 'more' : 'less'} than this point last{' '}
+            {word}
+          </>
+        )}
       </span>
     </GlanceCard>
   )

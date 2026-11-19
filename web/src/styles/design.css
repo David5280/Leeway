@@ -34,9 +34,12 @@
   color: var(--tone-problem);
 }
 
-/* Inside an SVG <text>, color is the fill. */
+/* Inside an SVG <text>, color is the fill; an ordinary amount keeps the text's own fill. */
 tspan.money {
   fill: currentColor;
+}
+tspan.money-neutral {
+  fill: inherit;
 }
 
 .money-sm {

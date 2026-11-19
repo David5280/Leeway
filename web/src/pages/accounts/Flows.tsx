@@ -52,7 +52,7 @@ function FlowBar({
         <Progress
           percent={(cents / of) * 100}
           color={good ? 'var(--good)' : 'var(--accent)'}
-          label={`${label}: ${money(cents)}`}
+          aria-label={`${label}: ${money(cents)}`}
         />
       </span>
       <span

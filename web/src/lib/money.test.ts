@@ -13,7 +13,8 @@ describe('formatMoney', () => {
   })
 
   it('shows a plain amount as the number is', () => {
-    expect(formatMoney(-5000, usd)).toBe('-$50')
+    // The true minus sign, as everywhere money is shown.
+    expect(formatMoney(-5000, usd)).toBe('−$50')
   })
 
   it('marks money in with a plus and leaves spending unmarked', () => {

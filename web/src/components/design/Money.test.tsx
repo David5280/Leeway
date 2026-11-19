@@ -37,7 +37,7 @@ describe('Money', () => {
     renderMoney(
       <Money cents={-5000} tone="problem" size="xl" precision="cents" className="mid-number" />,
     )
-    expect(screen.getByText('-$50.00')).toHaveClass('money-problem', 'money-xl', 'mid-number')
+    expect(screen.getByText('−$50.00')).toHaveClass('money-problem', 'money-xl', 'mid-number')
   })
 
   it('formats in the owner currency and locale', () => {

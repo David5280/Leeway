@@ -38,17 +38,14 @@ export function BudgetRow({
             percent={row.percentUsed ?? 0}
             color={row.status === 'over' ? 'var(--over-fill)' : row.color}
             marker={marker}
-            label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
+            aria-label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
           />
         )}
       </span>
       <span className="cat-figures">
         <Money cents={row.spentCents} />
         <span className="muted">{row.budgetCents === null ? ' spent · ' : ' of '}</span>
-        <InlineBudget
-          category={category}
-          shown={row.budgetCents === null ? null : money(row.budgetCents)}
-        />
+        <InlineBudget category={category} shown={row.budgetCents} />
       </span>
       <span className="cat-note">
         <span className={status.tone ? `${status.tone} strong` : 'muted'}>{status.text}</span>

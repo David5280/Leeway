@@ -271,7 +271,7 @@ describe('Net worth', () => {
     expect(screen.getByRole('region', { name: 'Assets' })).toHaveTextContent('$8,200')
     expect(screen.getByRole('region', { name: 'Debts' })).toHaveTextContent('$1,200')
     expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
-      'Net worth from -$500 on Jun 1 to $7,000 on Nov 17.',
+      'Net worth from −$500 on Jun 1 to $7,000 on Nov 17.',
     )
     // A house or a car counts once it is added by hand, in Settings.
     expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
@@ -295,7 +295,7 @@ describe('Net worth', () => {
     })
     renderPlan('/plan/net-worth')
     const card = await screen.findByRole('region', { name: 'Net worth' })
-    expect(within(card).getByText('-$50')).toHaveClass('money-problem')
+    expect(within(card).getByText('−$50')).toHaveClass('money-problem')
     expect(screen.getByText(/History builds as balances change/)).toBeInTheDocument()
   })
 

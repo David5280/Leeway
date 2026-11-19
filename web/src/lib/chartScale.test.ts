@@ -66,7 +66,7 @@ describe('axisFormat', () => {
   })
 
   it('looks at the size of negative ticks too', () => {
-    expect(axisFormat([-2_000_000, 0], usd)(-2_000_000)).toBe('-$20K')
+    expect(axisFormat([-2_000_000, 0], usd)(-2_000_000)).toBe('−$20K')
   })
 })
 

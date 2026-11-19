@@ -226,14 +226,15 @@ export function Progress({
   percent,
   color = 'var(--accent)',
   marker,
-  label,
+  'aria-label': label,
   thick = false,
   reserved = 0,
 }: {
   percent: number
   color?: string
   marker?: number | null
-  label: string
+  /** What a screen reader calls the bar, amounts spelled out: "Groceries: $40". */
+  'aria-label': string
   thick?: boolean
   reserved?: number
 }) {

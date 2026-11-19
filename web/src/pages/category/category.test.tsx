@@ -245,7 +245,9 @@ describe('Rollover', () => {
     expect(card.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
     expect(card.getByText('Counting from Sep 1, 2026, when it was turned on.')).toBeInTheDocument()
     expect(
-      within(region('This period')).getByText('Includes $40 rolled over from earlier periods.'),
+      within(region('This period')).getByText(
+        sentence('Includes $40 rolled over from earlier periods.'),
+      ),
     ).toBeInTheDocument()
   })
 
@@ -256,7 +258,9 @@ describe('Rollover', () => {
       get_budget: () => budgetFor([rolling], [], { carries: new Map([[groceries.id, -2500]]) }),
     })
     renderCategory()
-    expect(await screen.findByText('Less $25 overspent in earlier periods.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(sentence('Less $25 overspent in earlier periods.')),
+    ).toBeInTheDocument()
   })
 
   it('needs a budget first', async () => {
@@ -358,7 +362,7 @@ describe('Category page', () => {
       renderCategory(dining.id)
       await screen.findByRole('heading', { name: 'Dining out', level: 1 })
       expect(screen.getByText('Over by $30')).toBeInTheDocument()
-      expect(region('This period')).toHaveTextContent('Left-$30')
+      expect(region('This period')).toHaveTextContent('Left−$30')
       expect(region('This period')).toHaveTextContent('Per day left$0')
     })
 

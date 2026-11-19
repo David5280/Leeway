@@ -44,7 +44,7 @@ export function History({
   category: Category
   row: CategoryBudget | undefined
 }) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const trends = useAction('get_trends', { periods: 6 })
   const history = categoryHistory(
     trends.data ?? [],
@@ -60,7 +60,12 @@ export function History({
       {average !== null && (
         <span className="small muted">
           Average <Money cents={average} />
-          {budget ? ` against a ${money(budget)} budget` : ''}
+          {budget ? (
+            <>
+              {' '}
+              against a <Money cents={budget} /> budget
+            </>
+          ) : null}
         </span>
       )}
       <ErrorNote error={trends.error} />

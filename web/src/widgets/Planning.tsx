@@ -75,7 +75,11 @@ export function GoalsWidget() {
                 <Money cents={goal.currentCents} /> of <Money cents={goal.targetCents} />
               </span>
             </div>
-            <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
+            <Progress
+              percent={goal.percent}
+              color={goal.color}
+              aria-label={`${goal.name} progress`}
+            />
             <span className={`small ${plan.tone || 'muted'}`}>{plan.text}</span>
           </div>
         )

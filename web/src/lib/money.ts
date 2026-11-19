@@ -13,8 +13,11 @@ export interface MoneyOptions {
   locale: string
 }
 
-/** Whole units ("$1,235") where cents do not matter, or exact ("$1,234.56") where they do. */
-export type Precision = 'whole' | 'cents'
+/**
+ * Whole units ("$1,235") where cents do not matter, exact ("$1,234.56") where
+ * they do, or compact ("$12.5K") where room is short, as on a chart's bars.
+ */
+export type Precision = 'whole' | 'cents' | 'compact'
 
 /**
  * How an amount's sign reads:
@@ -39,8 +42,8 @@ export type MoneySign = 'plain' | 'transaction' | 'transfer' | 'change'
  */
 export type MoneyTone = 'in' | 'neutral' | 'muted' | 'warn' | 'problem'
 
-/** The true minus sign, which lines up with "+" in tabular figures. */
-const MINUS = '−'
+/** The true minus sign, which lines up with "+" in tabular figures; every amount uses it. */
+const MINUS = '\u2212'
 
 const formatters = new Map<string, Intl.NumberFormat>()
 
@@ -48,21 +51,31 @@ function formatter(options: MoneyOptions, precision: Precision): Intl.NumberForm
   const key = `${options.locale}|${options.currency}|${precision}`
   let found = formatters.get(key)
   if (!found) {
-    const digits = precision === 'cents' ? 2 : 0
     found = new Intl.NumberFormat(options.locale, {
       style: 'currency',
       currency: options.currency,
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
+      ...DIGITS[precision],
     })
     formatters.set(key, found)
   }
   return found
 }
 
+/** How each precision writes its digits. A compact currency would print "$15.0K" by default. */
+const DIGITS: Record<Precision, Intl.NumberFormatOptions> = {
+  whole: { minimumFractionDigits: 0, maximumFractionDigits: 0 },
+  cents: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  compact: { notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 },
+}
+
 /** An amount in units, rounded to whole units unless cents are wanted. */
 function units(cents: number, precision: Precision): number {
-  return precision === 'cents' ? cents / 100 : Math.round(cents / 100)
+  return precision === 'whole' ? Math.round(cents / 100) : cents / 100
+}
+
+/** Text with the locale's hyphen-minus, if any, written as the true minus sign. */
+function withMinus(text: string): string {
+  return text.replace('-', MINUS)
 }
 
 /** An amount as text, with its sign as `sign` says (see MoneySign). */
@@ -72,7 +85,7 @@ export function formatMoney(
   { sign = 'plain', precision = 'whole' }: { sign?: MoneySign; precision?: Precision } = {},
 ): string {
   const format = formatter(options, precision)
-  if (sign === 'plain') return format.format(units(cents, precision))
+  if (sign === 'plain') return withMinus(format.format(units(cents, precision)))
   const size = format.format(units(Math.abs(cents), precision))
   if (sign === 'transfer') return size
   // A bank amount is negative for money in, which reads "+".
@@ -101,14 +114,7 @@ export function signedAmount(cents: number, options: MoneyOptions): string {
 
 /** Money in the owner's currency, shortened: "$5K", "$12.5K", "$1.2M". */
 export function compactMoney(cents: number, options: MoneyOptions): string {
-  return new Intl.NumberFormat(options.locale, {
-    style: 'currency',
-    currency: options.currency,
-    notation: 'compact',
-    // Currencies default to a fixed number of decimals, which would print "$15.0K".
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  }).format(cents / 100)
+  return formatMoney(cents, options, { precision: 'compact' })
 }
 
 /**

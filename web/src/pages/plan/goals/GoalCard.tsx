@@ -53,7 +53,7 @@ export function GoalCard({
           of <Money cents={goal.targetCents} />
         </span>
       </div>
-      <Progress percent={goal.percent} color={goal.color} label={`${goal.name} progress`} />
+      <Progress percent={goal.percent} color={goal.color} aria-label={`${goal.name} progress`} />
       <span className="small">{planText(goal, money, word, settings.locale)}</span>
       {thisPeriod && <span className="small muted">{thisPeriod}</span>}
       <GoalTimeline goal={goal} today={today} />

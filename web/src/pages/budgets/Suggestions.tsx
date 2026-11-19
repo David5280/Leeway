@@ -9,7 +9,7 @@ import { Money } from '../../components/design/Money'
 
 /** Budgets based on the last three full months, applied one at a time or all at once. */
 export function Suggestions({ onClose }: { onClose: () => void }) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const result = useAction('suggest_budgets')
   const update = useActionMutation('update_category')
   const [applying, setApplying] = useState(false)
@@ -60,7 +60,11 @@ export function Suggestions({ onClose }: { onClose: () => void }) {
           <span className="grow">{s.name}</span>
           <span className="small muted">
             you average <Money cents={s.averageMonthlyCents} />
-            {s.currentBudgetCents !== null && `, budget now ${money(s.currentBudgetCents)}`}
+            {s.currentBudgetCents !== null && (
+              <>
+                , budget now <Money cents={s.currentBudgetCents} />
+              </>
+            )}
           </span>
           <strong>
             <Money cents={s.suggestedMonthlyCents} />

@@ -4,7 +4,6 @@
 import { Link } from 'react-router-dom'
 import type { Budget } from '../api/client'
 import { Card, Dot, Progress } from '../components/ui'
-import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
 import { Money } from '../components/design/Money'
 
@@ -41,7 +40,6 @@ function NoBudgets() {
 }
 
 export function LeewayWidget({ budget }: WidgetProps) {
-  const { money } = useApp()
   const { totals, period } = budget
   const isCurrent = budget.period.offset === 0
   if (totals.budgetedCents === 0) return <NoBudgets />
@@ -59,7 +57,11 @@ export function LeewayWidget({ budget }: WidgetProps) {
         </span>
         <span className="muted" style={{ fontSize: 16 }}>
           {leeway < 0 ? 'over' : 'left of'} <Money cents={totals.budgetedCents} />
-          {totals.setAsideCents > 0 && `, after ${money(totals.setAsideCents)} set aside`}
+          {totals.setAsideCents > 0 && (
+            <>
+              , after <Money cents={totals.setAsideCents} /> set aside
+            </>
+          )}
         </span>
       </div>
       {isCurrent && totals.safePerDayCents !== null && (
@@ -86,7 +88,7 @@ export function LeewayWidget({ budget }: WidgetProps) {
           reserved={held}
           color={used > 100 ? 'var(--over-fill)' : 'var(--accent)'}
           marker={isCurrent ? (period.daysElapsed / period.days) * 100 : null}
-          label="Budget used"
+          aria-label="Budget used"
         />
         <div className="row-between small muted">
           <span>

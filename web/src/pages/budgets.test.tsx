@@ -93,7 +93,7 @@ describe('budgets page', () => {
     })
     renderBudgets()
     const left = await screen.findByRole('region', { name: 'Left' })
-    expect(within(left).getByText('-$100')).toHaveClass('money-problem')
+    expect(within(left).getByText('−$100')).toHaveClass('money-problem')
   })
 
   it('lists categories under their group headings, with ungrouped ones last', async () => {

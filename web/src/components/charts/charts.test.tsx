@@ -190,7 +190,7 @@ describe('LineChart', () => {
     fakeServer({})
     renderSignedIn(<LineChart points={history} label="Net worth" description="Rising." />)
     point('first')
-    expect(readout()).toHaveTextContent('Jun 1-$500')
+    expect(readout()).toHaveTextContent('Jun 1\u2212$500')
     fireEvent.pointerLeave(screen.getByTestId('chart-hit'))
     expect(readout()).toBeNull()
   })

@@ -2,6 +2,7 @@
 
 import { Link } from 'react-router-dom'
 import type { Budget, CategoryBudget } from '../api/client'
+import { Money } from '../components/design/Money'
 import { Card, Dot, Progress } from '../components/ui'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
@@ -60,15 +61,19 @@ function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
             percent={row.percentUsed ?? 0}
             color={row.status === 'over' ? 'var(--over-fill)' : row.color}
             marker={marker}
-            label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
+            aria-label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
           />
         )}
       </span>
       <span className="cat-figures">
-        <span className="num">
-          {row.budgetCents === null
-            ? money(row.spentCents)
-            : `${money(row.spentCents)} of ${money(row.budgetCents)}`}
+        <span>
+          <Money cents={row.spentCents} />
+          {row.budgetCents !== null && (
+            <>
+              {' '}
+              of <Money cents={row.budgetCents} />
+            </>
+          )}
         </span>
         <span className="muted" aria-hidden="true">
           {' · '}

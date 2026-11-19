@@ -1,9 +1,9 @@
 // A category's numbers for the current period: spent, budget, left and pace.
 
+import type { ReactNode } from 'react'
 import type { Budget, Category, CategoryBudget } from '../../api/client'
-import { Card, Progress } from '../../components/ui'
-import { useApp } from '../../lib/app'
 import { Money } from '../../components/design/Money'
+import { Card, Progress } from '../../components/ui'
 
 type Period = Budget['period']
 
@@ -25,7 +25,6 @@ export function ThisPeriod({
   row: CategoryBudget
   period: Period
 }) {
-  const { money } = useApp()
   const perDay = perDayLeft(row.leftCents, period.daysLeft)
   const isExpense = row.kind === 'expense'
   // The marker on the bar shows how far through the period today is.
@@ -33,15 +32,28 @@ export function ThisPeriod({
   return (
     <Card label="This period" className="stack">
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
-        <Stat label={row.kind === 'income' ? 'Received' : 'Spent'} value={money(row.spentCents)} />
-        <Stat label="Budget" value={row.budgetCents === null ? 'None' : money(row.budgetCents)} />
-        <Stat label="Left" value={row.leftCents === null ? '' : money(row.leftCents)} />
-        {isExpense && perDay !== null && <Stat label="Per day left" value={money(perDay)} />}
+        <Stat label={row.kind === 'income' ? 'Received' : 'Spent'}>
+          <Money cents={row.spentCents} />
+        </Stat>
+        <Stat label="Budget">
+          {row.budgetCents === null ? 'None' : <Money cents={row.budgetCents} />}
+        </Stat>
+        <Stat label="Left">
+          {row.leftCents !== null && (
+            // Below zero is over budget, which reads as a problem.
+            <Money cents={row.leftCents} tone={row.leftCents < 0 ? 'problem' : undefined} />
+          )}
+        </Stat>
+        {isExpense && perDay !== null && (
+          <Stat label="Per day left">
+            <Money cents={perDay} />
+          </Stat>
+        )}
       </div>
       {row.budgetCents !== null && isExpense && (
         <Progress
           thick
-          label={`${row.name} budget used`}
+          aria-label={`${row.name} budget used`}
           percent={row.percentUsed ?? 0}
           color={row.status === 'over' ? 'var(--over-fill)' : category.color}
           marker={todayMarker}
@@ -60,22 +72,28 @@ export function ThisPeriod({
 
 /** What rolled over into this period's budget, when rollover moved anything. */
 function CarriedNote({ carriedCents }: { carriedCents: number | null }) {
-  const { money } = useApp()
   if (!carriedCents) return null
   return (
     <span className="small muted">
-      {carriedCents > 0
-        ? `Includes ${money(carriedCents)} rolled over from earlier periods.`
-        : `Less ${money(-carriedCents)} overspent in earlier periods.`}
+      {carriedCents > 0 ? (
+        <>
+          Includes <Money cents={carriedCents} /> rolled over from earlier periods.
+        </>
+      ) : (
+        <>
+          Less <Money cents={-carriedCents} /> overspent in earlier periods.
+        </>
+      )}
     </span>
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/** One of the period's figures under its name. */
+function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="stack-sm" style={{ gap: 2 }}>
       <span className="eyebrow">{label}</span>
-      <span className="mid-number num">{value}</span>
+      <span className="mid-number">{children}</span>
     </div>
   )
 }

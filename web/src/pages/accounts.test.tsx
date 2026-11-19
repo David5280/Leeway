@@ -9,6 +9,7 @@ import {
   failing,
   fakeServer,
   renderSignedIn,
+  sentence,
   settingsHandlers,
   settingsWith,
   transaction,
@@ -81,7 +82,7 @@ describe('Accounts dashboard', () => {
     for (const title of ['Available', 'Current balance', 'Owed', 'Credit left', 'Net']) {
       expect(within(balances).getByText(title)).toBeInTheDocument()
     }
-    expect(within(balances).getByText('Of a $1,000.00 limit')).toBeInTheDocument()
+    expect(within(balances).getByText(sentence('Of a $1,000.00 limit'))).toBeInTheDocument()
     expect(
       screen.getByRole('progressbar', { name: 'In, November 2026: $2,500' }),
     ).toBeInTheDocument()
@@ -165,8 +166,8 @@ describe('Accounts dashboard', () => {
       within(alerts).getByRole('link', { name: /Everyday is overdrawn by \$42\.10/ }),
     ).toHaveAttribute('href', '/accounts?select=a')
     // Both balances are below zero, so both read in red.
-    for (const figure of screen.getAllByText('-$42.10', { selector: '.mid-number' })) {
-      expect(figure).toHaveClass('over')
+    for (const figure of screen.getAllByText('−$42.10', { selector: '.mid-number' })) {
+      expect(figure).toHaveClass('money-problem')
     }
   })
 
@@ -209,7 +210,7 @@ describe('Accounts dashboard', () => {
     server([maxed], { summarize_accounts: () => accountsViewFor([maxed], { spending }) })
     renderSignedIn(<Accounts />)
     expect(await screen.findByText('Needs a category')).toBeInTheDocument()
-    expect(screen.getByText('-$200.00', { selector: '.mid-number' })).toHaveClass('over')
+    expect(screen.getByText('−$200.00', { selector: '.mid-number' })).toHaveClass('money-problem')
   })
 
   it('lists recent transactions with their categories', async () => {
