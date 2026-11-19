@@ -76,6 +76,9 @@ function serve(initial: AiUsage = usage()) {
 
 const picker = (title: string) => screen.getByRole('group', { name: title })
 const limitInput = () => screen.getByRole('textbox', { name: 'Monthly limit in US dollars' })
+/** This month's spend against the limit, as the line under the ring reads. */
+const total = () =>
+  screen.getByText((_, element) => element?.classList.contains('ai-usage-total') ?? false)
 
 describe('Settings > AI models', () => {
   it("shows this month's spending against the limit, in all and by job", async () => {
@@ -85,7 +88,9 @@ describe('Settings > AI models', () => {
     // $1.06 of $5.00, rounded up to the cent.
     expect(ring).toHaveAttribute('aria-valuenow', '21')
     expect(ring).toHaveTextContent('21%')
-    expect(screen.getByText('$1.06 of $5.00')).toBeInTheDocument()
+    expect(total()).toHaveTextContent('$1.06 of $5.00')
+    // Each amount is drawn as money.
+    expect(within(total()).getByText('$1.06')).toHaveClass('money')
     expect(screen.getByText('13 calls this month. Resets on Dec 1.')).toBeInTheDocument()
     const byJob = within(screen.getByRole('list', { name: 'Spending by job' }))
     expect(byJob.getAllByRole('listitem').map((row) => row.textContent)).toEqual([
@@ -269,7 +274,7 @@ describe('the monthly limit', () => {
     )
     expect(await screen.findByText('Limit saved.')).toBeInTheDocument()
     expect(limitInput()).toHaveValue('$12.50')
-    expect(screen.getByText('$1.06 of $12.50')).toBeInTheDocument()
+    expect(total()).toHaveTextContent('$1.06 of $12.50')
     // Typing again clears the note.
     await userEvent.type(limitInput(), '0')
     expect(screen.queryByText('Limit saved.')).not.toBeInTheDocument()

@@ -56,6 +56,23 @@ const ACCOUNT_TRANSFERS = [
 ]
 
 /** The starter set, in display order, grouped under headings. */
+/**
+ * Money moving between your own accounts, or borrowed: never spending or
+ * income. Which loan payments and bank transfers really are transfers is
+ * decided per transaction (see isTransfer in transfers.ts); the rest fall to
+ * the other categories. Also made on its own when a transfer pairs and no
+ * transfer category is left (see categorize.ts).
+ */
+export const TRANSFER_STARTER: StarterCategory = starter(
+  'Transfers',
+  'Transfers',
+  '#6b7280',
+  'swap',
+  null,
+  ['TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS', 'LOAN_DISBURSEMENTS'],
+  { kind: 'transfer' },
+)
+
 export const STARTER_CATEGORIES: StarterCategory[] = [
   starter('Food and drink', 'Groceries', '#5fb878', 'cart', 60000, ['FOOD_AND_DRINK_GROCERIES']),
   starter('Food and drink', 'Dining out', '#f0a04b', 'utensils', 25000, [
@@ -233,17 +250,6 @@ export const STARTER_CATEGORIES: StarterCategory[] = [
     kind: 'income',
   }),
 
-  // Money moving between your own accounts, or borrowed: never spending or
-  // income. Which loan payments and bank transfers really are transfers is
-  // decided per transaction (see isTransfer in transfers.ts); the rest fall
-  // to the categories above.
-  starter(
-    'Transfers',
-    'Transfers',
-    '#6b7280',
-    'swap',
-    null,
-    ['TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS', 'LOAN_DISBURSEMENTS'],
-    { kind: 'transfer' },
-  ),
+  // Money moving between your own accounts.
+  TRANSFER_STARTER,
 ]

@@ -7,10 +7,13 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 // The test clock reads 2026-11-17, in UTC.
 let ctx: AppContext
 const { call, callError } = actionCaller(() => ctx)
+/** The same actions as an AI assistant calls them, over MCP. */
+const assistant = actionCaller(() => ({ ...ctx, agent: true }))
 
 beforeAll(async () => {
   ctx = await createTestContext()
@@ -121,6 +124,64 @@ describe('bills', () => {
   })
 })
 
+describe('bills an assistant adds', () => {
+  /** Monthly gym dues whose bank text ends in the letters of an account's mask. */
+  async function gymDues() {
+    const { accountId } = await insertBankAccount(ctx.db, { mask: 'AB' })
+    await chargeMonthly(accountId, 'ACCT GYM AB', ['2026-09', '2026-10'], 4000)
+    await chargeMonthly(accountId, 'IRON GYM', ['2026-08'], 4000)
+  }
+  const gym = { ...netflix, name: 'Gym', anchorDate: '2026-12-20' }
+
+  it("find their payment by the shown name, never the bank's text", async () => {
+    await gymDues()
+    const shown = await assistant.call('create_bill', { ...gym, matchPattern: 'iron gym' })
+    expect(shown).toMatchObject({ reads: 'shown_name', lastPaidDate: '2026-08-20' })
+    // The mask's letters find what letters found nowhere do: nothing.
+    for (const matchPattern of ['acct gym ab', 'acct gym zq']) {
+      const bill = await assistant.call('create_bill', { ...gym, matchPattern })
+      expect(bill).toMatchObject({ reads: 'shown_name', lastPaidDate: null, lastPaidCents: null })
+    }
+    // The owner's own bill reads the bank's text, and finds the newest payment.
+    const owners = await call('create_bill', { ...gym, matchPattern: 'acct gym ab' })
+    expect(owners).toMatchObject({ reads: 'bank_text', lastPaidDate: '2026-10-20' })
+    const listed = await call('list_bills')
+    expect(listed.bills.map((b) => b.lastPaidDate)).toEqual([
+      '2026-08-20',
+      null,
+      null,
+      '2026-10-20',
+    ])
+  })
+
+  it('count only what the owner bills count: no refund, no hidden account', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-15',
+      name: 'NETFLIX.COM',
+      amountCents: -1549,
+    })
+    const hidden = await insertBankAccount(ctx.db, { hidden: true })
+    await chargeMonthly(hidden.accountId, 'NETFLIX.COM', ['2026-11'])
+    expect(await assistant.call('create_bill', netflix)).toMatchObject({ lastPaidDate: null })
+  })
+
+  it("read shown names once an assistant changes an owner's pattern, and only then", async () => {
+    await gymDues()
+    const owners = await call('create_bill', { ...gym, matchPattern: 'acct gym ab' })
+    const moved = await assistant.call('update_bill', { id: owners.id, amountCents: 4500 })
+    expect(moved).toMatchObject({ reads: 'bank_text', lastPaidDate: '2026-10-20' })
+    // The same pattern again is no change.
+    const same = await assistant.call('update_bill', { id: owners.id, matchPattern: 'acct gym ab' })
+    expect(same.reads).toBe('bank_text')
+    const rewritten = await assistant.call('update_bill', { id: owners.id, matchPattern: 'gym ab' })
+    expect(rewritten).toMatchObject({ reads: 'shown_name', lastPaidDate: null })
+    // The owner changing it back leaves it reading what it does.
+    const back = await call('update_bill', { id: owners.id, matchPattern: 'iron gym' })
+    expect(back).toMatchObject({ reads: 'shown_name', lastPaidDate: '2026-08-20' })
+  })
+})
+
 describe('recurring charges', () => {
   async function history() {
     const { accountId } = await insertBankAccount(ctx.db)
@@ -142,7 +203,7 @@ describe('recurring charges', () => {
     await call('create_bill', { ...netflix, name: 'Gym', matchPattern: null })
     const found = await call('find_recurring')
     expect(found).toMatchObject([
-      { key: 'spotify p a', name: 'SPOTIFY P1A2', cadence: 'month', suggestedKind: 'subscription' },
+      { key: 'spotify p a', name: 'Spotify', cadence: 'month', suggestedKind: 'subscription' },
     ])
   })
 
@@ -168,5 +229,47 @@ describe('recurring charges', () => {
     // Dismissing twice is fine.
     await call('dismiss_recurring', { key: 'spotify p a' })
     expect((await call('find_recurring')).map((s) => s.key)).toEqual(['netflix com'])
+  })
+
+  it('gives an assistant keys made from shown names, which track a charge', async () => {
+    await history()
+    const found = await assistant.call('find_recurring')
+    expect(found.map((s) => s.key)).toEqual(['netflix com', 'spotify'])
+    const [netflixSeries] = found
+    const bill = await assistant.call('create_bill', {
+      ...netflix,
+      anchorDate: netflixSeries!.nextDate,
+      matchPattern: netflixSeries!.key,
+    })
+    expect(bill).toMatchObject({ reads: 'shown_name', lastPaidDate: '2026-10-20' })
+    expect((await call('find_recurring')).map((s) => s.key)).toEqual(['spotify p a'])
+  })
+
+  it('lets an assistant dismiss a charge only by the key it was given', async () => {
+    await history()
+    // The bank's key is not one an assistant was given, so it dismisses nothing.
+    const raw = await assistant.callError('dismiss_recurring', { key: 'spotify p a' })
+    expect(raw.code).toBe('not_found')
+    expect(await assistant.call('dismiss_recurring', { key: 'spotify' })).toEqual({
+      dismissed: 'spotify',
+    })
+    // The owner's app no longer suggests it either.
+    expect((await call('find_recurring')).map((s) => s.key)).toEqual(['netflix com'])
+  })
+
+  it("never gives an assistant the bank's letters for a mask", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { mask: 'AB' })
+    await chargeMonthly(accountId, 'ACCT GYM AB', ['2026-08', '2026-09', '2026-10'], 4000)
+    expect((await call('find_recurring')).map((s) => s.key)).toEqual(['acct gym ab'])
+    const [series] = await assistant.call('find_recurring')
+    // The shown name leaves the mask out, and so does the key made from it.
+    expect(series!.key).toBe('acct gym')
+    expect(withoutUuids(JSON.stringify(series))).not.toMatch(/\bab\b/i)
+    // A bill on the mask's letters tracks nothing, so the charge is still suggested.
+    await assistant.call('create_bill', { ...netflix, matchPattern: 'acct gym ab' })
+    expect(await assistant.call('find_recurring')).toHaveLength(1)
+    expect((await assistant.callError('dismiss_recurring', { key: 'acct gym ab' })).code).toBe(
+      'not_found',
+    )
   })
 })

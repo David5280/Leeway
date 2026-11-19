@@ -14,9 +14,14 @@ import {
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
+import { accountMasks } from './accounts.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
+import { spendingSql } from './counted.js'
+import { GENERIC_NAME } from './merchantName.js'
+import { withShownNames } from './ruleText.js'
 import { periodConfig, type Settings } from './settings.js'
+import { merchantDisplayName } from './transactionName.js'
 
 export interface PeriodTrend {
   offset: number
@@ -148,7 +153,8 @@ export async function suggestForPlannedCategories(
     rolloverSince: null,
   }))
   const sums = new Map<string, number>()
-  for (const tx of rows) {
+  // No rules here, so no shown names are worked out.
+  for (const tx of withShownNames(rows, [], [])) {
     const choice = chooseCategory(tx, [], categories, accounts)
     if (choice) sums.set(choice.categoryId, (sums.get(choice.categoryId) ?? 0) + tx.amountCents)
   }
@@ -181,7 +187,14 @@ export interface MerchantTotal {
   count: number
 }
 
-/** Where the money went in a period, by merchant, biggest first. Refunds count against a merchant. */
+/**
+ * Where the money went in a period, by merchant, biggest first. Refunds count
+ * against a merchant. Merchants are named as everywhere else (see
+ * transactionName.ts), so "STARBUCKS #123" and "STARBUCKS #456" add up as one
+ * Starbucks. Lines with nothing readable in them are left out: under their
+ * shared "Bank transaction" they would add up unrelated spending as if it
+ * were one merchant.
+ */
 export async function topMerchants(
   db: Db,
   settings: Settings,
@@ -190,22 +203,33 @@ export async function topMerchants(
   limit: number,
 ): Promise<MerchantTotal[]> {
   const { period } = currentPeriod(settings, now, offset)
-  const { rows } = await db.query<MerchantTotal>(
-    `SELECT coalesce(t.merchant_name, t.name) AS merchant,
+  const { rows } = await db.query<{ name: string; merchantName: string | null } & MerchantTotal>(
+    `SELECT t.name, t.merchant_name AS "merchantName",
             sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.date >= $1 AND t.date < $2
        AND NOT t.excluded AND NOT a.hidden AND ($3 OR NOT t.pending)
-       AND (c.kind IS NULL OR c.kind = 'expense')
-     GROUP BY 1
-     HAVING sum(t.amount_cents) > 0
-     ORDER BY 2 DESC, 1
-     LIMIT $4`,
-    [period.start, period.end, settings.includePending, limit],
+       AND ${spendingSql()}
+     GROUP BY 1, 2`,
+    [period.start, period.end, settings.includePending],
   )
-  return rows
+  // Merchant names go to assistants and the AI writer, so they show no account number.
+  const masks = await accountMasks(db)
+  const byMerchant = new Map<string, MerchantTotal>()
+  for (const row of rows) {
+    const merchant = merchantDisplayName(row, { masks })
+    const total = byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 }
+    total.spentCents += row.spentCents
+    total.count += row.count
+    byMerchant.set(merchant, total)
+  }
+  byMerchant.delete(GENERIC_NAME)
+  return [...byMerchant.values()]
+    .filter((total) => total.spentCents > 0)
+    .sort((a, b) => b.spentCents - a.spentCents || a.merchant.localeCompare(b.merchant))
+    .slice(0, limit)
 }
 
 export interface SpendingPace {

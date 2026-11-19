@@ -2,7 +2,7 @@
 // Kept free of React so every rule here can be read and tested on its own.
 
 import { fromDayNumber, toDayNumber } from './dates'
-import { money, type MoneyOptions } from './format'
+import { compactMoney, money, type MoneyOptions } from './money'
 
 /** The multiples of a power of ten that read as round numbers on an axis. */
 const NICE_STEPS = [1, 2, 2.5, 5, 10]
@@ -41,18 +41,6 @@ export function niceTicks(low: number, high: number, maxTicks = 5): Ticks {
   // Integer steps avoid float drift such as 0.30000000000000004.
   for (let i = first; i <= last; i++) values.push(i * step)
   return { low: first * step, high: last * step, values }
-}
-
-/** Money in the owner's currency, shortened: "$5K", "$12.5K", "$1.2M". */
-export function compactMoney(cents: number, options: MoneyOptions): string {
-  return new Intl.NumberFormat(options.locale, {
-    style: 'currency',
-    currency: options.currency,
-    notation: 'compact',
-    // Currencies default to a fixed number of decimals, which would print "$15.0K".
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  }).format(cents / 100)
 }
 
 /** Amounts from five whole digits up ($10,000) read better shortened on a chart. */
@@ -176,4 +164,12 @@ export function timeTicks(first: string, last: string, maxTicks: number): TimeTi
     ticks.push({ date, showYear: ticks.length === 0 || monthOfYear === 0, monthly: true })
   }
   return ticks
+}
+
+/**
+ * A coordinate for an SVG path, to a tenth of a pixel: finer is invisible
+ * and only makes the path longer.
+ */
+export function svgNumber(value: number): number {
+  return Math.round(value * 10) / 10
 }

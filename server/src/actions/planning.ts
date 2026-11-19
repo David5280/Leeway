@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getCashFlow } from '../domain/cashFlow.js'
 import { debtPlans } from '../domain/debts.js'
 import { getNetWorth } from '../domain/netWorth.js'
+import { recentBalances } from '../domain/recentBalances.js'
 import { defineAction } from './action.js'
 import { settingsAndToday, today } from './today.js'
 
@@ -16,6 +17,17 @@ export const getNetWorthAction = defineAction({
   scope: 'read',
   surface: 'all',
   run: async (ctx, { days }) => getNetWorth(ctx.db, await today(ctx), days),
+})
+
+export const listRecentBalancesAction = defineAction({
+  name: 'list_recent_balances',
+  title: 'List recent balances',
+  description:
+    "Each account's balance once a day over the last 30 days, oldest first, for the line on its card.",
+  input: z.object({}),
+  scope: 'read',
+  surface: 'app',
+  run: async (ctx) => recentBalances(ctx.db, await today(ctx)),
 })
 
 export const planDebtPayoffAction = defineAction({

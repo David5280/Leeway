@@ -4,18 +4,19 @@
 import { useId, useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting } from '../../../components/ui'
-import { dollars, readCap } from './aiText'
+import { dollars, readCap, type CapProblem } from './aiText'
+import { CapProblemText } from './Dollars'
 
 export function LimitField({ capCents, locale }: { capCents: number; locale: string }) {
   const set = useActionMutation('set_ai_limit')
   const [text, setText] = useState(() => dollars(capCents, locale))
-  const [problem, setProblem] = useState<string | null>(null)
+  const [problem, setProblem] = useState<CapProblem | null>(null)
   const hintId = useId()
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const read = readCap(text, locale)
-    setProblem(read.ok ? null : read.error)
+    const read = readCap(text)
+    setProblem(read.ok ? null : read.problem)
     if (!read.ok) return
     set.mutate(
       { monthlyCapCents: read.cents },
@@ -50,7 +51,7 @@ export function LimitField({ capCents, locale }: { capCents: number; locale: str
       </Setting>
       {problem && (
         <p className="small over" role="alert">
-          {problem}
+          <CapProblemText problem={problem} />
         </p>
       )}
       {set.isSuccess && <p className="small good">Limit saved.</p>}

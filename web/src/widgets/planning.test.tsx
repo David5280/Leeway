@@ -162,7 +162,7 @@ describe('Net worth widget', () => {
       }),
     })
     renderSignedIn(<NetWorthWidget />)
-    expect(await screen.findByText('-$50')).toHaveClass('over')
+    expect(await screen.findByText('−$50')).toHaveClass('money-problem')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 })

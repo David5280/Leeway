@@ -20,6 +20,7 @@ const rules: Rule[] = STARTER_RULES.map(({ category, ...rule }, position) => ({
   id: `rule-${position}`,
   categoryId: category,
   position,
+  reads: 'bank_text',
 }))
 
 const CHECKING_CARD = { cardMasks: ['4321'] }
@@ -41,7 +42,8 @@ function fileUnder(
     accountType: 'depository',
     ...fields,
   }
-  return chooseCategory(tx, rules, categories, accounts)?.categoryId ?? null
+  // Starter rules read the bank's text, so the shown name is never looked at.
+  return chooseCategory({ ...tx, shownName: '' }, rules, categories, accounts)?.categoryId ?? null
 }
 
 describe('the starter set', () => {

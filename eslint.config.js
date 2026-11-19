@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
+import { moneyText } from './eslint/moneyText.js'
 
 // A <Route> path that is neither the catch-all "*" nor a name from routes.ts
 // (ROUTES, SCREEN_ROUTES or CONNECT_ROUTES).
@@ -10,6 +11,40 @@ const ROUTE_PATH_NOT_FROM_ROUTES = [
   ":not([value.value='*'])",
   ":not([value.expression.type='MemberExpression'][value.expression.object.name=/^(SCREEN_|CONNECT_)?ROUTES$/])",
 ].join('')
+
+/**
+ * Every address the router answers lives in web/src/routes.ts, where the
+ * phone layout guard finds it. A path written straight onto a <Route> would
+ * reach the app unguarded, so only the catch-all "*" may be literal.
+ */
+const ROUTE_SYNTAX = [
+  {
+    selector: ROUTE_PATH_NOT_FROM_ROUTES,
+    message: 'Give <Route> a path from routes.ts (or "*"), so the phone layout guard covers it.',
+  },
+]
+
+/** The two files where money is formatted and drawn; the money checks skip them. */
+const MONEY_HOME = ['web/src/lib/money.ts', 'web/src/components/design/Money.tsx']
+
+/** Number formatting outside lib/money.ts, which would let a screen write amounts its own way. */
+const MONEY_SYNTAX = [
+  {
+    selector: "NewExpression[callee.object.name='Intl'][callee.property.name='NumberFormat']",
+    message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='toFixed']",
+    message: 'Round with Math.round, or format money in web/src/lib/money.ts.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='toLocaleString'] Property[key.name='currency']",
+    message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
+  },
+]
+
+/** Leeway's own rules, in eslint/. */
+const leeway = { rules: { 'money-text': moneyText } }
 
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 export default tseslint.config(
@@ -69,21 +104,23 @@ export default tseslint.config(
     },
   },
   {
-    // Every address the router answers lives in web/src/routes.ts, where the
-    // phone layout guard finds it. A path written straight onto a <Route>
-    // would reach the app unguarded, so only the catch-all "*" may be literal.
-    files: ['web/src/**/*.tsx'],
-    ignores: ['web/src/test/**', 'web/src/**/*.test.tsx'],
+    // One way to show money (web/src/lib/money.ts and <Money>), so every
+    // screen reads amounts alike: no number formatting of its own, and no
+    // amount dropped into the page as bare text. Routes are held here too,
+    // since a later block setting the same rule would replace this one.
+    files: ['web/src/**/*.{ts,tsx}'],
+    plugins: { leeway },
+    ignores: [...MONEY_HOME, 'web/src/**/*.test.{ts,tsx}', 'web/src/test/**'],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: ROUTE_PATH_NOT_FROM_ROUTES,
-          message:
-            'Give <Route> a path from routes.ts (or "*"), so the phone layout guard covers it.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...MONEY_SYNTAX, ...ROUTE_SYNTAX],
+      // A formatted amount reaching the page, however it gets there (eslint/moneyText.js).
+      'leeway/money-text': 'error',
     },
+  },
+  {
+    // Where money is formatted and drawn, only the route check applies.
+    files: MONEY_HOME,
+    rules: { 'no-restricted-syntax': ['error', ...ROUTE_SYNTAX] },
   },
   {
     // Command-line scripts talk to the person running them.

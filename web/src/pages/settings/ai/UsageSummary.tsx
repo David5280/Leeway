@@ -2,15 +2,8 @@
 // job's share. Counts and costs only; Leeway keeps nothing that was asked.
 
 import { ProgressRing } from '../../../components/ProgressRing'
-import {
-  callsText,
-  dollars,
-  percentUsed,
-  resetText,
-  spentText,
-  usageTone,
-  type AiUsage,
-} from './aiText'
+import { callsText, percentUsed, resetText, usageTone, type AiUsage } from './aiText'
+import { Dollars, Spent } from './Dollars'
 
 export function UsageSummary({ usage, locale }: { usage: AiUsage; locale: string }) {
   const used = percentUsed(usage.spentMicros, usage.monthlyCapCents)
@@ -22,7 +15,7 @@ export function UsageSummary({ usage, locale }: { usage: AiUsage; locale: string
         </ProgressRing>
         <div className="ai-usage-figures">
           <span className="ai-usage-total">
-            {spentText(usage.spentMicros, locale)} of {dollars(usage.monthlyCapCents, locale)}
+            <Spent micros={usage.spentMicros} /> of <Dollars cents={usage.monthlyCapCents} />
           </span>
           <span className="small muted">
             {callsText(usage.calls)} this month. {resetText(usage.month.resetsOn, locale)}
@@ -34,7 +27,7 @@ export function UsageSummary({ usage, locale }: { usage: AiUsage; locale: string
           <li key={job.job} className="row-between">
             <span>{job.title}</span>
             <span className="figures">
-              {spentText(job.spend.costMicros, locale)}
+              <Spent micros={job.spend.costMicros} />
               <span className="muted">, {callsText(job.spend.calls)}</span>
             </span>
           </li>

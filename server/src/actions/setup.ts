@@ -70,9 +70,10 @@ export const importConfigAction = defineAction({
   name: 'import_config',
   title: 'Import setup',
   description:
-    'Apply an exported setup. "merge" adds missing categories and rules; "replace" swaps all categories and rules for the file\'s. Transactions are kept and re-categorized.',
+    'Apply an exported setup. "merge" adds missing categories and rules; "replace" swaps all categories and rules for the file\'s. Transactions are kept and re-categorized. Rules you import read "shown_name", the displayName you see, whatever the file says.',
   input: z.object({ config: portableConfigSchema, mode: z.enum(['merge', 'replace']) }),
   scope: 'write',
   surface: 'all',
-  run: (ctx, { config, mode }) => importConfig(ctx.db, config, mode),
+  // An assistant's rules read only shown names (see RuleReads in rules.ts).
+  run: (ctx, { config, mode }) => importConfig(ctx.db, config, mode, { byAssistant: ctx.agent }),
 })

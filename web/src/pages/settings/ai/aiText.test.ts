@@ -5,30 +5,30 @@ import { MODEL_CHOICES } from '../../../../../server/src/ai/models'
 import {
   callsText,
   dollars,
+  modelPrices,
   percentUsed,
-  priceText,
   readCap,
   resetText,
-  spentText,
+  spentCents,
   usageTone,
 } from './aiText'
 
 const [haiku, sonnet, opus] = MODEL_CHOICES
 
 describe('money', () => {
-  it('writes dollars and cents in the owner style, always in US dollars', () => {
+  it('writes the limit for its field in dollars and cents, in the owner style, always in US dollars', () => {
     expect(dollars(500, 'en-US')).toBe('$5.00')
     expect(dollars(100_000, 'en-US')).toBe('$1,000.00')
     expect(dollars(500, 'en-GB')).toBe('US$5.00')
   })
 
-  it('rounds a spend up to the cent, as the limit counts it, and names a sliver', () => {
-    expect(spentText(0, 'en-US')).toBe('$0.00')
-    expect(spentText(1, 'en-US')).toBe('Under $0.01')
-    expect(spentText(9_999, 'en-US')).toBe('Under $0.01')
-    expect(spentText(10_000, 'en-US')).toBe('$0.01')
-    expect(spentText(10_001, 'en-US')).toBe('$0.02')
-    expect(spentText(4_210_000, 'en-US')).toBe('$4.21')
+  it('rounds a spend up to the cent, as the limit counts it, and marks a sliver', () => {
+    expect(spentCents(0)).toEqual({ cents: 0, under: false })
+    expect(spentCents(1)).toEqual({ cents: 1, under: true })
+    expect(spentCents(9_999)).toEqual({ cents: 1, under: true })
+    expect(spentCents(10_000)).toEqual({ cents: 1, under: false })
+    expect(spentCents(10_001)).toEqual({ cents: 2, under: false })
+    expect(spentCents(4_210_000)).toEqual({ cents: 421, under: false })
   })
 })
 
@@ -60,27 +60,28 @@ describe('words', () => {
     expect(resetText('2026-12-01', 'en-GB')).toBe('Resets on 1 Dec.')
   })
 
-  it("gives each model's price per million tokens, with Haiku's dearer long prompts", () => {
-    expect(priceText(sonnet, 'en-US')).toBe('$2.00 in, $10.00 out per million tokens')
-    expect(priceText(opus, 'en-US')).toBe('$4.00 in, $20.00 out per million tokens')
-    expect(priceText(haiku, 'en-US')).toBe(
-      '$0.10 in, $0.50 out per million tokens; $0.50 in, $2.50 out past 100,000 tokens',
-    )
+  it("gives each model's prices per million tokens in cents, with Haiku's dearer long prompts", () => {
+    expect(modelPrices(sonnet)).toEqual({ base: { input: 200, output: 1_000 }, long: null })
+    expect(modelPrices(opus)).toEqual({ base: { input: 400, output: 2_000 }, long: null })
+    expect(modelPrices(haiku)).toEqual({
+      base: { input: 10, output: 50 },
+      long: { input: 50, output: 250, overTokens: 100_000 },
+    })
   })
 })
 
 describe('readCap', () => {
   it('reads a typed limit in dollars as cents', () => {
-    expect(readCap('$5', 'en-US')).toEqual({ ok: true, cents: 500 })
-    expect(readCap('12.50', 'en-US')).toEqual({ ok: true, cents: 1_250 })
-    expect(readCap('$1,000', 'en-US')).toEqual({ ok: true, cents: 100_000 })
-    expect(readCap('0', 'en-US')).toEqual({ ok: true, cents: 0 })
+    expect(readCap('$5')).toEqual({ ok: true, cents: 500 })
+    expect(readCap('12.50')).toEqual({ ok: true, cents: 1_250 })
+    expect(readCap('$1,000')).toEqual({ ok: true, cents: 100_000 })
+    expect(readCap('0')).toEqual({ ok: true, cents: 0 })
   })
 
-  it('turns away a blank, a negative or a limit over $1,000, saying why', () => {
-    expect(readCap('', 'en-US')).toEqual({ ok: false, error: 'Enter an amount, like $5.' })
-    expect(readCap('five', 'en-US')).toEqual({ ok: false, error: 'Enter an amount, like $5.' })
-    expect(readCap('-5', 'en-US')).toEqual({ ok: false, error: 'Enter an amount, like $5.' })
-    expect(readCap('1000.01', 'en-US')).toEqual({ ok: false, error: 'Use $1,000.00 or less.' })
+  it('turns away a blank, a negative or a limit over $1,000, saying which', () => {
+    expect(readCap('')).toEqual({ ok: false, problem: 'not_an_amount' })
+    expect(readCap('five')).toEqual({ ok: false, problem: 'not_an_amount' })
+    expect(readCap('-5')).toEqual({ ok: false, problem: 'not_an_amount' })
+    expect(readCap('1000.01')).toEqual({ ok: false, problem: 'too_high' })
   })
 })

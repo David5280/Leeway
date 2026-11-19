@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { budgetFor, category, fakeServer, renderSignedIn, transaction } from '../../test/fake'
 import { Transactions } from '../Transactions'
@@ -23,6 +24,9 @@ const paymentOut = transaction({
   accountName: 'Checking',
   categoryId: transfers.id,
   bankCategory: CARD_PAYMENT,
+  // Paired by the server with the payment's arrival on the card.
+  displayName: 'Checking to Sapphire',
+  transfer: { id: 'pay-in', accountId: 'card', accountName: 'Sapphire', date: '2026-11-04' },
 })
 const paymentIn = transaction({
   id: 'pay-in',
@@ -33,6 +37,8 @@ const paymentIn = transaction({
   accountName: 'Sapphire',
   categoryId: transfers.id,
   bankCategory: CARD_PAYMENT,
+  displayName: 'Checking to Sapphire',
+  transfer: { id: 'pay-out', accountId: 'checking', accountName: 'Checking', date: '2026-11-03' },
 })
 const zelleIn = transaction({
   id: 'zelle-in',
@@ -58,49 +64,61 @@ function renderList(transactions = [zelleIn, zelleOut, paymentIn, paymentOut]) {
     get_budget: () => budgetFor(categories, []),
     list_categories: () => categories,
     list_rules: () => [],
-    list_transactions: () => ({ transactions, total: transactions.length }),
+    list_accounts: () => [],
+    list_transactions: (input) => {
+      // A sheet reads its transaction again by account and day.
+      const shown = input.accountId
+        ? transactions.filter((tx) => tx.accountId === input.accountId && tx.date === input.start)
+        : transactions
+      return { transactions: shown, total: shown.length }
+    },
   })
   return renderSignedIn(<Transactions />, { route: '/transactions' })
 }
 
 describe('money moving between your own accounts', () => {
-  it('labels both sides of a card payment and names the account on the other side', async () => {
+  it('names both sides of a card payment by their accounts, and says which side each is', async () => {
     renderList()
+    const user = userEvent.setup()
+    const sides = await screen.findAllByRole('button', { name: /^Checking to Sapphire, moved/ })
+    expect(sides).toHaveLength(2)
 
-    expect(await screen.findByText('Checking · Card payment · to Sapphire')).toBeInTheDocument()
-    expect(screen.getByText('Sapphire · Card payment · from Checking')).toBeInTheDocument()
+    await user.click(sides[0]!)
+    const sheet = screen.getByRole('dialog', { name: 'Checking to Sapphire' })
+    expect(within(sheet).getByText('Card payment')).toBeInTheDocument()
+    expect(within(sheet).getByText('Moved from')).toBeInTheDocument()
+    expect(within(sheet).getByText('Checking, Nov 3')).toBeInTheDocument()
   })
 
-  it('shows the payment arriving on the card in a neutral color, never as money earned', async () => {
+  it('shows the payment arriving on the card with no sign and a quiet tone, never as money earned', async () => {
     renderList()
-
-    const arrival = await screen.findByText('+$2,000.00')
-    expect(arrival).toHaveClass('muted')
-    expect(arrival).not.toHaveClass('good')
-    expect(screen.getByText('$2,000.00')).toHaveClass('muted')
+    const amounts = await screen.findAllByText('$2,000.00')
+    expect(amounts).toHaveLength(2)
+    for (const amount of amounts) expect(amount).toHaveClass('money-muted')
+    expect(screen.queryByText('+$2,000.00')).not.toBeInTheDocument()
   })
 
-  it('still labels a lone side of a transfer when its partner is not in view', async () => {
-    renderList([paymentIn])
-
-    expect(await screen.findByText('Sapphire · Card payment')).toBeInTheDocument()
+  it('still marks a lone side of a transfer as a move', async () => {
+    renderList([{ ...paymentIn, transfer: null, displayName: 'Card payment' }])
+    const row = await screen.findByRole('button', { name: /^Card payment, moved \$2,000\.00/ })
+    expect(within(row).getByText('$2,000.00')).toHaveClass('money-muted')
   })
 })
 
 describe('money between people', () => {
   it('shows money received from a person as money in, from them', async () => {
     renderList()
-
-    expect(await screen.findByText('From Jane Doe')).toBeInTheDocument()
-    expect(screen.getByText('Checking · Received with Zelle')).toBeInTheDocument()
-    expect(screen.getByText('+$125.00')).toHaveClass('good')
+    const row = await screen.findByRole('button', { name: /^From Jane Doe, received \$125\.00/ })
+    expect(within(row).getByText('+$125.00')).toHaveClass('money-in')
+    await userEvent.click(row)
+    expect(screen.getByText('Received with Zelle')).toBeInTheDocument()
   })
 
   it('shows money sent to a person as money out, to them', async () => {
     renderList()
-
-    expect(await screen.findByText('To Jane Doe')).toBeInTheDocument()
-    expect(screen.getByText('Checking · Sent with Zelle')).toBeInTheDocument()
-    expect(screen.getByText('$40.00')).not.toHaveClass('good')
+    const row = await screen.findByRole('button', { name: /^To Jane Doe, spent \$40\.00/ })
+    expect(within(row).getByText('$40.00')).toHaveClass('money-neutral')
+    await userEvent.click(row)
+    expect(screen.getByText('Sent with Zelle')).toBeInTheDocument()
   })
 })

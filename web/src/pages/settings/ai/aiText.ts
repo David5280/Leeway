@@ -1,27 +1,32 @@
 // Words and figures for Settings > AI models. Anthropic bills in US dollars,
-// so money here is always USD, written by the app's own money helper in the
-// owner's number style.
+// so money here is always USD, in the owner's number style. Amounts on the
+// page are drawn by <Dollars> (Dollars.tsx); these work out what they show.
 
 import { centsOfMicros, MICROS_PER_CENT } from '../../../../../server/src/ai/models'
 import { MAX_MONTHLY_CAP_CENTS } from '../../../../../server/src/domain/ai/settings'
 import type { Output } from '../../../api/client'
-import { money, parseMoney, shortDate } from '../../../lib/format'
+import { parseMoney, shortDate } from '../../../lib/format'
+import { money } from '../../../lib/money'
 
 export type AiUsage = Output<'get_ai_usage'>
 export type JobReport = AiUsage['jobs'][number]
 export type ModelChoice = AiUsage['models'][number]
 
-const usd = (locale: string) => ({ currency: 'USD', locale })
+/** The currency Anthropic bills in, whatever the owner's own. */
+export const AI_CURRENCY = 'USD'
 
-/** Dollars and cents: "$5.00". */
+/** Dollars and cents as the limit field holds them, for typing over: "$5.00". */
 export function dollars(cents: number, locale: string): string {
-  return money(cents, usd(locale), true)
+  return money(cents, { currency: AI_CURRENCY, locale }, true)
 }
 
-/** A spend to the cent, rounded up as the limit counts it, or "Under $0.01" for a sliver. */
-export function spentText(micros: number, locale: string): string {
-  if (micros > 0 && micros < MICROS_PER_CENT) return `Under ${dollars(1, locale)}`
-  return dollars(centsOfMicros(micros), locale)
+/**
+ * A spend to the cent, rounded up as the limit counts it. A sliver under a
+ * cent is `under` one cent, so it never reads as nothing spent.
+ */
+export function spentCents(micros: number): { cents: number; under: boolean } {
+  if (micros > 0 && micros < MICROS_PER_CENT) return { cents: 1, under: true }
+  return { cents: centsOfMicros(micros), under: false }
 }
 
 /** How much of the limit is spent, from 0 to 100. A $0 limit is always full. */
@@ -47,29 +52,40 @@ export function resetText(resetsOn: string, locale: string): string {
   return `Resets on ${shortDate(resetsOn, locale)}.`
 }
 
-/**
- * A model's price per million tokens, the way Anthropic lists it:
- * "$2.00 in, $10.00 out per million tokens", with any dearer long-prompt price.
- */
-export function priceText(model: ModelChoice, locale: string): string {
-  const per = (price: number) => dollars(Math.round(price * 100), locale)
-  const { input, output } = model.prices
-  const base = `${per(input)} in, ${per(output)} out per million tokens`
-  const long = 'longPrompt' in model.prices ? model.prices.longPrompt : undefined
-  if (!long) return base
-  const over = long.overTokens.toLocaleString(locale)
-  return `${base}; ${per(long.prices.input)} in, ${per(long.prices.output)} out past ${over} tokens`
+/** What a million tokens in and out cost, in cents. */
+export interface TokenPrices {
+  input: number
+  output: number
 }
+
+/**
+ * A model's prices per million tokens, the way Anthropic lists them, with any
+ * dearer prices for a prompt past `overTokens`.
+ */
+export function modelPrices(model: ModelChoice): {
+  base: TokenPrices
+  long: (TokenPrices & { overTokens: number }) | null
+} {
+  const cents = (prices: { input: number; output: number }): TokenPrices => ({
+    input: Math.round(prices.input * 100),
+    output: Math.round(prices.output * 100),
+  })
+  const long = 'longPrompt' in model.prices ? model.prices.longPrompt : undefined
+  return {
+    base: cents(model.prices),
+    long: long ? { ...cents(long.prices), overTokens: long.overTokens } : null,
+  }
+}
+
+/** Why a typed limit can't be one: not an amount, or over the most allowed. */
+export type CapProblem = 'not_an_amount' | 'too_high'
 
 /** A typed limit in cents, or why it can't be one. */
 export function readCap(
   text: string,
-  locale: string,
-): { ok: true; cents: number } | { ok: false; error: string } {
+): { ok: true; cents: number } | { ok: false; problem: CapProblem } {
   const cents = parseMoney(text)
-  if (cents === null || cents < 0) return { ok: false, error: 'Enter an amount, like $5.' }
-  if (cents > MAX_MONTHLY_CAP_CENTS) {
-    return { ok: false, error: `Use ${dollars(MAX_MONTHLY_CAP_CENTS, locale)} or less.` }
-  }
+  if (cents === null || cents < 0) return { ok: false, problem: 'not_an_amount' }
+  if (cents > MAX_MONTHLY_CAP_CENTS) return { ok: false, problem: 'too_high' }
   return { ok: true, cents }
 }

@@ -5,6 +5,7 @@ import { useAction } from '../../api/hooks'
 import { Card, LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
+import { Money } from '../../components/design/Money'
 
 /** One line on where the payday came from, so the number can be trusted the right amount. */
 function paydayText(flow: CashFlow, money: (cents: number) => string, locale: string): string {
@@ -21,19 +22,18 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
 
 /** The headline: per-day room, or how far short the bills leave you. */
 function Headline({ flow }: { flow: CashFlow }) {
-  const { money } = useApp()
   const days = Math.max(1, flow.daysUntilPayday)
   if (flow.leftAfterBillsCents < 0) {
     return (
       <p style={{ fontSize: 17 }}>
-        <span className="num mid-number over">{money(-flow.leftAfterBillsCents)}</span> short of the
-        bills due before payday.
+        <Money cents={-flow.leftAfterBillsCents} tone="problem" className="mid-number" /> short of
+        the bills due before payday.
       </p>
     )
   }
   return (
     <p style={{ fontSize: 17 }}>
-      <span className="num mid-number">{money(flow.perDayCents)}</span> a day for the next {days}{' '}
+      <Money cents={flow.perDayCents} className="mid-number" /> a day for the next {days}{' '}
       {days === 1 ? 'day' : 'days'}.
     </p>
   )
@@ -41,7 +41,7 @@ function Headline({ flow }: { flow: CashFlow }) {
 
 /** Cash until payday. Compact leaves out the list of bills, for the dashboard. */
 export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
-  const { money, exact, settings } = useApp()
+  const { money, settings } = useApp()
   const cash = useAction('get_cash_flow')
   if (!cash.data) {
     return <LoadingOrError error={cash.error} />
@@ -51,9 +51,8 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
     <div className="stack-sm">
       <Headline flow={flow} />
       <span className="small muted">
-        <span className="num">{money(flow.cashCents)}</span> in checking and savings, minus{' '}
-        <span className="num">{money(flow.billsDueCents)}</span> in bills.{' '}
-        {paydayText(flow, money, settings.locale)}
+        <Money cents={flow.cashCents} /> in checking and savings, minus{' '}
+        <Money cents={flow.billsDueCents} /> in bills. {paydayText(flow, money, settings.locale)}
       </span>
       {!compact &&
         flow.billsDue.map((bill) => (
@@ -65,7 +64,7 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
               {bill.name}
               {bill.overdue && <span className="small over"> No payment found</span>}
             </span>
-            <span className="num">{exact(bill.amountCents)}</span>
+            <Money cents={bill.amountCents} precision="cents" />
           </div>
         ))}
     </div>

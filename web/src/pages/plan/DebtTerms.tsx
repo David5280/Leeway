@@ -5,8 +5,8 @@ import { useState, type FormEvent } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
+import { Money } from '../../components/design/Money'
 
 /** "24.99" into 24.99, rounded to the hundredth; null when blank or not a number. */
 export function parseRate(text: string): number | null {
@@ -15,7 +15,6 @@ export function parseRate(text: string): number | null {
 }
 
 export function DebtTerms({ account }: { account: Account }) {
-  const { exact } = useApp()
   const [rate, setRate] = useState(account.aprPercent === null ? '' : String(account.aprPercent))
   const [minimum, setMinimum] = useState(
     account.minimumPaymentCents === null ? '' : String(account.minimumPaymentCents / 100),
@@ -36,7 +35,7 @@ export function DebtTerms({ account }: { account: Account }) {
       <span className="grow stack-sm" style={{ gap: 0, minWidth: 140 }}>
         <span style={{ fontWeight: 500 }}>{account.name}</span>
         <span className="small muted">
-          <span className="num">{exact(account.balanceCents ?? 0)}</span> owed
+          <Money cents={account.balanceCents ?? 0} precision="cents" /> owed
         </span>
       </span>
       <label className="small muted row" style={{ gap: 6 }}>

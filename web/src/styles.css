@@ -674,28 +674,6 @@ select.input {
   color: var(--ink);
 }
 
-/* A rule in a rules list: its number, what it matches over where matches
-   go, then its buttons. When the row is too narrow for the text beside the
-   buttons, they drop to a line of their own under it, at the right, so the
-   text keeps the row's width; a long pattern with no spaces wraps rather
-   than widening the row. */
-.rule-row {
-  flex-wrap: wrap;
-}
-
-.rule-text {
-  flex: 1 1 12em;
-  min-width: 0;
-  gap: 2px;
-  overflow-wrap: break-word;
-}
-
-.rule-actions {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
 /* A starter category in setup: its amount drops under its name on a narrow phone. */
 .starter-item {
   flex-wrap: wrap;
@@ -819,15 +797,30 @@ button.chip {
 }
 
 .switch {
+  /* The button is the pressable box; the track and knob are drawn inside it, so
+     on a touch screen the box grows to --tap (design.css) and the look stays. */
+  position: relative;
   width: 48px;
   height: 28px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: none;
+  cursor: pointer;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 14px);
+  left: 0;
+  width: 48px;
+  height: 28px;
+  box-sizing: border-box;
   border-radius: 99px;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  position: relative;
-  cursor: pointer;
-  flex: none;
-  padding: 0;
 }
 
 /* The switch draws 28px tall but takes taps across 44px, Apple's smallest comfortable tap. */
@@ -840,8 +833,8 @@ button.chip {
 .switch::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 4px;
+  top: calc(50% - 10px);
   width: 20px;
   height: 20px;
   border-radius: 99px;
@@ -849,7 +842,7 @@ button.chip {
   transition: transform 0.15s;
 }
 
-.switch[aria-checked='true'] {
+.switch[aria-checked='true']::before {
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -983,6 +976,13 @@ button.chip {
   align-items: center;
   gap: 14px;
   padding: 12px 14px;
+}
+
+/* An account on the home screen: its name and detail, the line of its recent
+   balance, then the balance itself, in one row (a .clickrow stacks). */
+.account-row {
+  flex-direction: row;
+  align-items: center;
 }
 
 .alert-icon {
@@ -1707,6 +1707,50 @@ details.more[open] summary {
   font-size: 14px;
 }
 
+/* A home widget row keeps room for its name, five letters or so at the
+   least, however long its status: the figures wrap instead. */
+.cat-row-wrap {
+  grid-template-columns: minmax(min(7em, 50%), 1fr) minmax(0, auto);
+}
+
+/* The home widget's figures: the amounts, a dot, then the status, which
+   wraps under the amounts when the row is too narrow for both. A wrapped dot
+   would end the first line, so the items reach one dot's width past the
+   figures, which clip that strip: the dot falls in it, while the status
+   keeps clear of it by the same width. */
+.cat-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.cat-summary-items {
+  --cat-sep: 0.9em;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  row-gap: 2px;
+  margin-right: calc(-1 * var(--cat-sep));
+}
+
+.cat-amounts {
+  white-space: nowrap;
+}
+
+.cat-sep {
+  flex: none;
+  inline-size: var(--cat-sep);
+  text-align: center;
+}
+
+/* A status too long even for a line of its own wraps within it. */
+.cat-status {
+  min-width: 0;
+  margin-right: var(--cat-sep);
+  text-align: right;
+}
+
 /* A Budgets screen row: the same grid, plus a line of plain words under it. */
 .cat-row.budget-row {
   grid-template-areas:
@@ -1765,6 +1809,20 @@ details.more[open] summary {
 
   .cat-bar:empty {
     display: block;
+  }
+
+  /* The home widget's rows share the list's columns, so every bar starts and
+     ends in the same place, however long one row's status. The figures
+     column is as wide as the widest row's figures needs. */
+  .cat-rows:has(> .cat-row-wrap) {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(90px, 1.5fr) minmax(200px, auto);
+    column-gap: 16px;
+  }
+
+  .cat-rows > .cat-row-wrap {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
   }
 }
 

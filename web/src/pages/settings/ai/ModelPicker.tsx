@@ -6,7 +6,8 @@
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote } from '../../../components/ui'
 import { shortDate } from '../../../lib/format'
-import { priceText, type JobReport, type ModelChoice } from './aiText'
+import type { JobReport, ModelChoice } from './aiText'
+import { Price } from './Dollars'
 
 export function ModelPicker({
   job,
@@ -58,7 +59,9 @@ export function ModelPicker({
                 {model.id === job.defaultModel && <span className="badge">Default</span>}
               </span>
               <span className="small muted">{model.description}</span>
-              <span className="small muted">{priceText(model, locale)}</span>
+              <span className="small muted">
+                <Price model={model} locale={locale} />
+              </span>
             </span>
           </label>
         ))}

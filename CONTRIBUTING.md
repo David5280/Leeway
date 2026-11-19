@@ -158,6 +158,15 @@ npm run check
 This runs Prettier, ESLint (which enforces the rules above that a tool can
 check), the type checker and every test with coverage. It must pass.
 
+One of Leeway's own lint rules, `leeway/money-text` (`eslint/moneyText.js`),
+keeps every amount on screen drawn by `<Money cents={...} />`. It catches a
+money formatter's result reaching the page directly, through a variable, or
+through another name for the formatter (`const fmt = money`). It reads code
+without type information, so it cannot follow an amount returned from a
+function, kept in an object or array, passed through another function, or
+assigned to a variable after it was declared. Don't build amounts those ways
+for the page; pass cents to `<Money>` instead.
+
 ## Running the tests
 
 Server tests need Postgres. By default they use

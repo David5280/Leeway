@@ -20,6 +20,7 @@ import {
 import { alertsFor, recentCharges, selectAccounts } from './alerts.js'
 import { categoryTotalsByRange, currentPeriod, type DateRange } from './budgetReport.js'
 import { listCategories } from './categories.js'
+import { countedSql } from './counted.js'
 import { periodConfig, type Settings } from './settings.js'
 import type { SummaryText } from './summaryText.js'
 import { listTransactions, transactionFilterSchema, type Transaction } from './transactions.js'
@@ -68,7 +69,7 @@ export async function moneyInAndOut(
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.account_id = ANY($4::uuid[]) AND NOT t.excluded
        AND ($3 OR NOT t.pending)
-       AND (c.kind IS NULL OR c.kind <> 'transfer')
+       AND ${countedSql()}
      GROUP BY r.n`,
     [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds],
   )
