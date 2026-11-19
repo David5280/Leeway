@@ -3,12 +3,19 @@
 
 import type { Page } from '@playwright/test'
 
+const phoneScreen = (width: number, height: number) =>
+  ({ viewport: { width, height }, isMobile: true, hasTouch: true }) as const
+
 /** An iPhone 16 Pro, upright. */
-export const IPHONE = { viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true }
+export const IPHONE = phoneScreen(402, 874)
 /** The same iPhone turned sideways. */
-export const IPHONE_LANDSCAPE = { ...IPHONE, viewport: { width: 874, height: 402 } }
-/** The narrowest phone still in use: an iPhone SE, first generation. */
-export const NARROWEST = { viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true }
+export const IPHONE_LANDSCAPE = phoneScreen(874, 402)
+/**
+ * The narrowest screen to support: the first iPhone SE, 320pt wide. Apple
+ * stopped selling it in 2018, but it is still in use. The narrowest iPhone
+ * still sold is the later SE, at 375pt.
+ */
+export const NARROWEST = phoneScreen(320, 568)
 
 /** Safe-area insets in pixels, as an iPhone with a Dynamic Island reports them. */
 export const UPRIGHT_INSETS = { top: 62, right: 0, bottom: 34, left: 0 }
@@ -16,42 +23,45 @@ export const SIDEWAYS_INSETS = { top: 0, right: 62, bottom: 21, left: 62 }
 
 export type Insets = typeof UPRIGHT_INSETS
 
+/** Up to this width the app uses its phone layout (styles.css), with the tab bar. */
+export const PHONE_LAYOUT_WIDTH = 820
+
 /** A phone the layout guard checks every screen on, installed to its home screen. */
 export interface GuardedPhone {
   name: string
   screen: { viewport: { width: number; height: number }; isMobile: true; hasTouch: true }
   insets: Insets
+  /**
+   * Whether the overview is wide enough to be arranged in place (its Edit
+   * layout button). Narrower screens arrange it in Settings, Appearance.
+   */
+  editsInPlace: boolean
 }
 
-const phoneScreen = (width: number, height: number) =>
-  ({ viewport: { width, height }, isMobile: true, hasTouch: true }) as const
+const guarded = (name: string, width: number, height: number, insets: Insets): GuardedPhone => ({
+  name,
+  screen: phoneScreen(width, height),
+  insets,
+  editsInPlace: width > PHONE_LAYOUT_WIDTH,
+})
 
 /**
- * The layout guard's phones: the common 390pt iPhone and the narrowest one
- * still sold (the 375pt iPhone SE), each upright and turned sideways. Sideways
- * both get a notch's side insets, the harder case, though the SE has none.
+ * The layout guard's phones: the common 390pt iPhone and the 375pt iPhone SE
+ * (the narrowest iPhone still sold), each upright and turned sideways, and
+ * the narrowest screen supported (the first SE, 320pt) upright. Sideways
+ * both get a notch's side insets, the harder case, though an SE has none.
  */
 export const GUARDED_PHONES: readonly GuardedPhone[] = [
-  {
-    name: 'an iPhone',
-    screen: phoneScreen(390, 844),
-    insets: { top: 47, right: 0, bottom: 34, left: 0 },
-  },
-  {
-    name: 'an iPhone SE',
-    screen: phoneScreen(375, 667),
-    insets: { top: 20, right: 0, bottom: 0, left: 0 },
-  },
-  {
-    name: 'an iPhone turned sideways',
-    screen: phoneScreen(844, 390),
-    insets: { top: 0, right: 47, bottom: 21, left: 47 },
-  },
-  {
-    name: 'an iPhone SE turned sideways',
-    screen: phoneScreen(667, 375),
-    insets: { top: 0, right: 47, bottom: 21, left: 47 },
-  },
+  guarded('an iPhone', 390, 844, { top: 47, right: 0, bottom: 34, left: 0 }),
+  guarded('an iPhone SE', 375, 667, { top: 20, right: 0, bottom: 0, left: 0 }),
+  guarded('the first iPhone SE', NARROWEST.viewport.width, NARROWEST.viewport.height, {
+    top: 20,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  }),
+  guarded('an iPhone turned sideways', 844, 390, { top: 0, right: 47, bottom: 21, left: 47 }),
+  guarded('an iPhone SE turned sideways', 667, 375, { top: 0, right: 47, bottom: 21, left: 47 }),
 ]
 
 /**

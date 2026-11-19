@@ -1,0 +1,182 @@
+// The screens the phone layout guard (layout-guard.phone.spec.ts) checks:
+// every route the app answers (web/src/routes.ts), with long names seeded,
+// and the forms people open on them.
+
+import { createHash, randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import type { RouteName } from '../web/src/routes'
+import type { GuardedPhone } from './phone'
+import type { Seeded } from './seed'
+
+/** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
+export const SETTINGS_GROUPS = [
+  'appearance',
+  'budgeting',
+  'accounts',
+  'banks',
+  'email',
+  'assistant',
+  'data',
+  'sign-in',
+]
+
+/** A bank's CSV export, as the import tests use. */
+const CSV = fileURLToPath(new URL('./fixtures/old-checking.csv', import.meta.url))
+
+export interface Screen {
+  name: string
+  /** The route in web/src/routes.ts this screen is an address of. */
+  route: RouteName
+  /** The address, worked out from what was seeded (an assistant's needs the server). */
+  path: (seeded: Seeded, request: APIRequestContext) => string | Promise<string>
+  /** Anything to do once it has loaded, like opening a form. */
+  then?: (page: Page) => Promise<void>
+  /** Only on the phones this holds for; by default, on every phone. */
+  on?: (phone: GuardedPhone) => boolean
+}
+
+const at = (route: RouteName, path: string, more: Partial<Screen> = {}): Screen => ({
+  name: path,
+  route,
+  path: () => path,
+  ...more,
+})
+
+/** Presses a button, then waits for what it opens. */
+const open = (button: string | RegExp, opens: (page: Page) => ReturnType<Page['getByRole']>) =>
+  async function (page: Page) {
+    await page.getByRole('button', { name: button }).first().click()
+    await expect(opens(page)).toBeVisible()
+  }
+
+/** A key that looks like a new one, answered without making it, so no key is left behind. */
+async function revealKey(page: Page) {
+  await page.route('**/api/actions/create_token', (route) =>
+    route.fulfill({
+      json: {
+        result: {
+          id: '00000000-0000-4000-8000-000000000000',
+          name: 'Claude on the laptop upstairs',
+          scope: 'read',
+          createdAt: new Date().toISOString(),
+          lastUsedAt: null,
+          token: `lw_${'x'.repeat(43)}`,
+        },
+      },
+    }),
+  )
+  await page.getByRole('button', { name: 'Create a key' }).click()
+  await expect(page.getByLabel('New key')).toBeVisible()
+}
+
+/** Every screen the app's router answers, and the forms that open on them. */
+export const SCREENS: Screen[] = [
+  at('overview', '/'),
+  at('overview', '/', {
+    name: '/ while editing its layout in place',
+    on: (phone) => phone.editsInPlace,
+    then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
+  }),
+  at('accounts', '/accounts'),
+  ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
+    name: `the ${kind} account page`,
+    route: 'accounts',
+    path: (seeded) => `/accounts?select=${seeded.accounts[index]}`,
+  })),
+  at('alerts', '/alerts'),
+  at('transactions', '/transactions'),
+  at('transactions', '/transactions', {
+    name: '/transactions adding one by hand',
+    then: open('Add by hand', (page) => page.getByRole('form', { name: 'Add a transaction' })),
+  }),
+  at('transactions', '/transactions', {
+    name: '/transactions making a rule from one',
+    then: open('Make a rule', (page) => page.getByRole('form', { name: 'New rule' })),
+  }),
+  {
+    name: "one account's transactions",
+    route: 'transactions',
+    path: (seeded) => `/transactions?account=${seeded.accounts[0]}`,
+  },
+  at('importTransactions', '/transactions/import'),
+  at('importTransactions', '/transactions/import', {
+    name: '/transactions/import with a file chosen',
+    then: async (page) => {
+      await page.getByLabel('Choose a CSV file').setInputFiles(CSV)
+      await expect(page.getByText('old-checking.csv')).toBeVisible()
+    },
+  }),
+  at('budgets', '/budgets'),
+  at('budgets', '/budgets', {
+    name: '/budgets adding a category',
+    then: open('New category', (page) => page.getByRole('region', { name: 'New category' })),
+  }),
+  {
+    name: 'a category page',
+    route: 'category',
+    path: (seeded) => `/budgets/${seeded.categories[0]}`,
+  },
+  {
+    name: 'a category page making a rule',
+    route: 'category',
+    path: (seeded) => `/budgets/${seeded.categories[0]}`,
+    then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
+  },
+  at('plan', '/plan'),
+  at('plan', '/plan', {
+    name: '/plan adding a bill',
+    then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
+  }),
+  at('planSection', '/plan/goals'),
+  at('planSection', '/plan/goals', {
+    name: '/plan/goals adding a goal',
+    then: open('Add a goal', (page) => page.getByRole('region', { name: 'New goal' })),
+  }),
+  at('planSection', '/plan/debts'),
+  at('planSection', '/plan/net-worth'),
+  ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
+  at('settings', '/settings/accounts', {
+    name: '/settings/accounts adding an account by hand',
+    then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),
+  }),
+  at('settings', '/settings/assistant', {
+    name: '/settings/assistant showing a new key',
+    then: revealKey,
+  }),
+  // The old Customize address lands on Settings.
+  at('oldSettings', '/customize/appearance'),
+  at('connectProblem', '/connect'),
+  {
+    name: "an assistant's connect screen",
+    route: 'connect',
+    path: (_, request) => connectAddress(request),
+    then: (page) =>
+      expect(page.getByRole('heading', { name: /^Connect .+ to Leeway\?$/ })).toBeVisible(),
+  },
+]
+
+/** A sign-in screen an assistant is sent to, as Claude would be (see connect.spec.ts). */
+async function connectAddress(request: APIRequestContext): Promise<string> {
+  const callback = 'http://127.0.0.1:33418/callback'
+  const server = await (await request.get('/.well-known/oauth-authorization-server')).json()
+  const resource = await (await request.get('/.well-known/oauth-protected-resource/mcp')).json()
+  const app = await (
+    await request.post('/oauth/register', {
+      data: { client_name: 'Claude on the laptop upstairs', redirect_uris: [callback] },
+    })
+  ).json()
+  const verifier = randomBytes(32).toString('base64url')
+  const address = new URL(server.authorization_endpoint)
+  address.search = new URLSearchParams({
+    response_type: 'code',
+    client_id: app.client_id,
+    redirect_uri: callback,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    state: 'layout-guard',
+    scope: 'read write',
+    resource: resource.resource,
+  }).toString()
+  return address.toString()
+}
