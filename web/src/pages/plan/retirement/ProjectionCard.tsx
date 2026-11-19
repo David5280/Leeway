@@ -27,7 +27,7 @@ function MeterTile({ meter }: { meter: Meter }) {
             <li key={part.label} className="row-between">
               <span>{part.label}</span>
               <span>
-                <Amount cents={part.cents} /> / mo
+                <Amount cents={part.cents} flow="in" /> / mo
               </span>
             </li>
           ))}
@@ -48,12 +48,7 @@ function SavingsBand({ meter }: { meter: Meter }) {
   const description = `Savings at ${first.age}: ${money(first.mid)}. At ${last.age}: ${range(last, money)}${inMiddle}.`
   return (
     <div className="stack-sm">
-      <BandChart
-        points={meter.band}
-        label="Savings by age"
-        description={description}
-        money={money}
-      />
+      <BandChart points={meter.band} label="Savings by age" description={description} />
       {/* A key to the drawing, which shows a range rather than one promised line. */}
       <p className="small muted">Shaded: the low to high case. Line: the middle case.</p>
     </div>
@@ -74,7 +69,7 @@ export function ProjectionCard({ view }: { view: RetirementView }) {
       <p className={answer.headline ? 'small' : ''}>{answer.detail}</p>
       {answer.progress && (
         <Progress
-          label="Share of the income you want"
+          aria-label="Share of the income you want"
           percent={(answer.progress.value / answer.progress.target) * 100}
           color={answer.tone === 'good' ? 'var(--good)' : 'var(--accent)'}
         />

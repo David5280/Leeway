@@ -9,6 +9,7 @@ import {
   fakeServer,
   renderPlain,
   renderSignedIn,
+  sentence,
   settings,
   status,
   type Handlers,
@@ -253,7 +254,7 @@ describe('starting point', () => {
     const user = userEvent.setup()
     await toStartingPoint(user)
     expect(await screen.findByLabelText('Groceries budget')).toHaveValue('420')
-    expect(screen.getByText(/you average \$412/)).toBeInTheDocument()
+    expect(screen.getByText(sentence(/you average \$412/))).toBeInTheDocument()
     expect(server.actions('suggest_starter_budgets')[0]).toEqual({
       categories: [groceries, paycheck],
     })

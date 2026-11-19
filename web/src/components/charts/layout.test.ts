@@ -10,7 +10,7 @@ import {
   steadyAt,
   type Pace,
 } from './pace'
-import { barAmounts, barAxis, barLayout, barPath } from './PeriodBars'
+import { barAxis, barLayout, barPath, barPrecision } from './PeriodBars'
 
 const usd = { currency: 'USD', locale: 'en-US' }
 
@@ -167,14 +167,14 @@ describe('barLayout', () => {
   })
 })
 
-describe('barAmounts', () => {
+describe('barPrecision', () => {
   it('writes whole amounts when they fit over their bars', () => {
-    expect(barAmounts([50_000, 34_000], 70, usd)).toEqual(['$500', '$340'])
+    expect(barPrecision([50_000, 34_000], 70, usd)).toBe('whole')
   })
 
   it('shortens every amount alike when whole ones crowd, and drops them when even those do', () => {
-    expect(barAmounts([123_456, 99_999], 50, usd)).toEqual(['$1.2K', '$1K'])
-    expect(barAmounts([123_456, 99_999], 30, usd)).toEqual(['', ''])
+    expect(barPrecision([123_456, 99_999], 50, usd)).toBe('compact')
+    expect(barPrecision([123_456, 99_999], 30, usd)).toBeNull()
   })
 })
 

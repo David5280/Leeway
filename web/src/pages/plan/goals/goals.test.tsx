@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Goal } from '../../../api/client'
-import { failing, type Handlers } from '../../../test/fake'
+import { failing, sentence, type Handlers } from '../../../test/fake'
 import { account, goal, planServer, renderPlan } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -49,15 +49,17 @@ describe('Goals', () => {
     renderPlan('/plan/goals')
     const tripCard = within(await screen.findByRole('region', { name: 'Trip' }))
     expect(tripCard.getByText('$300')).toBeInTheDocument()
-    expect(tripCard.getByText('of $1,200')).toBeInTheDocument()
+    expect(tripCard.getByText(sentence('of $1,200'))).toBeInTheDocument()
     expect(tripCard.getByRole('progressbar', { name: 'Trip progress' })).toHaveAttribute(
       'aria-valuenow',
       '25',
     )
     expect(
-      tripCard.getByText('$900 to go: set aside $150 each month to reach it by Apr 30, 2027.'),
+      tripCard.getByText(
+        sentence('$900 to go: set aside $150 each month to reach it by Apr 30, 2027.'),
+      ),
     ).toBeInTheDocument()
-    expect(tripCard.getByText('$0 of $150 put aside this month.')).toBeInTheDocument()
+    expect(tripCard.getByText(sentence('$0 of $150 put aside this month.'))).toBeInTheDocument()
     expect(tripCard.getByText('Behind: nothing was put toward it lately.')).toHaveClass('warn')
     expect(tripCard.getByRole('img', { name: 'Trip timeline' })).toHaveAccessibleDescription(
       'Today is Nov 17, 2026. The goal date is Apr 30, 2027. There is no recent progress to project from.',
@@ -283,11 +285,11 @@ describe('Saving for a purchase', () => {
     renderPlan('/plan/goals')
     const card = within(await screen.findByRole('region', { name: 'Road bike' }))
     expect(card.getByText('Purchase')).toBeInTheDocument()
-    expect(card.getByText("$160 held from this month's budget")).toBeInTheDocument()
+    expect(card.getByText(sentence("$160 held from this month's budget"))).toBeInTheDocument()
     expect(
-      card.getByText('$900 to go: set aside $160 each month to buy it by Apr 30, 2027.'),
+      card.getByText(sentence('$900 to go: set aside $160 each month to buy it by Apr 30, 2027.')),
     ).toBeInTheDocument()
-    expect(card.getByText('$60 of $160 put aside this month.')).toBeInTheDocument()
+    expect(card.getByText(sentence('$60 of $160 put aside this month.'))).toBeInTheDocument()
     expect(card.getByText('On track: at your recent pace, ready by Apr 1, 2027.')).toHaveClass(
       'good',
     )

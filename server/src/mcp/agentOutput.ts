@@ -12,9 +12,11 @@
  * account number, and the bank's own name for an account sometimes ends with
  * them. Both help the owner match an account to a statement on screen, give
  * an assistant nothing to coach with, and should not leave the app. The
- * clean `name` beside them says which account it is.
+ * clean `name` beside them says which account it is. An import's file name
+ * goes too: banks name their exports by account number, as in
+ * "Chase4417_Activity20261119.CSV".
  */
-export const OWNER_ONLY_FIELDS: ReadonlySet<string> = new Set(['mask', 'bankName'])
+export const OWNER_ONLY_FIELDS: ReadonlySet<string> = new Set(['mask', 'bankName', 'fileName'])
 
 /** A tool's result as indented JSON for an agent, with every owner-only field left out. */
 export function agentJson(result: unknown): string {

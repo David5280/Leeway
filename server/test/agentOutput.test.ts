@@ -14,11 +14,14 @@ describe('agentJson', () => {
           nested: { mask: '3333', bankName: 'SAVINGS 3333', kept: 1 },
         },
       ],
+      // Banks name their exports by account number.
+      imports: [{ id: 'i', fileName: 'Chase4417_Activity20261119.CSV', rows: 3 }],
     }
     expect(JSON.parse(agentJson(result))).toEqual({
       accounts: [{ id: 'a', name: 'Chase Total Checking', nested: { kept: 1 } }],
+      imports: [{ id: 'i', rows: 3 }],
     })
-    expect(OWNER_ONLY_FIELDS).toEqual(new Set(['mask', 'bankName']))
+    expect(OWNER_ONLY_FIELDS).toEqual(new Set(['mask', 'bankName', 'fileName']))
   })
 
   it('leaves sentences as they were built', () => {

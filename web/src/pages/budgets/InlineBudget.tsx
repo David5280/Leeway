@@ -6,6 +6,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { Category } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { CADENCE_LABELS } from '../../components/CategoryForm'
+import { Money } from '../../components/design/Money'
 import { ErrorNote } from '../../components/ui'
 import { parseMoney } from '../../lib/format'
 
@@ -22,8 +23,8 @@ export function InlineBudget({
 }: {
   /** The category as stored: its own amount and cadence, before any rollover. */
   category: Category
-  /** What the row shows for the budget this period, or null for none. */
-  shown: string | null
+  /** The budget the row shows for this period, in cents, or null for none. */
+  shown: number | null
 }) {
   const [text, setText] = useState<string | null>(null)
   const update = useActionMutation('update_category')
@@ -48,12 +49,14 @@ export function InlineBudget({
       <button
         type="button"
         className="linkbtn num inline-budget"
-        aria-label={shown ? `Change ${category.name} budget` : `Set ${category.name} budget`}
+        aria-label={
+          shown !== null ? `Change ${category.name} budget` : `Set ${category.name} budget`
+        }
         onClick={() =>
           setText(category.budgetCents === null ? '' : String(category.budgetCents / 100))
         }
       >
-        {shown ?? 'Set budget'}
+        {shown === null ? 'Set budget' : <Money cents={shown} />}
       </button>
     )
   }
