@@ -134,10 +134,16 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
     ['Shell', null, 4_820, card],
     ['Corner market', 'Groceries', 4_250, checking],
   ]
+  // Spending falls in the current budget period, so "This period" lists it at
+  // any hour: a paycheck period that began today takes it all on today.
+  const { period } = await action<{ period: { start: string } }>(request, 'get_budget', {
+    offset: 0,
+  })
+  const inPeriod = (days: number) => [daysAgo(days), period.start].sort().at(-1)!
   for (const [index, [name, category, amountCents, accountId]] of spending.entries()) {
     await action(request, 'create_transaction', {
       accountId,
-      date: daysAgo(index + 1),
+      date: inPeriod(index + 1),
       name,
       amountCents,
       categoryId: category ? categoryId(category) : null,
