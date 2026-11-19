@@ -163,6 +163,26 @@ describe('PaceChart', () => {
     expect(readout()).toHaveTextContent('Nov 17$340 spentSteady pace $453')
   })
 
+  it('labels the steady pace above its line when the budget is too small to leave room below', () => {
+    fakeServer({})
+    /** How far the label sits below the point on the slope it turns about. */
+    const offset = (budgetCents: number) => {
+      const { container, unmount } = renderSignedIn(
+        <PaceChart pace={pace({ budgetCents })} isCurrent />,
+      )
+      const label = Array.from(container.querySelectorAll('text')).find(
+        (text) => text.textContent === 'Steady pace',
+      )!
+      const turn = /rotate\(\S+ \S+ (\S+)\)/.exec(label.getAttribute('transform')!)!
+      const below = Number(label.getAttribute('y')) - Number(turn[1])
+      unmount()
+      return below
+    }
+    // Heading past the budget, the label sits under the slope, clear of the projection.
+    expect(offset(80_000)).toBeGreaterThan(0)
+    expect(offset(1_000)).toBeLessThan(0)
+  })
+
   it('still draws a period with no spending and no budget', () => {
     fakeServer({})
     renderSignedIn(<PaceChart pace={pace({ cumulative: [], budgetCents: 0 })} isCurrent />)

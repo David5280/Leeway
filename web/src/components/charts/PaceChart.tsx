@@ -120,6 +120,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
             to={{ x: x(pace.days - 1), y: y(pace.budgetCents) }}
             left={left}
             right={right}
+            bottom={bottom}
             labelBelow={pace.projectedCents > pace.budgetCents}
           />
         )}
@@ -229,25 +230,29 @@ function TodayMarker({ x, top, bottom }: { x: number; top: number; bottom: numbe
 
 /**
  * The budget line, and the steady pace climbing to it, labeled along the
- * slope on whichever side the projection line is not.
+ * slope on whichever side the projection line is not. A budget so small the
+ * slope lies on the floor is labeled above it, clear of the dates.
  */
 function SteadyPace({
   from,
   to,
   left,
   right,
+  bottom,
   labelBelow,
 }: {
   from: Point
   to: Point
   left: number
   right: number
+  bottom: number
   labelBelow: boolean
 }) {
   const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
   // Two thirds along, where the actual line has usually not reached yet.
   const at = { x: from.x + (to.x - from.x) * 0.66, y: from.y + (to.y - from.y) * 0.66 }
-  const offset = labelBelow ? AXIS_FONT + 4 : -6
+  const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
+  const offset = below ? AXIS_FONT + 4 : -6
   return (
     <g aria-hidden="true">
       <line x1={left} x2={right} y1={to.y} y2={to.y} className="chart-line budget" />
