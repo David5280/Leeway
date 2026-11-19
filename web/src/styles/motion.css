@@ -1,0 +1,80 @@
+/* Motion: cards rise into place one after another as a screen loads, rings
+   and bars fill, and list rows sink a little under a finger. Only transform
+   and opacity move, so nothing reflows mid-animation. When the device asks
+   for less motion, all of it is off (the end of this file), as is the hero
+   number's count (lib/motion.ts). */
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* A screen's cards: the dashboard's widgets, Activity's days, account cards.
+   --i is each one's place, set where it is drawn, so they arrive in order. */
+.rise-in {
+  animation: rise-in var(--duration-enter) var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 8) * var(--stagger));
+}
+
+/* Rings fill from empty when they first show. */
+@keyframes ring-fill {
+  from {
+    stroke-dashoffset: var(--ring-empty);
+  }
+}
+
+.ring-fill {
+  animation: ring-fill var(--duration-count) var(--ease-out) both;
+}
+
+/* Bars grow from their start. */
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.bar-grow {
+  transform-origin: left center;
+  animation: bar-grow var(--duration-count) var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 8) * var(--stagger));
+}
+
+/* A list row sinks a little while pressed. */
+.act-row,
+.drill-item-link,
+.account-card .card-press {
+  transition:
+    transform var(--duration-quick) var(--ease-out),
+    background var(--duration-quick) var(--ease-out);
+}
+
+.act-row:active,
+.drill-item-link:active {
+  transform: scale(0.985);
+}
+
+/* Less motion: everything arrives in place at once. */
+@media (prefers-reduced-motion: reduce) {
+  .rise-in,
+  .ring-fill,
+  .bar-grow {
+    animation: none;
+  }
+
+  .card.card-tap,
+  .act-row,
+  .drill-item-link,
+  .account-card .card-press {
+    transition: none;
+  }
+
+  .card.card-tap:hover,
+  .card.card-tap:has(.card-press:active),
+  .act-row:active,
+  .drill-item-link:active {
+    transform: none;
+  }
+}
