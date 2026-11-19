@@ -3,8 +3,9 @@
 
 import type { Db } from '../db/pool.js'
 import { daysBetween, type IsoDate } from '../lib/dates.js'
-import { periodContaining } from '../lib/periods.js'
-import { accountMasks } from './accounts.js'
+import { periodContaining, type Cadence } from '../lib/periods.js'
+import { isSpendableCash } from './accountKinds.js'
+import { accountMasks, listAccounts } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
 import { detectRecurring, recentHistory } from './recurring.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -37,10 +38,20 @@ export interface CashFlow {
   perDayCents: number
 }
 
-interface Payday {
+export interface Payday {
   date: IsoDate
   source: PaydaySource
   amountCents: number | null
+  /** How often pay comes, when the pay period or a regular deposit says. */
+  cadence: Cadence | null
+}
+
+/** A paycheck budget period's frequency, as a cadence. */
+const PAY_CADENCE: Record<'weekly' | 'biweekly' | 'semimonthly' | 'monthly', Cadence> = {
+  weekly: 'week',
+  biweekly: 'biweek',
+  semimonthly: 'semimonth',
+  monthly: 'month',
 }
 
 /**
@@ -53,7 +64,12 @@ export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Pr
   // `end` is exclusive: it is already the first day of the next period.
   const nextPeriodStart = periodContaining(today, config).end
   if (config.kind === 'paycheck') {
-    return { date: nextPeriodStart, source: 'pay_period', amountCents: null }
+    return {
+      date: nextPeriodStart,
+      source: 'pay_period',
+      amountCents: null,
+      cadence: PAY_CADENCE[config.frequency],
+    }
   }
 
   const income = detectRecurring(await recentHistory(db, today), today, await accountMasks(db))
@@ -64,9 +80,10 @@ export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Pr
       date: income.nextDate,
       source: 'detected_income',
       amountCents: income.typicalAmountCents,
+      cadence: income.cadence,
     }
   }
-  return { date: nextPeriodStart, source: 'period_end', amountCents: null }
+  return { date: nextPeriodStart, source: 'period_end', amountCents: null, cadence: null }
 }
 
 /** Every unpaid bill date before payday, soonest first. */
@@ -84,12 +101,16 @@ function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] 
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name))
 }
 
+/**
+ * Money available to spend before payday: counted checking and savings
+ * accounts that are not locked up (see isSpendableCash). Available balance
+ * where the bank gives one, since it already takes out pending charges.
+ */
 async function cashOnHand(db: Db): Promise<number> {
-  const { rows } = await db.query<{ cents: number }>(
-    `SELECT coalesce(sum(coalesce(available_cents, balance_cents)), 0)::bigint AS cents
-     FROM accounts WHERE type = 'depository' AND NOT hidden`,
-  )
-  return rows[0]!.cents
+  const accounts = await listAccounts(db, false)
+  return accounts
+    .filter(isSpendableCash)
+    .reduce((sum, a) => sum + (a.availableCents ?? a.balanceCents ?? 0), 0)
 }
 
 export async function getCashFlow(db: Db, settings: Settings, today: IsoDate): Promise<CashFlow> {

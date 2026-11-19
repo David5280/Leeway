@@ -41,6 +41,7 @@ export function checkin(
     goals: [],
     debts: null,
     netWorth: { netWorthCents: 0, changeCents: 0, sinceDays: 30 },
+    savings: null,
   }
   return {
     ...base,

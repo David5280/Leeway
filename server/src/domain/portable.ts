@@ -1,6 +1,7 @@
-// Everything that makes a Leeway yours, minus bank data: settings, categories
-// and rules, as one JSON file. Use it to back up a setup, move it to a new
-// install, or share a starting point with someone else.
+// Everything that makes a Leeway yours, minus bank data: settings, categories,
+// rules and the essential spending categories, as one JSON file. Use it to back
+// up a setup, move it to a new install, or share a starting point with someone
+// else.
 
 import type pg from 'pg'
 import { z } from 'zod'
@@ -8,6 +9,7 @@ import { withTransaction, type Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { recategorize } from './categorize.js'
 import { categoryInputSchema, createCategory, listCategories } from './categories.js'
+import { currentEssentials } from './profile/income.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -17,7 +19,7 @@ import {
 } from './rules.js'
 import { getSettings, mergeSettings, saveSettings, settingsPatchSchema } from './settings.js'
 
-/** The backup file: format markers, then settings, categories and rules. */
+/** The backup file: format markers, then settings, categories, rules and essentials. */
 export const portableConfigSchema = z.object({
   app: z.literal('leeway'),
   version: z.literal(1),
@@ -34,6 +36,10 @@ export const portableConfigSchema = z.object({
         .refine(amountBoundsValid, AMOUNT_BOUNDS_MESSAGE),
     )
     .default([]),
+  // The essential spending categories, by name like the rules, since ids differ
+  // between installs. Null counts every spending category; left out keeps
+  // the current pick on a merge.
+  essentialCategories: z.array(z.string().min(1)).max(200).nullable().optional(),
 })
 
 export type PortableConfig = z.infer<typeof portableConfigSchema>
@@ -45,11 +51,14 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     listRules(db),
   ])
   const names = new Map(categories.map((c) => [c.id, c.name]))
+  const { essentialCategoryIds, ...savingsPlan } = settings.savingsPlan
+  const essentials = currentEssentials(categories, essentialCategoryIds)
   return {
     app: 'leeway',
     version: 1,
     exportedAt: new Date().toISOString(),
-    settings,
+    // Essential categories go by name below, not by this install's ids.
+    settings: { ...settings, savingsPlan },
     // Rollover counts from a day on this install, so it stays here.
     categories: categories.map(
       ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,
@@ -58,7 +67,25 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
       ...rest,
       category: names.get(categoryId)!,
     })),
+    essentialCategories: essentials && [...essentials].map((id) => names.get(id)!),
   }
+}
+
+/**
+ * The essential categories a file picks, as this install's ids, once its
+ * categories exist here. Undefined leaves the current pick alone: a merge of a
+ * file that does not say, where the categories it points at are still here.
+ * A replace always sets it, since the old ids went with the old categories.
+ */
+function essentialIdsFrom(
+  config: PortableConfig,
+  mode: 'merge' | 'replace',
+  idsByName: Map<string, string>,
+): string[] | null | undefined {
+  const names = config.essentialCategories
+  if (names === undefined) return mode === 'replace' ? null : undefined
+  if (names === null) return null
+  return names.flatMap((name) => idsByName.get(name.toLowerCase()) ?? [])
 }
 
 /**
@@ -93,7 +120,9 @@ async function applyConfig(
     await db.query('DELETE FROM rules')
     await db.query('DELETE FROM categories')
   }
-  await saveSettings(db, mergeSettings(await getSettings(db), config.settings))
+  // Ids in a file belong to the install that wrote it; essentials come by name below.
+  const { essentialCategoryIds: _ids, ...savingsPlan } = config.settings.savingsPlan ?? {}
+  await saveSettings(db, mergeSettings(await getSettings(db), { ...config.settings, savingsPlan }))
 
   const existing = new Map((await listCategories(db)).map((c) => [c.name.toLowerCase(), c.id]))
   let categoriesAdded = 0
@@ -115,6 +144,12 @@ async function applyConfig(
     if (!categoryId || current.some((r) => sameRule(r, rule))) continue
     await createRule(db, { ...rule, categoryId }, true)
     rulesAdded += 1
+  }
+
+  const essentialCategoryIds = essentialIdsFrom(config, mode, existing)
+  if (essentialCategoryIds !== undefined) {
+    const settings = await getSettings(db)
+    await saveSettings(db, mergeSettings(settings, { savingsPlan: { essentialCategoryIds } }))
   }
 
   await recategorize(db)
