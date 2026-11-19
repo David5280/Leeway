@@ -68,7 +68,7 @@ describe('transactionDisplayName', () => {
 
   it('names a merchant alone the same way, for lists of merchants', () => {
     expect(
-      merchantDisplayName({ name: 'STARBUCKS STORE 12345', merchantName: null }, UNGUARDED),
+      merchantDisplayName({ name: 'STARBUCKS #12345 DENVER CO', merchantName: null }, UNGUARDED),
     ).toBe('Starbucks')
   })
 })

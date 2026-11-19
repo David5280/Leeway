@@ -137,6 +137,39 @@ const CITY_ENDS = new Set(
   'CITY BEACH SPRINGS PARK HEIGHTS FALLS VALLEY LAKE RAPIDS ROCK HILLS GROVE CREEK'.split(' '),
 )
 
+/**
+ * Cities common on card lines, named in one word. With the words above they
+ * are the known city words: a place is taken off a short name only when it
+ * holds one, so "JERSEY MIKES NJ" keeps "Mikes".
+ */
+const CITIES = new Set(
+  (
+    'ALBUQUERQUE ANAHEIM ANCHORAGE ARLINGTON ARVADA ATLANTA AURORA AUSTIN BALTIMORE BELLEVUE ' +
+    'BERKELEY BOISE BOSTON BOULDER BROOKLYN BROOMFIELD BUFFALO CENTENNIAL CHARLOTTE CHICAGO ' +
+    'CINCINNATI CLEVELAND COLUMBUS DALLAS DENVER DETROIT DURHAM ENGLEWOOD FRESNO GOLDEN HONOLULU ' +
+    'HOUSTON INDIANAPOLIS IRVINE LAKEWOOD LITTLETON LONGMONT LOUISVILLE MANHATTAN MEMPHIS MIAMI ' +
+    'MILWAUKEE MINNEAPOLIS NASHVILLE NEWARK OAKLAND OMAHA ORLANDO PASADENA PHILADELPHIA PHOENIX ' +
+    'PITTSBURGH PORTLAND RALEIGH RICHMOND SACRAMENTO SEATTLE SPOKANE SPRINGFIELD TACOMA TAMPA ' +
+    'THORNTON TUCSON WESTMINSTER'
+  ).split(' '),
+)
+
+/**
+ * Words that say what a business does. One is never taken for a city
+ * ("GRAND CANYON RAILWAY AZ"), and a "CO" after one is the company, not
+ * Colorado ("GREAT DIVIDE BREWING CO").
+ */
+const BUSINESS_WORDS = new Set(
+  (
+    'AUTO BAKERY BAR BBQ BISTRO BOOKS BREWERY BREWING BURGERS CAFE CANDLE CHOCOLATE CLEANERS ' +
+    'CLOTHING COFFEE CREAMERY DAIRY DELI DISTILLERY DISTILLING DONUTS DRUG ELECTRIC EXPRESS FARM ' +
+    'FARMS FOOD FOODS FURNITURE GAS GOODS GRILL HARDWARE INSURANCE KITCHEN LAUNDRY LUMBER ' +
+    'MANUFACTURING MARKET MEATS MILLS MOTOR MOTORS MUSIC OIL OUTFITTERS PAPER PHARMACY PIZZA PUB ' +
+    'RAILROAD RAILWAY RANCH ROASTERS ROASTING SALOON SEAFOOD SERVICE SERVICES SHOP SPORTS STORE ' +
+    'STUDIO SUPPLY TACOS TAVERN TEA TIRE TOYS TRADING WINE'
+  ).split(' '),
+)
+
 /** Where a counterparty's name ends in a transfer line. */
 const COUNTERPARTY_END =
   /,|\s+a division of\b|\s+transaction\s*#|\s+ref\b|\s+conf\b|\s+ending in\b/i
@@ -147,7 +180,7 @@ const COUNTERPARTY_END =
  * taken for one, so "7-ELEVEN" and "76" keep their names. Digits are read in
  * any script ("٤٤١٧" is 4417) and counted across letters ("441X7").
  */
-function endsName(rawWord: string, rawNext = ''): boolean {
+function endsName(rawWord: string, rawNext = '', previous = ''): boolean {
   const word = asciiDigits(rawWord)
   const next = asciiDigits(rawNext)
   const digits = digitCount(word)
@@ -159,8 +192,10 @@ function endsName(rawWord: string, rawNext = ''): boolean {
     /^(transaction|trans|ref|conf|confirmation|trace|id|ppd|web|ccd|card|acct)\b[#:]*/i.test(word)
   )
     return true
-  // "STORE 12345": the word only says a store number follows.
-  if (/^(store|str|location)$/i.test(word) && /^#?\d+$/.test(next)) return true
+  // "STR 12345": the word only says a store number follows. "STORE" is left
+  // in, since it can be the name's own ("THE UPS STORE 1234"); its number ends the name.
+  if (/^(str|location)$/i.test(word) && /^#?\d+$/.test(next)) return true
+  if (/^(store|unit)$/i.test(previous) && /^#?\d+$/.test(word)) return true
   if (/^\d{3,}$/.test(word)) return true // plain numbers: store or terminal ids
   // Codes that mix letters and digits, like "P1A2" or "S586321456".
   return digits >= 2 && /\p{L}/u.test(word)
@@ -197,29 +232,51 @@ function trimEnds(text: string): string {
 /** The name part of a merchant line: up to the first word that ends it. */
 function namePart(text: string): string {
   const all = words(text)
-  const end = all.findIndex((word, index) => index > 0 && endsName(word, all[index + 1]))
+  const end = all.findIndex(
+    (word, index) => index > 0 && endsName(word, all[index + 1], all[index - 1]),
+  )
   return (end === -1 ? all : all.slice(0, end)).join(' ')
 }
 
 /**
  * Takes off the place a card line ends with, a city and a state code in
- * capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY BEER GARDEN". A city
- * may run to three words ("SALT LAKE CITY UT"). At least one word of the
- * name is always kept, and "SMITH & CO" keeps its "CO".
+ * capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY BEER GARDEN". The state
+ * goes whenever two or more words come before it; the city with it only when
+ * it is a known city word or two words of name are left ("JERSEY MIKES NJ"
+ * reads "JERSEY MIKES"). A line that is all place keeps its city ("SALT LAKE
+ * CITY UT" reads "SALT LAKE CITY"), and "SMITH & CO" and "BREWING CO" keep
+ * their "CO", which there means company.
  */
 function withoutPlace(text: string): string {
   const all = words(text)
-  if (all.length < 3 || !STATES.has(all.at(-1)!) || /^(&|and)$/i.test(all.at(-2)!)) return text
-  let cut = all.length - 2
-  if (!/^[\p{L}.'-]+$/u.test(all[cut]!)) return text
-  // Take in more of a city named in more than one word, keeping one word of name.
-  for (let more = 0; more < 2 && cut > 1; more++) {
-    const city = all[cut]!.toUpperCase()
-    const before = all[cut - 1]!.toUpperCase()
-    if (!CITY_ENDS.has(city) && !CITY_STARTS.has(before)) break
-    cut -= 1
+  const state = all.at(-1)!
+  if (all.length < 3 || !STATES.has(state)) return text
+  const before = all.at(-2)!.toUpperCase()
+  if (state === 'CO' && (/^(&|AND)$/.test(before) || BUSINESS_WORDS.has(before))) return text
+  const name = all.slice(0, -1)
+  return name.slice(0, name.length - cityLength(name)).join(' ')
+}
+
+/**
+ * How many words at the end of a card line's name are its city: none, or one
+ * to three ("SALT LAKE CITY"). See withoutPlace for when a city counts.
+ */
+function cityLength(name: string[]): number {
+  const upper = name.map((word) => word.toUpperCase())
+  let start = upper.length - 1
+  if (!/^[\p{L}.'-]+$/u.test(name[start]!) || BUSINESS_WORDS.has(upper[start]!)) return 0
+  // Take in more of a city named in more than one word: "FORT COLLINS", "KANSAS CITY".
+  for (let more = 0; more < 2 && start > 0; more++) {
+    if (!CITY_ENDS.has(upper[start]!) && !CITY_STARTS.has(upper[start - 1]!)) break
+    start -= 1
   }
-  return all.slice(0, cut).join(' ')
+  const city = upper.slice(start)
+  const left = start
+  if (left === 0) return 0
+  const known = city.some(
+    (word) => CITIES.has(word) || CITY_STARTS.has(word) || CITY_ENDS.has(word),
+  )
+  return known || left >= 2 ? city.length : 0
 }
 
 /**
@@ -256,9 +313,14 @@ function casePart(word: string, first: boolean): string {
   if (!first && SMALL_WORDS.has(lower)) return lower
   // A capital starts each part after a bracket, hyphen or dot ("7-Eleven",
   // "Netflix.com" keeps its ".com" low), but not after an apostrophe ("Joe's").
-  return lower.replace(/(^|[(-])(\p{L})/gu, (_match, before: string, letter: string) => {
-    return before + letter.toUpperCase()
-  })
+  return lower
+    .replace(/(^|[(-])(\p{L})/gu, (_match, before: string, letter: string) => {
+      return before + letter.toUpperCase()
+    })
+    .replace(/^(Mc|O')(\p{L}\p{L})/u, (_match, prefix: string, letters: string) => {
+      // Family names keep their second capital: "McDonald's", "O'Reilly".
+      return prefix + letters[0]!.toUpperCase() + letters.slice(1)
+    })
 }
 
 /** A name in readable case, word by word. */
@@ -271,7 +333,10 @@ export function readableName(text: string): string {
 /** "Transfer to BOK Financial" from what follows "TRANSFER TO" in a bank's line. */
 function transferName(direction: string, rest: string): string {
   const [counterparty = ''] = rest.split(COUNTERPARTY_END)
-  const name = trimEnds(withoutNumbers(namePart(counterparty)))
+  // A code before the name ("TRANSFER TO 12AB") is a reference, not who it went to.
+  const named = words(counterparty)
+  while (named.length > 0 && endsName(named[0]!)) named.shift()
+  const name = trimEnds(withoutNumbers(namePart(named.join(' '))))
   const way = direction.toLowerCase()
   return name ? `Transfer ${way} ${readableName(name)}` : 'Transfer'
 }
@@ -298,7 +363,8 @@ function merchantWords(text: string): string {
  * file for what it promises.
  */
 export function cleanMerchantName(raw: string): string {
-  const text = words(raw).join(' ')
+  // "BP#1234": a store number glued to the brand is split off, so the brand stays.
+  const text = words(raw.replace(/(\p{L})#(?=\p{N})/gu, '$1 #')).join(' ')
   if (CARD_PAYMENT.test(text)) return 'Card payment'
   const transfer = TRANSFER.exec(text)
   if (transfer) return transferName(transfer[1]!, transfer[2]!)
