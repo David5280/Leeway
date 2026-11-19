@@ -8,7 +8,12 @@ import {
   distinctAccountNames,
   type AccountNameParts,
 } from '../src/domain/accountName.js'
-import { asciiDigits, carriesMask, withoutAccountNumber } from '../src/domain/accountNumber.js'
+import {
+  asciiDigits,
+  carriesAnotherMask,
+  carriesMask,
+  withoutAccountNumber,
+} from '../src/domain/accountNumber.js'
 import { isShouted, readableCase } from '../src/domain/nameWords.js'
 
 describe('withoutAccountNumber', () => {
@@ -321,6 +326,36 @@ describe('carriesMask', () => {
     expect(carriesMask('Top 10', '7')).toBe(false)
     expect(carriesMask('Checking 4417', null)).toBe(false)
     expect(carriesMask('Checking', '4417')).toBe(false)
+  })
+})
+
+describe('carriesAnotherMask', () => {
+  it('finds a mask of digits written whole, in any form', () => {
+    expect(carriesAnotherMask('Checking 2360', '2360')).toBe(true)
+    expect(carriesAnotherMask('Checking 23 60', '2360')).toBe(true)
+    expect(carriesAnotherMask('Checking 236x0', '2360')).toBe(true)
+    expect(carriesAnotherMask('Checking ٢٣٦٠', '2360')).toBe(true)
+  })
+
+  it('finds its end only where marked as a number', () => {
+    expect(carriesAnotherMask('Checking ...360', '2360')).toBe(true)
+    expect(carriesAnotherMask('Checking #60', '2360')).toBe(true)
+    expect(carriesAnotherMask('360 Savings', '2360')).toBe(false)
+    expect(carriesAnotherMask('360 Savings', '0360')).toBe(false)
+    expect(carriesAnotherMask('Top 10 Rewards', '0010')).toBe(false)
+  })
+
+  it('finds a mask of letters and digits written whole only', () => {
+    expect(carriesAnotherMask('Checking X9Z1', 'X9Z1')).toBe(true)
+    expect(carriesAnotherMask('Checking x9-z1', 'X9Z1')).toBe(true)
+    expect(carriesAnotherMask('Card AB1x2', 'AB12')).toBe(true)
+    expect(carriesAnotherMask('Card 2AB', '12AB')).toBe(false)
+  })
+
+  it('never counts a mask of letters alone, a mask too short or none', () => {
+    expect(carriesAnotherMask('Total Checking', 'AL')).toBe(false)
+    expect(carriesAnotherMask('Checking 7', '7')).toBe(false)
+    expect(carriesAnotherMask('Checking 4417', null)).toBe(false)
   })
 })
 

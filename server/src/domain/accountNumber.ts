@@ -75,11 +75,6 @@ function digitsOf(mask: string | null): string {
   return /^\d+$/.test(key) ? key : ''
 }
 
-/** Whether a mask is digits alone, "4417", as Plaid sends them, rather than one with letters. */
-export function isDigitMask(mask: string | null): boolean {
-  return digitsOf(mask) !== ''
-}
-
 /**
  * Whether a name carries the account's mask, in any form a reader could
  * piece it back from. This is the guarantee: a name for which it is false
@@ -120,21 +115,44 @@ function joinedAtX(text: string): string {
   return text.replace(/(?<=\d)X(?=\d)/g, '')
 }
 
-/** carriesMask for a mask of digits only. */
-function carriesDigits(text: string, digits: string): boolean {
+/**
+ * Whether a name carries another account's mask, which is held to less than
+ * the account's own: its own name may hold another's mask by chance, "360
+ * SAVINGS" beside a mask of 0360, so adding an account seldom renames one.
+ * A mask of digits counts where it is written whole ("CHECKING 0360" or
+ * "441x7"), and by its end only where marked as a number ("...360" or "#60").
+ * A mask with letters and digits counts written whole, read as carriesMask
+ * reads it ("X9Z1" or "X9-Z1"). A mask of letters alone is never counted: it
+ * may be letters any word holds, and two such, NT and EY, would rule out
+ * every name Leeway falls back to.
+ */
+export function carriesAnotherMask(name: string, mask: string | null): boolean {
+  const key = maskKey(mask)
+  if (key.length < 2 || !/\d/.test(key)) return false
+  const text = asciiDigits(name).toUpperCase()
+  if (/^\d+$/.test(key)) return carriesDigits(text, key, { ownMask: false })
+  const lettersAndDigits = (read: string) => read.replace(/[^\p{L}\p{N}]+/gu, '')
+  return [text, joinedAtX(text)].some((read) => lettersAndDigits(read).includes(key))
+}
+
+/**
+ * carriesMask for a mask of digits only, or carriesAnotherMask where it is
+ * not the account's own: then an unmarked run counts only with the whole mask.
+ */
+function carriesDigits(text: string, digits: string, { ownMask = true } = {}): boolean {
   const unpadded = digits.replace(/^0+/, '')
   const digitsIn = (run: string) => run.replace(/\D/g, '')
+  const isMarked = (run: string) => /^[*•·.…#-]/.test(run.trim())
   const isWholeMask = (run: string) =>
-    run.includes(digits) || (unpadded.length >= 2 && run === unpadded)
+    run.includes(digits) || (ownMask && unpadded.length >= 2 && run === unpadded)
   const carries = (run: string) => isWholeMask(run) || (run.length >= 2 && digits.endsWith(run))
   // Read first with each x a letter, then with it joining the digits around it.
-  if (text.split(/\p{L}+/u).some((run) => carries(digitsIn(run)))) return true
+  const split = text.split(/\p{L}+/u)
+  const unmarkedCarries = ownMask ? carries : isWholeMask
+  if (split.some((run) => (isMarked(run) ? carries : unmarkedCarries)(digitsIn(run)))) return true
   return joinedAtX(text)
     .split(/\p{L}+/u)
-    .some((run) => {
-      const marked = /^[*•·.…#-]/.test(run.trim())
-      return marked ? carries(digitsIn(run)) : isWholeMask(digitsIn(run))
-    })
+    .some((run) => (isMarked(run) ? carries : isWholeMask)(digitsIn(run)))
 }
 
 /** carriesMask for a mask with letters. */

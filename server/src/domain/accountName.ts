@@ -8,7 +8,7 @@
 // the bank's text never shows the account's mask, nor another account's mask
 // of digits, as carriesMask defines it: see accountNumber.ts.
 
-import { carriesMask, isDigitMask, withoutAccountNumber } from './accountNumber.js'
+import { carriesAnotherMask, carriesMask, withoutAccountNumber } from './accountNumber.js'
 import {
   coreOf,
   isInitials,
@@ -80,12 +80,11 @@ const COMMON_BANK_WORDS = new Set([
 
 /**
  * The account's name as shown, before telling apart any that share it. A name
- * built from the bank's text shows neither the account's own mask nor any of
- * otherMasks, the masks of the owner's accounts: "OVERDRAFT PROTECTION
- * ...417" may name the checking account whose mask is 417. Of other masks,
- * only those of digits alone count, as Plaid sends them. A mask with letters
- * may be letters many words share, and two such, NT and EY, would rule out
- * both last resorts, so another account's is not checked.
+ * built from the bank's text never shows the account's own mask (see
+ * carriesMask), nor, as carriesAnotherMask reads them, any of otherMasks, the
+ * masks of the owner's other accounts: "OVERDRAFT PROTECTION ...417" may name
+ * the checking account whose mask is 417. Another account's mask of letters
+ * alone is the one kind never checked; carriesAnotherMask says why.
  */
 export function accountDisplayName(
   parts: AccountNameParts,
@@ -103,7 +102,6 @@ export function accountDisplayName(
   // the bank wrote it, gives way to one made only of the bank and the kind of
   // account, "Chase Checking", then to the kind alone, and at worst to one of
   // LAST_RESORTS, one of which never carries any.
-  const masks = [parts.mask, ...otherMasks.filter(isDigitMask)]
   const names = [
     withBank(bank, account),
     withBank(bank, kindOfAccount(parts)),
@@ -113,57 +111,77 @@ export function accountDisplayName(
     typeOfAccount(parts),
     ...LAST_RESORTS,
   ]
-  return names.find((name) => name && showsNone(name, masks))!
+  return names.find((name) => name && showsNoMask(name, parts.mask, otherMasks))!
 }
 
-/** Whether a name carries none of the masks. */
-function showsNone(name: string, masks: readonly (string | null)[]): boolean {
-  return !masks.some((mask) => carriesMask(name, mask))
+/** Whether a name shows neither the account's own mask nor another's. */
+function showsNoMask(
+  name: string,
+  ownMask: string | null,
+  otherMasks: readonly (string | null)[],
+): boolean {
+  if (carriesMask(name, ownMask)) return false
+  return !otherMasks.some((mask) => carriesAnotherMask(name, mask))
 }
 
 /**
  * Names for an account, one of which leaves out every mask it is checked
- * against: the account's own, and other accounts' masks of digits. Neither has
- * digits, so no mask of digits matches. A mask with letters matches a name
- * only by being in it or by its last two characters ending it, and the two
- * share no pair of letters side by side and end differently, "NT" and "EY".
- * So a mask like NT, which "Account" carries, never fits "Money".
+ * against. Neither has digits, so no mask of digits matches, and another
+ * account's mask is checked only when it has a digit. The account's own mask
+ * of letters matches a name only by being in it or by its last two
+ * characters ending it, and the two share no pair of letters side by side
+ * and end differently, "NT" and "EY". So a mask like NT, which "Account"
+ * carries, never fits "Money".
  */
 const LAST_RESORTS = ['Account', 'Money'] as const
+
+/** How many orders to try against every account's mask before only the account's own. */
+const ORDER_TRIES = 100
 
 /**
  * Every account's name, by id, with no two alike, whatever their case. Of
  * accounts sharing a name, the oldest keeps it and the rest are told apart by
  * their kind, "Chase Checking (Savings)", or by order within it, "(Second
  * Checking)". Never by the account number, since names leave the app, and no
- * name shows another account's mask either (see accountDisplayName). Accounts
- * must come oldest first, so adding one never renames another.
+ * name shows another account's mask either (see accountDisplayName).
+ *
+ * Accounts must come oldest first, so that adding one renames no other but
+ * one whose name shows the new account's mask: written whole, as "CHECKING
+ * 2360" for a new mask of 2360, or its end marked as a number, "...360". A
+ * name like "360 SAVINGS" stays.
  */
 export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<string, string> {
   const names = new Map<string, string>()
   const taken = new Set<string>()
   // How many accounts so far share each name and kind, so the next is "Second", "Third".
   const sharing = new Map<string, number>()
-  // Every account's mask of digits, which no name may show; each once.
-  const digitMasks = [...new Set(accounts.map((account) => account.mask).filter(isDigitMask))]
+  // Every account's mask, once each, which no other account's name may show.
+  const allMasks = [...new Set(accounts.map((account) => account.mask))]
   for (const account of accounts) {
-    const masks = [account.mask, ...digitMasks]
-    const base = accountDisplayName(account, digitMasks)
+    const otherMasks = allMasks.filter((mask) => mask !== account.mask)
+    const showsNone = (words: string) => showsNoMask(words, account.mask, otherMasks)
+    const base = accountDisplayName(account, otherMasks)
     const kinds = [kindOfAccount(account), typeOfAccount(account), ...LAST_RESORTS]
-    const kind = kinds.find((words) => showsNone(words, masks))!
+    const kind = kinds.find(showsNone)!
     const key = `${base.toLowerCase()}\n${kind}`
     let count = sharing.get(key) ?? 0
+    let tries = 0
     let name = base
     // A suffixed name can match another account's own, so step on until it is free.
     while (taken.has(name.toLowerCase())) {
       count += 1
+      tries += 1
       const suffix = count <= 1 ? kind : `${ordinal(count)} ${kind}`
       const suffixed = `${base} (${suffix})`
       // Read whole, the suffix must not show a mask, alone or run on from the
       // name: "Chase Savings (Checking)" carries the mask SC across the two.
       // The order is in words, so it adds no digits, and its words end in
       // different letters, so no one mask of letters rules out every count.
-      if (showsNone(suffixed, masks)) name = suffixed
+      // Many masks made up to match, "5S", "5T" and so on after a name ending
+      // in 5, could rule out every order, so past ORDER_TRIES only the
+      // account's own mask is checked, and the search still ends.
+      const free = tries <= ORDER_TRIES ? showsNone(suffixed) : !carriesMask(suffixed, account.mask)
+      if (free) name = suffixed
     }
     sharing.set(key, Math.max(count, 1))
     taken.add(name.toLowerCase())

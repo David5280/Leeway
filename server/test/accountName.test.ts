@@ -499,6 +499,41 @@ describe('distinctAccountNames', () => {
     expect(names.get('b')).toBe('Chase Retirement (Investment)')
   })
 
+  it("never shows another account's mask of letters and digits, written whole", () => {
+    const named = (bankName: string, otherMask: string) =>
+      distinctAccountNames([
+        account('other', { mask: otherMask }),
+        account('this', { bankName, mask: '9921', subtype: 'savings' }),
+      ]).get('this')
+    expect(named('CHECKING X9Z1', 'X9Z1')).toBe('Chase Savings')
+    expect(named('CARD 12-AB', '12AB')).toBe('Chase Savings')
+    expect(named('PLAN A1 GOLD', 'A1')).toBe('Chase Savings')
+    // Only its whole: the end of another account's mask may be any name's.
+    expect(named('CARD 2AB', '12AB')).toBe('Chase Card 2AB')
+  })
+
+  it('renames no account when another is added, unless its name shows the new mask', () => {
+    const existing = [
+      ['360 PERFORMANCE SAVINGS', '0360'],
+      ['12 MONTH CD', '8812'],
+      ['ROTH 401(K)', '1401'],
+      ['529 PLAN', '7529'],
+      ['TOP 10 REWARDS', '0010'],
+      ['LINE OF CREDIT 2025', '9025'],
+    ] as const
+    for (const [bankName, newMask] of existing) {
+      const before = [account('old', { bankName, mask: '9921' })]
+      const after = [...before, account('new', { bankName: 'NEW', mask: newMask })]
+      const name = distinctAccountNames(before).get('old')
+      expect(distinctAccountNames(after).get('old'), `${bankName} beside ${newMask}`).toBe(name)
+    }
+    // Written whole, the new mask is shown, so the name gives way.
+    const whole = [account('old', { bankName: 'CHECKING 360 PLUS', mask: '9921' })]
+    const added = [...whole, account('new', { bankName: 'NEW', mask: '360' })]
+    expect(distinctAccountNames(whole).get('old')).toBe('Chase Checking 360 Plus')
+    expect(distinctAccountNames(added).get('old')).toBe('Chase Checking')
+  })
+
   it("doesn't check another account's mask of letters alone, which many words share", () => {
     const names = distinctAccountNames([account('a'), account('b', { mask: 'AL', bankName: 'X' })])
     // TOTAL holds AL, but only the account whose mask it is avoids it.
@@ -548,6 +583,15 @@ describe('distinctAccountNames', () => {
     const names = [...distinctAccountNames(many).values()]
     expect(new Set(names).size).toBe(12)
     for (const mask of masks) expect(names.filter((name) => carriesMask(name, mask))).toEqual([])
+  })
+
+  it("still ends when other accounts' masks rule out every order", () => {
+    // Made up to match: after "Plan 5", each catches the orders starting with its letter.
+    const masks = ['5S', '5T', '5F', '5E', '5N', '5O', '5C', '9921']
+    const many = masks.map((mask, index) => account(String(index), { bankName: 'PLAN 5', mask }))
+    const names = [...distinctAccountNames(many).values()]
+    expect(new Set(names).size).toBe(masks.length)
+    names.forEach((name, index) => expect(carriesMask(name, masks[index]!)).toBe(false))
   })
 
   it('tells apart by type when the kind itself shows the mask', () => {
