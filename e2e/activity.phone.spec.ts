@@ -1,10 +1,17 @@
 // The Transactions list on a phone, upright and sideways: rows never overlap
 // each other or their day headers, nothing in a row is cut off or runs into
-// the amount, and a transaction's sheet stays clear of the notch.
+// the amount, a transaction's sheet stays clear of the notch, and everything
+// pressed in the filters and the sheet is at least a finger (--tap) tall.
 
 import { expect, test, type Page } from '@playwright/test'
 import { addAccount, addSpending, removeAccount } from './manual'
-import { overflow, simulateInsets, SIDEWAYS_INSETS, UPRIGHT_INSETS } from './phone'
+import {
+  overflow,
+  shortTargets,
+  simulateInsets,
+  SIDEWAYS_INSETS,
+  UPRIGHT_INSETS,
+} from './phone'
 
 /** An iPhone's 390 by 844 screen, upright, and the same turned sideways. */
 const UPRIGHT = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
@@ -108,6 +115,25 @@ test.describe('the Transactions list on a phone', () => {
         expect(await overflow(page)).toBeLessThanOrEqual(0)
         await page.keyboard.press('Escape')
         await expect(sheet).toHaveCount(0)
+      })
+
+      test('everything pressed is a finger tall, in the filters and the sheet', async ({
+        page,
+      }) => {
+        await page.goto('/transactions')
+        // The guard only means something where the page sees a finger.
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
+        await expect(page.getByRole('button', { name: /^Snooze, spent/ })).toBeVisible()
+        expect(await shortTargets(page, '.act-filters')).toEqual([])
+
+        await page.getByRole('button', { name: /^King Soopers, spent/ }).click()
+        const sheet = page.getByRole('dialog', { name: 'King Soopers' })
+        // Set by hand and added by hand, so every control the sheet can show is there.
+        await expect(sheet.getByRole('button', { name: 'Let rules decide again' })).toBeVisible()
+        await expect(sheet.getByRole('switch', { name: 'Leave out of totals' })).toBeVisible()
+        await expect(sheet.getByRole('button', { name: 'Delete transaction' })).toBeVisible()
+        await expect.poll(() => sheet.evaluate((element) => element.getAnimations().length)).toBe(0)
+        expect(await shortTargets(page, '.sheet')).toEqual([])
       })
     })
   }

@@ -670,22 +670,37 @@ button.chip {
 }
 
 .switch {
+  /* The button is the pressable box; the track and knob are drawn inside it, so
+     on a touch screen the box grows to --tap (design.css) and the look stays. */
+  position: relative;
   width: 48px;
   height: 28px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: none;
+  cursor: pointer;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 14px);
+  left: 0;
+  width: 48px;
+  height: 28px;
+  box-sizing: border-box;
   border-radius: 99px;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  position: relative;
-  cursor: pointer;
-  flex: none;
-  padding: 0;
 }
 
 .switch::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 4px;
+  top: calc(50% - 10px);
   width: 20px;
   height: 20px;
   border-radius: 99px;
@@ -693,7 +708,7 @@ button.chip {
   transition: transform 0.15s;
 }
 
-.switch[aria-checked='true'] {
+.switch[aria-checked='true']::before {
   background: var(--accent);
   border-color: var(--accent);
 }

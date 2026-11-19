@@ -758,6 +758,27 @@ tspan.money-neutral {
   color: var(--accent);
 }
 
+/* Touch targets ---------------------------------------------------------- */
+
+/* On a finger-sized pointer everything pressed is at least --tap tall, even
+   where a mouse is happy with less. Each keeps its look; only the box grows.
+   The Transactions search box does the same in activity.css. */
+@media (pointer: coarse) {
+  .btn,
+  .btn.small,
+  .fchip,
+  .switch {
+    min-height: var(--tap);
+  }
+
+  /* A text button in a sheet stands alone on its line, so it can grow too. */
+  .sheet button.linkbtn {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+  }
+}
+
 /* Less motion ------------------------------------------------------------ */
 
 @media (prefers-reduced-motion: reduce) {

@@ -50,6 +50,13 @@
   border-radius: var(--radius-pill);
 }
 
+/* A finger needs the full --tap, as everything pressed does (design.css). */
+@media (pointer: coarse) {
+  .act-search .input {
+    min-height: var(--tap);
+  }
+}
+
 .act-search-icon {
   position: absolute;
   top: 50%;

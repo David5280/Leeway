@@ -29,3 +29,39 @@ export async function simulateInsets(page: Page, insets: typeof UPRIGHT_INSETS):
 /** How far the page is wider than the screen; above zero means it scrolls sideways. */
 export const overflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+/** The smallest a finger target may be, as --tap in tokens.css says. */
+export const TAP_PX = 44
+
+/**
+ * Every visible control under `root` shorter than a finger, as "name: 36px",
+ * so a failure says which. A control may reach --tap with an invisible
+ * absolutely placed ::after around it (the sheet's close button does), so
+ * that margin counts toward its height.
+ */
+export function shortTargets(page: Page, root: string): Promise<string[]> {
+  return page.evaluate(
+    ({ root, tap }) => {
+      const controls = document.querySelectorAll<HTMLElement>(
+        `${root} :is(button, a[href], input, select, textarea, [role="switch"])`,
+      )
+      return [...controls].flatMap((control) => {
+        const box = control.getBoundingClientRect()
+        if (box.width === 0 && box.height === 0) return []
+        const after = getComputedStyle(control, '::after')
+        const reach =
+          after.content !== 'none' && after.position === 'absolute'
+            ? Math.max(0, -parseFloat(after.top)) + Math.max(0, -parseFloat(after.bottom))
+            : 0
+        const height = Math.round((box.height + reach) * 10) / 10
+        if (height >= tap) return []
+        const name =
+          control.getAttribute('aria-label') ??
+          control.getAttribute('placeholder') ??
+          control.textContent?.trim()
+        return [`${name}: ${height}px`]
+      })
+    },
+    { root, tap: TAP_PX },
+  )
+}
