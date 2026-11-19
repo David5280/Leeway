@@ -2,6 +2,11 @@
 -- PERA, and the plan details the owner gives for it. A bank never shows a
 -- pension's benefit, so every figure here is one the owner typed; Leeway
 -- stores no plan rules of its own.
+--
+-- Upgrading: from this version on an account may be stored with kind
+-- 'pension', which an older Leeway does not know and cannot show. Rolling
+-- back below this version needs those accounts set to another kind first:
+--   UPDATE accounts SET kind = NULL WHERE kind = 'pension';
 
 -- 'pension' joins the kinds an owner may pick for an account.
 ALTER TABLE accounts DROP CONSTRAINT accounts_kind_check;

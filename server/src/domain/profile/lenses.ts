@@ -113,13 +113,35 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
   }
 }
 
-/** Money sent from the bank into investment and retirement accounts over the last year. */
+/** Payroll deductions do not show in the bank, which is why Leeway asks for them. */
+const UNSEEN = 'Payroll deductions, like a 401(k), do not show in bank transactions.'
+
+/** What a pension takes from pay a month, and what the employer adds, as a meter; null while unknown. */
+function pensionContributions(
+  profile: FinancialProfile,
+  money: InsightFormat['money'],
+): { headline: string; detail: string } | null {
+  const { memberCents, employerCents } = profile.pensionPay
+  if (memberCents === null) return null
+  const employer =
+    employerCents === null ? '' : `, and your employer adds about ${money(employerCents)}`
+  return {
+    headline: `${money(memberCents)} a month`,
+    detail: `from your pay into your pension${employer}.`,
+  }
+}
+
+/**
+ * What goes into retirement saving: a pension's contribution from pay, as
+ * the owner entered it, and money sent from the bank into investment and
+ * retirement accounts over the last year. With a pension, it never says that
+ * nothing goes in: the pension is retirement saving.
+ */
 export function contributionsMeter(
   profile: FinancialProfile,
   { money, locale }: InsightFormat,
 ): Meter {
   const contributions = profile.savings.contributions
-  const unseen = 'Payroll deductions, like a 401(k), do not show in bank transactions.'
   const shared = {
     id: 'contributions' as const,
     question: 'What am I putting in?',
@@ -129,19 +151,29 @@ export function contributionsMeter(
     series: [],
     band: [],
   }
-  if (!contributions || contributions.totalCents.invested === 0) {
+  const invested = contributions?.totalCents.invested ?? 0
+  // Money sent from the bank, said only when some was.
+  const fromBank =
+    contributions && invested > 0
+      ? `from your bank into investment and retirement accounts since ${shortDate(contributions.since, locale)}`
+      : null
+  if (profile.retirement.hasPension) {
+    const pension = pensionContributions(profile, money)
+    const bank = fromBank ? ` Also ${money(invested)} ${fromBank}.` : ''
+    if (pension) return { ...shared, ...pension, detail: `${pension.detail}${bank}` }
+    const ask = 'Your pension contribution is not entered yet. Your paystub shows it.'
+    return fromBank
+      ? { ...shared, headline: money(invested), detail: `${fromBank}. ${ask}` }
+      : { ...shared, headline: null, detail: ask }
+  }
+  if (!fromBank) {
     return {
       ...shared,
       headline: null,
-      detail: `No transfers from your bank to investment or retirement accounts in the last year. ${unseen}`,
+      detail: `No transfers from your bank to investment or retirement accounts in the last year. ${UNSEEN}`,
     }
   }
-  const since = shortDate(contributions.since, locale)
-  return {
-    ...shared,
-    headline: money(contributions.totalCents.invested),
-    detail: `from your bank into investment and retirement accounts since ${since}. ${unseen}`,
-  }
+  return { ...shared, headline: money(invested), detail: `${fromBank}. ${UNSEEN}` }
 }
 
 /** Savings: how many months of essentials the cash covers, what it is building, and the rate. */

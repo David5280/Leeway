@@ -146,7 +146,7 @@ export interface ManualAccountRow {
   kind: AccountKind | null
 }
 
-/** Adds an account by hand: through create_account, or as a pension (retirement/pensions.ts). */
+/** Adds an account by hand: through create_account, or as a pension (retirement/pensionStore.ts). */
 export async function insertManualAccount(db: Db, row: ManualAccountRow): Promise<Account> {
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO accounts (name, type, subtype, balance_cents, credit_limit_cents, currency,

@@ -24,8 +24,11 @@ export const portableConfigSchema = z.object({
   app: z.literal('leeway'),
   version: z.literal(1),
   // Settings the file leaves out keep their current values on import. Unknown
-  // keys (from a newer Leeway, say) are dropped rather than refused.
-  settings: z.object(settingsPatchSchema.shape).default({}),
+  // keys (from a newer Leeway, say) are dropped rather than refused. The
+  // retirement assumptions are among them: a birth year, income target and
+  // contribution are the owner's own, so a file shared with someone else
+  // never carries them, and an import never sets them.
+  settings: z.object(settingsPatchSchema.omit({ retirement: true }).shape).default({}),
   categories: z.array(categoryInputSchema).default([]),
   // Rules point at categories by name so the file works on any install.
   rules: z
@@ -44,6 +47,14 @@ export const portableConfigSchema = z.object({
 
 export type PortableConfig = z.infer<typeof portableConfigSchema>
 
+/** Settings without the retirement assumptions, which never leave this install. */
+function withoutRetirement<T extends { retirement: unknown }>({
+  retirement: _retirement,
+  ...rest
+}: T): Omit<T, 'retirement'> {
+  return rest
+}
+
 export async function exportConfig(db: Db): Promise<PortableConfig & { exportedAt: string }> {
   const [settings, categories, rules] = await Promise.all([
     getSettings(db),
@@ -57,8 +68,9 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     app: 'leeway',
     version: 1,
     exportedAt: new Date().toISOString(),
-    // Essential categories go by name below, not by this install's ids.
-    settings: { ...settings, savingsPlan },
+    // Essential categories go by name below, not by this install's ids; the
+    // retirement assumptions stay on this install (see the schema above).
+    settings: { ...withoutRetirement(settings), savingsPlan },
     // Rollover counts from a day on this install, so it stays here.
     categories: categories.map(
       ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,

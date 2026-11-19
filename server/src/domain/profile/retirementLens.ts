@@ -49,6 +49,11 @@ function range(band: Band, money: InsightFormat['money']): string {
   return band.low === band.high ? money(band.mid) : `${money(band.low)} to ${money(band.high)}`
 }
 
+/** When the projection is for, in words: "at 60", or "now" for an owner past the planned age. */
+function when(projection: Projection): string {
+  return projection.yearsToGo > 0 ? `at ${projection.atAge}` : 'now'
+}
+
 /** One decimal at most: 12.5 years, 20 years. */
 const years = (value: number) => `${Math.round(value * 10) / 10} years`
 
@@ -68,9 +73,9 @@ function benefitDetail(
         ? `From the plan's formula with your figures, starting at ${startsAge}.`
         : `${money(benefit.low)} for your service so far, ${money(benefit.mid)} with ${years(details.serviceYears! + startsAge - age)} by ${startsAge}.`
   }
-  const { retirementAge } = plan.assumptions
+  const atAge = plan.projection?.atAge ?? plan.assumptions.retirementAge
   if (!pension.counted) {
-    detail += ` It starts after ${retirementAge}, so income at ${retirementAge} leaves it out.`
+    detail += ` It starts after ${atAge}, so income at ${atAge} leaves it out.`
   }
   return detail
 }
@@ -109,15 +114,41 @@ export function pensionCards(plan: RetirementPlan, format: InsightFormat): Pensi
   }))
 }
 
-/** "On track", with the range of the target it covers. */
+/** Whose income it is, in words: a pension is always named when there is one. */
+function whose(plan: RetirementPlan): string {
+  return plan.hasPension ? 'Your pension and savings' : 'Your savings'
+}
+
+/**
+ * The answer while a pension starts after the age projected: when it starts,
+ * and the income until then, with no verdict, since the pension may cover
+ * the target once it starts.
+ */
+function laterPensionAnswer(
+  projection: Projection,
+  startsAge: number,
+  money: InsightFormat['money'],
+): LensAnswer {
+  return {
+    headline: `Your pension starts at ${startsAge}`,
+    detail: `Until then, you could have ${range(projection.income.total, money)} a month ${when(projection)}, in today's dollars. Leeway counts your pension from ${startsAge}, so it gives no verdict ${when(projection)}.`,
+    tone: 'neutral',
+    progress: null,
+  }
+}
+
+/**
+ * The answer: "On track" with the share of the target covered, when Leeway
+ * can judge it; otherwise the income as figures, with no verdict.
+ */
 function onTrackAnswer(
   plan: RetirementPlan,
   projection: Projection,
   { money }: InsightFormat,
 ): LensAnswer {
-  const { coverage, onTrack, target, income } = projection
+  const { coverage, onTrack, target, income, laterPensionAge } = projection
   if (coverage && target && onTrack) {
-    const who = income.pension.mid > 0 ? 'Your pension and savings' : 'Your savings'
+    const who = whose(plan)
     return {
       headline: ON_TRACK_WORDS[onTrack],
       detail: `${who} should cover ${coverage.low}% to ${coverage.high}% of the ${money(target.monthlyCents)} a month you want, most likely about ${coverage.mid}%.`,
@@ -134,31 +165,49 @@ function onTrackAnswer(
       progress: null,
     }
   }
+  if (laterPensionAge !== null) return laterPensionAnswer(projection, laterPensionAge, money)
+  const headline = `${range(income.total, money)} a month`
+  if (plan.hasPension) {
+    return {
+      headline,
+      detail: `from your pension and savings ${when(projection)}, in today's dollars. Your pension gives about ${money(income.pension.mid)} of it.`,
+      tone: 'neutral',
+      progress: null,
+    }
+  }
   return {
-    headline: `${range(income.total, money)} a month`,
-    detail: `of income at ${projection.retirementAge}. Set a target income, or give Leeway a whole month of spending, to see whether that is enough.`,
+    headline,
+    detail: `of income ${when(projection)}. Set a target income, or give Leeway a whole month of spending, to see whether that is enough.`,
     tone: 'neutral',
     progress: null,
   }
 }
 
-/** Savings at retirement as a range, with the chart of how they get there. */
-function projectionMeter(projection: Projection, { money }: InsightFormat): Meter {
-  const { savingsAtRetirement: at, realReturns, contribution, startingSavings } = projection
+/** How savings get from today to the age projected: what goes in, and the returns. */
+function growthWords(projection: Projection, money: InsightFormat['money']): string {
+  const { realReturns, contribution, startingSavings } = projection
+  // Already at or past the planned age, savings are what is held today.
+  if (projection.yearsToGo === 0) return 'the savings you have to draw on today.'
   const adding = {
     entered: ` and ${money(contribution.monthlyCents)} a month`,
     found: ` and about ${money(contribution.monthlyCents)} a month going in`,
     none: '',
   }[contribution.source]
+  return `in today's dollars, from ${money(startingSavings.totalCents)} now${adding}, with returns of ${realReturns.low}% to ${realReturns.high}% after inflation.`
+}
+
+/** Savings at the age projected as a range, with the chart of how they get there. */
+function projectionMeter(projection: Projection, { money }: InsightFormat): Meter {
+  const { savingsAtRetirement: at, startingSavings } = projection
   const cash =
     startingSavings.cashCents > 0
       ? ` That counts ${money(startingSavings.cashCents)} of cash beyond your emergency fund.`
       : ''
   return {
     id: 'projection',
-    question: `Savings at ${projection.retirementAge}`,
+    question: projection.yearsToGo > 0 ? `Savings at ${projection.atAge}` : 'Savings now',
     headline: range(at, money),
-    detail: `in today's dollars, from ${money(startingSavings.totalCents)} now${adding}, with returns of ${realReturns.low}% to ${realReturns.high}% after inflation.${cash}`,
+    detail: `${growthWords(projection, money)}${cash}`,
     tone: 'neutral',
     progress: null,
     parts: [],
@@ -167,26 +216,33 @@ function projectionMeter(projection: Projection, { money }: InsightFormat): Mete
   }
 }
 
-/** Monthly income at retirement, from pensions and savings, against the target. */
 /**
- * What the income range is measured against. A pension with no benefit entered
- * yet adds nothing to the range, so that comes first: a comparison with the
- * target would then read as a shortfall the pension may well cover.
+ * What the income range is measured against. A pension with no benefit
+ * entered yet, or one that starts later, adds nothing to the range, so that
+ * comes first: a comparison with the target would then read as a shortfall
+ * the pension may well cover. With a pension, the target is named only once
+ * the income meets it.
  */
 function incomeAgainst(
   plan: RetirementPlan,
   projection: Projection,
   money: InsightFormat['money'],
 ): string {
-  const { income, target } = projection
+  const { income, target, laterPensionAge } = projection
   if (plan.pensionsWithoutBenefit > 0) {
     return 'A pension counts here once its monthly benefit is entered.'
   }
-  if (!target) return 'Set a target income to compare against.'
-  if (income.pension.mid > 0) {
-    const share = Math.round((income.pension.mid / target.monthlyCents) * 100)
-    return `Your pension alone covers about ${share}% of your ${money(target.monthlyCents)} target.`
+  if (laterPensionAge !== null) {
+    return `Your pension starts at ${laterPensionAge} and is not in this figure.`
   }
+  if (plan.hasPension) {
+    const pension = `Your pension gives about ${money(income.pension.mid)} of it`
+    const met = target && projection.onTrack
+    return met
+      ? `${pension}, and the ${money(target.monthlyCents)} you want is met.`
+      : `${pension}.`
+  }
+  if (!target) return 'Set a target income to compare against.'
   const from = target.source === 'spending' ? ', your recent spending' : ''
   return `Your target is ${money(target.monthlyCents)} a month${from}.`
 }
@@ -205,10 +261,12 @@ function incomeMeter(
       cents: income.savings.mid,
     },
   ]
-  const compared = target !== null && plan.pensionsWithoutBenefit === 0
+  // A bar only where Leeway gives a verdict, so it never shows a shortfall it would not say.
+  const compared = target !== null && projection.coverage !== null
   return {
     id: 'retirement_income',
-    question: `Monthly income at ${projection.retirementAge}`,
+    question:
+      projection.yearsToGo > 0 ? `Monthly income at ${projection.atAge}` : 'Monthly income now',
     headline: range(income.total, money),
     detail: `most likely about ${money(income.total.mid)}. ${incomeAgainst(plan, projection, money)}`,
     tone: 'neutral',

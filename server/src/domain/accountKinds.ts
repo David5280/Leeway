@@ -67,7 +67,6 @@ const RETIREMENT_SUBTYPES = new Set([
   'lrif',
   'lrsp',
   'other annuity',
-  'pension',
   'prif',
   'profit sharing plan',
   'retirement',
@@ -83,6 +82,11 @@ const RETIREMENT_SUBTYPES = new Set([
   'thrift savings plan',
   'variable annuity',
 ])
+
+// A defined-benefit pension, as Plaid calls one. It pays a benefit rather than
+// holding a balance to draw on, so it is a pension, never retirement savings
+// (retirement/pensions.ts), and the owner can enter its plan there.
+const PENSION_SUBTYPE = 'pension'
 
 // Investment-type subtypes that hold nothing to invest or withdraw:
 // insurance policies and reimbursement plans.
@@ -103,7 +107,10 @@ const HEALTH_SAVINGS_SUBTYPE = 'hsa'
 
 // Account names that say "retirement" when the bank's subtype does not, such
 // as a Rollover IRA reported with subtype "other". Matched as whole words.
-const RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|ira|roth|rollover|pension)\b/i
+const RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|ira|roth|rollover)\b/i
+
+// The same for a pension, such as "PERA Defined Benefit Pension".
+const PENSION_NAME = /\bpension\b/i
 
 // The same for a bank account, read more strictly, since a bank account named
 // for retirement is rare and an ordinary one named after a person is not:
@@ -128,6 +135,15 @@ export interface ClassifiableAccount {
   bankName: string
 }
 
+/**
+ * An investment account whose subtype Leeway does not know, or that has none:
+ * a pension or retirement account when its name says so, otherwise investing.
+ */
+function investmentKindByName(bankName: string): AccountKind {
+  if (PENSION_NAME.test(bankName)) return 'pension'
+  return RETIREMENT_NAME.test(bankName) ? 'retirement' : 'investment'
+}
+
 /** The kind an account is by its type, subtype and name alone. */
 export function automaticKind({ type, subtype, bankName }: ClassifiableAccount): AccountKind {
   const sub = subtype?.trim().toLowerCase() ?? ''
@@ -143,11 +159,10 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
       if (sub !== 'checking' && bankNameSaysRetirement(bankName)) return 'retirement'
       return SAVINGS_SUBTYPES.has(sub) ? 'savings' : 'checking'
     case 'investment':
+      if (sub === PENSION_SUBTYPE) return 'pension'
       if (RETIREMENT_SUBTYPES.has(sub)) return 'retirement'
       if (NOT_INVESTED_SUBTYPES.has(sub)) return 'other'
-      // A subtype Leeway knows (brokerage, 529, crypto exchange...) is investing;
-      // an unknown or missing one may still be retirement, judging by its name.
-      return RETIREMENT_NAME.test(bankName) ? 'retirement' : 'investment'
+      return investmentKindByName(bankName)
     default:
       return 'other'
   }

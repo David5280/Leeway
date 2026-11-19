@@ -3,12 +3,12 @@
 // working, returns, inflation, how fast savings are drawn, what they add each
 // month and the income they want. Saved to settings.
 
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
 import { Card, ErrorNote, Setting } from '../../../components/ui'
 import { assumptionsText, readAssumptions, type Assumptions, type AssumptionsText } from './fields'
 
-/** Each field: its label, a hint, and the input's width. */
+/** Each field: its label and a hint. */
 const FIELDS: { key: keyof AssumptionsText; label: string; hint: string }[] = [
   { key: 'birthYear', label: 'Birth year', hint: 'Projections start from your age' },
   { key: 'retirementAge', label: 'Retire at', hint: 'The age you want to stop working' },
@@ -35,6 +35,33 @@ const FIELDS: { key: keyof AssumptionsText; label: string; hint: string }[] = [
   },
 ]
 
+/** One assumption: its input, with the hint read out beside the label. */
+function AssumptionField({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const hintId = useId()
+  return (
+    <Setting label={label} hint={hint} hintId={hintId}>
+      <input
+        className="input num figure"
+        inputMode="decimal"
+        aria-label={label}
+        aria-describedby={hintId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Setting>
+  )
+}
+
 export function AssumptionsCard({ assumptions }: { assumptions: Assumptions }) {
   const save = useActionMutation('update_settings')
   const [text, setText] = useState<AssumptionsText>(() => assumptionsText(assumptions))
@@ -54,21 +81,22 @@ export function AssumptionsCard({ assumptions }: { assumptions: Assumptions }) {
       <h2>Your assumptions</h2>
       <form className="stack" onSubmit={submit} aria-label="Retirement assumptions">
         {FIELDS.map(({ key, label, hint }) => (
-          <Setting key={key} label={label} hint={hint}>
-            <input
-              className="input num"
-              style={{ width: 130 }}
-              inputMode="decimal"
-              aria-label={label}
-              value={text[key]}
-              onChange={(e) => {
-                setSaved(false)
-                setText((current) => ({ ...current, [key]: e.target.value }))
-              }}
-            />
-          </Setting>
+          <AssumptionField
+            key={key}
+            label={label}
+            hint={hint}
+            value={text[key]}
+            onChange={(value) => {
+              setSaved(false)
+              setText((current) => ({ ...current, [key]: value }))
+            }}
+          />
         ))}
-        {problem && <p className="notice error">{problem}</p>}
+        {problem && (
+          <p className="notice error" role="alert">
+            {problem}
+          </p>
+        )}
         <ErrorNote error={save.error} />
         <div className="row wrap">
           <button type="submit" className="btn primary" disabled={save.isPending}>

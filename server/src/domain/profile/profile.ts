@@ -29,11 +29,8 @@ import { ACCOUNT_KINDS, KIND_INFO, type AccountKind, type SavingsKind } from '..
 import { listAccounts, type Account } from '../accounts.js'
 import { listBills } from '../bills.js'
 import { listGoals, type Goal } from '../goals.js'
-import {
-  pensionMonthlyTotals,
-  pensionsOf,
-  type PensionMonthlyTotals,
-} from '../retirement/pensions.js'
+import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
+import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
 import { savingsRate, type SavingSource, type SavingsRate } from '../savings/rate.js'
