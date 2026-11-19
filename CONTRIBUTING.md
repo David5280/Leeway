@@ -177,6 +177,10 @@ summary switch, the weekly email settings, an assistant connecting through
 the consent screen, and a phone-sized screen.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
+The test server runs with no Anthropic key, so no browser test can reach a
+model. The paystub specs stand in for the reader at the network
+(`e2e/paystub.ts` answers the upload and tells `get_paystub` the server can
+read); saving and everything after it runs for real.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set
