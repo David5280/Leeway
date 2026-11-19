@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, Budget, CategoryBudget, Connection, SpendingPace } from '../api/client'
 import { settingsSchema } from '../../../server/src/domain/settings'
@@ -409,9 +410,62 @@ describe('AlertsWidget', () => {
     const server = fakeServer({}, failing('list_connections', 'Could not read banks'))
     const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }])
     renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
-    // The banks and the account alerts are both asked for; neither answers.
-    await waitFor(() => expect(server.calls).toHaveLength(2))
+    // The banks, the account alerts and AI usage are each asked for; none answers.
+    await waitFor(() => expect(server.calls).toHaveLength(3))
     expect(region()).toHaveTextContent('Dining out is over budget by $40')
+  })
+})
+
+describe('AlertsWidget and the AI spending alert', () => {
+  const region = () => screen.getByRole('region', { name: 'Heads up' })
+  const limit = {
+    level: 'limit',
+    message: "This month's AI limit of $5.00 is reached.",
+  }
+
+  /** AI usage with an alert, until it is dismissed. */
+  function serveAlert(alert = limit) {
+    let shown: typeof limit | null = alert
+    return fakeServer({
+      list_connections: () => [],
+      get_ai_usage: () => ({ alert: shown }),
+      dismiss_ai_alert: () => {
+        shown = null
+        return { dismissed: true }
+      },
+    })
+  }
+
+  it('shows the alert last, with a way to AI models, in place of "nothing needs you"', async () => {
+    serveAlert()
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    expect(await within(region()).findByText(/AI limit of \$5.00 is reached/)).toBeInTheDocument()
+    expect(region()).not.toHaveTextContent('Nothing needs you')
+    expect(within(region()).getByRole('link', { name: 'AI models' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+  })
+
+  it('shows the warning as information, after the other alerts', async () => {
+    serveAlert({ level: 'warning', message: "AI has spent $4.10 of this month's $5.00 limit." })
+    const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }])
+    renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
+    const warning = await within(region()).findByText(/AI has spent/)
+    expect(region().textContent!.indexOf('Dining out')).toBeLessThan(
+      region().textContent!.indexOf('AI has spent'),
+    )
+    expect(warning.closest('.alert-row')!.querySelector('.alert-icon.info')).not.toBeNull()
+  })
+
+  it('dismisses the alert through the owner-only action', async () => {
+    const server = serveAlert()
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Dismiss the AI spending alert' }),
+    )
+    await waitFor(() => expect(server.actions('dismiss_ai_alert')).toEqual([{}]))
+    expect(await within(region()).findByText(/Nothing needs you/)).toBeInTheDocument()
   })
 })
 
