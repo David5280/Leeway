@@ -5,6 +5,7 @@
 
 import { createHash } from 'node:crypto'
 import { ReaderError, type DocumentReader } from '../../ai/documents.js'
+import { AiLimitError } from '../ai/gateway.js'
 import { AppError } from '../../errors.js'
 import { AttemptLimiter } from '../../lib/attemptLimiter.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../lib/time.js'
@@ -139,23 +140,25 @@ export class PaystubReader {
     this.checkNotPaused()
     // Recorded before the count, so counting can't be used to call the API without limit.
     this.limiter.record()
-    await this.checkLength(file, log)
+    const inputTokens = await this.checkLength(file, log)
     try {
-      const { reading, usage } = await this.reader.readPaystub(file)
+      const { reading, usage } = await this.reader.readPaystub(file, inputTokens)
       log.info({ reader: this.reader.name, ...usage }, 'paystub read')
       const extraction = extractionFrom(reading)
       return reading.isPaystub && foundAnything(extraction) ? extraction : null
     } catch (error) {
       if (error instanceof ReaderError) throw new AppError('reader_error', error.message)
+      if (error instanceof AiLimitError) throw new AppError('ai_limit', error.message)
       throw error
     }
   }
 
   /**
-   * Refuses a file whose read would send more than MAX_PAYSTUB_INPUT_TOKENS.
-   * Fails closed: when the count can't be had, the file is not sent.
+   * The input tokens a read of the file would send, refusing a file over
+   * MAX_PAYSTUB_INPUT_TOKENS. Fails closed: when the count can't be had, the
+   * file is not sent.
    */
-  private async checkLength(file: PaystubFile, log: UsageLog): Promise<void> {
+  private async checkLength(file: PaystubFile, log: UsageLog): Promise<number> {
     let inputTokens: number
     try {
       inputTokens = await this.reader.countPaystubTokens(file)
@@ -164,7 +167,7 @@ export class PaystubReader {
       throw new AppError('reader_error', message)
     }
     // Written so a count that is not a number refuses too.
-    if (inputTokens <= MAX_PAYSTUB_INPUT_TOKENS) return
+    if (inputTokens <= MAX_PAYSTUB_INPUT_TOKENS) return inputTokens
     log.info({ reader: this.reader.name, inputTokens }, 'paystub too long')
     throw new AppError('file_too_large', TOO_LONG)
   }

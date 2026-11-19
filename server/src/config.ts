@@ -1,6 +1,7 @@
 // Configuration from environment variables, read and checked once at startup.
 
 import { z } from 'zod'
+import type { AiJob } from './ai/jobs.js'
 import type { ProxyTrust } from './http/proxyTrust.js'
 
 /** An email address with no spaces or angle brackets in it. */
@@ -21,19 +22,6 @@ const ENCRYPTION_KEY_HELP =
   'set it to 64 hex characters (generate one with: openssl rand -hex 32), and keep a copy somewhere safe'
 const ADDRESS_HELP =
   'set it to a full web address, like https://leeway.example.com, or leave it empty'
-/**
- * The summary is a few short sentences a day, so a small, low-cost model is
- * plenty and keeps the Anthropic bill to cents a month. Owners can pick a
- * larger model with SUMMARY_MODEL.
- */
-export const DEFAULT_SUMMARY_MODEL = 'claude-haiku-5-5'
-
-/**
- * Reading a paystub is one short extraction per upload, which a small model
- * does well. Owners can pick another with PAYSTUB_MODEL.
- */
-export const DEFAULT_PAYSTUB_MODEL = 'claude-haiku-5-5'
-
 const PROXY_HELP = 'set it to the number of proxies in front of Leeway, like 1, or leave it empty'
 
 /**
@@ -84,8 +72,9 @@ const envSchema = z.object({
     .enum(['true', 'false'], { error: 'set it to true or false, or leave it empty' })
     .optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  SUMMARY_MODEL: z.string().default(DEFAULT_SUMMARY_MODEL),
-  PAYSTUB_MODEL: z.string().default(DEFAULT_PAYSTUB_MODEL),
+  // Each fixes one job's model, over the owner's pick in Settings (ai/jobs.ts).
+  SUMMARY_MODEL: z.string().optional(),
+  PAYSTUB_MODEL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z
     .string()
@@ -123,10 +112,6 @@ export interface PlaidConfig {
 
 export interface AnthropicConfig {
   apiKey: string
-  /** The Claude model that writes the dashboard summary. */
-  model: string
-  /** The Claude model that reads an uploaded paystub. */
-  paystubModel: string
 }
 
 export interface MailConfig {
@@ -159,6 +144,11 @@ export interface Config {
    * words, and paystub import is turned off.
    */
   anthropic: AnthropicConfig | null
+  /**
+   * A model fixed for a job by SUMMARY_MODEL or PAYSTUB_MODEL, over the
+   * owner's pick in Settings; null where the variable is not set.
+   */
+  modelOverrides: Record<AiJob, string | null>
   /** Null until RESEND_API_KEY and MAIL_FROM are both set; the weekly email is then unavailable. */
   mail: MailConfig | null
 }
@@ -206,7 +196,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 /** The outside services Leeway can use, each null until all of its keys are set. */
 function optionalServices(
   e: z.infer<typeof envSchema>,
-): Pick<Config, 'plaid' | 'anthropic' | 'mail'> {
+): Pick<Config, 'plaid' | 'anthropic' | 'modelOverrides' | 'mail'> {
   const plaid =
     e.PLAID_CLIENT_ID && e.PLAID_SECRET
       ? {
@@ -219,9 +209,8 @@ function optionalServices(
       : null
   return {
     plaid,
-    anthropic: e.ANTHROPIC_API_KEY
-      ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL, paystubModel: e.PAYSTUB_MODEL }
-      : null,
+    anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY } : null,
+    modelOverrides: { summary: e.SUMMARY_MODEL ?? null, paystub: e.PAYSTUB_MODEL ?? null },
     mail: e.RESEND_API_KEY && e.MAIL_FROM ? { apiKey: e.RESEND_API_KEY, from: e.MAIL_FROM } : null,
   }
 }

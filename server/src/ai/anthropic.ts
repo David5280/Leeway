@@ -1,75 +1,121 @@
-// Writes the dashboard summary with Claude, through Anthropic's official SDK.
-// Only used when the owner turns it on and sets ANTHROPIC_API_KEY themselves.
+// Claude, through Anthropic's official SDK: the one AI provider today. Only
+// used when the owner sets ANTHROPIC_API_KEY themselves. It sends what a job
+// asks with the model the usage layer chose, and reports the tokens billed.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { z } from 'zod'
-import { MAX_POINTS, type SummaryFacts, type SummaryText } from '../domain/summaryText.js'
-import type { AnthropicConfig } from '../config.js'
 import { MINUTE_MS } from '../lib/time.js'
-import type { SummaryWriter } from './writer.js'
+import {
+  AiProviderError,
+  type AiContent,
+  type AiProvider,
+  type AiReply,
+  type AiRequest,
+  type AiStop,
+} from './provider.js'
 
-/** The part of the SDK client this writer uses, so tests can pass a fake. */
+/** The part of the SDK client this provider uses, so tests can pass a fake. */
 export type MessagesClient = Pick<Anthropic, 'messages'>
 
-/** The shape Claude is asked for. Lengths are checked after, in `checked`. */
-const outputShape = z.object({
-  headline: z.string(),
-  points: z.array(z.string()),
-})
+/** One part of a request as the Messages API takes it. */
+function blockOf(
+  part: AiContent,
+): Anthropic.TextBlockParam | Anthropic.DocumentBlockParam | Anthropic.ImageBlockParam {
+  if (part.type === 'text') return { type: 'text', text: part.text }
+  const data = part.data.toString('base64')
+  if (part.mediaType === 'application/pdf') {
+    return { type: 'document', source: { type: 'base64', media_type: part.mediaType, data } }
+  }
+  return { type: 'image', source: { type: 'base64', media_type: part.mediaType, data } }
+}
 
-/** What the dashboard accepts: one short headline and one to four short points. */
-const checked = z.object({
-  headline: z.string().trim().min(1).max(160),
-  points: z.array(z.string().trim().min(1).max(240)).min(1).max(MAX_POINTS),
-})
+/** Why Claude stopped, in the provider's own words. */
+function stopOf(reason: Anthropic.StopReason | null): AiStop {
+  if (reason === 'refusal') return 'refused'
+  if (reason === 'max_tokens') return 'cut_off'
+  return 'done'
+}
 
-export const SYSTEM_PROMPT = `You write the short summary at the top of a personal budgeting dashboard, for the person whose money it is. They glance at it to learn how their money is doing and whether anything needs them.
+/**
+ * An SDK failure as the kind of failure it is. The SDK's own message is never
+ * passed on, since it may quote the request. Most specific first: a
+ * connection error is also an APIError.
+ */
+export function failureFrom(error: unknown): AiProviderError {
+  if (
+    error instanceof Anthropic.AuthenticationError ||
+    error instanceof Anthropic.PermissionDeniedError
+  ) {
+    return new AiProviderError('key')
+  }
+  if (error instanceof Anthropic.RateLimitError) return new AiProviderError('busy')
+  if (error instanceof Anthropic.ContentTooLargeError) return new AiProviderError('too_large')
+  if (error instanceof Anthropic.BadRequestError) return new AiProviderError('bad_request')
+  if (error instanceof Anthropic.APIConnectionError) return new AiProviderError('unreachable')
+  return new AiProviderError('failed')
+}
 
-Write a headline: one sentence, at most 15 words, on how this budget period is going.
-Then write 2 to 4 points, most useful first, each one sentence of at most 20 words.
-
-Use only the facts you are given, and copy amounts and dates exactly as written. Do not guess at causes the facts do not show. Speak to the person as "you", warmly and plainly, like a sharp friend who is good with money. Lead with anything that needs them today. When fixedHeadline is set, use it as the headline word for word, and do not repeat it in the points. When things are fine, say so briefly. The heads-up messages are written for an assistant, so put them in your own words for the person, and never mention tools. Payroll deductions such as a 401(k) never show in the bank, and a pension counts only once the person enters it, so the facts may leave out saving that happens, and a pension is retirement saving in itself. Never say or imply that the person saves too little or should save more, or that they are behind on saving for retirement. Do not use dashes as punctuation.`
-
-/** Thinking always runs on this model; low effort keeps a short summary quick and cheap. */
-const EFFORT = 'low'
-/** Room for the model's thinking as well as the few sentences it returns. */
-const MAX_TOKENS = 4000
-
-export class AnthropicSummaryWriter implements SummaryWriter {
+/**
+ * Prompt caching is left off on purpose. Leeway's jobs are a few calls a day,
+ * hours apart, while a cached prompt lives five minutes, so a cache write
+ * (1.25 times the input price) would almost never be read back. Leeway caches
+ * whole answers instead: the summary per day, a paystub by its file. Cache
+ * tokens are still recorded and priced, for a future job that turns it on.
+ */
+export class AnthropicProvider implements AiProvider {
   readonly name = 'Claude'
   private readonly client: MessagesClient
 
   constructor(
-    private readonly config: AnthropicConfig,
-    // One retry and a minute's wait: the dashboard falls back to Leeway's own words.
-    client: MessagesClient = new Anthropic({
-      apiKey: config.apiKey,
-      maxRetries: 1,
-      timeout: MINUTE_MS,
-    }),
+    apiKey: string,
+    // One retry and a minute's wait: every job falls back or lets the owner try again.
+    client: MessagesClient = new Anthropic({ apiKey, maxRetries: 1, timeout: MINUTE_MS }),
   ) {
     this.client = client
   }
 
-  async write(facts: SummaryFacts): Promise<SummaryText> {
-    const response = await this.client.messages.parse({
-      model: this.config.model,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Today's facts, as JSON:\n${JSON.stringify(facts, null, 2)}`,
+  async send(request: AiRequest): Promise<AiReply> {
+    try {
+      const response = await this.client.messages.parse({
+        ...this.params(request),
+        max_tokens: request.maxTokens,
+      })
+      const usage = response.usage
+      return {
+        stop: stopOf(response.stop_reason),
+        output: response.parsed_output ?? null,
+        usage: {
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+          cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
         },
-      ],
-      output_config: { effort: EFFORT, format: zodOutputFormat(outputShape) },
-    })
-    if (response.stop_reason === 'refusal') throw new Error('Claude declined to write a summary')
-    if (response.stop_reason === 'max_tokens') throw new Error('The summary was cut off')
-    const result = checked.safeParse(response.parsed_output)
-    if (!result.success) throw new Error('The summary came back in an unexpected shape')
-    // An urgent account alert always leads, whatever the model wrote.
-    return { ...result.data, headline: facts.fixedHeadline ?? result.data.headline }
+      }
+    } catch (error) {
+      throw failureFrom(error)
+    }
+  }
+
+  async count(request: AiRequest): Promise<number> {
+    try {
+      const { input_tokens } = await this.client.messages.countTokens(this.params(request))
+      return input_tokens
+    } catch (error) {
+      throw failureFrom(error)
+    }
+  }
+
+  /**
+   * What a request sends, shared by send and count so a count can't miss a
+   * token. Thinking is left at the model's default, adaptive on every model
+   * Leeway offers, and its depth is set by the effort.
+   */
+  private params(request: AiRequest) {
+    return {
+      model: request.model,
+      system: request.system,
+      messages: [{ role: 'user', content: request.content.map(blockOf) }],
+      output_config: { effort: request.effort, format: zodOutputFormat(request.format) },
+    } satisfies Anthropic.MessageCountTokensParams
   }
 }

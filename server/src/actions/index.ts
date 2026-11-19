@@ -9,6 +9,7 @@ import {
   summarizeAccountsAction,
   updateAccountAction,
 } from './accounts.js'
+import { dismissAiAlertAction, getAiUsageAction, setAiLimitAction, setAiModelAction } from './ai.js'
 import {
   createBillAction,
   deleteBillAction,
@@ -112,6 +113,10 @@ export const actionList = [
   getSettingsAction,
   updateSettingsAction,
   setAiSummaryAction,
+  getAiUsageAction,
+  setAiModelAction,
+  setAiLimitAction,
+  dismissAiAlertAction,
   getWeeklyEmailAction,
   setWeeklyEmailAction,
   sendTestWeeklyEmailAction,

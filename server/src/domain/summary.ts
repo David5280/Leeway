@@ -8,6 +8,7 @@ import { messageOf } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { formatWholeCents } from '../lib/money.js'
 import { HOUR_MS, MINUTE_MS } from '../lib/time.js'
+import { AiLimitError } from './ai/gateway.js'
 import { getCheckin } from './checkin.js'
 import type { Settings } from './settings.js'
 import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from './summaryText.js'
@@ -15,9 +16,10 @@ import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from 
 /**
  * Where the AI summary stands, so the app can explain what it shows:
  * off (the owner has not turned it on), no_key (turned on, but the server has
- * no Anthropic key), on, or unavailable (writing failed; Leeway's words show).
+ * no Anthropic key), on, unavailable (writing failed; Leeway's words show),
+ * or limit (the monthly AI limit is reached; Leeway's words show until it resets).
  */
-export type AiSummaryState = 'off' | 'no_key' | 'on' | 'unavailable'
+export type AiSummaryState = 'off' | 'no_key' | 'on' | 'unavailable' | 'limit'
 
 export interface Summary extends SummaryText {
   /** "Leeway" for its own words, else the writer's name, like "Claude". */
@@ -25,6 +27,8 @@ export interface Summary extends SummaryText {
   /** When the words were written: now for Leeway's, earlier for a saved one. */
   writtenAt: string
   ai: AiSummaryState
+  /** When the monthly AI limit resets, for the limit state; absent otherwise. */
+  limitResetsOn?: IsoDate
 }
 
 /** A saved summary is reused for this long even after the numbers move. */
@@ -102,6 +106,9 @@ export async function getSummary(
     await saveSummary(ctx, today, factsHash, { text })
     return { ...text, writtenBy: writer.name, writtenAt: now.toISOString(), ai: 'on' }
   } catch (error) {
+    // Nothing is saved for the limit: a check costs nothing, so the summary
+    // comes back as soon as the owner raises the limit or the month turns.
+    if (error instanceof AiLimitError) return { ...own('limit'), limitResetsOn: error.resetsOn }
     await saveSummary(ctx, today, factsHash, { error: messageOf(error) })
     return own('unavailable')
   }
