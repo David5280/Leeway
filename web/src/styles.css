@@ -1441,6 +1441,20 @@ details.more[open] summary {
   .cat-bar:empty {
     display: block;
   }
+
+  /* The home widget's rows share the list's columns, so every bar starts and
+     ends in the same place, however long one row's status. The figures
+     column is as wide as the widest row's figures needs. */
+  .cat-rows:has(> .cat-row-wrap) {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(90px, 1.5fr) minmax(200px, auto);
+    column-gap: 16px;
+  }
+
+  .cat-rows > .cat-row-wrap {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
 }
 
 /* Charts: SVG drawn at its real width, so text keeps its size (components/charts). */
