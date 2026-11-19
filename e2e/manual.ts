@@ -49,3 +49,10 @@ export async function addSpending(
   await form.getByRole('button', { name: 'Add' }).click()
   await expect(page.getByRole('dialog', { name: 'Add a transaction' })).toHaveCount(0)
 }
+
+/** Calls one of Leeway's actions as the signed-in owner. */
+export async function action<T>(page: Page, name: string, input: object = {}): Promise<T> {
+  const response = await page.request.post(`/api/actions/${name}`, { data: input })
+  expect(response.ok(), name).toBe(true)
+  return ((await response.json()) as { result: T }).result
+}

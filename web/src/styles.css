@@ -1338,6 +1338,50 @@ details.more[open] summary {
   font-size: 14px;
 }
 
+/* A home widget row keeps room for its name, five letters or so at the
+   least, however long its status: the figures wrap instead. */
+.cat-row-wrap {
+  grid-template-columns: minmax(min(7em, 50%), 1fr) minmax(0, auto);
+}
+
+/* The home widget's figures: the amounts, a dot, then the status, which
+   wraps under the amounts when the row is too narrow for both. A wrapped dot
+   would end the first line, so the items reach one dot's width past the
+   figures, which clip that strip: the dot falls in it, while the status
+   keeps clear of it by the same width. */
+.cat-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.cat-summary-items {
+  --cat-sep: 0.9em;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  row-gap: 2px;
+  margin-right: calc(-1 * var(--cat-sep));
+}
+
+.cat-amounts {
+  white-space: nowrap;
+}
+
+.cat-sep {
+  flex: none;
+  inline-size: var(--cat-sep);
+  text-align: center;
+}
+
+/* A status too long even for a line of its own wraps within it. */
+.cat-status {
+  min-width: 0;
+  margin-right: var(--cat-sep);
+  text-align: right;
+}
+
 /* A Budgets screen row: the same grid, plus a line of plain words under it. */
 .cat-row.budget-row {
   grid-template-areas:

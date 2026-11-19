@@ -1,9 +1,11 @@
 // Long names stay inside a phone screen: a long category ends in an ellipsis
 // in a transaction's sheet, and a long unbroken description ends in an
 // ellipsis on its row, and wraps in its sheet, instead of widening the page.
+// A long status on the overview's Categories widget wraps under its amounts
+// rather than squeeze a short category name to a letter or two.
 
 import { expect, test, type Locator } from '@playwright/test'
-import { addAccount, addSpending, removeAccount } from './manual'
+import { action, addAccount, addSpending, removeAccount } from './manual'
 import { IPHONE, NARROWEST, overflow } from './phone'
 
 /** Checks that text stays inside the page's 16px gutters rather than spilling past its card. */
@@ -47,6 +49,47 @@ test.describe('on the narrowest phone', () => {
 
     await page.keyboard.press('Escape')
     await removeAccount(page, 'Ellipsis checking')
+  })
+
+  test("a long status wraps under a category's amounts, leaving its name whole", async ({
+    page,
+  }) => {
+    // Four letters, far over a small budget: "Over by $12,3xx" is the longest kind of status.
+    const kite = await action<{ id: string }>(page, 'create_category', {
+      name: 'Kite',
+      budgetCents: 1_000,
+    })
+    await addAccount(page, { name: 'Status checking', balance: '20000' })
+    await addSpending(page, {
+      account: 'Status checking',
+      description: 'Kite shop',
+      amount: '12345.67',
+      category: 'Kite',
+    })
+
+    await page.goto('/')
+    const row = page
+      .getByRole('region', { name: 'Categories', exact: true })
+      .locator('.cat-row')
+      .filter({ has: page.locator('.cat-label', { hasText: /^Kite$/ }) })
+    const status = row.locator('.cat-status')
+    // The budget is shared out over the period, so the exact figure moves day to day.
+    await expect(status).toHaveText(/^Over by \$12,\d{3}/)
+
+    // The name is whole, not cut to "K…".
+    const label = row.locator('.cat-label')
+    expect(await lineFit(label)).toMatchObject({ truncated: false })
+    // The status took a line of its own, and none of it is clipped or off the screen.
+    const amounts = (await row.locator('.cat-amounts').boundingBox())!
+    const shown = (await status.boundingBox())!
+    const figures = (await row.locator('.cat-summary').boundingBox())!
+    expect(shown.y).toBeGreaterThanOrEqual(amounts.y + amounts.height - 1)
+    expect(shown.x + shown.width).toBeLessThanOrEqual(figures.x + figures.width + 0.5)
+    await expectInsideGutters(status, NARROWEST.viewport.width)
+    expect(await overflow(page)).toBeLessThanOrEqual(0)
+
+    await removeAccount(page, 'Status checking')
+    await action(page, 'delete_category', { id: kite.id })
   })
 })
 

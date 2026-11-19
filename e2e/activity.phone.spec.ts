@@ -5,7 +5,7 @@
 // everything pressed in the filters and the sheet is a finger (--tap) tall.
 
 import { expect, test, type Page } from '@playwright/test'
-import { addAccount, addSpending, removeAccount } from './manual'
+import { action, addAccount, addSpending, removeAccount } from './manual'
 import {
   overflow,
   shortTargets,
@@ -75,13 +75,6 @@ const RULES = [
   { field: 'description', pattern: 'apple.com/bill' },
   { field: 'merchant', pattern: 'colorado department of revenue motor vehicle' },
 ]
-
-/** Calls one of Leeway's actions as the signed-in owner. */
-async function action<T>(page: Page, name: string, input: object = {}): Promise<T> {
-  const response = await page.request.post(`/api/actions/${name}`, { data: input })
-  expect(response.ok(), name).toBe(true)
-  return ((await response.json()) as { result: T }).result
-}
 
 test.describe('the Transactions list on a phone', () => {
   test.beforeAll(async ({ browser }) => {

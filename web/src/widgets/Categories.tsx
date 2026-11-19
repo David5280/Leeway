@@ -41,7 +41,9 @@ export function rowNote(row: CategoryBudget, money: (cents: number) => string) {
 
 /**
  * One category on a line or two: name, bar, then "$208 of $621 · $413 left".
- * The list it sits in decides the layout by its width (.cat-list in styles.css).
+ * The list it sits in decides the layout by its width (.cat-list in styles.css),
+ * and a long status wraps under the amounts rather than squeeze the name
+ * (.cat-summary).
  */
 function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
   const { money } = useApp()
@@ -50,7 +52,7 @@ function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
   const marker =
     isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
   return (
-    <Link to={`/budgets/${row.categoryId}`} className="cat-row">
+    <Link to={`/budgets/${row.categoryId}`} className="cat-row cat-row-wrap">
       <span className="cat-name">
         <Dot color={row.color} />
         <span className="cat-label">{row.name}</span>
@@ -65,20 +67,22 @@ function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
           />
         )}
       </span>
-      <span className="cat-figures">
-        <span>
-          <Money cents={row.spentCents} />
-          {row.budgetCents !== null && (
-            <>
-              {' '}
-              of <Money cents={row.budgetCents} />
-            </>
-          )}
+      <span className="cat-figures cat-summary">
+        <span className="cat-summary-items">
+          <span className="cat-amounts">
+            <Money cents={row.spentCents} />
+            {row.budgetCents !== null && (
+              <>
+                {' '}
+                of <Money cents={row.budgetCents} />
+              </>
+            )}
+          </span>
+          <span className="cat-sep muted" aria-hidden="true">
+            {' · '}
+          </span>
+          <span className={`cat-status ${note.className}`}>{note.text}</span>
         </span>
-        <span className="muted" aria-hidden="true">
-          {' · '}
-        </span>
-        <span className={note.className}>{note.text}</span>
       </span>
     </Link>
   )
