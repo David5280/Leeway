@@ -353,6 +353,13 @@ button.list-row:hover {
   text-decoration: none;
 }
 
+/* The logo takes a finger's tap home: 44px, Apple's smallest comfortable target. */
+@media (pointer: coarse) {
+  .brand {
+    min-height: 44px;
+  }
+}
+
 .pillbar {
   display: flex;
   flex-wrap: wrap;
@@ -1955,5 +1962,13 @@ details.more[open] summary {
 
   h1 {
     font-size: 24px;
+  }
+}
+
+/* The slim row stays easy to tap with a finger: 44px, Apple's smallest
+   comfortable target, still well under a fifth of the height. */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .topbar nav .navlink {
+    min-height: 44px;
   }
 }

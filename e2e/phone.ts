@@ -26,6 +26,9 @@ export type Insets = typeof UPRIGHT_INSETS
 /** Up to this width the app uses its phone layout (styles.css), with the tab bar. */
 export const PHONE_LAYOUT_WIDTH = 820
 
+/** The smallest comfortable tap for a finger, in CSS pixels (Apple's 44pt). */
+export const TAP = 44
+
 /** A phone the layout guard checks every screen on, installed to its home screen. */
 export interface GuardedPhone {
   name: string
