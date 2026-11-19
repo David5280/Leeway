@@ -39,11 +39,11 @@ describe('account names', () => {
     })
 
     const names = (await call('list_accounts')).map((account) => account.name)
-    expect(names.sort()).toEqual(['Test Checking', 'Test Checking (second bank account)'])
+    expect(names.sort()).toEqual(['Test Checking', 'Test Checking (Second Bank Account)'])
     const [transaction] = (await call('list_transactions', {})).transactions
-    expect(transaction!.accountName).toBe('Test Checking (second bank account)')
+    expect(transaction!.accountName).toBe('Test Checking (Second Bank Account)')
     const [alert] = await call('list_alerts')
-    expect(alert!.message).toBe('Test Checking (second bank account) is overdrawn by $5.')
+    expect(alert!.message).toBe('Test Checking (Second Bank Account) is overdrawn by $5.')
   })
 
   it('keeps a name once given, when an account with the same name is added', async () => {
@@ -53,7 +53,7 @@ describe('account names', () => {
     expect(await nameOf(accountId)).toBe('Test Checking')
     const { accountId: added } = await insertBankAccount(ctx.db, { name: 'CHECKING' })
     expect(await nameOf(accountId)).toBe('Test Checking')
-    expect(await nameOf(added)).toBe('Test Checking (second bank account)')
+    expect(await nameOf(added)).toBe('Test Checking (Second Bank Account)')
   })
 })
 

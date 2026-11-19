@@ -1,6 +1,6 @@
 // The Accounts section: listing, renaming, hiding, deleting and adding accounts by hand.
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { account, failing, fakeServer, renderSignedIn, settingsWith } from '../../test/fake'
@@ -73,7 +73,7 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for Everyday' })
     await user.clear(name)
     await user.type(name, '  Bills account  ')
     expect(server.actions('update_account')).toEqual([])
@@ -89,7 +89,7 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for Everyday' })
     await user.click(name)
     await user.type(name, ' ')
     await user.tab()
@@ -98,16 +98,76 @@ describe('Accounts', () => {
 
   it("shows the name Leeway gives the account once the owner's is cleared", async () => {
     // The server names an account with no name of the owner's (see accountName.ts).
+    let current = checking
     const server = serve({
-      update_account: () => ({ ...checking, name: 'First Checking', nickname: null }),
+      list_accounts: () => [current, card, cash],
+      update_account: () => (current = { ...checking, name: 'First Checking', nickname: null }),
     })
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for Everyday' })
     await user.clear(name)
     await user.tab()
     await waitFor(() => expect(name).toHaveValue('First Checking'))
     expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: null }])
+  })
+
+  it('shows a name the server changes while the row is open, and never saves the old one', async () => {
+    // A sync renames the account while the page is open; the owner never typed a name.
+    let current = account({ ...checking, name: 'Chase Checking', nickname: null })
+    const server = serve({ list_accounts: () => [current, card, cash] })
+    const { client } = renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    expect(await screen.findByRole('textbox', { name: 'Name for Chase Checking' })).toHaveValue(
+      'Chase Checking',
+    )
+    current = { ...current, name: 'Chase Total Checking' }
+    await act(() => client.invalidateQueries({ queryKey: ['action'] }))
+    const name = await screen.findByRole('textbox', { name: 'Name for Chase Total Checking' })
+    expect(name).toHaveValue('Chase Total Checking')
+    await user.click(name)
+    await user.tab()
+    expect(server.actions('update_account')).toEqual([])
+  })
+
+  it('saves nothing for a field focused but never typed in, even if the server renames it meanwhile', async () => {
+    let current = account({ ...checking, name: 'Chase Checking', nickname: null })
+    const server = serve({ list_accounts: () => [current, card, cash] })
+    const { client } = renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for Chase Checking' })
+    await user.click(name)
+    current = { ...current, name: 'Chase Total Checking' }
+    await act(() => client.invalidateQueries({ queryKey: ['action'] }))
+    await waitFor(() => expect(name).toHaveValue('Chase Total Checking'))
+    await user.tab()
+    expect(server.actions('update_account')).toEqual([])
+  })
+
+  it('keeps what the owner is typing when the server renames the account meanwhile', async () => {
+    let current = checking
+    const server = serve({ list_accounts: () => [current, card, cash] })
+    const { client } = renderSignedIn(<AccountSection />)
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Name for Everyday' })
+    await user.clear(name)
+    await user.type(name, 'Bills')
+    current = { ...current, name: 'Chase Total Checking', nickname: null }
+    await act(() => client.invalidateQueries({ queryKey: ['action'] }))
+    await screen.findByRole('textbox', { name: 'Name for Chase Total Checking' })
+    expect(name).toHaveValue('Bills')
+    await user.tab()
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: 'Bills' }]),
+    )
+  })
+
+  it('names each field by its account, so no two read the same', async () => {
+    serve()
+    renderSignedIn(<AccountSection />)
+    expect(await screen.findByRole('textbox', { name: 'Name for Everyday' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Name for Rewards card' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Name for Cash' })).toBeInTheDocument()
   })
 
   it('keeps what was typed when renaming fails', async () => {
@@ -117,7 +177,7 @@ describe('Accounts', () => {
     )
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for Everyday' })
     await user.clear(name)
     await user.type(name, 'Bills')
     await user.tab()

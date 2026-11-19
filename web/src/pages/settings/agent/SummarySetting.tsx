@@ -34,9 +34,9 @@ export function SummarySetting() {
       </span>
       {on && summary.data?.ai === 'no_key' && (
         <p className="notice">
-          Add <code className="code">ANTHROPIC_API_KEY</code> to your server&apos;s variables (on
-          Railway: the Leeway service, then Variables). You can make a key at console.anthropic.com.
-          Until then, Leeway writes the summary.
+          Add <code>ANTHROPIC_API_KEY</code> to your server&apos;s variables (on Railway: the Leeway
+          service, then Variables). You can make a key at console.anthropic.com. Until then, Leeway
+          writes the summary.
         </p>
       )}
       <ErrorNote error={toggle.error} />

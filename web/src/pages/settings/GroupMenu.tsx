@@ -24,6 +24,11 @@ export function GroupMenu({ current }: { current: string }) {
           to={settingsPath(group.id)}
           ref={group.id === current ? currentLink : undefined}
           className="settings-link"
+          // Tabbing along the phone's row moves past its edge; keep the
+          // focused pill in view, clear of the fade (see scroll-padding-inline).
+          onFocus={(event) =>
+            event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          }
         >
           {group.title}
         </NavLink>
