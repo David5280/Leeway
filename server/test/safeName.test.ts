@@ -40,7 +40,8 @@ describe('safeName', () => {
   })
 
   it('falls back when what is left still shows a mask, or nothing readable is left', () => {
-    expect(safeName('Card ending 76', masks, 'Shopping')).toBe('Card ending')
+    // The mask's last digits go with the word that led up to them.
+    expect(safeName('Card ending 76', masks, 'Shopping')).toBe('Card')
     // Digits spread over words are caught as a whole, and the name gives way.
     expect(safeName('Card ending 7 6', masks, 'Shopping')).toBe('Shopping')
     expect(safeName('Rent 98/76 due', masks, 'Rent')).toBe('Rent due')
