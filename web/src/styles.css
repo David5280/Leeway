@@ -405,10 +405,9 @@ button.list-row:hover {
 /* The status bar backdrop (index.html). Installed to an iPhone's home screen
    the app draws under the status bar (black-translucent), so a scrolled page
    would run its text under the clock and the Dynamic Island. This bar, exactly
-   as tall as the top safe area, lays the page's own background over them,
-   with a light blur like the system's own bars. Where there is no top inset
-   (a desktop, or a phone turned sideways) it is 0px tall. It sits above the
-   tab bar and never takes a tap. */
+   as tall as the top safe area, covers them, with a light blur like the
+   system's own bars. Where there is no top inset (a desktop, or a phone turned
+   sideways) it is 0px tall. It sits above the tab bar and never takes a tap. */
 .status-backdrop {
   position: fixed;
   top: 0;
@@ -416,10 +415,29 @@ button.list-row:hover {
   left: 0;
   z-index: 20;
   height: var(--sat);
+  /* Dark themes: the page's own background, which white status text reads on. */
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   pointer-events: none;
+}
+
+/* Light themes: black-translucent keeps the clock and battery white whatever
+   the page's colors, so the bar takes the theme's ink, solid, for white text
+   to read on. A short fade under it eases the dark bar into the light page. */
+:root[data-mode='light'] .status-backdrop {
+  background: var(--ink);
+}
+
+:root[data-mode='light'] .status-backdrop::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  /* No fade where there is no bar. */
+  height: min(10px, var(--sat));
+  background: linear-gradient(var(--ink), transparent);
 }
 
 /* Controls */
