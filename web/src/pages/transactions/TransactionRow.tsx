@@ -53,8 +53,7 @@ export function TransactionRow({
     <div className="list-row wrap" style={{ alignItems: 'flex-start' }}>
       <button
         type="button"
-        className="grow linkbtn"
-        style={{ textAlign: 'left', color: 'var(--ink)', minWidth: 160 }}
+        className="grow linkbtn tx-title"
         aria-expanded={open}
         onClick={onToggle}
       >

@@ -474,23 +474,35 @@ textarea.input {
 }
 
 /* A long choice, like a category name, ends in an ellipsis instead of being
-   cut mid-word. The native arrow is replaced by a chevron drawn from two
-   gradients in the theme's colors, inside the right padding, so it never
-   covers the text and looks the same on every platform. */
+   cut mid-word. The native arrow is replaced by a chevron in the theme's
+   muted color, inside the right padding, so it never covers the text and
+   looks the same on every platform. Each half of the chevron is a 2px
+   diagonal stroke drawn by a gradient in its own 6px square: "\" on the
+   left, "/" on the right, meeting at the bottom. */
 select.input {
+  --chevron-stroke:
+    transparent calc(50% - 1px), var(--muted) calc(50% - 1px), var(--muted) calc(50% + 1px),
+    transparent calc(50% + 1px);
   appearance: none;
   padding-right: 36px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   background-image:
-    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    linear-gradient(45deg, var(--chevron-stroke)), linear-gradient(-45deg, var(--chevron-stroke));
   background-position:
-    calc(100% - 20px) 50%,
-    calc(100% - 15px) 50%;
-  background-size: 5px 5px;
+    calc(100% - 22px) 50%,
+    calc(100% - 16px) 50%;
+  background-size: 6px 6px;
   background-repeat: no-repeat;
+}
+
+/* Lets a long unbroken transaction name wrap instead of widening the page. */
+.tx-title {
+  min-width: 160px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  color: var(--ink);
 }
 
 .input.num {
@@ -1079,6 +1091,17 @@ details.more[open] summary {
   .auth {
     padding-left: calc(16px + var(--sal));
     padding-right: calc(16px + var(--sar));
+  }
+
+  /* iOS zooms in when a field under 16px gets focus, and an installed app
+     keeps that zoom afterwards, so every card ends up wider than the screen.
+     At 16px it never zooms, and pinch zoom stays available. */
+  input,
+  select,
+  textarea,
+  .input,
+  textarea.input {
+    font-size: 16px;
   }
 
   .grid > * {

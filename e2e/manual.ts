@@ -18,3 +18,10 @@ export async function addAccount(
   await form.getByRole('button', { name: 'Add account' }).click()
   await expect(page.getByRole('textbox', { name: `Name for ${account.name}` })).toBeVisible()
 }
+
+/** Deletes an account, and its transactions with it, so other tests see the install as before. */
+export async function removeAccount(page: Page, name: string): Promise<void> {
+  await page.goto('/customize#accounts')
+  await page.getByRole('button', { name: `Delete ${name}` }).click()
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toHaveCount(0)
+}
