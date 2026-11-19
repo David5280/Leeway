@@ -1,6 +1,7 @@
 // Importing a paystub: choose a PDF or photo, Claude reads its figures, and
-// the owner reviews them before anything is saved. The file goes to the
-// server once and is never kept; only the figures the owner saves are.
+// the owner reviews them before anything is saved. The file goes to
+// Anthropic once, as it is, and Leeway never keeps it; only the figures the
+// owner saves are kept.
 
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -32,12 +33,17 @@ function ChooseFile({
         Choose a PDF or a photo of a paystub. {readerName} reads its pay, pension, 401(k), 457,
         403(b) and HSA figures, and you check each one before anything is saved.
       </p>
+      {/* Plain about what leaves Leeway: the file goes as it is, identifiers and all. */}
       <ul className="plain-list small muted">
         <li>
-          Only the file is sent to Anthropic to be read, once. Nothing else of yours goes with it.
+          The whole file goes to Anthropic to be read, once, as it is, including any Social Security
+          number or address printed on it. Nothing else of yours goes with it.
         </li>
-        <li>The file is never kept. Leeway keeps only the figures you save.</li>
-        <li>Numbers that identify you, like a Social Security number, are taken out.</li>
+        <li>Leeway never keeps the file, only the figures you save.</li>
+        <li>
+          Leeway takes Social Security numbers, labeled IDs and long numbers out of what it shows
+          and keeps.
+        </li>
       </ul>
       {reading ? (
         <Loading label={`${readerName} is reading your paystub`} />

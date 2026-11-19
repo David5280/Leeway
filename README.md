@@ -245,20 +245,25 @@ account.
 
 With `ANTHROPIC_API_KEY` set, **Import a paystub** appears in **Plan**, then
 **Retirement**, and on a pension's form. Upload a PDF, PNG or JPEG of a
-paystub (up to 10 MB for a PDF, 5 MB for a photo) and Claude reads its pay,
-pension, 401(k), 457, 403(b) and HSA figures, this period's and the year's.
+paystub (a PDF of up to 5 pages and 10 MB, or a photo of up to 5 MB) and
+Claude reads its pay, pension, 401(k), 457, 403(b) and HSA figures, this
+period's and the year's.
 You see each figure with the line it came from and how sure Claude is, change
 any of them, and choose whether they update a pension or your monthly
 retirement saving. Nothing is saved until you choose **Save**.
 
-- Only the file and a fixed instruction are sent, in one request. Nothing
-  else of yours goes with it.
+- The whole file goes to Anthropic as it is, with a fixed instruction, in
+  one request. That includes any Social Security number, account number or
+  address printed on it. Nothing else of yours goes with it.
 - The file stays in memory for that request: it is never written to disk or
   to the database. Leeway keeps only the figures you save.
-- Social Security numbers, employee IDs, account and routing numbers and
-  addresses are taken out of every line Leeway keeps or shows.
-- The same file is never read twice in a day, and at most 10 new files are
-  read an hour, which keeps the cost on your own Anthropic account small.
+- Leeway takes Social Security numbers, labeled IDs (such as an employee ID
+  or an account number after its label) and long numbers out of every line
+  it shows or keeps, along with street addresses. A masked account ending,
+  such as the last four digits, may still show.
+- A file read once is not sent again while Leeway keeps running, for up to a
+  day, and at most 10 new files are read an hour, which keeps the cost on
+  your own Anthropic account small.
 - No assistant tool can read or save a paystub.
 
 An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set

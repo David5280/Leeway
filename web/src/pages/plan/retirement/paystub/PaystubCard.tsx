@@ -8,6 +8,7 @@ import { Card, ErrorNote } from '../../../../components/ui'
 import { useApp } from '../../../../lib/app'
 import { longDate } from '../../../../lib/format'
 import { FormCard } from '../../FormCard'
+import { Amount } from '../money'
 import { PaystubImport } from './PaystubImport'
 import { CURRENT_LABELS, type PaystubImport as ImportStatus, type PensionChoice } from './review'
 
@@ -15,7 +16,7 @@ type Latest = NonNullable<ImportStatus['latest']>
 
 /** The figures a saved paystub showed for its period, the ones it did not left out. */
 function LatestPaystub({ paystub }: { paystub: Latest }) {
-  const { exact, settings } = useApp()
+  const { settings } = useApp()
   const remove = useActionMutation('delete_paystub')
   const who = paystub.employerName ? `From ${paystub.employerName}` : 'Your latest paystub'
   const when = paystub.payDate ? `, paid ${longDate(paystub.payDate, settings.locale)}` : ''
@@ -33,7 +34,7 @@ function LatestPaystub({ paystub }: { paystub: Latest }) {
         {shown.map(({ label, cents }) => (
           <li key={label} className="row-between">
             <span>{label}</span>
-            <span className="num">{exact(cents)}</span>
+            <Amount cents={cents} exact />
           </li>
         ))}
       </ul>

@@ -9,8 +9,14 @@ export function useMoney(): (cents: number) => string {
   return useApp().money
 }
 
-/** An amount in the figures' typeface. */
-export function Amount({ cents }: { cents: number }) {
-  const money = useMoney()
-  return <span className="num">{money(cents)}</span>
+/** Exact amounts to the cent, as a paystub prints them: "$1,234.56". */
+export function useExactMoney(): (cents: number) => string {
+  return useApp().exact
+}
+
+/** An amount in the figures' typeface: whole, or to the cent when `exact`. */
+export function Amount({ cents, exact = false }: { cents: number; exact?: boolean }) {
+  const whole = useMoney()
+  const toTheCent = useExactMoney()
+  return <span className="num">{(exact ? toTheCent : whole)(cents)}</span>
 }

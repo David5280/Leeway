@@ -128,8 +128,19 @@ describe('choosing a file', () => {
     renderPlan('/plan/retirement')
     await user.click(within(await card()).getByRole('button', { name: 'Import a paystub' }))
     const form = within(await screen.findByRole('region', { name: 'Import a paystub' }))
-    expect(form.getByText(/Only the file is sent to Anthropic/)).toBeVisible()
-    expect(form.getByText(/The file is never kept/)).toBeVisible()
+    // Plain that the file goes as it is: identifiers come out only of what Leeway keeps.
+    expect(
+      form.getByText(
+        'The whole file goes to Anthropic to be read, once, as it is, including any Social Security number or address printed on it. Nothing else of yours goes with it.',
+      ),
+    ).toBeVisible()
+    expect(form.getByText('Leeway never keeps the file, only the figures you save.')).toBeVisible()
+    expect(
+      form.getByText(
+        'Leeway takes Social Security numbers, labeled IDs and long numbers out of what it shows and keeps.',
+      ),
+    ).toBeVisible()
+    expect(form.queryByText(/Only the file is sent|are taken out\.$/)).toBeNull()
     await user.upload(form.getByLabelText('Choose a paystub'), file)
 
     await review()
