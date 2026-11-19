@@ -10,15 +10,17 @@ import {
   type AlertAccount,
   type FeeCandidate,
 } from '../src/domain/accountAlerts.js'
+import { kindOf } from '../src/domain/accountKinds.js'
 
 const format = {
   money: (cents: number) => `$${(cents / 100).toFixed(2)}`,
   date: (date: string) => `on ${date}`,
 }
 
-/** A Chase checking account with $500 posted and available. */
+/** A Chase checking account with $500 posted and available; its kind follows the bank's type. */
 function account(fields: Partial<AlertAccount> = {}): AlertAccount {
-  return {
+  const row: Omit<AlertAccount, 'kind'> = {
+    kindChoice: null,
     id: 'acct-1',
     name: 'Everyday',
     institutionName: 'Chase',
@@ -29,6 +31,10 @@ function account(fields: Partial<AlertAccount> = {}): AlertAccount {
     creditLimitCents: null,
     lowBalanceCents: null,
     ...fields,
+  }
+  return {
+    ...row,
+    kind: fields.kind ?? kindOf({ ...row, bankName: row.name }),
   }
 }
 
@@ -101,6 +107,13 @@ describe('lowBalanceThreshold', () => {
     expect(lowBalanceThreshold(account({ subtype: 'savings' }))).toBeNull()
     expect(lowBalanceThreshold(account({ subtype: null }))).toBeNull()
     expect(lowBalanceThreshold(account({ subtype: 'savings', lowBalanceCents: 25000 }))).toBe(25000)
+  })
+
+  it('follows the kind the owner picked over the bank subtype', () => {
+    const marked = account({ subtype: null, kindChoice: 'checking', kind: 'checking' })
+    expect(lowBalanceThreshold(marked)).toBe(DEFAULT_LOW_BALANCE_CENTS)
+    const moved = account({ subtype: 'checking', kindChoice: 'savings', kind: 'savings' })
+    expect(lowBalanceThreshold(moved)).toBeNull()
   })
 
   it('takes the owner amount over the default, and 0 as off', () => {

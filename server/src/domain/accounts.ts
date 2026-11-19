@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { recategorize } from './categorize.js'
+import { ACCOUNT_KINDS, kindFitsType, kindOf, type AccountKind } from './accountKinds.js'
 
 export const ACCOUNT_TYPES = [
   'depository',
@@ -45,7 +46,16 @@ export interface Account {
    * default (see accountAlerts.ts) and 0 turns the warning off.
    */
   lowBalanceCents: number | null
+  /** The owner's pick of kind; null follows the automatic one. */
+  kindChoice: AccountKind | null
+  /** What kind of account this is (see accountKinds.ts). */
+  kind: AccountKind
 }
+
+/** An account as stored, before its kind is worked out. */
+type AccountRow = Omit<Account, 'kind'>
+
+const withKind = (row: AccountRow): Account => ({ ...row, kind: kindOf(row) })
 
 const SELECT = `
   SELECT a.id, a.connection_id AS "connectionId", c.institution_name AS "institutionName",
@@ -54,21 +64,21 @@ const SELECT = `
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
     a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents",
-    a.low_balance_cents AS "lowBalanceCents"
+    a.low_balance_cents AS "lowBalanceCents", a.kind AS "kindChoice"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
-  const { rows } = await db.query<Account>(
+  const { rows } = await db.query<AccountRow>(
     `${SELECT} ${includeHidden ? '' : 'WHERE NOT a.hidden'}
      ORDER BY a.type, coalesce(a.display_name, a.name)`,
   )
-  return rows
+  return rows.map(withKind)
 }
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
-  const { rows } = await db.query<Account>(`${SELECT} WHERE a.id = $1`, [id])
+  const { rows } = await db.query<AccountRow>(`${SELECT} WHERE a.id = $1`, [id])
   if (!rows[0]) throw notFound('Account')
-  return rows[0]
+  return withKind(rows[0])
 }
 
 export const manualAccountInputSchema = z.object({
@@ -113,6 +123,8 @@ export const accountPatchSchema = z
     minimumPaymentCents: z.number().int().min(0).nullable(),
     /** Warn when the balance drops below this. Null follows the default; 0 turns it off. */
     lowBalanceCents: z.number().int().min(0).nullable(),
+    /** What kind of account it is. Null goes back to the kind worked out from the bank. */
+    kind: z.enum(ACCOUNT_KINDS).nullable(),
     // The rest only apply to manual accounts; bank accounts get them from the bank.
     balanceCents: z.number().int(),
     creditLimitCents: z.number().int().min(0).nullable(),
@@ -121,12 +133,11 @@ export const accountPatchSchema = z
   })
   .partial()
 
-export async function updateAccount(
-  db: Db,
-  id: string,
-  patch: z.infer<typeof accountPatchSchema>,
-): Promise<Account> {
-  const account = await getAccount(db, id)
+/**
+ * Refuses a patch the account cannot take: bank-owned fields on a linked
+ * account, or a kind that does not fit its type (a card marked as savings).
+ */
+function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSchema>): void {
   const manualOnly = (['balanceCents', 'creditLimitCents', 'type', 'subtype'] as const).filter(
     (key) => patch[key] !== undefined,
   )
@@ -136,6 +147,21 @@ export async function updateAccount(
       `${manualOnly.join(', ')} come from the bank for linked accounts and cannot be edited`,
     )
   }
+  if (patch.kind && !kindFitsType(patch.kind, patch.type ?? account.type)) {
+    throw new AppError(
+      'invalid_input',
+      'A card or loan can only be a credit card, a loan or other, and an account you own cannot be either',
+    )
+  }
+}
+
+export async function updateAccount(
+  db: Db,
+  id: string,
+  patch: z.infer<typeof accountPatchSchema>,
+): Promise<Account> {
+  const account = await getAccount(db, id)
+  assertPatchFits(account, patch)
   await db.query(
     `UPDATE accounts SET
        display_name = CASE WHEN $2 THEN $3 ELSE display_name END,
@@ -147,7 +173,8 @@ export async function updateAccount(
        balance_updated_at = CASE WHEN $5::bigint IS NULL THEN balance_updated_at ELSE now() END,
        apr_bps = CASE WHEN $11 THEN $12 ELSE apr_bps END,
        minimum_payment_cents = CASE WHEN $13 THEN $14 ELSE minimum_payment_cents END,
-       low_balance_cents = CASE WHEN $15 THEN $16 ELSE low_balance_cents END
+       low_balance_cents = CASE WHEN $15 THEN $16 ELSE low_balance_cents END,
+       kind = CASE WHEN $17 THEN $18 ELSE kind END
      WHERE id = $1`,
     [
       id,
@@ -167,6 +194,8 @@ export async function updateAccount(
       patch.minimumPaymentCents ?? null,
       patch.lowBalanceCents !== undefined,
       patch.lowBalanceCents ?? null,
+      patch.kind !== undefined,
+      patch.kind ?? null,
     ],
   )
   // A card counted or left out changes whether payments to it are transfers.

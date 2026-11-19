@@ -141,6 +141,26 @@ function goalsSection({ goals }: Checkin, money: Money, locale: string): EmailSe
   }
 }
 
+/** Savings and investments in one line, only for an owner who has some. */
+function savingsSection({ savings }: Checkin, money: Money, locale: string): EmailSection[] {
+  if (!savings) return []
+  const { changeThisMonthCents: change, changeSince } = savings
+  const moved =
+    change === null || changeSince === null
+      ? ''
+      : `, ${change < 0 ? '-' : '+'}${money(Math.abs(change))} since ${shortDate(changeSince, locale)}`
+  const items: EmailItem[] = [
+    { text: 'Saved and invested', detail: `${money(savings.totalCents)}${moved}` },
+  ]
+  if (savings.emergencyFundMonths !== null) {
+    items.push({
+      text: 'Emergency fund',
+      detail: `${savings.emergencyFundMonths} of ${savings.emergencyFundTargetMonths} months`,
+    })
+  }
+  return [{ title: 'Savings and investments', items, empty: '' }]
+}
+
 /**
  * The summary without the lines the alert block already says. Leeway's own
  * summary leads with the worst alert, in its headline or first point, and
@@ -174,6 +194,7 @@ export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent 
       headsUpSection(checkin),
       billsSection(input.billsDue, checkin.cashFlow.nextPayday, money, settings.locale),
       goalsSection(checkin, money, settings.locale),
+      ...savingsSection(checkin, money, settings.locale),
     ],
     appUrl: input.appUrl,
     footer: footer(input.summary.writtenBy),

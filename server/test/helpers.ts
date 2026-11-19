@@ -70,7 +70,14 @@ let counter = 0
 /** Inserts a bank connection and one account; returns the account id. */
 export async function insertBankAccount(
   db: pg.Pool,
-  fields: { name?: string; type?: string; balanceCents?: number; hidden?: boolean } = {},
+  fields: {
+    name?: string
+    type?: string
+    subtype?: string | null
+    balanceCents?: number | null
+    currency?: string
+    hidden?: boolean
+  } = {},
 ): Promise<{ accountId: string; connectionId: string }> {
   counter += 1
   const { rows } = await db.query<{ id: string }>(
@@ -80,14 +87,17 @@ export async function insertBankAccount(
   )
   const connectionId = rows[0]!.id
   const account = await db.query<{ id: string }>(
-    `INSERT INTO accounts (connection_id, provider_account_id, name, type, balance_cents, hidden)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO accounts (connection_id, provider_account_id, name, type, subtype, balance_cents,
+       currency, hidden)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
     [
       connectionId,
       `acct-${counter}`,
       fields.name ?? 'Checking',
       fields.type ?? 'depository',
-      fields.balanceCents ?? 100000,
+      fields.subtype ?? null,
+      fields.balanceCents === undefined ? 100000 : fields.balanceCents,
+      fields.currency ?? 'USD',
       fields.hidden ?? false,
     ],
   )

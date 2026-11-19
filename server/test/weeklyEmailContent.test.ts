@@ -155,6 +155,40 @@ describe('weeklyEmailContent', () => {
   })
 })
 
+describe('savings in the weekly email', () => {
+  const savings = {
+    totalCents: 5_800_000,
+    changeThisMonthCents: 120_000,
+    changeSince: '2026-11-01',
+    emergencyFundMonths: 2.5,
+    emergencyFundTargetMonths: 6,
+    savingsRatePercent: 9,
+  }
+
+  it('shows the total, how it moved and the emergency fund', () => {
+    expect(section({ checkin: checkin({ savings }) }, 'Savings and investments').items).toEqual([
+      { text: 'Saved and invested', detail: '$58,000, +$1,200 since Nov 1' },
+      { text: 'Emergency fund', detail: '2.5 of 6 months' },
+    ])
+  })
+
+  it('says a fall plainly, and leaves out what is not known', () => {
+    const fell = { ...savings, changeThisMonthCents: -5_000, emergencyFundMonths: null }
+    expect(section({ checkin: checkin({ savings: fell }) }, 'Savings').items).toEqual([
+      { text: 'Saved and invested', detail: '$58,000, -$50 since Nov 1' },
+    ])
+    const unmoved = { ...savings, changeThisMonthCents: null, changeSince: null }
+    expect(section({ checkin: checkin({ savings: unmoved }) }, 'Savings').items[0]).toEqual({
+      text: 'Saved and invested',
+      detail: '$58,000',
+    })
+  })
+
+  it('has no savings section for an owner without savings', () => {
+    expect(content().sections.map((s) => s.title)).not.toContain('Savings and investments')
+  })
+})
+
 describe('account alerts in the weekly email', () => {
   const overdrawn = accountAlert()
   const accountItem: AttentionItem = {

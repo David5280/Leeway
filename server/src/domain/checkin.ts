@@ -13,13 +13,14 @@ import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
+import { getFinancialProfile, type FinancialProfile } from './profile/profile.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
 const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
-  const [budget, cashFlow, bills, goals, plans, connections, recurring, worth, alerts] =
+  const [budget, cashFlow, bills, goals, plans, connections, recurring, worth, alerts, profile] =
     await Promise.all([
       budgetReport(db, settings, now),
       getCashFlow(db, settings, today),
@@ -30,6 +31,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       untrackedRecurring(db, today),
       getNetWorth(db, today, NET_WORTH_DAYS),
       listAlerts(db, settings, today),
+      getFinancialProfile(db, settings, today),
     ])
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
@@ -108,6 +110,25 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       changeCents: worth.netWorthCents - startWorth,
       sinceDays: NET_WORTH_DAYS,
     },
+    savings: savingsGlance(profile),
+  }
+}
+
+/**
+ * Savings at a glance, from the financial profile: the total and how it moved
+ * this month, the emergency fund and the savings rate. Null without any savings.
+ */
+function savingsGlance({ savings, emergencyFund, savingsRate }: FinancialProfile) {
+  if (!savings.hasSavings) return null
+  return {
+    totalCents: savings.totalCents,
+    /** Measured from the first of the month, or from the first day of history when later. */
+    changeThisMonthCents: savings.changes.month?.changeCents ?? null,
+    changeSince: savings.changes.month?.since ?? null,
+    emergencyFundMonths: emergencyFund?.monthsCovered ?? null,
+    emergencyFundTargetMonths: emergencyFund?.targetMonths ?? null,
+    /** Null when pay or saving is unknown, never a guess of zero. */
+    savingsRatePercent: savingsRate?.percent ?? null,
   }
 }
 
