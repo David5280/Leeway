@@ -91,6 +91,7 @@ const screensFor = (phone: GuardedPhone) => SCREENS.filter((screen) => screen.on
 
 /** Loads a screen at its address on this phone, with any form it opens open. */
 async function open(page: Page, screen: Screen, phone: GuardedPhone, path: string): Promise<void> {
+  await screen.before?.(page)
   await load(page, path, phone.insets)
   if (!screen.then) return
   await screen.then(page)

@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
+import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
 
@@ -30,6 +31,8 @@ export interface Screen {
   route: RouteName
   /** The address, worked out from what was seeded (an assistant's needs the server). */
   path: (seeded: Seeded, request: APIRequestContext) => string | Promise<string>
+  /** Anything to set up before it loads, like standing in for a service the tests cannot reach. */
+  before?: (page: Page) => Promise<void>
   /** Anything to do once it has loaded, like opening a form. */
   then?: (page: Page) => Promise<void>
   /** Only on the phones this holds for; by default, on every phone. */
@@ -141,6 +144,19 @@ export const SCREENS: Screen[] = [
   at('planSection', '/plan/retirement', {
     name: "/plan/retirement changing a pension's figures",
     then: open('Edit figures', (page) => page.getByRole('form', { name: 'Pension figures' })),
+  }),
+  at('planSection', '/plan/retirement', {
+    name: '/plan/retirement reviewing a paystub',
+    // No model reads it in the tests: the reader is stood in for (paystub.ts).
+    before: async (page) => {
+      await mockReader(page)
+    },
+    then: async (page) => {
+      await importPaystub(page)
+      // Open the folds, so the figures not found are checked too.
+      const review = page.getByRole('form', { name: 'Review the paystub' })
+      for (const fold of await review.locator('details summary').all()) await fold.click()
+    },
   }),
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
