@@ -20,6 +20,7 @@ const SCREENS = [
   { path: '/settings/banks', heading: 'Settings' },
   { path: '/settings/assistant', heading: 'Settings' },
   { path: '/settings/ai', heading: 'Settings' },
+  { path: '/settings/widget', heading: 'Settings' },
 ]
 
 for (const { path, heading } of SCREENS) {

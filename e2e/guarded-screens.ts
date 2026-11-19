@@ -10,6 +10,7 @@ import { pretendBusyMonth, pretendModelTrouble, pretendSummaryModelGone } from '
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
+import { PLACEHOLDER_TOKEN } from './widget'
 
 /** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
 export const SETTINGS_GROUPS = [
@@ -20,6 +21,7 @@ export const SETTINGS_GROUPS = [
   'email',
   'assistant',
   'ai',
+  'widget',
   'data',
   'sign-in',
 ]
@@ -111,6 +113,22 @@ async function revealKey(page: Page) {
   )
   await page.getByRole('button', { name: 'Create a key' }).click()
   await expect(page.getByLabel('New key')).toBeVisible()
+}
+
+/**
+ * A widget token that looks freshly made, answered without making one, so no
+ * token is left behind: the page then shows the parameter it shows only once.
+ */
+async function revealWidgetToken(page: Page) {
+  const made = { name: 'Widget', createdAt: new Date().toISOString(), lastUsedAt: null }
+  await page.route('**/api/actions/get_widget_token', (route) =>
+    route.fulfill({ json: { result: made } }),
+  )
+  await page.route('**/api/actions/create_widget_token', (route) =>
+    route.fulfill({ json: { result: { ...made, token: PLACEHOLDER_TOKEN } } }),
+  )
+  await page.getByRole('button', { name: 'Create the widget token' }).click()
+  await expect(page.getByLabel('Widget parameter')).toBeVisible()
 }
 
 /** Every screen the app's router answers, and the forms that open on them. */
@@ -291,6 +309,10 @@ export const SCREENS: Screen[] = [
       await expect(page.getByText(/^Leeway has no prices for/)).toBeVisible()
       await expect(page.getByText(/^Anthropic retires .+ on Nov 30/)).toBeVisible()
     },
+  }),
+  at('settings', '/settings/widget', {
+    name: '/settings/widget showing a new token',
+    then: revealWidgetToken,
   }),
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
