@@ -95,11 +95,12 @@ describe('retirementPlan', () => {
     expect(retirement().note).toBe(PROJECTION_NOTE)
   })
 
-  it('adds the pension to what savings give at the withdrawal rate, against the target', () => {
+  it('adds the pension to what savings give at the withdrawal rate, with no verdict short of the target', () => {
     const plan = retirement({ ...saved, pensions: [pera] }, owner)
     const projection = plan.projection!
     expect(projection).toMatchObject({
       age: 36,
+      atAge: 60,
       yearsToGo: 24,
       contribution: { monthlyCents: 46_300, source: 'found' },
       target: { monthlyCents: 420_000, source: 'entered' },
@@ -114,9 +115,16 @@ describe('retirementPlan', () => {
       mid: income.savings.mid + 218_000,
       high: income.savings.high + 218_000,
     })
-    expect(projection.coverage!.mid).toBe(Math.round((income.total.mid / 420_000) * 100))
-    expect(projection.onTrack).toBe('close')
-    expect(projection.gapMonthlyCents).toBe(420_000 - income.total.mid)
+    // Short of the target, a pension holder gets the figures and no verdict: a
+    // pension is retirement saving, and Leeway never says its holder falls short.
+    expect(income.total.mid).toBeLessThan(420_000)
+    expect(projection).toMatchObject({
+      coverage: null,
+      onTrack: null,
+      gapMonthlyCents: null,
+      laterAge: null,
+      laterPensionAge: null,
+    })
     expect(projection.band).toHaveLength(25)
     expect(plan.pensions[0]).toMatchObject({
       counted: true,
@@ -164,18 +172,27 @@ describe('retirementPlan', () => {
     })
   })
 
-  it('finds a later age that meets the target, when one within five years does', () => {
-    const plan = retirement(
-      { ...saved, pensions: [pera] },
-      { ...owner, targetMonthlyIncomeCents: 360_000 },
-    )
+  it('finds a later age that meets the target from savings, when one within five years does', () => {
+    const plan = retirement(saved, { ...owner, targetMonthlyIncomeCents: 140_000 })
     expect(plan.projection).toMatchObject({ onTrack: 'close', laterAge: 64 })
-    const far = retirement({ pensions: [pera] }, { ...owner, targetMonthlyIncomeCents: 2_000_000 })
+    const far = retirement(saved, { ...owner, targetMonthlyIncomeCents: 2_000_000 })
     expect(far.projection).toMatchObject({ onTrack: 'below_target', laterAge: null })
+  })
+
+  it('gives a pension holder a verdict only once the target is met in full', () => {
     const met = retirement({ pensions: [pera] }, { ...owner, targetMonthlyIncomeCents: 200_000 })
     expect(met.projection).toMatchObject({
       onTrack: 'on_track',
+      coverage: { mid: 109 },
       gapMonthlyCents: 0,
+      laterAge: null,
+    })
+    // Just short: no "close", no gap and no later age, only the figures.
+    const short = retirement({ pensions: [pera] }, { ...owner, targetMonthlyIncomeCents: 220_000 })
+    expect(short.projection).toMatchObject({
+      onTrack: null,
+      coverage: null,
+      gapMonthlyCents: null,
       laterAge: null,
     })
   })
@@ -199,9 +216,10 @@ describe('retirementPlan', () => {
     })
     expect(plan.projection).toMatchObject({
       income: { pension: { low: 150_000, mid: 510_000, high: 510_000 } },
-      onTrack: 'close',
-      laterAge: 64,
+      onTrack: null,
     })
+    const met = retirement({ pensions: [formula] }, { ...owner, targetMonthlyIncomeCents: 500_000 })
+    expect(met.projection).toMatchObject({ onTrack: 'on_track', gapMonthlyCents: 0 })
   })
 
   it('says nothing about being on track while a pension has no benefit known', () => {
@@ -216,13 +234,29 @@ describe('retirementPlan', () => {
     })
   })
 
-  it('leaves out a pension that starts after the retirement age', () => {
+  it('gives no verdict while a known pension starts after the retirement age', () => {
     const late = pension({ statementBenefitMonthlyCents: 100_000, benefitAge: 62 })
-    const plan = retirement({ pensions: [late] }, owner)
+    const plan = retirement({ ...saved, pensions: [late] }, owner)
     expect(plan.pensions[0]).toMatchObject({ counted: false, startsAge: 62 })
-    expect(plan.projection!.income.pension.mid).toBe(0)
-    // Known, so the verdict still stands, on savings alone.
-    expect(plan.projection!.onTrack).toBe('below_target')
+    // The income at 60 leaves it out, so it could cover the target once it starts.
+    expect(plan.projection).toMatchObject({
+      income: { pension: { low: 0, mid: 0, high: 0 } },
+      laterPensionAge: 62,
+      coverage: null,
+      onTrack: null,
+      gapMonthlyCents: null,
+      laterAge: null,
+    })
+    // The latest of several is the one named.
+    const later = pension({ statementBenefitMonthlyCents: 50_000, benefitAge: 67 })
+    const both = retirement({ pensions: [late, later, pera] }, owner)
+    expect(both.projection!.laterPensionAge).toBe(67)
+    // Without a target there is no verdict to give either way.
+    const noTarget = { birthYear: 1990, retirementAge: 60 }
+    expect(retirement({ pensions: [late] }, noTarget).projection).toMatchObject({
+      laterPensionAge: 62,
+      onTrack: null,
+    })
   })
 
   it('lists pensions without a birth year, counting only the service so far', () => {
@@ -253,15 +287,37 @@ describe('retirementPlan', () => {
     })
   })
 
-  it('handles nothing saved at all, and an owner already past the retirement age', () => {
+  it('handles nothing saved at all', () => {
     const empty = retirement({}, owner).projection!
     expect(empty.savingsAtRetirement).toEqual({ low: 0, mid: 0, high: 0 })
     expect(empty.coverage).toEqual({ low: 0, mid: 0, high: 0 })
-    const past = retirement({ retirementCents: 50_000_000 }, { birthYear: 1955, retirementAge: 65 })
+  })
+
+  it('projects an owner already past the retirement age for the age they are now', () => {
+    const pastOwner = { birthYear: 1955, retirementAge: 65, targetMonthlyIncomeCents: 180_000 }
+    const savedNow = { retirementCents: 50_000_000, foundMonthlyContributionCents: 100_000 }
+    const past = retirement(savedNow, pastOwner)
     expect(past.projection).toMatchObject({
       age: 71,
+      retirementAge: 65,
+      atAge: 71,
       yearsToGo: 0,
       savingsAtRetirement: { low: 50_000_000, mid: 50_000_000, high: 50_000_000 },
+      onTrack: 'close',
+      // Only an age still ahead is offered, never 66 to a 71-year-old.
+      laterAge: 73,
+    })
+    expect(past.projection!.band).toEqual([
+      { age: 71, low: 50_000_000, mid: 50_000_000, high: 50_000_000 },
+    ])
+    // A pension that started at 70 has started by now, and is counted.
+    const started = pension({ statementBenefitMonthlyCents: 100_000, benefitAge: 70 })
+    const withPension = retirement({ ...savedNow, pensions: [started] }, pastOwner)
+    expect(withPension.pensions[0]).toMatchObject({ counted: true, startsAge: 70 })
+    expect(withPension.projection).toMatchObject({
+      income: { pension: { mid: 100_000 } },
+      laterPensionAge: null,
+      onTrack: 'on_track',
     })
   })
 })

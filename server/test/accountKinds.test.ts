@@ -18,7 +18,7 @@ describe('automaticKind', () => {
     bankName,
   })
 
-  it.each(['401k', '403B', 'ira', 'Roth', 'roth 401k', 'sep ira', 'simple ira', 'pension'])(
+  it.each(['401k', '403B', 'ira', 'Roth', 'roth 401k', 'sep ira', 'simple ira'])(
     'reads a %s as retirement',
     (subtype) => {
       expect(automaticKind(investment(subtype))).toBe('retirement')
@@ -31,6 +31,16 @@ describe('automaticKind', () => {
       expect(automaticKind(investment(subtype))).toBe('investment')
     },
   )
+
+  it('reads a defined-benefit pension as a pension, never as savings to draw on', () => {
+    // A pension's balance pays its benefit, so counting it as retirement savings would count it twice.
+    expect(automaticKind(investment('pension'))).toBe('pension')
+    expect(automaticKind(investment('Pension'))).toBe('pension')
+    expect(automaticKind(investment(null, 'PERA Defined Benefit Pension'))).toBe('pension')
+    expect(automaticKind(investment('other', 'State Pension Plan'))).toBe('pension')
+    // A known retirement subtype wins over a name that mentions a pension.
+    expect(automaticKind(investment('401k', 'Pension Plus 401k'))).toBe('retirement')
+  })
 
   it('reads retirement from the name when the subtype says nothing', () => {
     expect(automaticKind(investment('other', 'Rollover IRA'))).toBe('retirement')

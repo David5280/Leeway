@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { pension } from '../../../../../server/test/fixtures/profile'
+import { account } from '../../../test/fake'
+import { pension } from '../../../test/profile'
 import { retirementOf } from '../../../test/planning'
 import {
   assumptionsText,
   centsText,
   firstError,
+  pensionCandidates,
   planText,
   readAmount,
   readAssumptions,
   readPlan,
+  switchContribution,
   type PlanText,
 } from './fields'
 
@@ -118,6 +121,59 @@ describe('readPlan', () => {
       ok: false,
       error: 'Enter the contribution as a number.',
     })
+  })
+})
+
+describe('switchContribution', () => {
+  const typed = (fields: Partial<PlanText>): PlanText => ({ ...BLANK, ...fields })
+
+  it('converts through gross pay, so 11% of $2,500 becomes $275 and back', () => {
+    const percent = typed({ contributionKind: 'percent', contribution: '11', grossPay: '2,500' })
+    const amount = switchContribution(percent, 'amount')
+    expect(amount).toEqual({ ...percent, contributionKind: 'amount', contribution: '275' })
+    expect(switchContribution(amount, 'percent').contribution).toBe('11')
+    // A rate keeps two decimals, as plans state them.
+    const odd = typed({ contributionKind: 'amount', contribution: '100', grossPay: '3,000' })
+    expect(switchContribution(odd, 'percent').contribution).toBe('3.33')
+  })
+
+  it('starts blank when nothing can convert it, never reading 11% as $11', () => {
+    const percent = typed({ contributionKind: 'percent', contribution: '11' })
+    expect(switchContribution(percent, 'amount').contribution).toBe('')
+    const noPay = typed({ contributionKind: 'percent', contribution: '11', grossPay: '0' })
+    expect(switchContribution(noPay, 'amount').contribution).toBe('')
+    const notNumber = typed({ contributionKind: 'percent', contribution: 'lots', grossPay: '2500' })
+    expect(switchContribution(notNumber, 'amount').contribution).toBe('')
+    const notAmount = typed({ contributionKind: 'amount', contribution: 'lots', grossPay: '2500' })
+    expect(switchContribution(notAmount, 'percent').contribution).toBe('')
+    expect(switchContribution(typed({ grossPay: '2500' }), 'amount').contribution).toBe('')
+    // Not known yet holds no figure, whatever was typed.
+    const paid = typed({ contributionKind: 'percent', contribution: '11', grossPay: '2500' })
+    expect(switchContribution(paid, 'none').contribution).toBe('')
+  })
+
+  it('leaves the form as it is when the type does not change', () => {
+    const percent = typed({ contributionKind: 'percent', contribution: '11' })
+    expect(switchContribution(percent, 'percent')).toBe(percent)
+  })
+})
+
+describe('pensionCandidates', () => {
+  it('offers accounts that could hold a pension, never cash, a debt or a pension already', () => {
+    const accounts = [
+      account({ id: 'checking', name: 'Checking' }),
+      account({ id: '401k', name: '401k', type: 'investment', subtype: '401k' }),
+      account({ id: 'broker', name: 'Brokerage', type: 'investment', subtype: 'brokerage' }),
+      account({ id: 'other', name: 'Other', type: 'other' }),
+      account({ id: 'card', name: 'Card', type: 'credit', subtype: 'credit card', kind: 'other' }),
+      account({ id: 'loan', name: 'Loan', type: 'loan', kind: 'other' }),
+      account({ id: 'pera', name: 'PERA', type: 'investment', subtype: 'pension' }),
+    ]
+    expect(pensionCandidates(accounts).map((candidate) => candidate.id)).toEqual([
+      '401k',
+      'broker',
+      'other',
+    ])
   })
 })
 

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addDays } from '../../lib/dates'
 import { money as format } from '../../lib/format'
 import { fakeServer, renderSignedIn } from '../../test/fake'
-import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
+import { ageTicks, BandChart, bandPath, rangeText, type BandPoint } from './BandChart'
 import { LineChart } from './LineChart'
 import type { Pace } from './pace'
 import { PaceChart } from './PaceChart'
@@ -247,6 +247,13 @@ describe('ageTicks', () => {
   })
 })
 
+describe('rangeText', () => {
+  it('gives a range, or one figure when the cases agree', () => {
+    expect(rangeText(5_750_000, 14_780_000, money)).toBe('$57,500 to $147,800')
+    expect(rangeText(4_000_000, 4_000_000, money)).toBe('$40,000')
+  })
+})
+
 describe('bandPath', () => {
   it('runs along the high case and back along the low', () => {
     expect(bandPath([0, 10, 20], [5, 4, 3], [6, 7, 8])).toBe('M0,5 L10,4 L20,3 L20,8 L10,7 L0,6 Z')
@@ -273,10 +280,27 @@ describe('BandChart', () => {
     )
     point('last')
     expect(readout()).toHaveTextContent('At 65$57,500 to $147,800Middle $92,600')
+    // Today's savings are known, so the cases agree and the readout gives one figure.
     point('first')
-    expect(readout()).toHaveTextContent('At 40$40,000 to $40,000Middle $40,000')
+    expect(readout()).toHaveTextContent(/^At 40\$40,000$/)
     fireEvent.pointerLeave(screen.getByTestId('chart-hit'))
     expect(readout()).toBeNull()
+  })
+
+  it('gives every year to a screen reader as a table, with no pointer needed', () => {
+    fakeServer({})
+    renderSignedIn(
+      <BandChart points={band} label="Savings by age" description="Growing." money={money} />,
+    )
+    const table = screen.getByRole('table', { name: 'Savings by age, each year' })
+    expect(table).toHaveClass('visually-hidden')
+    const rows = screen.getAllByRole('row').map((row) => row.textContent)
+    expect(rows).toEqual([
+      'AgeRangeMiddle case',
+      '40$40,000$40,000',
+      '50$46,000 to $67,000$56,000',
+      '65$57,500 to $147,800$92,600',
+    ])
   })
 
   it('draws a single age without failing', () => {

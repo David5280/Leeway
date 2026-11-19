@@ -18,10 +18,10 @@ import { monthlyAverages, paySchedule } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
 import {
   pensionMonthlyTotals,
-  pensionsOf,
   type Pension,
   type PensionMonthlyTotals,
 } from './retirement/pensions.js'
+import { pensionsOf } from './retirement/pensionStore.js'
 import { bankSeenRate, countsPayroll } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'

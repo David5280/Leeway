@@ -7,7 +7,7 @@ import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
-import type { PensionInPlan } from '../retirement/plan.js'
+import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
 import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
@@ -158,18 +158,36 @@ function pensionLines({ retirement }: FinancialProfile, money: Money): string[] 
   })
 }
 
+/**
+ * How the projection compares with the target, in words. It is compared only
+ * where Leeway gives a verdict (plan.ts), so with a pension it never reads as
+ * a shortfall: the comparison is left out, or says why it waits.
+ */
+function againstTarget(retirement: RetirementPlan, projection: Projection, money: Money): string {
+  const { target, coverage, laterPensionAge, atAge } = projection
+  if (!target) return ''
+  if (coverage) {
+    return ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
+  }
+  if (retirement.pensionsWithoutBenefit > 0) {
+    return `; not compared with the ${money(target.monthlyCents)} target until the pension benefit is known`
+  }
+  if (laterPensionAge !== null) {
+    return `; not compared with the target, since a pension starts at ${laterPensionAge}, after ${atAge}`
+  }
+  return ''
+}
+
 /** The projection in one line, with the plain note that goes with it. */
 function projectionLine({ retirement }: FinancialProfile, money: Money): string | null {
   const projection = retirement.projection
   if (!projection) return null
-  const { savingsAtRetirement: at, income, target, coverage, realReturns } = projection
-  let against = ''
-  if (target && coverage) {
-    against = ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
-  } else if (target && retirement.pensionsWithoutBenefit > 0) {
-    against = `; not compared with the ${money(target.monthlyCents)} target until the pension benefit is known`
-  }
-  return `Retirement at ${projection.retirementAge} (now about ${projection.age}): savings ${money(at.low)} to ${money(at.high)}, income ${money(income.total.low)} to ${money(income.total.high)} a month including pensions${against}; returns ${realReturns.low}% to ${realReturns.high}% after inflation. ${retirement.note}`
+  const { savingsAtRetirement: at, income, realReturns, atAge, retirementAge } = projection
+  const when =
+    atAge > retirementAge
+      ? `Retirement now, at ${atAge} (past the planned ${retirementAge})`
+      : `Retirement at ${atAge} (now about ${projection.age})`
+  return `${when}: savings ${money(at.low)} to ${money(at.high)}, income ${money(income.total.low)} to ${money(income.total.high)} a month including pensions started by then${againstTarget(retirement, projection, money)}; returns ${realReturns.low}% to ${realReturns.high}% after inflation. ${retirement.note}`
 }
 
 /** What an assistant must not say when a pension is recorded. */

@@ -11,6 +11,7 @@ export type PensionPlan = RetirementView['plan']['pensions'][number]['plan']
 export type PlanChange = Omit<Input<'update_pension'>, 'accountId'>
 export type Assumptions = RetirementView['plan']['assumptions']
 export type AssumptionsChange = NonNullable<Input<'update_settings'>['retirement']>
+type Account = Output<'list_accounts'>[number]
 
 /** How the contribution is given: not yet, a fixed amount, or a share of gross pay. */
 export type ContributionKind = 'none' | 'amount' | 'percent'
@@ -89,6 +90,47 @@ export function planText(plan: PensionPlan | null): PlanText {
     benefitAge: numberText(figures.benefitAge),
     checkedOn: figures.checkedOn ?? '',
   }
+}
+
+/**
+ * The form after the contribution's type changes. A figure typed as one type
+ * means nothing as the other, so 11 (percent) never becomes $11: with gross
+ * pay known it is converted, otherwise it starts blank.
+ */
+export function switchContribution(text: PlanText, kind: string): PlanText {
+  const next = kind as ContributionKind
+  if (next === text.contributionKind) return text
+  return { ...text, contributionKind: next, contribution: convertedContribution(text, next) }
+}
+
+/** The typed contribution in the other type, through gross pay; '' when it cannot be. */
+function convertedContribution(text: PlanText, next: ContributionKind): string {
+  const gross = parseMoney(text.grossPay)
+  if (!gross || text.contribution.trim() === '') return ''
+  if (text.contributionKind === 'percent' && next === 'amount') {
+    const percent = Number(text.contribution)
+    return Number.isFinite(percent) ? centsText(Math.round((gross * percent) / 100)) : ''
+  }
+  if (text.contributionKind === 'amount' && next === 'percent') {
+    const cents = parseMoney(text.contribution)
+    // Two decimals, as a plan states its rate: 10.75.
+    return cents === null ? '' : String(Math.round((cents / gross) * 10_000) / 100)
+  }
+  return ''
+}
+
+/**
+ * The accounts a pension's plan can be attached to: ones Leeway already has
+ * that hold retirement money but are not counted as a pension yet, such as a
+ * plan linked from the bank. Never one owed, such as a card.
+ */
+export function pensionCandidates(accounts: Account[]): Account[] {
+  return accounts.filter(
+    (account) =>
+      account.kind === 'retirement' ||
+      account.kind === 'investment' ||
+      (account.kind === 'other' && account.type !== 'credit' && account.type !== 'loan'),
+  )
 }
 
 export function assumptionsText(assumptions: Assumptions): AssumptionsText {

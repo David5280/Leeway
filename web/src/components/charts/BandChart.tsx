@@ -2,16 +2,54 @@
 // with the middle case drawn as a line, by age. Used for a retirement
 // projection, where one line would read as a promise.
 
+import type { BandPoint } from '../../../../server/src/domain/retirement/projection'
 import { useApp } from '../../lib/app'
 import { axisFormat, niceTicks, textWidth } from '../../lib/chartScale'
 import { useWidth } from '../../lib/useWidth'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
 
-export interface BandPoint {
-  age: number
-  low: number
-  mid: number
-  high: number
+/** One year on the chart, as the server's projection gives it. */
+export type { BandPoint }
+
+/** A range in words, or one figure when the cases agree: "$1,200 to $1,800", "$72,000". */
+export function rangeText(low: number, high: number, money: (cents: number) => string): string {
+  return low === high ? money(low) : `${money(low)} to ${money(high)}`
+}
+
+/**
+ * Every year's figures as a table only a screen reader reads, since the
+ * drawing and its readout need a pointer.
+ */
+function YearTable({
+  points,
+  label,
+  money,
+}: {
+  points: BandPoint[]
+  label: string
+  money: (cents: number) => string
+}) {
+  return (
+    <table className="visually-hidden">
+      <caption>{label}, each year</caption>
+      <thead>
+        <tr>
+          <th scope="col">Age</th>
+          <th scope="col">Range</th>
+          <th scope="col">Middle case</th>
+        </tr>
+      </thead>
+      <tbody>
+        {points.map((point) => (
+          <tr key={point.age}>
+            <th scope="row">{point.age}</th>
+            <td>{rangeText(point.low, point.high, money)}</td>
+            <td>{money(point.mid)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
 }
 
 /** About one age label per this many pixels, so labels never crowd on a phone. */
@@ -69,62 +107,66 @@ export function BandChart({
   const ticks = ageTicks(first, points.at(-1)!.age, Math.floor((right - left) / PIXELS_PER_LABEL))
 
   return (
-    <ChartFrame
-      measure={measure}
-      width={width}
-      height={height}
-      name={label}
-      description={description}
-      readout={
-        hovered && (
-          <Readout
-            x={x(hovered.age)}
-            chartWidth={width}
-            title={`At ${hovered.age}`}
-            lines={[
-              `${money(hovered.low)} to ${money(hovered.high)}`,
-              `Middle ${money(hovered.mid)}`,
-            ]}
-          />
-        )
-      }
-    >
-      <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
-      <g aria-hidden="true">
-        {ticks.map((age) => (
-          <text key={age} x={x(age)} y={height - 8} textAnchor="middle" className="chart-axis">
-            {age}
-          </text>
-        ))}
-      </g>
-      <path
-        d={bandPath(
-          xs,
-          points.map((p) => y(p.high)),
-          points.map((p) => y(p.low)),
+    <>
+      <ChartFrame
+        measure={measure}
+        width={width}
+        height={height}
+        name={label}
+        description={description}
+        readout={
+          hovered && (
+            <Readout
+              x={x(hovered.age)}
+              chartWidth={width}
+              title={`At ${hovered.age}`}
+              lines={
+                hovered.low === hovered.high
+                  ? [money(hovered.mid)]
+                  : [rangeText(hovered.low, hovered.high, money), `Middle ${money(hovered.mid)}`]
+              }
+            />
+          )
+        }
+      >
+        <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
+        <g aria-hidden="true">
+          {ticks.map((age) => (
+            <text key={age} x={x(age)} y={height - 8} textAnchor="middle" className="chart-axis">
+              {age}
+            </text>
+          ))}
+        </g>
+        <path
+          d={bandPath(
+            xs,
+            points.map((p) => y(p.high)),
+            points.map((p) => y(p.low)),
+          )}
+          className="chart-band"
+          aria-hidden="true"
+        />
+        <polyline
+          points={points.map((p) => `${x(p.age)},${y(p.mid)}`).join(' ')}
+          className="chart-line actual"
+          fill="none"
+          aria-hidden="true"
+        />
+        {hovered && (
+          <>
+            <Guide x={x(hovered.age)} top={top} bottom={bottom} />
+            <circle cx={x(hovered.age)} cy={y(hovered.mid)} r="4" className="chart-dot" />
+          </>
         )}
-        className="chart-band"
-        aria-hidden="true"
-      />
-      <polyline
-        points={points.map((p) => `${x(p.age)},${y(p.mid)}`).join(' ')}
-        className="chart-line actual"
-        fill="none"
-        aria-hidden="true"
-      />
-      {hovered && (
-        <>
-          <Guide x={x(hovered.age)} top={top} bottom={bottom} />
-          <circle cx={x(hovered.age)} cy={y(hovered.mid)} r="4" className="chart-dot" />
-        </>
-      )}
-      <PointerLayer
-        left={left}
-        top={top}
-        width={right - left}
-        height={bottom - top}
-        handlers={pointer.handlers}
-      />
-    </ChartFrame>
+        <PointerLayer
+          left={left}
+          top={top}
+          width={right - left}
+          height={bottom - top}
+          handlers={pointer.handlers}
+        />
+      </ChartFrame>
+      <YearTable points={points} label={label} money={money} />
+    </>
   )
 }

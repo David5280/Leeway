@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { pension } from '../../../../../server/test/fixtures/profile'
-import { failing, settingsHandlers, type Handlers } from '../../../test/fake'
+import { pension } from '../../../test/profile'
+import { account, failing, settingsHandlers, type Handlers } from '../../../test/fake'
 import { planServer, renderPlan, retirementOf } from '../../../test/planning'
 import type { RetirementView } from './fields'
 
@@ -35,7 +35,9 @@ function serve(view: RetirementView, extra: Handlers = {}, routes = {}) {
       ...settingsHandlers(),
       project_retirement: () => view,
       create_pension: () => PERA,
+      attach_pension: () => PERA,
       update_pension: () => PERA,
+      list_accounts: () => [],
       ...extra,
     },
     routes,
@@ -71,7 +73,7 @@ describe('the projection', () => {
     const share = projection.getByRole('progressbar', { name: 'Share of the income you want' })
     expect(share.firstElementChild?.getAttribute('style')).toContain('var(--good)')
     expect(projection.getByRole('img', { name: 'Savings by age' })).toHaveAccessibleDescription(
-      'Savings from $40,000 at 40 to between $57,517 and $147,760 at 65, $92,600 in the middle case.',
+      'Savings at 40: $40,000. At 65: $57,517 to $147,760, $92,600 in the middle case.',
     )
     expect(
       projection.getByText('Shaded: the low to high case. Line: the middle case.'),
@@ -100,6 +102,32 @@ describe('the projection', () => {
     expect(projection.getByText('Below target')).toBeVisible()
     const fill = projection.getByRole('progressbar').firstElementChild
     expect(fill?.getAttribute('style')).toContain('var(--accent)')
+  })
+
+  it('gives a pension holder short of the target the figures, with no verdict or bar', async () => {
+    // Wanting $9,000 a month, more than the pension and savings give.
+    serve(
+      retirementOf(
+        { ...SAVER, recentMonthlySpendingCents: 900_000, pensions: [PERA] },
+        { birthYear: 1986 },
+      ),
+    )
+    renderPlan('/plan/retirement')
+    const projection = within(await card('Retirement projection'))
+    expect(projection.getByText('$1,392 to $5,443 a month')).toBeVisible()
+    expect(projection.getByText(/^from your pension and savings at 65/)).toBeVisible()
+    expect(projection.queryByRole('progressbar')).toBeNull()
+    expect(projection.queryByText(/below target|close|short|instead of/i)).toBeNull()
+  })
+
+  it('says when a pension starts after the retirement age, with no verdict for that age', async () => {
+    const later = pension({ ...PERA.plan, benefitAge: 67 }, { balanceCents: 6_500_000 })
+    serve(retirementOf({ ...SAVER, pensions: [later] }, { birthYear: 1986 }))
+    renderPlan('/plan/retirement')
+    const projection = within(await card('Retirement projection'))
+    expect(projection.getByText('Your pension starts at 67')).toBeVisible()
+    expect(projection.getByText(/so it gives no verdict at 65\.$/)).toBeVisible()
+    expect(projection.queryByRole('progressbar')).toBeNull()
   })
 
   it('says so when the projection cannot load', async () => {
@@ -216,6 +244,77 @@ describe('pensions', () => {
     )
   })
 
+  it('adds the plan to an account Leeway already has, so it is not counted twice', async () => {
+    const server = serve(retirementOf(), {
+      list_accounts: () => [
+        account({ id: 'acct-checking', name: 'Checking' }),
+        account({ id: 'acct-plan', name: 'State Plan', type: 'investment', subtype: 'other' }),
+      ],
+    })
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
+    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const where = await form.findByRole('combobox', { name: 'Add it to' })
+    // Only an account that could hold a pension is offered; a checking account is not.
+    expect(
+      within(where)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['A new pension', 'State Plan'])
+    await user.selectOptions(where, 'State Plan')
+    // The account has its own name and balance, so the form stops asking for them.
+    expect(form.queryByLabelText('Name')).toBeNull()
+    expect(form.queryByRole('textbox', { name: 'Member balance' })).toBeNull()
+    await user.type(form.getByRole('textbox', { name: 'Years of service' }), '8')
+    await user.click(form.getByRole('button', { name: 'Add pension' }))
+
+    await waitFor(() => expect(server.actions('attach_pension')).toHaveLength(1))
+    expect(server.actions('attach_pension')[0]).toEqual({
+      ...pension().plan,
+      accountId: 'acct-plan',
+      serviceYears: 8,
+    })
+    expect(server.actions('create_pension')).toHaveLength(0)
+  })
+
+  it('never turns a percent into dollars when the contribution type changes', async () => {
+    serve(retirementOf())
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
+    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const type = form.getByRole('combobox', { name: 'Contribution type' })
+    await user.selectOptions(type, 'A percent of gross pay')
+    await user.type(form.getByRole('textbox', { name: 'Percent of pay' }), '11')
+    await user.selectOptions(type, 'An amount each paycheck')
+    // No gross pay to convert through, so it starts blank.
+    expect(form.getByRole('textbox', { name: 'Amount each paycheck' })).toHaveValue('')
+    await user.type(form.getByRole('textbox', { name: 'Gross pay each paycheck' }), '2500')
+    await user.type(form.getByRole('textbox', { name: 'Amount each paycheck' }), '275')
+    await user.selectOptions(type, 'A percent of gross pay')
+    expect(form.getByRole('textbox', { name: 'Percent of pay' })).toHaveValue('11')
+  })
+
+  it('reads each hint with its figure, and each problem out loud', async () => {
+    serve(retirementOf())
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
+    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    expect(
+      form.getByRole('textbox', { name: 'Benefit starts at age' }),
+    ).toHaveAccessibleDescription('Blank uses your retirement age')
+    // A figure with no hint names nothing.
+    expect(form.getByRole('textbox', { name: 'Years of service' })).not.toHaveAttribute(
+      'aria-describedby',
+    )
+    await user.type(form.getByLabelText('Name'), 'PERA')
+    await user.type(form.getByRole('textbox', { name: 'Years of service' }), 'many')
+    await user.click(form.getByRole('button', { name: 'Add pension' }))
+    expect(form.getByRole('alert')).toHaveTextContent('Enter years of service as a number.')
+  })
+
   it('names a figure that is not a number and sends nothing, then closes on cancel', async () => {
     const server = serve(retirementOf())
     renderPlan('/plan/retirement')
@@ -293,7 +392,10 @@ describe('the assumptions', () => {
     const form = within(await screen.findByRole('form', { name: 'Retirement assumptions' }))
     await user.clear(form.getByRole('textbox', { name: 'Retire at' }))
     await user.click(form.getByRole('button', { name: 'Save assumptions' }))
-    expect(form.getByText('Enter a retirement age.')).toBeVisible()
+    expect(form.getByRole('alert')).toHaveTextContent('Enter a retirement age.')
+    expect(form.getByRole('textbox', { name: 'Birth year' })).toHaveAccessibleDescription(
+      'Projections start from your age',
+    )
     expect(server.actions('update_settings')).toHaveLength(0)
   })
 })

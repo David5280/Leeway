@@ -52,8 +52,15 @@ export async function tearDownRetirement(page: Page): Promise<void> {
   await page.goto('/plan/retirement')
   await setAssumptions(page, { birthYear: '', income: '' })
   await page.goto('/settings/accounts')
-  // The list must have loaded before an account's absence means anything.
-  await page.waitForLoadState('networkidle')
+  // The list must have loaded before an account's absence means anything: it
+  // shows a switch for each account, or says there are none.
+  const accounts = page.getByRole('region', { name: 'Accounts' })
+  await expect(
+    accounts
+      .getByRole('switch', { name: /^Count / })
+      .or(accounts.getByText(/^No accounts yet/))
+      .first(),
+  ).toBeVisible()
   for (const name of [PENSION, SAVINGS]) {
     const remove = page.getByRole('button', { name: `Delete ${name}` })
     // A test that stopped early may not have added both.

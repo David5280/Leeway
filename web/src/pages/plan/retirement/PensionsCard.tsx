@@ -3,12 +3,12 @@
 // change its figures. A pension is removed like any account added by hand.
 
 import { useState } from 'react'
-import { useActionMutation } from '../../../api/hooks'
+import { useAction, useActionMutation } from '../../../api/hooks'
 import { Card } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { longDate } from '../../../lib/format'
 import { FormCard } from '../FormCard'
-import type { PlanChange, RetirementView } from './fields'
+import { pensionCandidates, type PlanChange, type RetirementView } from './fields'
 import { Amount } from './money'
 import { PensionForm, type NewPensionFields } from './PensionForm'
 
@@ -60,19 +60,24 @@ function PensionRow({
 /** The open form: a new pension, or the figures of one already kept. */
 function PensionEditor({ pension, onClose }: { pension: PlanPension | null; onClose: () => void }) {
   const create = useActionMutation('create_pension')
+  const attach = useActionMutation('attach_pension')
   const update = useActionMutation('update_pension')
+  // A new pension may belong on an account Leeway already has, such as one linked from the bank.
+  const accounts = useAction('list_accounts', undefined, { enabled: !pension })
   const close = { onSuccess: onClose }
-  const save = (change: PlanChange, created: NewPensionFields) =>
-    pension
-      ? update.mutate({ accountId: pension.accountId, ...change }, close)
-      : create.mutate({ ...created, ...change }, close)
+  function save(change: PlanChange, { accountId, ...created }: NewPensionFields) {
+    if (pension) update.mutate({ accountId: pension.accountId, ...change }, close)
+    else if (accountId) attach.mutate({ accountId, ...change }, close)
+    else create.mutate({ ...created, ...change }, close)
+  }
   return (
     <FormCard title={pension ? pension.name : 'Add a pension'}>
       <PensionForm
         plan={pension?.plan ?? null}
         isNew={!pension}
-        busy={create.isPending || update.isPending}
-        error={create.error ?? update.error}
+        candidates={pensionCandidates(accounts.data ?? [])}
+        busy={create.isPending || attach.isPending || update.isPending}
+        error={create.error ?? attach.error ?? update.error}
         onSubmit={save}
         onCancel={onClose}
       />

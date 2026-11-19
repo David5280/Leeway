@@ -174,9 +174,11 @@ function goalInsight(
 }
 
 /**
- * What the middle projection means for the target: what the pension and
- * savings each give, and a later age that would meet it, or the room to spare.
- * It states figures and a choice, never that the owner should save more.
+ * What the middle projection means for the target: the room to spare, or
+ * what savings give and a later age that would meet it. It states figures
+ * and a choice, never that the owner should save more. A projection with a
+ * pension is judged only once it meets the target (plan.ts), so a shortfall
+ * here is always one of savings alone.
  */
 export function retirementInsight(
   profile: FinancialProfile,
@@ -184,29 +186,24 @@ export function retirementInsight(
 ): Insight | null {
   const projection = profile.retirement.projection
   if (!projection?.target || projection.onTrack === null) return null
-  const { income, target, retirementAge, laterAge } = projection
-  const pension = income.pension.mid
+  const { income, target, atAge, laterAge } = projection
   if (projection.gapMonthlyCents === 0) {
     const spare = income.total.mid - target.monthlyCents
     return {
       about: 'retirement',
       topic: 'retirement',
       tone: 'good',
-      text: `In the middle case you would have about ${money(income.total.mid)} a month at ${retirementAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
+      text: `In the middle case you would have about ${money(income.total.mid)} a month at ${atAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
     }
   }
-  const parts =
-    pension > 0
-      ? `your pension gives about ${money(pension)} a month and savings about ${money(income.savings.mid)}`
-      : `savings give about ${money(income.savings.mid)} a month`
   const later = laterAge
-    ? ` Retiring at ${laterAge} instead of ${retirementAge} would meet it, with no change to what you put in.`
+    ? ` Retiring at ${laterAge} instead of ${atAge} would meet it, with no change to what you put in.`
     : ''
   return {
     about: 'retirement',
     topic: 'retirement',
     tone: 'neutral',
-    text: `Of the ${money(target.monthlyCents)} a month you want at ${retirementAge}, ${parts} in the middle case.${later}`,
+    text: `Of the ${money(target.monthlyCents)} a month you want at ${atAge}, savings give about ${money(income.savings.mid)} a month in the middle case.${later}`,
   }
 }
 

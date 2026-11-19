@@ -3,10 +3,10 @@
 // words come worked out from the server (project_retirement); this only lays
 // them out.
 
-import { BandChart } from '../../../components/charts/BandChart'
+import { BandChart, rangeText } from '../../../components/charts/BandChart'
 import { Card, Progress } from '../../../components/ui'
 import type { RetirementView } from './fields'
-import { useMoney } from './money'
+import { Amount, useMoney } from './money'
 
 type Meter = RetirementView['lens']['meters'][number]
 
@@ -25,7 +25,9 @@ function MeterTile({ meter }: { meter: Meter }) {
           {meter.parts.map((part) => (
             <li key={part.label} className="row-between">
               <span>{part.label}</span>
-              <PartAmount cents={part.cents} />
+              <span>
+                <Amount cents={part.cents} /> / mo
+              </span>
             </li>
           ))}
         </ul>
@@ -34,17 +36,12 @@ function MeterTile({ meter }: { meter: Meter }) {
   )
 }
 
-function PartAmount({ cents }: { cents: number }) {
-  const money = useMoney()
-  return <span className="num">{money(cents)} / mo</span>
-}
-
 /** The chart of savings by age, described in words for a screen reader. */
 function SavingsBand({ meter }: { meter: Meter }) {
   const money = useMoney()
   const first = meter.band[0]!
   const last = meter.band.at(-1)!
-  const description = `Savings from ${money(first.mid)} at ${first.age} to between ${money(last.low)} and ${money(last.high)} at ${last.age}, ${money(last.mid)} in the middle case.`
+  const description = `Savings at ${first.age}: ${money(first.mid)}. At ${last.age}: ${rangeText(last.low, last.high, money)}, ${money(last.mid)} in the middle case.`
   return (
     <div className="stack-sm">
       <BandChart

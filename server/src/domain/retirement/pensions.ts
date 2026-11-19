@@ -4,14 +4,15 @@
 // plan's statement or from the plan's formula with the multiplier they typed.
 // A bank never shows a pension's benefit, and plan rules differ and change,
 // so nothing here is guessed: a field left empty stays empty and is said to be
-// unknown, and no plan's rules are built in.
+// unknown, and no plan's rules are built in. This module holds the plan's
+// shape and its arithmetic, and is pure; pensionStore.ts keeps plans in the
+// database.
 
 import { z } from 'zod'
-import type { Db } from '../../db/pool.js'
-import { AppError } from '../../errors.js'
+import { formatWholeCents } from '../../lib/money.js'
 import { convertCadence, type Cadence } from '../../lib/periods.js'
 import { isoDateSchema, patchOf } from '../../lib/schemas.js'
-import { getAccount, insertManualAccount, type Account } from '../accounts.js'
+import { MAX_MONTHLY_CENTS } from './assumptions.js'
 import type { Band } from './projection.js'
 
 /** How often a paycheck comes, for turning a per-paycheck amount into a monthly one. */
@@ -20,14 +21,25 @@ export const PAY_CADENCES = ['week', 'biweek', 'semimonth', 'month'] as const
 /** One owner rarely has more than a couple; this only stops a runaway caller. */
 export const MAX_PENSIONS = 10
 
-const cents = (what: string) =>
-  z.number().int(`Enter ${what} in whole cents`).min(0, `${what} cannot be negative`)
+/** The most a member balance may be: $50,000,000, far above any real pension account. */
+export const MAX_BALANCE_CENTS = 5_000_000_000
+
+/** Whole cents from zero up to `max`, saying the limit in dollars when it is crossed. */
+const cents = (what: string, max: number) =>
+  z
+    .number()
+    .int(`Enter ${what} in whole cents`)
+    .min(0, `${what} cannot be negative`)
+    .max(max, `${what} can be up to ${formatWholeCents(max)}`)
+
+/** A per-paycheck or monthly figure: a paycheck, a salary or a benefit. */
+const monthlyCents = (what: string) => cents(what, MAX_MONTHLY_CENTS)
 
 const percent = z.number().min(0, 'Use 0% or more').max(100, 'Use 100% or less')
 
 /** What the owner pays in each paycheck: a fixed amount, or a percent of gross pay. */
 export const pensionContributionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('amount'), cents: cents('The contribution').max(10_000_000) }),
+  z.object({ kind: z.literal('amount'), cents: monthlyCents('The contribution') }),
   z.object({ kind: z.literal('percent'), percent }),
 ])
 
@@ -40,9 +52,7 @@ export const pensionPlanSchema = z.object({
   /** What the employer pays in on top, as a percent of gross pay. */
   employerContributionPercent: percent.nullable().default(null),
   /** Gross pay per paycheck, which turns a percent into an amount. */
-  grossPayCents: z
-    .number()
-    .int('Use whole cents')
+  grossPayCents: monthlyCents('Gross pay')
     .positive('Gross pay must be more than zero')
     .nullable()
     .default(null),
@@ -56,9 +66,7 @@ export const pensionPlanSchema = z.object({
     .nullable()
     .default(null),
   /** The monthly salary the plan's formula uses, such as a highest average salary. */
-  salaryBasisMonthlyCents: z
-    .number()
-    .int('Use whole cents')
+  salaryBasisMonthlyCents: monthlyCents('The salary')
     .positive('The salary must be more than zero')
     .nullable()
     .default(null),
@@ -70,7 +78,7 @@ export const pensionPlanSchema = z.object({
     .nullable()
     .default(null),
   /** The monthly benefit the plan's statement or calculator gives, in today's dollars. */
-  statementBenefitMonthlyCents: cents('The benefit').nullable().default(null),
+  statementBenefitMonthlyCents: monthlyCents('The benefit').nullable().default(null),
   /** The age the benefit starts; null means the owner's planned retirement age. */
   benefitAge: z
     .number()
@@ -97,7 +105,7 @@ export const EMPTY_PLAN: PensionPlan = pensionPlanSchema.parse({})
 export const newPensionSchema = pensionPlanSchema.extend({
   name: z.string().trim().min(1, 'Name the plan, like Colorado PERA').max(80),
   /** The member account's balance from the plan's statement; null when not known. */
-  balanceCents: cents('The balance').nullable().default(null),
+  balanceCents: cents('The balance', MAX_BALANCE_CENTS).nullable().default(null),
 })
 
 export type NewPension = z.infer<typeof newPensionSchema>
@@ -217,166 +225,4 @@ export function pensionBenefit(
     serviceYears + Math.max(0, yearsToBenefit ?? 0),
   )
   return { low: soFar, mid: staying, high: staying, source: 'formula' }
-}
-
-interface PlanRow {
-  accountId: string
-  contributionCents: number | null
-  contributionBps: number | null
-  employerContributionBps: number | null
-  grossPayCents: number | null
-  payCadence: PensionPlan['payCadence']
-  serviceYears: number | null
-  salaryBasisCents: number | null
-  multiplierBps: number | null
-  statementBenefitCents: number | null
-  benefitAge: number | null
-  checkedOn: string | null
-}
-
-/** Percents are stored in basis points, which keep a figure like 10.5% or 2.25% exact. */
-const toBps = (value: number | null) => (value === null ? null : Math.round(value * 100))
-const fromBps = (value: number | null) => (value === null ? null : value / 100)
-
-function planFromRow(row: PlanRow): PensionPlan {
-  let contribution: PensionContribution | null = null
-  if (row.contributionCents !== null) {
-    contribution = { kind: 'amount', cents: row.contributionCents }
-  } else if (row.contributionBps !== null) {
-    contribution = { kind: 'percent', percent: row.contributionBps / 100 }
-  }
-  return {
-    contribution,
-    employerContributionPercent: fromBps(row.employerContributionBps),
-    grossPayCents: row.grossPayCents,
-    payCadence: row.payCadence,
-    serviceYears: row.serviceYears,
-    salaryBasisMonthlyCents: row.salaryBasisCents,
-    multiplierPercent: fromBps(row.multiplierBps),
-    statementBenefitMonthlyCents: row.statementBenefitCents,
-    benefitAge: row.benefitAge,
-    checkedOn: row.checkedOn,
-  }
-}
-
-/** The stored plan of each of these accounts that has one, by account id. */
-async function plansOf(db: Db, accountIds: string[]): Promise<Map<string, PensionPlan>> {
-  if (accountIds.length === 0) return new Map()
-  const { rows } = await db.query<PlanRow>(
-    `SELECT account_id AS "accountId", contribution_cents AS "contributionCents",
-       contribution_bps AS "contributionBps", employer_contribution_bps AS "employerContributionBps",
-       gross_pay_cents AS "grossPayCents", pay_cadence AS "payCadence",
-       service_years::float8 AS "serviceYears", salary_basis_cents AS "salaryBasisCents",
-       multiplier_bps AS "multiplierBps", statement_benefit_cents AS "statementBenefitCents",
-       benefit_age AS "benefitAge", checked_on AS "checkedOn"
-     FROM pension_plans WHERE account_id = ANY($1::uuid[])`,
-    [accountIds],
-  )
-  return new Map(rows.map((row) => [row.accountId, planFromRow(row)]))
-}
-
-function pensionOf(account: Account, plan: PensionPlan | undefined): Pension {
-  return {
-    accountId: account.id,
-    name: account.name,
-    balanceCents: account.balanceCents,
-    plan: plan ?? EMPTY_PLAN,
-  }
-}
-
-/**
- * The pensions among these accounts, as listAccounts gives them, each with
- * its plan. An account marked as a pension with no plan entered yet gets an
- * empty one, so it still shows, asking for its details.
- */
-export async function pensionsOf(db: Db, accounts: Account[]): Promise<Pension[]> {
-  const pensionAccounts = accounts.filter((account) => account.kind === 'pension')
-  const plans = await plansOf(
-    db,
-    pensionAccounts.map((account) => account.id),
-  )
-  return pensionAccounts.map((account) => pensionOf(account, plans.get(account.id)))
-}
-
-/** Writes a pension's whole plan, adding the row the first time. */
-async function savePlan(db: Db, accountId: string, plan: PensionPlan): Promise<void> {
-  const { contribution } = plan
-  await db.query(
-    `INSERT INTO pension_plans (account_id, contribution_cents, contribution_bps,
-       employer_contribution_bps, gross_pay_cents, pay_cadence, service_years, salary_basis_cents,
-       multiplier_bps, statement_benefit_cents, benefit_age, checked_on)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     ON CONFLICT (account_id) DO UPDATE SET
-       contribution_cents = EXCLUDED.contribution_cents,
-       contribution_bps = EXCLUDED.contribution_bps,
-       employer_contribution_bps = EXCLUDED.employer_contribution_bps,
-       gross_pay_cents = EXCLUDED.gross_pay_cents, pay_cadence = EXCLUDED.pay_cadence,
-       service_years = EXCLUDED.service_years, salary_basis_cents = EXCLUDED.salary_basis_cents,
-       multiplier_bps = EXCLUDED.multiplier_bps,
-       statement_benefit_cents = EXCLUDED.statement_benefit_cents,
-       benefit_age = EXCLUDED.benefit_age, checked_on = EXCLUDED.checked_on, updated_at = now()`,
-    [
-      accountId,
-      contribution?.kind === 'amount' ? contribution.cents : null,
-      contribution?.kind === 'percent' ? toBps(contribution.percent) : null,
-      toBps(plan.employerContributionPercent),
-      plan.grossPayCents,
-      plan.payCadence,
-      plan.serviceYears,
-      plan.salaryBasisMonthlyCents,
-      toBps(plan.multiplierPercent),
-      plan.statementBenefitMonthlyCents,
-      plan.benefitAge,
-      plan.checkedOn,
-    ],
-  )
-}
-
-/** The pension on one account, or an error when the account is not a pension. */
-async function getPension(db: Db, accountId: string): Promise<Pension> {
-  const account = await getAccount(db, accountId)
-  if (account.kind !== 'pension') {
-    throw new AppError(
-      'invalid_input',
-      'This account is not a pension. Mark it as one first, or add a pension.',
-    )
-  }
-  return pensionOf(account, (await plansOf(db, [accountId])).get(accountId))
-}
-
-/**
- * Adds a pension: an account added by hand, of kind pension, with its plan.
- * It is an investment-type account, the type banks give a pension, so its
- * balance, when known, counts as something the owner owns.
- */
-export async function createPension(db: Db, input: NewPension, currency: string): Promise<Pension> {
-  const { rows } = await db.query<{ count: number }>(
-    `SELECT count(*)::int AS count FROM accounts WHERE kind = 'pension'`,
-  )
-  if (rows[0]!.count >= MAX_PENSIONS) {
-    throw new AppError('invalid_input', `Leeway keeps up to ${MAX_PENSIONS} pensions`)
-  }
-  const { name, balanceCents, ...plan } = input
-  const account = await insertManualAccount(db, {
-    name,
-    type: 'investment',
-    subtype: 'pension',
-    balanceCents,
-    creditLimitCents: null,
-    currency,
-    kind: 'pension',
-  })
-  await savePlan(db, account.id, plan)
-  return getPension(db, account.id)
-}
-
-/** Changes some of a pension's plan details; the rest stay as they are. */
-export async function updatePension(
-  db: Db,
-  accountId: string,
-  patch: PensionPlanPatch,
-): Promise<Pension> {
-  const current = await getPension(db, accountId)
-  await savePlan(db, accountId, { ...current.plan, ...patch })
-  return getPension(db, accountId)
 }

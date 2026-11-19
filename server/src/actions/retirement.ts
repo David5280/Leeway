@@ -8,11 +8,12 @@ import { getFinancialProfile } from '../domain/profile/profile.js'
 import { retirementView } from '../domain/profile/views.js'
 import { retirementPatchSchema, retirementSchema } from '../domain/retirement/assumptions.js'
 import {
+  attachPension,
+  attachPensionSchema,
   createPension,
-  newPensionSchema,
-  pensionPlanPatchSchema,
   updatePension,
-} from '../domain/retirement/pensions.js'
+} from '../domain/retirement/pensionStore.js'
+import { newPensionSchema, pensionPlanPatchSchema } from '../domain/retirement/pensions.js'
 import { defineAction } from './action.js'
 import { insightFormat } from './savings.js'
 import { settingsAndToday } from './today.js'
@@ -24,7 +25,7 @@ const PLAN_FIELDS =
 export const createPensionAction = defineAction({
   name: 'create_pension',
   title: 'Add a pension',
-  description: `Records a pension as an account of kind "pension", with its name, its member balance (balanceCents, null when not known) and any plan figures. ${PLAN_FIELDS} To remove one, use delete_account.`,
+  description: `Records a pension as a new account of kind "pension", with its name, its member balance (balanceCents, null when not known) and any plan figures. When the pension is already an account in Leeway, such as one linked from the bank, use attach_pension instead, so it is not counted twice. ${PLAN_FIELDS} To remove one, use delete_account.`,
   input: newPensionSchema,
   scope: 'write',
   surface: 'all',
@@ -32,6 +33,16 @@ export const createPensionAction = defineAction({
     const { settings } = await settingsAndToday(ctx)
     return createPension(ctx.db, input, settings.currency)
   },
+})
+
+export const attachPensionAction = defineAction({
+  name: 'attach_pension',
+  title: 'Record a pension on an existing account',
+  description: `Records a pension's plan on an account Leeway already has (accountId), such as a pension linked from the bank or one listed under retirement or investing, instead of adding a second account. The account becomes a pension, and its balance is then what pays the benefit, not savings. The plan given replaces any already there. ${PLAN_FIELDS}`,
+  input: attachPensionSchema,
+  scope: 'write',
+  surface: 'all',
+  run: (ctx, input) => attachPension(ctx.db, input),
 })
 
 export const updatePensionAction = defineAction({
@@ -51,7 +62,8 @@ const PROJECT_RETIREMENT_PARTS = [
   'lens is the retirement question, answer and meters in words. plan.projection is null until a birth year is known.',
   'Savings to draw on are the retirement and investment accounts plus cash beyond the emergency fund target (startingSavings), grown in a low, middle and high case with returns 2 points either side. Income is pension benefits started by the retirement age plus savings at the withdrawal rate.',
   "Each pension's benefit comes from the plan's statement, or from the formula with the salary, multiplier and service the owner entered: low counts the service so far, middle and high the service by the benefit age. No plan rules, such as caps or early retirement reductions, are applied.",
-  'coverage and onTrack are null without a target or while a pension has no known benefit. laterAge is a later retirement age that would meet the target, offered as a choice.',
+  "atAge is the age projected: the retirement age, or the owner's age once past it. A pension that starts after atAge is not in the income; laterPensionAge says when it starts.",
+  'coverage and onTrack are null without a target, while a pension has no known benefit or starts after atAge, and whenever a pension is recorded unless the middle case meets the target: Leeway never says a pension holder falls short. laterAge is a later age, above the current one, that would meet the target, offered as a choice.',
   'A pension is retirement saving: when plan.hasPension, never call little or nothing going into a 401(k), IRA or brokerage account under-saving. Always share plan.note with the numbers, and give ranges, never a single promise. Read-only.',
 ]
 

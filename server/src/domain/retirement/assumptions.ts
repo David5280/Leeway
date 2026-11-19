@@ -5,6 +5,10 @@
 
 import { z } from 'zod'
 
+/** The most a monthly figure here may be: $100,000, far above any real contribution or income. */
+export const MAX_MONTHLY_CENTS = 10_000_000
+const MAX_MONTHLY_MESSAGE = 'Use $100,000 a month or less'
+
 /** A common, middle-of-the-road set: stop at 65, 6% returns, 2.5% inflation, the 4% rule. */
 export const DEFAULT_RETIREMENT_AGE = 65
 export const DEFAULT_RETURN_PERCENT = 6
@@ -35,12 +39,14 @@ export const retirementFields = {
     .number()
     .int('Use whole cents')
     .min(0, 'A contribution cannot be negative')
+    .max(MAX_MONTHLY_CENTS, MAX_MONTHLY_MESSAGE)
     .nullable(),
   /** Income wanted in retirement, per month in today's dollars. Null uses recent spending. */
   targetMonthlyIncomeCents: z
     .number()
     .int('Use whole cents')
     .positive('A target must be more than zero')
+    .max(MAX_MONTHLY_CENTS, MAX_MONTHLY_MESSAGE)
     .nullable(),
 }
 
