@@ -5,7 +5,8 @@
 // "TOTAL CHECKING" from "BOK Financial - Online Banking", which read better as
 // "BOK Total Checking": the bank's short name, then the account in plain case.
 // Names leave the app (the weekly email, the AI writer), so a name built from
-// the bank's text never shows the account number: see accountNumber.ts.
+// the bank's text never shows the account's mask, as carriesMask defines it:
+// see accountNumber.ts.
 
 import { carriesMask, withoutAccountNumber } from './accountNumber.js'
 import {
@@ -26,7 +27,7 @@ export interface AccountNameParts {
   institutionName: string | null
   /** Added by hand: its name is the owner's own, so it is shown as typed. */
   manual: boolean
-  /** The last digits of the account number, which a bank's name may repeat. */
+  /** The account number's last 2 to 4 characters, digits or letters, which a bank's name may repeat. */
   mask: string | null
   /** The kind of account, as Plaid sends it: "depository" and "checking". */
   type: string
@@ -87,9 +88,10 @@ export function accountDisplayName(parts: AccountNameParts): string {
   const acronyms = bankAcronyms(institution)
   const account = readableCase(withoutAccountNumber(parts.bankName, parts.mask), { acronyms })
   const bank = institution ? shortBankName(institution) : ''
-  // The guarantee: a name that still shows the account number, however the
-  // bank wrote it, gives way to one made only of the bank and the kind of
-  // account, "Chase Checking", and at worst to "Account".
+  // The guarantee: a name that still shows the mask (see carriesMask), however
+  // the bank wrote it, gives way to one made only of the bank and the kind of
+  // account, "Chase Checking", and at worst to "Account", which has no digits
+  // and could only match a mask of the letters it ends with, like "NT".
   const names = [
     withBank(bank, account),
     withBank(bank, kindOfAccount(parts)),
