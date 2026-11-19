@@ -3,6 +3,7 @@
 // keeps clear of them, with even 16px gutters inside the safe area.
 
 import { expect, test, type Page } from '@playwright/test'
+import { smallFields } from './fields'
 import {
   IPHONE,
   IPHONE_LANDSCAPE,
@@ -94,6 +95,8 @@ test.describe('on an iPhone turned sideways', () => {
         expect(edge.right).toBeGreaterThanOrEqual(SIDEWAYS_INSETS.right + GUTTER)
       }
       expect(await overflow(page)).toBeLessThanOrEqual(0)
+      // Wider than the phone layout, but still a touch screen that zooms on small fields.
+      expect(await smallFields(page)).toEqual([])
     })
   }
 })
