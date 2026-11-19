@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountsView } from '../../api/client'
 import { account, transaction } from '../../test/fake'
-import { mathSentence } from '../drill'
+import { mathSentence, trendDescription } from '../drill'
 import { money as formatMoney } from '../money'
 import { accountDrill, allAccountsDrill, averageOf, balanceTrend, selectionDrill } from './accounts'
 import { earlierPeriods, flowsDrill, leftOver, spendingDrill, usualOut } from './accountView'
@@ -34,6 +34,18 @@ describe('balanceTrend and averageOf', () => {
       description: "Everyday's balance each day for the last 3 days, today last.",
     })
     expect(balanceTrend([100], '2026-11-17', 'Everyday')).toBeUndefined()
+  })
+
+  it('carries where the balance should be, said for screen readers too', () => {
+    const level = { cents: 30000, label: 'Under 30% of the limit' }
+    const trend = balanceTrend([100, 200], '2026-11-17', 'Travel card', level)!
+    expect(trend.reference).toEqual(level)
+    expect(trendDescription(trend, money)).toBe(
+      "Travel card's balance each day for the last 2 days, today last. The dashed line marks where it should be (Under 30% of the limit, $300).",
+    )
+    expect(trendDescription(balanceTrend([1, 2], '2026-11-17', 'Everyday')!, money)).toBe(
+      "Everyday's balance each day for the last 2 days, today last.",
+    )
   })
 
   it('averages balances to the cent, with none to average', () => {
@@ -94,8 +106,19 @@ describe('accountDrill', () => {
     )
   })
 
-  it('lists recent activity, each opening Activity on this account', () => {
+  it('draws where a card should stay on its trend', () => {
+    const level = { cents: 30000, label: 'Under 30% of the limit' }
+    const drill = accountDrill(card, { balances: week, today: '2026-11-17', reference: level })
+    expect(drill.trend?.reference).toEqual(level)
+  })
+
+  it('lists recent activity dated in words, each opening Activity on this account', () => {
     const tx = transaction({ id: 't', date: '2026-11-16', name: 'MARKET', amountCents: 4210 })
+    const words = (iso: string) => (iso === '2026-11-16' ? 'Nov 16' : iso)
+    expect(
+      accountDrill(checking, { recent: [tx], today: '2026-11-17', date: words }).items!.rows[0]!
+        .detail,
+    ).toBe('Nov 16')
     const drill = accountDrill(checking, { recent: [tx], today: '2026-11-17' })
     expect(drill.items!.rows).toEqual([
       {

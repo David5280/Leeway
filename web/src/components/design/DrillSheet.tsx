@@ -7,10 +7,12 @@ import { useApp } from '../../lib/app'
 import {
   compareToUsual,
   mathSentence,
+  trendDescription,
   usualSentence,
   type DrillDown,
   type DrillItem,
   type DrillMath,
+  type DrillTrend,
   type DrillUsual,
   type DrillValue,
 } from '../../lib/drill'
@@ -28,16 +30,7 @@ export function DrillSheet({ drill, onClose }: { drill: DrillDown; onClose: () =
           <Value value={drill.figure} size="xl" />
         </div>
         <MathSection math={drill.math} />
-        {drill.trend && drill.trend.points.length > 1 && (
-          <section className="sheet-section" aria-label="Trend">
-            <h3 className="sheet-section-title">{drill.trend.label}</h3>
-            <LineChart
-              points={drill.trend.points}
-              label={drill.trend.label}
-              description={drill.trend.description}
-            />
-          </section>
-        )}
+        {drill.trend && drill.trend.points.length > 1 && <TrendSection trend={drill.trend} />}
         {drill.usual && <UsualSection usual={drill.usual} />}
         {drill.items && drill.items.rows.length > 0 && (
           <section className="sheet-section" aria-label={drill.items.title}>
@@ -59,6 +52,22 @@ export function DrillSheet({ drill, onClose }: { drill: DrillDown; onClose: () =
         )}
       </div>
     </Sheet>
+  )
+}
+
+/** How the figure moved, with where it should be as a dashed level when there is one. */
+function TrendSection({ trend }: { trend: DrillTrend }) {
+  const { money } = useApp()
+  return (
+    <section className="sheet-section" aria-label="Trend">
+      <h3 className="sheet-section-title">{trend.label}</h3>
+      <LineChart
+        points={trend.points}
+        label={trend.label}
+        description={trendDescription(trend, money)}
+        reference={trend.reference}
+      />
+    </section>
   )
 }
 

@@ -41,6 +41,7 @@ const everything: DrillDown = {
     ],
     label: 'Owed over the last two months',
     description: 'What is owed, each month.',
+    reference: { cents: 150000, label: 'On plan' },
   },
   usual: spentLess,
   items: {
@@ -67,7 +68,11 @@ describe('DrillSheet', () => {
       'Paid in all $3,440 = Owed now $2,000 plus interest $1,449 minus paid early $9',
     )
     expect(within(sheet).getByText('Paying more clears it sooner.')).toBeInTheDocument()
-    expect(within(sheet).getByRole('img', { name: 'Owed over the last two months' })).toBeVisible()
+    const trend = within(sheet).getByRole('img', { name: 'Owed over the last two months' })
+    expect(trend).toHaveAccessibleDescription(
+      'What is owed, each month. The dashed line marks where it should be (On plan, $1,500).',
+    )
+    expect(trend).toHaveTextContent('On plan: $1,500')
     expect(within(sheet).getByText('$40 less than this point last month')).toHaveClass(
       'drill-usual-good',
     )

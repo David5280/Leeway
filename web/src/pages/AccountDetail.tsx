@@ -18,7 +18,9 @@ import { balanceReference, billsPaidFrom, feesCharged, recurringFrom } from '../
 import { accountDetail, isOwed, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { isoDaysAgo } from '../lib/dates'
+import { trendDescription } from '../lib/drill'
 import { accountDrill, balanceTrend } from '../lib/drills/accounts'
+import { shortDate } from '../lib/format'
 import { BillsCard, FeesCard, GoalsCard, RecurringCard } from './accounts/DetailLists'
 import { SummaryCard, ViewParts } from './accounts/ViewParts'
 
@@ -87,6 +89,7 @@ function DetailBody({ account }: { account: Account }) {
         account={account}
         balances={data.balances}
         today={data.today}
+        goals={data.goals}
         recent={view.data?.recent ?? []}
       />
       <BalanceChart
@@ -117,14 +120,23 @@ function BalanceHero({
   account,
   balances,
   today,
+  goals,
   recent,
 }: {
   account: Account
   balances: readonly number[]
   today: string
+  goals: readonly Goal[]
   recent: readonly Transaction[]
 }) {
-  const drill = accountDrill(account, { balances, recent, today })
+  const { settings } = useApp()
+  const drill = accountDrill(account, {
+    balances,
+    recent,
+    today,
+    reference: balanceReference(account, goals),
+    date: (iso) => shortDate(iso, settings.locale),
+  })
   return (
     <Card drill={drill} label={`${account.name} balance`} className="hero stack">
       <HeroFigure
@@ -151,21 +163,16 @@ function BalanceChart({
   goals: readonly Goal[]
 }) {
   const { money } = useApp()
-  const trend = balanceTrend(balances, today, account.name)
+  const trend = balanceTrend(balances, today, account.name, balanceReference(account, goals))
   if (!trend) return null
-  const reference = balanceReference(account, goals)
-  // The dashed level is drawn only, so screen readers hear it in the description.
-  const description = reference
-    ? `${trend.description} The dashed line marks where it should be (${reference.label}, ${money(reference.cents)}).`
-    : trend.description
   return (
     <Card static="chart" label="Balance over time" className="stack-sm">
       <SectionHead icon="growth" title={trend.label} />
       <LineChart
         points={trend.points}
         label={trend.label}
-        description={description}
-        reference={reference ?? undefined}
+        description={trendDescription(trend, money)}
+        reference={trend.reference}
       />
     </Card>
   )

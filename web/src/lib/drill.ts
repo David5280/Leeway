@@ -38,6 +38,18 @@ export interface DrillTrend {
   label: string
   /** One sentence on what the line shows, for screen readers. */
   description: string
+  /** Where the line should be, drawn as a dashed level: "Under 30% of the limit". */
+  reference?: { cents: number; label: string }
+}
+
+/**
+ * What a trend's chart says to a screen reader: its description, and where
+ * the dashed level is, since that level is only drawn.
+ */
+export function trendDescription(trend: DrillTrend, money: (cents: number) => string): string {
+  if (!trend.reference) return trend.description
+  const { label, cents } = trend.reference
+  return `${trend.description} The dashed line marks where it should be (${label}, ${money(cents)}).`
 }
 
 /** The figure against what is usual for it. */

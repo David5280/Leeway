@@ -9,11 +9,15 @@ import { accountDetailPath } from '../accounts'
 import { addDays } from '../dates'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
 
-/** Daily balances, oldest first and ending today, as dated points for the trend. */
+/**
+ * Daily balances, oldest first and ending today, as dated points for the
+ * trend, with where the balance should be (lib/accountDetail.ts) when known.
+ */
 export function balanceTrend(
   balances: readonly number[],
   today: string,
   name: string,
+  reference: DrillTrend['reference'] | null = null,
 ): DrillTrend | undefined {
   if (balances.length < 2) return undefined
   const first = addDays(today, -(balances.length - 1))
@@ -21,6 +25,7 @@ export function balanceTrend(
     points: balances.map((cents, index) => ({ date: addDays(first, index), cents })),
     label: `Balance over the last ${balances.length} days`,
     description: `${name}'s balance each day for the last ${balances.length} days, today last.`,
+    reference: reference ?? undefined,
   }
 }
 
@@ -91,12 +96,16 @@ function balanceMath(account: Account): DrillDown['math'] {
   }
 }
 
-/** A transaction as a drill-down row that opens Activity on this account. */
-function transactionItem(tx: Transaction, accountId: string): DrillItem {
+/** A transaction as a drill-down row, dated in words, that opens Activity on this account. */
+function transactionItem(
+  tx: Transaction,
+  accountId: string,
+  date: (iso: string) => string,
+): DrillItem {
   return {
     key: tx.id,
     label: tx.displayName,
-    detail: tx.date,
+    detail: date(tx.date),
     value: { cents: tx.amountCents, sign: 'transaction' },
     to: `/transactions?account=${encodeURIComponent(accountId)}`,
   }
@@ -109,7 +118,17 @@ export function accountDrill(
     balances = [],
     recent = [],
     today,
-  }: { balances?: readonly number[]; recent?: readonly Transaction[]; today: string },
+    reference = null,
+    date = (iso) => iso,
+  }: {
+    balances?: readonly number[]
+    recent?: readonly Transaction[]
+    today: string
+    /** Where the balance should be, drawn on its trend. */
+    reference?: DrillTrend['reference'] | null
+    /** A transaction's date in words; the ISO date by default. */
+    date?: (iso: string) => string
+  },
 ): DrillDown {
   return {
     title: account.name,
@@ -120,11 +139,14 @@ export function accountDrill(
         (account.balanceCents ?? 0) < 0 && account.type === 'depository' ? 'problem' : undefined,
     },
     math: balanceMath(account),
-    trend: balanceTrend(balances, today, account.name),
+    trend: balanceTrend(balances, today, account.name, reference),
     usual: usualBalance(account, balances),
     items:
       recent.length > 0
-        ? { title: 'Recent activity', rows: recent.map((tx) => transactionItem(tx, account.id)) }
+        ? {
+            title: 'Recent activity',
+            rows: recent.map((tx) => transactionItem(tx, account.id, date)),
+          }
         : undefined,
     more: {
       to: `/transactions?account=${encodeURIComponent(account.id)}`,
