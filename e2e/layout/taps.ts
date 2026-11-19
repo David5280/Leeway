@@ -2,12 +2,13 @@
 // a tap TAP pixels across, centred on it: probed at its four edges, each must
 // land on the control, on a label for it, or on a hit area it draws around
 // itself (a ::before), and not on a neighbour drawn over it. And no other
-// control's hit area may reach over it: walked along its own edges, a tap
-// must never land on another control whose box is elsewhere. Each control is
-// scrolled into view first, so one below the fold is checked like the rest;
-// one that cannot be scrolled into view (placed off the page) cannot be
-// tapped at all. Controls hidden on purpose are skipped, and so are links in
-// running text, which a sentence carries and no layout can enlarge.
+// control's hit area, its labels included, may reach over it: walked along
+// its own edges, a tap must never land on another control whose box is
+// elsewhere. Each control is scrolled into view first, so one below the fold
+// is checked like the rest; one that cannot be scrolled into view (placed off
+// the page) cannot be tapped at all. Controls hidden on purpose are skipped,
+// and so are links in running text, which a sentence carries and no layout
+// can enlarge.
 
 import { blockOf, CONTROLS, describe, isHiddenByDesign } from './elements'
 
@@ -55,10 +56,15 @@ function inRunningText(control: Element): boolean {
  * below are placed with that square in mind.
  */
 
-/** The control a point lands on, if any, and the element it hit. */
+/**
+ * The control a point lands on, if any, and the element it hit. A tap on a
+ * label is a tap on the control it names, so a label is its control's hit area.
+ */
 function hitAt(x: number, y: number): { hit: Element; control: Element | null } | null {
   const hit = document.elementFromPoint(x, y)
-  return hit ? { hit, control: hit.closest(CONTROLS) } : null
+  if (!hit) return null
+  const control = hit.closest(CONTROLS) ?? hit.closest('label')?.control ?? null
+  return { hit, control }
 }
 
 /** Whether a hit counts as a tap on the control: on it, or on one of its labels. */

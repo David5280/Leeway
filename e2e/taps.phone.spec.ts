@@ -199,6 +199,25 @@ test.describe("a neighbour's hit area reaching over a control", () => {
     )
     expect(await missedTaps(page)).toEqual([])
   })
+
+  test("finds a button whose corner a checkbox's label takes, and passes the two apart", async ({
+    page,
+  }) => {
+    // A label 44px tall under the button's right end, drawn over it by `margin`:
+    // a tap there ticks the box, though the box itself is clear of the button.
+    const buttonAndCheck = (margin: string) => `<div style="padding: 20px">
+      <button style="display: block; width: 200px; height: 44px">Save</button>
+      <label style="position: relative; display: flex; align-items: center; gap: 8px;
+        width: fit-content; min-height: 44px; padding: 0 12px 0 24px; margin: ${margin}">
+        <input type="checkbox" style="margin: 0"> Remind me
+      </label>
+    </div>`
+    await fixture(page, buttonAndCheck('-8px 0 0 150px'))
+    expect(await missedTaps(page)).toEqual(['<button> "Save" loses taps to <input>\'s hit area'])
+
+    await fixture(page, buttonAndCheck('0 0 0 150px'))
+    expect(await missedTaps(page)).toEqual([])
+  })
 })
 
 test.describe('a control hidden on purpose', () => {
