@@ -9,6 +9,7 @@ import { AppError } from '../../errors.js'
 import { AttemptLimiter } from '../../lib/attemptLimiter.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../lib/time.js'
 import { checkPaystubFile, type PaystubFile } from './files.js'
+import { checkPdfPages } from './pdfPages.js'
 import { extractionFrom, foundAnything, type PaystubExtraction } from './reading.js'
 
 /** Paid reads allowed an hour: plenty for a few paystubs and a retry or two. */
@@ -64,10 +65,12 @@ export class PaystubReader {
 
   /**
    * The figures on a paystub, or a plain error: a file Leeway does not read,
-   * too many reads this hour, a failed read, or no paystub found.
+   * a PDF too long to be a paystub, too many reads this hour, a failed read,
+   * or no paystub found.
    */
   async read(bytes: Buffer, log: UsageLog): Promise<PaystubRead> {
     const file = checkPaystubFile(bytes)
+    if (file.mediaType === 'application/pdf') checkPdfPages(bytes)
     const hash = fileHash(bytes)
     // A kept "not a paystub" is null, so only undefined means nothing is kept.
     const kept = this.cached(hash)

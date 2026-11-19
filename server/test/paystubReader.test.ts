@@ -12,7 +12,7 @@ import {
 } from '../src/ai/anthropicDocuments.js'
 import { ReaderError } from '../src/ai/documents.js'
 import type { AnthropicConfig } from '../src/config.js'
-import { checkPaystubFile } from '../src/domain/paystubs/files.js'
+import { checkPaystubFile, MAX_PDF_PAGES } from '../src/domain/paystubs/files.js'
 import {
   CACHE_SIZE,
   CACHE_TTL_MS,
@@ -28,6 +28,7 @@ import {
   jpeg,
   NOT_A_PAYSTUB,
   pdf,
+  pdfOfPages,
   png,
   USAGE,
 } from './fixtures/paystub.js'
@@ -280,6 +281,18 @@ describe('PaystubReader', () => {
     expect((await failure(reader.read(Buffer.from('hello'), log))).code).toBe('unsupported_file')
     expect(fake.files).toEqual([])
     expect(log.entries).toEqual([])
+  })
+
+  it('refuses a PDF too long to be a paystub before anything is sent or counted', async () => {
+    const { reader, fake, log } = readerWith()
+    const refused = await failure(reader.read(pdfOfPages(MAX_PDF_PAGES + 1), log))
+    expect(refused.code).toBe('file_too_large')
+    expect(refused.message).toMatch(/^A PDF can be up to 5 pages, and this one has 6\./)
+    expect(fake.files).toEqual([])
+    expect(log.entries).toEqual([])
+    // A short one goes through as usual.
+    await reader.read(pdfOfPages(2), log)
+    expect(fake.files).toHaveLength(1)
   })
 
   it(`stops after ${READS_PER_HOUR} paid reads an hour, still giving readings it has`, async () => {
