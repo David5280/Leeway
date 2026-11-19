@@ -29,6 +29,7 @@ describe('RulesList', () => {
       maxAmountCents: null,
       categoryId: groceries.id,
       position: 0,
+      reads: 'bank_text',
     },
     {
       id: ids[1],
@@ -39,6 +40,7 @@ describe('RulesList', () => {
       maxAmountCents: null,
       categoryId: dining.id,
       position: 1,
+      reads: 'bank_text',
     },
     {
       id: ids[2],
@@ -49,6 +51,8 @@ describe('RulesList', () => {
       maxAmountCents: null,
       categoryId: 'cat-deleted',
       position: 2,
+      // Made by an assistant: it reads only the name shown.
+      reads: 'shown_name',
     },
   ]
 
@@ -75,7 +79,7 @@ describe('RulesList', () => {
     expect(await screen.findByText('Merchant contains "Costco"')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Your rules' })).toBeInTheDocument()
     expect(region).toHaveTextContent(
-      /1Merchant contains "Costco"Groceries.*2Description starts with "SQ \*" \(amount limited\)Dining out.*3Merchant is exactly "Rent"Unknown/,
+      /1Merchant contains "Costco"Groceries.*2Description starts with "SQ \*" \(amount limited\)Dining out.*3Shown name is exactly "Rent"Unknown/,
     )
     expect(screen.getAllByText('(amount limited)')).toHaveLength(1)
   })

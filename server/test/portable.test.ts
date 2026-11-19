@@ -81,6 +81,42 @@ describe('config export and import', () => {
     expect(await importConfig(ctx.db, file, 'merge')).toEqual({ categoriesAdded: 0, rulesAdded: 0 })
   })
 
+  it('keeps what each rule reads, and reads bank text for a file from before', async () => {
+    const { coffee } = await seed()
+    await createRule(
+      ctx.db,
+      { ...(await listRules(ctx.db))[0]!, pattern: 'iron gym', categoryId: coffee.id },
+      { reads: 'shown_name' },
+    )
+    const exported = JSON.parse(JSON.stringify(await exportConfig(ctx.db))) as {
+      rules: Record<string, unknown>[]
+    }
+    const reads = () => listRules(ctx.db).then((rules) => rules.map((r) => [r.pattern, r.reads]))
+
+    await importConfig(ctx.db, portableConfigSchema.parse(exported), 'replace')
+    expect(await reads()).toEqual([
+      ['iron gym', 'shown_name'],
+      ['blue bottle', 'bank_text'],
+    ])
+
+    // An older file says nothing of it.
+    const older = { ...exported, rules: exported.rules.map(({ reads: _r, ...rule }) => rule) }
+    await importConfig(ctx.db, portableConfigSchema.parse(older), 'replace')
+    expect(await reads()).toEqual([
+      ['iron gym', 'bank_text'],
+      ['blue bottle', 'bank_text'],
+    ])
+  })
+
+  it('makes every rule an assistant imports read the shown name, whatever the file says', async () => {
+    await seed()
+    const file = portableConfigSchema.parse(JSON.parse(JSON.stringify(await exportConfig(ctx.db))))
+    expect(file.rules[0]!.reads).toBe('bank_text')
+
+    await importConfig(ctx.db, file, 'replace', { byAssistant: true })
+    expect((await listRules(ctx.db)).map((rule) => rule.reads)).toEqual(['shown_name'])
+  })
+
   it('leaves everything as it was when a replace fails', async () => {
     await seed()
     const rule = { field: 'merchant', matchType: 'contains', pattern: 'x', category: 'Tea' }

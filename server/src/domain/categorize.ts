@@ -2,14 +2,19 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
+import { accountMasks } from './accounts.js'
 import { createCategory, listCategories, type Category } from './categories.js'
-import { listRules, ruleMatches, type Rule } from './rules.js'
+import { withShownNames } from './ruleText.js'
+import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
 import { TRANSFER_STARTER } from './starters.js'
 import { loadTransferPairs, PAIR_WINDOW_DAYS, type PairCandidate } from './transferPairs.js'
 import { isTransfer, NO_ACCOUNTS, type Movement, type OwnAccounts } from './transfers.js'
 
 /** The fields of a transaction that decide its category. */
 export type Categorizable = Movement
+
+/** A transaction as rules read it: its fields and its shown name (see withShownNames). */
+export type RuleReadable = Categorizable & Pick<RuleSubject, 'shownName'>
 
 export interface CategoryChoice {
   categoryId: string
@@ -41,7 +46,7 @@ function byDirection(claimants: Category[], tx: Categorizable): Category | undef
  *    money decides, which is how a Zelle received and a Zelle sent part ways.
  */
 export function chooseCategory(
-  tx: Categorizable,
+  tx: RuleReadable,
   rules: Rule[],
   categories: Category[],
   accounts: OwnAccounts = NO_ACCOUNTS,
@@ -105,6 +110,7 @@ export async function loadOwnAccounts(db: Db): Promise<OwnAccounts> {
 export async function recategorize(db: Db, transactionIds?: string[]): Promise<number> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const rules = await listRules(db)
+  const masks = await accountMasks(db)
   const accounts = await loadOwnAccounts(db)
   const around = await datesAround(db, transactionIds)
   if (!around) return 0 // no transactions to look at
@@ -127,7 +133,7 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
   const ids: string[] = []
   const categoryIds: (string | null)[] = []
   const sources: (string | null)[] = []
-  for (const tx of rows) {
+  for (const tx of withShownNames(rows, rules, masks)) {
     const choice = chooseCategory(tx, rules, categories, accounts, partners.has(tx.id))
     const categoryId = choice?.categoryId ?? null
     const source = choice?.source ?? null

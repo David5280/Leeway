@@ -7,8 +7,8 @@ import { isoDateSchema } from '../lib/schemas.js'
 import { accountMasks, accountNames } from './accounts.js'
 import { assertCategoryExists, type Category } from './categories.js'
 import { recategorize } from './categorize.js'
-import { safeName, type AccountMasks } from './safeName.js'
-import { transactionDisplayName } from './transactionName.js'
+import type { AccountMasks } from './safeName.js'
+import { safePerson, transactionDisplayName } from './transactionName.js'
 import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
 
@@ -120,12 +120,6 @@ function present(row: StoredTransaction, { names, masks, partners }: Presenting)
     fallback: categoryName ?? undefined,
   })
   return { ...tx, accountName, displayName, person, transfer }
-}
-
-/** A payment between people, without the other person's name when it would show an account number. */
-function safePerson(person: PersonPayment | null, masks: AccountMasks): PersonPayment | null {
-  if (!person?.counterparty) return person
-  return { ...person, counterparty: safeName(person.counterparty, masks, '') || null }
 }
 
 /** Transfer pairs around the dates of the given rows (none for no rows). */

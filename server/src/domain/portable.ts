@@ -16,6 +16,8 @@ import {
   createRule,
   listRules,
   ruleFieldsSchema,
+  ruleReadsSchema,
+  type RuleAuthor,
 } from './rules.js'
 import { getSettings, mergeSettings, saveSettings, settingsPatchSchema } from './settings.js'
 
@@ -27,12 +29,13 @@ export const portableConfigSchema = z.object({
   // keys (from a newer Leeway, say) are dropped rather than refused.
   settings: z.object(settingsPatchSchema.shape).default({}),
   categories: z.array(categoryInputSchema).default([]),
-  // Rules point at categories by name so the file works on any install.
+  // Rules point at categories by name so the file works on any install. A
+  // file from before rules said what they read has rules that read bank text.
   rules: z
     .array(
       ruleFieldsSchema
         .omit({ categoryId: true })
-        .extend({ category: z.string().min(1) })
+        .extend({ category: z.string().min(1), reads: ruleReadsSchema.default('bank_text') })
         .refine(amountBoundsValid, AMOUNT_BOUNDS_MESSAGE),
     )
     .default([]),
@@ -91,21 +94,24 @@ function essentialIdsFrom(
 /**
  * Applies an exported file. "merge" keeps what is here and adds categories
  * and rules that are missing; "replace" swaps categories and rules for the
- * file's (transactions stay, and are re-categorized).
+ * file's (transactions stay, and are re-categorized). Rules an assistant
+ * imports read only shown names, whatever the file says (see RuleReads).
  */
 export async function importConfig(
   pool: pg.Pool,
   config: PortableConfig,
   mode: 'merge' | 'replace',
+  author: RuleAuthor = {},
 ): Promise<{ categoriesAdded: number; rulesAdded: number }> {
   // All or nothing: a bad file never leaves a half-replaced setup.
-  return withTransaction(pool, (db) => applyConfig(db, config, mode))
+  return withTransaction(pool, (db) => applyConfig(db, config, mode, author))
 }
 
 async function applyConfig(
   db: Db,
   config: PortableConfig,
   mode: 'merge' | 'replace',
+  author: RuleAuthor,
 ): Promise<{ categoriesAdded: number; rulesAdded: number }> {
   const known = new Set(config.categories.map((c) => c.name.toLowerCase()))
   const missing = config.rules.find((r) => !known.has(r.category.toLowerCase()))
@@ -139,10 +145,10 @@ async function applyConfig(
     a.matchType === b.matchType &&
     a.pattern.toLowerCase() === b.pattern.toLowerCase()
   let rulesAdded = 0
-  for (const { category, ...rule } of config.rules) {
+  for (const { category, reads, ...rule } of config.rules) {
     const categoryId = existing.get(category.toLowerCase())
     if (!categoryId || current.some((r) => sameRule(r, rule))) continue
-    await createRule(db, { ...rule, categoryId }, true)
+    await createRule(db, { ...rule, categoryId }, { atEnd: true, reads, ...author })
     rulesAdded += 1
   }
 

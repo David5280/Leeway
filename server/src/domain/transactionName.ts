@@ -63,6 +63,15 @@ export function transactionDisplayName(
   return safeName(name, masks, TRANSFER_WORDS.test(name) ? TRANSFER_NAME : fallback)
 }
 
+/** A payment between people, without the other person's name when it would show an account number. */
+export function safePerson(
+  person: PersonPayment | null,
+  masks: AccountMasks,
+): PersonPayment | null {
+  if (!person?.counterparty) return person
+  return { ...person, counterparty: safeName(person.counterparty, masks, '') || null }
+}
+
 /** A clean name that says money moved between accounts: "Transfer from Checking". */
 const TRANSFER_WORDS = /\btransfer\b/i
 

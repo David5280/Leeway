@@ -235,8 +235,14 @@ describe('filedElsewhere', () => {
     maxAmountCents: null,
     categoryId,
     position: 0,
+    reads: 'bank_text',
   })
-  const line = { name: 'ONLINE TRANSFER', merchantName: null, amountCents: 2500 }
+  const line = {
+    name: 'ONLINE TRANSFER',
+    merchantName: null,
+    amountCents: 2500,
+    shownName: 'Transfer',
+  }
 
   it('says so for a transaction filed by hand under another kind', () => {
     const byHand = { ...line, categorySource: 'manual' }

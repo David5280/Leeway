@@ -302,3 +302,78 @@ describe('previewing a rule', () => {
     expect(preview.examples).toHaveLength(10)
   })
 })
+
+describe('rules an assistant makes', () => {
+  // The same actions, called as over MCP.
+  const assistant = actionCaller(() => ({ ...ctx, agent: true }))
+  let gym: string
+
+  beforeEach(async () => {
+    // Bank text that repeats the account's number, under a clean merchant name.
+    const gymAccount = (await insertBankAccount(ctx.db, { name: 'Savings', mask: '9876' }))
+      .accountId
+    gym = await insertBankTransaction(ctx.db, gymAccount, {
+      date: '2026-11-10',
+      name: 'GYM DUES 9876',
+      merchantName: 'Iron Gym',
+      amountCents: 4000,
+    })
+  })
+
+  it("read only the shown name, so an account's digits match nothing", async () => {
+    const digits = { field: 'description', pattern: '9876', categoryId: coffee.id }
+    const made = await assistant.call('create_rule', digits)
+    expect(made).toMatchObject({ rule: { reads: 'shown_name' }, recategorized: 0 })
+    expect(await categoryOf(gym)).toBeNull()
+
+    // What the assistant can read still matches, whatever the field says.
+    const named = await assistant.call('create_rule', { ...digits, pattern: 'iron gym' })
+    expect(named.recategorized).toBe(1)
+    expect(await categoryOf(gym)).toBe(coffee.id)
+  })
+
+  it("leave the owner's rules reading the bank's text", async () => {
+    const { rule } = await call('create_rule', {
+      field: 'description',
+      pattern: '9876',
+      categoryId: coffee.id,
+    })
+    expect(rule.reads).toBe('bank_text')
+    expect(await categoryOf(gym)).toBe(coffee.id)
+  })
+
+  it("make an owner's rule read the shown name once they change what it looks for", async () => {
+    const { rule } = await call('create_rule', {
+      field: 'description',
+      pattern: 'gym dues',
+      categoryId: coffee.id,
+    })
+
+    // A new category, or the same pattern given back, leaves it reading bank text.
+    const moved = await assistant.call('update_rule', {
+      id: rule.id,
+      categoryId: dining.id,
+      field: 'description',
+      pattern: 'gym dues',
+    })
+    expect(moved.rule.reads).toBe('bank_text')
+    expect(await categoryOf(gym)).toBe(dining.id)
+
+    // A new pattern makes it the assistant's: "gym dues" is not in the shown name.
+    const rewritten = await assistant.call('update_rule', { id: rule.id, pattern: '9876' })
+    expect(rewritten).toMatchObject({ rule: { reads: 'shown_name' }, recategorized: 1 })
+    expect(await categoryOf(gym)).toBeNull()
+
+    // The owner changing it back leaves it as the assistant made it.
+    const back = await call('update_rule', { id: rule.id, pattern: 'iron' })
+    expect(back.rule.reads).toBe('shown_name')
+    expect(await categoryOf(gym)).toBe(dining.id)
+  })
+
+  it('preview as they would be saved', async () => {
+    const digits = { field: 'description', pattern: '9876' }
+    expect((await assistant.call('preview_rule', digits)).matchCount).toBe(0)
+    expect((await call('preview_rule', digits)).matchCount).toBe(1)
+    expect((await assistant.call('preview_rule', { pattern: 'Iron Gym' })).matchCount).toBe(1)
+  })
+})

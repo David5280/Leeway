@@ -52,6 +52,7 @@ function rule(fields: Partial<Rule> & Pick<Rule, 'id' | 'pattern' | 'categoryId'
     minAmountCents: null,
     maxAmountCents: null,
     position: 0,
+    reads: 'bank_text',
     ...fields,
   }
 }

@@ -27,8 +27,10 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
+import { accountMasks } from './accounts.js'
 import type { Category } from './categories.js'
-import { listRules, ruleMatches, type Rule } from './rules.js'
+import { withShownNames } from './ruleText.js'
+import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
 import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
 
 /** How far apart, in days, the two sides of one transfer may post. */
@@ -137,7 +139,7 @@ export interface Filing {
  * chooseCategory.
  */
 export function filedElsewhere(
-  tx: Filing & Pick<Movement, 'name' | 'merchantName' | 'amountCents'>,
+  tx: Filing & RuleSubject,
   rules: readonly Rule[],
   kinds: ReadonlyMap<string, Category['kind']>,
 ): boolean {
@@ -162,6 +164,7 @@ export async function loadTransferPairs(
 ): Promise<Map<string, PairCandidate>> {
   // One query at a time: db may be a transaction's client.
   const rules = await listRules(db)
+  const masks = await accountMasks(db)
   const { rows: categories } = await db.query<{ id: string; kind: Category['kind'] }>(
     'SELECT id, kind FROM categories',
   )
@@ -177,8 +180,8 @@ export async function loadTransferPairs(
        AND NOT (a.hidden AND a.type IN ('credit', 'loan'))`,
     [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS)],
   )
-  const candidates: PairCandidate[] = rows
+  const candidates: PairCandidate[] = withShownNames(rows, rules, masks)
     .filter((row) => !filedElsewhere(row, rules, kinds))
-    .map(({ categorySource: _source, categoryKind: _kind, ...candidate }) => candidate)
+    .map(({ categorySource: _s, categoryKind: _k, shownName: _n, ...candidate }) => candidate)
   return pairTransfers(candidates)
 }

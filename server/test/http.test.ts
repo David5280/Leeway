@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
+import { recategorize } from '../src/domain/categorize.js'
 import { createSession, resetPassword } from '../src/domain/owner.js'
+import { createRule, ruleFieldsSchema } from '../src/domain/rules.js'
 import { createToken } from '../src/domain/tokens.js'
 import { listTransactions, transactionFilterSchema } from '../src/domain/transactions.js'
 import { buildApp } from '../src/http/app.js'
@@ -418,6 +421,87 @@ describe('MCP endpoint', () => {
     // The owner's own app searches the bank's text, as the details show it.
     const own = await listTransactions(ctx.db, transactionFilterSchema.parse({ search: '9876' }))
     expect(own.total).toBe(4)
+  })
+
+  it("learns nothing from a rule an assistant builds on an account's digits, through any field", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '9876' })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    for (const back of [2, 3]) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date: day(back),
+        name: 'GYM DUES 9876',
+        merchantName: 'Iron Gym',
+        amountCents: 4000,
+      })
+    }
+    // The owner's own rule, reading the bank's text, for the assistant to rewrite.
+    const fitness = await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Fitness' }))
+    const owners = await createRule(ctx.db, {
+      ...ruleFieldsSchema.parse({ pattern: 'gym dues', categoryId: fitness.id }),
+      field: 'description',
+    })
+    await recategorize(ctx.db)
+
+    const { token } = await createToken(ctx.db, 'Coach', 'write')
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      return JSON.parse(response.json().result.content[0].text)
+    }
+    // Everything an assistant can read about the transactions, every field.
+    const everything = () => tool('list_transactions', { includeExcluded: true })
+    const before = await everything()
+    expect(before.total).toBe(3)
+
+    // A rule on the digits does exactly what one on letters found nowhere does: nothing.
+    const digits = { field: 'description', pattern: '9876', categoryId: fitness.id }
+    const nowhere = { ...digits, pattern: 'qqqq' }
+    for (const fields of [digits, nowhere]) {
+      expect(await tool('preview_rule', fields)).toEqual({
+        matchCount: 0,
+        examples: [],
+        wouldMove: 0,
+        movingFrom: [],
+      })
+      const made = await tool('create_rule', fields)
+      expect(made).toMatchObject({ rule: { reads: 'shown_name' }, recategorized: 0 })
+      expect(await everything()).toEqual(before)
+    }
+
+    // Rewriting the owner's rule onto the digits is the same as onto letters found nowhere.
+    const rewritten = await tool('update_rule', { id: owners.id, pattern: '9876' })
+    expect(rewritten.rule.reads).toBe('shown_name')
+    const afterDigits = await everything()
+    expect(await tool('update_rule', { id: owners.id, pattern: 'qqqq' })).toMatchObject({
+      recategorized: 0,
+    })
+    expect(await everything()).toEqual(afterDigits)
+
+    // A backup the assistant imports cannot bring back a rule that reads bank text.
+    const bankRule = { field: 'description', pattern: 'gym dues', category: 'Fitness' }
+    const imported = await tool('import_config', {
+      config: { app: 'leeway', version: 1, rules: [{ ...bankRule, reads: 'bank_text' }] },
+      mode: 'merge',
+    })
+    expect(imported).toMatchObject({ rulesAdded: 1 })
+    expect(await everything()).toEqual(afterDigits)
+    const reads = (await tool('list_rules')).map((rule: { reads: string }) => rule.reads)
+    expect(reads).toEqual(['shown_name', 'shown_name', 'shown_name', 'shown_name'])
+
+    // The owner's own rule on the digits reads the bank's text, and finds them.
+    await createRule(ctx.db, {
+      ...ruleFieldsSchema.parse({ pattern: '9876', categoryId: fitness.id }),
+      field: 'description',
+    })
+    await recategorize(ctx.db)
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({}))
+    expect(own.transactions.every((tx) => tx.categoryId === fitness.id)).toBe(true)
   })
 
   it('never hands an agent an account mask, from any tool, error results included', async () => {

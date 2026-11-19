@@ -19,6 +19,7 @@ import { chooseCategory, loadOwnAccounts, type Categorizable } from './categoriz
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { spendingSql } from './counted.js'
 import { GENERIC_NAME } from './merchantName.js'
+import { withShownNames } from './ruleText.js'
 import { periodConfig, type Settings } from './settings.js'
 import { merchantDisplayName } from './transactionName.js'
 
@@ -152,7 +153,8 @@ export async function suggestForPlannedCategories(
     rolloverSince: null,
   }))
   const sums = new Map<string, number>()
-  for (const tx of rows) {
+  // No rules here, so no shown names are worked out.
+  for (const tx of withShownNames(rows, [], [])) {
     const choice = chooseCategory(tx, [], categories, accounts)
     if (choice) sums.set(choice.categoryId, (sums.get(choice.categoryId) ?? 0) + tx.amountCents)
   }

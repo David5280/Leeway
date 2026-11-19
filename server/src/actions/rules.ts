@@ -2,7 +2,9 @@
 
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
+import { accountMasks } from '../domain/accounts.js'
 import { recategorize } from '../domain/categorize.js'
+import { shownName } from '../domain/ruleText.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -20,7 +22,7 @@ import { patchOf } from '../lib/schemas.js'
 import { defineAction } from './action.js'
 
 const RULES_EXPLAINED =
-  'Rules run top to bottom and the first match sets the category of any transaction not categorized by hand. field "merchant" matches the merchant name (or the description when there is none); "description" matches the bank description. Amount bounds are in cents, positive for money out.'
+  'Rules run top to bottom and the first match sets the category of any transaction not categorized by hand. A rule reads "shown_name" or "bank_text". Rules you make, or whose pattern, field or match you change, read "shown_name": the displayName you see (a paired transfer by its own name, not its two accounts), whatever the field. The owner\'s rules read "bank_text", the bank\'s own text, which you are never shown: field "merchant" is the merchant name (or the description when there is none) and "description" the bank description. Amount bounds are in cents, positive for money out.'
 
 export const listRulesAction = defineAction({
   name: 'list_rules',
@@ -43,7 +45,7 @@ export const createRuleAction = defineAction({
   surface: 'all',
   run: (ctx, { atEnd, ...input }) =>
     withTransaction(ctx.db, async (db) => {
-      const rule = await createRule(db, input, atEnd)
+      const rule = await createRule(db, input, { atEnd, byAssistant: ctx.agent })
       const changed = await recategorize(db)
       return { rule, recategorized: changed }
     }),
@@ -52,14 +54,14 @@ export const createRuleAction = defineAction({
 export const updateRuleAction = defineAction({
   name: 'update_rule',
   title: 'Update a rule',
-  description: 'Change a rule. Only the fields given change. Transactions are re-categorized.',
+  description: `Change a rule. Only the fields given change. Transactions are re-categorized. ${RULES_EXPLAINED}`,
   // Amount bounds are checked against the rule as changed, in updateRule.
   input: patchOf(ruleFieldsSchema).extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
   run: (ctx, { id, ...patch }) =>
     withTransaction(ctx.db, async (db) => {
-      const rule = await updateRule(db, id, patch)
+      const rule = await updateRule(db, id, patch, { byAssistant: ctx.agent })
       const changed = await recategorize(db)
       return { rule, recategorized: changed }
     }),
@@ -110,18 +112,18 @@ export const previewRuleAction = defineAction({
   surface: 'all',
   run: async (ctx, input) => {
     const { categoryId: target, ...fields } = input
-    const rule: Rule = { id: 'preview', position: 0, ...fields, categoryId: 'preview' }
+    // Read as the rule would be saved: an agent's reads only the shown name.
+    const reads = ctx.agent ? 'shown_name' : 'bank_text'
+    const rule: Rule = { id: 'preview', position: 0, ...fields, categoryId: 'preview', reads }
     const { transactions } = await listTransactions(ctx.db, {
       limit: 500,
       offset: 0,
       includeExcluded: false,
     })
-    // An agent's preview matches only the display name it can read, never the
-    // bank's text, so a pattern like "4417" cannot find an account's digits.
-    const readable = ctx.agent
-      ? transactions.map((tx) => ({ ...tx, name: tx.displayName, merchantName: null }))
-      : transactions
-    const matches = readable.filter((tx) => ruleMatches(rule, tx))
+    const masks = await accountMasks(ctx.db)
+    const matches = transactions.filter((tx) =>
+      ruleMatches(rule, { ...tx, shownName: reads === 'shown_name' ? shownName(tx, masks) : '' }),
+    )
     const moving = target
       ? matches.filter((tx) => tx.categorySource !== 'manual' && tx.categoryId !== target)
       : []

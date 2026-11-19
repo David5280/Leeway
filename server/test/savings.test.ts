@@ -460,7 +460,8 @@ describe('the savings migration', () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 4_200 })
     await ctx.db.query('DELETE FROM balance_history')
 
-    expect(await migrate(ctx.db)).toEqual(['013_savings.sql'])
+    // This one runs first, then any added after it.
+    expect((await migrate(ctx.db))[0]).toBe('013_savings.sql')
     const { rows } = await ctx.db.query<{ cents: number; owners: boolean; utc: boolean }>(
       `SELECT balance_cents AS cents, day = (now() AT TIME ZONE $2)::date AS owners,
          day = (now() AT TIME ZONE 'UTC')::date AS utc
