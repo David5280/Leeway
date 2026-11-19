@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { z } from 'zod'
 import { findAction } from '../src/actions/index.js'
 import { MICROS_PER_CENT, MODEL_CHOICES } from '../src/ai/models.js'
+import { markUnavailable } from '../src/domain/ai/unavailable.js'
 import { buildApp } from '../src/http/app.js'
 import { agentTools } from '../src/mcp/server.js'
 import { actionCaller } from './actionCaller.js'
@@ -57,6 +58,8 @@ describe('get_ai_usage', () => {
           envVar: 'SUMMARY_MODEL',
           defaultModel: 'claude-haiku-5-5',
           priced: true,
+          unavailable: false,
+          retiresOn: null,
           spend: { calls: 0, costMicros: 0 },
         },
         {
@@ -68,6 +71,8 @@ describe('get_ai_usage', () => {
           envVar: 'PAYSTUB_MODEL',
           defaultModel: 'claude-haiku-5-5',
           priced: true,
+          unavailable: false,
+          retiresOn: null,
           spend: { calls: 0, costMicros: 0 },
         },
       ],
@@ -104,6 +109,17 @@ describe('get_ai_usage', () => {
     }
     const [, paystub] = (await call('get_ai_usage')).jobs
     expect(paystub).toMatchObject({ model: 'claude-something-9', source: 'server', priced: false })
+  })
+
+  it('shows a model Anthropic does not have, and the day a retiring one goes', async () => {
+    ctx.config = {
+      ...ctx.config,
+      modelOverrides: { summary: 'claude-sonnet-4-5-20250929', paystub: 'claude-typo-1' },
+    }
+    await markUnavailable(ctx.db, 'claude-typo-1', ctx.now())
+    const [summary, paystub] = (await call('get_ai_usage')).jobs
+    expect(summary).toMatchObject({ unavailable: false, retiresOn: '2026-11-30', priced: true })
+    expect(paystub).toMatchObject({ unavailable: true, retiresOn: null, priced: false })
   })
 
   it('shows the warning, then the limit, each in words, until dismissed', async () => {

@@ -168,7 +168,16 @@ describe('AnthropicProvider', () => {
       [new Anthropic.BadRequestError(400, {}, secret, headers), 'bad_request'],
       [new Anthropic.APIConnectionError({ message: secret }), 'unreachable'],
       [new Anthropic.APIConnectionTimeoutError({ message: secret }), 'unreachable'],
-      [new Anthropic.InternalServerError(500, {}, secret, headers), 'failed'],
+      // Any other status is an answer with no billed message.
+      [new Anthropic.NotFoundError(404, {}, secret, headers), 'model'],
+      [new Anthropic.ConflictError(409, {}, secret, headers), 'rejected'],
+      [new Anthropic.UnprocessableEntityError(422, {}, secret, headers), 'rejected'],
+      [new Anthropic.InternalServerError(500, {}, secret, headers), 'rejected'],
+      [Anthropic.APIError.generate(529, {}, secret, headers), 'rejected'],
+      [Anthropic.APIError.generate(504, {}, secret, headers), 'rejected'],
+      [Anthropic.APIError.generate(418, {}, secret, headers), 'rejected'],
+      // No status: the call was cut off by us, so it may still have been billed.
+      [new Anthropic.APIUserAbortError({ message: secret }), 'failed'],
       [new Error(secret), 'failed'],
     ]
     for (const [error, failure] of cases) {
@@ -185,6 +194,12 @@ describe('AnthropicProvider', () => {
 
   it('builds its own SDK client from the key when given none, without calling it', () => {
     expect(new AnthropicProvider('test-key').name).toBe('Claude')
+  })
+
+  it('tells an overloaded answer from the SDK as unbilled', () => {
+    const overloaded = Anthropic.APIError.generate(529, {}, 'Overloaded', new Headers())
+    expect(overloaded).toBeInstanceOf(Anthropic.OverloadedError)
+    expect(failureFrom(overloaded).failure).toBe('rejected')
   })
 
   it('never retries: a timed-out attempt may be billed, and each call is counted once', () => {

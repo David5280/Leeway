@@ -12,6 +12,7 @@ import {
   MODEL_IDS,
   pricesFor,
   pricingOf,
+  retiresOn,
   worstCostMicros,
 } from '../src/ai/models.js'
 import { tokens } from './fixtures/ai.js'
@@ -42,6 +43,32 @@ describe('model choices', () => {
       ['claude-sonnet-5-5', { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10 }],
       ['claude-opus-5-5', { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 }],
     ])
+  })
+
+  it('offers and defaults to no model with an announced retirement', () => {
+    for (const model of MODEL_IDS) expect(retiresOn(model)).toBeNull()
+    for (const job of AI_JOBS) expect(retiresOn(JOB_INFO[job].defaultModel)).toBeNull()
+  })
+
+  it('knows the day a deprecated model retires, by its plain or dated id', () => {
+    expect(retiresOn('claude-sonnet-4-5')).toBe('2026-11-30')
+    expect(retiresOn('claude-sonnet-4-5-20250929')).toBe('2026-11-30')
+    expect(retiresOn('claude-something-9')).toBeNull()
+  })
+
+  it('prices the older models a server variable may still name, not as the dearest', () => {
+    expect(pricingOf('claude-sonnet-4-5-20250929')).toEqual({
+      input: 3,
+      cacheWrite: 3.75,
+      cacheRead: 0.3,
+      output: 15,
+    })
+    expect(pricingOf('claude-opus-4-5')).toEqual({
+      input: 5,
+      cacheWrite: 6.25,
+      cacheRead: 0.5,
+      output: 25,
+    })
   })
 
   it('gives every job the small model by default, and a variable to fix it', () => {

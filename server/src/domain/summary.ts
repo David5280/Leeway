@@ -8,6 +8,7 @@ import { messageOf } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { formatWholeCents } from '../lib/money.js'
 import { HOUR_MS, MINUTE_MS } from '../lib/time.js'
+import { AiProviderError } from '../ai/provider.js'
 import { AiLimitError } from './ai/gateway.js'
 import { getCheckin } from './checkin.js'
 import type { Settings } from './settings.js'
@@ -17,9 +18,10 @@ import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from 
  * Where the AI summary stands, so the app can explain what it shows:
  * off (the owner has not turned it on), no_key (turned on, but the server has
  * no Anthropic key), on, unavailable (writing failed; Leeway's words show),
+ * no_model (Anthropic has no such model, so the owner should pick another),
  * or limit (the monthly AI limit is reached; Leeway's words show until it resets).
  */
-export type AiSummaryState = 'off' | 'no_key' | 'on' | 'unavailable' | 'limit'
+export type AiSummaryState = 'off' | 'no_key' | 'on' | 'unavailable' | 'no_model' | 'limit'
 
 export interface Summary extends SummaryText {
   /** "Leeway" for its own words, else the writer's name, like "Claude". */
@@ -37,6 +39,12 @@ export const REUSE_HOURS = 4
 export const RETRY_AFTER_MINUTES = 60
 /** A failure's message is kept for the log and the app, so very long ones are cut. */
 const MAX_ERROR_LENGTH = 500
+/** The message of a failure for a model Anthropic does not have, as it is saved. */
+const NO_MODEL = new AiProviderError('model').message
+
+/** Why writing failed, from the failure's saved message, in the state the app explains. */
+const failedState = (message: string): AiSummaryState =>
+  message === NO_MODEL ? 'no_model' : 'unavailable'
 
 interface SavedRow {
   factsHash: string
@@ -92,7 +100,7 @@ export async function getSummary(
       }
     }
   } else if (saved?.error && age < RETRY_AFTER_MINUTES * MINUTE_MS) {
-    return own('unavailable')
+    return own(failedState(saved.error))
   }
 
   const key = `${today}:${factsHash}`
@@ -109,8 +117,9 @@ export async function getSummary(
     // Nothing is saved for the limit: a check costs nothing, so the summary
     // comes back as soon as the owner raises the limit or the month turns.
     if (error instanceof AiLimitError) return { ...own('limit'), limitResetsOn: error.resetsOn }
-    await saveSummary(ctx, today, factsHash, { error: messageOf(error) })
-    return own('unavailable')
+    const message = messageOf(error)
+    await saveSummary(ctx, today, factsHash, { error: message })
+    return own(failedState(message))
   }
 }
 

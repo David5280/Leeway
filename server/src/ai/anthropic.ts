@@ -39,7 +39,13 @@ function stopOf(reason: Anthropic.StopReason | null): AiStop {
 /**
  * An SDK failure as the kind of failure it is. The SDK's own message is never
  * passed on, since it may quote the request. Most specific first: a
- * connection error is also an APIError.
+ * connection error is also an APIError, one without a status.
+ *
+ * Whether a failure can be billed follows from it: an error with an HTTP
+ * status means Anthropic answered, and it answers with an error instead of a
+ * billed message, so nothing was billed. Only a call that got no answer at all
+ * (unreachable), or one whose answer could not be read (failed), may have been
+ * billed unseen.
  */
 export function failureFrom(error: unknown): AiProviderError {
   if (
@@ -51,7 +57,12 @@ export function failureFrom(error: unknown): AiProviderError {
   if (error instanceof Anthropic.RateLimitError) return new AiProviderError('busy')
   if (error instanceof Anthropic.ContentTooLargeError) return new AiProviderError('too_large')
   if (error instanceof Anthropic.BadRequestError) return new AiProviderError('bad_request')
+  if (error instanceof Anthropic.NotFoundError) return new AiProviderError('model')
   if (error instanceof Anthropic.APIConnectionError) return new AiProviderError('unreachable')
+  // Any other status, 409, 422, 500 or 529 overloaded among them.
+  if (error instanceof Anthropic.APIError && error.status !== undefined) {
+    return new AiProviderError('rejected')
+  }
   return new AiProviderError('failed')
 }
 

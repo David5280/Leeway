@@ -77,6 +77,16 @@ describe('Byline', () => {
     expect(byline({ ai: 'unavailable' })).toHaveTextContent("Claude couldn't write it just now")
   })
 
+  it("says the chosen model isn't available, and where to pick another", () => {
+    expect(byline({ ai: 'no_model' })).toHaveTextContent(
+      "The AI model chosen for the summary isn't available from Anthropic, so this is Leeway's own summary. Pick another in Settings, then AI models.",
+    )
+    expect(screen.getByRole('link', { name: 'Settings, then AI models' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+  })
+
   it('points to Settings when the key is missing or the AI summary is off', () => {
     expect(byline({ ai: 'no_key' })).toHaveTextContent('needs an Anthropic key')
     expect(screen.getByRole('link', { name: 'Settings, then AI assistant' })).toHaveAttribute(

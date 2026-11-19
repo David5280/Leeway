@@ -41,6 +41,9 @@ const FAILURES: Record<AiFailure, string> = {
   busy: 'Claude is busy right now. Try again in a minute.',
   too_large: 'This file is too large for Claude to read. Try one page of the paystub.',
   bad_request: 'Claude could not open this file. Try a clearer photo or the PDF itself.',
+  model:
+    "The AI model set for reading paystubs isn't available from Anthropic. Choose another in Settings, then AI models.",
+  rejected: 'Claude could not take the request just now. Try again in a moment.',
   unreachable: 'Leeway could not reach Claude. Try again in a moment.',
   failed: 'Claude had a problem reading the paystub. Try again in a moment.',
 }

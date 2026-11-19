@@ -2,7 +2,7 @@
 // from, and this month's spending against the limit, with any alert.
 
 import { AI_JOBS, JOB_INFO, type AiJob } from '../../ai/jobs.js'
-import { centsOfMicros, MODEL_CHOICES, isPriced } from '../../ai/models.js'
+import { centsOfMicros, MODEL_CHOICES, isPriced, retiresOn } from '../../ai/models.js'
 import type { AppContext } from '../../context.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
@@ -11,6 +11,7 @@ import type { Settings } from '../settings.js'
 import { activeSpendAlert, type SpendAlertLevel } from './alerts.js'
 import { aiMonth } from './month.js'
 import { resolveModel, type ModelSource } from './settings.js'
+import { unavailableModels } from './unavailable.js'
 import { monthSpend, type JobSpend } from './usage.js'
 
 export interface JobReport {
@@ -24,6 +25,10 @@ export interface JobReport {
   defaultModel: string
   /** False for a model Leeway has no prices for, which is counted at the dearest prices. */
   priced: boolean
+  /** True once Anthropic said it has no such model, until a call with it works. */
+  unavailable: boolean
+  /** The day Anthropic retires the model, or null when none is announced. */
+  retiresOn: IsoDate | null
   spend: JobSpend
 }
 
@@ -66,9 +71,10 @@ export function spendAlertMessage(
 
 export async function aiUsageReport(ctx: AppContext, settings: Settings): Promise<AiUsageReport> {
   const month = aiMonth(ctx.now(), settings.timeZone)
-  const [spend, level] = await Promise.all([
+  const [spend, level, missing] = await Promise.all([
     monthSpend(ctx.db, month),
     activeSpendAlert(ctx.db, month.start),
+    unavailableModels(ctx.db),
   ])
   const jobs = AI_JOBS.map((job): JobReport => {
     const { model, source } = resolveModel(job, settings.ai, ctx.config.modelOverrides)
@@ -82,6 +88,8 @@ export async function aiUsageReport(ctx: AppContext, settings: Settings): Promis
       envVar: info.envVar,
       defaultModel: info.defaultModel,
       priced: isPriced(model),
+      unavailable: missing.has(model),
+      retiresOn: retiresOn(model),
       spend: spend.byJob[job] ?? { calls: 0, costMicros: 0 },
     }
   })

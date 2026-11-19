@@ -5,6 +5,7 @@
 
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote } from '../../../components/ui'
+import { shortDate } from '../../../lib/format'
 import { priceText, type JobReport, type ModelChoice } from './aiText'
 
 export function ModelPicker({
@@ -31,6 +32,7 @@ export function ModelPicker({
           variable to choose here.
         </p>
       )}
+      <ModelNotice job={job} locale={locale} />
       {!job.priced && (
         <p className="notice small">
           Leeway has no prices for <code>{job.model}</code>, so it counts each call at its dearest
@@ -64,4 +66,36 @@ export function ModelPicker({
       <ErrorNote error={set.error} />
     </fieldset>
   )
+}
+
+/**
+ * Why the job's model needs changing: Anthropic said it has no such model, or
+ * it retires on an announced day. Either way, say where to change it.
+ */
+export function ModelNotice({ job, locale }: { job: JobReport; locale: string }) {
+  const change =
+    job.source === 'server' ? (
+      <>
+        Change <code>{job.envVar}</code> on your server, or remove it to choose here.
+      </>
+    ) : (
+      'Pick another below.'
+    )
+  if (job.unavailable) {
+    return (
+      <p className="notice small" role="alert">
+        Anthropic doesn&apos;t have <code>{job.model}</code>; it may be retired or mistyped, so this
+        job can&apos;t run. {change}
+      </p>
+    )
+  }
+  if (job.retiresOn) {
+    return (
+      <p className="notice small">
+        Anthropic retires <code>{job.model}</code> on {shortDate(job.retiresOn, locale)}, and this
+        job stops working then. {change}
+      </p>
+    )
+  }
+  return null
 }

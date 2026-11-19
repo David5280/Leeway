@@ -32,3 +32,11 @@ CREATE TABLE ai_spend_alerts (
   dismissed_at timestamptz,
   PRIMARY KEY (month, level)
 );
+
+-- Models the provider said it does not have (retired, mistyped, or not on this
+-- account), so Settings can tell the owner to choose another. A later call
+-- that works with the model takes it off.
+CREATE TABLE ai_unavailable_models (
+  model text PRIMARY KEY CHECK (char_length(model) BETWEEN 1 AND 100),
+  seen_at timestamptz NOT NULL
+);

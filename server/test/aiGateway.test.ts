@@ -2,7 +2,7 @@
 // before a call, the month on the owner's clock, what is recorded after, and
 // the warning at 80%. Every call goes to a fake provider.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { AiJob } from '../src/ai/jobs.js'
 import { MICROS_PER_CENT, worstCostMicros } from '../src/ai/models.js'
@@ -18,6 +18,7 @@ import {
 } from '../src/domain/ai/gateway.js'
 import { aiMonth } from '../src/domain/ai/month.js'
 import { DEFAULT_MONTHLY_CAP_CENTS } from '../src/domain/ai/settings.js'
+import { unavailableModels } from '../src/domain/ai/unavailable.js'
 import { monthSpend } from '../src/domain/ai/usage.js'
 import { getSettings, saveSettings, type Settings } from '../src/domain/settings.js'
 import { createTestContext, resetData } from './helpers.js'
@@ -168,8 +169,8 @@ describe('AiGateway: recording', () => {
     expect((await monthSpend(ctx.db, aiMonth(ctx.now(), 'UTC'))).calls).toBe(2)
   })
 
-  it.each(['key', 'busy', 'too_large', 'bad_request'] as const)(
-    'records nothing for a call turned away before any work (%s)',
+  it.each(['key', 'busy', 'too_large', 'bad_request', 'model', 'rejected'] as const)(
+    'records nothing for a call Anthropic answered with an error (%s)',
     async (failure) => {
       const { ai, provider } = gatewayFor(ctx)
       provider.reply = new AiProviderError(failure)
@@ -202,6 +203,44 @@ describe('AiGateway: recording', () => {
       ])
     },
   )
+
+  it('notes a model Anthropic does not have, until a call with it works', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    provider.reply = new AiProviderError('model')
+    await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+    expect(await unavailableModels(ctx.db)).toEqual(new Set(['claude-haiku-5-5']))
+    // A second miss keeps one note, with the newer time.
+    ctx.setNow(new Date('2026-11-17T19:00:00Z'))
+    await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+    const { rows } = await ctx.db.query(
+      'SELECT model, seen_at AS "seenAt" FROM ai_unavailable_models',
+    )
+    expect(rows).toEqual([{ model: 'claude-haiku-5-5', seenAt: ctx.now() }])
+    provider.reply = { stop: 'done', output: null, usage: tokens() }
+    await ai.run('summary', ASK)
+    expect(await unavailableModels(ctx.db)).toEqual(new Set())
+  })
+
+  it('notes a missing model found by a count too, and says so to the caller', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    provider.inputTokens = new AiProviderError('model')
+    await expect(ai.run('paystub', FILE_ASK)).rejects.toMatchObject({ failure: 'model' })
+    await expect(ai.count('paystub', FILE_ASK)).rejects.toMatchObject({ failure: 'model' })
+    expect(await unavailableModels(ctx.db)).toEqual(new Set(['claude-haiku-5-5']))
+    expect(provider.sent).toHaveLength(0)
+    expect(await spentThisMonth()).toBe(0)
+  })
+
+  it('notes nothing for any other failure', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    for (const failure of ['rejected', 'unreachable', 'key'] as const) {
+      provider.reply = new AiProviderError(failure)
+      await expect(ai.run('summary', ASK)).rejects.toThrow(AiProviderError)
+    }
+    provider.inputTokens = new AiProviderError('busy')
+    await expect(ai.count('paystub', FILE_ASK)).rejects.toThrow(AiProviderError)
+    expect(await unavailableModels(ctx.db)).toEqual(new Set())
+  })
 
   it("counts an error that is not the provider's own as possibly billed", () => {
     expect(billedNothing(new Error('socket hang up'))).toBe(false)
@@ -351,6 +390,8 @@ describe('AiGateway: the monthly limit', () => {
     await setCap(1)
     await spend(MICROS_PER_CENT - ASK_WORST * 2 + 1)
     const first = ai.run('summary', ASK)
+    // Once the first is sent and held there, the second must count it.
+    await vi.waitFor(() => expect(provider.sent).toHaveLength(1))
     const second = ai.run('summary', ASK).catch((error) => error)
     expect(await second).toBeInstanceOf(AiLimitError)
     open()

@@ -13,12 +13,15 @@
 // plus this one's worst cost, would pass the limit. So a call never takes the
 // month over by more than nothing: the real cost is at most the worst cost.
 //
-// A call that fails is settled one of two ways. An error the provider gives
-// before any work (the key refused, rate limited, a request too large or
-// unreadable) bills nothing, so its hold is released. Any other failure (a
-// timeout, a lost connection, a server error) may still be billed, so its
-// worst cost is recorded as an estimate. The provider makes one attempt per
-// call, never retrying on its own, so no attempt goes uncounted.
+// A call that fails is settled one of two ways. When the provider answered
+// with an error (the key refused, rate limited, a request too large or
+// unreadable, no such model, overloaded, a server error), it billed nothing,
+// so the hold is released. When no answer came (a timeout, a lost
+// connection) or the answer could not be read, the call may still have been
+// billed, so its worst cost is recorded as an estimate. The provider makes
+// one attempt per call, never retrying on its own, so no attempt goes
+// uncounted. A model the provider says it doesn't have is noted, so Settings
+// can tell the owner to choose another.
 
 import { z } from 'zod'
 import type { AiJob } from '../../ai/jobs.js'
@@ -38,10 +41,18 @@ import { getSettings, type Settings } from '../settings.js'
 import { raiseSpendAlert } from './alerts.js'
 import { aiMonth, type AiMonth } from './month.js'
 import { resolveModel, WARN_AT_PERCENT } from './settings.js'
+import { markAvailable, markUnavailable } from './unavailable.js'
 import { monthSpend, recordUsage } from './usage.js'
 
-/** Failures the provider gives before doing any work, so nothing is billed. */
-const UNBILLED: ReadonlySet<AiFailure> = new Set(['key', 'busy', 'too_large', 'bad_request'])
+/** Failures the provider answered with, which it bills nothing for. */
+const UNBILLED: ReadonlySet<AiFailure> = new Set([
+  'key',
+  'busy',
+  'too_large',
+  'bad_request',
+  'model',
+  'rejected',
+])
 
 /** Whether a failed call is known to have cost nothing. */
 export function billedNothing(error: unknown): boolean {
@@ -127,7 +138,7 @@ export class AiGateway {
   /** The input tokens a call would send, counted free of charge with the job's model. */
   async count(job: AiJob, ask: AiAsk): Promise<number> {
     const { request } = await this.prepare(job, ask)
-    return this.provider.count(request)
+    return this.counted(request)
   }
 
   /**
@@ -161,6 +172,7 @@ export class AiGateway {
         this.reservedMicros -= worst
       }
     })
+    await markAvailable(this.deps.db, request.model)
     await this.warnIfNear(month, settings)
     return { ...reply, model: request.model, costMicros: cost }
   }
@@ -178,6 +190,7 @@ export class AiGateway {
   ): Promise<void> {
     await this.serially(async () => {
       try {
+        await this.noteMissingModel(request.model, error)
         if (billedNothing(error)) return
         const usage = {
           inputTokens,
@@ -207,8 +220,24 @@ export class AiGateway {
 
   /** Counted when a file could make the request large, estimated otherwise. */
   private async inputTokens(request: AiRequest): Promise<number> {
-    if (request.content.some((part) => part.type === 'file')) return this.provider.count(request)
+    if (request.content.some((part) => part.type === 'file')) return this.counted(request)
     return estimateInputTokens(request)
+  }
+
+  /** The provider's free count, noting a model it says it doesn't have. */
+  private async counted(request: AiRequest): Promise<number> {
+    try {
+      return await this.provider.count(request)
+    } catch (error) {
+      await this.noteMissingModel(request.model, error)
+      throw error
+    }
+  }
+
+  private async noteMissingModel(model: string, error: unknown): Promise<void> {
+    if (error instanceof AiProviderError && error.failure === 'model') {
+      await markUnavailable(this.deps.db, model, this.deps.now())
+    }
   }
 
   /**

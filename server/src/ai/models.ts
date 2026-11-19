@@ -6,7 +6,13 @@
 // They match the model table in Anthropic's claude-api skill (cached
 // 2026-11-03). When Anthropic changes a price, change it here; usage already
 // recorded keeps the cost it was recorded with.
+//
+// Retirement dates come from Anthropic's model deprecations page,
+// https://platform.claude.com/docs/en/about-claude/model-deprecations, read
+// 2026-11-19. The models offered in Settings retire no sooner than September
+// 2027; when Anthropic deprecates one, add its date to RETIRING.
 
+import type { IsoDate } from '../lib/dates.js'
 import type { TokenUsage } from './provider.js'
 
 /** What a model charges per million tokens of each kind, in US dollars. */
@@ -43,11 +49,13 @@ const PRICING: Record<string, ModelPricing> = {
   'claude-sonnet-5-5': { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10 },
   'claude-sonnet-5': { input: 2, cacheWrite: 2.5, cacheRead: 0.2, output: 10 },
   'claude-sonnet-4-6': { input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15 },
+  'claude-sonnet-4-5': { input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15 },
   'claude-opus-5-5': { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 },
   'claude-opus-5': { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 },
   'claude-opus-4-8': { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 },
   'claude-opus-4-7': { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 },
   'claude-opus-4-6': { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 },
+  'claude-opus-4-5': { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 },
   'claude-fable-5-2': { input: 8, cacheWrite: 10, cacheRead: 0.2, output: 40 },
   'claude-mythos-5-2': { input: 8, cacheWrite: 10, cacheRead: 0.2, output: 40 },
   'claude-fable-5-1': { input: 10, cacheWrite: 12.5, cacheRead: 0.25, output: 50 },
@@ -102,6 +110,19 @@ export const MODEL_IDS = MODEL_CHOICES.map((model) => model.id) as [ModelId, ...
 /** A model's prices by its id, also with a date on the end, like claude-haiku-4-5-20251001. */
 export function pricingOf(model: string): ModelPricing {
   return PRICING[model] ?? PRICING[model.replace(/-\d{8}$/, '')] ?? UNKNOWN_MODEL
+}
+
+/**
+ * Deprecated models and the day Anthropic retires them, after which a call
+ * with one fails. A server variable may still name one.
+ */
+const RETIRING: Record<string, IsoDate> = {
+  'claude-sonnet-4-5': '2026-11-30',
+}
+
+/** The day a model retires, also with a date on the end, or null when none is announced. */
+export function retiresOn(model: string): IsoDate | null {
+  return RETIRING[model] ?? RETIRING[model.replace(/-\d{8}$/, '')] ?? null
 }
 
 /** Whether Leeway knows this model's prices, rather than pricing it as the dearest. */

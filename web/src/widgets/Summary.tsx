@@ -66,6 +66,14 @@ export function Byline({
           Claude couldn&apos;t write it just now, so this is Leeway&apos;s own summary.
         </p>
       )
+    case 'no_model':
+      return (
+        <p className="small muted">
+          The AI model chosen for the summary isn&apos;t available from Anthropic, so this is
+          Leeway&apos;s own summary. Pick another in{' '}
+          <Link to={settingsPath('ai')}>Settings, then AI models</Link>.
+        </p>
+      )
     case 'no_key':
       return (
         <p className="small muted">

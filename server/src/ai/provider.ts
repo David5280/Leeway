@@ -71,10 +71,14 @@ export interface AiProvider {
  * - busy: rate limited; worth a try in a minute.
  * - too_large: the request is over the provider's size limit.
  * - bad_request: the provider could not take the request, often an unreadable file.
+ * - model: the provider has no such model: retired, mistyped, or not on this account.
+ * - rejected: the provider answered with any other error, such as overloaded or a
+ *   server error, before giving an answer.
  * - unreachable: no answer from the provider.
- * - failed: anything else.
+ * - failed: anything else, such as an answer that could not be read.
  */
-export type AiFailure = 'key' | 'busy' | 'too_large' | 'bad_request' | 'unreachable' | 'failed'
+export type AiFailure =
+  'key' | 'busy' | 'too_large' | 'bad_request' | 'model' | 'rejected' | 'unreachable' | 'failed'
 
 /** A failed request. The message is the provider's kind of failure, never what was sent. */
 export class AiProviderError extends Error {

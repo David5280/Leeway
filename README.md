@@ -298,10 +298,12 @@ How the limit works:
   writes) are priced and recorded. Prices are Anthropic's list prices,
   checked on 2026-11-19, so your Anthropic bill is the final word.
 - Each call is one attempt; Leeway never retries on its own. A call Anthropic
-  turns away before doing any work (the key refused, rate limited, a request
-  too large or unreadable) costs nothing and is not recorded. A call that
-  times out, loses its connection or meets a server error may still be
-  billed, so its most possible cost is recorded, marked as an estimate.
+  answers with an error (the key refused, rate limited, overloaded, a server
+  error, a request too large or unreadable, or a model it doesn't have) is
+  not billed, so nothing is recorded. Only a call that gets no answer (it
+  times out or loses its connection) or an answer Leeway can't read may have
+  been billed unseen, so its most possible cost is recorded, marked as an
+  estimate.
 - At 80% of the limit a warning shows once in **Heads up** and in Settings,
   and once the month's spending reaches the limit, a second alert says so.
   A single call turned away while some of the limit is left only says so
@@ -311,7 +313,9 @@ How the limit works:
   answered.
 
 `SUMMARY_MODEL` or `PAYSTUB_MODEL` fixes that job's model on the server, and
-Settings then shows it locked. A model Leeway has no price for is counted at
+Settings then shows it locked. When Anthropic says it has no such model
+(retired or mistyped), Settings and the summary card say so and where to pick
+another, and a model with an announced retirement day shows that day. A model Leeway has no price for is counted at
 the price of the dearest model it knows, so the limit still holds. No
 assistant can see or change any of this over MCP, since it decides what is
 spent on your Anthropic account; an assistant still sees the chosen models

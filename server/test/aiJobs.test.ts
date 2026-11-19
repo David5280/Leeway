@@ -189,6 +189,8 @@ describe('AiDocumentReader', () => {
       ['busy', /^Claude is busy right now/],
       ['too_large', /too large for Claude/],
       ['bad_request', /could not open this file/],
+      ['model', /isn't available from Anthropic\. Choose another in Settings, then AI models/],
+      ['rejected', /could not take the request just now/],
       ['unreachable', /could not reach Claude/],
       ['failed', /had a problem reading/],
     ]
@@ -208,6 +210,13 @@ describe('AiDocumentReader', () => {
     await expect(reader.countPaystubTokens(checkPaystubFile(pdf()))).rejects.toThrow(
       'Leeway could not reach Claude. Try again in a moment.',
     )
+    // A model Anthropic doesn't have says where to pick another, from a count or a read.
+    const missing = /isn't available from Anthropic/
+    provider.inputTokens = new AiProviderError('model')
+    await expect(reader.countPaystubTokens(checkPaystubFile(pdf()))).rejects.toThrow(missing)
+    provider.inputTokens = 2_000
+    provider.reply = new AiProviderError('model')
+    expect((await readFailure(reader)).message).toMatch(missing)
   })
 })
 

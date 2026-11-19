@@ -20,6 +20,8 @@ function job(fields: Partial<JobReport> & Pick<JobReport, 'job'>): JobReport {
     envVar: paystub ? 'PAYSTUB_MODEL' : 'SUMMARY_MODEL',
     defaultModel: 'claude-haiku-5-5',
     priced: true,
+    unavailable: false,
+    retiresOn: null,
     spend: { calls: 0, costMicros: 0 },
     ...fields,
   }
@@ -194,6 +196,52 @@ describe('Settings > AI models', () => {
       expect(option).not.toBeChecked()
     }
     expect(within(picker('Dashboard summary')).getAllByRole('radio')[0]).toBeEnabled()
+  })
+
+  it("says when Anthropic doesn't have a job's model, and where to change it", async () => {
+    serve(
+      usage({
+        jobs: [
+          job({ job: 'summary', model: 'claude-haiku-5-5', unavailable: true }),
+          job({ job: 'paystub', model: 'claude-typo-1', source: 'server', unavailable: true }),
+        ],
+      }),
+    )
+    renderSignedIn(<AiModelsSection />)
+    await screen.findByRole('group', { name: 'Paystub reader' })
+    const summary = within(picker('Dashboard summary')).getByRole('alert')
+    expect(summary).toHaveTextContent(
+      "Anthropic doesn't have claude-haiku-5-5; it may be retired or mistyped, so this job can't run. Pick another below.",
+    )
+    const paystub = within(picker('Paystub reader')).getByRole('alert')
+    expect(paystub).toHaveTextContent(
+      'Change PAYSTUB_MODEL on your server, or remove it to choose here.',
+    )
+  })
+
+  it('warns of a model Anthropic is retiring, with the day', async () => {
+    serve(
+      usage({
+        jobs: [
+          job({ job: 'summary', retiresOn: '2027-03-01' }),
+          job({
+            job: 'paystub',
+            model: 'claude-sonnet-4-5',
+            source: 'server',
+            retiresOn: '2026-11-30',
+          }),
+        ],
+      }),
+    )
+    renderSignedIn(<AiModelsSection />)
+    await screen.findByRole('group', { name: 'Paystub reader' })
+    expect(within(picker('Dashboard summary')).getByText(/retires/)).toHaveTextContent(
+      'Anthropic retires claude-haiku-5-5 on Mar 1, and this job stops working then. Pick another below.',
+    )
+    expect(within(picker('Paystub reader')).getByText(/retires/)).toHaveTextContent(
+      'Anthropic retires claude-sonnet-4-5 on Nov 30, and this job stops working then. Change PAYSTUB_MODEL on your server',
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows why a pick could not be saved', async () => {
