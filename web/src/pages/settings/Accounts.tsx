@@ -7,7 +7,7 @@ import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
-import { ACCOUNT_TYPES, accountPath, isOwed } from '../../lib/accounts'
+import { ACCOUNT_TYPES, accountDetailPath, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
 import { LowBalanceField } from './LowBalance'
@@ -90,7 +90,7 @@ function AccountRow({ account }: { account: Account }) {
       </span>
       {account.type === 'depository' && <LowBalanceField account={account} />}
       <Link
-        to={accountPath(account.id)}
+        to={accountDetailPath(account.id)}
         className="num linkbtn"
         style={{ textAlign: 'right' }}
         aria-label={`Open ${account.name}`}

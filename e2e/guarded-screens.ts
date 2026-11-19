@@ -82,11 +82,15 @@ export const SCREENS: Screen[] = [
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
   }),
   at('accounts', '/accounts'),
+  at('accounts', '/accounts', {
+    name: '/accounts picking accounts to add up',
+    then: open('Select', (page) => page.getByRole('region', { name: 'Picked accounts' })),
+  }),
   ...['checking', 'savings', 'credit card', 'loan', 'overdrawn checking'].map(
     (kind, index): Screen => ({
       name: `the ${kind} account page`,
-      route: 'accounts',
-      path: (seeded) => `/accounts?select=${seeded.accounts[index]}`,
+      route: 'account',
+      path: (seeded) => `/accounts/${seeded.accounts[index]}`,
     }),
   ),
   at('alerts', '/alerts'),

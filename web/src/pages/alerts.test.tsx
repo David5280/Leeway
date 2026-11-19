@@ -26,7 +26,7 @@ describe('the account health banner', () => {
     fakeServer({ list_alerts: () => alertsFor([low('b'), overdrawn]) })
     renderSignedIn(<AccountHealth />)
     const link = await screen.findByRole('link', { name: /Everyday is overdrawn by \$42\.10/ })
-    expect(link).toHaveAttribute('href', '/accounts?select=a')
+    expect(link).toHaveAttribute('href', '/accounts/a')
     expect(banner()).toHaveClass('over-card')
     expect(within(banner()).getAllByRole('link')[0]).toBe(link)
     expect(within(banner()).getByRole('link', { name: 'See all alerts' })).toHaveAttribute(

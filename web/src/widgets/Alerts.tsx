@@ -7,7 +7,7 @@ import type { Connection } from '../api/client'
 import { useAction } from '../api/hooks'
 import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
 import { Icon } from '../components/ui'
-import { accountPath } from '../lib/accounts'
+import { accountDetailPath } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
@@ -36,7 +36,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
       tone: alert.severity === 'urgent' ? 'over' : 'warn',
       text: alert.message,
       level: ACCOUNT_ALERT_LABELS[alert.kind],
-      to: accountPath(alert.accountId),
+      to: accountDetailPath(alert.accountId),
     })
   }
   for (const connection of connections.data ?? []) {

@@ -1,5 +1,5 @@
 // A small line of how a number moved, for where the trend matters more than
-// the values: a card's corner, a row's end, a drill-down's trend. With
+// the values: a card's corner or a row's end. With
 // `area` it fills softly under the line and marks where it ends today.
 // Decorative unless given a label.
 
@@ -46,14 +46,11 @@ export function Sparkline({
   values,
   label,
   area = false,
-  wide = false,
 }: {
   values: readonly number[]
   label?: string
   /** Fill under the line and mark its last point. */
   area?: boolean
-  /** Take the full width of its box, as in a drill-down, instead of 80px. */
-  wide?: boolean
 }) {
   // Each sparkline's fill needs its own gradient id on the page.
   const gradient = `spark-fill-${useId().replace(/:/g, '')}`
@@ -62,7 +59,7 @@ export function Sparkline({
   const last = points[points.length - 1]!
   return (
     <svg
-      className={wide ? 'spark spark-wide' : 'spark'}
+      className="spark"
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       preserveAspectRatio="none"
       role={label ? 'img' : undefined}

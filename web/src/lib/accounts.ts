@@ -29,26 +29,9 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   return parts.filter(Boolean).join(' ')
 }
 
-/** Where one account opens: its own detail page, with everything Leeway knows about it. */
+/** Where every link to an account opens: its own page, with everything Leeway knows about it. */
 export function accountDetailPath(id: string): string {
   return `/accounts/${encodeURIComponent(id)}`
-}
-
-/** Every link to an account (alerts, lists, drill-downs) opens its detail page. */
-export const accountPath = accountDetailPath
-
-/**
- * The pick after tapping an account's chip. An empty pick means every
- * account. From every account, a tap narrows to the one tapped; otherwise it
- * adds or removes that one, and removing the last goes back to every account.
- * A pick naming every account is saved as empty, so it still means "all"
- * once more accounts are added.
- */
-export function toggleAccount(picked: string[], id: string, allIds: string[]): string[] {
-  if (picked.length === 0) return [id]
-  const next = picked.includes(id) ? picked.filter((other) => other !== id) : [...picked, id]
-  const coversAll = allIds.every((other) => next.includes(other))
-  return coversAll ? [] : next
 }
 
 /**

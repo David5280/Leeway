@@ -49,25 +49,36 @@ export function lineFrame(compact: boolean, width: number, tickLabels: string[],
   }
 }
 
+/** A level the line should stay on one side of, such as a card's score-friendly balance. */
+export interface LineReference {
+  cents: number
+  /** Where the line should be, in words, drawn on the line: "Under 30% of the limit". */
+  label: string
+}
+
 /**
  * The full chart has value and date axes and the latest value at the line's
  * end. Compact draws the line and its shading alone, for a dashboard widget.
+ * A reference, when given, is a dashed level labelled with where the line
+ * should be; without one the chart draws exactly as before.
  */
 export function LineChart({
   points,
   label,
   description,
   compact = false,
+  reference,
 }: {
   points: LinePoint[]
   label: string
   description: string
   compact?: boolean
+  reference?: LineReference
 }) {
   const { money, settings } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(640)
   const gradientId = useId()
-  const values = points.map((p) => p.cents)
+  const values = axisValues(points, reference)
   const axis = niceTicks(Math.min(...values), Math.max(...values), width < 420 ? 4 : 5)
   const format = axisFormat(axis.values, settings)
   const last = points.at(-1)
@@ -119,6 +130,7 @@ export function LineChart({
             width={right - left}
             locale={settings.locale}
           />
+          <ReferenceLine reference={reference} y={y} left={left} right={right} />
         </>
       )}
       <ShadedLine points={placed} baseline={baseline} fill={`url(#${gradientId})`} />
@@ -146,6 +158,36 @@ export function LineChart({
         />
       )}
     </ChartFrame>
+  )
+}
+
+/** The amounts the value axis must show: every point, and the reference level if any. */
+function axisValues(points: LinePoint[], reference: LineReference | undefined): number[] {
+  const values = points.map((p) => p.cents)
+  return reference ? [...values, reference.cents] : values
+}
+
+/** The reference level as a dashed line, its words and amount just above it at the left. */
+function ReferenceLine({
+  reference,
+  y,
+  left,
+  right,
+}: {
+  reference: LineReference | undefined
+  y: (cents: number) => number
+  left: number
+  right: number
+}) {
+  if (!reference) return null
+  const at = y(reference.cents)
+  return (
+    <g aria-hidden="true">
+      <line x1={left} x2={right} y1={at} y2={at} className="chart-line budget" />
+      <text x={left + 4} y={at - 6} className="chart-axis strong-label">
+        {reference.label}: <Money as="tspan" cents={reference.cents} />
+      </text>
+    </g>
   )
 }
 

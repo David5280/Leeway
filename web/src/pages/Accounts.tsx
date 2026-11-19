@@ -1,141 +1,165 @@
-// The Accounts dashboard: pick one account or several and see them on their
-// own. One account picked is that account's page, so every link to an
-// account opens here with just it picked (?select=id).
+// The Accounts screen: every account as a card, grouped by kind, under what
+// they all come to together and any alerts. A card opens its account's own
+// page (AccountDetail). Select mode turns the cards into tick boxes: the
+// ticked accounts are added up in a bar, and the money in and out, spending
+// and recent activity below follow the pick, which is saved in settings.
 
-import { Card } from '../components/design/Card'
-import { useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import type { Account, AccountsView } from '../api/client'
+import { useState } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import type { Account, NetWorth } from '../api/client'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
-import { AlertRows } from '../components/AccountAlerts'
+import { AlertsCard } from '../components/AccountAlerts'
+import { Card } from '../components/design/Card'
+import { HeroFigure } from '../components/design/HeroFigure'
+import { Money } from '../components/design/Money'
+import { SectionHead } from '../components/design/SectionHead'
+import { Sparkline } from '../components/design/Sparkline'
 import { Shell } from '../components/Shell'
-import { TransactionLine } from '../components/TransactionLine'
-import { ErrorNote, LoadingOrError } from '../components/ui'
-import { activePick } from '../lib/accounts'
+import { ErrorNote, Icon, LoadingOrError } from '../components/ui'
+import { combine } from '../lib/accountCards'
+import { accountDetailPath, activePick } from '../lib/accounts'
 import { useApp } from '../lib/app'
+import { allAccountsDrill } from '../lib/drills/accounts'
 import { settingsPath } from './settings/paths'
-import { AccountPicker } from './accounts/AccountPicker'
-import { Balances } from './accounts/Balances'
-import { Flows } from './accounts/Flows'
-import { Spending } from './accounts/Spending'
-
-/**
- * The pick to show: an account linked to from elsewhere, or else the saved
- * pick. A link's pick is saved too, and the address cleared, so a reload or
- * the phone shows the same.
- */
-function usePick(): [string[], (next: string[]) => void, Error | null] {
-  const { settings } = useApp()
-  const update = useUpdateSettings()
-  const save = update.mutate
-  const [params, setParams] = useSearchParams()
-  const linked = params.get('select')
-  useEffect(() => {
-    if (!linked) return
-    save({ accountSelection: [linked] })
-    setParams({}, { replace: true })
-  }, [linked, save, setParams])
-  const picked = linked ? [linked] : settings.accountSelection
-  return [picked, (next) => save({ accountSelection: next }), update.error]
-}
+import { AccountGroups } from './accounts/AccountGroups'
+import { SelectBar } from './accounts/SelectBar'
+import { SummaryCard, ViewParts } from './accounts/ViewParts'
 
 export function Accounts() {
-  const [saved, setPick, saveError] = usePick()
+  // Old links picked one account here (?select=id); that account has its own page now.
+  const [params] = useSearchParams()
+  const linked = params.get('select')
+  if (linked) return <Navigate to={accountDetailPath(linked)} replace />
+  return <AccountsScreen />
+}
+
+function AccountsScreen() {
+  const { settings } = useApp()
+  const update = useUpdateSettings()
+  const [selecting, setSelecting] = useState(false)
   const accounts = useAction('list_accounts')
+  // The lines, goals and history are niceties: the cards show without them.
+  const balances = useAction('list_recent_balances')
+  const goals = useAction('list_goals')
+  const netWorth = useAction('get_net_worth', { days: 365 })
+  const alerts = useAction('list_alerts')
+
+  const all = accounts.data ?? []
   // Only accounts that still exist; none of them means every account.
-  const picked = activePick(saved, accounts.data ?? [])
-  const view = useAction(
-    'summarize_accounts',
-    { accountIds: picked },
-    {
-      enabled: accounts.isSuccess,
-      // Keep the last view on screen while a new pick loads, so it does not flash.
-      placeholderData: (previous) => previous,
-    },
-  )
+  const picked = activePick(settings.accountSelection, all)
+  const toggle = (id: string) =>
+    update.mutate({
+      accountSelection: picked.includes(id) ? picked.filter((one) => one !== id) : [...picked, id],
+    })
+  const lines = new Map(balances.data?.map((one) => [one.accountId, one.balancesCents]))
 
   return (
     <Shell>
-      <h1>Accounts</h1>
-      {accounts.data && accounts.data.length > 0 && (
-        <AccountPicker accounts={accounts.data} picked={picked} onChange={setPick} />
-      )}
-      <ErrorNote error={saveError} />
-      {view.data ? (
-        <AccountsBody view={view.data} />
-      ) : (
-        <LoadingOrError error={accounts.error ?? view.error} />
+      <div className="page-head">
+        <h1 className="page-title">
+          <Icon name="accounts" size={22} />
+          Accounts
+        </h1>
+        {all.length > 1 && !selecting && (
+          <button type="button" className="btn" onClick={() => setSelecting(true)}>
+            Select
+          </button>
+        )}
+      </div>
+      <ErrorNote error={update.error} />
+      {accounts.data && all.length === 0 && <NoAccounts />}
+      {!accounts.data && <LoadingOrError error={accounts.error} />}
+      {all.length > 0 && (
+        <>
+          {!selecting && (
+            <AlertsCard alerts={alerts.data ?? []} label="Alerts for these accounts" />
+          )}
+          {!selecting && <TogetherCard accounts={all} netWorth={netWorth.data} />}
+          <AccountGroups
+            accounts={all}
+            balances={lines}
+            goals={goals.data ?? []}
+            picking={selecting ? { picked, toggle } : null}
+          />
+          {selecting && (
+            <SelectBar
+              picked={all.filter((account) => picked.includes(account.id))}
+              onDone={() => setSelecting(false)}
+            />
+          )}
+          <PickedView picked={picked} ready={accounts.isSuccess} />
+        </>
       )}
     </Shell>
   )
 }
 
-function AccountsBody({ view }: { view: AccountsView }) {
-  if (view.accounts.length === 0) {
-    return (
-      <p className="empty">
-        No accounts yet. <Link to={settingsPath('banks')}>Connect a bank</Link> or{' '}
-        <Link to={settingsPath('accounts')}>add one by hand</Link>.
-      </p>
-    )
-  }
+function NoAccounts() {
   return (
-    <>
-      {view.alerts.length > 0 && (
-        <Card
-          static="list"
-          label="Alerts for these accounts"
-          className={`tight ${view.alerts.some((a) => a.severity === 'urgent') ? 'over-card' : 'warn-card'}`}
-        >
-          <AlertRows alerts={view.alerts} />
-        </Card>
-      )}
-      <Card static="words" label="Summary" className="summary stack-sm">
-        <p className="eyebrow">Summary</p>
-        <p className="summary-headline">{view.summary.headline}</p>
-        {view.summary.points.length > 0 && (
-          <ul className="summary-points">
-            {view.summary.points.map((point) => (
-              <li key={point}>{point}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-      <Balances view={view} />
-      <div className="grid">
-        <Flows flows={view.flows} />
-        <Spending spending={view.spending} period={view.period} />
-      </div>
-      <Recent view={view} />
-    </>
+    <p className="empty">
+      No accounts yet. <Link to={settingsPath('banks')}>Connect a bank</Link> or{' '}
+      <Link to={settingsPath('accounts')}>add one by hand</Link>.
+    </p>
   )
 }
 
-/** The newest transactions on the picked accounts, linking to all of one account's. */
-function Recent({ view }: { view: AccountsView }) {
-  const categories = useAction('list_categories')
-  // Transfers are left out, so the line reads them as transfers, as on the dashboard.
-  const byId = new Map(
-    (categories.data ?? []).filter((c) => c.kind !== 'transfer').map((c) => [c.id, c]),
-  )
-  const only: Account | undefined = view.accounts.length === 1 ? view.accounts[0] : undefined
+/** What every counted account comes to: owned less owed, with net worth's line. */
+function TogetherCard({ accounts, netWorth }: { accounts: Account[]; netWorth?: NetWorth }) {
+  const counted = accounts.filter((account) => !account.hidden)
+  const { ownedCents, owedCents, netCents } = combine(counted)
+  const history = netWorth?.history.map((point) => point.netWorthCents) ?? []
   return (
-    <Card static="list" label="Recent transactions" className="stack-sm">
-      <div className="row-between">
-        <h2>Recent</h2>
-        <Link to={only ? `/transactions?account=${only.id}` : '/transactions'} className="linkbtn">
-          All transactions
-        </Link>
-      </div>
-      {view.recent.length === 0 && <p className="empty">No transactions yet.</p>}
-      {view.recent.map((tx) => (
-        <TransactionLine
-          key={tx.id}
-          tx={tx}
-          category={tx.categoryId ? byId.get(tx.categoryId) : undefined}
-        />
-      ))}
+    <Card
+      drill={allAccountsDrill(accounts, netWorth)}
+      label="All accounts together"
+      className="hero stack"
+    >
+      <HeroFigure
+        label="All accounts together"
+        cents={netCents}
+        precision="cents"
+        tone={netCents < 0 ? 'problem' : undefined}
+        caption={
+          <>
+            <Money cents={ownedCents} /> owned, less <Money cents={owedCents} /> owed
+          </>
+        }
+        aside={
+          history.length > 1 ? (
+            <Sparkline values={history} area label="Net worth over the last year" />
+          ) : undefined
+        }
+      />
     </Card>
+  )
+}
+
+/** Money in and out, spending and recent activity for the pick, or for every account. */
+function PickedView({ picked, ready }: { picked: string[]; ready: boolean }) {
+  const view = useAction(
+    'summarize_accounts',
+    { accountIds: picked },
+    // Keep the last view on screen while a new pick loads, so it does not flash.
+    { enabled: ready, placeholderData: (previous) => previous },
+  )
+  const count = picked.length
+  return (
+    <section className="stack" aria-label="Activity on these accounts">
+      <SectionHead
+        icon="activity"
+        title={
+          count === 0 ? 'All accounts' : `${count} picked ${count === 1 ? 'account' : 'accounts'}`
+        }
+      />
+      {view.data ? (
+        <>
+          <SummaryCard summary={view.data.summary} />
+          <ViewParts view={view.data} />
+        </>
+      ) : (
+        <LoadingOrError error={view.error} />
+      )}
+    </section>
   )
 }

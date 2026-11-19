@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  accountDetail,
-  accountPath,
-  activePick,
-  isOwed,
-  overdrawn,
-  toggleAccount,
-} from './accounts'
+import { accountDetail, accountDetailPath, activePick, isOwed, overdrawn } from './accounts'
 
 describe('isOwed', () => {
   it('counts cards and loans as owed, and everything else as owned', () => {
@@ -35,28 +28,10 @@ describe('accountDetail', () => {
   })
 })
 
-describe('accountPath', () => {
-  it('opens the Accounts dashboard with just that account picked', () => {
-    expect(accountPath('abc')).toBe('/accounts?select=abc')
-    expect(accountPath('a b')).toBe('/accounts?select=a%20b')
-  })
-})
-
-describe('toggleAccount', () => {
-  const all = ['a', 'b', 'c']
-
-  it('narrows every account to the one tapped', () => {
-    expect(toggleAccount([], 'b', all)).toEqual(['b'])
-  })
-
-  it('adds and removes accounts from a pick', () => {
-    expect(toggleAccount(['a'], 'b', all)).toEqual(['a', 'b'])
-    expect(toggleAccount(['a', 'b'], 'a', all)).toEqual(['b'])
-  })
-
-  it('goes back to every account when the last is removed or all are picked', () => {
-    expect(toggleAccount(['a'], 'a', all)).toEqual([])
-    expect(toggleAccount(['a', 'b'], 'c', all)).toEqual([])
+describe('accountDetailPath', () => {
+  it("opens the account's own page, its id made safe for an address", () => {
+    expect(accountDetailPath('abc')).toBe('/accounts/abc')
+    expect(accountDetailPath('a b')).toBe('/accounts/a%20b')
   })
 })
 
