@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { call } from '../api/client'
 import { useAction } from '../api/hooks'
-import { ErrorNote, Loading, Logo, Segmented } from '../components/ui'
+import { AUTH_LOGO_SIZE, ErrorNote, Loading, Logo, Segmented } from '../components/ui'
 
 type Scope = 'read' | 'write'
 
@@ -36,7 +36,7 @@ function Frame({ children }: { children: React.ReactNode }) {
     <main className="auth">
       <div className="card stack">
         <div className="brand">
-          <Logo />
+          <Logo size={AUTH_LOGO_SIZE} />
           leeway
         </div>
         {children}
