@@ -1,5 +1,5 @@
-// The install manifest an iPhone or Android reads when Leeway is added to the
-// home screen.
+// The install manifest a phone or computer reads when Leeway is added to its
+// home screen or installed.
 
 import { describe, expect, it } from 'vitest'
 import manifestText from '../public/manifest.webmanifest?raw'
@@ -11,7 +11,11 @@ describe('the install manifest', () => {
     expect(manifest.display).toBe('standalone')
   })
 
-  it('turns with the phone instead of locking it upright', () => {
+  // Where a platform reads it (Android, desktop installs), "any" leaves the
+  // app free to turn rather than locked upright. An iPhone ignores the field:
+  // an installed app turns there unless rotation lock is on, so this changes
+  // nothing on iOS.
+  it('locks no orientation on platforms that read it', () => {
     expect(manifest.orientation).toBe('any')
   })
 })
