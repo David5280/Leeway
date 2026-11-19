@@ -19,6 +19,21 @@ export async function makeWidgetToken(page: Page): Promise<string> {
   return (await parameter.textContent())!
 }
 
+/** A token plainly not real, for pictures, which are kept and shared. */
+export const PLACEHOLDER_TOKEN = 'lww_EXAMPLE-TOKEN-NOT-REAL'
+
+/**
+ * Shows PLACEHOLDER_TOKEN wherever a new token would be shown. The server
+ * still makes a real one, which never reaches the page.
+ */
+export async function showPlaceholderToken(page: Page): Promise<void> {
+  await page.route('**/api/actions/create_widget_token', async (route) => {
+    const response = await route.fetch()
+    const { result } = (await response.json()) as { result: object }
+    await route.fulfill({ response, json: { result: { ...result, token: PLACEHOLDER_TOKEN } } })
+  })
+}
+
 /** Revokes the token if there is one, so each test starts without. */
 export async function revokeWidgetToken(page: Page): Promise<void> {
   await page.request.post('/api/actions/revoke_widget_token', { data: {} })

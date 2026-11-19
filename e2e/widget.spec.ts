@@ -3,7 +3,14 @@
 
 import { readFile } from 'node:fs/promises'
 import { expect, request as newRequest, test } from '@playwright/test'
-import { deployedAt, makeWidgetToken, revokeWidgetToken, SCREENSHOTS } from './widget'
+import {
+  deployedAt,
+  makeWidgetToken,
+  PLACEHOLDER_TOKEN,
+  revokeWidgetToken,
+  SCREENSHOTS,
+  showPlaceholderToken,
+} from './widget'
 
 test.afterEach(async ({ page }) => revokeWidgetToken(page))
 
@@ -74,8 +81,10 @@ test('the script downloads as Leeway.js, the same as the one in the repository',
 
 test('on a deployed Leeway, the parameter carries its https address', async ({ page }) => {
   await deployedAt(page, 'https://leeway.example.com')
+  // The picture below is shared, so it shows a token that is plainly not real.
+  await showPlaceholderToken(page)
   const parameter = await makeWidgetToken(page)
-  expect(parameter).toMatch(/^https:\/\/leeway\.example\.com\|lww_/)
+  expect(parameter).toBe(`https://leeway.example.com|${PLACEHOLDER_TOKEN}`)
   const section = page.getByRole('region', { name: 'Widget' })
   await expect(section).not.toContainText('public https address')
   if (SCREENSHOTS) {

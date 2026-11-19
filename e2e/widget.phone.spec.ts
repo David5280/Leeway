@@ -4,7 +4,13 @@
 
 import { expect, test } from '@playwright/test'
 import { boxes, overflow, overlapping, PHONES } from './phone'
-import { deployedAt, makeWidgetToken, revokeWidgetToken, SCREENSHOTS } from './widget'
+import {
+  deployedAt,
+  makeWidgetToken,
+  revokeWidgetToken,
+  SCREENSHOTS,
+  showPlaceholderToken,
+} from './widget'
 
 for (const [name, viewport] of PHONES) {
   test.describe(`on ${name}`, () => {
@@ -13,6 +19,7 @@ for (const [name, viewport] of PHONES) {
 
     test('the widget setup fits, with nothing overlapping and 44px targets', async ({ page }) => {
       await deployedAt(page, 'https://leeway.example.com')
+      await showPlaceholderToken(page)
       await makeWidgetToken(page)
       const section = page.getByRole('region', { name: 'Widget' })
       await expect(section.getByRole('button', { name: 'Copy the script' })).toBeEnabled()
