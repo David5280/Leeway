@@ -827,6 +827,13 @@ button.chip {
   padding: 12px 14px;
 }
 
+/* An account on the home screen: its name and detail, the line of its recent
+   balance, then the balance itself, in one row (a .clickrow stacks). */
+.account-row {
+  flex-direction: row;
+  align-items: center;
+}
+
 .alert-icon {
   width: 32px;
   height: 32px;

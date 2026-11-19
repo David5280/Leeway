@@ -2,11 +2,11 @@
 
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
+import { Money } from '../components/design/Money'
+import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, Progress } from '../components/ui'
 import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
-import { Money } from '../components/design/Money'
-import { Sparkline } from '../components/design/Sparkline'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
 
@@ -54,7 +54,7 @@ export function AccountsWidget() {
         <Link
           key={account.id}
           to={accountPath(account.id)}
-          className={`list-row clickrow ${account.hidden ? 'muted' : ''}`}
+          className={`list-row clickrow account-row ${account.hidden ? 'muted' : ''}`}
         >
           <span className="grow stack-sm" style={{ gap: 0 }}>
             <span className="ellipsis">{account.name}</span>

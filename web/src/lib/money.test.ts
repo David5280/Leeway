@@ -59,6 +59,9 @@ describe('the shorthand formatters', () => {
     expect(compactMoney(1_500_000, usd)).toBe('$15K')
     expect(compactMoney(1_250_000, usd)).toBe('$12.5K')
     expect(compactMoney(120_000_000, usd)).toBe('$1.2M')
+    // Under a thousand there is nothing to shorten, so no tenth is shown.
+    expect(compactMoney(41_470, usd)).toBe('$415')
+    expect(compactMoney(-41_470, usd)).toBe('\u2212$415')
   })
 
   it('show how a locale writes money, with the currency’s own decimals', () => {

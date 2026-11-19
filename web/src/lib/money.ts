@@ -68,9 +68,14 @@ const DIGITS: Record<Precision, Intl.NumberFormatOptions> = {
   compact: { notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 },
 }
 
-/** An amount in units, rounded to whole units unless cents are wanted. */
+/**
+ * An amount in units, rounded to whole units unless cents are wanted. A
+ * compact amount under a thousand has nothing to shorten, so it is whole
+ * too: "$415", never "$414.7".
+ */
 function units(cents: number, precision: Precision): number {
-  return precision === 'whole' ? Math.round(cents / 100) : cents / 100
+  const whole = precision === 'whole' || (precision === 'compact' && Math.abs(cents) < 100_000)
+  return whole ? Math.round(cents / 100) : cents / 100
 }
 
 /** Text with the locale's hyphen-minus, if any, written as the true minus sign. */
