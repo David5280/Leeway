@@ -4,6 +4,7 @@
 
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import { periodWord, shortDate } from '../lib/words.js'
+import type { AccountAlert } from './accountAlerts.js'
 import type { Checkin } from './checkin.js'
 import type { Settings } from './settings.js'
 
@@ -18,10 +19,21 @@ type Money = (cents: number) => string
 /** The most points the dashboard shows, so the summary stays a glance. */
 export const MAX_POINTS = 4
 
+/** How a point counts alerts it does not spell out; the weekly email lists them all instead. */
+export const MORE_ALERTS_ENDING = 'at the top of the dashboard.'
+
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
-/** One sentence on the period: over, heading over, on track, or no budget yet. */
-export function headline({ budget }: Checkin, money: Money, word: string): string {
+/**
+ * One sentence on the period: over, heading over, on track, or no budget yet.
+ * `onTrack` opens the on-track sentence, so it can read as a point under an alert.
+ */
+function budgetSentence(
+  { budget }: Checkin,
+  money: Money,
+  word: string,
+  onTrack = "You're on track",
+): string {
   // Today still counts, as it does for the money left per day.
   const days = plural(budget.daysLeft + 1, 'day', 'days')
   if (budget.budgetedCents === 0) {
@@ -44,18 +56,47 @@ export function headline({ budget }: Checkin, money: Money, word: string): strin
     budget.setAsideCents > 0 ? ` after ${money(budget.setAsideCents)} set aside for goals` : ''
   const perDay =
     budget.safePerDayCents === null ? '' : `, about ${money(budget.safePerDayCents)} a day`
-  return `You're on track: ${money(budget.leewayCents)} left${afterGoals}${perDay} for ${days}.`
+  return `${onTrack}: ${money(budget.leewayCents)} left${afterGoals}${perDay} for ${days}.`
+}
+
+/**
+ * The alert that outranks the budget: an overdrawn account or a card over its
+ * limit. Alerts arrive most serious first, so it can only be the first one.
+ */
+function urgentAlert({ alerts }: Checkin): AccountAlert | null {
+  const [first] = alerts
+  return first?.severity === 'urgent' ? first : null
+}
+
+/**
+ * The headline: an overdrawn account or a card over its limit comes first,
+ * since a budget can be on track while an account is below zero. Otherwise,
+ * how the period is going.
+ */
+export function headline(checkin: Checkin, money: Money, word: string): string {
+  return urgentAlert(checkin)?.summary ?? budgetSentence(checkin, money, word)
 }
 
 /**
  * The most serious account alert, in words that name the bank but not the
  * account, since this summary also goes in the weekly email and to an AI writer.
+ * When the headline already carries that alert, this only counts the rest.
  */
-function alertPoint({ alerts }: Checkin): string | null {
-  const [first, ...rest] = alerts
+function alertPoint(checkin: Checkin): string | null {
+  const [first, ...rest] = checkin.alerts
   if (!first) return null
-  if (rest.length === 0) return first.summary
-  return `${first.summary} ${plural(rest.length, 'more account alert is', 'more account alerts are')} at the top of the dashboard.`
+  const more =
+    rest.length === 0
+      ? null
+      : `${plural(rest.length, 'more account alert is', 'more account alerts are')} ${MORE_ALERTS_ENDING}`
+  if (urgentAlert(checkin)) return more
+  return more ? `${first.summary} ${more}` : first.summary
+}
+
+/** How the budget is going, as a point once an urgent alert has taken the headline. */
+function budgetPoint(checkin: Checkin, money: Money, word: string): string | null {
+  if (!urgentAlert(checkin)) return null
+  return budgetSentence(checkin, money, word, 'Your budgets are on track')
 }
 
 /** How many other things the Heads up list says need doing today, if any. */
@@ -117,6 +158,7 @@ export function plainSummary(
   const word = periodWord(settings.period.kind)
   const points = [
     alertPoint(checkin),
+    budgetPoint(checkin, money, word),
     urgentPoint(checkin),
     cashPoint(checkin, money, settings.locale),
     pacePoint(checkin, money, word),
@@ -166,6 +208,9 @@ export function summaryFacts(
       .filter((item) => item.topic !== 'account')
       .map(({ priority, message }) => ({ priority, message })),
     accountAlerts: checkin.alerts.map((alert) => alert.summary),
+    // An overdrawn account or a card over its limit outranks the budget, so the
+    // writer is handed the headline rather than trusted to lead with it.
+    fixedHeadline: urgentAlert(checkin)?.summary ?? null,
     goals: checkin.goals.map((g) => ({
       name: g.name,
       kind: g.kind,

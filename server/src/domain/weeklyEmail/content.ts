@@ -9,7 +9,7 @@ import { periodWord, shortDate } from '../../lib/words.js'
 import type { BillDue } from '../cashFlow.js'
 import type { Checkin } from '../checkin.js'
 import type { Settings } from '../settings.js'
-import type { SummaryText } from '../summaryText.js'
+import { MORE_ALERTS_ENDING, type SummaryText } from '../summaryText.js'
 
 type Money = (cents: number) => string
 
@@ -141,20 +141,33 @@ function goalsSection({ goals }: Checkin, money: Money, locale: string): EmailSe
   }
 }
 
+/**
+ * The summary without the lines the alert block already says. Leeway's own
+ * summary leads with the worst alert, in its headline or first point, and
+ * counts the rest; the email lists every alert above it instead. When the
+ * headline was an alert, the next line takes its place.
+ */
+function withoutAlertLines(summary: SummaryText, alerts: string[]): SummaryText {
+  const repeatsAlerts = (line: string) =>
+    alerts.some((alert) => line.startsWith(alert)) || line.endsWith(MORE_ALERTS_ENDING)
+  const [headline = summary.headline, ...points] = [summary.headline, ...summary.points].filter(
+    (line) => !repeatsAlerts(line),
+  )
+  return { headline, points }
+}
+
 /** The weekly email's content, in the order it reads. */
 export function weeklyEmailContent(input: WeeklyEmailInput): WeeklyEmailContent {
   const { checkin, money, settings } = input
   const word = periodWord(settings.period.kind)
   const alerts = checkin.alerts.map((alert) => alert.summary)
+  const { headline, points } = withoutAlertLines(input.summary, alerts)
   return {
     subject: subjectLine(checkin, money, word),
-    preview: input.summary.headline,
+    preview: headline,
     alerts,
-    headline: input.summary.headline,
-    // Leeway's summary mentions the worst alert, which the alert block already says.
-    points: input.summary.points.filter(
-      (point) => !alerts.some((alert) => point.startsWith(alert)),
-    ),
+    headline,
+    points,
     figuresTitle: `This ${word}`,
     figures: periodFigures(checkin, money, settings.locale),
     sections: [
