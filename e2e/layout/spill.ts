@@ -27,11 +27,16 @@ function clips(el: Element): boolean {
   return style.overflowX !== 'visible' || style.overflowY !== 'visible'
 }
 
-/** The nearest ancestor that paints, short of the page itself; null on the bare page. */
+/**
+ * The nearest ancestor that paints, short of the page itself; null on the
+ * bare page, and null inside a box that scrolls or clips before one paints
+ * (a sheet's scrolling body), whose rows run past it by design.
+ */
 function surfaceOf(el: Element): Element | null {
   for (let node = el.parentElement; node; node = node.parentElement) {
     if (node === document.body || node === document.documentElement) return null
     if (paints(node)) return node
+    if (clips(node)) return null
   }
   return null
 }

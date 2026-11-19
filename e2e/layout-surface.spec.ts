@@ -42,6 +42,23 @@ test.describe('spill', () => {
     )
     expect(await found(page, 'spill')).toEqual([])
   })
+  test('leaves alone rows scrolled past a panel by the box that scrolls inside it', async ({
+    page,
+  }) => {
+    // A sheet: a painted panel around a scrolling body, its rows running on below.
+    const sheet = (body: string) =>
+      `<div class="sheet" style="margin: 16px; height: 200px; display: flex; flex-direction: column; background: #222">
+        <h2 style="margin: 0">Filter by category</h2>
+        <div style="${body}">
+          ${['Groceries', 'Dining out', 'Education', 'Debt payments'].map((name) => `<button style="display: block; height: 60px">${name}</button>`).join('')}
+        </div>
+      </div>`
+    await fixture(page, sheet('min-height: 0; overflow-y: auto'))
+    expect(await found(page, 'spill')).toEqual([])
+    // Without the scrolling box, the rows hang out of the panel.
+    await fixture(page, sheet(''))
+    expect(await found(page, 'spill')).toHaveLength(2)
+  })
 })
 
 test.describe('sticky-hover', () => {
