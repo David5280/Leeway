@@ -76,10 +76,13 @@ test('saving for a purchase sets money aside and counts what goes toward it', as
   // The overview's leeway holds the goal's share back and says so.
   await page.goto('/')
   const leeway = page.getByRole('region', { name: 'Your leeway' })
-  await expect(leeway).toContainText('set aside')
   await expect(
-    leeway.getByRole('list', { name: 'Set aside for goals' }).getByRole('link', {
-      name: 'Set aside for Road bike',
-    }),
-  ).toBeVisible()
+    leeway.getByRole('list', { name: 'Set aside for goals' }).getByRole('listitem'),
+  ).toContainText(['Set aside for Road bike'])
+  // Its math takes the share out of what is left to spend.
+  await leeway.getByRole('button', { name: /show how it adds up/ }).click()
+  await expect(
+    page.getByRole('dialog').getByRole('region', { name: 'How it adds up' }),
+  ).toContainText(/minus set aside for goals \$\d+/)
+  await page.keyboard.press('Escape')
 })

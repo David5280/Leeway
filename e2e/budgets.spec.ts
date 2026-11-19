@@ -34,9 +34,9 @@ test('a new category gets a budget, which can be changed on its own page', async
   ).toBeVisible()
 })
 
-test("the overview's category bars line up, however long a row's status", async ({ page }) => {
+test("the overview's category bars line up, however wide a row's figures", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
-  // One category on track and one far over budget, whose status runs long.
+  // One category on track and one far over budget, whose figures run wide.
   const calm = await action<{ id: string }>(page, 'create_category', {
     name: 'Calm',
     budgetCents: 100_000,
@@ -55,8 +55,8 @@ test("the overview's category bars line up, however long a row's status", async 
 
   await page.goto('/')
   const widget = page.getByRole('region', { name: 'Categories', exact: true })
-  await expect(widget.getByText(/^Over by \$12,/)).toBeVisible()
-  const edges = await widget.locator('.cat-bar').evaluateAll((bars) =>
+  await expect(widget.locator('.cbar', { hasText: 'Overspent' })).toContainText(/Over\s*\$12,/)
+  const edges = await widget.locator('.cbar-track').evaluateAll((bars) =>
     bars.map((bar) => {
       const box = bar.getBoundingClientRect()
       return `${Math.round(box.left)} to ${Math.round(box.right)}`

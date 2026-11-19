@@ -16,7 +16,7 @@ import { leewayDrill, spendingUsual } from '../lib/drills/budget'
 import { periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
 
-/** Each goal's share held back this period. Its goals open from the drill-down. */
+/** Each goal's share held back this period, which the drill-down's math takes out. */
 function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
   if (setAsides.length === 0) return null
   return (

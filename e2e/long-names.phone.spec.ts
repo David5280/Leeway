@@ -1,8 +1,8 @@
 // Long names stay inside a phone screen: a long category ends in an ellipsis
 // in a transaction's sheet, and a long unbroken description ends in an
 // ellipsis on its row, and wraps in its sheet, instead of widening the page.
-// A long status on the overview's Categories widget wraps under its amounts
-// rather than squeeze a short category name to a letter or two.
+// A category far over budget on the overview's Categories widget keeps a short
+// name whole beside its figures rather than squeeze it to a letter or two.
 
 import { expect, test, type Locator } from '@playwright/test'
 import { action, addAccount, addSpending, removeAccount } from './manual'
@@ -51,10 +51,8 @@ test.describe('on the narrowest phone', () => {
     await removeAccount(page, 'Ellipsis checking')
   })
 
-  test("a long status wraps under a category's amounts, leaving its name whole", async ({
-    page,
-  }) => {
-    // Four letters, far over a small budget: "Over by $12,3xx" is the longest kind of status.
+  test('a category far over budget keeps its name whole beside its figures', async ({ page }) => {
+    // Four letters, far over a small budget: the widest figures a bar shows.
     const kite = await action<{ id: string }>(page, 'create_category', {
       name: 'Kite',
       budgetCents: 1_000,
@@ -70,22 +68,15 @@ test.describe('on the narrowest phone', () => {
     await page.goto('/')
     const row = page
       .getByRole('region', { name: 'Categories', exact: true })
-      .locator('.cat-row')
-      .filter({ has: page.locator('.cat-label', { hasText: /^Kite$/ }) })
-    const status = row.locator('.cat-status')
+      .locator('.cbar')
+      .filter({ has: page.locator('.cbar-name', { hasText: /^Kite$/ }) })
+    const figures = row.locator('.cbar-figures')
     // The budget is shared out over the period, so the exact figure moves day to day.
-    await expect(status).toHaveText(/^Over by \$12,\d{3}/)
+    await expect(figures).toHaveText(/^Over\s*\$12,\d{3} of \$\d+/)
 
-    // The name is whole, not cut to "K…".
-    const label = row.locator('.cat-label')
-    expect(await lineFit(label)).toMatchObject({ truncated: false })
-    // The status took a line of its own, and none of it is clipped or off the screen.
-    const amounts = (await row.locator('.cat-amounts').boundingBox())!
-    const shown = (await status.boundingBox())!
-    const figures = (await row.locator('.cat-summary').boundingBox())!
-    expect(shown.y).toBeGreaterThanOrEqual(amounts.y + amounts.height - 1)
-    expect(shown.x + shown.width).toBeLessThanOrEqual(figures.x + figures.width + 0.5)
-    await expectInsideGutters(status, NARROWEST.viewport.width)
+    // The name is whole, not cut to "K…", and the figures stay on the screen.
+    expect(await lineFit(row.locator('.cbar-name'))).toMatchObject({ truncated: false })
+    await expectInsideGutters(figures, NARROWEST.viewport.width)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
 
     await removeAccount(page, 'Status checking')

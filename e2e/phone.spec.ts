@@ -109,8 +109,10 @@ test('an account alert and its account fit a phone screen', async ({ page }) => 
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
   await banner.getByRole('link', { name: /Phone checking with a long name is overdrawn/ }).click()
-  // Amounts below zero carry a true minus sign (U+2212), not a hyphen.
-  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('\u2212$1,234.56')
+  // The alert opens the account's own page, which leads with the overdraft.
+  await expect(
+    page.getByRole('region', { name: 'Phone checking with a long name balance' }),
+  ).toContainText(/Overdrawn by\s*\$1,234\.56/)
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
   // Removed again, so the other tests see the install as before.

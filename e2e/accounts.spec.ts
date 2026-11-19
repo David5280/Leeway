@@ -1,7 +1,7 @@
 // Account health: an overdrawn account warns at the top of the dashboard and
-// opens on the Accounts dashboard, and a low-balance warning set in Settings
-// becomes an alert. Each test removes its accounts, since later specs share
-// this install.
+// opens on its own page, Select on Accounts adds up a saved pick, and a
+// low-balance warning set in Settings becomes an alert. Each test removes its
+// accounts, since later specs share this install.
 
 import { expect, test, type Page } from '@playwright/test'
 import { addAccount } from './manual'
@@ -24,35 +24,40 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await expect(banner).toContainText('Everyday is overdrawn by $42.10.')
   await banner.getByRole('link', { name: /Everyday is overdrawn/ }).click()
 
-  // The account opens alone on the Accounts dashboard, and the pick is saved.
-  await expect(page).toHaveURL(/\/accounts$/)
-  const picker = page.getByRole('group', { name: 'Accounts to show' })
-  await expect(picker.getByRole('button', { name: 'Everyday' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
+  // The alert opens the account's own page, which leads with the overdraft.
+  await expect(page).toHaveURL(/\/accounts\/[\w-]+$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Everyday' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Everyday balance' })).toContainText(
+    /Overdrawn by\s*\$42\.10/,
   )
-  await expect(page.getByRole('region', { name: 'Summary' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Alerts for this account' })).toContainText(
     'Everyday is overdrawn by $42.10.',
-  )
-  // Amounts below zero carry a true minus sign (U+2212), not a hyphen.
-  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('\u2212$42.10')
-  await page.reload()
-  await expect(picker.getByRole('button', { name: 'Everyday' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
   )
 
-  // Adding the savings account to the pick sums both; the overdraft still leads.
-  await picker.getByRole('button', { name: 'Rainy day' }).click()
-  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('$857.90')
+  // On Accounts, picking both sums them, and the pick is saved.
+  await page.goto('/accounts')
+  await page.getByRole('button', { name: 'Select' }).click()
+  // A tick saves the pick, so each box is read back rather than assumed.
+  for (const name of ['Pick Everyday', 'Pick Rainy day']) {
+    await page.getByRole('checkbox', { name }).click()
+    await expect(page.getByRole('checkbox', { name })).toBeChecked()
+  }
+  const bar = page.getByRole('region', { name: 'Picked accounts' })
+  await expect(bar).toContainText('2 accounts together')
+  await expect(bar).toContainText('$857.90')
+  await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByRole('region', { name: 'Summary' })).toContainText(
     'Everyday is overdrawn by $42.10.',
   )
-  await picker.getByRole('button', { name: 'All accounts' }).click()
-  await expect(picker.getByRole('button', { name: 'All accounts' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await page.reload()
+  await page.getByRole('button', { name: 'Select' }).click()
+  await expect(page.getByRole('checkbox', { name: 'Pick Everyday' })).toBeChecked()
+  for (const name of ['Pick Everyday', 'Pick Rainy day']) {
+    await page.getByRole('checkbox', { name }).click()
+    await expect(page.getByRole('checkbox', { name })).not.toBeChecked()
+  }
+  await expect(bar).toContainText('Tick the accounts to add up')
+  await page.getByRole('button', { name: 'Done' }).click()
 
   // Every alert is a tap away from the banner.
   await page.goto('/')
