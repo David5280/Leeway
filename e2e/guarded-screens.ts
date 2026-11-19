@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
+import { pretendBusyMonth } from './ai'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
@@ -18,6 +19,7 @@ export const SETTINGS_GROUPS = [
   'banks',
   'email',
   'assistant',
+  'ai',
   'data',
   'sign-in',
 ]
@@ -168,6 +170,12 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',
     then: revealKey,
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with a key set and a month near its limit',
+    // No model is called in the tests: the month's spending is stood in for (ai.ts).
+    before: pretendBusyMonth,
+    then: (page) => expect(page.getByText(/AI has spent \$4\.10/).first()).toBeVisible(),
   }),
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),

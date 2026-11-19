@@ -2249,6 +2249,12 @@ details.more[open] summary {
     display: none;
   }
 
+  /* The Settings menu scrolls with the page: held in place, its last groups
+     would sit below the screen's bottom edge, out of reach. */
+  .settings-menu {
+    position: static;
+  }
+
   h1 {
     font-size: 24px;
   }
