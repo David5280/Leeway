@@ -116,3 +116,25 @@ export const missedTaps = (area: Locator) =>
     },
     { controls: CONTROLS, tap: TAP },
   )
+
+/** What a finger taps on any screen: buttons, icon buttons, segmented options and links in a nav. */
+export const TAPPED = '.btn, .iconbtn, .seg button, nav a[href]'
+
+/**
+ * The TAPPED controls on the page smaller than TAP either way, by name and
+ * size. Measured by their own boxes, so it holds wherever the page is
+ * scrolled; a control hidden on purpose is left out.
+ */
+export const smallTaps = (page: Page) =>
+  page.evaluate(
+    ({ tapped, tap }) =>
+      [...document.querySelectorAll(tapped)].flatMap((control) => {
+        if (!control.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return []
+        const { width, height } = control.getBoundingClientRect()
+        // Half a pixel of rounding, as a 44px box can measure 43.99.
+        if (width >= tap - 0.5 && height >= tap - 0.5) return []
+        const name = control.getAttribute('aria-label') ?? control.textContent?.trim()
+        return [`"${name}" is ${Math.round(width)}x${Math.round(height)}px`]
+      }),
+    { tapped: TAPPED, tap: TAP },
+  )

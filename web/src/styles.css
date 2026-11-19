@@ -483,13 +483,6 @@ button.list-row:hover {
   white-space: nowrap;
 }
 
-/* A finger's tap is 44px tall at the least, Apple's smallest comfortable target. */
-@media (pointer: coarse) {
-  .btn {
-    min-height: 44px;
-  }
-}
-
 .btn:hover {
   border-color: var(--muted);
 }
@@ -523,6 +516,15 @@ button.list-row:hover {
   min-height: 32px;
   padding: 0 12px;
   font-size: 13px;
+}
+
+/* A finger's tap is 44px tall at the least, Apple's smallest comfortable
+   target, so on a touch screen a small button is small only in its type. */
+@media (pointer: coarse) {
+  .btn,
+  .btn.small {
+    min-height: 44px;
+  }
 }
 
 .iconbtn {
@@ -1843,6 +1845,13 @@ details.more[open] summary {
 
   .settings-head h2 {
     font-size: 20px;
+  }
+}
+
+/* The group links, side menu or pills, are a finger's 44px tap on a touch screen. */
+@media (pointer: coarse) {
+  .settings-link {
+    min-height: 44px;
   }
 }
 

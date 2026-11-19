@@ -4,16 +4,17 @@
 // over other text or controls, no text cut off without an ellipsis (or squeezed
 // to a sliver with one), no word split across lines, no sideways scrolling,
 // nothing showing under the status bar, the notch or the home indicator, and
-// no control in the header smaller than a finger's 44px tap. The layout
-// checks themselves are in layout.ts. Every route the app answers
-// (web/src/routes.ts) must have a screen here; a test below makes sure.
+// no button, segmented option, nav link or header control smaller than a
+// finger's 44px tap. The layout checks themselves are in layout.ts. Every
+// route the app answers (web/src/routes.ts) must have a screen here; a test
+// below makes sure.
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, SETTINGS_GROUPS } from './guarded-screens'
 import { describeProblems, findProblems, layoutProblems, type LayoutProblem } from './layout'
 import { OWNER, SETUP_CODE } from './owner'
-import { GUARDED_PHONES, missedTaps, simulateInsets, type Insets } from './phone'
+import { GUARDED_PHONES, missedTaps, simulateInsets, smallTaps, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 /** Waits until the screen has its data, fonts and final layout. */
@@ -35,34 +36,47 @@ async function settle(page: Page): Promise<void> {
  * single jump, so the jump repeats until the page holds still.
  */
 async function scrollTo(page: Page, share: number): Promise<void> {
+  const message = `the page would not hold still ${Math.round(share * 100)}% of the way down`
   await expect
-    .poll(() =>
-      page.evaluate(async (to) => {
-        const target = Math.round((document.documentElement.scrollHeight - window.innerHeight) * to)
-        window.scrollTo({ top: target, behavior: 'instant' })
-        await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
-        return Math.abs(window.scrollY - target) <= 1
-      }, share),
+    .poll(
+      () =>
+        page.evaluate(async (to) => {
+          const target = Math.round(
+            (document.documentElement.scrollHeight - window.innerHeight) * to,
+          )
+          window.scrollTo({ top: target, behavior: 'instant' })
+          await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+          return Math.abs(window.scrollY - target) <= 1
+        }, share),
+      { message },
     )
     .toBe(true)
 }
 
-/** The header's controls a finger can miss, on screens that have a header. */
-async function headerTaps(page: Page): Promise<string[]> {
+/**
+ * Controls too small for a finger: any button, segmented option or nav link
+ * on the page under 44px either way, and any control in the header (the theme
+ * dots included) whose 44px tap misses it.
+ */
+async function tapProblems(page: Page): Promise<string[]> {
+  const small = (await smallTaps(page)).map((control) => `tap: ${control}, under 44px`)
   const banner = page.getByRole('banner')
-  if ((await banner.count()) === 0) return []
-  return (await missedTaps(banner)).map((name) => `tap: "${name}" in the header is under 44px`)
+  if ((await banner.count()) === 0) return small
+  const missed = (await missedTaps(banner)).map(
+    (name) => `tap: "${name}" in the header is under 44px`,
+  )
+  return [...small, ...missed]
 }
 
 /**
  * Every layout problem on the screen: all checks at the top, with the
- * header's tap sizes, then the safe areas again scrolled halfway, where
+ * tap sizes, then the safe areas again scrolled halfway, where
  * content has moved under the status bar, and at the end, where the last
  * content must also rest clear of the tab bar.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   await scrollTo(page, 0)
-  const taps = await headerTaps(page)
+  const taps = await tapProblems(page)
   const problems: LayoutProblem[] = await layoutProblems(page)
   for (const [share, checks] of [
     [0.5, ['safe-area']],
