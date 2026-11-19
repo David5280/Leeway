@@ -1,7 +1,7 @@
 // Shared pieces for the phone browser tests: screen sizes, the sideways-scroll
-// check and simulated iPhone safe areas.
+// and overlap checks, and simulated iPhone safe areas.
 
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 /** An iPhone 16 Pro, upright. */
 export const IPHONE = { viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true }
@@ -9,6 +9,14 @@ export const IPHONE = { viewport: { width: 402, height: 874 }, isMobile: true, h
 export const IPHONE_LANDSCAPE = { ...IPHONE, viewport: { width: 874, height: 402 } }
 /** The narrowest phone still in use: an iPhone SE, first generation. */
 export const NARROWEST = { viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true }
+
+/** The phone sizes a screen must fit: iPhones upright, the narrowest phone, and sideways. */
+export const PHONES = [
+  ['an iPhone 390px across', { width: 390, height: 844 }],
+  ['an iPhone 375px across', { width: 375, height: 667 }],
+  ['the narrowest phone', { width: 320, height: 568 }],
+  ['an iPhone turned sideways', { width: 844, height: 390 }],
+] as const
 
 /** Safe-area insets in pixels, as an iPhone with a Dynamic Island reports them. */
 export const UPRIGHT_INSETS = { top: 62, right: 0, bottom: 34, left: 0 }
@@ -29,3 +37,18 @@ export async function simulateInsets(page: Page, insets: typeof UPRIGHT_INSETS):
 /** How far the page is wider than the screen; above zero means it scrolls sideways. */
 export const overflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+/** Every element's box, so overlaps and sizes can be checked. */
+export async function boxes(elements: Locator) {
+  const all = await elements.all()
+  return Promise.all(all.map(async (element) => (await element.boundingBox())!))
+}
+
+type Box = Awaited<ReturnType<typeof boxes>>[number]
+
+/** Whether two boxes share any area; touching edges do not count. */
+export const overlapping = (a: Box, b: Box) =>
+  a.x < b.x + b.width - 0.5 &&
+  b.x < a.x + a.width - 0.5 &&
+  a.y < b.y + b.height - 0.5 &&
+  b.y < a.y + a.height - 0.5
