@@ -295,6 +295,11 @@ h2 {
   font-weight: 600;
 }
 
+/* A range such as "$1,200 to $4,950 / mo" breaks into even lines, never a lone unit. */
+.mid-number.range {
+  text-wrap: balance;
+}
+
 .list-row {
   display: flex;
   align-items: center;

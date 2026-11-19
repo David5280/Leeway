@@ -34,7 +34,7 @@ function PensionRow({
         <strong>{card.name}</strong>
         <span className="small muted">{card.label}</span>
       </div>
-      <span className="mid-number num">{card.benefit ?? 'Benefit not known yet'}</span>
+      <span className="mid-number num range">{card.benefit ?? 'Benefit not known yet'}</span>
       <span className="small">{card.benefitDetail}</span>
       {card.benefitNote && <span className="small muted">{card.benefitNote}</span>}
       <span className="small">{card.contribution}</span>

@@ -18,7 +18,7 @@ function MeterTile({ meter }: { meter: Meter }) {
   return (
     <div className="span-6 stack-sm" role="group" aria-label={meter.question}>
       <span className="eyebrow">{meter.question}</span>
-      <span className="mid-number num">{meter.headline}</span>
+      <span className="mid-number num range">{meter.headline}</span>
       <span className="small muted">{meter.detail}</span>
       {meter.parts.length > 0 && (
         <ul className="plain-list small">
@@ -46,7 +46,16 @@ function SavingsBand({ meter }: { meter: Meter }) {
   const last = meter.band.at(-1)!
   const description = `Savings from ${money(first.mid)} at ${first.age} to between ${money(last.low)} and ${money(last.high)} at ${last.age}, ${money(last.mid)} in the middle case.`
   return (
-    <BandChart points={meter.band} label="Savings by age" description={description} money={money} />
+    <div className="stack-sm">
+      <BandChart
+        points={meter.band}
+        label="Savings by age"
+        description={description}
+        money={money}
+      />
+      {/* A key to the drawing, which shows a range rather than one promised line. */}
+      <p className="small muted">Shaded: the low to high case. Line: the middle case.</p>
+    </div>
   )
 }
 
@@ -60,7 +69,7 @@ export function ProjectionCard({ view }: { view: RetirementView }) {
   return (
     <Card label="Retirement projection" className="stack">
       <span className="eyebrow">{lens.question}</span>
-      {answer.headline && <span className="mid-number num">{answer.headline}</span>}
+      {answer.headline && <span className="mid-number num range">{answer.headline}</span>}
       <p className={answer.headline ? 'small' : ''}>{answer.detail}</p>
       {answer.progress && (
         <Progress

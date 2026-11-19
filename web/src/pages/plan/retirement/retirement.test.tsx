@@ -73,6 +73,9 @@ describe('the projection', () => {
     expect(projection.getByRole('img', { name: 'Savings by age' })).toHaveAccessibleDescription(
       'Savings from $40,000 at 40 to between $57,517 and $147,760 at 65, $92,600 in the middle case.',
     )
+    expect(
+      projection.getByText('Shaded: the low to high case. Line: the middle case.'),
+    ).toBeVisible()
 
     const savings = within(projection.getByRole('group', { name: 'Savings at 65' }))
     expect(savings.getByText('$57,517 to $147,760')).toBeVisible()
