@@ -1,4 +1,6 @@
-// (a) Text drawn over other text, or over a control it is not part of.
+// (a) Text drawn over other text, or over a control it is not part of; and
+// page text or controls coming to rest under a fixed bar, like the last row
+// of a page left under the tab bar.
 
 import { CONTROLS, clipArea, describe, isShown, layerOf, shownBox } from './elements'
 import {
@@ -6,8 +8,13 @@ import {
   cornersOf,
   height,
   intersect,
+  isScrolledToEnd,
+  isScrolledToTop,
   overlaps,
   shapesOverlap,
+  toBox,
+  TOUCHING,
+  viewport,
   width,
   type Box,
   type Point,
@@ -69,6 +76,35 @@ function collide(a: Piece, b: Piece): boolean {
   return overlaps(a.box, b.box) && shapesOverlap(a.corners, b.corners)
 }
 
+/**
+ * The fixed bars that page content must come to rest clear of, now: a bar
+ * along the top edge while the page is at its top, and one along the bottom
+ * edge (the tab bar) once it is scrolled to its end. In between, content
+ * passes under them as in any app.
+ */
+function barsAtRest(pieces: Piece[]): { bar: Element; box: Box }[] {
+  const screen = viewport()
+  const layers = new Set(pieces.flatMap((p) => (p.layer ? [p.layer] : [])))
+  return [...layers]
+    .map((bar) => ({ bar, box: toBox(bar.getBoundingClientRect()) }))
+    .filter(
+      ({ box }) =>
+        (isScrolledToTop() && box.top <= TOUCHING) ||
+        (isScrolledToEnd() && box.bottom >= screen.bottom - TOUCHING),
+    )
+}
+
+/** Page text and controls resting under a fixed bar, where nobody can read or reach them. */
+function underBars(pieces: Piece[]): string[] {
+  const bars = barsAtRest(pieces)
+  return pieces
+    .filter((p) => p.layer === null)
+    .flatMap((p) => {
+      const over = bars.find(({ box }) => overlaps(p.box, box))
+      return over ? [`${describe(p.owner)} rests under ${describe(over.bar)}`] : []
+    })
+}
+
 export function findOverlaps(): LayoutProblem[] {
   const pieces = [...textPieces(), ...controlPieces()]
   // Each pair of elements once, however many of their lines meet.
@@ -78,5 +114,6 @@ export function findOverlaps(): LayoutProblem[] {
       if (collide(a, b)) messages.add(`${describe(a.owner)} overlaps ${describe(b.owner)}`)
     }
   })
+  for (const message of underBars(pieces)) messages.add(message)
   return [...messages].map((message) => ({ check: 'overlap', message }))
 }

@@ -15,20 +15,12 @@
 // theme. They live in layout/, one file per check, and run inside the page:
 // this module bundles them into one script and has the page run it.
 
+import { fileURLToPath } from 'node:url'
 import { buildSync } from 'esbuild'
 import type { Page } from '@playwright/test'
-import type { LayoutCheck, LayoutProblem } from './layout/types'
+import { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem } from './layout/types'
 
-export type { LayoutCheck, LayoutProblem }
-
-/** Every check, in the order layoutProblems runs them. */
-export const LAYOUT_CHECKS: readonly LayoutCheck[] = [
-  'overlap',
-  'clipped',
-  'broken-word',
-  'page-overflow',
-  'safe-area',
-]
+export { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem }
 
 let script: string | undefined
 
@@ -38,7 +30,7 @@ let script: string | undefined
  */
 function pageScript(): string {
   script ??= buildSync({
-    entryPoints: [new URL('./layout/page.ts', import.meta.url).pathname],
+    entryPoints: [fileURLToPath(new URL('./layout/page.ts', import.meta.url))],
     bundle: true,
     format: 'iife',
     globalName: 'layout',

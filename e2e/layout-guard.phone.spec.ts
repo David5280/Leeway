@@ -108,17 +108,20 @@ async function settle(page: Page): Promise<void> {
 
 /**
  * Every layout problem on the screen: all checks at the top, then the safe
- * areas again scrolled halfway and to the end, where content has moved under
- * the status bar.
+ * areas again scrolled halfway, where content has moved under the status bar,
+ * and at the end, where the last content must also rest clear of the tab bar.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   const problems: LayoutProblem[] = await layoutProblems(page)
-  for (const share of [0.5, 1]) {
+  for (const [share, checks] of [
+    [0.5, ['safe-area']],
+    [1, ['safe-area', 'overlap']],
+  ] as const) {
     await page.evaluate((to) => {
       window.scrollTo(0, (document.documentElement.scrollHeight - window.innerHeight) * to)
     }, share)
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(done)))
-    problems.push(...(await findProblems(page, 'safe-area')))
+    for (const check of checks) problems.push(...(await findProblems(page, check)))
   }
   // Each problem once, however many scroll positions found it.
   return [...new Set(describeProblems(problems))]

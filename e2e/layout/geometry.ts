@@ -63,6 +63,13 @@ export const viewport = (): Box => ({
   bottom: window.innerHeight,
 })
 
+/** Whether the page is scrolled to its very end, where its last content comes to rest. */
+export const isScrolledToEnd = () =>
+  window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - TOUCHING
+
+/** Whether the page is at its top, where its first content comes to rest. */
+export const isScrolledToTop = () => window.scrollY <= TOUCHING
+
 /** A box's corners, in order around it. */
 export const cornersOf = (b: Box): Point[] => [
   { x: b.left, y: b.top },

@@ -55,18 +55,46 @@ export function clipArea(el: Element, ownText = false): Box {
   return area
 }
 
-/** Shown on the page: rendered, not see-through, and bigger than a 1px hiding box. */
+/**
+ * Tucked into a box for screen readers only: absolutely placed and clipped
+ * away, or shrunk to a single pixel that hides its overflow (the
+ * .visually-hidden pattern).
+ */
+function isScreenReaderOnly(node: Element): boolean {
+  const style = getComputedStyle(node)
+  if (style.position !== 'absolute') return false
+  if (style.clip !== 'auto' || style.clipPath !== 'none') return true
+  const r = node.getBoundingClientRect()
+  return r.width <= 1 && r.height <= 1 && style.overflowX !== 'visible'
+}
+
+/**
+ * Hidden on purpose: not rendered, invisible or fully see-through, or inside
+ * a screen-reader-only box. Something the layout merely squeezed to nothing
+ * (a name in a 0px flex item) is not hidden by design, and the checks report it.
+ */
+export function isHiddenByDesign(el: Element): boolean {
+  if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return true
+  for (let node: Element | null = el; node; node = node.parentElement) {
+    if (isScreenReaderOnly(node)) return true
+  }
+  return false
+}
+
+/**
+ * Shown on the page: not hidden by design, and with more than a pixel each
+ * way left once its ancestors' clipping (a scrolling row, say) is applied.
+ */
 export function isShown(el: Element): boolean {
-  if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false
-  const r = el.getBoundingClientRect()
-  if (r.width <= 1 || r.height <= 1) return false
-  const area = intersect(toBox(r), clipArea(el))
+  if (isHiddenByDesign(el)) return false
+  const area = shownBox(el)
   return width(area) > 1 && height(area) > 1
 }
 
 /** The part of an element that shows, after its ancestors' clipping. */
-export const shownBox = (el: Element): Box =>
-  intersect(toBox(el.getBoundingClientRect()), clipArea(el))
+export function shownBox(el: Element): Box {
+  return intersect(toBox(el.getBoundingClientRect()), clipArea(el))
+}
 
 /** The fixed bar (like the tab bar) an element is inside, which floats over the page. */
 export function layerOf(el: Element): Element | null {

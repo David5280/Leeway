@@ -5,7 +5,16 @@
 // clear; backgrounds (the tab bar's) may run to the edge.
 
 import { alphaOf, CONTROLS, describe, isShown, layerOf, shownBox } from './elements'
-import { height, intersect, TOUCHING, viewport, width, type Box, type Point } from './geometry'
+import {
+  height,
+  intersect,
+  isScrolledToEnd,
+  TOUCHING,
+  viewport,
+  width,
+  type Box,
+  type Point,
+} from './geometry'
 import type { LayoutProblem } from './types'
 
 /** The opacity from which a background hides what is under it. */
@@ -47,8 +56,7 @@ function bands(): Band[] {
   const screen = viewport()
   // Content scrolls past the home indicator on its way up, as in any iPhone
   // app; only at the end of the page must it come to rest clear of it.
-  const scrolledToEnd =
-    window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - TOUCHING
+  const scrolledToEnd = isScrolledToEnd()
   const all: Band[] = [
     { name: 'the status bar', box: { ...screen, bottom: top }, anything: true, always: true },
     {

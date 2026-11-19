@@ -1,7 +1,16 @@
-// What the layout checks report, shared by the checks in the page and the
-// tests that read them.
+// What the layout checks are and what they report, shared by the checks in
+// the page and the tests that run them.
 
-export type LayoutCheck = 'overlap' | 'clipped' | 'broken-word' | 'page-overflow' | 'safe-area'
+/** Every check, in the order layoutProblems runs them. */
+export const LAYOUT_CHECKS = [
+  'overlap',
+  'clipped',
+  'broken-word',
+  'page-overflow',
+  'safe-area',
+] as const
+
+export type LayoutCheck = (typeof LAYOUT_CHECKS)[number]
 
 export interface LayoutProblem {
   check: LayoutCheck

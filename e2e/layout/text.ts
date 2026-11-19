@@ -1,7 +1,7 @@
 // The text drawn on the page, as the line boxes the browser laid it out in.
 
-import { cornersOf, toBox, type Box, type Point } from './geometry'
-import { isShown } from './elements'
+import { alphaOf, clipArea, isHiddenByDesign } from './elements'
+import { cornersOf, height, intersect, toBox, union, width, type Box, type Point } from './geometry'
 
 /**
  * A text box runs from the font's ascent to its descent, taller than the
@@ -23,17 +23,38 @@ const NOT_TEXT = [
   'title',
 ].join(',')
 
-/** Every text node drawn on the page, with the element holding it. */
+/**
+ * Whether an element's text is painted at all: not hidden by design, and in
+ * a color that is not fully transparent (as text under a custom control can be).
+ */
+function paintsText(owner: Element): boolean {
+  return !isHiddenByDesign(owner) && alphaOf(getComputedStyle(owner).color) > 0
+}
+
+/**
+ * Every text node drawn on the page, with the element holding it. Text counts
+ * wherever its letters reach the screen, even when the layout squeezed its
+ * element to nothing; text scrolled out of a sideways row does not.
+ */
 export function textNodes(): { node: Text; owner: Element }[] {
   const found: { node: Text; owner: Element }[] = []
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-  // Many text nodes share an owner; whether it shows is worked out once.
-  const shown = new Map<Element, boolean>()
+  const range = document.createRange()
+  // Many text nodes share an owner, so what it paints and where is worked out once.
+  const painted = new Map<Element, boolean>()
+  const areas = new Map<Element, Box>()
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const owner = node.parentElement
     if (!owner || !node.textContent?.trim() || owner.closest(NOT_TEXT)) continue
-    if (!shown.has(owner)) shown.set(owner, isShown(owner))
-    if (shown.get(owner)) found.push({ node: node as Text, owner })
+    if (!painted.has(owner)) painted.set(owner, paintsText(owner))
+    if (!painted.get(owner)) continue
+    if (!areas.has(owner)) areas.set(owner, clipArea(owner))
+    range.selectNodeContents(node)
+    const lines = lineBoxes(range)
+    const onScreen = lines.length > 0 && intersect(union(lines), areas.get(owner)!)
+    if (onScreen && width(onScreen) > 1 && height(onScreen) > 1) {
+      found.push({ node: node as Text, owner })
+    }
   }
   return found
 }

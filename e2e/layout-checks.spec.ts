@@ -72,16 +72,45 @@ test.describe('overlap', () => {
     expect(await found(page, 'overlap')).toEqual(['<text> "Steady pace" overlaps <text> "$1,003"'])
   })
 
-  test('leaves alone a button with its own label, and a bar fixed over the page', async ({
+  test('leaves alone a button with its own label, and a bar the page scrolls under', async ({
     page,
   }) => {
+    // At the top of a long page, its middle passes under the tab bar on the way up.
     await fixture(
       page,
       `<button><span>Move up</span></button>
-      <p style="margin-top: 780px">Last line</p>
-      <nav style="position: fixed; bottom: 0; left: 0; right: 0; background: #fff">
+      <p style="margin-top: 800px">Passing under</p>
+      <p style="margin: 400px 0 80px">Last line</p>
+      <nav style="position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #fff">
         <a href="#">Overview</a>
       </nav>`,
+    )
+    expect(await found(page, 'overlap')).toEqual([])
+  })
+
+  test('finds the end of a page left resting under the tab bar', async ({ page }) => {
+    const ending = (room: string) =>
+      `<p style="margin: 1000px 0 ${room}">Last line</p>
+      <nav style="position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #fff">
+        <a href="#">Overview</a>
+      </nav>`
+    await fixture(page, ending('0'))
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    expect(await found(page, 'overlap')).toEqual(['<p> "Last line" rests under <nav> "Overview"'])
+
+    // With room for the bar at the end, the last line comes to rest above it.
+    await fixture(page, ending('80px'))
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    expect(await found(page, 'overlap')).toEqual([])
+  })
+
+  test('ignores text painted in a transparent color', async ({ page }) => {
+    await fixture(
+      page,
+      `<div style="position: relative">
+        <span style="color: transparent">Surplus</span>
+        <button style="position: absolute; left: 0; top: 0">Half</button>
+      </div>`,
     )
     expect(await found(page, 'overlap')).toEqual([])
   })
@@ -132,6 +161,45 @@ test.describe('clipped', () => {
     ])
   })
 
+  test('finds a name its row squeezed to nothing, though it would end in an ellipsis', async ({
+    page,
+  }) => {
+    await fixture(
+      page,
+      `<div style="display: flex; width: 300px">
+        <span style="flex: 0 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Spending pace</span>
+        <button style="flex: none; width: 300px">Half</button>
+      </div>`,
+    )
+    expect(await found(page, 'clipped')).toEqual(['<span> "Spending pace" is squeezed to 0px'])
+  })
+
+  test('finds an ellipsis that leaves only a letter or two', async ({ page }) => {
+    await fixture(
+      page,
+      `<div style="width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Surplus</div>`,
+    )
+    expect(await found(page, 'clipped')).toEqual(['<div> "Surplus" is squeezed to 24px'])
+  })
+
+  test('finds lines cut off by a box too short for them', async ({ page }) => {
+    await fixture(
+      page,
+      `<div style="width: 120px; height: 1.4em; overflow: hidden">Total spent this paycheck so far</div>`,
+    )
+    expect(await found(page, 'clipped')).toEqual([
+      '<div> "Total spent this paycheck so far" is cut off at the bottom',
+    ])
+  })
+
+  test('accepts lines a line clamp ends with an ellipsis', async ({ page }) => {
+    await fixture(
+      page,
+      `<div style="width: 120px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden">Total spent this paycheck so far</div>`,
+    )
+    expect(await found(page, 'clipped')).toEqual([])
+  })
+
   test('accepts an ellipsis, a row that scrolls sideways and a picker with an ellipsis', async ({
     page,
   }) => {
@@ -172,6 +240,21 @@ test.describe('page-overflow', () => {
     await fixture(page, `<main><div class="wide" style="width: 500px">Wide</div></main>`)
     expect(await found(page, 'page-overflow')).toEqual([
       'the page is 110px wider than the screen; sticking out: <div.wide> "Wide"',
+    ])
+  })
+
+  test('finds content past the edge of a page that hides its sideways overflow', async ({
+    page,
+  }) => {
+    await fixture(
+      page,
+      `<main><div class="wide" style="width: 500px">Wide</div></main>`,
+      'html, body { overflow-x: hidden; }',
+    )
+    expect(await found(page, 'page-overflow')).toEqual([
+      '<html> hides sideways overflow (overflow-x: hidden), so content past the edge is cut off unseen',
+      '<body> hides sideways overflow (overflow-x: hidden), so content past the edge is cut off unseen',
+      'content runs off the screen; sticking out: <div.wide> "Wide"',
     ])
   })
 

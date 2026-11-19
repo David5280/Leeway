@@ -6,8 +6,9 @@ import { findClippedText } from './clipped'
 import { findOverlaps } from './overlap'
 import { findPageOverflow } from './page-overflow'
 import { findUncoveredInsets } from './safe-area'
-import type { LayoutCheck, LayoutProblem } from './types'
+import { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem } from './types'
 
+/** Each check's finder, one for every name in LAYOUT_CHECKS (the type makes sure). */
 const CHECKS: Record<LayoutCheck, () => LayoutProblem[]> = {
   overlap: findOverlaps,
   clipped: findClippedText,
@@ -17,4 +18,7 @@ const CHECKS: Record<LayoutCheck, () => LayoutProblem[]> = {
 }
 
 /** Runs one check on the page as it is drawn now. */
-export const measure = (check: LayoutCheck): LayoutProblem[] => CHECKS[check]()
+export function measure(check: LayoutCheck): LayoutProblem[] {
+  if (!LAYOUT_CHECKS.includes(check)) throw new Error(`No layout check named ${check}`)
+  return CHECKS[check]()
+}
