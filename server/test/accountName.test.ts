@@ -17,6 +17,8 @@ function parts(fields: Partial<AccountNameParts> = {}): AccountNameParts {
     institutionName: 'Chase',
     manual: false,
     mask: '4417',
+    type: 'depository',
+    subtype: 'checking',
     ...fields,
   }
 }
@@ -77,87 +79,22 @@ describe('accountDisplayName', () => {
     )
   })
 
+  // How the number comes out is tested in accountNumber.test.ts; here, that it does.
   it('leaves out an account number the bank put in the name', () => {
     const named = (bankName: string) => accountDisplayName(parts({ bankName }))
     expect(named('CHECKING ...4417')).toBe('Chase Checking')
     expect(named('CREDIT CARD (X4417)')).toBe('Chase Credit Card')
-    expect(named('SAVINGS XXXX-4417')).toBe('Chase Savings')
     expect(named('CHECKING ENDING IN 4417')).toBe('Chase Checking')
-    expect(named('CHK4417')).toBe('Chase Chk')
-    expect(named('Checking *4417')).toBe('Chase Checking')
-  })
-
-  it('leaves out the number however the bank writes it, with what led up to it', () => {
-    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
-    expect(named('CHECKING (ACCT 4417)')).toBe('Chase Checking')
-    expect(named('CHECKING [ACCT #4417]')).toBe('Chase Checking')
-    expect(named('CHECKING #: 4417')).toBe('Chase Checking')
-    expect(named('CREDIT CARD XXXX XXXX XXXX 4417')).toBe('Chase Credit Card')
-    expect(named('CHECKING **** 4417')).toBe('Chase Checking')
-    expect(named('CHECKING-4417')).toBe('Chase Checking')
-    expect(named('MY ACCT 1234567890')).toBe('Chase My')
-    expect(named('SAVINGS (ACCT4417)')).toBe('Chase Savings')
-    expect(named('SAVINGS NO. 4417')).toBe('Chase Savings')
-  })
-
-  it('takes out a short number that is exactly the mask, however the bank marks it', () => {
-    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
-    expect(named('CHECKING 417', '417')).toBe('Chase Checking')
-    expect(named('CHECKING-417', '417')).toBe('Chase Checking')
-    expect(named('CHECKING (417)', '417')).toBe('Chase Checking')
-    expect(named('CHK417', '417')).toBe('Chase Chk')
-    expect(named('CHECKING ACCT#417', '417')).toBe('Chase Checking')
-    expect(named('CHECKING ...417', '417')).toBe('Chase Checking')
-    expect(named('CHECKING #417 PLUS', '417')).toBe('Chase Checking Plus')
-    expect(named('SAVINGS 12', '12')).toBe('Chase Savings')
-    expect(named('CHECKING X12', '12')).toBe('Chase Checking')
-  })
-
-  it('takes out any run of four digits or more, and a mask the bank split', () => {
-    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
-    expect(named('CHECKING 4417A', '4417')).toBe('Chase Checking')
-    expect(named('CHECKING 44-17', '4417')).toBe('Chase Checking')
-    expect(named('CHECKING 44 17', '4417')).toBe('Chase Checking')
-    expect(named('CHECKING XXXX-XXXX-4417', '4417')).toBe('Chase Checking')
-    expect(named('CHECKINGX4417', '4417')).toBe('Chase Checkingx')
-  })
-
-  it('keeps digits that are only part of the name', () => {
-    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
-    // A bare number with more of the name after it is the name's own.
-    expect(named('12 MONTH CD', '12')).toBe('Chase 12 Month CD')
-    // Only the whole mask counts, never a part of it.
-    expect(named('ACME 401K', '01')).toBe('Chase Acme 401k')
-    expect(named('ACME 401K', '40')).toBe('Chase Acme 401k')
-    expect(named('PLAN 401', '01')).toBe('Chase Plan 401')
-    expect(named('PLATINUM X2', '12')).toBe('Chase Platinum X2')
-    // A short mask split up is more likely a range than the account number.
-    expect(named('1-2 YEAR CD', '12')).toBe('Chase 1-2 Year CD')
-  })
-
-  it('takes out a lone x, star or # that led up to the number', () => {
-    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
-    expect(named('CHECKING X 4417')).toBe('Chase Checking')
-    expect(named('CHECKING * 4417')).toBe('Chase Checking')
-    expect(named('CHECKING # 4417')).toBe('Chase Checking')
-  })
-
-  it('drops a bracket left open once the number goes', () => {
-    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
-    expect(named('CHECKING [ACCT 4417')).toBe('Chase Checking')
-    expect(named('CHECKING (ACCT 4417')).toBe('Chase Checking')
-  })
-
-  it('keeps brackets that still pair up', () => {
-    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
-    expect(named('PLUS (SAVINGS) ...4417')).toBe('Chase Plus (Savings)')
     expect(named('PLUS (SAVINGS) (ACCT 4417)')).toBe('Chase Plus (Savings)')
   })
 
-  it('leaves out any long masked number, even one that is not the mask', () => {
-    expect(accountDisplayName(parts({ bankName: 'CHECKING ...9921', mask: null }))).toBe(
-      'Chase Checking',
-    )
+  it('keeps the words after a mask that something led up to', () => {
+    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
+    expect(named('CHECKING ACCT 352 PLUS', '352')).toBe('Chase Checking Plus')
+    expect(named('CHECKING ENDING IN 52 2025', '52')).toBe('Chase Checking 2025')
+    expect(named('CHECKING NO. 61 6 MO', '61')).toBe('Chase Checking 6 Mo')
+    expect(named('CHECKING X 352 TOP 10', '352')).toBe('Chase Checking Top 10')
+    expect(named('CHECKING 3RD ...4417', '4417')).toBe('Chase Checking 3rd')
   })
 
   it('keeps short numbers that are part of the name', () => {
@@ -165,9 +102,44 @@ describe('accountDisplayName', () => {
     expect(accountDisplayName(parts({ bankName: 'PLATINUM X2' }))).toBe('Chase Platinum X2')
   })
 
+  it("names the bank and kind instead when the bank's name still shows the mask", () => {
+    const named = (fields: Partial<AccountNameParts>) => accountDisplayName(parts(fields))
+    // Split with no lead-in, the tidying leaves "5 2" alone; it still reads as 52.
+    expect(named({ bankName: 'CHECKING 5 2', mask: '52' })).toBe('Chase Checking')
+    // A bare 12 at the start is kept by the tidying, but with a mask of 12 it can't be shown.
+    expect(named({ bankName: '12 MONTH CD', mask: '12', subtype: 'cd' })).toBe('Chase CD')
+    expect(named({ bankName: 'CHK17', mask: '4417', subtype: 'savings' })).toBe('Chase Savings')
+    expect(named({ bankName: 'SAVINGS 52', mask: '0052', subtype: 'savings' })).toBe(
+      'Chase Savings',
+    )
+  })
+
+  it('falls back to the type, then the bank alone, then "Account", whichever shows no mask', () => {
+    const named = (fields: Partial<AccountNameParts>) => accountDisplayName(parts(fields))
+    // The name reads "0 1", and the kind itself, 401k, holds the mask 01 too.
+    expect(
+      named({ bankName: 'PLAN 0 1 GOLD', mask: '01', type: 'investment', subtype: '401k' }),
+    ).toBe('Chase Investment')
+    expect(named({ bankName: 'CHECKING 417', mask: '417', institutionName: null })).toBe('Checking')
+    // A bank named with the very digits, so nothing built from it can be shown.
+    expect(
+      named({ bankName: 'CHECKING 52', mask: '52', institutionName: 'Bank 52', type: 'other' }),
+    ).toBe('Account')
+  })
+
+  it("shows the owner's own name as typed, digits and all", () => {
+    expect(accountDisplayName(parts({ nickname: 'Joint 4417' }))).toBe('Joint 4417')
+    expect(accountDisplayName(parts({ bankName: 'CASH 4417', manual: true }))).toBe('CASH 4417')
+  })
+
   it('never ends in a space, and has a name when the bank sends none', () => {
     expect(accountDisplayName(parts({ bankName: '' }))).toBe('Chase')
-    expect(accountDisplayName(parts({ bankName: '  ', institutionName: null }))).toBe('Account')
+    expect(accountDisplayName(parts({ bankName: '  ', institutionName: null }))).toBe('Checking')
+    expect(
+      accountDisplayName(
+        parts({ bankName: '', institutionName: null, type: 'mystery', subtype: null }),
+      ),
+    ).toBe('Account')
     expect(accountDisplayName(parts({ bankName: ' ', manual: true }))).toBe('Account')
   })
 
@@ -293,6 +265,11 @@ describe('readableCase', () => {
     expect(readableCase('HELOC LINE')).toBe('HELOC Line')
     expect(readableCase('PLATINUM X2')).toBe('Platinum X2')
     expect(readableCase('4417')).toBe('4417')
+  })
+
+  it('writes ordinals in small letters', () => {
+    expect(readableCase('1ST 2ND 3RD 4TH 21ST CHOICE')).toBe('1st 2nd 3rd 4th 21st Choice')
+    expect(readableCase('(3RD)')).toBe('(3rd)')
   })
 
   it('spells 401k its usual way, in any name', () => {
@@ -439,8 +416,25 @@ describe('distinctAccountNames', () => {
     ])
   })
 
+  it('never counts with an ordinal that shows the mask', () => {
+    const many = Array.from({ length: 19 }, (_, index) => account(String(index)))
+    const names = [...distinctAccountNames(many).values()]
+    // 17th ends in the mask 4417, so the count skips it.
+    expect(names[15]).toBe('Chase Total Checking (16th Checking)')
+    expect(names[16]).toBe('Chase Total Checking (18th Checking)')
+    expect(names.join(' ')).not.toMatch(/17/)
+  })
+
+  it('tells apart by type when the kind itself shows the mask', () => {
+    const names = distinctAccountNames([
+      account('a', { bankName: 'RETIREMENT', type: 'investment', subtype: '401k' }),
+      account('b', { bankName: 'RETIREMENT', type: 'investment', subtype: '401k', mask: '01' }),
+    ])
+    expect(names.get('b')).toBe('Chase Retirement (Investment)')
+  })
+
   it('counts on in words, then in numbers', () => {
-    const many = Array.from({ length: 23 }, (_, index) => account(String(index)))
+    const many = Array.from({ length: 23 }, (_, index) => account(String(index), { mask: null }))
     const names = [...distinctAccountNames(many).values()]
     expect(names[0]).toBe('Chase Total Checking')
     expect(names[7]).toBe('Chase Total Checking (Eighth Checking)')

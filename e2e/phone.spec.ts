@@ -73,7 +73,7 @@ for (const width of [390, 320]) {
       const lines = await names.evaluateAll((codes) =>
         codes.map((code) => `${code.textContent} ${code.getClientRects().length}`),
       )
-      expect(lines).toEqual(['RESEND_API_KEY 1', 'MAIL_FROM 1'])
+      expect(lines).toEqual(['RESEND_API_KEY 1', 'MAIL_FROM 1', 'MAIL_FROM 1'])
       expect(await overflow(page)).toBeLessThanOrEqual(0)
     })
 

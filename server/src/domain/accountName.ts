@@ -4,9 +4,10 @@
 // The owner's own name for an account wins. Otherwise banks send names like
 // "TOTAL CHECKING" from "BOK Financial - Online Banking", which read better as
 // "BOK Total Checking": the bank's short name, then the account in plain case.
-// Names leave the app (the weekly email, the AI writer), so a bank's name
-// never carries the account number it sometimes ends with.
+// Names leave the app (the weekly email, the AI writer), so a name built from
+// the bank's text never shows the account number: see accountNumber.ts.
 
+import { carriesMask, withoutAccountNumber } from './accountNumber.js'
 import {
   coreOf,
   isInitials,
@@ -14,7 +15,6 @@ import {
   isShouted,
   readableCase,
   SMALL_WORDS,
-  withoutAccountNumber,
 } from './nameWords.js'
 
 /** What naming one account needs. */
@@ -28,13 +28,14 @@ export interface AccountNameParts {
   manual: boolean
   /** The last digits of the account number, which a bank's name may repeat. */
   mask: string | null
+  /** The kind of account, as Plaid sends it: "depository" and "checking". */
+  type: string
+  subtype: string | null
 }
 
 /** What naming accounts side by side needs, to tell apart two with the same name. */
 export interface NamingAccount extends AccountNameParts {
   id: string
-  type: string
-  subtype: string | null
 }
 
 /**
@@ -86,7 +87,16 @@ export function accountDisplayName(parts: AccountNameParts): string {
   const acronyms = bankAcronyms(institution)
   const account = readableCase(withoutAccountNumber(parts.bankName, parts.mask), { acronyms })
   const bank = institution ? shortBankName(institution) : ''
-  return withBank(bank, account) || 'Account'
+  // The guarantee: a name that still shows the account number, however the
+  // bank wrote it, gives way to one made only of the bank and the kind of
+  // account, "Chase Checking", and at worst to "Account".
+  const names = [
+    withBank(bank, account),
+    withBank(bank, kindOfAccount(parts)),
+    withBank(bank, typeOfAccount(parts)),
+    bank,
+  ]
+  return names.find((name) => name && !carriesMask(name, parts.mask)) ?? 'Account'
 }
 
 /**
@@ -103,14 +113,18 @@ export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<st
   const sharing = new Map<string, number>()
   for (const account of accounts) {
     const base = accountDisplayName(account)
-    const kind = kindOfAccount(account)
+    const kind = [kindOfAccount(account), typeOfAccount(account), 'Account'].find(
+      (words) => !carriesMask(words, account.mask),
+    )!
     const key = `${base.toLowerCase()}\n${kind}`
     let count = sharing.get(key) ?? 0
     let name = base
     // A suffixed name can match another account's own, so step on until it is free.
     while (taken.has(name.toLowerCase())) {
       count += 1
-      name = `${base} (${count <= 1 ? kind : `${ordinal(count)} ${kind}`})`
+      const suffix = count <= 1 ? kind : `${ordinal(count)} ${kind}`
+      // Past eighth the order is in digits, "21st", which must not show the mask either.
+      if (!carriesMask(suffix, account.mask)) name = `${base} (${suffix})`
     }
     sharing.set(key, Math.max(count, 1))
     taken.add(name.toLowerCase())
@@ -218,9 +232,14 @@ function withBank(bank: string, account: string): string {
 }
 
 /** The kind of account, written like a name: "Checking", "Credit Card", "Roth IRA". */
-function kindOfAccount({ type, subtype }: Pick<NamingAccount, 'type' | 'subtype'>): string {
+function kindOfAccount({ type, subtype }: Pick<AccountNameParts, 'type' | 'subtype'>): string {
   const kind = subtype?.trim() || TYPE_WORDS[type] || 'account'
   return readableCase(kind.toUpperCase())
+}
+
+/** The type of account alone, written like a name: "Investment" for a 401k. */
+function typeOfAccount({ type }: Pick<AccountNameParts, 'type'>): string {
+  return readableCase((TYPE_WORDS[type] ?? 'account').toUpperCase())
 }
 
 /** Each type of account in words, for one the bank gives no subtype. */
