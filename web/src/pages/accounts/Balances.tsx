@@ -34,7 +34,7 @@ export function Balances({ view }: { view: AccountsView }) {
   const kinds = [b.cashAccounts, b.debtAccounts, b.otherAccounts].filter((n) => n > 0).length
   return (
     <section aria-label="Balances" className="stack-sm">
-      <div className="glance">
+      <div className="glance balance-figures">
         {b.cashAccounts > 0 && (
           <>
             <Figure

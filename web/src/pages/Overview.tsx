@@ -40,7 +40,7 @@ export function Overview() {
           onClick={() => setEditing(!editing)}
         >
           <Icon name="customize" size={16} />
-          {editing ? 'Done' : 'Customize'}
+          {editing ? 'Done' : 'Edit layout'}
         </button>
       }
     >

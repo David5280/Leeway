@@ -33,11 +33,10 @@ export function budgetStatus(row: CategoryBudget, period: Period, money: Money):
   const daysToSpend = period.daysLeft + 1
   if (daysToSpend === 1) return { text: `${money(left)} left for today${ahead}`, tone }
   // Whole units, rounded down: "about $25 a day" should never add up to more than is left.
-  const perDay = money(Math.floor(left / daysToSpend / 100) * 100)
-  return {
-    text: `${money(left)} left for ${days(daysToSpend)}, about ${perDay} a day${ahead}`,
-    tone,
-  }
+  const perDayCents = Math.floor(left / daysToSpend / 100) * 100
+  // Under one unit a day rounds to "about $0 a day", which reads as nothing left.
+  const perDay = perDayCents > 0 ? `, about ${money(perDayCents)} a day` : ''
+  return { text: `${money(left)} left for ${days(daysToSpend)}${perDay}${ahead}`, tone }
 }
 
 /** "+$40 rolled over" or "$12 overspent last time, taken from this budget"; null without rollover. */
