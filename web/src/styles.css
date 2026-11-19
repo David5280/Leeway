@@ -1393,10 +1393,15 @@ details.more[open] summary {
 /* Phones */
 
 /* The narrowest phones (320pt, the first iPhone SE): cards give their
-   contents more of the width. */
+   contents more of the width, and the header shows the logo without its
+   name, so the logo, the bell and the theme dots keep to one row. */
 @media (max-width: 360px) {
   .card {
     padding: min(var(--pad), 16px);
+  }
+
+  .brand-name {
+    display: none;
   }
 }
 
@@ -2253,6 +2258,12 @@ details.more[open] summary {
 
   .tabbar {
     display: none;
+  }
+
+  /* The Settings menu scrolls with the page: held in place, its last groups
+     would sit below the screen's bottom edge, out of reach. */
+  .settings-menu {
+    position: static;
   }
 
   h1 {

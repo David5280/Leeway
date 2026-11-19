@@ -1,5 +1,7 @@
 // The bell in the header: the way to the inbox, with how much is unread.
 
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { Icon } from './ui'
@@ -10,6 +12,20 @@ export const BELL_POLL_MS = 60_000
 /** The count as the badge shows it: up to 9, then "9+". */
 export function badgeText(unread: number): string {
   return unread > 9 ? '9+' : String(unread)
+}
+
+/** The bell's cached count, as useAction keys it. */
+const BELL_KEY = ['action', 'count_notifications', {}]
+
+/**
+ * Puts a fresher unread count on the bell, such as the inbox's own when it
+ * has just brought itself up to date, so the two never disagree.
+ */
+export function useBellCount(unread: number | undefined) {
+  const client = useQueryClient()
+  useEffect(() => {
+    if (unread !== undefined) client.setQueryData(BELL_KEY, { unread })
+  }, [client, unread])
 }
 
 export function Bell() {

@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
+import { fakeLongInbox, fakePushBrowser, fakePushServer } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
@@ -17,6 +18,7 @@ export const SETTINGS_GROUPS = [
   'accounts',
   'banks',
   'email',
+  'notifications',
   'assistant',
   'data',
   'sign-in',
@@ -88,6 +90,11 @@ export const SCREENS: Screen[] = [
     path: (seeded) => `/accounts?select=${seeded.accounts[index]}`,
   })),
   at('alerts', '/alerts'),
+  at('inbox', '/inbox'),
+  at('inbox', '/inbox', {
+    name: '/inbox with long alerts, read, unread and cleared',
+    before: fakeLongInbox,
+  }),
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {
     name: '/transactions adding one by hand',
@@ -164,6 +171,16 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',
     then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),
+  }),
+  at('settings', '/settings/notifications', {
+    name: '/settings/notifications with push on this device',
+    // A fake browser and push service: no test reaches a real one (notifications.ts).
+    before: async (page) => {
+      await fakePushBrowser(page, { subscribed: true })
+      await fakePushServer(page, { subscribed: true })
+    },
+    then: (page) =>
+      expect(page.getByRole('button', { name: 'Send a test notification' })).toBeVisible(),
   }),
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',

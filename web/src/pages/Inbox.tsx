@@ -4,6 +4,7 @@
 import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
+import { useBellCount } from '../components/Bell'
 import { Shell } from '../components/Shell'
 import { Card, ErrorNote, LoadingOrError } from '../components/ui'
 import { timeAgo } from '../lib/format'
@@ -15,6 +16,7 @@ export function Inbox() {
   const inbox = useAction('list_notifications')
   const markRead = useActionMutation('mark_notifications_read')
   const unread = inbox.data?.unread ?? 0
+  useBellCount(inbox.data?.unread)
   return (
     <Shell>
       <div className="inbox-head">

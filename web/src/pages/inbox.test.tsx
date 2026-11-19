@@ -60,6 +60,12 @@ describe('Inbox', () => {
     )
   })
 
+  it('puts its own fresh count on the bell, which may have asked before the inbox caught up', async () => {
+    fakeServer({ ...inboxHandlers([overdrawn, bill]), count_notifications: () => ({ unread: 0 }) })
+    renderSignedIn(<Inbox />, { route: '/inbox' })
+    expect(await screen.findByRole('link', { name: 'Inbox, 1 unread' })).toBeVisible()
+  })
+
   it('says so when there is nothing', async () => {
     renderInbox([])
     expect(await screen.findByText('Nothing new. Alerts show here as they happen.')).toBeVisible()
