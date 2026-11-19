@@ -37,9 +37,9 @@ export function ModelPicker({
           model&apos;s prices to keep within the limit.
         </p>
       )}
-      <div className="choice-list">
+      <div className="model-choices">
         {models.map((model) => (
-          <label key={model.id} className="choice">
+          <label key={model.id} className="model-choice">
             <input
               type="radio"
               name={`model-${job.job}`}
@@ -50,7 +50,7 @@ export function ModelPicker({
                 set.mutate({ job: job.job, model: model.id === job.defaultModel ? null : model.id })
               }
             />
-            <span className="choice-text">
+            <span className="model-choice-text">
               <span className="strong">
                 {model.name}
                 {model.id === job.defaultModel && <span className="badge">Default</span>}

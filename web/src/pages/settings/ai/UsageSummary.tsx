@@ -33,7 +33,7 @@ export function UsageSummary({ usage, locale }: { usage: AiUsage; locale: string
         {usage.jobs.map((job) => (
           <li key={job.job} className="row-between">
             <span>{job.title}</span>
-            <span className="num">
+            <span className="figures">
               {spentText(job.spend.costMicros, locale)}
               <span className="muted">, {callsText(job.spend.calls)}</span>
             </span>

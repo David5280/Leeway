@@ -1281,6 +1281,16 @@ details.more[open] summary {
   min-height: 44px;
 }
 
+/* In the card the alert lines up with the rest; in Heads up it keeps the row's padding. */
+.ai-models .ai-alert {
+  padding: 0;
+}
+
+.ai-models .figures {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .ai-limit {
   flex-wrap: nowrap;
 }
@@ -1302,13 +1312,13 @@ details.more[open] summary {
   margin-bottom: 4px;
 }
 
-.choice-list {
+.model-choices {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.choice {
+.model-choice {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -1319,15 +1329,15 @@ details.more[open] summary {
   cursor: pointer;
 }
 
-.choice:has(input:checked) {
+.model-choice:has(input:checked) {
   border-color: var(--accent);
 }
 
-.choice:has(input:disabled) {
+.model-choice:has(input:disabled) {
   cursor: default;
 }
 
-.choice input {
+.model-choice input {
   flex: none;
   width: 20px;
   height: 20px;
@@ -1335,14 +1345,14 @@ details.more[open] summary {
   accent-color: var(--accent);
 }
 
-.choice-text {
+.model-choice-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.choice-text .badge {
+.model-choice-text .badge {
   margin-left: 8px;
 }
 
