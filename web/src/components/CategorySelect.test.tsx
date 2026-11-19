@@ -1,6 +1,6 @@
 // The category picker used wherever a transaction or rule gets a category.
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { category } from '../test/fake'
@@ -33,10 +33,49 @@ describe('CategorySelect', () => {
       />,
     )
     expect(screen.getByRole('combobox')).toHaveDisplayValue('Groceries')
+  })
+
+  it('lists categories A to Z, not in the budget order they came in', () => {
+    const list = [groceries, category('transportation'), dining, category('Shopping')]
+    render(<CategorySelect categories={list} value={null} onChange={vi.fn()} label="Category" />)
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Groceries',
+      'Pick a category',
       'Dining out',
+      'Groceries',
+      'Shopping',
+      'transportation',
     ])
+    // Without groups there are no headings.
+    expect(screen.queryAllByRole('group')).toEqual([])
+  })
+
+  it('keeps the empty label first, then groups A to Z with ungrouped categories under Other', () => {
+    const list = [
+      category('Rent', { group: 'Home' }),
+      category('Mine'),
+      category('Groceries', { group: 'Food and drink' }),
+      category('Alcohol', { group: 'Food and drink' }),
+    ]
+    render(
+      <CategorySelect
+        categories={list}
+        value={null}
+        onChange={vi.fn()}
+        label="Category"
+        emptyLabel="All categories"
+      />,
+    )
+    const select = screen.getByRole('combobox', { name: 'Category' })
+    expect(select.firstElementChild).toHaveTextContent('All categories')
+    const groups = screen.getAllByRole('group')
+    expect(groups.map((g) => g.getAttribute('label'))).toEqual(['Food and drink', 'Home', 'Other'])
+    expect(
+      groups.map((g) =>
+        within(g)
+          .getAllByRole('option')
+          .map((o) => o.textContent),
+      ),
+    ).toEqual([['Alcohol', 'Groceries'], ['Rent'], ['Mine']])
   })
 
   it('lets nothing be chosen with the empty label, sent as null', async () => {
