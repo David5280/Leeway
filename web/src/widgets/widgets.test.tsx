@@ -185,7 +185,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 20000 },
+      previous: { spentCents: 70000, spentToDateCents: 20000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$300')
@@ -196,7 +196,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 45000 },
+      previous: { spentCents: 70000, spentToDateCents: 45000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$150 less than this point last month')
@@ -223,7 +223,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }]),
-      previous: { spentCents: 0, spentToDateCents: 1000 },
+      previous: { spentCents: 0, spentToDateCents: 1000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />, {
       settings: settingsSchema.parse({ timeZone: 'America/Denver', period }),
@@ -788,6 +788,27 @@ describe('AccountsWidget', () => {
     expect(screen.getByRole('link', { name: 'All accounts' })).toHaveAttribute('href', '/accounts')
     // Each account opens the Accounts dashboard with just it picked.
     expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
+  })
+
+  it("draws a line of each account's recent balance, when it has one", async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: 9000 }),
+        account({ id: 'b', name: 'New savings', balanceCents: 100 }),
+      ],
+      list_recent_balances: () => [
+        { accountId: 'a', balancesCents: [5000, 7000, 9000] },
+        { accountId: 'b', balancesCents: [100] },
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const checking = (await screen.findByText('Checking')).closest('.list-row')!
+    await waitFor(() => expect(checking.querySelector('svg.spark polyline')).not.toBeNull())
+    // Decorative: the row's link still reads as the account.
+    expect(checking.querySelector('svg.spark')).toHaveAttribute('aria-hidden', 'true')
+    // One day of history makes no line.
+    const savings = screen.getByText('New savings').closest('.list-row')!
+    expect(savings.querySelector('svg.spark')).toBeNull()
   })
 
   it('shows an overdrawn cash balance in red, but never a card balance', async () => {

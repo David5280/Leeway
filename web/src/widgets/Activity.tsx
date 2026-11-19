@@ -5,9 +5,10 @@ import { useAction } from '../api/hooks'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, Progress } from '../components/ui'
 import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
+import { Money } from '../components/design/Money'
+import { Sparkline } from '../components/design/Sparkline'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
-import { Money } from '../components/design/Money'
 
 export function RecentWidget({ budget }: WidgetProps) {
   const recent = useAction('list_transactions', { limit: 6, end: budget.period.end })
@@ -36,6 +37,9 @@ export function RecentWidget({ budget }: WidgetProps) {
 
 export function AccountsWidget() {
   const accounts = useAction('list_accounts')
+  // The line of each balance is a nicety: the list shows without it.
+  const recent = useAction('list_recent_balances')
+  const lines = new Map(recent.data?.map((one) => [one.accountId, one.balancesCents]))
   return (
     <Card label="Accounts" className="stack-sm">
       <div className="row-between">
@@ -59,6 +63,7 @@ export function AccountsWidget() {
               {account.hidden && ' · ignored for budgets'}
             </span>
           </span>
+          <Sparkline values={lines.get(account.id) ?? []} />
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
             {account.balanceCents === null ? (
               <span>No balance</span>

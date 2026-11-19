@@ -191,6 +191,7 @@ tspan.money-neutral {
 .spark {
   width: 80px;
   height: 24px;
+  flex: none;
   overflow: visible;
 }
 

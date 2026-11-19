@@ -136,7 +136,29 @@ export function sumTotals(
 
 export interface BudgetReport extends BudgetSummary {
   /** The period before, for "more than this point last month" comparisons. */
-  previous: { spentCents: number; spentToDateCents: number }
+  previous: {
+    spentCents: number
+    spentToDateCents: number
+    /**
+     * Each category's amount the same number of days into the period before,
+     * read as its row's spentCents is: spending for an expense, money
+     * received for income. Categories with none are left out.
+     */
+    categories: { categoryId: string; spentToDateCents: number }[]
+  }
+}
+
+/** Each category's total, read as a budget row reads it: money received is positive for income. */
+function byCategory(
+  categories: Category[],
+  totals: CategoryTotal[],
+): BudgetReport['previous']['categories'] {
+  const kinds = new Map(categories.map((c) => [c.id, c.kind]))
+  return totals.flatMap(({ categoryId, amountCents }) => {
+    if (categoryId === null) return []
+    const received = kinds.get(categoryId) === 'income'
+    return [{ categoryId, spentToDateCents: received ? -amountCents : amountCents }]
+  })
 }
 
 /** The budget plus how the previous period looked at the same point. */
@@ -165,6 +187,7 @@ export async function budgetReport(
     previous: {
       spentCents: sumTotals(categories, full).spentCents,
       spentToDateCents: sumTotals(categories, toDate).spentCents,
+      categories: byCategory(categories, toDate),
     },
   }
 }

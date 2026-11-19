@@ -289,7 +289,7 @@ export function budgetFor(
       settings,
       ...extra,
     }),
-    previous: { spentCents: 0, spentToDateCents: 0 },
+    previous: { spentCents: 0, spentToDateCents: 0, categories: [] },
   }
 }
 

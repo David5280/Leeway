@@ -67,7 +67,22 @@ describe('insights', () => {
     await recategorize()
     const budget = await call('get_budget')
     expect(budget.totals.spentCents).toBe(15000)
-    expect(budget.previous).toEqual({ spentCents: 30000, spentToDateCents: 10000 })
+    expect(budget.previous).toEqual({
+      spentCents: 30000,
+      spentToDateCents: 10000,
+      categories: [{ categoryId: food.id, spentToDateCents: 10000 }],
+    })
+  })
+
+  it("reads each category's last period to date as its row reads, money received as positive", async () => {
+    const pay = (await call('list_categories')).find((c: { name: string }) => c.name === 'Pay')
+    await spend('2026-10-02', 'Paycheck', -250000)
+    await spend('2026-10-03', 'Corner store', 700)
+    await ctx.db.query(`UPDATE transactions SET category_id = $1 WHERE name = 'Paycheck'`, [pay.id])
+    const budget = await call('get_budget')
+    // Uncategorized spending counts toward the total, but has no category row to compare.
+    expect(budget.previous.categories).toEqual([{ categoryId: pay.id, spentToDateCents: 250000 }])
+    expect(budget.previous.spentToDateCents).toBe(700)
   })
 
   it('reports spending and income per period, oldest first', async () => {
