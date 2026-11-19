@@ -31,16 +31,23 @@ test('an accent color applies right away', async ({ page }) => {
 })
 
 test('a dashboard card can be hidden and shown again', async ({ page }) => {
+  // The switch flips at once, before the save lands; leaving the page too soon
+  // would cancel the save, so each click waits for the server to answer.
+  const toggleHeadsUp = async () => {
+    const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_settings'))
+    await page.getByRole('switch', { name: 'Show Heads up' }).click()
+    expect((await saved).ok()).toBe(true)
+  }
+
   await page.goto('/customize')
-  const headsUp = page.getByRole('switch', { name: 'Show Heads up' })
-  await headsUp.click()
-  await expect(headsUp).not.toBeChecked()
+  await toggleHeadsUp()
+  await expect(page.getByRole('switch', { name: 'Show Heads up' })).not.toBeChecked()
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Heads up' })).toHaveCount(0)
 
   await page.goto('/customize')
-  await page.getByRole('switch', { name: 'Show Heads up' }).click()
+  await toggleHeadsUp()
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Heads up' })).toBeVisible()
 })
