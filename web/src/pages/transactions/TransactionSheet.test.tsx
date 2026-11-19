@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../../api/client'
 import {
@@ -67,6 +68,19 @@ function choices(list: HTMLElement): (string | null)[] {
   return within(list)
     .getAllByRole('button')
     .map((button) => button.querySelector('.option-label')!.textContent)
+}
+
+/** The sheet as the Activity page holds it: gone once it asks to close. */
+function ClosingSheet({ tx }: { tx: Transaction }) {
+  const [open, setOpen] = useState(true)
+  return open ? (
+    <TransactionSheet
+      initial={tx}
+      categories={categories}
+      onOpen={() => {}}
+      onClose={() => setOpen(false)}
+    />
+  ) : null
 }
 
 function renderSheet(tx: Transaction, extra: { onOpen?: () => void; onClose?: () => void } = {}) {
@@ -255,6 +269,43 @@ describe('TransactionSheet note, totals and delete', () => {
       ]),
     )
     expect(within(dialog).queryByRole('button', { name: 'Delete transaction' })).toBeNull()
+  })
+
+  it('saves a note typed just before Escape closes the sheet', async () => {
+    const server = serve([costco])
+    renderSignedIn(<ClosingSheet tx={costco} />)
+    const user = userEvent.setup()
+    const dialog = screen.getByRole('dialog', { name: costco.displayName })
+    await user.type(within(dialog).getByLabelText('Note'), 'Party food')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() =>
+      expect(server.actions('update_transaction')).toEqual([{ id: 't1', note: 'Party food' }]),
+    )
+  })
+
+  it('saves a note once when the field is left and the sheet then closes', async () => {
+    const server = serve([costco])
+    renderSignedIn(<ClosingSheet tx={costco} />)
+    const user = userEvent.setup()
+    const dialog = screen.getByRole('dialog', { name: costco.displayName })
+    await user.type(within(dialog).getByLabelText('Note'), 'Party food')
+    await user.tab()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(server.actions('update_transaction')).toHaveLength(1))
+    expect(server.actions('update_transaction')).toEqual([{ id: 't1', note: 'Party food' }])
+  })
+
+  it('saves a note typed before switching to the category picker', async () => {
+    const server = serve([costco])
+    const { dialog } = renderSheet(costco)
+    const user = userEvent.setup()
+    await user.type(within(dialog).getByLabelText('Note'), 'Party')
+    await user.click(within(dialog).getByRole('button', { name: /Groceries/ }))
+    await waitFor(() =>
+      expect(server.actions('update_transaction')).toEqual([{ id: 't1', note: 'Party' }]),
+    )
   })
 
   it('clears a note, and saves nothing when the note did not change', async () => {

@@ -2,7 +2,7 @@
 // category and where that came from, a rule for ones like it, a note,
 // leaving it out of totals, and the bank's own text tucked away below.
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Category, Transaction } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { CategoryIcon } from '../../components/design/CategoryIcon'
@@ -140,9 +140,11 @@ function OtherSide({
 
 /** A note, leaving it out of totals, and deleting one added by hand. */
 function MoreOptions({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void }) {
-  const [note, setNote] = useState(tx.note ?? '')
   const update = useActionMutation('update_transaction')
   const remove = useActionMutation('delete_transaction')
+  const [note, setNote, saveNote] = useNoteDraft(tx, (text) =>
+    update.mutate({ id: tx.id, note: text || null }),
+  )
   return (
     <section className="sheet-section" aria-label="Note and totals">
       <label className="sheet-section-title" htmlFor={`note-${tx.id}`}>
@@ -156,7 +158,7 @@ function MoreOptions({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void
         value={note}
         maxLength={500}
         onChange={(event) => setNote(event.target.value)}
-        onBlur={() => note !== (tx.note ?? '') && update.mutate({ id: tx.id, note: note || null })}
+        onBlur={saveNote}
       />
       <div className="sheet-switch">
         <span>
@@ -182,6 +184,33 @@ function MoreOptions({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void
       <ErrorNote error={update.error ?? remove.error} />
     </section>
   )
+}
+
+/**
+ * A note being typed, saved when the field is left and again when the sheet
+ * closes or changes view mid-word, as Escape does without leaving the field.
+ * A note is saved once: what was last sent is remembered, so leaving the
+ * field and then closing sends nothing twice.
+ */
+function useNoteDraft(
+  tx: Pick<Transaction, 'note'>,
+  save: (text: string) => void,
+): [string, (text: string) => void, () => void] {
+  const [note, setNote] = useState(tx.note ?? '')
+  const sent = useRef(tx.note ?? '')
+  // The latest draft and save, kept for the save on unmount, which no render follows.
+  const latest = useRef({ note, save })
+  useEffect(() => {
+    latest.current = { note, save }
+  })
+  const flush = useCallback(() => {
+    const { note: draft, save: send } = latest.current
+    if (draft === sent.current) return
+    sent.current = draft
+    send(draft)
+  }, [])
+  useEffect(() => flush, [flush])
+  return [note, setNote, flush]
 }
 
 /** Where a transaction came from, as the bank sent it. Closed until wanted. */
