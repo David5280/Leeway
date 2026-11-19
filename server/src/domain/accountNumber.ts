@@ -218,28 +218,38 @@ function withoutNumber(word: string, maskDigits: string, standsAsNumber: boolean
   return null
 }
 
+/** How a run of digits sits in its word, for isNumber. */
+interface RunPlace {
+  marked: boolean
+  markedPlainly: boolean
+  alone: boolean
+  standsAsNumber: boolean
+}
+
 /** Whether a run of digits in a word is the account number; see withoutNumber. */
-function isNumber(
-  digits: string,
-  maskDigits: string,
-  how: { marked: boolean; markedPlainly: boolean; alone: boolean; standsAsNumber: boolean },
-): boolean {
+function isNumber(digits: string, maskDigits: string, how: RunPlace): boolean {
   // The mask, with or without zeros in front: "052" or "52" for 0052 or 52.
   const unpadded = (text: string) => text.replace(/^0+/, '')
-  const isMask = maskDigits.length >= 2 && unpadded(digits) === unpadded(maskDigits)
-  if (isMask && digits !== maskDigits && unpadded(digits).length < 2) {
-    // Found only with its zeros off and down to one digit, the "1" of 0001 is
-    // only the mask when plainly marked or led up to, so "1ST TIME" and
-    // "2-IN-1" keep theirs. Written in full, "CHK0001" is the mask as ever.
-    return how.markedPlainly || (how.alone && how.standsAsNumber)
+  if (maskDigits.length >= 2 && unpadded(digits) === unpadded(maskDigits)) {
+    return isMaskNumber(digits !== maskDigits && unpadded(digits).length < 2, how)
   }
-  if (isMask) return !how.alone || how.standsAsNumber
   if (how.marked && maskDigits.length >= 2) {
     const endOfMask = digits.length >= 2 && maskDigits.endsWith(digits)
     if (digits.endsWith(maskDigits) || endOfMask) return true
   }
   const year = /^(19|20)\d\d$/.test(digits)
   return digits.length >= 4 && (!year || how.marked)
+}
+
+/**
+ * Whether a run that is the mask, with or without its zeros, is the number
+ * where it sits. One down to a single digit once its zeros are off, the "1"
+ * of 0001, is only the mask when plainly marked or led up to, so "1ST TIME"
+ * and "2-IN-1" keep theirs; written in full, "CHK0001" is the mask as ever.
+ */
+function isMaskNumber(downToOneDigit: boolean, how: RunPlace): boolean {
+  if (downToOneDigit) return how.markedPlainly || (how.alone && how.standsAsNumber)
+  return !how.alone || how.standsAsNumber
 }
 
 /**
