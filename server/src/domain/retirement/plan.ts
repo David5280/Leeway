@@ -1,28 +1,37 @@
 /**
- * Retirement: the one place Leeway works out whether savings and pensions can
- * pay for the retirement the owner wants. The financial profile holds the
- * result, and the retirement lens, the digest and the summary all read it
- * there. Pure.
+ * Retirement: the one place Leeway works out what pensions and savings could
+ * pay in retirement. The financial profile holds the result, and the
+ * retirement lens, the digest and the weekly email read it there. Pure.
  *
  * How the parts fit:
- * - Assumptions come from settings (assumptions.ts). Without a birth year
- *   there is no projection, only a request for one.
- * - Savings are the retirement accounts' balance, grown in today's dollars by
- *   projection.ts as a low, middle and high case, plus the monthly
- *   contribution: the owner's figure, else transfers Leeway found going to
- *   investment and retirement accounts, else nothing.
- * - Income in retirement is each pension's monthly benefit plus what savings
- *   give at the withdrawal rate. A pension with no benefit entered counts as
- *   unknown, and then Leeway does not say whether the owner is on track.
- * - The target is the owner's figure, else their recent monthly spending.
- * - Coaching never treats missing IRA, 401(k) or brokerage contributions as
- *   under-saving when a pension is recorded: a pension is retirement saving.
+ * - Assumptions come from settings (assumptions.ts), and the owner can change
+ *   every one. Without a birth year there is no projection, only a request
+ *   for one.
+ * - Savings to draw on are the retirement and investment accounts, plus cash
+ *   savings beyond the emergency fund's target: the emergency fund stays for
+ *   emergencies. They grow in today's dollars as a low, middle and high case
+ *   (projection.ts), with a monthly contribution: the owner's figure, else
+ *   transfers Leeway found going to investment and retirement accounts, else
+ *   nothing.
+ * - Each pension pays its benefit from the age it starts (pensions.ts). A
+ *   pension's member balance is not savings to draw on: it is what pays the
+ *   benefit, so counting both would count it twice.
+ * - Income is the pensions' benefits plus savings drawn at the withdrawal rate,
+ *   against a target: the owner's figure, else recent monthly spending.
+ * - Whether that is on track is said only when every pension's benefit is
+ *   known: a pension with no benefit entered could cover the whole target.
  */
 
 import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import type { RetirementAssumptions } from './assumptions.js'
-import { pensionPayIn, type Pension, type PensionPayIn } from './pensions.js'
+import {
+  pensionBenefit,
+  pensionPayIn,
+  type Pension,
+  type PensionBenefit,
+  type PensionPayIn,
+} from './pensions.js'
 import {
   caseReturns,
   growthBand,
@@ -36,23 +45,36 @@ import {
 const ON_TRACK_PERCENT = 95
 /** Below this share, the middle case is below target rather than close. */
 const CLOSE_PERCENT = 75
-/** How many years later Leeway looks for a retirement age that closes a gap. */
+/** How many years later Leeway looks for a retirement age that meets the target. */
 const LATER_YEARS = 5
 
 export type OnTrack = 'on_track' | 'close' | 'below_target'
 
+/** Said with every projection, wherever it is shown. */
+export const PROJECTION_NOTE =
+  "A range in today's dollars from the assumptions shown, not a promise of what markets or a plan will pay. Social Security is not included."
+
 /** A pension as a projection counts it. */
 export interface PensionInPlan extends Pension {
   payIn: PensionPayIn
-  /** Counted in income at the retirement age: it has a benefit that starts by then. */
+  /** The monthly benefit at the age it starts, or null while it is unknown. */
+  benefit: PensionBenefit | null
+  /** The age the benefit starts: the plan's own, else the planned retirement age. */
+  startsAge: number
+  /** Counted in income at retirement: its benefit is known and starts by then. */
   counted: boolean
 }
 
 export interface RetirementInput {
   today: IsoDate
   assumptions: RetirementAssumptions
-  /** The retirement accounts' balance now. */
-  balanceCents: number
+  /** The counted balances of the owner's retirement and investment accounts. */
+  retirementCents: number
+  investmentCents: number
+  /** Cash in savings accounts, or null without any savings account. */
+  cashCents: number | null
+  /** The emergency fund's target, or null when essentials are unknown. */
+  emergencyTargetCents: number | null
   /** Monthly transfers found going to investment and retirement accounts, if any. */
   foundMonthlyContributionCents: number | null
   /** Average monthly spending lately, if Leeway has a whole month of it. */
@@ -62,11 +84,32 @@ export interface RetirementInput {
   payCadence: Cadence | null
 }
 
+/** What savings a projection starts from. */
+export interface StartingSavings {
+  retirementCents: number
+  investmentCents: number
+  /** Cash savings beyond the emergency fund's target. */
+  cashCents: number
+  /** Cash left for emergencies and not counted: all of it while the target is unknown. */
+  cashKeptCents: number
+  totalCents: number
+}
+
+/** Monthly income at a retirement age, in today's dollars. */
+export interface RetirementIncome {
+  /** Pension benefits that have started by then. */
+  pension: Band
+  /** Savings drawn at the withdrawal rate. */
+  savings: Band
+  total: Band
+}
+
 /** A projection ready to show. */
 export interface Projection {
   age: number
   retirementAge: number
   yearsToGo: number
+  startingSavings: StartingSavings
   contribution: { monthlyCents: number; source: 'entered' | 'found' | 'none' }
   target: { monthlyCents: number; source: 'entered' | 'spending' } | null
   /** Yearly returns after inflation, in percent to one decimal. */
@@ -75,13 +118,12 @@ export interface Projection {
   savingsAtRetirement: Band
   /** Each year from now to retirement, for the chart. */
   band: BandPoint[]
-  /** Monthly income at retirement: pensions counted, and savings at the withdrawal rate. */
-  income: { pensionCents: number; savings: Band; total: Band }
-  /** Total income as a whole percent of the target; null without a target. */
+  income: RetirementIncome
+  /** Total income as a whole percent of the target; null when onTrack is. */
   coverage: Band | null
-  /** Null without a target, or while a recorded pension has no benefit entered. */
+  /** Null without a target, or while a pension's benefit is unknown. */
   onTrack: OnTrack | null
-  /** How much the middle case falls short of the target each month; 0 when it does not. */
+  /** How far the middle case falls short of the target a month; null when onTrack is. */
   gapMonthlyCents: number | null
   /** The first later age (up to five years) whose middle case meets the target. */
   laterAge: number | null
@@ -93,16 +135,17 @@ export interface RetirementPlan {
   /** The assumptions the projection used. */
   assumptions: RetirementAssumptions
   pensions: PensionInPlan[]
-  /** Whether a pension is recorded; coaching reads this before talking about saving. */
+  /** Whether a pension is recorded; coaching reads this before saying anything about saving. */
   hasPension: boolean
-  /** Recorded pensions whose monthly benefit is not entered yet. */
+  /** Recorded pensions whose monthly benefit is not known yet. */
   pensionsWithoutBenefit: number
-  /** One plain line that goes with every projection. */
   note: string
 }
 
-export const PROJECTION_NOTE =
-  "A projection in today's dollars from the assumptions shown, not a promise of what markets will do."
+/** The owner's age this calendar year: a year early before their birthday, which a projection can bear. */
+export function ageIn(today: IsoDate, birthYear: number): number {
+  return Number(today.slice(0, 4)) - birthYear
+}
 
 function onTrackOf(midPercent: number): OnTrack {
   if (midPercent >= ON_TRACK_PERCENT) return 'on_track'
@@ -111,6 +154,28 @@ function onTrackOf(midPercent: number): OnTrack {
 
 /** Rounded to one decimal, for a return shown as a percent. */
 const oneDecimal = (value: number) => Math.round(value * 10) / 10
+
+const ZERO: Band = { low: 0, mid: 0, high: 0 }
+
+const addBands = (a: Band, b: Band): Band => ({
+  low: a.low + b.low,
+  mid: a.mid + b.mid,
+  high: a.high + b.high,
+})
+
+/** Savings to draw on now; cash counts only beyond the emergency fund's target. */
+function startingSavingsOf(input: RetirementInput): StartingSavings {
+  const cash = Math.max(0, input.cashCents ?? 0)
+  const target = input.emergencyTargetCents
+  const cashCents = target === null ? 0 : Math.max(0, cash - target)
+  return {
+    retirementCents: input.retirementCents,
+    investmentCents: input.investmentCents,
+    cashCents,
+    cashKeptCents: cash - cashCents,
+    totalCents: input.retirementCents + input.investmentCents + cashCents,
+  }
+}
 
 /** The contribution a projection uses, and where it came from. */
 function contributionOf(input: RetirementInput): Projection['contribution'] {
@@ -128,103 +193,130 @@ function targetOf(input: RetirementInput): Projection['target'] {
   return spending && spending > 0 ? { monthlyCents: spending, source: 'spending' } : null
 }
 
-/** Savings at a retirement age, in each case. */
-function savingsAt(input: RetirementInput, age: number, retirementAge: number, monthly: number) {
+/**
+ * Each pension as it stands for one retirement age: its benefit at the age
+ * it starts, and whether it has started by then. `age` is null without a
+ * birth year, when only the service so far is counted.
+ */
+function pensionsAt(
+  input: RetirementInput,
+  age: number | null,
+  retirementAge: number,
+): PensionInPlan[] {
+  return input.pensions.map((pension) => {
+    const startsAge = pension.plan.benefitAge ?? retirementAge
+    const benefit = pensionBenefit(pension.plan, age === null ? null : startsAge - age)
+    return {
+      ...pension,
+      payIn: pensionPayIn(pension.plan, input.payCadence),
+      benefit,
+      startsAge,
+      counted: benefit !== null && startsAge <= retirementAge,
+    }
+  })
+}
+
+/** Savings each year from now to a retirement age, ending with the balance then. */
+function growthTo(input: RetirementInput, start: StartingSavings, age: number, until: number) {
   const { returnPercent, inflationPercent } = input.assumptions
   const growth = {
-    balanceCents: input.balanceCents,
-    monthlyContributionCents: monthly,
-    years: retirementAge - age,
+    balanceCents: start.totalCents,
+    monthlyContributionCents: contributionOf(input).monthlyCents,
+    years: until - age,
     returnPercent,
     inflationPercent,
   }
   return growthBand(growth, age)
 }
 
-/** Monthly income from savings at the withdrawal rate. */
-function drawdown(savings: Band, withdrawalPercent: number): Band {
-  return mapBand(savings, (cents) => Math.round((cents * withdrawalPercent) / 100 / 12))
+/** Monthly income at a retirement age, from the savings then and the pensions started by then. */
+function incomeOf(
+  input: RetirementInput,
+  savingsAtRetirement: Band,
+  pensions: PensionInPlan[],
+): RetirementIncome {
+  const { withdrawalPercent } = input.assumptions
+  const savings = mapBand(savingsAtRetirement, (cents) =>
+    Math.round((cents * withdrawalPercent) / 100 / 12),
+  )
+  const pension = pensions
+    .filter((one) => one.counted)
+    .reduce((sum, one) => addBands(sum, one.benefit!), ZERO)
+  return { pension, savings, total: addBands(pension, savings) }
+}
+
+/** The balance at the last point of a band, without its age. */
+function finalBand(band: BandPoint[]): Band {
+  const { low, mid, high } = band.at(-1)!
+  return { low, mid, high }
+}
+
+/**
+ * The first age up to five years past the planned one whose middle case meets
+ * the target, with savings growing and service adding up for the extra years.
+ * Offered as one choice the owner can weigh, never as advice to save more.
+ */
+function laterAgeOf(
+  input: RetirementInput,
+  start: StartingSavings,
+  age: number,
+  targetCents: number,
+): number | null {
+  const { retirementAge } = input.assumptions
+  for (let later = retirementAge + 1; later <= retirementAge + LATER_YEARS; later++) {
+    const savings = finalBand(growthTo(input, start, age, later))
+    const income = incomeOf(input, savings, pensionsAt(input, age, later))
+    if (income.total.mid >= targetCents) return later
+  }
+  return null
 }
 
 function projectionOf(input: RetirementInput, pensions: PensionInPlan[], age: number): Projection {
-  const { retirementAge, withdrawalPercent, inflationPercent, returnPercent } = input.assumptions
-  const contribution = contributionOf(input)
+  const { retirementAge, inflationPercent, returnPercent } = input.assumptions
+  const startingSavings = startingSavingsOf(input)
   const target = targetOf(input)
-  const band = savingsAt(input, age, retirementAge, contribution.monthlyCents)
-  const { age: _age, ...savingsAtRetirement } = band.at(-1)!
-  const pensionCents = pensions
-    .filter((p) => p.counted)
-    .reduce((sum, p) => sum + p.monthlyBenefitCents!, 0)
-  const savings = drawdown(savingsAtRetirement, withdrawalPercent)
-  const total = mapBand(savings, (cents) => cents + pensionCents)
-  const coverage =
-    target && mapBand(total, (cents) => Math.round((cents / target.monthlyCents) * 100))
-  const unknownPension = pensions.some((p) => p.monthlyBenefitCents === null)
-  const short = target !== null && total.mid < target.monthlyCents
+  const band = growthTo(input, startingSavings, age, retirementAge)
+  const savingsAtRetirement = finalBand(band)
+  const income = incomeOf(input, savingsAtRetirement, pensions)
+  // A pension with no known benefit could cover the target alone, so no verdict without it.
+  const judged = target !== null && pensions.every((pension) => pension.benefit !== null)
+  const coverage = judged
+    ? mapBand(income.total, (cents) => Math.round((cents / target.monthlyCents) * 100))
+    : null
+  const short = judged && income.total.mid < target.monthlyCents
 
   return {
     age,
     retirementAge,
     yearsToGo: Math.max(0, retirementAge - age),
-    contribution,
+    startingSavings,
+    contribution: contributionOf(input),
     target,
     realReturns: mapBand(caseReturns(returnPercent), (r) =>
       oneDecimal(realReturnPercent(r, inflationPercent)),
     ),
     savingsAtRetirement,
     band,
-    income: { pensionCents, savings, total },
+    income,
     coverage,
-    onTrack: coverage && !unknownPension ? onTrackOf(coverage.mid) : null,
-    gapMonthlyCents: target ? Math.max(0, target.monthlyCents - total.mid) : null,
-    laterAge: short
-      ? laterAgeOf(input, age, contribution.monthlyCents, pensionCents, target)
-      : null,
+    onTrack: coverage ? onTrackOf(coverage.mid) : null,
+    gapMonthlyCents: judged ? Math.max(0, target.monthlyCents - income.total.mid) : null,
+    laterAge: short ? laterAgeOf(input, startingSavings, age, target.monthlyCents) : null,
   }
-}
-
-/**
- * The first age up to five years past the planned one whose middle case meets
- * the target. Offered as a choice the owner can weigh, never as advice to save
- * more.
- */
-function laterAgeOf(
-  input: RetirementInput,
-  age: number,
-  monthlyContributionCents: number,
-  pensionCents: number,
-  target: NonNullable<Projection['target']>,
-): number | null {
-  const { retirementAge, withdrawalPercent } = input.assumptions
-  for (let later = retirementAge + 1; later <= retirementAge + LATER_YEARS; later++) {
-    const savings = savingsAt(input, age, later, monthlyContributionCents).at(-1)!
-    if (drawdown(savings, withdrawalPercent).mid + pensionCents >= target.monthlyCents) return later
-  }
-  return null
-}
-
-/** The owner's age this calendar year: a year early before their birthday, which a projection can bear. */
-export function ageIn(today: IsoDate, birthYear: number): number {
-  return Number(today.slice(0, 4)) - birthYear
 }
 
 export function retirementPlan(input: RetirementInput): RetirementPlan {
   const { birthYear, retirementAge } = input.assumptions
-  const pensions = input.pensions.map<PensionInPlan>((pension) => ({
-    ...pension,
-    payIn: pensionPayIn(pension, input.payCadence),
-    counted:
-      pension.monthlyBenefitCents !== null &&
-      (pension.benefitAge ?? retirementAge) <= retirementAge,
-  }))
-  const age = birthYear === null ? null : ageIn(input.today, birthYear)
+  const known = birthYear === null ? null : ageIn(input.today, birthYear)
+  // An age below zero is a typo, not a projection.
+  const age = known !== null && known >= 0 ? known : null
+  const pensions = pensionsAt(input, age, retirementAge)
   return {
-    // An age below zero is a typo, not a projection.
-    projection: age === null || age < 0 ? null : projectionOf(input, pensions, age),
+    projection: age === null ? null : projectionOf(input, pensions, age),
     assumptions: input.assumptions,
     pensions,
     hasPension: pensions.length > 0,
-    pensionsWithoutBenefit: pensions.filter((p) => p.monthlyBenefitCents === null).length,
+    pensionsWithoutBenefit: pensions.filter((pension) => pension.benefit === null).length,
     note: PROJECTION_NOTE,
   }
 }

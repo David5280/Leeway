@@ -130,16 +130,36 @@ export async function createManualAccount(
   db: Db,
   input: z.infer<typeof manualAccountInputSchema>,
 ): Promise<Account> {
+  return insertManualAccount(db, { ...input, kind: null })
+}
+
+/** What a manual account is stored with, for adding one of any kind. */
+export interface ManualAccountRow {
+  name: string
+  type: AccountType
+  subtype: string | null
+  /** Null for an account whose balance the owner does not know, such as a pension. */
+  balanceCents: number | null
+  creditLimitCents: number | null
+  currency: string
+  /** The owner's pick of kind, or null to follow the automatic one. */
+  kind: AccountKind | null
+}
+
+/** Adds an account by hand: through create_account, or as a pension (retirement/pensions.ts). */
+export async function insertManualAccount(db: Db, row: ManualAccountRow): Promise<Account> {
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO accounts (name, type, subtype, balance_cents, credit_limit_cents, currency, balance_updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+    `INSERT INTO accounts (name, type, subtype, balance_cents, credit_limit_cents, currency,
+       kind, balance_updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING id`,
     [
-      input.name,
-      input.type,
-      input.subtype,
-      input.balanceCents,
-      input.creditLimitCents,
-      input.currency,
+      row.name,
+      row.type,
+      row.subtype,
+      row.balanceCents,
+      row.creditLimitCents,
+      row.currency,
+      row.kind,
     ],
   )
   return getAccount(db, rows[0]!.id)

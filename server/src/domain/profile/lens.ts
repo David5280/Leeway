@@ -83,6 +83,7 @@ export const LENS_QUESTIONS: Record<
   checking: { title: 'Checking', question: 'Will I make it to payday?' },
   savings: { title: 'Savings', question: 'How protected am I?' },
   retirement: { title: 'Retirement', question: 'Can I stop working on time?' },
+  pension: { title: 'Pensions', question: 'What will it pay?' },
   investment: { title: 'Investing', question: 'How is it growing?' },
   credit_card: { title: 'Credit cards', question: 'Is it costing me?' },
   loan: { title: 'Loans', question: 'When will it be gone?' },

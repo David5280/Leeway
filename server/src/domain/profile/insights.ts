@@ -5,7 +5,7 @@
 import type { IsoDate } from '../../lib/dates.js'
 import { shortDate } from '../../lib/words.js'
 import type { SavingsKind } from '../accountKinds.js'
-import { SEEN_AT_BANK } from '../savings/rate.js'
+import { countedNote, countsPayroll, payNoun } from '../savings/rate.js'
 import type { CombinedChanges } from '../savings/report.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
@@ -128,11 +128,12 @@ function overallInsights(profile: FinancialProfile, { money, locale }: InsightFo
   const insights: Insight[] = []
   const rate = profile.savingsRate
   if (rate) {
+    const through = countsPayroll(rate) ? '' : ' through your bank'
     insights.push({
       about: 'overall',
       topic: 'savings_rate',
       tone: 'neutral',
-      text: `About ${rate.percent}% of your take-home pay goes to savings through your bank: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`,
+      text: `About ${rate.percent}% of your ${payNoun(rate)} goes to savings${through}: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${countedNote(rate)}`,
     })
   }
   const contributions = profile.savings.contributions
@@ -184,7 +185,8 @@ export function retirementInsight(
   const projection = profile.retirement.projection
   if (!projection?.target || projection.onTrack === null) return null
   const { income, target, retirementAge, laterAge } = projection
-  const onTopOf = income.pensionCents > 0 ? ' on top of your pension' : ''
+  const pension = income.pension.mid
+  const onTopOf = pension > 0 ? ' on top of your pension' : ''
   if (projection.gapMonthlyCents === 0) {
     const spare = income.total.mid - target.monthlyCents
     return {
@@ -194,7 +196,7 @@ export function retirementInsight(
       text: `In the middle case you would have about ${money(income.total.mid)} a month at ${retirementAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
     }
   }
-  const needed = Math.max(0, target.monthlyCents - income.pensionCents)
+  const needed = Math.max(0, target.monthlyCents - pension)
   const later = laterAge
     ? ` Retiring at ${laterAge} instead of ${retirementAge} closes that gap in the middle case, with no change to what you put in.`
     : ''

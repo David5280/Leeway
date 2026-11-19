@@ -69,6 +69,16 @@ export function goalLens(goal: ProfileGoal): SavingsKind {
 
 const NO_CHANGES = { month: null, days30: null, year: null, all: null }
 
+/** The retirement report with no accounts, for a lens that has only a pension or a birth year. */
+const NO_RETIREMENT_ACCOUNTS: SavingsKindReport = {
+  kind: 'retirement',
+  label: KIND_INFO.retirement.label,
+  totalCents: 0,
+  changes: NO_CHANGES,
+  history: [],
+  accounts: [],
+}
+
 /**
  * The kinds to show a lens for: each kind with accounts, and retirement when
  * there is a pension or a birth year to project from, even with no
@@ -79,17 +89,33 @@ export function lensKinds(profile: FinancialProfile): SavingsKindReport[] {
   const { hasPension, assumptions } = profile.retirement
   const wantsRetirement = hasPension || assumptions.birthYear !== null
   if (!wantsRetirement || kinds.some((k) => k.kind === 'retirement')) return kinds
-  const empty: SavingsKindReport = {
-    kind: 'retirement',
-    label: KIND_INFO.retirement.label,
-    totalCents: 0,
-    changes: NO_CHANGES,
-    history: [],
-    accounts: [],
-  }
   return SAVINGS_KINDS.flatMap((kind) =>
-    kind === 'retirement' ? [empty] : kinds.filter((k) => k.kind === kind),
+    kind === 'retirement' ? [NO_RETIREMENT_ACCOUNTS] : kinds.filter((k) => k.kind === kind),
   )
+}
+
+/** What project_retirement returns and the Retirement screen shows. */
+export interface RetirementView {
+  /** The retirement lens: its question, answer, meters and insight. */
+  lens: Lens<'retirement'>
+  /** The projection, the assumptions it used and each pension with its plan details. */
+  plan: RetirementPlan
+  /** A card per pension, in words. */
+  pensions: PensionCard[]
+}
+
+/** The retirement lens on its own, whether or not the owner has a retirement account. */
+export function retirementView(profile: FinancialProfile, format: InsightFormat): RetirementView {
+  const report =
+    profile.savings.kinds.find((k) => k.kind === 'retirement') ?? NO_RETIREMENT_ACCOUNTS
+  const insights = savingsInsights(profile, format).filter(
+    (insight) => insight.about === 'retirement' || insight.about === 'overall',
+  )
+  return {
+    lens: retirementLens({ profile, report, insights, format }),
+    plan: profile.retirement,
+    pensions: pensionCards(profile.retirement, format),
+  }
 }
 
 export function savingsView(profile: FinancialProfile, format: InsightFormat): SavingsView {

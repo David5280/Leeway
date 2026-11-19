@@ -7,7 +7,8 @@ import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
-import { RATE_GUARD_FOR_AI } from '../savings/rate.js'
+import type { PensionInPlan } from '../retirement/plan.js'
+import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
@@ -86,7 +87,10 @@ function emergencyLine({ emergencyFund: fund, locale }: FinancialProfile, money:
 function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string | null {
   if (!rate) return null
   const parts = rate.sources.map((s) => `${s.label.toLowerCase()} ${money(s.monthlyCents)}`)
-  return `Savings rate seen at the bank: about ${rate.percent}% of take-home pay (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
+  const seen = countsPayroll(rate)
+    ? 'from bank transfers and the pension contributions the owner entered'
+    : 'seen at the bank'
+  return `Savings rate ${seen}: about ${rate.percent}% of ${payNoun(rate)} (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
 }
 
 /** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
@@ -121,18 +125,36 @@ function goalsLine({ goals, locale }: FinancialProfile, money: Money): string | 
   return `Goals: ${parts.join('; ')}${rest}.`
 }
 
-/** Each pension, as the owner entered it. */
+/** A pension's benefit in words, saying where the figure came from. */
+function benefitWords(pension: PensionInPlan, money: Money): string {
+  const { benefit, startsAge } = pension
+  if (!benefit) return 'benefit not known yet'
+  if (benefit.source === 'statement') {
+    return `about ${money(benefit.mid)} a month from age ${startsAge}, from the plan's statement`
+  }
+  return `${money(benefit.low)} to ${money(benefit.high)} a month from age ${startsAge}, worked out from the salary, multiplier and service the owner entered (no plan rules applied)`
+}
+
+/** What a pension takes from pay, and what the employer adds, as far as the owner entered. */
+function payInWords({ payIn, plan }: PensionInPlan, money: Money): string {
+  const { perPaycheckCents, monthlyCents, employerMonthlyCents } = payIn
+  const monthly = monthlyCents === null ? '' : `, about ${money(monthlyCents)} a month`
+  const pays =
+    perPaycheckCents === null
+      ? 'contribution not known yet'
+      : `the owner pays ${money(perPaycheckCents)} a paycheck${monthly}`
+  const percent = plan.employerContributionPercent
+  if (percent === null) return pays
+  const employer =
+    employerMonthlyCents === null ? '' : ` (about ${money(employerMonthlyCents)} a month)`
+  return `${pays}; the employer adds ${percent}% of pay${employer}`
+}
+
+/** Each pension, without its name, as the owner entered it. */
 function pensionLines({ retirement }: FinancialProfile, money: Money): string[] {
   return retirement.pensions.map((pension) => {
-    const age = pension.benefitAge ?? retirement.assumptions.retirementAge
-    const benefit =
-      pension.monthlyBenefitCents === null
-        ? 'benefit not entered yet'
-        : `about ${money(pension.monthlyBenefitCents)} a month from age ${age} (${pension.benefitSource ?? 'source not given'})`
-    const perPaycheck = pension.payIn.perPaycheckCents
-    const pays =
-      perPaycheck === null ? 'contribution not set yet' : `pays ${money(perPaycheck)} a paycheck`
-    return `Pension, entered by the owner: ${pension.planName}, ${benefit}; ${pays}.`
+    const later = pension.counted || !pension.benefit ? '' : '; starts after the retirement age'
+    return `Pension, entered by the owner: ${benefitWords(pension, money)}; ${payInWords(pension, money)}${later}.`
   })
 }
 
@@ -141,10 +163,12 @@ function projectionLine({ retirement }: FinancialProfile, money: Money): string 
   const projection = retirement.projection
   if (!projection) return null
   const { savingsAtRetirement: at, income, target, coverage, realReturns } = projection
-  const against =
-    target && coverage
-      ? ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
-      : ''
+  let against = ''
+  if (target && coverage) {
+    against = ` against a ${money(target.monthlyCents)} target (${coverage.low}% to ${coverage.high}%, most likely ${coverage.mid}%)`
+  } else if (target && retirement.pensionsWithoutBenefit > 0) {
+    against = `; not compared with the ${money(target.monthlyCents)} target until the pension benefit is known`
+  }
   return `Retirement at ${projection.retirementAge} (now about ${projection.age}): savings ${money(at.low)} to ${money(at.high)}, income ${money(income.total.low)} to ${money(income.total.high)} a month including pensions${against}; returns ${realReturns.low}% to ${realReturns.high}% after inflation. ${retirement.note}`
 }
 

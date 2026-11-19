@@ -1,5 +1,5 @@
-// What kind of account each one is: checking, savings, retirement, investing,
-// credit card, loan or other. Worked out from the bank's account type and
+// What kind of account each one is: checking, savings, retirement, pension,
+// investing, credit card, loan or other. Worked out from the bank's account type and
 // subtype (Plaid's names), unless the owner picked a kind. Every part of
 // Leeway that treats accounts differently by kind asks this module. Pure, so
 // the web app uses the very same rules.
@@ -9,6 +9,7 @@ export const ACCOUNT_KINDS = [
   'checking',
   'savings',
   'retirement',
+  'pension',
   'investment',
   'credit_card',
   'loan',
@@ -32,13 +33,18 @@ export const KIND_INFO: Record<AccountKind, KindInfo> = {
   checking: { label: 'Checking', noun: 'checking account', side: 'asset' },
   savings: { label: 'Savings', noun: 'savings account', side: 'asset' },
   retirement: { label: 'Retirement', noun: 'retirement account', side: 'asset' },
+  pension: { label: 'Pensions', noun: 'pension', side: 'asset' },
   investment: { label: 'Investing', noun: 'investment account', side: 'asset' },
   credit_card: { label: 'Credit cards', noun: 'credit card', side: 'liability' },
   loan: { label: 'Loans', noun: 'loan', side: 'liability' },
   other: { label: 'Other', noun: 'account', side: 'either' },
 }
 
-/** The kinds that hold money put away for later, in the order they are listed. */
+/**
+ * The kinds that hold money put away for later, in the order they are listed.
+ * A pension is not one: it pays a benefit rather than holding a balance to
+ * draw on, so retirement projections count it on its own (retirement/).
+ */
 export const SAVINGS_KINDS = ['savings', 'retirement', 'investment'] as const
 export type SavingsKind = (typeof SAVINGS_KINDS)[number]
 

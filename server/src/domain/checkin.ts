@@ -14,8 +14,15 @@ import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
-import { monthlyAverages } from './profile/income.js'
+import { monthlyAverages, paySchedule } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
+import {
+  pensionMonthlyTotals,
+  pensionsOf,
+  type Pension,
+  type PensionMonthlyTotals,
+} from './retirement/pensions.js'
+import { bankSeenRate, countsPayroll } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
 
@@ -33,8 +40,9 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     recurring,
     worth,
     alerts,
-    savings,
+    { savings, pensions },
     monthly,
+    pay,
   ] = await Promise.all([
     budgetReport(db, settings, now),
     getCashFlow(db, settings, today),
@@ -46,9 +54,14 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     getNetWorth(db, today, NET_WORTH_DAYS),
     listAlerts(db, settings, today),
     // Only what the savings glance needs beyond the reads above, not the whole profile.
-    listAccounts(db, false).then((accounts) => getSavingsGlance(db, settings, today, accounts)),
+    listAccounts(db, false).then(async (accounts) => ({
+      savings: await getSavingsGlance(db, settings, today, accounts),
+      pensions: await pensionsOf(db, accounts),
+    })),
     monthlyAverages(db, settings, today),
+    paySchedule(db, settings, today),
   ])
+  const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
@@ -126,9 +139,11 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     },
     savings: savingsGlance(
       savings,
+      { pensions, pensionPay },
       savingsMeasures({
         cashCents: savings.cashCents,
         contributions: savings.contributions,
+        pensionMonthlyCents: pensionPay.memberCents,
         monthly,
         billsMonthlyCents,
         settings,
@@ -138,14 +153,26 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
   }
 }
 
+/** The pensions the check-in reports on, and what they take from pay. */
+interface PensionGlanceInput {
+  pensions: Pension[]
+  pensionPay: PensionMonthlyTotals
+}
+
 /**
  * Savings at a glance: the total and how it moved this month, the emergency
- * fund and the savings rate, worked out as the financial profile does. Null
- * without any savings.
+ * fund, the savings rate and any pension, worked out as the financial profile
+ * does. Null with neither savings nor a pension.
  */
-function savingsGlance(savings: SavingsGlance, { emergencyFund, savingsRate }: SavingsMeasures) {
-  if (!savings.hasSavings) return null
+function savingsGlance(
+  savings: SavingsGlance,
+  { pensions, pensionPay }: PensionGlanceInput,
+  { emergencyFund, savingsRate }: SavingsMeasures,
+) {
+  if (!savings.hasSavings && pensions.length === 0) return null
   return {
+    /** Whether any savings, retirement or investment account is counted; false with only a pension. */
+    hasSavingsAccounts: savings.hasSavings,
     totalCents: savings.totalCents,
     /** Measured from the first of the month, or from the first day of history when later. */
     changeThisMonthCents: savings.month?.changeCents ?? null,
@@ -157,7 +184,23 @@ function savingsGlance(savings: SavingsGlance, { emergencyFund, savingsRate }: S
      * in it, so the key says so wherever it is read. Null when pay or saving is
      * unknown, never a guess of zero.
      */
-    bankSeenSavingsRatePercent: savingsRate?.percent ?? null,
+    bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
+    /** The rate with the pension contributions the owner entered; null when none are known. */
+    pensionIncludedSavingsRatePercent:
+      savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
+    /**
+     * Whether a pension is recorded, and what it takes from pay a month and the
+     * employer adds, where the owner entered enough to say. A recorded pension
+     * is retirement saving, whatever goes into a 401(k) or IRA.
+     */
+    pension:
+      pensions.length === 0
+        ? null
+        : {
+            count: pensions.length,
+            monthlyContributionCents: pensionPay.memberCents,
+            employerMonthlyCents: pensionPay.employerCents,
+          },
   }
 }
 
