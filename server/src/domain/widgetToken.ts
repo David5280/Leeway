@@ -26,15 +26,17 @@ export async function getWidgetToken(db: Db): Promise<WidgetToken | null> {
 }
 
 /**
- * Makes a new token, replacing any earlier one in the same statement, so
- * there is never a moment with two. The plain token is returned once and
- * never stored, only its hash.
+ * Makes a new token, writing over any earlier one. The table holds one row at
+ * most, so even two makes at once leave a single token. The plain token is
+ * returned once and never stored, only its hash.
  */
 export async function createWidgetToken(db: Db): Promise<WidgetToken & { token: string }> {
   const token = randomToken(WIDGET_TOKEN_PREFIX)
   const { rows } = await db.query<WidgetToken>(
-    `WITH replaced AS (DELETE FROM widget_tokens)
-     INSERT INTO widget_tokens (token_hash) VALUES ($1) RETURNING ${COLUMNS}`,
+    `INSERT INTO widget_tokens (token_hash) VALUES ($1)
+     ON CONFLICT (id) DO UPDATE
+       SET token_hash = EXCLUDED.token_hash, created_at = now(), last_used_at = NULL
+     RETURNING ${COLUMNS}`,
     [hashToken(token)],
   )
   return { ...rows[0]!, token }

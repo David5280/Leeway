@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createToken } from '../src/domain/tokens.js'
 import { WIDGET_BILLS, type WidgetSummary } from '../src/domain/widget.js'
-import { verifyWidgetToken } from '../src/domain/widgetToken.js'
+import { createWidgetToken, verifyWidgetToken } from '../src/domain/widgetToken.js'
 import { buildApp } from '../src/http/app.js'
 import { findWidgetScript, WIDGET_LIMIT } from '../src/http/widget.js'
 import { hashToken, randomToken } from '../src/lib/crypto.js'
@@ -102,6 +102,21 @@ describe('widget token', () => {
     expect(await verifyWidgetToken(ctx.db, second)).toBe(true)
     const { rows } = await ctx.db.query('SELECT 1 FROM widget_tokens')
     expect(rows).toHaveLength(1)
+  })
+
+  it('keeps a single token when several are made at once', async () => {
+    const made = await Promise.all(Array.from({ length: 8 }, () => createWidgetToken(ctx.db)))
+    const { rows } = await ctx.db.query('SELECT 1 FROM widget_tokens')
+    expect(rows).toHaveLength(1)
+    const working = await Promise.all(made.map(({ token }) => verifyWidgetToken(ctx.db, token)))
+    expect(working.filter(Boolean)).toHaveLength(1)
+  })
+
+  it('starts a new token unused, even after the old one was used', async () => {
+    await widget(`Bearer ${await widgetToken()}`)
+    const fresh = await call('create_widget_token')
+    expect(fresh.lastUsedAt).toBeNull()
+    expect((await call('get_widget_token'))!.lastUsedAt).toBeNull()
   })
 
   it('notes when it was last used', async () => {
