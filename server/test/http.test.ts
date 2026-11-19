@@ -445,12 +445,12 @@ describe('MCP endpoint', () => {
 
 describe('bank webhooks', () => {
   it('rejects a bad signature and syncs on a good one', async () => {
-    const { FakeBank, bankTx, page } = await import('./fakeBank.js')
+    const { FakeBank, bankTx, newLink, page } = await import('./fakeBank.js')
     const { linkBank } = await import('../src/domain/connections.js')
     const bank = new FakeBank()
     ctx.bank = bank
     try {
-      await linkBank(ctx, 'public-hook')
+      await linkBank(ctx, newLink('public-hook'))
       const post = (body: unknown) =>
         app.inject({
           method: 'POST',

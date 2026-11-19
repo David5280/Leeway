@@ -18,6 +18,7 @@ import {
   type BankTransaction,
   type BankWebhook,
   type LinkedItem,
+  type LinkTokenOptions,
   type SyncPage,
 } from './provider.js'
 
@@ -29,6 +30,12 @@ const REAUTH_CODES = new Set([
   'INVALID_CREDENTIALS',
   'USER_PERMISSION_REVOKED',
 ])
+
+/**
+ * Where Plaid lets the owner change which accounts a login shares in update
+ * mode. Its docs say the UK and EU must remove the Item and link a new one.
+ */
+const ACCOUNT_SELECT_COUNTRIES = new Set(['US', 'CA'])
 
 interface PlaidAccount {
   account_id: string
@@ -101,19 +108,32 @@ export class PlaidProvider implements BankProvider {
     return data as T
   }
 
-  async createLinkToken(options: { accessToken?: string; webhookUrl?: string | null }) {
+  async createLinkToken(options: LinkTokenOptions) {
     const { link_token } = await this.call<{ link_token: string }>('/link/token/create', {
       client_name: 'Leeway',
       language: 'en',
       country_codes: this.config.countryCodes,
       user: { client_user_id: 'leeway-owner' },
       ...(options.accessToken
-        ? { access_token: options.accessToken } // update mode: repair a broken login
+        ? this.updateMode(options.accessToken, options.chooseAccounts ?? false)
         : { products: ['transactions'], transactions: { days_requested: 730 } }),
       ...(options.webhookUrl ? { webhook: options.webhookUrl } : {}),
       ...(this.config.redirectUri ? { redirect_uri: this.config.redirectUri } : {}),
     })
     return link_token
+  }
+
+  /**
+   * Update mode: the window opens for an existing Item, so a broken login is
+   * repaired, or more accounts shared, without creating (and paying for) a
+   * new Item. Plaid asks for no products here.
+   */
+  private updateMode(accessToken: string, chooseAccounts: boolean) {
+    const canChoose = this.config.countryCodes.every((code) => ACCOUNT_SELECT_COUNTRIES.has(code))
+    return {
+      access_token: accessToken,
+      ...(chooseAccounts && canChoose ? { update: { account_selection_enabled: true } } : {}),
+    }
   }
 
   async exchangePublicToken(publicToken: string): Promise<LinkedItem> {

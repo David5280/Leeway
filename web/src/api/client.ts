@@ -28,12 +28,17 @@ export type CashFlow = Output<'get_cash_flow'>
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
 
-/** A failure the server explained: its HTTP status, error code and a message for people. */
+/**
+ * A failure the server explained: its HTTP status, error code, a message for
+ * people, and any details a screen can act on (like the login a duplicate_bank
+ * refusal offers to keep).
+ */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: unknown,
   ) {
     super(message)
   }
@@ -85,13 +90,19 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as {
     error?: string
     message?: string
+    details?: unknown
   }
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
     const fallback = PROXY_DOWN.has(response.status)
       ? UNREACHABLE
       : 'Something went wrong. Please try again.'
-    throw new ApiError(response.status, data.error ?? 'error', data.message ?? fallback)
+    throw new ApiError(
+      response.status,
+      data.error ?? 'error',
+      data.message ?? fallback,
+      data.details,
+    )
   }
   return data as T
 }

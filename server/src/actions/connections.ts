@@ -39,21 +39,45 @@ export const syncBanksAction = defineAction({
 export const createLinkTokenAction = defineAction({
   name: 'create_link_token',
   title: 'Start linking a bank',
-  description: 'Get a token for the bank login window. Pass a connection to repair its login.',
-  input: z.object({ connectionId: z.uuid().optional() }),
+  description:
+    'Get a token for the bank login window. Pass a connection to reconnect it instead, and chooseAccounts to let the owner change which of its accounts are shared.',
+  input: z
+    .object({ connectionId: z.uuid().optional(), chooseAccounts: z.boolean().optional() })
+    .refine((input) => !input.chooseAccounts || input.connectionId, {
+      message: 'Choosing accounts needs the connection to reconnect',
+      path: ['chooseAccounts'],
+    }),
   scope: 'write',
   surface: 'app',
-  run: async (ctx, { connectionId }) => ({ linkToken: await createLinkToken(ctx, connectionId) }),
+  run: async (ctx, { connectionId, chooseAccounts }) => ({
+    linkToken: await createLinkToken(ctx, connectionId, { chooseAccounts }),
+  }),
+})
+
+/** Plaid's ids and account names are short; the caps only keep out junk. */
+const pickedBank = z.object({
+  id: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(200),
+})
+const pickedAccount = z.object({
+  name: z.string().max(200),
+  mask: z.string().max(10).nullable(),
 })
 
 export const linkBankAction = defineAction({
   name: 'link_bank',
   title: 'Finish linking a bank',
-  description: 'Save a bank linked in the login window and pull its accounts and history.',
-  input: z.object({ publicToken: z.string().min(1) }),
+  description:
+    "Save a bank linked in the login window and pull its accounts and history. Pass the window's institution and accounts: a bank already connected is refused with duplicate_bank before Plaid counts a new login, unless allowSecondLogin confirms it is a separate login.",
+  input: z.object({
+    publicToken: z.string().min(1),
+    institution: pickedBank.nullable().default(null),
+    accounts: z.array(pickedAccount).max(100).default([]),
+    allowSecondLogin: z.boolean().default(false),
+  }),
   scope: 'write',
   surface: 'app',
-  run: (ctx, { publicToken }) => linkBank(ctx, publicToken),
+  run: (ctx, link) => linkBank(ctx, link),
 })
 
 export const reconnectedBankAction = defineAction({

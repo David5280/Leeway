@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'forbidden'
   | 'not_configured'
   | 'bank_error'
+  | 'duplicate_bank'
   | 'mail_error'
   | 'wrong_password'
   | 'too_many_attempts'
@@ -24,6 +25,7 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   not_configured: 503,
   bank_error: 502,
+  duplicate_bank: 409,
   mail_error: 502,
   wrong_password: 400,
   too_many_attempts: 429,
