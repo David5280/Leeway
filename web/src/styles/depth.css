@@ -36,6 +36,14 @@ body {
   box-shadow: var(--elev-1), var(--hi);
 }
 
+/* A day's heading in Activity, frosted: the rows passing under it show only
+   as a blur, so they never compete with the day's name and net. */
+.act-day-head {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
 /* Tinted cards keep their tint and their depth. */
 .card.soft,
 .card.warn-card,

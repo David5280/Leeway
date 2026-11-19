@@ -1,28 +1,8 @@
-/* The Accounts screen and an account's own page: page heads, account cards
+/* The Accounts screen and an account's own page: the account's title, cards
    grouped by kind, Select mode's bar, and the rows of the detail lists
    (pages/Accounts.tsx, pages/AccountDetail.tsx, pages/accounts/). */
 
-/* Page heads ------------------------------------------------------------- */
-
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.page-title > svg {
-  flex: none;
-  color: var(--accent);
-}
+/* An account's page head ------------------------------------------------ */
 
 /* An account's name is shown as typed, however long: it wraps, never cut. */
 .acct-title {

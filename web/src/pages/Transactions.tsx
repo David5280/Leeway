@@ -64,7 +64,8 @@ export function Transactions() {
       <div className="act-page">
         <div className="act-head">
           {/* Focusable from code only: where focus lands when nothing nearer is left. */}
-          <h1 ref={heading} tabIndex={-1}>
+          <h1 ref={heading} tabIndex={-1} className="page-title">
+            <Icon name="activity" size={22} />
             Transactions
           </h1>
           <Menu

@@ -1,6 +1,7 @@
 /* Figures and their explanations: tappable cards, the hero number, the
-   usual chip, sparkline fills, category bars and the drill-down sheet
-   (components/design/Card, HeroFigure, UsualChip, Sparkline, DrillSheet). */
+   usual chip, sparkline fills, category bars, the drill-down sheet and the
+   page heads that title each screen (components/design/Card, HeroFigure,
+   UsualChip, Sparkline, DrillSheet). */
 
 /* Tappable cards ---------------------------------------------------------- */
 
@@ -449,4 +450,26 @@
   border-radius: 1px;
   background: var(--ink);
   opacity: 0.7;
+}
+
+/* Page heads: a screen's title with its icon, and what sits beside it -- */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-title > svg {
+  flex: none;
+  color: var(--accent);
 }

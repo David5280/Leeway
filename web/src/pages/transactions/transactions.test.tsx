@@ -47,6 +47,7 @@ function serve(handlers: Handlers = {}, routes: Record<string, () => Response> =
       get_budget: () => budgetFor(categories, []),
       list_categories: () => categories,
       list_rules: () => [],
+      get_trends: () => [],
       list_accounts: () => [
         account({ id: 'acct-2', name: 'Visa Card' }),
         account({ id: 'acct-1', name: 'everyday checking' }),
@@ -116,8 +117,26 @@ describe('Transactions list', () => {
       }),
     })
     renderTransactions()
-    const figure = (await screen.findByText('Spent this month')).parentElement!
-    expect(figure).toHaveTextContent('Spent this month$240$40 more than this point last month')
+    const figure = await screen.findByRole('region', { name: 'Spent this month' })
+    expect(figure).toHaveTextContent('Spent this month$240')
+    expect(
+      within(figure).getByRole('img', { name: '$40 more than this point last month' }),
+    ).toHaveTextContent('▲ $40 more spent')
+
+    // The figure opens the math behind it.
+    await userEvent.click(within(figure).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Spent this month' })
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Spent $240 = Categories with a budget $240 plus categories without one $0',
+    )
+  })
+
+  it('names the screen with its icon beside the title', async () => {
+    serve()
+    renderTransactions()
+    const title = await screen.findByRole('heading', { level: 1, name: 'Transactions' })
+    expect(title).toHaveClass('page-title')
+    expect(title.querySelector('svg')).not.toBeNull()
   })
 
   it.each([
