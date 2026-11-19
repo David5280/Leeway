@@ -109,3 +109,89 @@ test.describe('on an iPhone turned sideways', () => {
     })
   }
 })
+
+test.describe('the status bar backdrop', () => {
+  const backdrop = (page: Page) => page.locator('.status-backdrop')
+
+  /**
+   * The backdrop's fill and the page's background, each as the red, green,
+   * blue and alpha a screen would draw (0 to 255). Painting each color on a
+   * canvas reads modern color syntax, like color-mix(), the same way.
+   */
+  const fills = (page: Page) =>
+    page.evaluate(() => {
+      const canvas = document.createElement('canvas').getContext('2d')!
+      const pixel = (color: string) => {
+        canvas.clearRect(0, 0, 1, 1)
+        canvas.fillStyle = color
+        canvas.fillRect(0, 0, 1, 1)
+        return [...canvas.getImageData(0, 0, 1, 1).data]
+      }
+      const backdrop = document.querySelector('.status-backdrop')!
+      return {
+        backdrop: pixel(getComputedStyle(backdrop).backgroundColor),
+        page: pixel(getComputedStyle(document.body).backgroundColor),
+      }
+    })
+
+  test.describe('on an iPhone', () => {
+    test.use(IPHONE)
+
+    test('covers exactly the status bar and lets taps through', async ({ page }) => {
+      await page.goto('/')
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await simulateInsets(page, UPRIGHT_INSETS)
+
+      expect(await backdrop(page).boundingBox()).toEqual({
+        x: 0,
+        y: 0,
+        width: IPHONE.viewport.width,
+        height: UPRIGHT_INSETS.top,
+      })
+      await expect(backdrop(page)).toHaveCSS('position', 'fixed')
+      await expect(backdrop(page)).toHaveCSS('pointer-events', 'none')
+      await expect(backdrop(page)).toHaveAttribute('aria-hidden', 'true')
+    })
+
+    // Each theme in each mode, set on the way to the page so the install keeps its own look.
+    for (const theme of ['night', 'harbor', 'neon']) {
+      for (const mode of ['dark', 'light']) {
+        test(`is filled with the page background in ${theme}, ${mode}`, async ({ page }) => {
+          await page.route('**/api/actions/get_settings', async (route) => {
+            const { result } = await (await route.fetch()).json()
+            await route.fulfill({
+              json: { result: { ...result, appearance: { ...result.appearance, theme, mode } } },
+            })
+          })
+          await page.goto('/')
+          await expect(page.locator('html')).toHaveAttribute('data-mode', mode)
+          await simulateInsets(page, UPRIGHT_INSETS)
+
+          const { backdrop, page: background } = await fills(page)
+          // The same color, nearly opaque, so the clock reads over any scrolled text.
+          // A see-through pixel's channels round to the nearest step, so allow one.
+          backdrop.slice(0, 3).forEach((value, channel) => {
+            expect(Math.abs(value - background[channel]!)).toBeLessThanOrEqual(1)
+          })
+          expect(backdrop[3]).toBeGreaterThanOrEqual(0.9 * 255)
+          expect(background[3]).toBe(255)
+        })
+      }
+    }
+  })
+
+  test('folds away when the phone is turned sideways', async ({ page }) => {
+    await page.setViewportSize(IPHONE_LANDSCAPE.viewport)
+    await page.goto('/')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await simulateInsets(page, SIDEWAYS_INSETS)
+    expect((await backdrop(page).boundingBox())?.height ?? 0).toBe(0)
+  })
+
+  test('takes no room on a computer, which has no status bar', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    expect((await backdrop(page).boundingBox())?.height ?? 0).toBe(0)
+  })
+})

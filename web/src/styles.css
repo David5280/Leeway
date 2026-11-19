@@ -399,6 +399,26 @@ button.list-row:hover {
   display: none;
 }
 
+/* The status bar backdrop (index.html). Installed to an iPhone's home screen
+   the app draws under the status bar (black-translucent), so a scrolled page
+   would run its text under the clock and the Dynamic Island. This bar, exactly
+   as tall as the top safe area, lays the page's own background over them,
+   with a light blur like the system's own bars. Where there is no top inset
+   (a desktop, or a phone turned sideways) it is 0px tall. It sits above the
+   tab bar and never takes a tap. */
+.status-backdrop {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
+  height: var(--sat);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
 /* Controls */
 
 .btn {
@@ -577,6 +597,13 @@ select.input {
   color: var(--accent);
 }
 
+/* A rule in a rules list: what it matches over where matches go. A long
+   pattern with no spaces wraps rather than widening the row. */
+.rule-text {
+  gap: 2px;
+  overflow-wrap: break-word;
+}
+
 /* A list without bullets, its rows spaced like a short table. */
 .plain-list {
   display: flex;
@@ -676,6 +703,13 @@ button.chip {
   cursor: pointer;
   flex: none;
   padding: 0;
+}
+
+/* The switch draws 28px tall but takes taps across 44px, Apple's smallest comfortable tap. */
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -2px;
 }
 
 .switch::after {
@@ -791,6 +825,13 @@ button.chip {
 
 .clickrow:hover {
   background: var(--surface-2);
+}
+
+/* A list row that is also a link, like an account on the overview, stays one
+   row: name, then figures. Stacked, its items were centered at their full
+   width, so a long name spilled past both sides of the card. */
+.list-row.clickrow {
+  flex-direction: row;
 }
 
 .alert-row {
@@ -977,6 +1018,13 @@ code.code {
   margin-bottom: 8px;
   font-size: 13px;
   color: var(--muted);
+}
+
+/* The name keeps room for a few words, ending in an ellipsis; in a narrow
+   column the size and move controls wrap under it instead of covering it. */
+.widget-tools-name {
+  flex: 1 1 8em;
+  min-width: 0;
 }
 
 .editing .widget > .card,
@@ -1250,7 +1298,8 @@ details.more[open] summary {
 
 .cat-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* The figures take what they need up to 60%, so the name always keeps some room. */
+  grid-template-columns: minmax(0, 1fr) fit-content(60%);
   grid-template-areas:
     'name figures'
     'bar bar';
@@ -1297,6 +1346,11 @@ details.more[open] summary {
   grid-area: figures;
   font-size: 13px;
   text-align: right;
+}
+
+/* The amount stays whole; a long note ("91% used, ahead of pace") may go to
+   a second line rather than spill out of the row. */
+.cat-figures > .num {
   white-space: nowrap;
 }
 
@@ -1699,15 +1753,63 @@ details.more[open] summary {
   }
 
   /* Under a setting's label, the control spans the card. */
-  .setting > .seg,
-  .layout-row .seg {
+  .setting > .seg {
     display: grid;
     align-self: stretch;
   }
+}
 
-  /* A dashboard row: switch, name and move buttons on one line, its size under them. */
-  .layout-row .seg {
-    order: 1;
+/* A widget row in Settings > Appearance > Dashboard. Where the card is wide it
+   is one line: switch, name, size and the move buttons. Where it is narrow, as
+   on a phone, it is two: the switch and the name (ending in an ellipsis, never
+   covered), then the size control across the card with the move buttons after
+   it. The card's own width decides, through the container query below. */
+
+.layout-rows {
+  container-type: inline-size;
+}
+
+.layout-row {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.layout-row-name {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 12px;
+  /* Lets a long name shrink to its ellipsis instead of pushing the controls off. */
+  min-width: 0;
+}
+
+.layout-row-controls,
+.layout-row-move {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Every control here is at least 44px tall, Apple's smallest comfortable tap. */
+.layout-row .seg button {
+  min-height: 44px;
+}
+
+.layout-row-move .iconbtn {
+  width: 44px;
+  height: 44px;
+}
+
+@container (max-width: 560px) {
+  .layout-row-name,
+  .layout-row-controls {
     flex-basis: 100%;
+  }
+
+  /* The size control takes the room the move buttons leave, its options in one even row. */
+  .layout-row-controls .seg {
+    display: grid;
+    flex: 1;
+    grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
   }
 }

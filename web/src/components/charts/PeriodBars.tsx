@@ -98,7 +98,11 @@ export function PeriodBars({
   const pointer = usePointer(positions, width)
   const hovered = bars[pointer.active]
   const amounts = barAmounts(values, slot, settings)
-  const dateLabels = new Set(axisIndices(bars.length, Math.floor((right - left) / 52)))
+  // Each date label needs its own width and a gap, so neighbors never touch.
+  const labelRoom = Math.max(0, ...bars.map((bar) => textWidth(bar.label))) + 12
+  const dateLabels = new Set(
+    axisIndices(bars.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
+  )
   const budgetText = budget !== null ? `. Budget ${money(budget)}.` : ''
 
   return (

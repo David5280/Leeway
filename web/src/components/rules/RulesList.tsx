@@ -52,15 +52,18 @@ export function RulesList({
             <span className="num small muted" style={{ width: 20 }}>
               {index + 1}
             </span>
-            <span className="grow small">
-              {describeRule(rule)}
-              {(rule.minAmountCents !== null || rule.maxAmountCents !== null) && (
-                <span className="muted"> (amount limited)</span>
-              )}
-            </span>
-            <span className="row small" style={{ gap: 6 }}>
-              <Dot color={category?.color} />
-              {category?.name ?? 'Unknown'}
+            {/* What it matches, and under it where matches go: two lines that fit any width. */}
+            <span className="grow stack-sm small rule-text">
+              <span>
+                {describeRule(rule)}
+                {(rule.minAmountCents !== null || rule.maxAmountCents !== null) && (
+                  <span className="muted"> (amount limited)</span>
+                )}
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <Dot color={category?.color} />
+                <span className="ellipsis">{category?.name ?? 'Unknown'}</span>
+              </span>
             </span>
             {!categoryId && (
               <>
