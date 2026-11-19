@@ -21,6 +21,13 @@ const ENCRYPTION_KEY_HELP =
   'set it to 64 hex characters (generate one with: openssl rand -hex 32), and keep a copy somewhere safe'
 const ADDRESS_HELP =
   'set it to a full web address, like https://leeway.example.com, or leave it empty'
+/**
+ * The summary is a few short sentences a day, so a small, low-cost model is
+ * plenty and keeps the Anthropic bill to cents a month. Owners can pick a
+ * larger model with SUMMARY_MODEL.
+ */
+export const DEFAULT_SUMMARY_MODEL = 'claude-haiku-5-5'
+
 const PROXY_HELP = 'set it to the number of proxies in front of Leeway, like 1, or leave it empty'
 
 /**
@@ -71,7 +78,7 @@ const envSchema = z.object({
     .enum(['true', 'false'], { error: 'set it to true or false, or leave it empty' })
     .optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  SUMMARY_MODEL: z.string().default('claude-opus-5-5'),
+  SUMMARY_MODEL: z.string().default(DEFAULT_SUMMARY_MODEL),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z
     .string()

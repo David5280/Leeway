@@ -106,9 +106,10 @@ describe('config', () => {
 
   it('turns the Claude summary writer on with a key, on the default model unless one is named', () => {
     expect(loadConfig(base).anthropic).toBeNull()
+    // The small model is the default on purpose: it keeps the summary to cents a month.
     expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({
       apiKey: 'key',
-      model: 'claude-opus-5-5',
+      model: 'claude-haiku-5-5',
     })
     const named = loadConfig({
       ...base,
