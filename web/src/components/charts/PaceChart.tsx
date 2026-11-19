@@ -3,10 +3,11 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, spreadLabels, textWidth } from '../../lib/chartScale'
+import { axisFormat, axisIndices, spreadLabels, svgNumber, textWidth } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
+import { Money } from '../design/Money'
 import {
   edgeAnchor,
   paceAxis,
@@ -83,8 +84,12 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
             chartWidth={width}
             title={shortDate(hovered.date, settings.locale)}
             lines={[
-              `${money(hovered.cents)} spent`,
-              `Steady pace ${money(steadyAt(pace.budgetCents, pointer.active, pace.days))}`,
+              <>
+                <Money cents={hovered.cents} /> spent
+              </>,
+              <>
+                Steady pace <Money cents={steadyAt(pace.budgetCents, pointer.active, pace.days)} />
+              </>,
             ]}
           />
         )
@@ -126,16 +131,14 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
           />
         )}
       </g>
-      {state.projecting && today && (
-        <SpentDot at={today} label={money(state.spentCents)} left={left} />
-      )}
+      {state.projecting && today && <SpentDot at={today} cents={state.spentCents} left={left} />}
       {ends.map((label, i) => (
         <EndLabel
           key={label.name}
           x={right + 10}
           y={endYs[i]!}
           name={label.name}
-          value={money(label.cents)}
+          value={<Money as="tspan" cents={label.cents} />}
           tone={label.tone}
         />
       ))}
@@ -198,7 +201,7 @@ function DateAxis({
 /** Spending so far, shaded beneath. */
 function ActualLine({ points, bottom, fill }: { points: Point[]; bottom: number; fill: string }) {
   if (points.length === 0) return null
-  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
+  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
   return (
     <>
       {points.length > 1 && (
@@ -253,7 +256,7 @@ function SteadyPace({
         x={at.x}
         y={at.y + offset}
         textAnchor="middle"
-        transform={`rotate(${angle.toFixed(1)} ${at.x} ${at.y})`}
+        transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
         className="chart-axis"
       >
         Steady pace
@@ -263,14 +266,15 @@ function SteadyPace({
 }
 
 /** Today's spending: a dot on the line with its amount beside it. */
-function SpentDot({ at, label, left }: { at: Point; label: string; left: number }) {
+function SpentDot({ at, cents, left }: { at: Point; cents: number; left: number }) {
+  const { money } = useApp()
   // The amount sits up and to the left of the dot, clear of the line climbing away to the right.
-  const labelX = Math.max(left + textWidth(label, 13), at.x - 8)
+  const labelX = Math.max(left + textWidth(money(cents), 13), at.x - 8)
   return (
     <g aria-hidden="true">
       <circle cx={at.x} cy={at.y} r="5" className="chart-dot" />
       <text x={labelX} y={at.y - 12} textAnchor="end" className="chart-value ink halo">
-        {label}
+        <Money as="tspan" cents={cents} />
       </text>
     </g>
   )

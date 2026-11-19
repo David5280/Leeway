@@ -48,7 +48,12 @@ import {
   updateGoalAction,
 } from './goals.js'
 import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
-import { getCashFlowAction, getNetWorthAction, planDebtPayoffAction } from './planning.js'
+import {
+  getCashFlowAction,
+  getNetWorthAction,
+  listRecentBalancesAction,
+  planDebtPayoffAction,
+} from './planning.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -162,6 +167,7 @@ export const actionList = [
   listGoalContributionsAction,
   deleteGoalAction,
   getNetWorthAction,
+  listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
   listConnectionsAction,

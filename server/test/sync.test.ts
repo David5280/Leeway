@@ -255,6 +255,63 @@ describe('applying many changes at once', () => {
   })
 })
 
+describe('transfers across syncs', () => {
+  it('pairs again when a later sync brings a closer other side, and files the one left over', async () => {
+    // Only pairing files into Transfers; a lone arrival is income, as the bank says.
+    const transfers = await createCategory(
+      ctx.db,
+      categoryInputSchema.parse({ name: 'Transfers', kind: 'transfer' }),
+    )
+    const income = await createCategory(
+      ctx.db,
+      categoryInputSchema.parse({
+        name: 'Income',
+        kind: 'income',
+        providerCategories: ['TRANSFER_IN'],
+      }),
+    )
+    bank.accounts.push(account('acc-savings', 'Savings', 'depository', 0))
+    const moved = { amountCents: 10000 }
+    const out = bankTx({ name: 'TRANSFER TO SAVINGS', ...moved, categoryPrimary: 'TRANSFER_OUT' })
+    const arrival = (date: string) =>
+      bankTx({
+        name: 'TRANSFER FROM CHECKING',
+        amountCents: -moved.amountCents,
+        providerAccountId: 'acc-savings',
+        date,
+        categoryPrimary: 'TRANSFER_IN',
+      })
+    const late = arrival('2026-11-14')
+    bank.pages = [page({ added: [out, late] })]
+    const { connectionId } = await linkBank(ctx, 'public-pairs')
+    const byBankId = async () =>
+      new Map(
+        (
+          await ctx.db.query<{ id: string; provider_transaction_id: string }>(
+            'SELECT id, provider_transaction_id FROM transactions',
+          )
+        ).rows.map((row) => [row.provider_transaction_id, row.id]),
+      )
+    let ids = await byBankId()
+    let listed = new Map((await all()).map((tx) => [tx.id, tx]))
+    expect(listed.get(ids.get(out.providerTransactionId)!)?.transfer?.id).toBe(
+      ids.get(late.providerTransactionId),
+    )
+
+    const close = arrival('2026-11-11')
+    bank.pages = [page({ added: [close] })]
+    await syncConnection(ctx, connectionId)
+    ids = await byBankId()
+    listed = new Map((await all()).map((tx) => [tx.id, tx]))
+    const idOf = (tx: { providerTransactionId: string }) => ids.get(tx.providerTransactionId)!
+    const [outId, lateId, closeId] = [idOf(out), idOf(late), idOf(close)]
+    expect(listed.get(outId)).toMatchObject({ categoryId: transfers.id, transfer: { id: closeId } })
+    expect(listed.get(closeId)).toMatchObject({ categoryId: transfers.id, transfer: { id: outId } })
+    // The arrival left over is no longer a transfer, and says so everywhere.
+    expect(listed.get(lateId)).toMatchObject({ categoryId: income.id, transfer: null })
+  })
+})
+
 describe('latestOfEach', () => {
   it('keeps the last version of each transaction, in the order first seen', () => {
     const a = bankTx({ name: 'A', amountCents: 1 })

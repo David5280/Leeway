@@ -83,8 +83,11 @@ describe('the projection', () => {
     expect(savings.getByText('$57,517 to $147,760')).toBeVisible()
     const income = within(projection.getByRole('group', { name: 'Monthly income at 65' }))
     expect(income.getByText('$1,392 to $5,443')).toBeVisible()
-    expect(income.getByText('Pension, entered by you').nextSibling).toHaveTextContent('$4,950 / mo')
-    expect(income.getByText('Savings at 4% a year').nextSibling).toHaveTextContent('$309 / mo')
+    // Income in retirement is money in: a plus and its color.
+    const pensionIncome = income.getByText('Pension, entered by you').nextSibling
+    expect(pensionIncome).toHaveTextContent('+$4,950 / mo')
+    expect(within(pensionIncome as HTMLElement).getByText('+$4,950')).toHaveClass('money-in')
+    expect(income.getByText('Savings at 4% a year').nextSibling).toHaveTextContent('+$309 / mo')
     // A pension is retirement saving, so the meter about bank transfers stays out of view.
     expect(projection.queryByText('What am I putting in?')).toBeNull()
     expect(projection.getByText(/\$1,259 more than the \$4,000 you want/)).toBeVisible()

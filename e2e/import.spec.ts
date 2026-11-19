@@ -6,10 +6,17 @@ import { expect, test, type Page } from '@playwright/test'
 /** A small export in a common US bank shape: month-first dates, spending negative. */
 const FIXTURE = 'e2e/fixtures/old-checking.csv'
 
+/** Widens the Transactions list from this period to every date. */
+async function showAllDates(page: Page) {
+  await page.getByRole('button', { name: /^Dates:/ }).click()
+  await page.getByRole('menuitemradio', { name: 'All' }).click()
+}
+
 /** Opens the Import screen and chooses the fixture file. */
 async function chooseFixture(page: Page) {
   await page.goto('/transactions')
-  await page.getByRole('link', { name: 'Import a file' }).click()
+  await page.getByRole('button', { name: 'Add or import' }).click()
+  await page.getByRole('menuitem', { name: 'Import a file' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Import transactions' })).toBeVisible()
   await page.getByLabel('Choose a CSV file').setInputFiles(FIXTURE)
 }
@@ -44,17 +51,16 @@ test('a CSV export imports once, skips what is already there, and can be undone'
 
   // The rows are in the list, with the category the file gave.
   await done.getByRole('link', { name: 'See transactions' }).click()
-  await page.getByRole('group', { name: 'Dates' }).getByRole('button', { name: 'All' }).click()
+  await showAllDates(page)
   await page.getByRole('searchbox', { name: 'Search transactions' }).fill('fresh fields')
   const list = page.getByRole('region', { name: 'Transaction list' })
-  await expect(list.getByText('Fresh Fields Market')).toHaveCount(1)
-  await expect(
-    list
-      .getByRole('combobox', { name: 'Category for Fresh Fields Market' })
-      .locator('option:checked'),
-  ).toHaveText('Groceries')
-  await list.getByRole('button', { name: /Fresh Fields Market/ }).click()
-  await expect(list.getByText('Imported from a file.')).toBeVisible()
+  const row = list.getByRole('button', { name: /^Fresh Fields Market, .*, Groceries/ })
+  await expect(row).toHaveCount(1)
+  await row.click()
+  const sheet = page.getByRole('dialog', { name: 'Fresh Fields Market' })
+  await sheet.getByText('Bank details').click()
+  await expect(sheet.getByText('Imported from a file')).toBeVisible()
+  await page.keyboard.press('Escape')
 
   // The same file again, into the same account, adds nothing.
   await chooseFixture(page)
@@ -72,7 +78,7 @@ test('a CSV export imports once, skips what is already there, and can be undone'
   await expect(past).toHaveCount(0)
 
   await page.goto('/transactions')
-  await page.getByRole('group', { name: 'Dates' }).getByRole('button', { name: 'All' }).click()
+  await showAllDates(page)
   await page.getByRole('searchbox', { name: 'Search transactions' }).fill('fresh fields')
-  await expect(list.getByText('Nothing matches.')).toBeVisible()
+  await expect(list.getByText('Nothing matches these filters.')).toBeVisible()
 })

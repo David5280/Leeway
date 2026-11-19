@@ -15,6 +15,7 @@ function bill(fields: Partial<BillInput> & { lastPaidDate?: string | null } = {}
     matchPattern: 'landlord',
     categoryId: null,
     autopay: false,
+    reads: 'bank_text' as const,
     lastPaidCents: fields.lastPaidDate ? 150000 : null,
     lastPaidDate: null,
     ...fields,

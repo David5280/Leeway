@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   axisFormat,
   axisIndices,
-  compactMoney,
   nearestIndex,
   niceTicks,
   spreadLabels,
+  svgNumber,
   textWidth,
   timeTicks,
 } from './chartScale'
@@ -45,11 +45,10 @@ describe('niceTicks', () => {
   })
 })
 
-describe('compactMoney', () => {
-  it('shortens thousands and millions in the owner currency', () => {
-    expect(compactMoney(1_500_000, usd)).toBe('$15K')
-    expect(compactMoney(1_250_000, usd)).toBe('$12.5K')
-    expect(compactMoney(120_000_000, usd)).toBe('$1.2M')
+describe('svgNumber', () => {
+  it('rounds a coordinate to a tenth of a pixel', () => {
+    expect(svgNumber(12.345)).toBe(12.3)
+    expect(svgNumber(7)).toBe(7)
   })
 })
 
@@ -67,7 +66,7 @@ describe('axisFormat', () => {
   })
 
   it('looks at the size of negative ticks too', () => {
-    expect(axisFormat([-2_000_000, 0], usd)(-2_000_000)).toBe('-$20K')
+    expect(axisFormat([-2_000_000, 0], usd)(-2_000_000)).toBe('−$20K')
   })
 })
 

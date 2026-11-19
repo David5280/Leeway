@@ -4,6 +4,7 @@
 import { useApp } from '../../lib/app'
 import { longDate } from '../../lib/format'
 import type { PreparedRows } from '../../lib/csv/rows'
+import { Money } from '../../components/design/Money'
 
 /** Enough rows to check the columns and signs at a glance. */
 const PREVIEW_ROWS = 8
@@ -11,7 +12,7 @@ const PREVIEW_ROWS = 8
 const LISTED_PROBLEMS = 5
 
 export function Preview({ prepared, missing }: { prepared: PreparedRows; missing: string | null }) {
-  const { settings, signed } = useApp()
+  const { settings } = useApp()
   const { rows, problems } = prepared
   return (
     <section className="card stack" aria-labelledby="import-preview-title">
@@ -51,7 +52,9 @@ export function Preview({ prepared, missing }: { prepared: PreparedRows; missing
                       <td>{longDate(row.date, settings.locale)}</td>
                       <td>{row.name}</td>
                       <td className="muted">{row.category ?? 'By your rules'}</td>
-                      <td className="num">{signed(row.amountCents)}</td>
+                      <td className="num">
+                        <Money cents={row.amountCents} sign="transaction" />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

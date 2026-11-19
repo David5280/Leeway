@@ -7,6 +7,8 @@ import { afterEach } from 'vitest'
 // jsdom lays nothing out, so it has no scrolling; screens that scroll
 // something into view get a no-op here, and tests that care spy on it.
 Element.prototype.scrollIntoView = () => {}
+// Nor does it track pointers; the sheet's swipe captures one, and its tests spy on this.
+Element.prototype.setPointerCapture = () => {}
 
 afterEach(() => {
   cleanup()

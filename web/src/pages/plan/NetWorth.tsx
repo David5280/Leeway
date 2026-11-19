@@ -9,6 +9,7 @@ import { Card, LoadingOrError, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { shortDate } from '../../lib/format'
 import { settingsPath } from '../settings/paths'
+import { Money } from '../../components/design/Money'
 
 const RANGES = [
   { value: '90', label: '3 months' },
@@ -33,17 +34,19 @@ export function NetWorthSection() {
       <div className="grid">
         <Card label="Net worth" className="span-4 stack-sm">
           <span className="eyebrow">Net worth</span>
-          <span className={`mid-number num ${netWorthCents < 0 ? 'over' : ''}`}>
-            {money(netWorthCents)}
-          </span>
+          <Money
+            cents={netWorthCents}
+            tone={netWorthCents < 0 ? 'problem' : undefined}
+            className="mid-number"
+          />
         </Card>
         <Card label="Assets" className="span-4 stack-sm">
           <span className="eyebrow">You own</span>
-          <span className="mid-number num">{money(assetsCents)}</span>
+          <Money cents={assetsCents} className="mid-number" />
         </Card>
         <Card label="Debts" className="span-4 stack-sm">
           <span className="eyebrow">You owe</span>
-          <span className="mid-number num">{money(liabilitiesCents)}</span>
+          <Money cents={liabilitiesCents} className="mid-number" />
         </Card>
       </div>
       <Card label="Net worth over time" className="stack">

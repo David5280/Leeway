@@ -17,6 +17,7 @@ import {
 import { computeBudget, type SetAside } from '../../../server/src/domain/budget'
 import { kindOf } from '../../../server/src/domain/accountKinds'
 import type { Category } from '../../../server/src/domain/categories'
+import { transactionDisplayName } from '../../../server/src/domain/transactionName'
 import type { Transaction } from '../../../server/src/domain/transactions'
 import {
   mergeSettings,
@@ -39,6 +40,19 @@ export type Handlers = Record<string, (input: Record<string, unknown>) => unknow
 export interface FakeServer {
   calls: { path: string; body: unknown }[]
   actions: (name: string) => unknown[]
+}
+
+/**
+ * Finds a sentence whose amount is drawn by <Money>, so its text is split
+ * across elements: the innermost element whose whole text matches.
+ */
+export function sentence(text: string | RegExp) {
+  const matches = (element: Element) => {
+    const content = element.textContent ?? ''
+    return typeof text === 'string' ? content === text : text.test(content)
+  }
+  return (_content: string, element: Element | null) =>
+    element !== null && matches(element) && ![...element.children].some(matches)
 }
 
 export function fakeServer(
@@ -232,6 +246,14 @@ export function transaction(
   fields: Partial<Transaction> & Pick<Transaction, 'id' | 'date' | 'name'>,
 ): Transaction {
   return {
+    // Named as the server names it, unless the test gives a name of its own.
+    displayName: transactionDisplayName(
+      { name: fields.name, merchantName: fields.merchantName ?? null, person: fields.person },
+      null,
+      // No account masks: the fake accounts have none.
+      { masks: [] },
+    ),
+    transfer: null,
     accountId: 'acct',
     accountName: 'Checking',
     merchantName: null,
@@ -269,7 +291,7 @@ export function budgetFor(
       settings,
       ...extra,
     }),
-    previous: { spentCents: 0, spentToDateCents: 0 },
+    previous: { spentCents: 0, spentToDateCents: 0, categories: [] },
   }
 }
 

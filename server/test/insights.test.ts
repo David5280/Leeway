@@ -67,7 +67,22 @@ describe('insights', () => {
     await recategorize()
     const budget = await call('get_budget')
     expect(budget.totals.spentCents).toBe(15000)
-    expect(budget.previous).toEqual({ spentCents: 30000, spentToDateCents: 10000 })
+    expect(budget.previous).toEqual({
+      spentCents: 30000,
+      spentToDateCents: 10000,
+      categories: [{ categoryId: food.id, spentToDateCents: 10000 }],
+    })
+  })
+
+  it("reads each category's last period to date as its row reads, money received as positive", async () => {
+    const pay = (await call('list_categories')).find((c: { name: string }) => c.name === 'Pay')
+    await spend('2026-10-02', 'Paycheck', -250000)
+    await spend('2026-10-03', 'Corner store', 700)
+    await ctx.db.query(`UPDATE transactions SET category_id = $1 WHERE name = 'Paycheck'`, [pay.id])
+    const budget = await call('get_budget')
+    // Uncategorized spending counts toward the total, but has no category row to compare.
+    expect(budget.previous.categories).toEqual([{ categoryId: pay.id, spentToDateCents: 250000 }])
+    expect(budget.previous.spentToDateCents).toBe(700)
   })
 
   it('reports spending and income per period, oldest first', async () => {
@@ -166,6 +181,35 @@ describe('insights', () => {
     await recategorize()
     expect(await call('top_merchants')).toEqual([
       { merchant: 'King Soopers', spentCents: 12000, count: 2 },
+    ])
+  })
+
+  it('adds up a merchant’s stores as one, named as everywhere else, the biggest first', async () => {
+    await spend('2026-11-02', 'STARBUCKS #12345 DENVER CO', 500)
+    await spend('2026-11-03', 'STARBUCKS #67890 AURORA CO', 700)
+    await spend('2026-11-04', 'SQ *BLUE BOTTLE #12', 1200)
+    await spend('2026-11-05', 'SQ *BLUE BOTTLE #12', 400)
+    await spend('2026-11-05', 'PEETS COFFEE #77', 1200)
+    await spend('2026-11-06', 'APPLE.COM/BILL 866-712-7753 CA', 99)
+    await spend('2026-11-06', 'APPLE.COM/BILL 866-712-7753 CA', -99)
+    await recategorize()
+    expect(await call('top_merchants', { limit: 1 })).toEqual([
+      { merchant: 'Blue Bottle', spentCents: 1600, count: 2 },
+    ])
+    expect(await call('top_merchants')).toEqual([
+      { merchant: 'Blue Bottle', spentCents: 1600, count: 2 },
+      { merchant: 'Peets Coffee', spentCents: 1200, count: 1 },
+      { merchant: 'Starbucks', spentCents: 1200, count: 2 },
+    ])
+  })
+
+  it('leaves out lines with no readable merchant, rather than add them up as one', async () => {
+    await spend('2026-11-02', 'XXXXXX4417 11/18', 90000)
+    await spend('2026-11-03', '123456789', 80000)
+    await spend('2026-11-04', 'CORNER STORE', 700)
+    await recategorize()
+    expect(await call('top_merchants')).toEqual([
+      { merchant: 'Corner Store', spentCents: 700, count: 1 },
     ])
   })
 

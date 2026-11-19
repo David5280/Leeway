@@ -3,10 +3,18 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, niceTicks, textWidth, timeTicks, type TimeTick } from '../../lib/chartScale'
+import {
+  axisFormat,
+  niceTicks,
+  svgNumber,
+  textWidth,
+  type TimeTick,
+  timeTicks,
+} from '../../lib/chartScale'
 import { toDayNumber } from '../../lib/dates'
 import { monthYear, shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
+import { Money } from '../design/Money'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
 
 export interface LinePoint {
@@ -90,7 +98,7 @@ export function LineChart({
             x={placed[pointer.active]!.x}
             chartWidth={width}
             title={shortDate(hovered.date, settings.locale)}
-            lines={[money(hovered.cents)]}
+            lines={[<Money cents={hovered.cents} />]}
           />
         )
       }
@@ -115,11 +123,7 @@ export function LineChart({
       )}
       <ShadedLine points={placed} baseline={baseline} fill={`url(#${gradientId})`} />
       {last && (
-        <EndPoint
-          at={placed.at(-1)!}
-          label={compact ? null : money(last.cents)}
-          labelX={right + 10}
-        />
+        <EndPoint at={placed.at(-1)!} cents={compact ? null : last.cents} labelX={right + 10} />
       )}
       {hovered && (
         <>
@@ -183,7 +187,7 @@ function ShadedLine({
   fill: string
 }) {
   if (points.length < 2) return null
-  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
+  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
   return (
     <>
       <path
@@ -198,19 +202,20 @@ function ShadedLine({
 /** The latest point, with its value in the right-hand gutter when there is one. */
 function EndPoint({
   at,
-  label,
+  cents,
   labelX,
 }: {
   at: { x: number; y: number }
-  label: string | null
+  /** The amount written beside the point, or null for none. */
+  cents: number | null
   labelX: number
 }) {
   return (
     <>
       <circle cx={at.x} cy={at.y} r="4" className="chart-dot" />
-      {label && (
+      {cents !== null && (
         <text x={labelX} y={at.y + 4} className="chart-value ink" aria-hidden="true">
-          {label}
+          <Money as="tspan" cents={cents} />
         </text>
       )}
     </>

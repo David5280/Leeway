@@ -23,8 +23,17 @@ export const MATCHES = {
   starts_with: 'starts with',
 } as const
 
-/** A rule as a sentence, like: Merchant contains "Trader Joe". */
-export function describeRule(rule: Pick<Rule, 'field' | 'matchType' | 'pattern'>): string {
-  const field = rule.field === 'merchant' ? 'Merchant' : 'Description'
+/** What a rule that reads the bank's text calls its field, at the start of a sentence. */
+const FIELD_NAMES = { merchant: 'Merchant', description: 'Description' } as const
+
+/**
+ * A rule as a sentence, like: Merchant contains "Trader Joe". A rule an AI
+ * assistant made reads only the name shown in the list, never the bank's
+ * text, so it says "Shown name" whatever its field.
+ */
+export function describeRule(
+  rule: Pick<Rule, 'field' | 'matchType' | 'pattern'> & Partial<Pick<Rule, 'reads'>>,
+): string {
+  const field = rule.reads === 'shown_name' ? 'Shown name' : FIELD_NAMES[rule.field]
   return `${field} ${MATCHES[rule.matchType]} "${rule.pattern}"`
 }

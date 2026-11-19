@@ -3,7 +3,14 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, failing, fakeServer, renderSignedIn, settingsWith } from '../../test/fake'
+import {
+  account,
+  failing,
+  fakeServer,
+  renderSignedIn,
+  sentence,
+  settingsWith,
+} from '../../test/fake'
 import { AccountSection } from './Accounts'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -53,7 +60,7 @@ describe('Accounts', () => {
     expect(within(section).getByText('Bank')).toBeInTheDocument()
     expect(within(section).getByText('Added by hand')).toBeInTheDocument()
     expect(within(section).getByText('$1,234.56')).toBeInTheDocument()
-    expect(within(section).getByText('$500.00 owed')).toBeInTheDocument()
+    expect(within(section).getByText(sentence('$500.00 owed'))).toBeInTheDocument()
     expect(server.actions('list_accounts')).toEqual([{ includeHidden: true }])
   })
 

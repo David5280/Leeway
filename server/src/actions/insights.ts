@@ -52,7 +52,8 @@ export const suggestStarterBudgetsAction = defineAction({
 export const topMerchantsAction = defineAction({
   name: 'top_merchants',
   title: 'Top merchants',
-  description: 'Where the money went in a budget period, by merchant, biggest first.',
+  description:
+    'Where the money went in a budget period, by merchant, biggest first. Lines the bank sent with no readable merchant are left out.',
   input: z.object({ offset, limit: z.number().int().min(1).max(50).default(8) }),
   scope: 'read',
   surface: 'all',

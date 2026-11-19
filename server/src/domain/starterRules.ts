@@ -71,7 +71,7 @@ export async function addStarterRules(db: Db): Promise<number> {
   for (const { category, ...rule } of STARTER_RULES) {
     const categoryId = categoryIds.get(category.toLowerCase())
     if (!categoryId || coveredBy(patterns, rule.pattern)) continue
-    await createRule(db, { ...rule, categoryId }, true)
+    await createRule(db, { ...rule, categoryId }, { atEnd: true })
     patterns.push(rule.pattern.toLowerCase())
     added += 1
   }
