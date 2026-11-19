@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
+import { patchPension } from '../src/domain/retirement/pensionStore.js'
 import { getSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -282,6 +283,20 @@ describe('create_pension and update_pension', () => {
       const error = await callError('update_settings', { retirement: { [field]: 10_000_001 } })
       expect(error.message).toContain('Use $100,000 a month or less')
     }
+  })
+
+  it('checks the whole plan on every change, whoever calls, refusing one out of range', async () => {
+    const { accountId } = await call('create_pension', PERA)
+    // patchPension is what a paystub save calls; its patch comes from code, not a form.
+    const tooMuch = patchPension(ctx.db, accountId, {
+      contribution: { kind: 'amount', cents: 50_000_000 },
+    })
+    await expect(tooMuch).rejects.toMatchObject({
+      code: 'invalid_input',
+      message: 'The contribution can be up to $100,000',
+    })
+    const [pension] = (await call('project_retirement')).plan.pensions
+    expect(pension!.plan.contribution).toEqual(PERA.contribution)
   })
 
   it('stores one kind of contribution at a time, whatever writes to the table', async () => {

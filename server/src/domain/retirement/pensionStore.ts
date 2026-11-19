@@ -263,6 +263,17 @@ export async function updateAccountWithinPensionLimit(
 }
 
 /**
+ * A merged plan checked as a whole, so no caller can store one the pension
+ * form would refuse, such as a contribution above the limit. Its first
+ * problem is the error, in the schema's own plain words.
+ */
+function checkedPlan(plan: PensionPlan): PensionPlan {
+  const checked = pensionPlanSchema.safeParse(plan)
+  if (checked.success) return checked.data
+  throw new AppError('invalid_input', checked.error.issues[0]!.message)
+}
+
+/**
  * Changes some of a pension's plan details inside a transaction the caller
  * holds, such as saving a paystub; the rest stay as they are.
  */
@@ -273,7 +284,7 @@ export async function patchPension(
 ): Promise<Pension> {
   await lockPensions(db)
   const current = await getPension(db, accountId)
-  await savePlan(db, accountId, { ...current.plan, ...patch })
+  await savePlan(db, accountId, checkedPlan({ ...current.plan, ...patch }))
   return getPension(db, accountId)
 }
 

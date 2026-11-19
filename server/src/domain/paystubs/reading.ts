@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { isIsoDate, type IsoDate } from '../../lib/dates.js'
+import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
 import { PAY_CADENCES } from '../retirement/pensions.js'
 import { redactEmployer, redactSource } from './redact.js'
 
@@ -93,10 +94,14 @@ export interface PaystubExtraction {
   yearToDate: Record<YearToDateField, ReviewFigure>
 }
 
-/** A paycheck figure above this is surely a misread: $100,000 in one period. */
-const MAX_PERIOD_CENTS = 10_000_000
+/**
+ * A paycheck figure above this is surely a misread: $100,000 in one period.
+ * It is the most a pension or retirement contribution may be, so a figure
+ * the review allows can always be applied to one.
+ */
+export const MAX_PERIOD_CENTS = MAX_MONTHLY_CENTS
 /** And a year-to-date figure above $1,000,000. */
-const MAX_YEAR_CENTS = 100_000_000
+export const MAX_YEAR_CENTS = 100_000_000
 
 /** One amount as printed: "1,234.56", "1234.5" or "$275", with no sign. */
 const AMOUNT = /^\$?\s?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/
