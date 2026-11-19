@@ -73,6 +73,15 @@ const BANK_LINES: [raw: string, name: string][] = [
   ['INTEREST PAYMENT', 'Interest Payment'],
   ['CHECK 1234', 'Check'],
   ['SAFEWAY 1/8 DENVER', 'Safeway'],
+  // A city and state at the end of a card line, with no number before them.
+  ['TST* LOWRY BEER GARDEN DENVER CO', 'Lowry Beer Garden'],
+  ['BLUE BOTTLE COFFEE SAN FRANCISCO CA', 'Blue Bottle Coffee'],
+  ['TACOS EL GORDO LAS VEGAS NV', 'Tacos El Gordo'],
+  ['TRADER JOES SALT LAKE CITY UT', 'Trader Joes'],
+  ['SNOOZE Fort Collins CO', 'Snooze'],
+  ['SMITH & CO', 'Smith & Co'],
+  ['BAKER AND CO', 'Baker and Co'],
+  ['PANERA BREAD DENVER', 'Panera Bread Denver'],
   ['BLUE BOTTLE ...21 DENVER', 'Blue Bottle'],
   ['CORNER STORE XXXX', 'Corner Store'],
 ]

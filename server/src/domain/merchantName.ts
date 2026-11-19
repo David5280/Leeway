@@ -111,6 +111,30 @@ const ACH_COMPANY = /\borig co name:\s*(.+?)\s+(?:orig id|co entry|desc date|ent
 /** A Bank of America ACH line: "ACME CORP DES:PAYROLL ID:... INDN:..." keeps the company and the description. */
 const ACH_DESCRIPTION = /^(.+?)\s+des:\s*(\S+)/i
 
+/**
+ * US state codes, which end a card line's place: "LOWRY BEER GARDEN DENVER
+ * CO". Codes that are also common English words (IN, ME, OR, OK, OH, HI)
+ * are left out, since a name can end in one.
+ */
+const STATES = new Set(
+  (
+    'AK AL AR AZ CA CO CT DC DE FL GA IA ID IL KS KY LA MA MD MI MN MO MS MT NC ND NE NH NJ NM ' +
+    'NV NY PA RI SC SD TN TX UT VA VT WA WI WV WY'
+  ).split(' '),
+)
+
+/** First words of cities named in two or three words: "SAN JOSE", "FORT COLLINS". */
+const CITY_STARTS = new Set(
+  'SAN SANTA LOS LAS NEW FORT FT ST SAINT EL PALM SALT WEST EAST NORTH SOUTH GRAND BATON BOCA COLORADO KANSAS OKLAHOMA JERSEY VIRGINIA LONG'.split(
+    ' ',
+  ),
+)
+
+/** Last words of cities named in two or three words: "KANSAS CITY", "LONG BEACH". */
+const CITY_ENDS = new Set(
+  'CITY BEACH SPRINGS PARK HEIGHTS FALLS VALLEY LAKE RAPIDS ROCK HILLS GROVE CREEK'.split(' '),
+)
+
 /** Where a counterparty's name ends in a transfer line. */
 const COUNTERPARTY_END =
   /,|\s+a division of\b|\s+transaction\s*#|\s+ref\b|\s+conf\b|\s+ending in\b/i
@@ -165,6 +189,27 @@ function namePart(text: string): string {
   const all = words(text)
   const end = all.findIndex((word, index) => index > 0 && endsName(word, all[index + 1]))
   return (end === -1 ? all : all.slice(0, end)).join(' ')
+}
+
+/**
+ * Takes off the place a card line ends with, a city and a state code in
+ * capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY BEER GARDEN". A city
+ * may run to three words ("SALT LAKE CITY UT"). At least one word of the
+ * name is always kept, and "SMITH & CO" keeps its "CO".
+ */
+function withoutPlace(text: string): string {
+  const all = words(text)
+  if (all.length < 3 || !STATES.has(all.at(-1)!) || /^(&|and)$/i.test(all.at(-2)!)) return text
+  let cut = all.length - 2
+  if (!/^[\p{L}.'-]+$/u.test(all[cut]!)) return text
+  // Take in more of a city named in more than one word, keeping one word of name.
+  for (let more = 0; more < 2 && cut > 1; more++) {
+    const city = all[cut]!.toUpperCase()
+    const before = all[cut - 1]!.toUpperCase()
+    if (!CITY_ENDS.has(city) && !CITY_STARTS.has(before)) break
+    cut -= 1
+  }
+  return all.slice(0, cut).join(' ')
 }
 
 /**
@@ -235,7 +280,7 @@ function merchantWords(text: string): string {
   const described = ACH_DESCRIPTION.exec(text)
   if (described) return trimEnds(withoutNumbers(`${described[1]} ${described[2]}`))
   const rest = withoutProcessor(withoutLeadingNoise(text))
-  return trimEnds(withoutNumbers(namePart(rest)))
+  return trimEnds(withoutNumbers(withoutPlace(namePart(rest))))
 }
 
 /**
