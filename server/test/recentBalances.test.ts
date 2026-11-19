@@ -1,10 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import {
-  dailyBalances,
-  recentBalances,
-  RECENT_BALANCE_DAYS,
-} from '../src/domain/recentBalances.js'
+import { dailyBalances, recentBalances, RECENT_BALANCE_DAYS } from '../src/domain/recentBalances.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 
