@@ -30,8 +30,40 @@ const MASK_CHARACTERS_AT_END = new RegExp(`[${MASK_CHARACTERS}]+$`, 'i')
 /** The same, but for a hyphen, which also joins words: "2-IN-1". */
 const PLAIN_MASK_CHARACTERS_AT_END = /[x*•·.…#]+$/i
 
-/** The dingbat digits, negative and plain circled 1 to 10: "❶" to "➓". */
-const DINGBAT_DIGITS = /[\u2776-\u2793]/gu
+/**
+ * Enclosed numbers NFKD leaves as they are, as [first, last, value of the
+ * first, step]: the dingbats "❶" to "➓", double-circled "⓵" to "⓾",
+ * negative-circled "⓫" to "⓴" and "⓿", the circled zeros "🄋" and "🄌", and
+ * "㉈" to "㉏", which are 10 to 80.
+ */
+const ENCLOSED_NUMBERS: readonly (readonly [number, number, number, number])[] = [
+  [0x2776, 0x277f, 1, 1],
+  [0x2780, 0x2789, 1, 1],
+  [0x278a, 0x2793, 1, 1],
+  [0x24f5, 0x24fe, 1, 1],
+  [0x24eb, 0x24f4, 11, 1],
+  [0x24ff, 0x24ff, 0, 1],
+  [0x1f10b, 0x1f10c, 0, 0],
+  [0x3248, 0x324f, 10, 10],
+]
+
+/** Words that mark the number after them, as in "ACCT 4417" or "ENDING IN 89". */
+const MARKING_WORDS = 'acct|account|no|num|number|ending(?:\\s+in)?'
+
+/**
+ * What comes before a run of digits when it marks the run as an account
+ * number: dots, a star or a "#" not after a digit ("...", "# ", but not the
+ * "3." of "3.25"), an x on its own ("X417", "X 89", but not the X of "MAX" or
+ * "12X18"), or a word like "ACCT", "NO." or "ENDING IN".
+ */
+const MARKED_AS_NUMBER = new RegExp(
+  [
+    String.raw`(?:^|\P{N})[*•·.…#]+\s*$`,
+    String.raw`(?:^|[^\p{L}\p{N}])x+\s*$`,
+    String.raw`(?:^|\P{L})(?:${MARKING_WORDS})[.:]?\s*$`,
+  ].join('|'),
+  'iu',
+)
 
 /** Words that lead up to an account number, as in "ENDING IN 4417" or "(ACCT 4417)". */
 const NUMBER_LEAD_INS = new Set(['account', 'acct', 'ending', 'in', 'no', 'num', 'number'])
@@ -40,26 +72,37 @@ const NUMBER_LEAD_INS = new Set(['account', 'acct', 'ending', 'in', 'no', 'num',
  * Text as the guarantee reads it: every digit written as 0 to 9, and letters
  * without their accents. NFKD folds fullwidth "４", math "𝟒", superscript "⁴"
  * and circled "④" to 4, and splits "Á" into A and an accent, which goes. The
- * dingbat digits "❹", "➃" and "➍", which NFKD leaves, are mapped by hand. A
+ * enclosed numbers NFKD leaves, like "❹" and "⓿", are mapped by hand. A
  * digit of another script, like Arabic-Indic "٤" or Devanagari "४", is read
  * by its place in its run of ten, as Unicode lays out every set of decimal
- * digits.
+ * digits. Any other number, like "ↀ", stays; see hasUnreadNumber.
  */
 export function asciiDigits(text: string): string {
-  const folded = text
-    .replace(DINGBAT_DIGITS, (dingbat) => {
-      // Three sets of 1 to 10 in a row, from U+2776.
-      const place = (dingbat.codePointAt(0)! - 0x2776) % 10
-      return String(place + 1)
-    })
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
+  const folded = [...text].map(enclosedNumber).join('').normalize('NFKD').replace(/\p{M}/gu, '')
   return folded.replace(/\p{Nd}/gu, (digit) => {
     const point = digit.codePointAt(0)!
     let zero = point
     while (/\p{Nd}/u.test(String.fromCodePoint(zero - 1))) zero--
     return String((point - zero) % 10)
   })
+}
+
+/** An enclosed number NFKD leaves, "⓿" or "㉈", in digits; anything else as it is. */
+function enclosedNumber(character: string): string {
+  const point = character.codePointAt(0)!
+  const range = ENCLOSED_NUMBERS.find(([first, last]) => point >= first && point <= last)
+  if (!range) return character
+  const [first, , value, step] = range
+  return String(value + (point - first) * step)
+}
+
+/**
+ * Whether text, as asciiDigits leaves it, still holds a number it couldn't
+ * write in digits, like the Roman "ↀ". A name with one is taken to carry any
+ * mask with a digit, so it falls back rather than show what can't be read.
+ */
+function hasUnreadNumber(text: string): boolean {
+  return /(?![0-9])\p{N}/u.test(text)
 }
 
 /** A mask as compared: its letters and digits, in capitals and ASCII digits. */
@@ -73,11 +116,6 @@ function maskKey(mask: string | null): string {
 function digitsOf(mask: string | null): string {
   const key = maskKey(mask)
   return /^\d+$/.test(key) ? key : ''
-}
-
-/** Whether a mask is digits alone, "4417", as Plaid sends them, rather than one with letters. */
-export function isDigitMask(mask: string | null): boolean {
-  return digitsOf(mask) !== ''
 }
 
 /**
@@ -111,6 +149,7 @@ export function carriesMask(name: string, mask: string | null): boolean {
   const key = maskKey(mask)
   if (key.length < 2) return false
   const text = asciiDigits(name).toUpperCase()
+  if (/\d/.test(key) && hasUnreadNumber(text)) return true
   if (/^\d+$/.test(key)) return carriesDigits(text, key)
   return carriesCharacters(text, key) || carriesCharacters(joinedAtX(text), key)
 }
@@ -120,21 +159,55 @@ function joinedAtX(text: string): string {
   return text.replace(/(?<=\d)X(?=\d)/g, '')
 }
 
-/** carriesMask for a mask of digits only. */
-function carriesDigits(text: string, digits: string): boolean {
+/**
+ * Whether a name carries another account's mask, which is held to less than
+ * the account's own: its own name may hold another's mask by chance, "360
+ * SAVINGS" beside a mask of 0360, so adding an account seldom renames one.
+ * A mask of digits counts where it is written whole ("CHECKING 0360" or
+ * "441x7"), and by its end only where marked as a number ("...360" or "#60").
+ * A mask with letters and digits counts written whole, read as carriesMask
+ * reads it ("X9Z1" or "X9-Z1"). A mask of letters alone is never counted: it
+ * may be letters any word holds, and two such, NT and EY, would rule out
+ * every name Leeway falls back to.
+ */
+export function carriesAnotherMask(name: string, mask: string | null): boolean {
+  const key = maskKey(mask)
+  if (key.length < 2 || !/\d/.test(key)) return false
+  const text = asciiDigits(name).toUpperCase()
+  if (hasUnreadNumber(text)) return true
+  if (/^\d+$/.test(key)) return carriesDigits(text, key, { ownMask: false })
+  const lettersAndDigits = (read: string) => read.replace(/[^\p{L}\p{N}]+/gu, '')
+  return [text, joinedAtX(text)].some((read) => lettersAndDigits(read).includes(key))
+}
+
+/**
+ * carriesMask for a mask of digits only, or carriesAnotherMask where it is
+ * not the account's own: then an unmarked run counts only with the whole mask.
+ */
+function carriesDigits(text: string, digits: string, { ownMask = true } = {}): boolean {
   const unpadded = digits.replace(/^0+/, '')
-  const digitsIn = (run: string) => run.replace(/\D/g, '')
   const isWholeMask = (run: string) =>
-    run.includes(digits) || (unpadded.length >= 2 && run === unpadded)
+    run.includes(digits) || (ownMask && unpadded.length >= 2 && run === unpadded)
   const carries = (run: string) => isWholeMask(run) || (run.length >= 2 && digits.endsWith(run))
   // Read first with each x a letter, then with it joining the digits around it.
-  if (text.split(/\p{L}+/u).some((run) => carries(digitsIn(run)))) return true
-  return joinedAtX(text)
-    .split(/\p{L}+/u)
-    .some((run) => {
-      const marked = /^[*•·.…#-]/.test(run.trim())
-      return marked ? carries(digitsIn(run)) : isWholeMask(digitsIn(run))
-    })
+  const unmarkedCarries = ownMask ? carries : isWholeMask
+  if (digitRuns(text).some((run) => (run.marked ? carries : unmarkedCarries)(run.digits))) {
+    return true
+  }
+  return digitRuns(joinedAtX(text)).some((run) => (run.marked ? carries : isWholeMask)(run.digits))
+}
+
+/**
+ * The runs of digits in text, split by letters alone, each with whether what
+ * comes before it marks it as a number: " ...417" or "ACCT 850".
+ */
+function digitRuns(text: string): { digits: string; marked: boolean }[] {
+  return [...text.matchAll(/\P{L}+/gu)].flatMap((run) => {
+    const firstDigit = run[0].search(/\d/)
+    if (firstDigit < 0) return []
+    const before = text.slice(0, run.index + firstDigit)
+    return [{ digits: run[0].replace(/\D/g, ''), marked: isMarkedAsNumber(before) }]
+  })
 }
 
 /** carriesMask for a mask with letters. */
@@ -171,9 +244,13 @@ export function withoutAccountNumber(bankName: string, mask: string | null): str
     // A bare run is the number when nothing follows it, or something led up to it.
     const last = index === words.length - 1
     const ledUpTo = afterNumber || (kept.length > 0 && leadsUpToNumber(kept.at(-1)!))
+    // The name up to this word, so a mark before it counts: "ACCT 850".
+    const preceding = `${words.slice(0, index).join(' ')} `
+    // Whether its digits run on into the next word's, as in "X 44 17".
+    const runsOn = !last && /^[^\p{L}\p{N}]*\d/u.test(words[index + 1]!)
     const rest =
       withoutLetterMask(word, key, last || ledUpTo) ??
-      withoutNumber(word, maskDigits, last || ledUpTo)
+      withoutNumber(word, maskDigits, { standsAsNumber: last || ledUpTo, preceding, runsOn })
     afterNumber = rest !== null
     if (rest === null) {
       kept.push(word)
@@ -223,7 +300,15 @@ function joinedMask(bankName: string, maskDigits: string): string {
  * that is how "12 MONTH CD" keeps its 12 when the mask is 12. carriesMask then
  * decides whether the name can be shown at all.
  */
-function withoutNumber(word: string, maskDigits: string, standsAsNumber: boolean): string | null {
+function withoutNumber(
+  word: string,
+  maskDigits: string,
+  {
+    standsAsNumber,
+    preceding,
+    runsOn,
+  }: { standsAsNumber: boolean; preceding: string; runsOn: boolean },
+): string | null {
   const core = coreOf(word)
   // "XXXX" or "****" stands for digits too; the stars leave no core at all.
   if (/^[x*•]{2,}$/i.test(core || word)) return ''
@@ -237,7 +322,7 @@ function withoutNumber(word: string, maskDigits: string, standsAsNumber: boolean
   }
   for (const run of bare.matchAll(/\d+(?:x\d+)*/gi)) {
     const joined = run[0].replace(/x/gi, '')
-    const markedAsNumber = isMarkedAsNumber(bare.slice(0, run.index))
+    const markedAsNumber = isMarkedAsNumber(preceding + bare.slice(0, run.index))
     if (joined !== run[0] && joinsAtX(joined, maskDigits, markedAsNumber)) {
       return withoutRun(run.index, run[0].length)
     }
@@ -248,7 +333,11 @@ function withoutNumber(word: string, maskDigits: string, standsAsNumber: boolean
       const how = {
         marked: MASK_CHARACTERS_AT_END.test(before),
         markedPlainly: PLAIN_MASK_CHARACTERS_AT_END.test(before),
-        markedAsNumber: isMarkedAsNumber(before),
+        // Split across words, "X 44 17", it is not taken in part, which would
+        // leave the "17"; carriesMask reads it whole.
+        markedAsNumber:
+          isMarkedAsNumber(preceding + before) &&
+          !(runsOn && index + digits.length === bare.length),
         alone: bare === digits && !bracketed,
         standsAsNumber,
       }
@@ -268,13 +357,9 @@ function joinsAtX(joined: string, maskDigits: string, markedAsNumber: boolean): 
   return markedAsNumber || (maskDigits.length >= 2 && (joined.includes(maskDigits) || isMask))
 }
 
-/**
- * Whether what comes before a run marks it as an account number: dots, a
- * star or a "#" not after a digit ("...", "#", but not the "3." of "3.25"),
- * or an x standing on its own ("X417", but not the X of "MAX" or "12X18").
- */
+/** Whether what comes before a run marks it as an account number; see MARKED_AS_NUMBER. */
 function isMarkedAsNumber(before: string): boolean {
-  return /(?:^|\P{N})[*•·.…#]+$/u.test(before) || /(?:^|[^\p{L}\p{N}])x+$/iu.test(before)
+  return MARKED_AS_NUMBER.test(before)
 }
 
 /** How a run of digits sits in its word, for isNumber. */

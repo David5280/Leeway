@@ -7,7 +7,7 @@ import {
   type AccountNameParts,
   type NamingAccount,
 } from '../src/domain/accountName.js'
-import { carriesMask } from '../src/domain/accountNumber.js'
+import { carriesAnotherMask, carriesMask } from '../src/domain/accountNumber.js'
 import { readableCase } from '../src/domain/nameWords.js'
 
 /** A linked account the bank calls TOTAL CHECKING at Chase, with no name of the owner's. */
@@ -481,6 +481,21 @@ describe('distinctAccountNames', () => {
     )
   })
 
+  it("never shows the end of another account's mask after a word or an x that marks it", () => {
+    const named = (bankName: string, otherMask: string) =>
+      distinctAccountNames([
+        account('other', { mask: otherMask }),
+        account('this', { bankName, mask: '9921', subtype: 'savings' }),
+      ]).get('this')
+    // Tidied out where it can be.
+    expect(named('LINKED ACCT 850', '5850')).toBe('Chase Linked')
+    expect(named('LINKED X 89', '389')).toBe('Chase Linked')
+    expect(named('SAVINGS ENDING IN 89', '389')).toBe('Chase Savings')
+    // Split up, it is left to the guarantee, which reads it whole.
+    expect(named('LINKED X 8 9', '389')).toBe('Chase Savings')
+    expect(named('LINKED ACCT 85 0', '5850')).toBe('Chase Savings')
+  })
+
   it("never shows another account's mask of 52 marked with a #", () => {
     const names = distinctAccountNames([
       account('checking', { mask: '52' }),
@@ -497,6 +512,41 @@ describe('distinctAccountNames', () => {
       account('c', { bankName: 'OTHER', mask: '01' }),
     ])
     expect(names.get('b')).toBe('Chase Retirement (Investment)')
+  })
+
+  it("never shows another account's mask of letters and digits, written whole", () => {
+    const named = (bankName: string, otherMask: string) =>
+      distinctAccountNames([
+        account('other', { mask: otherMask }),
+        account('this', { bankName, mask: '9921', subtype: 'savings' }),
+      ]).get('this')
+    expect(named('CHECKING X9Z1', 'X9Z1')).toBe('Chase Savings')
+    expect(named('CARD 12-AB', '12AB')).toBe('Chase Savings')
+    expect(named('PLAN A1 GOLD', 'A1')).toBe('Chase Savings')
+    // Only its whole: the end of another account's mask may be any name's.
+    expect(named('CARD 2AB', '12AB')).toBe('Chase Card 2AB')
+  })
+
+  it('renames no account when another is added, unless its name shows the new mask', () => {
+    const existing = [
+      ['360 PERFORMANCE SAVINGS', '0360'],
+      ['12 MONTH CD', '8812'],
+      ['ROTH 401(K)', '1401'],
+      ['529 PLAN', '7529'],
+      ['TOP 10 REWARDS', '0010'],
+      ['LINE OF CREDIT 2025', '9025'],
+    ] as const
+    for (const [bankName, newMask] of existing) {
+      const before = [account('old', { bankName, mask: '9921' })]
+      const after = [...before, account('new', { bankName: 'NEW', mask: newMask })]
+      const name = distinctAccountNames(before).get('old')
+      expect(distinctAccountNames(after).get('old'), `${bankName} beside ${newMask}`).toBe(name)
+    }
+    // Written whole, the new mask is shown, so the name gives way.
+    const whole = [account('old', { bankName: 'CHECKING 360 PLUS', mask: '9921' })]
+    const added = [...whole, account('new', { bankName: 'NEW', mask: '360' })]
+    expect(distinctAccountNames(whole).get('old')).toBe('Chase Checking 360 Plus')
+    expect(distinctAccountNames(added).get('old')).toBe('Chase Checking')
   })
 
   it("doesn't check another account's mask of letters alone, which many words share", () => {
@@ -548,6 +598,49 @@ describe('distinctAccountNames', () => {
     const names = [...distinctAccountNames(many).values()]
     expect(new Set(names).size).toBe(12)
     for (const mask of masks) expect(names.filter((name) => carriesMask(name, mask))).toEqual([])
+  })
+
+  it("falls back to a name with no digits when other accounts' masks rule out every order", () => {
+    // Made up to match: after "Plan 5", each catches the orders starting with its letter.
+    const masks = ['5S', '5T', '5F', '5E', '5N', '5O', '5C', '9921']
+    const many = masks.map((mask, index) => account(String(index), { bankName: 'PLAN 5', mask }))
+    const names = [...distinctAccountNames(many).values()]
+    expect(names.slice(0, 3)).toEqual([
+      'Chase Plan 5',
+      'Chase Checking (Second)',
+      'Chase Checking (Third)',
+    ])
+    expect(new Set(names).size).toBe(masks.length)
+    names.forEach((name, index) => {
+      expect(carriesMask(name, masks[index]!), name).toBe(false)
+      const others = masks.filter((_, other) => other !== index)
+      expect(
+        others.filter((mask) => carriesAnotherMask(name, mask)),
+        name,
+      ).toEqual([])
+    })
+  })
+
+  it('always ends, for any mask of its own in the fallback words, beside masks made up to match', () => {
+    // Every pair of letters side by side in the names it falls back to and their orders.
+    const words = 'BANK CHECKING ACCOUNT MONEY SECOND THIRD FOURTH FIFTH SIXTH SEVENTH EIGHTH'
+    const pairs = new Set(
+      words
+        .split(' ')
+        .flatMap((word) => [...word].slice(1).map((letter, at) => word[at]! + letter)),
+    )
+    const madeUp = ['5S', '5T', '5F', '5E', '5N', '5O', '5C']
+    // A bank named with digits, so the name with none falls back past it, or no bank at all.
+    for (const institutionName of ['Bank 5', null]) {
+      for (const mask of pairs) {
+        const many = [...madeUp, mask, mask].map((each, index) =>
+          account(String(index), { bankName: 'PLAN 5', institutionName, mask: each }),
+        )
+        const names = [...distinctAccountNames(many).values()]
+        expect(new Set(names.map((name) => name.toLowerCase())).size, mask).toBe(many.length)
+        names.slice(-2).forEach((name) => expect(carriesMask(name, mask), name).toBe(false))
+      }
+    }
   })
 
   it('tells apart by type when the kind itself shows the mask', () => {
