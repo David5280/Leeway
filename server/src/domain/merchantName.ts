@@ -15,8 +15,10 @@
 //
 // The raw text itself stays stored and is shown in the transaction's details.
 
-/** What is shown when the bank's text holds nothing readable. */
-export const UNNAMED = 'Bank transaction'
+import { asciiDigits } from './accountNumber.js'
+
+/** What a transaction is called when the bank's text holds nothing readable or safe to show. */
+export const GENERIC_NAME = 'Bank transaction'
 
 /** Short words that stay uppercase: acronyms people know in merchant and bank names. */
 const ACRONYMS = new Set([
@@ -142,10 +144,13 @@ const COUNTERPARTY_END =
 /**
  * A word that ends the name: everything after it is a store number, card
  * number, reference, date, phone number or location. The first word is never
- * taken for one, so "7-ELEVEN" and "76" keep their names.
+ * taken for one, so "7-ELEVEN" and "76" keep their names. Digits are read in
+ * any script ("٤٤١٧" is 4417) and counted across letters ("441X7").
  */
-function endsName(word: string, next = ''): boolean {
-  const digits = word.replace(/\D/g, '').length
+function endsName(rawWord: string, rawNext = ''): boolean {
+  const word = asciiDigits(rawWord)
+  const next = asciiDigits(rawNext)
+  const digits = digitCount(word)
   if (digits >= 4) return true // card, reference and phone numbers
   if (/^#/.test(word) && digits > 0) return true // store numbers: #2214
   if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(word)) return true // short dates: 1/8, 11/8
@@ -161,9 +166,14 @@ function endsName(word: string, next = ''): boolean {
   return digits >= 2 && /\p{L}/u.test(word)
 }
 
+/** How many digits a word holds, letters and marks between them ignored. */
+function digitCount(word: string): number {
+  return asciiDigits(word).replace(/\D/g, '').length
+}
+
 /** True for a word that could be or hold an account number or mask, never shown. */
 function holdsNumber(word: string): boolean {
-  return word.replace(/\D/g, '').length >= 4 || /[x*•…]{2,}\d|\.{3}\d/i.test(word)
+  return digitCount(word) >= 4 || /[x*•…]{2,}\d|\.{3}\d/i.test(asciiDigits(word))
 }
 
 /** Text with every word that could hold a number taken out. */
@@ -293,7 +303,7 @@ export function cleanMerchantName(raw: string): string {
   const transfer = TRANSFER.exec(text)
   if (transfer) return transferName(transfer[1]!, transfer[2]!)
   const name = merchantWords(text)
-  return name ? readableName(name) : UNNAMED
+  return name ? readableName(name) : GENERIC_NAME
 }
 
 /**
@@ -302,5 +312,5 @@ export function cleanMerchantName(raw: string): string {
  */
 export function tidyMerchantName(merchantName: string): string {
   const name = trimEnds(withoutNumbers(words(merchantName).join(' ')))
-  return name ? readableName(name) : UNNAMED
+  return name ? readableName(name) : GENERIC_NAME
 }

@@ -315,6 +315,13 @@ describe('MCP endpoint', () => {
       amountCents: 50000,
       primary: 'TRANSFER_OUT',
     })
+    // A person paid through Zelle, named with the savings mask split by a letter.
+    await insertBankTransaction(ctx.db, checking, {
+      date: day(1),
+      name: 'Zelle payment from JANE 441X7 DOE',
+      amountCents: -2500,
+      primary: 'TRANSFER_IN',
+    })
     // A monthly charge whose merchant name carries a number, for the merchant and recurring tools.
     for (const back of [2, 32, 62]) {
       await insertBankTransaction(ctx.db, checking, {
@@ -337,9 +344,11 @@ describe('MCP endpoint', () => {
       const result = response.json().result
       expect(result.isError, name).toBeFalsy()
       const text = result.content[0].text as string
-      expect(text, name).not.toMatch(/9\D?8\D?7\D?6|4417|31677300112/)
+      expect(text, name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
       expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
     }
+    const people = await rpc(token, 'tools/call', { name: 'list_transactions', arguments: {} })
+    expect(people.json().result.content[0].text).toContain('From Jane Doe')
 
     // An import names its account, and its file is named by the account's number.
     const { token: writer } = await createToken(ctx.db, 'Coach', 'write')

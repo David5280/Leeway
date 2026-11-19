@@ -94,7 +94,7 @@ describe('transactionDisplayName with account masks', () => {
   })
 
   it("falls back to the category's name when a mask can't be taken out cleanly", () => {
-    const tx = { name: 'RENT', merchantName: 'Card ending 76' }
+    const tx = { name: 'RENT', merchantName: 'Card ending 7 6' }
     expect(transactionDisplayName(tx, null, { ...guard, fallback: 'Rent' })).toBe('Rent')
     expect(transactionDisplayName(tx, null, guard)).toBe('Bank transaction')
   })
@@ -106,6 +106,27 @@ describe('transactionDisplayName with account masks', () => {
     expect(transactionDisplayName({ name: 'ZELLE', merchantName: null, person }, null, guard)).toBe(
       'Transfer',
     )
+  })
+
+  it('names a person without a mask split by letters', () => {
+    const person = { app: 'Zelle', counterparty: 'JANE 441X7 DOE', direction: 'in' as const }
+    const name = transactionDisplayName({ name: 'ZELLE', merchantName: null, person }, null, guard)
+    expect(name).toBe('From JANE DOE')
+    const spread = { ...person, counterparty: 'Jane 4a4b1c7', direction: 'out' as const }
+    expect(
+      transactionDisplayName({ name: 'ZELLE', merchantName: null, person: spread }, null, guard),
+    ).toBe('To Jane')
+  })
+
+  it('names a merchant without a mask in another script, however it is split', () => {
+    const named = (name: string) =>
+      transactionDisplayName({ name, merchantName: null }, null, guard)
+    expect(named('SHOP ٤٤١x٧')).toBe('Shop')
+    expect(named('٤٤١x٧ Store')).toBe('Store')
+    // The number ends the name, as an ASCII one would.
+    expect(named('PAYMENT TO ٤x٤x١x٧ SHOP')).toBe('Payment')
+    const given = { name: 'X', merchantName: 'SHOP ٤٤١x٧' }
+    expect(transactionDisplayName(given, null, guard)).toBe('Shop')
   })
 
   it('keeps a paired transfer named by its accounts, which never carry a mask', () => {

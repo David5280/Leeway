@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   cleanMerchantName,
+  GENERIC_NAME,
   readableName,
   tidyMerchantName,
-  UNNAMED,
 } from '../src/domain/merchantName.js'
 
 /** Real-world bank lines (numbers changed), and the name each should read as. */
@@ -112,9 +112,9 @@ describe('cleanMerchantName', () => {
   })
 
   it('says it is a bank transaction when nothing readable is left', () => {
-    expect(cleanMerchantName('XXXXXX4417 11/18 123456789')).toBe(UNNAMED)
-    expect(cleanMerchantName('   ')).toBe(UNNAMED)
-    expect(cleanMerchantName('ORIG CO NAME:12345678 ORIG ID:9876543210')).toBe(UNNAMED)
+    expect(cleanMerchantName('XXXXXX4417 11/18 123456789')).toBe(GENERIC_NAME)
+    expect(cleanMerchantName('   ')).toBe(GENERIC_NAME)
+    expect(cleanMerchantName('ORIG CO NAME:12345678 ORIG ID:9876543210')).toBe(GENERIC_NAME)
   })
 
   it('keeps the name after a leading store number', () => {
@@ -125,6 +125,13 @@ describe('cleanMerchantName', () => {
     expect(cleanMerchantName('LYFT *')).toBe('Lyft')
     expect(cleanMerchantName('SQ *')).toBe('Sq')
   })
+  it('reads digits in any script, and counts them across letters', () => {
+    expect(cleanMerchantName('SHOP ٤٤١x٧')).toBe('Shop')
+    expect(cleanMerchantName('٤٤١x٧ STORE')).toBe('Store')
+    expect(cleanMerchantName('PAYMENT TO ٤x٤x١x٧ SHOP')).toBe('Payment')
+    expect(cleanMerchantName('GYM DUES ٩٨٧٦ DENVER')).toBe('Gym Dues')
+    expect(cleanMerchantName('JANE 4A4B1C7 DOE')).toBe('Jane')
+  })
 })
 
 describe('tidyMerchantName', () => {
@@ -132,12 +139,17 @@ describe('tidyMerchantName', () => {
     expect(tidyMerchantName('Blue Bottle Coffee')).toBe('Blue Bottle Coffee')
   })
 
+  it('takes out numbers written in another script or split by letters', () => {
+    expect(tidyMerchantName('SHOP ٤٤١x٧')).toBe('Shop')
+    expect(tidyMerchantName('Jane 4a4b1c7 Doe')).toBe('Jane Doe')
+  })
+
   it('calms a shouted one and takes out numbers', () => {
     expect(tidyMerchantName('KING SOOPERS 0123')).toBe('King Soopers')
   })
 
   it('says it is a bank transaction when the name is only numbers', () => {
-    expect(tidyMerchantName('12345678')).toBe(UNNAMED)
+    expect(tidyMerchantName('12345678')).toBe(GENERIC_NAME)
   })
 })
 
