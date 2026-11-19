@@ -122,7 +122,8 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   `App.tsx` from there, then give it a screen in `e2e/guarded-screens.ts`
   (with long names seeded, and any form people open on it as a `then`
   step), so the phone layout guard checks it. The guard fails, naming the
-  route, until every route has one.
+  route, until every route has one, and lint refuses a `<Route>` path
+  written straight into the app (only the catch-all `"*"` may be).
 - **A database change:** add a new file to `server/migrations` numbered after
   the highest one, like `011_something.sql`. Migrations run in filename
   order when the server starts, each once, and installs record them by file

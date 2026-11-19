@@ -3,6 +3,14 @@ import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 
+// A <Route> path that is neither the catch-all "*" nor a name from routes.ts
+// (ROUTES, SCREEN_ROUTES or CONNECT_ROUTES).
+const ROUTE_PATH_NOT_FROM_ROUTES = [
+  "JSXOpeningElement[name.name='Route'] > JSXAttribute[name.name='path']",
+  ":not([value.value='*'])",
+  ":not([value.expression.type='MemberExpression'][value.expression.object.name=/^(SCREEN_|CONNECT_)?ROUTES$/])",
+].join('')
+
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 export default tseslint.config(
   { ignores: ['**/dist', '**/coverage', '**/node_modules', 'playwright-report', 'test-results'] },
@@ -58,6 +66,23 @@ export default tseslint.config(
       'no-implicit-coercion': 'error',
       'prefer-template': 'error',
       'no-throw-literal': 'error',
+    },
+  },
+  {
+    // Every address the router answers lives in web/src/routes.ts, where the
+    // phone layout guard finds it. A path written straight onto a <Route>
+    // would reach the app unguarded, so only the catch-all "*" may be literal.
+    files: ['web/src/**/*.tsx'],
+    ignores: ['web/src/test/**', 'web/src/**/*.test.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: ROUTE_PATH_NOT_FROM_ROUTES,
+          message:
+            'Give <Route> a path from routes.ts (or "*"), so the phone layout guard covers it.',
+        },
+      ],
     },
   },
   {

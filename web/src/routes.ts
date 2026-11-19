@@ -1,8 +1,9 @@
 // Every address the app's router answers, by name. The router (App.tsx) and
 // the browser tests' phone layout guard both read this list, and the guard
-// fails when a route has no screen of its own there, so a new screen cannot
-// reach the app without being checked on a phone. It imports nothing, so the
-// browser tests can read it without the app.
+// fails when a route has no screen of its own there. A lint rule refuses any
+// other <Route> path but "*", so a new screen cannot reach the app without
+// being checked on a phone. It imports nothing, so the browser tests can read
+// it without the app.
 
 /** The screens of an app that is set up, in the router's order. */
 export const SCREEN_ROUTES = {
