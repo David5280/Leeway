@@ -1,5 +1,6 @@
 // Every theme, light and dark, reads at WCAG AA: text tones on every surface,
-// status pills on their tints, and category icons on their tinted circles.
+// status pills and usual chips on their tints, and category icons and tile
+// icons on their tinted circles.
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -16,19 +17,24 @@ const MODES = Object.entries(THEMES).flatMap(([id, theme]) =>
 const TEXT = ['ink', 'muted', 'good', 'over', 'warn', 'accent'] as const
 const SURFACES = ['bg', 'surface', 'surface-2'] as const
 
-/** The stylesheet that draws pills and category icons, read as text. */
-const DESIGN_CSS = readFileSync(resolve(__dirname, '../styles/design.css'), 'utf8')
+/** The stylesheets that draw tinted chips and icons, read as text. */
+const STYLES = {
+  design: readFileSync(resolve(__dirname, '../styles/design.css'), 'utf8'),
+  figures: readFileSync(resolve(__dirname, '../styles/figures.css'), 'utf8'),
+}
 
 /**
- * How much of its tone a rule in design.css mixes into a property, read from
- * the stylesheet itself so this checks what is drawn: 0.14 for ".pill"
- * "background", from color-mix(in srgb, var(--t) 14%, var(--surface)).
+ * How much of its tone a rule mixes into a property, read from the stylesheet
+ * itself so this checks what is drawn: 0.14 for ".pill" "background", from
+ * color-mix(in srgb, var(--t) 14%, var(--surface)). The rule may be the first
+ * of several selectors sharing it (".tile-icon," before ".kind-chip").
  */
-function toneShare(selector: string, property: string): number {
-  const rule = DESIGN_CSS.split(`\n${selector} {`)[1]?.split('}')[0] ?? ''
+function toneShare(selector: string, property: string, sheet: keyof typeof STYLES = 'design') {
+  const rule =
+    STYLES[sheet].split(new RegExp(`\\n\\${selector}[ ,][^{]*\\{`))[1]?.split('}')[0] ?? ''
   const mix = new RegExp(`\\n\\s*${property}: color-mix\\(in srgb, var\\(--\\w+\\) (\\d+)%`)
   const percent = mix.exec(rule)?.[1]
-  if (!percent) throw new Error(`design.css has no color-mix for ${selector} ${property}`)
+  if (!percent) throw new Error(`${sheet}.css has no color-mix for ${selector} ${property}`)
   return Number(percent) / 100
 }
 
@@ -38,6 +44,16 @@ const ICON_GLYPH = toneShare('.icon-badge', 'color')
 /** How a status pill tints its background with its tone, and deepens its text toward the ink. */
 const PILL_TINT = toneShare('.pill', 'background')
 const PILL_TEXT = toneShare('.pill', 'color')
+/** The tinted chips and icons of the redesign (figures.css), each a tint and a text mix. */
+const TINTED = [
+  ['.usual-chip', 'usual chip'],
+  ['.drill-usual', "drill-down's usual line"],
+  ['.tile-icon', 'tile icon'],
+].map(([selector, name]) => ({
+  name: name!,
+  tint: toneShare(selector!, 'background', 'figures'),
+  text: toneShare(selector!, 'color', 'figures'),
+}))
 
 const categoryColors = [
   ...new Set([...STARTER_CATEGORIES.map((c) => c.color), ...CATEGORY_COLORS.map(([, c]) => c)]),
@@ -45,7 +61,8 @@ const categoryColors = [
 
 describe('the mixes read from design.css', () => {
   it('are shares of the tone, between none and all of it', () => {
-    for (const share of [PILL_TINT, PILL_TEXT, ICON_TINT, ICON_GLYPH]) {
+    const tinted = TINTED.flatMap(({ tint, text }) => [tint, text])
+    for (const share of [PILL_TINT, PILL_TEXT, ICON_TINT, ICON_GLYPH, ...tinted]) {
       expect(share).toBeGreaterThan(0)
       expect(share).toBeLessThan(1)
     }
@@ -55,6 +72,7 @@ describe('the mixes read from design.css', () => {
 
   it('says so plainly when a rule is missing', () => {
     expect(() => toneShare('.nowhere', 'color')).toThrow('design.css has no color-mix')
+    expect(() => toneShare('.nowhere', 'color', 'figures')).toThrow('figures.css has no color-mix')
   })
 })
 
@@ -74,6 +92,15 @@ describe.each(MODES)('the $name theme', ({ tokens }) => {
       expect(contrastRatio(text, tint)).toBeGreaterThanOrEqual(4.5)
     },
   )
+
+  // Usual chips are muted, green or amber; tile icons accent, green or amber.
+  it.each(TINTED)('sets a $name in every tone at 4.5:1 or more on its own tint', (chip) => {
+    for (const tone of ['muted', 'good', 'warn', 'accent'] as const) {
+      const tint = mixRgb(parseHex(tokens[tone]), parseHex(tokens.surface), chip.tint)
+      const text = mixRgb(parseHex(tokens[tone]), parseHex(tokens.ink), chip.text)
+      expect(contrastRatio(text, tint), tone).toBeGreaterThanOrEqual(4.5)
+    }
+  })
 
   it('draws every category icon at 3:1 or more on its tinted circle', () => {
     const surface = parseHex(tokens.surface)
