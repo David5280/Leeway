@@ -34,6 +34,10 @@ for (const group of ['appearance', 'budgeting', 'accounts', 'email', 'data', 'si
   test(`the ${group} settings fields are big enough not to zoom`, async ({ page }) => {
     await page.goto(`/settings/${group}`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    // Other tests add and remove accounts, so open the form for one, whose fields are always there.
+    if (group === 'accounts') {
+      await page.getByRole('button', { name: 'Add an account by hand' }).click()
+    }
     await expect(page.locator('input, select, textarea').first()).toBeVisible()
     expect(await smallFields(page)).toEqual([])
   })

@@ -146,7 +146,22 @@ describe('Settings menu', () => {
     const scrolled = watchScrolling()
     await userEvent.setup().click(menu().getByRole('link', { name: 'Sign-in' }))
     // The heading, so a switch from far down opens at the top; the pill, for a phone's row.
-    expect(scrolled.sort()).toEqual(['Sign-in', 'Sign-inChange your password, or sign out.'])
+    expect([...new Set(scrolled)].sort()).toEqual([
+      'Sign-in',
+      'Sign-inChange your password, or sign out.',
+    ])
+  })
+
+  it('keeps a pill in view as the keyboard moves along the row', async () => {
+    fakeServer(quiet)
+    renderSettings('/settings/appearance')
+    const scrolls = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+    const user = userEvent.setup()
+    const last = menu().getAllByRole('link').at(-1)!
+    for (let step = 0; step < 40 && document.activeElement !== last; step++) await user.tab()
+    expect(last).toHaveFocus()
+    expect(scrolls.mock.contexts.at(-1)).toBe(last)
+    expect(scrolls).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'nearest' })
   })
 })
 

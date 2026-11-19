@@ -720,6 +720,12 @@ button.chip {
   color: var(--muted);
 }
 
+/* A setting's list is as wide as its longest choice, beside its label. */
+.setting > select.input {
+  width: auto;
+  max-width: 100%;
+}
+
 .swatch {
   width: 32px;
   height: 32px;
@@ -1636,6 +1642,8 @@ details.more[open] summary {
     margin: -4px -16px;
     padding: 4px 16px;
     overflow-x: auto;
+    /* A pill scrolled into view stops this far in, past the fade at the edge. */
+    scroll-padding-inline: 24px;
     scrollbar-width: none;
     /* Pills fade out at the screen's edges, so one cut off there reads as more to scroll to.
        The fade is as wide as the padding, so at either end no pill is faded. */
@@ -1683,6 +1691,11 @@ details.more[open] summary {
 
   .setting-label {
     min-width: 0;
+  }
+
+  /* Under its label, a list spans the card, however long its longest choice. */
+  .setting > select.input {
+    width: 100%;
   }
 
   /* Options sit in even rows (Segmented sets --columns), so none wraps alone onto a

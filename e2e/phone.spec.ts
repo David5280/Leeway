@@ -7,7 +7,7 @@ import { addAccount } from './manual'
 const overflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
 
-for (const path of [
+const PATHS = [
   '/',
   '/accounts',
   '/alerts',
@@ -22,12 +22,60 @@ for (const path of [
   '/settings/assistant',
   '/settings/data',
   '/settings/sign-in',
-]) {
-  test(`${path} fits a phone screen`, async ({ page }) => {
-    await page.goto(path)
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
+]
+
+/** Loads a screen and checks it fits the width. */
+async function fits(page: Page, path: string): Promise<void> {
+  await page.goto(path)
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  expect(await overflow(page)).toBeLessThanOrEqual(0)
+}
+
+for (const path of PATHS) {
+  test(`${path} fits a phone screen`, async ({ page }) => fits(page, path))
+}
+
+// The project's phone is a 412px Pixel 7; many phones are narrower.
+for (const width of [390, 320]) {
+  test.describe(`a ${width}px phone`, () => {
+    test.use({ viewport: { width, height: 700 } })
+
+    for (const path of PATHS) {
+      test(`${path} fits`, async ({ page }) => fits(page, path))
+    }
+
+    test('a setting with a long list spans the card under its label, no wider', async ({
+      page,
+    }) => {
+      await page.goto('/settings/budgeting#region')
+      const zone = page.getByRole('combobox', { name: 'Time zone' })
+      const card = page.getByRole('region', { name: 'Region' })
+      const [zoneBox, cardBox] = [await zone.boundingBox(), await card.boundingBox()]
+      expect(zoneBox!.x).toBeGreaterThanOrEqual(cardBox!.x)
+      expect(zoneBox!.x + zoneBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width)
+      expect(await overflow(page)).toBeLessThanOrEqual(0)
+    })
+
+    test('each Settings pill the keyboard reaches is in full view, clear of the fade', async ({
+      page,
+    }) => {
+      await page.goto('/settings/appearance')
+      const pills = page.getByRole('navigation', { name: 'Settings groups' }).getByRole('link')
+      await pills.first().focus()
+      const count = await pills.count()
+      for (let index = 0; index < count; index++) {
+        if (index > 0) await page.keyboard.press('Tab')
+        const pill = pills.nth(index)
+        await expect(pill).toBeFocused()
+        // Wait for the row to settle, then check the pill sits inside the 16px fades.
+        await expect(async () => {
+          const box = (await pill.boundingBox())!
+          expect(box.x).toBeGreaterThanOrEqual(16)
+          expect(box.x + box.width).toBeLessThanOrEqual(width - 16)
+        }).toPass({ timeout: 2000 })
+      }
+    })
   })
 }
 
