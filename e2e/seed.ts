@@ -62,6 +62,9 @@ export const LONG = {
   pension: 'Public Employees Retirement Association of Colorado, the defined benefit plan',
 } as const
 
+/** What each seeded account is, in the order of `seeded.accounts`. */
+export const SEEDED_ACCOUNTS = ['checking', 'savings', 'credit card', 'loan', 'overdrawn checking']
+
 /**
  * Adds five accounts (checking, savings, a credit card, a loan and a second
  * checking account that is overdrawn, in that order in `seeded.accounts`),

@@ -30,6 +30,8 @@ export interface MoneyProps {
   precision?: Precision
   /** Inherits the text around it unless given. */
   size?: MoneySize
+  /** The currency, when the amount isn't in the owner's own, like Anthropic's bills in US dollars. */
+  currency?: string
   /** `tspan` to draw the amount inside an SVG <text>, as a chart does. */
   as?: 'span' | 'tspan'
   /** Makes the amount a button that opens its breakdown. */
@@ -51,6 +53,7 @@ export function Money({
   tone,
   precision,
   size,
+  currency,
   as = 'span',
   onOpen,
   openLabel,
@@ -58,7 +61,7 @@ export function Money({
   style,
 }: MoneyProps) {
   const { settings } = useApp()
-  const options = { currency: settings.currency, locale: settings.locale }
+  const options = { currency: currency ?? settings.currency, locale: settings.locale }
   // A bank transaction is shown to the cent; other amounts round unless told not to.
   const digits = precision ?? (sign === 'transaction' || sign === 'transfer' ? 'cents' : 'whole')
   const text = formatMoney(cents, options, { sign, precision: digits })

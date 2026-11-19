@@ -7,7 +7,8 @@ import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
 import { useAction } from '../api/hooks'
 import { ErrorNote, Loading } from '../components/ui'
-import { timeAgo } from '../lib/format'
+import { useApp } from '../lib/app'
+import { shortDate, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
 
 type Summary = Output<'get_summary'>
@@ -22,6 +23,7 @@ export function SummaryWidget() {
 }
 
 function SummaryBody() {
+  const { locale } = useApp().settings
   const summary = useAction('get_summary')
   if (summary.isPending) return <Loading label="Reading your numbers" />
   if (summary.isError) return <ErrorNote error={summary.error} />
@@ -36,13 +38,21 @@ function SummaryBody() {
           ))}
         </ul>
       )}
-      <Byline summary={summary.data} />
+      <Byline summary={summary.data} locale={locale} />
     </>
   )
 }
 
 /** Who wrote it and when, or how to have Claude write it. */
-export function Byline({ summary, now }: { summary: Summary; now?: number }) {
+export function Byline({
+  summary,
+  now,
+  locale = 'en-US',
+}: {
+  summary: Summary
+  now?: number
+  locale?: string
+}) {
   const settings = <Link to={settingsPath('assistant')}>Settings, then AI assistant</Link>
   switch (summary.ai) {
     case 'on':
@@ -57,6 +67,14 @@ export function Byline({ summary, now }: { summary: Summary; now?: number }) {
           Claude couldn&apos;t write it just now, so this is Leeway&apos;s own summary.
         </p>
       )
+    case 'no_model':
+      return (
+        <p className="small muted">
+          The AI model chosen for the summary isn&apos;t available from Anthropic, so this is
+          Leeway&apos;s own summary. Pick another in{' '}
+          <Link to={settingsPath('ai')}>Settings, then AI models</Link>.
+        </p>
+      )
     case 'no_key':
       return (
         <p className="small muted">
@@ -65,5 +83,13 @@ export function Byline({ summary, now }: { summary: Summary; now?: number }) {
       )
     case 'off':
       return <p className="small muted">Want Claude to write this? Turn it on in {settings}.</p>
+    case 'limit':
+      return (
+        <p className="small muted">
+          This month&apos;s AI limit is reached, so this is Leeway&apos;s own summary
+          {summary.limitResetsOn ? ` until ${shortDate(summary.limitResetsOn, locale)}` : ''}. See{' '}
+          <Link to={settingsPath('ai')}>Settings, then AI models</Link>.
+        </p>
+      )
   }
 }

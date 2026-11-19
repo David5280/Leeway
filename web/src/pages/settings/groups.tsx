@@ -5,6 +5,7 @@
 import type { ComponentType } from 'react'
 import { AccountSection } from './Accounts'
 import { AgentSection } from './Agent'
+import { AiModelsSection } from './AiModels'
 import { BanksSection } from './Banks'
 import { BudgetingSection } from './Budgeting'
 import { DataSection } from './Data'
@@ -62,6 +63,12 @@ export const SETTINGS_GROUPS = [
     title: 'AI assistant',
     description: 'Connect Claude or another assistant, manage its keys, and the AI summary.',
     sections: [AgentSection],
+  },
+  {
+    id: 'ai',
+    title: 'AI models',
+    description: 'The Claude model for each AI job, and a monthly limit on what they spend.',
+    sections: [AiModelsSection],
   },
   {
     id: 'widget',

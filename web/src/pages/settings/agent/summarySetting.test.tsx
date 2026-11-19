@@ -36,6 +36,13 @@ describe('SummarySetting', () => {
     ).toBeInTheDocument()
   })
 
+  it('says the cost is small, and points to AI models for the model and the limit', () => {
+    serve()
+    renderSignedIn(<SummarySetting />)
+    expect(screen.getByText(/each summary costs well under a cent/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'AI models' })).toHaveAttribute('href', '/settings/ai')
+  })
+
   it('turns it on through the owner-only action', async () => {
     const server = serve()
     renderSignedIn(<SummarySetting />)

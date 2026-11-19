@@ -19,6 +19,7 @@ const SCREENS = [
   { path: '/settings/budgeting', heading: 'Settings' },
   { path: '/settings/banks', heading: 'Settings' },
   { path: '/settings/assistant', heading: 'Settings' },
+  { path: '/settings/ai', heading: 'Settings' },
   { path: '/settings/widget', heading: 'Settings' },
 ]
 
