@@ -29,7 +29,7 @@ const PER_ADDRESS_LIMIT = perMinute(10)
  * most 80 guesses an hour reach the password, however many addresses an
  * attacker has; the owner waits at most this window while under attack.
  */
-export const ACCOUNT_LIMIT = { maxFailures: 20, windowMs: 15 * MINUTE_MS }
+export const ACCOUNT_LIMIT = { maxAttempts: 20, windowMs: 15 * MINUTE_MS }
 
 /** Reads a request body with a schema, as an error the person can read when it does not fit. */
 function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
@@ -117,7 +117,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setup:
     if (typed && setupCodeMatches(typed, setup.code)) return
     const where = whereSetupCodeIs(setup.from, ctx.config.platform)
     if (!typed) throw new AppError('forbidden', `Enter the setup code. It is ${where}.`)
-    wrongSetupCodes.recordFailure()
+    wrongSetupCodes.record()
     throw new AppError('forbidden', `That setup code is not right. Copy it again from ${where}.`)
   }
 
@@ -140,7 +140,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setup:
     const { email, password } = parseBody(credentials, request.body)
     checkNotPaused(wrongPasswords, reply, 'Sign-in')
     if (!(await checkLogin(ctx.db, email, password))) {
-      wrongPasswords.recordFailure()
+      wrongPasswords.record()
       throw new AppError('unauthorized', 'That email and password do not match')
     }
     await startSession(request, reply)
@@ -169,7 +169,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, setup:
         await changePassword(ctx.db, currentPassword, newPassword)
       } catch (error) {
         if (error instanceof AppError && error.code === 'wrong_password') {
-          wrongPasswords.recordFailure()
+          wrongPasswords.record()
         }
         throw error
       }

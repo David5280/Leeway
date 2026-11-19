@@ -51,6 +51,8 @@ export default defineConfig({
       // No email provider, whatever the shell has set: the tests never send real email.
       RESEND_API_KEY: '',
       MAIL_FROM: '',
+      // No Anthropic key either: no test may reach a model, so paystub reads are stood in for.
+      ANTHROPIC_API_KEY: '',
       SETUP_CODE,
     },
   },

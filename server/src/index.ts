@@ -2,6 +2,7 @@
 // banks and sends the weekly email.
 
 import { AnthropicSummaryWriter } from './ai/anthropic.js'
+import { AnthropicDocumentReader } from './ai/anthropicDocuments.js'
 import { PlaidProvider } from './bank/plaid.js'
 import { ConfigError, loadConfig, type Config } from './config.js'
 import type { AppContext } from './context.js'
@@ -10,6 +11,7 @@ import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { addSummaryWidget } from './domain/dashboardUpgrade.js'
 import { getOwner } from './domain/owner.js'
+import { PaystubReader } from './domain/paystubs/reader.js'
 import { getSettings } from './domain/settings.js'
 import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
 import { syncAll } from './domain/sync.js'
@@ -50,6 +52,9 @@ const ctx: AppContext = {
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
   writer: config.anthropic ? new AnthropicSummaryWriter(config.anthropic) : null,
+  paystubs: config.anthropic
+    ? new PaystubReader(new AnthropicDocumentReader(config.anthropic))
+    : null,
   mailer: config.mail ? new ResendSender(config.mail) : null,
   now: () => new Date(),
 }

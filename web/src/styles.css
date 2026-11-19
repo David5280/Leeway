@@ -667,6 +667,13 @@ select.input {
   color: var(--accent);
 }
 
+/* A figure to check closely: ink on the warning tint, edged in the warning color. */
+.badge.warn {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--ink);
+}
+
 /* A rule in a rules list: its number, what it matches over where matches
    go, then its buttons. When the row is too narrow for the text beside the
    buttons, they drop to a line of their own under it, at the right, so the
@@ -1207,6 +1214,75 @@ details.more summary {
 
 details.more[open] summary {
   margin-bottom: 10px;
+}
+
+/*
+ * Paystub import (paystub/): the review screen's figures sit two to a row
+ * where they fit and one to a row on a phone. Every control here is at
+ * least 44px tall, so each is easy to hit with a thumb.
+ */
+.paystub .btn,
+.paystub details.more summary,
+.paystub .check-row {
+  min-height: 44px;
+}
+
+.paystub details.more summary {
+  display: flex;
+  align-items: center;
+}
+
+/* The file input is hidden inside its button, so the button shows its focus. */
+.paystub label.btn:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.review-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.review-group legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.review-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 12px 16px;
+}
+
+.review-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* The line a figure came from can be long and unbroken, like a code; it wraps. */
+.review-figure small {
+  overflow-wrap: anywhere;
+}
+
+.check-row {
+  align-items: center;
+  gap: 10px;
+}
+
+.check-row input {
+  flex: none;
+  width: 22px;
+  height: 22px;
 }
 
 .steps {

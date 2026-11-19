@@ -1,11 +1,14 @@
 // The Retirement section of the Plan tab: what pensions and savings could pay
 // in retirement, the pensions behind it and the assumptions it rests on. All
-// worked out by rule on the server, with no AI; a pension always counts as
-// retirement saving.
+// worked out by rule on the server; a pension always counts as retirement
+// saving. Only a paystub import asks Claude, to read the file, and the owner
+// checks every figure it read.
 
 import { useAction } from '../../../api/hooks'
 import { LoadingOrError } from '../../../components/ui'
 import { AssumptionsCard } from './AssumptionsCard'
+import { PaystubCard } from './paystub/PaystubCard'
+import { pensionChoices } from './paystub/review'
 import { PensionsCard } from './PensionsCard'
 import { ProjectionCard } from './ProjectionCard'
 
@@ -16,6 +19,7 @@ export function RetirementSection() {
     <>
       <ProjectionCard view={view.data} />
       <PensionsCard view={view.data} />
+      <PaystubCard pensions={pensionChoices(view.data)} />
       <AssumptionsCard assumptions={view.data.plan.assumptions} />
     </>
   )

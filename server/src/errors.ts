@@ -12,6 +12,9 @@ export type ErrorCode =
   | 'mail_error'
   | 'wrong_password'
   | 'too_many_attempts'
+  | 'file_too_large'
+  | 'unsupported_file'
+  | 'reader_error'
 
 const STATUS: Record<ErrorCode, number> = {
   invalid_input: 400,
@@ -24,6 +27,9 @@ const STATUS: Record<ErrorCode, number> = {
   mail_error: 502,
   wrong_password: 400,
   too_many_attempts: 429,
+  file_too_large: 413,
+  unsupported_file: 415,
+  reader_error: 502,
 }
 
 export class AppError extends Error {

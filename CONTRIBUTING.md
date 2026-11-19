@@ -71,7 +71,8 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
 - **Lib** (`server/src/lib/`) is small, pure helpers with no knowledge of
   budgets: dates, time zones, money, periods, durations, schemas, crypto.
 - **Outside services** each sit behind an interface so tests use a fake:
-  banks in `bank/` (Plaid), the summary writer in `ai/` (Anthropic), email
+  banks in `bank/` (Plaid), the summary writer and the paystub reader in
+  `ai/` (Anthropic, behind `writer.ts` and `documents.ts`), email
   in `mail/` (Resend). `context.ts` hands them to every action, as `null`
   when not configured.
 - **Errors** meant for the caller are `AppError`s (`errors.ts`) with a code
@@ -137,6 +138,9 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   and inserts bank data, `actionCaller.ts` calls actions the way the app and
   MCP do, `fakeBank.ts` stands in for Plaid, and `fixtures/` holds shared
   data. HTTP tests build the app with `buildApp` and send it requests.
+  Nothing calls a live model: the Anthropic classes take a fake client, and
+  `fixtures/paystub.ts` has a fake document reader that records each file
+  it is given, so tests check exactly what would leave the server.
 - `web/src/`: tests sit next to what they test. `test/fake.tsx` answers
   actions from a fake server and renders a screen signed in; tests find
   things by role and label, as a person would.
@@ -179,6 +183,10 @@ summary switch, the weekly email settings, an assistant connecting through
 the consent screen, and a phone-sized screen.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
+The test server runs with no Anthropic key, so no browser test can reach a
+model. The paystub specs stand in for the reader at the network
+(`e2e/paystub.ts` answers the upload and tells `get_paystub` the server can
+read); saving and everything after it runs for real.
 
 The **phone layout guard** (`layout-guard.phone.spec.ts`) opens every screen,
 and the forms people open on them (`guarded-screens.ts`), on each phone in

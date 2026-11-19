@@ -24,7 +24,10 @@ function fakeClient(response: { stop_reason: string; parsed_output: unknown }) {
 const writerWith = (response: { stop_reason: string; parsed_output: unknown }) => {
   const { client, requests } = fakeClient(response)
   return {
-    writer: new AnthropicSummaryWriter({ apiKey: 'test', model: 'claude-opus-5-5' }, client),
+    writer: new AnthropicSummaryWriter(
+      { apiKey: 'test', model: 'claude-opus-5-5', paystubModel: 'claude-haiku-5-5' },
+      client,
+    ),
     requests,
   }
 }
@@ -91,8 +94,12 @@ describe('AnthropicSummaryWriter', () => {
   })
 
   it('builds a real SDK client when none is given', () => {
-    expect(new AnthropicSummaryWriter({ apiKey: 'test', model: 'claude-opus-5-5' }).name).toBe(
-      'Claude',
-    )
+    expect(
+      new AnthropicSummaryWriter({
+        apiKey: 'test',
+        model: 'claude-opus-5-5',
+        paystubModel: 'claude-haiku-5-5',
+      }).name,
+    ).toBe('Claude')
   })
 })
