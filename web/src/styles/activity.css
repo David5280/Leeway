@@ -400,3 +400,26 @@ textarea.input.sheet-note {
     padding-right: calc(16px + var(--sar));
   }
 }
+
+/* Rules ------------------------------------------------------------------ */
+
+/* A rule's number, what it matches over the category it files to, and its
+   buttons. The text column takes what is left and wraps, so on a phone the
+   words never run under the category or the buttons. */
+.rule-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+
+.rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rule-actions {
+  display: flex;
+  gap: 6px;
+}

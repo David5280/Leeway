@@ -65,3 +65,56 @@ export function shortTargets(page: Page, root: string): Promise<string[]> {
     { root, tap: TAP_PX },
   )
 }
+
+/**
+ * Every pair of words under `root` drawn on top of each other, as "A / B",
+ * so a failure says what ran into what. Each run of text is measured where
+ * the browser actually drew it, line by line, and only as far as it shows
+ * (a name cut off with "…" ends where it is cut), so it covers any layout.
+ */
+export function textOverlaps(page: Page, root: string): Promise<string[]> {
+  return page.evaluate((root) => {
+    /** The box text is cut off at, as a name ending in "…" is: its nearest clipping ancestor. */
+    const clipOf = (element: Element | null): DOMRect | null => {
+      for (let at = element; at; at = at.parentElement) {
+        if (getComputedStyle(at).overflowX !== 'visible') return at.getBoundingClientRect()
+      }
+      return null
+    }
+    /** The part of a box inside another; empty when they do not meet. */
+    const within = (box: DOMRect, clip: DOMRect) => {
+      const left = Math.max(box.left, clip.left)
+      const top = Math.max(box.top, clip.top)
+      const right = Math.min(box.right, clip.right)
+      const bottom = Math.min(box.bottom, clip.bottom)
+      return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top))
+    }
+    const walker = document.createTreeWalker(document.querySelector(root)!, NodeFilter.SHOW_TEXT)
+    const runs: { text: string; boxes: DOMRect[] }[] = []
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent!.trim()
+      if (!text) continue
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const clip = clipOf(node.parentElement!)
+      const boxes = [...range.getClientRects()]
+        .map((box) => (clip ? within(box, clip) : box))
+        .filter((box) => box.width > 0 && box.height > 0)
+      if (boxes.length) runs.push({ text, boxes })
+    }
+    // Half a pixel either way is rounding, not an overlap.
+    const meet = (a: DOMRect, b: DOMRect) =>
+      a.left < b.right - 0.5 &&
+      b.left < a.right - 0.5 &&
+      a.top < b.bottom - 0.5 &&
+      b.top < a.bottom - 0.5
+    const problems: string[] = []
+    runs.forEach((run, index) => {
+      for (const other of runs.slice(index + 1)) {
+        if (run.boxes.some((box) => other.boxes.some((theirs) => meet(box, theirs))))
+          problems.push(`${run.text} / ${other.text}`)
+      }
+    })
+    return problems
+  }, root)
+}

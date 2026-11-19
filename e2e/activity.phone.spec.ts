@@ -1,11 +1,19 @@
-// The Transactions list on a phone, upright and sideways: rows never overlap
-// each other or their day headers, nothing in a row is cut off or runs into
-// the amount, a transaction's sheet stays clear of the notch, and everything
-// pressed in the filters and the sheet is at least a finger (--tap) tall.
+// The Transactions screen on a phone, upright and sideways: rows never
+// overlap each other or their day headers, nothing in a row is cut off or
+// runs into the amount, no words anywhere on the screen (rules included) are
+// drawn over others, a transaction's sheet stays clear of the notch, and
+// everything pressed in the filters and the sheet is a finger (--tap) tall.
 
 import { expect, test, type Page } from '@playwright/test'
 import { addAccount, addSpending, removeAccount } from './manual'
-import { overflow, shortTargets, simulateInsets, SIDEWAYS_INSETS, UPRIGHT_INSETS } from './phone'
+import {
+  overflow,
+  shortTargets,
+  simulateInsets,
+  SIDEWAYS_INSETS,
+  textOverlaps,
+  UPRIGHT_INSETS,
+} from './phone'
 
 /** An iPhone's 390 by 844 screen, upright, and the same turned sideways. */
 const UPRIGHT = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
@@ -61,16 +69,43 @@ function rowProblems(page: Page): Promise<string[]> {
   })
 }
 
+/** Rules with long words, the kind that once ran under their category on a phone. */
+const RULES = [
+  { field: 'merchant', pattern: 'adobe creative cloud subscription' },
+  { field: 'description', pattern: 'apple.com/bill' },
+  { field: 'merchant', pattern: 'colorado department of revenue motor vehicle' },
+]
+
+/** Calls one of Leeway's actions as the signed-in owner. */
+async function action<T>(page: Page, name: string, input: object = {}): Promise<T> {
+  const response = await page.request.post(`/api/actions/${name}`, { data: input })
+  expect(response.ok(), name).toBe(true)
+  return ((await response.json()) as { result: T }).result
+}
+
 test.describe('the Transactions list on a phone', () => {
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage()
     await addAccount(page, { name: ACCOUNT, balance: '2000' })
     for (const spending of SPENDING) await addSpending(page, { account: ACCOUNT, ...spending })
+    const categories = await action<{ id: string; name: string }[]>(page, 'list_categories')
+    const groceries = categories.find((category) => category.name === 'Groceries')!
+    for (const rule of RULES) {
+      await action(page, 'create_rule', {
+        ...rule,
+        matchType: 'contains',
+        categoryId: groceries.id,
+      })
+    }
     await page.close()
   })
 
   test.afterAll(async ({ browser }) => {
     const page = await browser.newPage()
+    const rules = await action<{ id: string; pattern: string }[]>(page, 'list_rules')
+    for (const rule of rules.filter((r) => RULES.some((mine) => mine.pattern === r.pattern))) {
+      await action(page, 'delete_rule', { id: rule.id })
+    }
     await removeAccount(page, ACCOUNT)
     await page.close()
   })
@@ -87,6 +122,14 @@ test.describe('the Transactions list on a phone', () => {
         await simulateInsets(page, insets)
         await expect(page.getByRole('button', { name: /^Snooze, spent/ })).toBeVisible()
         expect(await rowProblems(page)).toEqual([])
+        expect(await overflow(page)).toBeLessThanOrEqual(0)
+      })
+
+      test('nothing on the screen runs into anything else, rules included', async ({ page }) => {
+        await page.goto('/transactions')
+        await simulateInsets(page, insets)
+        await expect(page.getByText(RULES[0]!.pattern, { exact: false })).toBeVisible()
+        expect(await textOverlaps(page, '.act-page')).toEqual([])
         expect(await overflow(page)).toBeLessThanOrEqual(0)
       })
 
