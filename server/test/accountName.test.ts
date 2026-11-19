@@ -489,11 +489,35 @@ describe('distinctAccountNames', () => {
       ]).get('this')
     // Tidied out where it can be.
     expect(named('LINKED ACCT 850', '5850')).toBe('Chase Linked')
-    expect(named('LINKED X 89', '389')).toBe('Chase Linked')
+    expect(named('LINKED ...(850)', '5850')).toBe('Chase Linked')
     expect(named('SAVINGS ENDING IN 89', '389')).toBe('Chase Savings')
-    // Split up, it is left to the guarantee, which reads it whole.
+    // A spaced x or a hyphen may be part of a name, so these are left to the guarantee.
+    expect(named('LINKED X 89', '389')).toBe('Chase Savings')
+    expect(named('CHECKING - 863', '8863')).toBe('Chase Savings')
+    expect(named('CHECKING-863', '8863')).toBe('Chase Savings')
+    expect(named('LINKED ...⑻⑼', '889')).toBe('Chase Savings')
+    // Split up, it is read whole.
     expect(named('LINKED X 8 9', '389')).toBe('Chase Savings')
     expect(named('LINKED ACCT 85 0', '5850')).toBe('Chase Savings')
+  })
+
+  it("keeps a hyphenated name and a product's x beside another account", () => {
+    const named = (bankName: string, otherMask: string) =>
+      distinctAccountNames([
+        account('other', { mask: otherMask }),
+        account('this', { bankName, mask: '9921', subtype: 'credit card', type: 'credit' }),
+      ]).get('this')
+    expect(named('1-2 YEAR CD', '4412')).toBe('Chase 1-2 Year CD')
+    expect(named('7-ELEVEN CARD', '4477')).toBe('Chase 7-ELEVEN Card')
+    expect(named('VENTURE X 2025', '4417')).toBe('Chase Venture X 2025')
+    expect(named('BUSINESS X 10', '4417')).toBe('Chase Business X 10')
+  })
+
+  it('trims a number after ACCOUNT, as the price of never showing a mask', () => {
+    // 12 is no mask here, but a number marked as an account's might be another's.
+    expect(accountDisplayName(parts({ bankName: 'SAVINGS ACCOUNT 12', subtype: 'savings' }))).toBe(
+      'Chase Savings',
+    )
   })
 
   it("never shows another account's mask of 52 marked with a #", () => {
