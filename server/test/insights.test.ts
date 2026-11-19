@@ -185,8 +185,8 @@ describe('insights', () => {
   })
 
   it('adds up a merchant’s stores as one, named as everywhere else, the biggest first', async () => {
-    await spend('2026-11-02', 'STARBUCKS STORE 12345 DENVER CO', 500)
-    await spend('2026-11-03', 'STARBUCKS STORE 67890 AURORA CO', 700)
+    await spend('2026-11-02', 'STARBUCKS #12345 DENVER CO', 500)
+    await spend('2026-11-03', 'STARBUCKS #67890 AURORA CO', 700)
     await spend('2026-11-04', 'SQ *BLUE BOTTLE #12', 1200)
     await spend('2026-11-05', 'SQ *BLUE BOTTLE #12', 400)
     await spend('2026-11-05', 'PEETS COFFEE #77', 1200)
@@ -200,6 +200,16 @@ describe('insights', () => {
       { merchant: 'Blue Bottle', spentCents: 1600, count: 2 },
       { merchant: 'Peets Coffee', spentCents: 1200, count: 1 },
       { merchant: 'Starbucks', spentCents: 1200, count: 2 },
+    ])
+  })
+
+  it('leaves out lines with no readable merchant, rather than add them up as one', async () => {
+    await spend('2026-11-02', 'XXXXXX4417 11/18', 90000)
+    await spend('2026-11-03', '123456789', 80000)
+    await spend('2026-11-04', 'CORNER STORE', 700)
+    await recategorize()
+    expect(await call('top_merchants')).toEqual([
+      { merchant: 'Corner Store', spentCents: 700, count: 1 },
     ])
   })
 

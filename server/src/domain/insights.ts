@@ -18,6 +18,7 @@ import { accountMasks } from './accounts.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { spendingSql } from './counted.js'
+import { GENERIC_NAME } from './merchantName.js'
 import { periodConfig, type Settings } from './settings.js'
 import { merchantDisplayName } from './transactionName.js'
 
@@ -187,8 +188,10 @@ export interface MerchantTotal {
 /**
  * Where the money went in a period, by merchant, biggest first. Refunds count
  * against a merchant. Merchants are named as everywhere else (see
- * transactionName.ts), so "STARBUCKS STORE 123" and "STARBUCKS STORE 456"
- * add up as one Starbucks.
+ * transactionName.ts), so "STARBUCKS #123" and "STARBUCKS #456" add up as one
+ * Starbucks. Lines with nothing readable in them are left out: under their
+ * shared "Bank transaction" they would add up unrelated spending as if it
+ * were one merchant.
  */
 export async function topMerchants(
   db: Db,
@@ -220,6 +223,7 @@ export async function topMerchants(
     total.count += row.count
     byMerchant.set(merchant, total)
   }
+  byMerchant.delete(GENERIC_NAME)
   return [...byMerchant.values()]
     .filter((total) => total.spentCents > 0)
     .sort((a, b) => b.spentCents - a.spentCents || a.merchant.localeCompare(b.merchant))
