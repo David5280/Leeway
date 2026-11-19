@@ -167,6 +167,23 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('CARD X2025', '9921')).toBe('CARD')
   })
 
+  it('keeps the number after an abbreviation, whatever the mask', () => {
+    const names = [
+      'SHARE CERT. 12 MO',
+      'IRA CERT. 18 MONTH',
+      'MONEY MKT. 30 DAY',
+      'SAV. 529 PLAN',
+      'St. 10 Club',
+      'U.S. (12 MONTH) CD',
+    ]
+    for (const name of names) {
+      for (const mask of [null, '9921']) expect(withoutAccountNumber(name, mask)).toBe(name)
+    }
+    // Touching the digits, a dot marks them: "CERT.12" or ".417".
+    expect(withoutAccountNumber('SHARE CERT.12', '9921')).toBe('SHARE CERT')
+    expect(withoutAccountNumber('CHECKING .417', '9921')).toBe('CHECKING')
+  })
+
   it('reads a hyphen as a word joiner, not a mark', () => {
     expect(withoutAccountNumber('1-2 YEAR CD', '9921')).toBe('1-2 YEAR CD')
     expect(withoutAccountNumber('7-ELEVEN CARD', '9921')).toBe('7-ELEVEN CARD')
@@ -418,6 +435,12 @@ describe('carriesAnotherMask', () => {
     expect(carriesAnotherMask('Linked ...(850)', '5850')).toBe(true)
     expect(carriesAnotherMask('Linked # [850]', '5850')).toBe(true)
     expect(carriesAnotherMask('Linked ...⑻⑼', '889')).toBe(true)
+  })
+
+  it('finds its end after one dot, touching or spaced', () => {
+    expect(carriesAnotherMask('Checking .417', '4417')).toBe(true)
+    expect(carriesAnotherMask('Checking . 417', '4417')).toBe(true)
+    expect(carriesAnotherMask('Checking 3.17', '4417')).toBe(false)
   })
 
   it('finds its end after a hyphen, but not one that follows a digit', () => {

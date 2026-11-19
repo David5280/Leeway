@@ -55,14 +55,16 @@ const MARK_GAP = String.raw`[\s(\[]*$`
 
 /**
  * What comes before a run of digits when it plainly marks the run as an
- * account number: dots, a star or a "#" not after a digit ("...", "# (", but
- * not the "3." of "3.25"), an x glued on ("X417", but not the X of "MAX" or
- * "12X18"), two x's or more ("XXXX 89"), or a word like "ACCT", "NO." or
- * "ENDING IN".
+ * account number: two dots or more, an ellipsis, a star or a "#" not after a
+ * digit ("...", "# (", but not the "3." of "3.25"), one dot touching the
+ * digits (".417" or "CERT.12", but not "CERT. 12", an abbreviation), an x
+ * glued on ("X417", but not the X of "MAX" or "12X18"), two x's or more
+ * ("XXXX 89"), or a word like "ACCT", "NO." or "ENDING IN".
  */
 const PLAIN_MARK = new RegExp(
   [
-    String.raw`(?:^|\P{N})[*•·.…#]+${MARK_GAP}`,
+    String.raw`(?:^|\P{N})(?:[*•·…#]+|\.{2,})${MARK_GAP}`,
+    String.raw`(?:^|\P{N})\.$`,
     String.raw`(?:^|[^\p{L}\p{N}])x[(\[]*$`,
     String.raw`(?:^|[^\p{L}\p{N}])xx+${MARK_GAP}`,
     String.raw`(?:^|\P{L})(?:${MARKING_WORDS})[.:]?${MARK_GAP}`,
@@ -73,11 +75,15 @@ const PLAIN_MARK = new RegExp(
 /** One x with a space after it, "X 89", which may as well be a product's name, "VENTURE X 2025". */
 const SPACED_X_MARK = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])x\s${MARK_GAP}`, 'iu')
 
-/** A hyphen not after a digit, "CHECKING-863", so "1-2 YEAR" is a range. */
-const HYPHEN_MARK = new RegExp(String.raw`(?:^|\D)-${MARK_GAP}`, 'u')
+/**
+ * Marks that join or end words as often as they mark a number: a hyphen not
+ * after a digit, "CHECKING-863" (so "1-2 YEAR" is a range), and one dot with
+ * a space or bracket after it, ". 417" (or "CERT. 12", an abbreviation).
+ */
+const LOOSE_MARK = new RegExp(String.raw`(?:^|\D)-${MARK_GAP}|(?:^|\P{N})\.[\s(\[]+$`, 'u')
 
 /** How what comes before a run of digits marks it as a number, if it does. */
-type NumberMark = 'plain' | 'spacedX' | 'hyphen'
+type NumberMark = 'plain' | 'spacedX' | 'loose'
 
 /** Words that lead up to an account number, as in "ENDING IN 4417" or "(ACCT 4417)". */
 const NUMBER_LEAD_INS = new Set(['account', 'acct', 'ending', 'in', 'no', 'num', 'number'])
@@ -375,12 +381,13 @@ function joinsAtX(joined: string, maskDigits: string, markedAsNumber: boolean): 
  * How what comes before a run marks it as a number. The guarantee counts
  * every mark. The tidying takes a run out after a plain mark only; after a
  * spaced x only when it is the mask or its end (see isNumber), and never
- * after a hyphen alone, which joins words as often as it marks.
+ * after a loose mark alone, a hyphen or a spaced dot, which join and end
+ * words as often as they mark.
  */
 function numberMark(before: string): NumberMark | null {
   if (PLAIN_MARK.test(before)) return 'plain'
   if (SPACED_X_MARK.test(before)) return 'spacedX'
-  if (HYPHEN_MARK.test(before)) return 'hyphen'
+  if (LOOSE_MARK.test(before)) return 'loose'
   return null
 }
 
