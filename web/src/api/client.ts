@@ -3,6 +3,7 @@
 
 import type { z } from 'zod'
 import type { ActionName, Actions } from '../../../server/src/actions/index.js'
+import type { PaystubRead } from '../../../server/src/domain/paystubs/reader.js'
 
 type ActionOf<N extends ActionName> = Extract<Actions, { name: N }>
 export type Input<N extends ActionName> = z.input<ActionOf<N>['input']>
@@ -52,15 +53,30 @@ export const UNREACHABLE =
 const PROXY_DOWN = new Set([502, 503, 504])
 
 /** Sends one request, turning an error reply into an ApiError and a lapsed session into sign-in. */
-export async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+export function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  return send<T>(path, {
+    method,
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+/**
+ * Sends a file as the whole request body, for the one route that takes a
+ * file. Its type is only a hint: the server tells the type from the bytes.
+ */
+export function upload<T>(path: string, file: Blob): Promise<T> {
+  return send<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  })
+}
+
+async function send<T>(path: string, init: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(path, {
-      method,
-      credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    response = await fetch(path, { ...init, credentials: 'same-origin' })
   } catch {
     // fetch only throws when no answer came at all: offline, or the server is down.
     throw new ApiError(0, 'unreachable', UNREACHABLE)
@@ -122,4 +138,11 @@ export const auth = {
   logout: () => request<void>('POST', '/api/auth/logout'),
   changePassword: (input: { currentPassword: string; newPassword: string }) =>
     request<void>('POST', '/api/auth/password', input),
+}
+
+/** Paystub import: reading a file, which sits outside the actions because it takes a file. */
+export const paystubs = {
+  /** The figures on a paystub, for the owner to review; nothing is saved. */
+  read: async (file: Blob) =>
+    (await upload<{ result: PaystubRead }>('/api/paystubs/read', file)).result,
 }

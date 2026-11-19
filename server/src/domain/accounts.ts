@@ -141,16 +141,36 @@ export async function createManualAccount(
   db: Db,
   input: z.infer<typeof manualAccountInputSchema>,
 ): Promise<Account> {
+  return insertManualAccount(db, { ...input, kind: null })
+}
+
+/** What a manual account is stored with, for adding one of any kind. */
+export interface ManualAccountRow {
+  name: string
+  type: AccountType
+  subtype: string | null
+  /** Null for an account whose balance the owner does not know, such as a pension. */
+  balanceCents: number | null
+  creditLimitCents: number | null
+  currency: string
+  /** The owner's pick of kind, or null to follow the automatic one. */
+  kind: AccountKind | null
+}
+
+/** Adds an account by hand: through create_account, or as a pension (retirement/pensionStore.ts). */
+export async function insertManualAccount(db: Db, row: ManualAccountRow): Promise<Account> {
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO accounts (name, type, subtype, balance_cents, credit_limit_cents, currency, balance_updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+    `INSERT INTO accounts (name, type, subtype, balance_cents, credit_limit_cents, currency,
+       kind, balance_updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING id`,
     [
-      input.name,
-      input.type,
-      input.subtype,
-      input.balanceCents,
-      input.creditLimitCents,
-      input.currency,
+      row.name,
+      row.type,
+      row.subtype,
+      row.balanceCents,
+      row.creditLimitCents,
+      row.currency,
+      row.kind,
     ],
   )
   return getAccount(db, rows[0]!.id)
@@ -176,11 +196,13 @@ export const accountPatchSchema = z
   })
   .partial()
 
+export type AccountPatch = z.infer<typeof accountPatchSchema>
+
 /**
  * Refuses a patch the account cannot take: bank-owned fields on a linked
  * account, or a kind that does not fit its type (a card marked as savings).
  */
-function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSchema>): void {
+function assertPatchFits(account: Account, patch: AccountPatch): void {
   const manualOnly = (['balanceCents', 'creditLimitCents', 'type', 'subtype'] as const).filter(
     (key) => patch[key] !== undefined,
   )
@@ -203,19 +225,12 @@ function assertPatchFits(account: Account, patch: z.infer<typeof accountPatchSch
  * type drops a pick that no longer fits it, such as savings on a loan, so the
  * old pick cannot come back later. Undefined leaves the stored pick as it is.
  */
-function kindToStore(
-  account: Account,
-  patch: z.infer<typeof accountPatchSchema>,
-): AccountKind | null | undefined {
+function kindToStore(account: Account, patch: AccountPatch): AccountKind | null | undefined {
   if (patch.kind !== undefined || !patch.type) return patch.kind
   return choiceThatFits(account.kindChoice, patch.type)
 }
 
-export async function updateAccount(
-  db: Db,
-  id: string,
-  patch: z.infer<typeof accountPatchSchema>,
-): Promise<Account> {
+export async function updateAccount(db: Db, id: string, patch: AccountPatch): Promise<Account> {
   const account = await getAccount(db, id)
   assertPatchFits(account, patch)
   const kind = kindToStore(account, patch)

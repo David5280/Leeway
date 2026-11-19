@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, CashFlow } from '../../api/client'
 import { failing } from '../../test/fake'
-import { account, cashFlow, debtPlans, planServer, renderPlan } from '../../test/planning'
+import {
+  account,
+  cashFlow,
+  debtPlans,
+  planServer,
+  renderPlan,
+  retirementOf,
+} from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -23,6 +30,7 @@ describe('Plan screen', () => {
       list_goals: () => [],
       list_accounts: () => [],
       get_net_worth: () => ({ assetsCents: 0, liabilitiesCents: 0, netWorthCents: 0, history: [] }),
+      project_retirement: () => retirementOf(),
     })
     renderPlan('/plan')
     const user = userEvent.setup()
@@ -36,6 +44,8 @@ describe('Plan screen', () => {
     expect(await screen.findByText(/No credit cards or loans/)).toBeVisible()
     await user.click(sections.getByRole('button', { name: 'Net worth' }))
     expect(await screen.findByRole('region', { name: 'Net worth over time' })).toBeVisible()
+    await user.click(sections.getByRole('button', { name: 'Retirement' }))
+    expect(await screen.findByRole('region', { name: 'Retirement projection' })).toBeVisible()
   })
 
   it('shows bills for an address it does not know', async () => {

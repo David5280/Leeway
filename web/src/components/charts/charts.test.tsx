@@ -1,7 +1,10 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addDays } from '../../lib/dates'
+import { money as format } from '../../lib/money'
 import { fakeServer, renderSignedIn } from '../../test/fake'
+import { range } from '../../../../server/src/domain/profile/rangeWords'
+import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
 import { LineChart } from './LineChart'
 import type { Pace } from './pace'
 import { PaceChart } from './PaceChart'
@@ -35,9 +38,10 @@ describe('on a phone', () => {
         <PeriodBars bars={bars} budgetCents={80_000} color="teal" label="Groceries" />
         <PaceChart pace={pace()} isCurrent />
         <LineChart points={history} label="Net worth" description="Rising." />
+        <BandChart points={band} label="Savings by age" description="Growing." />
       </>,
     )
-    expect(svgHeights()).toEqual(['200', '210', '210'])
+    expect(svgHeights()).toEqual(['200', '210', '210', '200'])
     expect(document.querySelector('svg.chart-svg')).toHaveAttribute('viewBox', '0 0 358 200')
   })
 })
@@ -214,5 +218,93 @@ describe('LineChart', () => {
     )
     expect(screen.getByRole('img')).toHaveTextContent('$10')
     expect(document.querySelector('.chart-line')).toBeNull()
+  })
+})
+
+/** Savings from 40 to 65 in three steps, spreading as the years go. */
+const band: BandPoint[] = [
+  { age: 40, low: 4_000_000, mid: 4_000_000, high: 4_000_000 },
+  { age: 50, low: 4_600_000, mid: 5_600_000, high: 6_700_000 },
+  { age: 65, low: 5_750_000, mid: 9_260_000, high: 14_780_000 },
+]
+
+const money = (cents: number) => format(cents, { currency: 'USD', locale: 'en-US' })
+
+describe('ageTicks', () => {
+  it('labels the first and last age with even whole steps between', () => {
+    expect(ageTicks(40, 65, 6)).toEqual([40, 45, 50, 55, 60, 65])
+    expect(ageTicks(40, 45, 10)).toEqual([40, 41, 42, 43, 44, 45])
+  })
+
+  it('drops the label before the last when the two would crowd', () => {
+    expect(ageTicks(40, 65, 5)).toEqual([40, 47, 54, 61, 65])
+    // Steps of 7 would put 68 three years from 71, so 68 goes.
+    expect(ageTicks(40, 71, 6)).toEqual([40, 47, 54, 61, 71])
+  })
+
+  it('labels a single age once, even with room for none', () => {
+    expect(ageTicks(65, 65, 6)).toEqual([65])
+    expect(ageTicks(40, 42, 0)).toEqual([40, 42])
+  })
+})
+
+describe('range, as the chart words its readout', () => {
+  it('gives a range, or one figure when the cases agree', () => {
+    expect(range({ low: 5_750_000, mid: 9_000_000, high: 14_780_000 }, money)).toBe(
+      '$57,500 to $147,800',
+    )
+    expect(range({ low: 4_000_000, mid: 4_000_000, high: 4_000_000 }, money)).toBe('$40,000')
+  })
+})
+
+describe('bandPath', () => {
+  it('runs along the high case and back along the low', () => {
+    expect(bandPath([0, 10, 20], [5, 4, 3], [6, 7, 8])).toBe('M0,5 L10,4 L20,3 L20,8 L10,7 L0,6 Z')
+  })
+})
+
+describe('BandChart', () => {
+  it('is one image named and described, with ages along the bottom', () => {
+    fakeServer({})
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
+    const chart = screen.getByRole('img', { name: 'Savings by age' })
+    expect(chart).toHaveAccessibleDescription('Growing.')
+    expect(chart).toHaveTextContent('40')
+    expect(chart).toHaveTextContent('65')
+    expect(document.querySelector('.chart-band')).toHaveAttribute('d', expect.stringMatching(/Z$/))
+  })
+
+  it('reads out the range and the middle case at the age under the pointer', () => {
+    fakeServer({})
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
+    point('last')
+    expect(readout()).toHaveTextContent('At 65$57,500 to $147,800Middle $92,600')
+    // Today's savings are known, so the cases agree and the readout gives one figure.
+    point('first')
+    expect(readout()).toHaveTextContent(/^At 40\$40,000$/)
+    fireEvent.pointerLeave(screen.getByTestId('chart-hit'))
+    expect(readout()).toBeNull()
+  })
+
+  it('gives every year to a screen reader as a table, with no pointer needed', () => {
+    fakeServer({})
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
+    const table = screen.getByRole('table', { name: 'Savings by age, each year' })
+    expect(table).toHaveClass('visually-hidden')
+    const rows = screen.getAllByRole('row').map((row) => row.textContent)
+    expect(rows).toEqual([
+      'AgeRangeMiddle case',
+      '40$40,000$40,000',
+      '50$46,000 to $67,000$56,000',
+      '65$57,500 to $147,800$92,600',
+    ])
+  })
+
+  it('draws a single age without failing', () => {
+    fakeServer({})
+    renderSignedIn(
+      <BandChart points={band.slice(0, 1)} label="Savings by age" description="Now." />,
+    )
+    expect(screen.getByRole('img', { name: 'Savings by age' })).toHaveTextContent('40')
   })
 })

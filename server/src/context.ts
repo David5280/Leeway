@@ -4,6 +4,7 @@ import type pg from 'pg'
 import type { Config } from './config.js'
 import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
+import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
 
 /**
@@ -18,6 +19,8 @@ export interface AppContext {
   bank: BankProvider | null
   /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
   writer: SummaryWriter | null
+  /** Null until ANTHROPIC_API_KEY is set; paystub import is then hidden. */
+  paystubs: PaystubReader | null
   /** Null until RESEND_API_KEY and MAIL_FROM are set; the weekly email is then unavailable. */
   mailer: EmailSender | null
   now: () => Date

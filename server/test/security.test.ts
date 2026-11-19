@@ -104,19 +104,24 @@ describe('config', () => {
     expect(loadConfig({ ...base, DATABASE_SSL: 'false' }).databaseSsl).toBe(false)
   })
 
-  it('turns the Claude summary writer on with a key, on the default model unless one is named', () => {
+  it('turns Claude on with a key, on the default models unless one is named', () => {
     expect(loadConfig(base).anthropic).toBeNull()
-    // The small model is the default on purpose: it keeps the summary to cents a month.
+    // The small model is the default on purpose: it keeps each use to fractions of a cent.
     expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({
       apiKey: 'key',
       model: 'claude-haiku-5-5',
+      paystubModel: 'claude-haiku-5-5',
     })
     const named = loadConfig({
       ...base,
       ANTHROPIC_API_KEY: 'key',
       SUMMARY_MODEL: 'claude-sonnet-5-5',
+      PAYSTUB_MODEL: 'claude-opus-5-5',
     })
-    expect(named.anthropic?.model).toBe('claude-sonnet-5-5')
+    expect(named.anthropic).toMatchObject({
+      model: 'claude-sonnet-5-5',
+      paystubModel: 'claude-opus-5-5',
+    })
   })
 
   it('turns email on only once both the Resend key and a sender are set', () => {

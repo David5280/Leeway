@@ -123,6 +123,18 @@ export function signedAmount(cents: number, options: MoneyOptions): string {
   return formatMoney(cents, options, { sign: 'transaction', precision: 'cents' })
 }
 
+/**
+ * Cents as a person types the amount into a field, to the cent and with no
+ * currency or grouping: 384500 is "3845.00", -5 is "-0.05". Worked out in
+ * whole cents, so it never rounds the way a float can.
+ */
+export function typedAmount(cents: number): string {
+  const size = Math.abs(Math.round(cents))
+  const units = Math.floor(size / 100)
+  const hundredths = String(size % 100).padStart(2, '0')
+  return `${cents < 0 && size > 0 ? '-' : ''}${units}.${hundredths}`
+}
+
 /** Money in the owner's currency, shortened: "$5K", "$12.5K", "$1.2M". */
 export function compactMoney(cents: number, options: MoneyOptions): string {
   return formatMoney(cents, options, { precision: 'compact' })

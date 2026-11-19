@@ -24,7 +24,10 @@ function fakeClient(response: { stop_reason: string; parsed_output: unknown }) {
 const writerWith = (response: { stop_reason: string; parsed_output: unknown }) => {
   const { client, requests } = fakeClient(response)
   return {
-    writer: new AnthropicSummaryWriter({ apiKey: 'test', model: 'claude-opus-5-5' }, client),
+    writer: new AnthropicSummaryWriter(
+      { apiKey: 'test', model: 'claude-opus-5-5', paystubModel: 'claude-haiku-5-5' },
+      client,
+    ),
     requests,
   }
 }
@@ -58,11 +61,13 @@ describe('AnthropicSummaryWriter', () => {
   })
 
   it('tells Claude never to say the person saves too little', () => {
-    // The bank never sees payroll saving such as a pension, so any such claim could be wrong.
-    expect(SYSTEM_PROMPT).toContain('never payroll deductions such as a pension or a 401(k)')
+    // The bank never sees payroll saving, and a pension is saving in itself, so any such claim could be wrong.
+    expect(SYSTEM_PROMPT).toContain('a pension counts only once the person enters it')
+    expect(SYSTEM_PROMPT).toContain('a pension is retirement saving in itself')
     expect(SYSTEM_PROMPT).toContain(
-      'never say or imply that the person saves too little or should save more',
+      'Never say or imply that the person saves too little or should save more',
     )
+    expect(SYSTEM_PROMPT).not.toContain('never payroll deductions such as a pension')
   })
 
   it('throws when Claude declines, so the dashboard falls back to Leeway’s words', async () => {
@@ -89,8 +94,12 @@ describe('AnthropicSummaryWriter', () => {
   })
 
   it('builds a real SDK client when none is given', () => {
-    expect(new AnthropicSummaryWriter({ apiKey: 'test', model: 'claude-opus-5-5' }).name).toBe(
-      'Claude',
-    )
+    expect(
+      new AnthropicSummaryWriter({
+        apiKey: 'test',
+        model: 'claude-opus-5-5',
+        paystubModel: 'claude-haiku-5-5',
+      }).name,
+    ).toBe('Claude')
   })
 })

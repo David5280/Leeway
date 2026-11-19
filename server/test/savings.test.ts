@@ -460,8 +460,8 @@ describe('the savings migration', () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 4_200 })
     await ctx.db.query('DELETE FROM balance_history')
 
-    // This one runs first, then any added after it.
-    expect((await migrate(ctx.db))[0]).toBe('013_savings.sql')
+    // Later migrations run after it; this one is the one under test.
+    expect(await migrate(ctx.db)).toContain('013_savings.sql')
     const { rows } = await ctx.db.query<{ cents: number; owners: boolean; utc: boolean }>(
       `SELECT balance_cents AS cents, day = (now() AT TIME ZONE $2)::date AS owners,
          day = (now() AT TIME ZONE 'UTC')::date AS utc
@@ -612,6 +612,7 @@ describe('the check-in', () => {
     })
     await setHistory(ira.accountId, [['2026-11-05', 4_800_000]])
     expect((await getCheckin(ctx.db, settings, now, '2026-11-19')).savings).toEqual({
+      hasSavingsAccounts: true,
       totalCents: 7_000_000,
       changeThisMonthCents: 200_000,
       changeSince: '2026-11-05',
@@ -619,6 +620,8 @@ describe('the check-in', () => {
       emergencyFundMonths: null,
       emergencyFundTargetMonths: null,
       bankSeenSavingsRatePercent: null,
+      pensionIncludedSavingsRatePercent: null,
+      pension: null,
     })
   })
 })

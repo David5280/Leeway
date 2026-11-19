@@ -132,6 +132,26 @@ describe('config export and import', () => {
     expect(await listRules(ctx.db)).toHaveLength(1)
   })
 
+  it('keeps the retirement assumptions on this install, out of the file both ways', async () => {
+    const retirement = { birthYear: 1990, targetMonthlyIncomeCents: 420_000 }
+    await saveSettings(ctx.db, mergeSettings(await getSettings(ctx.db), { retirement }))
+    const exported = await exportConfig(ctx.db)
+    expect(exported.settings).not.toHaveProperty('retirement')
+    expect(exported.settings).toHaveProperty('appearance')
+    // A file that carries them anyway, from someone else, sets none of them here.
+    await resetData(ctx.db)
+    const file = portableConfigSchema.parse({
+      app: 'leeway',
+      version: 1,
+      settings: { retirement: { birthYear: 1950, monthlyContributionCents: 99_900 } },
+    })
+    await importConfig(ctx.db, file, 'merge')
+    expect((await getSettings(ctx.db)).retirement).toMatchObject({
+      birthYear: null,
+      monthlyContributionCents: null,
+    })
+  })
+
   describe('essential categories', () => {
     it('go by name, so a pick survives a move to an install with other ids', async () => {
       const { coffee } = await seed()

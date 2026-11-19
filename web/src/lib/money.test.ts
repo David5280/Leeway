@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { compactMoney, currencySample, formatMoney, money, signedAmount, toneOf } from './money'
+import {
+  compactMoney,
+  currencySample,
+  formatMoney,
+  money,
+  signedAmount,
+  toneOf,
+  typedAmount,
+} from './money'
 
 const usd = { currency: 'USD', locale: 'en-US' }
 
@@ -67,5 +75,15 @@ describe('the shorthand formatters', () => {
   it('show how a locale writes money, with the currency’s own decimals', () => {
     expect(currencySample(usd)).toBe('$1,234.56')
     expect(currencySample({ currency: 'JPY', locale: 'en-US' })).toBe('¥1,235')
+  })
+})
+
+describe('typedAmount', () => {
+  it('writes cents as a person types them, to the cent, in whole-cent math', () => {
+    expect(typedAmount(384_500)).toBe('3845.00')
+    expect(typedAmount(1_005)).toBe('10.05')
+    expect(typedAmount(7)).toBe('0.07')
+    expect(typedAmount(0)).toBe('0.00')
+    expect(typedAmount(-5)).toBe('-0.05')
   })
 })

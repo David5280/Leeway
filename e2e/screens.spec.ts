@@ -14,6 +14,7 @@ const SCREENS = [
   { path: '/plan/goals', heading: 'Plan' },
   { path: '/plan/debts', heading: 'Plan' },
   { path: '/plan/net-worth', heading: 'Plan' },
+  { path: '/plan/retirement', heading: 'Plan' },
   { path: '/settings/appearance', heading: 'Settings' },
   { path: '/settings/budgeting', heading: 'Settings' },
   { path: '/settings/banks', heading: 'Settings' },

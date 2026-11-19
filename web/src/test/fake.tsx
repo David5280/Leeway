@@ -63,7 +63,9 @@ export function fakeServer(
   vi.stubGlobal(
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
-      const body = init?.body ? JSON.parse(init.body as string) : undefined
+      // JSON for actions; a file uploaded as the body is kept as it was sent.
+      const body =
+        typeof init?.body === 'string' ? JSON.parse(init.body) : (init?.body ?? undefined)
       calls.push({ path, body })
       if (routes[path]) return routes[path]()
       const action = path.match(/^\/api\/actions\/(.+)$/)?.[1]

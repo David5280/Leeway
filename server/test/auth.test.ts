@@ -163,7 +163,7 @@ describe('the setup code', { timeout: 30_000 }, () => {
   })
 
   it('pauses setup after many wrong codes from anywhere', async () => {
-    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxAttempts; i++) {
       expect((await setUp('WRNG-CODE-HERE', `198.51.100.${i}`)).statusCode).toBe(403)
     }
     const paused = await setUp(TEST_SETUP_CODE, '198.51.100.200')
@@ -187,7 +187,7 @@ describe('the setup code', { timeout: 30_000 }, () => {
   })
 
   it('counts wrong codes from the check toward the same pause', async () => {
-    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxAttempts; i++) {
       const wrong = await app.inject({
         method: 'POST',
         url: '/api/auth/setup-code',
@@ -392,7 +392,7 @@ describe('pausing sign-in after many wrong passwords', { timeout: 30_000 }, () =
     })
 
   async function guessFromManyAddresses(): Promise<void> {
-    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxAttempts; i++) {
       expect((await loginFrom(i, 'a wrong guess')).statusCode).toBe(401)
     }
   }
@@ -426,7 +426,7 @@ describe('pausing sign-in after many wrong passwords', { timeout: 30_000 }, () =
 
   it('counts wrong current passwords when changing it, so a stolen session cannot guess', async () => {
     const cookie = await signUp()
-    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxAttempts; i++) {
       const wrong = await app.inject({
         method: 'POST',
         url: '/api/auth/password',
@@ -449,7 +449,7 @@ describe('pausing sign-in after many wrong passwords', { timeout: 30_000 }, () =
 
   it('does not count a too-short new password as a wrong guess', async () => {
     const cookie = await signUp()
-    for (let i = 0; i < ACCOUNT_LIMIT.maxFailures; i++) {
+    for (let i = 0; i < ACCOUNT_LIMIT.maxAttempts; i++) {
       const tooShort = await app.inject({
         method: 'POST',
         url: '/api/auth/password',

@@ -4,10 +4,16 @@ import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
 import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
+import { retirementView } from '../../../server/src/domain/profile/views'
+import type { RetirementPatch } from '../../../server/src/domain/retirement/assumptions'
+import type { RetirementInput } from '../../../server/src/domain/retirement/plan'
+import { formatWholeCents } from '../../../server/src/lib/money'
 import { Route, Routes } from 'react-router-dom'
 import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '../api/client'
+import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
+import { retirementProfile } from './profile'
 
 export const TODAY = '2026-11-17'
 
@@ -148,4 +154,18 @@ export function renderPlan(path = '/plan') {
     </Routes>,
     { route: path },
   )
+}
+
+/** A retirement view as project_retirement returns it, from the server's own math and words. */
+export function retirementOf(
+  fields: Partial<RetirementInput> = {},
+  assumptions: RetirementPatch = {},
+): RetirementView {
+  const profile = retirementProfile(fields, assumptions)
+  const money = (cents: number) => formatWholeCents(cents, 'USD', 'en-US')
+  return {
+    asOf: TODAY,
+    whatIf: false,
+    ...retirementView(profile, { money, locale: 'en-US' }),
+  }
 }
