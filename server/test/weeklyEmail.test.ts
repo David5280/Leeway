@@ -9,6 +9,7 @@ import { MailError, type EmailMessage, type EmailSender } from '../src/mail/send
 import { agentTools } from '../src/mcp/server.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, insertBankAccount, resetData } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 /** A stand-in for Resend that keeps what it was given and can be made to fail. */
 class FakeMailer implements EmailSender {
@@ -338,7 +339,7 @@ describe('send_test_weekly_email', () => {
     await call('send_test_weekly_email')
     const [email] = mailer.sent
     expect(email!.text).toContain('Test Credit Card is overdrawn by $42.10.')
-    expect(`${email!.subject} ${email!.text} ${email!.html}`).not.toContain('4417')
+    expect(withoutUuids(`${email!.subject} ${email!.text} ${email!.html}`)).not.toContain('4417')
   })
 
   it('never puts a short mask in the email, even glued to the bank name', async () => {

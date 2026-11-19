@@ -76,7 +76,7 @@ export function TransactionRow({
         </span>
         <span className="small muted row-between">
           {tx.categorySource ? SOURCES[tx.categorySource] : 'not sorted yet'}
-          <button type="button" className="linkbtn small" onClick={onMakeRule}>
+          <button type="button" className="linkbtn small tap" onClick={onMakeRule}>
             Make a rule
           </button>
         </span>

@@ -123,7 +123,7 @@ export function Destination({
         </div>
       )}
       {chosen && !chosen.manual && (
-        <label className="row small">
+        <label className="check small">
           <input
             type="checkbox"
             checked={choices.skipBankDays}
@@ -133,7 +133,7 @@ export function Destination({
         </label>
       )}
       {repeats > 0 && (
-        <label className="row small">
+        <label className="check small">
           <input
             type="checkbox"
             checked={choices.keepRepeats}

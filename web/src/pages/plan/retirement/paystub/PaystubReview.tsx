@@ -262,7 +262,7 @@ export function PaystubReview({
           </label>
         )}
         {plans && (
-          <label className="row small check-row">
+          <label className="row small check check-row">
             <input
               type="checkbox"
               checked={contribution}

@@ -48,51 +48,56 @@ export function RulesList({
         const category = byId.get(rule.categoryId)
         const index = all.indexOf(rule)
         return (
-          <div key={rule.id} className="list-row">
+          <div key={rule.id} className="list-row rule-row">
             <span className="num small muted" style={{ width: 20 }}>
               {index + 1}
             </span>
-            <span className="grow small">
-              {describeRule(rule)}
-              {(rule.minAmountCents !== null || rule.maxAmountCents !== null) && (
-                <span className="muted"> (amount limited)</span>
+            {/* What it matches, and under it where matches go: two lines that fit any width. */}
+            <span className="grow stack-sm small rule-text">
+              <span>
+                {describeRule(rule)}
+                {(rule.minAmountCents !== null || rule.maxAmountCents !== null) && (
+                  <span className="muted"> (amount limited)</span>
+                )}
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <Dot color={category?.color} />
+                <span className="ellipsis">{category?.name ?? 'Unknown'}</span>
+              </span>
+            </span>
+            <span className="rule-actions">
+              {!categoryId && (
+                <>
+                  <button
+                    type="button"
+                    className="iconbtn"
+                    aria-label={`Move rule ${index + 1} up`}
+                    disabled={index === 0 || reorder.isPending}
+                    onClick={() => move(rule, -1)}
+                  >
+                    <Icon name="up" size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="iconbtn"
+                    aria-label={`Move rule ${index + 1} down`}
+                    disabled={index === all.length - 1 || reorder.isPending}
+                    onClick={() => move(rule, 1)}
+                  >
+                    <Icon name="down" size={16} />
+                  </button>
+                </>
               )}
+              <button
+                type="button"
+                className="iconbtn"
+                aria-label={`Delete rule ${index + 1}`}
+                disabled={remove.isPending}
+                onClick={() => remove.mutate({ id: rule.id })}
+              >
+                <Icon name="close" size={16} />
+              </button>
             </span>
-            <span className="row small" style={{ gap: 6 }}>
-              <Dot color={category?.color} />
-              {category?.name ?? 'Unknown'}
-            </span>
-            {!categoryId && (
-              <>
-                <button
-                  type="button"
-                  className="iconbtn"
-                  aria-label={`Move rule ${index + 1} up`}
-                  disabled={index === 0 || reorder.isPending}
-                  onClick={() => move(rule, -1)}
-                >
-                  <Icon name="up" size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="iconbtn"
-                  aria-label={`Move rule ${index + 1} down`}
-                  disabled={index === all.length - 1 || reorder.isPending}
-                  onClick={() => move(rule, 1)}
-                >
-                  <Icon name="down" size={16} />
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="iconbtn"
-              aria-label={`Delete rule ${index + 1}`}
-              disabled={remove.isPending}
-              onClick={() => remove.mutate({ id: rule.id })}
-            >
-              <Icon name="close" size={16} />
-            </button>
           </div>
         )
       })}
