@@ -327,8 +327,12 @@ button.list-row {
   cursor: pointer;
 }
 
-button.list-row:hover {
-  background: var(--surface-2);
+/* Hover looks only where there is a pointer: a touch screen keeps :hover on
+   whatever was tapped last, which painted a stuck row over its neighbours. */
+@media (hover: hover) {
+  button.list-row:hover {
+    background: var(--surface-2);
+  }
 }
 
 .dot {
@@ -394,8 +398,10 @@ button.list-row:hover {
   font-weight: 500;
 }
 
-.navlink:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .navlink:hover {
+    color: var(--ink);
+  }
 }
 
 .navlink.active {
@@ -491,8 +497,10 @@ button.list-row:hover {
   white-space: nowrap;
 }
 
-.btn:hover {
-  border-color: var(--muted);
+@media (hover: hover) {
+  .btn:hover {
+    border-color: var(--muted);
+  }
 }
 
 .btn:disabled {
@@ -512,8 +520,10 @@ button.list-row:hover {
   color: var(--muted);
 }
 
-.btn.ghost:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .btn.ghost:hover {
+    color: var(--ink);
+  }
 }
 
 .btn.danger {
@@ -980,8 +990,21 @@ button.chip {
   color: inherit;
 }
 
-.clickrow:hover {
+@media (hover: hover) {
+  .clickrow:hover {
+    background: var(--surface-2);
+  }
+}
+
+/* A finger's press shows too, for as long as the press lasts. */
+.clickrow:active {
   background: var(--surface-2);
+}
+
+/* A tight card's padding is narrower than a row's reach into it, so its rows
+   stay inside; reaching out, their press reached past the card's edges. */
+.card.tight > .clickrow {
+  margin: 0;
 }
 
 /* A list row that is also a link, like an account on the overview, stays one
@@ -1560,8 +1583,10 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.cat-row:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .cat-row:hover {
+    background: var(--surface-2);
+  }
 }
 
 .cat-name {
@@ -1662,8 +1687,10 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.budget-row .cat-name:hover .cat-label {
-  text-decoration: underline;
+@media (hover: hover) {
+  .budget-row .cat-name:hover .cat-label {
+    text-decoration: underline;
+  }
 }
 
 .cat-note {
@@ -1954,9 +1981,11 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.settings-link:hover {
-  color: var(--ink);
-  background: var(--surface-2);
+@media (hover: hover) {
+  .settings-link:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
 }
 
 .settings-link[aria-current='page'] {

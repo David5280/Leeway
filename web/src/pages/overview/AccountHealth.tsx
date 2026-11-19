@@ -5,6 +5,7 @@
 import { Link } from 'react-router-dom'
 import { useAction } from '../../api/hooks'
 import { AlertRows } from '../../components/AccountAlerts'
+import { Card } from '../../components/design/Card'
 
 /** Rows shown before "See all alerts", so the banner stays short. */
 export const BANNER_ROWS = 3
@@ -17,9 +18,10 @@ export function AccountHealth() {
   const urgent = list.some((alert) => alert.severity === 'urgent')
   const more = list.length - BANNER_ROWS
   return (
-    <section
-      aria-label="Account alerts"
-      className={`card tight ${urgent ? 'over-card' : 'warn-card'}`}
+    <Card
+      static="list"
+      label="Account alerts"
+      className={`tight ${urgent ? 'over-card' : 'warn-card'}`}
     >
       <AlertRows alerts={list.slice(0, BANNER_ROWS)} />
       <div className="row-between" style={{ padding: '4px 14px 8px' }}>
@@ -28,10 +30,11 @@ export function AccountHealth() {
             ? `${more} more ${more === 1 ? 'alert' : 'alerts'}`
             : 'From your last bank sync'}
         </span>
-        <Link to="/alerts" className="linkbtn small">
+        {/* A real 44px box, so its tap never reaches up into the last alert. */}
+        <Link to="/alerts" className="linkbtn small tap">
           See all alerts
         </Link>
       </div>
-    </section>
+    </Card>
   )
 }

@@ -119,10 +119,15 @@ export function shownBox(el: Element): Box {
   return intersect(toBox(el.getBoundingClientRect()), clipArea(el))
 }
 
-/** The fixed bar (like the tab bar) an element is inside, which floats over the page. */
+/**
+ * The bar an element is inside that floats over the page as it scrolls: a
+ * fixed one (the tab bar) or a sticky one (a list's day heading, which the
+ * rows below it pass under on their way up).
+ */
 export function layerOf(el: Element): Element | null {
   for (let node: Element | null = el; node; node = node.parentElement) {
-    if (getComputedStyle(node).position === 'fixed') return node
+    const { position } = getComputedStyle(node)
+    if (position === 'fixed' || position === 'sticky') return node
   }
   return null
 }

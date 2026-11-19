@@ -27,9 +27,17 @@ async function settle(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
   await page.waitForLoadState('networkidle')
   await expect(page.locator('.spinner')).toHaveCount(0)
+  // Hero figures count up to their amount; measure them at rest.
+  await expect(page.locator('.count-up')).toHaveCount(0)
   // Fonts swap in late, and charts measure their width a frame after they mount.
+  // Cards rise in and rings fill; boxes are measured once those have finished
+  // (an endless animation, like a skeleton's shimmer, is never waited for).
   await page.evaluate(async () => {
     await document.fonts.ready
+    const finite = document
+      .getAnimations()
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+    await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)))
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
   })
 }

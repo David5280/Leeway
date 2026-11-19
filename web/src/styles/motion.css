@@ -71,10 +71,16 @@
     transition: none;
   }
 
-  .card.card-tap:hover,
   .card.card-tap:has(.card-press:active),
   .act-row:active,
   .drill-item-link:active {
+    transform: none;
+  }
+}
+
+/* The hover lift is undone apart, under the same guard it is given under. */
+@media (prefers-reduced-motion: reduce) and (hover: hover) {
+  .card.card-tap:hover {
     transform: none;
   }
 }

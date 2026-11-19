@@ -119,8 +119,9 @@ body {
 
 /* The phone's tab bar: frosted, lifted off the page, the current tab lit. */
 @media (max-width: 820px) {
+  /* Mostly opaque, so the words passing under it never compete with its labels. */
   .tabbar {
-    background: color-mix(in srgb, var(--surface) 86%, transparent);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
     backdrop-filter: saturate(160%) blur(18px);
     -webkit-backdrop-filter: saturate(160%) blur(18px);
     box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, 0.35);

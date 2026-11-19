@@ -115,7 +115,9 @@
   color: color-mix(in srgb, var(--t) 80%, var(--ink));
   font: var(--weight-strong) var(--text-sm) var(--font-num);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  /* On the narrowest phones its words wrap inside the chip rather than spill. */
+  max-width: 100%;
+  padding-block: 3px;
 }
 
 .usual-good {

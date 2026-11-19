@@ -11,13 +11,18 @@
 //   safe-area      something drawn under the status bar, the notch or the home
 //                  indicator that nothing opaque (like the status bar backdrop)
 //                  covers
+//   spill          a control reaching past the edge of the card or other
+//                  surface it sits on, so its press paints outside it
+//   sticky-hover   a hover look outside @media (hover: hover), which a tap
+//                  leaves stuck on a touch screen
 //
 // missedTaps, apart from these, finds controls too small for a finger.
 //
 // The checks measure what the browser drew (boxes, text line boxes, what sits
 // on top at a point), never class names, so they hold for any screen and any
-// theme. They live in layout/, one file per check, and run inside the page:
-// this module bundles them into one script and has the page run it.
+// theme; sticky-hover alone reads the style rules the page loaded. They live
+// in layout/, one file per check, and run inside the page: this module
+// bundles them into one script and has the page run it.
 
 import { fileURLToPath } from 'node:url'
 import { buildSync } from 'esbuild'
