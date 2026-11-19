@@ -52,10 +52,9 @@ function EmailSettings({ view }: { view: WeeklyEmailView }) {
         />
       </Setting>
       <Setting label="Day and time" hint={`In your time zone, ${view.timeZone}`}>
-        <div className="row">
+        <div className="row setting-lists">
           <select
             className="input"
-            style={{ width: 'auto' }}
             aria-label="Day"
             value={shown.weekday}
             onChange={(e) => update.mutate({ weekday: Number(e.target.value) })}
@@ -68,7 +67,6 @@ function EmailSettings({ view }: { view: WeeklyEmailView }) {
           </select>
           <select
             className="input"
-            style={{ width: 'auto' }}
             aria-label="Hour"
             value={shown.hour}
             onChange={(e) => update.mutate({ hour: Number(e.target.value) })}
@@ -92,8 +90,7 @@ function EmailSettings({ view }: { view: WeeklyEmailView }) {
       )}
       {view.available && !view.linksTo && (
         <span className="small muted">
-          Set <code className="code">PUBLIC_URL</code> on the server to give the email a button that
-          opens Leeway.
+          Set <code>PUBLIC_URL</code> on the server to give the email a button that opens Leeway.
         </span>
       )}
       <TestEmail available={view.available} />
@@ -105,10 +102,10 @@ function EmailSettings({ view }: { view: WeeklyEmailView }) {
 function SetupNotice() {
   return (
     <p className="notice">
-      To send email, add <code className="code">RESEND_API_KEY</code> and{' '}
-      <code className="code">MAIL_FROM</code> to your server&apos;s variables (on Railway: the
-      Leeway service, then Variables). Make the key at resend.com, and verify the domain of the
-      MAIL_FROM address there. Nothing is sent until you turn the email on here.
+      To send email, add <code>RESEND_API_KEY</code> and <code>MAIL_FROM</code> to your
+      server&apos;s variables (on Railway: the Leeway service, then Variables). Make the key at
+      resend.com, and verify the domain of the MAIL_FROM address there. Nothing is sent until you
+      turn the email on here.
     </p>
   )
 }

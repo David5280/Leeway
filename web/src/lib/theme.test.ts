@@ -34,12 +34,22 @@ describe('theme', () => {
   })
 
   it('sets money in each font with tight commas and points ahead of its monospaced digits', () => {
-    for (const font of Object.values(FONTS))
-      expect(font.num.startsWith(`${NUMBER_MARKS}, `)).toBe(true)
     // The face is declared in styles.css under this very name.
     expect(NUMBER_MARKS).toBe("'Leeway Number Marks'")
-    expect(themeVariables({ ...base, font: 'ibm-plex' }, true).vars['--font-num']).toBe(
-      `${NUMBER_MARKS}, 'IBM Plex Mono', ui-monospace, monospace`,
+    for (const id of Object.keys(FONTS) as (keyof typeof FONTS)[]) {
+      const { vars } = themeVariables({ ...base, font: id }, true)
+      expect(vars['--font-num']).toBe(`${NUMBER_MARKS}, ${FONTS[id].mono}`)
+    }
+  })
+
+  it('keeps code on the plain monospaced font, every character the same width', () => {
+    for (const id of Object.keys(FONTS) as (keyof typeof FONTS)[]) {
+      const { vars } = themeVariables({ ...base, font: id }, true)
+      expect(vars['--font-mono']).toBe(FONTS[id].mono)
+      expect(vars['--font-mono']).not.toContain(NUMBER_MARKS)
+    }
+    expect(themeVariables({ ...base, font: 'ibm-plex' }, true).vars['--font-mono']).toBe(
+      "'IBM Plex Mono', ui-monospace, monospace",
     )
   })
 

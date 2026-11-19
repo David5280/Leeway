@@ -2,9 +2,10 @@
    lib/theme.ts, so every theme and customization flows through here. */
 
 /* Leeway Number Marks: the comma, the point and the spaces that group digits,
-   from Geist, a proportional font. Every number font lists it first (see
-   NUMBER_MARKS in lib/theme.ts), so money keeps its monospaced digits without
-   a digit-wide gap around each mark. One face per weight numbers are set in. */
+   from Geist, a proportional font. The money font, --font-num, lists it first
+   (see NUMBER_MARKS in lib/theme.ts), so money keeps its monospaced digits
+   without a digit-wide gap around each mark. Code uses --font-mono, without
+   it. One face per weight numbers are set in. */
 
 @font-face {
   font-family: 'Leeway Number Marks';
@@ -40,7 +41,9 @@
 
 :root {
   --font-ui: 'Geist', system-ui, sans-serif;
-  --font-num: 'Leeway Number Marks', 'Geist Mono', ui-monospace, monospace;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  /* Money: the monospaced font, with Leeway Number Marks' tight commas and points. */
+  --font-num: 'Leeway Number Marks', var(--font-mono);
   --radius: 16px;
   --radius-sm: 10px;
   --pad: 24px;
@@ -506,7 +509,7 @@ button.list-row:hover {
 textarea.input {
   padding: 10px 14px;
   min-height: 120px;
-  font-family: var(--font-num);
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 
@@ -721,7 +724,8 @@ button.chip {
 }
 
 /* A setting's list is as wide as its longest choice, beside its label. */
-.setting > select.input {
+.setting > select.input,
+.setting-lists > select.input {
   width: auto;
   max-width: 100%;
 }
@@ -865,19 +869,21 @@ button.chip {
   }
 }
 
-/* A setting name or a command inside a sentence, like SETUP_CODE. */
+/* A setting name or a command inside a sentence, like SETUP_CODE: padded little
+   enough to sit within its line, and broken only when it can't fit on one. */
 code:not(.code) {
-  font-family: var(--font-num);
+  font-family: var(--font-mono);
   font-size: 0.88em;
   background: var(--surface-2);
   border-radius: 6px;
-  padding: 1px 5px;
+  padding: 0.1em 0.4em;
   overflow-wrap: anywhere;
 }
 
+/* A value on its own, like an address to copy, which may break anywhere. */
 pre.code,
 code.code {
-  font-family: var(--font-num);
+  font-family: var(--font-mono);
   font-size: 13px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
@@ -1696,6 +1702,16 @@ details.more[open] summary {
   /* Under its label, a list spans the card, however long its longest choice. */
   .setting > select.input {
     width: 100%;
+  }
+
+  /* Lists side by side, like a day and an hour, share the card's width evenly. */
+  .setting > .setting-lists {
+    align-self: stretch;
+  }
+
+  .setting-lists > select.input {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   /* Options sit in even rows (Segmented sets --columns), so none wraps alone onto a

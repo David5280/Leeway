@@ -57,6 +57,26 @@ for (const width of [390, 320]) {
       expect(await overflow(page)).toBeLessThanOrEqual(0)
     })
 
+    test("the email's day and hour share the card's width, and its setup names stay whole", async ({
+      page,
+    }) => {
+      await page.goto('/settings/email')
+      const card = (await page.getByRole('region', { name: 'Email' }).boundingBox())!
+      for (const name of ['Day', 'Hour']) {
+        const list = (await page.getByRole('combobox', { name }).boundingBox())!
+        expect(list.x).toBeGreaterThanOrEqual(card.x)
+        expect(list.x + list.width).toBeLessThanOrEqual(card.x + card.width)
+      }
+      // A name like RESEND_API_KEY moves to the next line whole, never split across two.
+      const names = page.getByRole('region', { name: 'Email' }).locator('code')
+      await expect(names.first()).toBeVisible()
+      const lines = await names.evaluateAll((codes) =>
+        codes.map((code) => `${code.textContent} ${code.getClientRects().length}`),
+      )
+      expect(lines).toEqual(['RESEND_API_KEY 1', 'MAIL_FROM 1'])
+      expect(await overflow(page)).toBeLessThanOrEqual(0)
+    })
+
     test('each Settings pill the keyboard reaches is in full view, clear of the fade', async ({
       page,
     }) => {
