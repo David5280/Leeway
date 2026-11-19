@@ -110,13 +110,26 @@ describe('rulePattern', () => {
     expect(rulePattern(tx)).toBe('Spotify')
   })
 
-  it('keeps the bank text when the clean name is not inside it, so the rule still matches', () => {
-    const tx = {
-      displayName: 'Chase Checking to BOK Savings',
-      merchantName: null,
-      name: 'XFER 1234',
-    }
-    expect(rulePattern(tx)).toBe('XFER 1234')
+  it.each([
+    ['XFER 1234', 'XFER'],
+    ['ONLINE TRANSFER TO SAV XXXXXX4417 REF 31677300112', 'ONLINE TRANSFER TO SAV'],
+    ['AMZN Mktp US*2K3AB1CD2', 'AMZN Mktp'],
+    // Spacing is kept as the bank wrote it, so "contains" still finds it.
+    ['#1234  CORNER  STORE 5', 'CORNER  STORE'],
+    ['12 - 34 TOLL ROAD', 'TOLL ROAD'],
+    ['TST* 4417', 'TST'],
+  ])(
+    'takes the part of %j that stays the same between charges, without its numbers',
+    (name, pattern) => {
+      const tx = { displayName: 'Chase Checking to BOK Savings', merchantName: null, name }
+      expect(rulePattern(tx)).toBe(pattern)
+      expect(name.toLowerCase()).toContain(pattern.toLowerCase())
+    },
+  )
+
+  it('falls back to the clean name when every word of the bank text holds a number', () => {
+    const tx = { displayName: 'Bank transaction', merchantName: null, name: 'XXXX4417 11/18' }
+    expect(rulePattern(tx)).toBe('Bank transaction')
   })
 })
 

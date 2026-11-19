@@ -75,15 +75,43 @@ export function rowLabel(
 
 /**
  * The text an "Always categorize" rule matches. Rules match the bank's own
- * merchant name or description, so the clean name is used only where that
- * text contains it ("Blue Bottle" inside "SQ *BLUE BOTTLE 0412"); otherwise
- * the bank's text is used as sent, so the rule still matches.
+ * merchant name or description, so the clean name is used where that text
+ * contains it ("Blue Bottle" inside "SQ *BLUE BOTTLE 0412"). Otherwise it is
+ * the part of the bank's text that stays the same from one charge to the
+ * next: its first run of words with no number in them, so a reference or
+ * store number never ties the rule to a single transaction ("XFER 1234 REF
+ * 99" gives "XFER"). The clean name stands in when no such words are left.
  */
 export function rulePattern(
   tx: Pick<Transaction, 'displayName' | 'merchantName' | 'name'>,
 ): string {
   const matched = tx.merchantName ?? tx.name
-  return matched.toLowerCase().includes(tx.displayName.toLowerCase()) ? tx.displayName : matched
+  if (matched.toLowerCase().includes(tx.displayName.toLowerCase())) return tx.displayName
+  return steadyPart(matched) || tx.displayName
+}
+
+/** A word that holds a digit or stands for hidden ones: a reference, store number or mask. */
+const NUMBERED = /\p{N}|^[x*.…•#]{2,}$/iu
+
+/**
+ * The first run of the text's words that holds a letter and no number, with
+ * its spacing as the bank wrote it, so a rule's "contains" still finds it.
+ */
+function steadyPart(text: string): string {
+  // Words sit at the even places, the spaces between them at the odd ones.
+  const parts = text.split(/(\s+)/)
+  let run = ''
+  for (let index = 0; index < parts.length; index += 2) {
+    const word = parts[index]!
+    if (!NUMBERED.test(word)) {
+      run += word + (parts[index + 1] ?? '')
+      continue
+    }
+    if (/\p{L}/u.test(run)) break
+    run = ''
+  }
+  // Punctuation left at either end, as in "SQ *", ties the rule to nothing.
+  return /\p{L}/u.test(run) ? run.replace(/^[\s*#\-–,.:;/]+|[\s*#\-–,.:;/]+$/g, '') : ''
 }
 
 /**
