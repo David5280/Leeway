@@ -16,7 +16,10 @@ export default defineConfig({
     css: false,
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
+      // The Scriptable widget script is tested here too (src/widget), so it
+      // counts toward the same floors.
+      include: ['src/**/*.{ts,tsx}', '../widget/leeway-widget.js'],
+      allowExternal: true,
       // The entry point only mounts the app, fonts.ts only imports font files,
       // and test helpers are not app code.
       exclude: ['src/main.tsx', 'src/fonts.ts', 'src/test/**', 'src/**/*.test.{ts,tsx}'],

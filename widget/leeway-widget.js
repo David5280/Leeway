@@ -12,7 +12,7 @@
 // nothing here logs it. Revoke it in Leeway at any time.
 //
 // Everything above the "Scriptable" section is plain logic with no Scriptable
-// calls, so Leeway's tests run it as it is (widget/leeway-widget.test.ts).
+// calls, so Leeway's tests run it as it is (web/src/widget).
 
 /** @typedef {import('../server/src/domain/widget.js').WidgetSummary} Summary */
 /** @typedef {'light' | 'dark'} Mode */
@@ -220,8 +220,7 @@ function change(cents, options) {
  * @param {string} locale
  */
 function shortDate(iso, locale) {
-  const [year, month, day] = iso.split('-').map(Number)
-  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).toLocaleDateString(locale, {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
@@ -747,20 +746,37 @@ const PRESENT = {
 }
 
 /**
- * In the app: the menu. Returns the size to preview, or null once a Keychain
- * choice is done or the menu is cancelled.
+ * In the app: a menu of previews and the Keychain choices.
  * @param {Env} env
- * @returns {Promise<Family | null>}
+ * @param {Date} now
  */
-async function chooseInApp(env) {
+async function useInApp(env, now) {
   const menu = new env.Alert()
   menu.title = 'Leeway widget'
   MENU.forEach((label) => menu.addAction(label))
   menu.addCancelAction('Cancel')
   const choice = await menu.presentAlert()
-  if (choice === 3) await saveConnection(env)
-  if (choice === 4) forgetConnection(env)
-  return /** @type {Family[]} */ (['small', 'medium', 'large'])[choice] ?? null
+  const preview = /** @type {Family[]} */ (['small', 'medium', 'large'])[choice]
+  if (preview) await show(preview, env, now)
+  else if (choice === 3) await saveConnection(env)
+  else if (choice === 4) forgetConnection(env)
+}
+
+/**
+ * Draws the widget for a size: the numbers, or the problem in their place.
+ * @param {Family} family
+ * @param {Env} env
+ * @param {Date} now
+ */
+async function show(family, env, now) {
+  const connection = connectionFrom(env.args.widgetParameter, env.Keychain)
+  const outcome = await loadOutcome(connection, env)
+  const layout = outcome.ok
+    ? layoutFor(family, outcome.summary)
+    : messageLayout(outcome.problem, family)
+  const widget = render(layout, connection && originOf(connection.server), now, env)
+  if (env.config.runsInWidget) env.Script.setWidget(widget)
+  else await PRESENT[family](widget)
 }
 
 /**
@@ -770,19 +786,8 @@ async function chooseInApp(env) {
  * @param {Date} [now]
  */
 async function run(env, now = new Date()) {
-  const family = env.config.runsInWidget
-    ? familyOf(env.config.widgetFamily)
-    : await chooseInApp(env)
-  if (family) {
-    const connection = connectionFrom(env.args.widgetParameter, env.Keychain)
-    const outcome = await loadOutcome(connection, env)
-    const layout = outcome.ok
-      ? layoutFor(family, outcome.summary)
-      : messageLayout(outcome.problem, family)
-    const widget = render(layout, connection && originOf(connection.server), now, env)
-    if (env.config.runsInWidget) env.Script.setWidget(widget)
-    else await PRESENT[family](widget)
-  }
+  if (env.config.runsInWidget) await show(familyOf(env.config.widgetFamily), env, now)
+  else await useInApp(env, now)
   env.Script.complete()
 }
 
@@ -793,6 +798,7 @@ module.exports = {
   KEYCHAIN_TOKEN,
   LIST_LENGTH,
   THEME_COLORS,
+  THEME_MODES,
   parseConnection,
   connectionFrom,
   originOf,
