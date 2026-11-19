@@ -73,7 +73,19 @@ export function upload<T>(path: string, file: Blob): Promise<T> {
   })
 }
 
-async function send<T>(path: string, init: RequestInit): Promise<T> {
+/** Fetches a text file the server serves, like the widget script, failing as `request` does. */
+export function requestText(path: string): Promise<string> {
+  return send<string>(path, { method: 'GET' }, (response) => response.text())
+}
+
+/** JSON, or an empty object for a reply with no body worth reading. */
+const readJson = (response: Response): Promise<unknown> => response.json().catch(() => ({}))
+
+async function send<T>(
+  path: string,
+  init: RequestInit,
+  read: (response: Response) => Promise<unknown> = readJson,
+): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, { ...init, credentials: 'same-origin' })
@@ -82,18 +94,15 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
     throw new ApiError(0, 'unreachable', UNREACHABLE)
   }
   if (response.status === 204) return undefined as T
-  const data = (await response.json().catch(() => ({}))) as {
-    error?: string
-    message?: string
-  }
   if (!response.ok) {
+    const data = (await readJson(response)) as { error?: string; message?: string }
     if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
     const fallback = PROXY_DOWN.has(response.status)
       ? UNREACHABLE
       : 'Something went wrong. Please try again.'
     throw new ApiError(response.status, data.error ?? 'error', data.message ?? fallback)
   }
-  return data as T
+  return (await read(response)) as T
 }
 
 /** Runs a server action by name, typed by the server's own definition. */

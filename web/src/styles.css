@@ -2078,6 +2078,16 @@ details.more[open] summary {
   }
 }
 
+/* On a short screen, like a phone turned sideways, the side menu's links
+   stand taller than the screen. Held in place, its last links would stay
+   below the screen however far the page scrolls, so it scrolls with the
+   page instead. */
+@media (min-width: 821px) and (max-height: 520px) {
+  .settings-menu {
+    position: static;
+  }
+}
+
 @media (max-width: 560px) {
   /* A setting's control goes under its label, full width, rather than wrapping beside it. */
   .setting {
@@ -2301,4 +2311,12 @@ details.more[open] summary {
     padding-left: 16px;
     margin-left: -16px;
   }
+}
+
+/*
+ * The home-screen widget's setup (Settings > Widget). Every control is at
+ * least 44px tall, so each is easy to hit with a thumb.
+ */
+.widget-setup .btn {
+  min-height: 44px;
 }
