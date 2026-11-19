@@ -7,7 +7,7 @@ import {
   type AccountNameParts,
   type NamingAccount,
 } from '../src/domain/accountName.js'
-import { carriesMask } from '../src/domain/accountNumber.js'
+import { carriesAnotherMask, carriesMask } from '../src/domain/accountNumber.js'
 import { readableCase } from '../src/domain/nameWords.js'
 
 /** A linked account the bank calls TOTAL CHECKING at Chase, with no name of the owner's. */
@@ -585,13 +585,47 @@ describe('distinctAccountNames', () => {
     for (const mask of masks) expect(names.filter((name) => carriesMask(name, mask))).toEqual([])
   })
 
-  it("still ends when other accounts' masks rule out every order", () => {
+  it("falls back to a name with no digits when other accounts' masks rule out every order", () => {
     // Made up to match: after "Plan 5", each catches the orders starting with its letter.
     const masks = ['5S', '5T', '5F', '5E', '5N', '5O', '5C', '9921']
     const many = masks.map((mask, index) => account(String(index), { bankName: 'PLAN 5', mask }))
     const names = [...distinctAccountNames(many).values()]
+    expect(names.slice(0, 3)).toEqual([
+      'Chase Plan 5',
+      'Chase Checking (Second)',
+      'Chase Checking (Third)',
+    ])
     expect(new Set(names).size).toBe(masks.length)
-    names.forEach((name, index) => expect(carriesMask(name, masks[index]!)).toBe(false))
+    names.forEach((name, index) => {
+      expect(carriesMask(name, masks[index]!), name).toBe(false)
+      const others = masks.filter((_, other) => other !== index)
+      expect(
+        others.filter((mask) => carriesAnotherMask(name, mask)),
+        name,
+      ).toEqual([])
+    })
+  })
+
+  it('always ends, for any mask of its own in the fallback words, beside masks made up to match', () => {
+    // Every pair of letters side by side in the names it falls back to and their orders.
+    const words = 'BANK CHECKING ACCOUNT MONEY SECOND THIRD FOURTH FIFTH SIXTH SEVENTH EIGHTH'
+    const pairs = new Set(
+      words
+        .split(' ')
+        .flatMap((word) => [...word].slice(1).map((letter, at) => word[at]! + letter)),
+    )
+    const madeUp = ['5S', '5T', '5F', '5E', '5N', '5O', '5C']
+    // A bank named with digits, so the name with none falls back past it, or no bank at all.
+    for (const institutionName of ['Bank 5', null]) {
+      for (const mask of pairs) {
+        const many = [...madeUp, mask, mask].map((each, index) =>
+          account(String(index), { bankName: 'PLAN 5', institutionName, mask: each }),
+        )
+        const names = [...distinctAccountNames(many).values()]
+        expect(new Set(names.map((name) => name.toLowerCase())).size, mask).toBe(many.length)
+        names.slice(-2).forEach((name) => expect(carriesMask(name, mask), name).toBe(false))
+      }
+    }
   })
 
   it('tells apart by type when the kind itself shows the mask', () => {

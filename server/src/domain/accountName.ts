@@ -135,7 +135,7 @@ function showsNoMask(
  */
 const LAST_RESORTS = ['Account', 'Money'] as const
 
-/** How many orders to try against every account's mask before only the account's own. */
+/** How many orders to try after the account's own name before one with no digits. */
 const ORDER_TRIES = 100
 
 /**
@@ -172,22 +172,39 @@ export function distinctAccountNames(accounts: readonly NamingAccount[]): Map<st
       count += 1
       tries += 1
       const suffix = count <= 1 ? kind : `${ordinal(count)} ${kind}`
-      const suffixed = `${base} (${suffix})`
+      // Many masks made up to match, "5S", "5T" and so on after "Plan 5", can
+      // rule out every order run on from a name with digits. Past ORDER_TRIES
+      // the order starts again from Second after a name with none, "Chase
+      // Checking (Second)". No other account's mask that is checked fits it,
+      // since each has a digit, so only the account's own mask can rule out
+      // an order there, and no one mask rules out every order (see below).
+      const suffixed =
+        tries <= ORDER_TRIES
+          ? `${base} (${suffix})`
+          : `${digitFreeName(account, kind)} (${ordinal(tries - ORDER_TRIES + 1)})`
       // Read whole, the suffix must not show a mask, alone or run on from the
       // name: "Chase Savings (Checking)" carries the mask SC across the two.
       // The order is in words, so it adds no digits, and its words end in
       // different letters, so no one mask of letters rules out every count.
-      // Many masks made up to match, "5S", "5T" and so on after a name ending
-      // in 5, could rule out every order, so past ORDER_TRIES only the
-      // account's own mask is checked, and the search still ends.
-      const free = tries <= ORDER_TRIES ? showsNone(suffixed) : !carriesMask(suffixed, account.mask)
-      if (free) name = suffixed
+      if (showsNone(suffixed)) name = suffixed
     }
     sharing.set(key, Math.max(count, 1))
     taken.add(name.toLowerCase())
     names.set(account.id, name)
   }
   return names
+}
+
+/**
+ * A name for an account with no digits at all, which no mask with a digit can
+ * fit: the bank and the kind of account, "Chase Checking", or else the first
+ * of LAST_RESORTS that shows none of the account's own mask.
+ */
+function digitFreeName(account: AccountNameParts, kind: string): string {
+  const institution = account.institutionName?.trim()
+  const bank = institution ? shortBankName(institution) : ''
+  const names = [withBank(bank, kind), ...LAST_RESORTS]
+  return names.find((name) => !/\p{N}/u.test(name) && !carriesMask(name, account.mask))!
 }
 
 /**
