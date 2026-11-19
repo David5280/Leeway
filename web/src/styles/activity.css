@@ -403,23 +403,69 @@ textarea.input.sheet-note {
 
 /* Rules ------------------------------------------------------------------ */
 
+/* A rules list measures its own width, so its rows read well in any card. */
+.rules-list {
+  container: rules / inline-size;
+}
+
 /* A rule's number, what it matches over the category it files to, and its
-   buttons. The text column takes what is left and wraps, so on a phone the
-   words never run under the category or the buttons. */
+   buttons. The text column takes what is left and wraps between words (a
+   pattern with no spaces breaks only when it must), so on a phone the words
+   never run under the category or the buttons. */
 .rule-row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-areas: 'number text actions';
+}
+
+.rule-number {
+  grid-area: number;
 }
 
 .rule-text {
+  grid-area: text;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .rule-actions {
+  grid-area: actions;
   display: flex;
   gap: 6px;
+}
+
+/* On the narrowest phones the buttons would leave the words a word's width,
+   so they drop to a line of their own under the text, at the right. */
+@container rules (max-width: 300px) {
+  .rule-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-areas:
+      'number text'
+      '. actions';
+    row-gap: 8px;
+  }
+
+  .rule-actions {
+    justify-self: end;
+  }
+}
+
+/* A finger needs the full --tap each way, whatever size icon buttons are
+   elsewhere, and "+ New rule" grows to a full tap around its words. */
+@media (pointer: coarse) {
+  .rule-actions .iconbtn {
+    width: var(--tap);
+    height: var(--tap);
+  }
+
+  .rules-new {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap);
+    min-height: var(--tap);
+  }
 }

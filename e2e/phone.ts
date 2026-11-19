@@ -34,10 +34,10 @@ export const overflow = (page: Page) =>
 export const TAP_PX = 44
 
 /**
- * Every visible control under `root` shorter than a finger, as "name: 36px",
- * so a failure says which. A control may reach --tap with an invisible
- * absolutely placed ::after around it (the sheet's close button does), so
- * that margin counts toward its height.
+ * Every visible control under `root` narrower or shorter than a finger, as
+ * "name: 40 by 40px", so a failure says which. A control may reach --tap with
+ * an invisible absolutely placed ::after around it (the sheet's close button
+ * does), so that margin counts toward its size each way.
  */
 export function shortTargets(page: Page, root: string): Promise<string[]> {
   return page.evaluate(
@@ -45,25 +45,57 @@ export function shortTargets(page: Page, root: string): Promise<string[]> {
       const controls = document.querySelectorAll<HTMLElement>(
         `${root} :is(button, a[href], input, select, textarea, [role="switch"])`,
       )
+      /** How far a placed ::after reaches past the control on two sides. */
+      const reach = (after: CSSStyleDeclaration, start: string, end: string) =>
+        after.content !== 'none' && after.position === 'absolute'
+          ? Math.max(0, -parseFloat(after.getPropertyValue(start))) +
+            Math.max(0, -parseFloat(after.getPropertyValue(end)))
+          : 0
+      const tenth = (px: number) => Math.round(px * 10) / 10
       return [...controls].flatMap((control) => {
         const box = control.getBoundingClientRect()
         if (box.width === 0 && box.height === 0) return []
         const after = getComputedStyle(control, '::after')
-        const reach =
-          after.content !== 'none' && after.position === 'absolute'
-            ? Math.max(0, -parseFloat(after.top)) + Math.max(0, -parseFloat(after.bottom))
-            : 0
-        const height = Math.round((box.height + reach) * 10) / 10
-        if (height >= tap) return []
+        const width = tenth(box.width + reach(after, 'left', 'right'))
+        const height = tenth(box.height + reach(after, 'top', 'bottom'))
+        if (width >= tap && height >= tap) return []
         const name =
           control.getAttribute('aria-label') ??
           control.getAttribute('placeholder') ??
           control.textContent?.trim()
-        return [`${name}: ${height}px`]
+        return [`${name}: ${width} by ${height}px`]
       })
     },
     { root, tap: TAP_PX },
   )
+}
+
+/**
+ * Every word under `root` that the browser broke across two lines, as
+ * "Streaming", so a failure says which. A pattern with no spaces may have to
+ * break; the words of a sentence never should.
+ */
+export function brokenWords(page: Page, root: string): Promise<string[]> {
+  return page.evaluate((root) => {
+    /** Whether a word is drawn on more than one line: one box per line, tops a line apart. */
+    const broken = (node: Text, start: number, length: number) => {
+      const range = document.createRange()
+      range.setStart(node, start)
+      range.setEnd(node, start + length)
+      return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size > 1
+    }
+    const texts = [...document.querySelectorAll(root)].flatMap((container) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node as Text)
+      return nodes
+    })
+    return texts.flatMap((node) =>
+      [...(node.textContent ?? '').matchAll(/\S+/g)]
+        .filter((word) => broken(node, word.index, word[0].length))
+        .map((word) => word[0]),
+    )
+  }, root)
 }
 
 /**

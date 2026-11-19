@@ -7,6 +7,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { action, addAccount, addSpending, removeAccount } from './manual'
 import {
+  brokenWords,
+  NARROWEST,
   overflow,
   shortTargets,
   simulateInsets,
@@ -18,6 +20,8 @@ import {
 /** An iPhone's 390 by 844 screen, upright, and the same turned sideways. */
 const UPRIGHT = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
 const SIDEWAYS = { ...UPRIGHT, viewport: { width: 844, height: 390 } }
+/** The narrowest phone still in use, an iPhone SE, with only its status bar to keep clear of. */
+const SE_INSETS = { top: 20, right: 0, bottom: 0, left: 0 }
 
 const ACCOUNT = 'Layout checking with a longer name'
 
@@ -71,9 +75,13 @@ function rowProblems(page: Page): Promise<string[]> {
 
 /** Rules with long words, the kind that once ran under their category on a phone. */
 const RULES = [
-  { field: 'merchant', pattern: 'adobe creative cloud subscription' },
-  { field: 'description', pattern: 'apple.com/bill' },
-  { field: 'merchant', pattern: 'colorado department of revenue motor vehicle' },
+  { field: 'merchant', pattern: 'adobe creative cloud subscription', category: 'Groceries' },
+  { field: 'description', pattern: 'apple.com/bill', category: 'Streaming and apps' },
+  {
+    field: 'merchant',
+    pattern: 'colorado department of revenue motor vehicle',
+    category: 'Groceries',
+  },
 ]
 
 test.describe('the Transactions list on a phone', () => {
@@ -82,12 +90,12 @@ test.describe('the Transactions list on a phone', () => {
     await addAccount(page, { name: ACCOUNT, balance: '2000' })
     for (const spending of SPENDING) await addSpending(page, { account: ACCOUNT, ...spending })
     const categories = await action<{ id: string; name: string }[]>(page, 'list_categories')
-    const groceries = categories.find((category) => category.name === 'Groceries')!
-    for (const rule of RULES) {
+    const idOf = (name: string) => categories.find((category) => category.name === name)!.id
+    for (const { category, ...rule } of RULES) {
       await action(page, 'create_rule', {
         ...rule,
         matchType: 'contains',
-        categoryId: groceries.id,
+        categoryId: idOf(category),
       })
     }
     await page.close()
@@ -106,6 +114,7 @@ test.describe('the Transactions list on a phone', () => {
   for (const [orientation, screen, insets] of [
     ['upright', UPRIGHT, UPRIGHT_INSETS],
     ['sideways', SIDEWAYS, SIDEWAYS_INSETS],
+    ['on the narrowest phone', NARROWEST, SE_INSETS],
   ] as const) {
     test.describe(orientation, () => {
       test.use(screen)
@@ -123,6 +132,10 @@ test.describe('the Transactions list on a phone', () => {
         await simulateInsets(page, insets)
         await expect(page.getByText(RULES[0]!.pattern, { exact: false })).toBeVisible()
         expect(await textOverlaps(page, '.act-page')).toEqual([])
+        // A rule's words wrap between words, never inside one ("Streami / ng").
+        const rules = page.getByRole('region', { name: 'Rules' })
+        await expect(rules.getByText('Streaming and apps', { exact: true }).first()).toBeVisible()
+        expect(await brokenWords(page, '.rule-text')).toEqual([])
         expect(await overflow(page)).toBeLessThanOrEqual(0)
       })
 
@@ -147,7 +160,7 @@ test.describe('the Transactions list on a phone', () => {
         await expect(sheet).toHaveCount(0)
       })
 
-      test('everything pressed is a finger tall, in the filters and the sheet', async ({
+      test('everything pressed is a finger each way, in the filters, rules and sheet', async ({
         page,
       }) => {
         await page.goto('/transactions')
@@ -155,6 +168,10 @@ test.describe('the Transactions list on a phone', () => {
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
         await expect(page.getByRole('button', { name: /^Snooze, spent/ })).toBeVisible()
         expect(await shortTargets(page, '.act-filters')).toEqual([])
+        // Each rule's move and delete buttons, and the button that starts a new rule.
+        await expect(page.getByRole('button', { name: 'Delete rule 1' }).first()).toBeVisible()
+        expect(await shortTargets(page, '.rule-row')).toEqual([])
+        expect(await shortTargets(page, '.rules-list > .row-between')).toEqual([])
 
         await page.getByRole('button', { name: /^King Soopers, spent/ }).click()
         const sheet = page.getByRole('dialog', { name: 'King Soopers' })

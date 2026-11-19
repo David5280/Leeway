@@ -32,10 +32,10 @@ export function RulesList({
   }
 
   return (
-    <section className="card stack-sm" aria-label="Rules">
+    <section className="card stack-sm rules-list" aria-label="Rules">
       <div className="row-between">
         <h2>{categoryId ? 'Rules' : 'Your rules'}</h2>
-        <button type="button" className="linkbtn" onClick={onNew}>
+        <button type="button" className="linkbtn rules-new" onClick={onNew}>
           + New rule
         </button>
       </div>
@@ -50,7 +50,7 @@ export function RulesList({
         const index = all.indexOf(rule)
         return (
           <div key={rule.id} className="list-row rule-row">
-            <span className="num small muted">{index + 1}</span>
+            <span className="rule-number num small muted">{index + 1}</span>
             {/* What it matches over where it files it, so neither runs into the other on a phone. */}
             <span className="rule-text small">
               <span>
