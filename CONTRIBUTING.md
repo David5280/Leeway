@@ -118,6 +118,11 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   never rename an id once shipped, since links and bookmarks use it.
 - **A dashboard widget:** add its type to `WIDGETS` in `domain/settings.ts`,
   draw it in `web/src/widgets/`, and list it in `widgets/library.ts`.
+- **A screen:** add its address to `web/src/routes.ts` and its route in
+  `App.tsx` from there, then give it a screen in `e2e/guarded-screens.ts`
+  (with long names seeded, and any form people open on it as a `then`
+  step), so the phone layout guard checks it. The guard fails, naming the
+  route, until every route has one.
 - **A database change:** add a new file to `server/migrations` numbered after
   the highest one, like `011_something.sql`. Migrations run in filename
   order when the server starts, each once, and installs record them by file
@@ -173,6 +178,25 @@ summary switch, the weekly email settings, an assistant connecting through
 the consent screen, and a phone-sized screen.
 They share one install and run in order; `setup.spec.ts` creates the owner and
 saves the signed-in session the others reuse.
+
+The **phone layout guard** (`layout-guard.phone.spec.ts`) opens every screen,
+and the forms people open on them (`guarded-screens.ts`), on each phone in
+`GUARDED_PHONES` (`phone.ts`): a 390pt iPhone, a 375pt iPhone SE and the
+320pt first SE upright, and the first two turned sideways, each with its
+status bar, notch and home indicator simulated as an app installed to the
+home screen. `seed.ts` fills the install with the longest names Leeway takes
+first, and removes them afterwards. Each screen fails if text overlaps text
+or a control, is cut off without an ellipsis (or squeezed to a sliver with
+one), breaks a word across lines, scrolls the page sideways, comes to rest
+under a fixed bar, or shows under the status bar, notch or home indicator
+with nothing opaque over it. A few screens run again in Neon's wider font at
+compact density. A failure names each element and what is wrong with it.
+
+The checks live in `e2e/layout/`, one file per check, and run inside the
+page: `e2e/layout.ts` bundles them with esbuild into one script for
+Playwright to run there. `layout-checks.spec.ts` proves each one on small
+pages broken on purpose, and on the same pages fixed; when a check changes,
+add a fixture that fails without the change.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set
