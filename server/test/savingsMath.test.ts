@@ -139,21 +139,24 @@ describe('combineChanges', () => {
     })
   })
 
-  it('falls back to every known change when no account reaches the window’s first day', () => {
+  it('falls back to the earliest start when no account reaches the window’s first day', () => {
     const changes = [
       { changeCents: 50, since: '2026-11-10' },
       { changeCents: 20, since: '2026-11-05' },
+      { changeCents: 30, since: '2026-11-05' },
       null,
     ]
+    // Only the two seen since Nov 5 are added; the one seen from Nov 10 is left out.
     expect(combineChanges(changes, '2026-11-01')).toEqual({
-      changeCents: 70,
-      since: '2026-11-10',
-      accountsLeftOut: 1,
+      changeCents: 50,
+      since: '2026-11-05',
+      accountsLeftOut: 2,
     })
   })
 
   it('is null when no account has a change', () => {
     expect(combineChanges([null, null])).toBeNull()
+    expect(combineChanges([null, null], '2026-11-01')).toBeNull()
     expect(combineChanges([])).toBeNull()
   })
 })

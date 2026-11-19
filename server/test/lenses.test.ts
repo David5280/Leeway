@@ -220,7 +220,7 @@ describe('the savings lens', () => {
       question: 'How much of my take-home pay goes to savings?',
       headline: '8%',
       detail:
-        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
       tone: 'neutral',
       // No bar and no target by default: payroll saving never reaches the bank.
       progress: null,
@@ -275,19 +275,19 @@ describe('the savings lens', () => {
         savingsRateTargetPercent: target,
       }).meters[1]
     expect(saving(5)).toMatchObject({
-      detail: expect.stringMatching(/Above your 5% target\.$/),
+      detail: expect.stringMatching(/Above your 5% target, counting only bank transfers\.$/),
       tone: 'good',
       progress: null,
     })
     expect(saving(20)).toMatchObject({
       detail:
-        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted. Your target is 20%.',
+        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted. Your target is 20%, counting only bank transfers.',
       tone: 'neutral',
       progress: null,
     })
     expect(saving(null)).toMatchObject({
       detail:
-        'of pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
       progress: null,
     })
   })

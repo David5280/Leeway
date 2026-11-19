@@ -162,7 +162,7 @@ describe('savings in the weekly email', () => {
     changeSince: '2026-11-01',
     emergencyFundMonths: 2.5,
     emergencyFundTargetMonths: 6,
-    savingsRatePercent: 9,
+    bankSeenSavingsRatePercent: 9,
   }
 
   it('shows the total, how it moved and the emergency fund', () => {

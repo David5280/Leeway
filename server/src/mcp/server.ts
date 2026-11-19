@@ -14,9 +14,8 @@ import { z } from 'zod'
 import { runAction, type AnyAction } from '../actions/action.js'
 import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
-import { listAccounts } from '../domain/accounts.js'
 import { AppError, messageOf } from '../errors.js'
-import { agentJson, maskedNameRenames } from './agentOutput.js'
+import { agentJson } from './agentOutput.js'
 import { getPrompt, listPrompts } from './prompts.js'
 
 export const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
@@ -96,9 +95,7 @@ export function createMcpServer(
     }
     try {
       const result = await runAction(ctx, action, request.params.arguments ?? {})
-      // Read after the action, so a name it just changed is cleaned as it now stands.
-      const renames = maskedNameRenames(await listAccounts(ctx.db))
-      return { content: [{ type: 'text', text: agentJson(result, renames) }] }
+      return { content: [{ type: 'text', text: agentJson(result) }] }
     } catch (error) {
       if (error instanceof AppError) return errorResult(error.message)
       onError(error)

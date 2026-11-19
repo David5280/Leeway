@@ -152,8 +152,12 @@ function savingsGlance(savings: SavingsGlance, { emergencyFund, savingsRate }: S
     changeSince: savings.month?.since ?? null,
     emergencyFundMonths: emergencyFund?.monthsCovered ?? null,
     emergencyFundTargetMonths: emergencyFund?.targetMonths ?? null,
-    /** Null when pay or saving is unknown, never a guess of zero. */
-    savingsRatePercent: savingsRate?.percent ?? null,
+    /**
+     * The savings rate as far as the bank sees it: payroll deductions are never
+     * in it, so the key says so wherever it is read. Null when pay or saving is
+     * unknown, never a guess of zero.
+     */
+    bankSeenSavingsRatePercent: savingsRate?.percent ?? null,
   }
 }
 

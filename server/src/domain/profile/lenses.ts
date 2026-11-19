@@ -70,10 +70,10 @@ function protectionAnswer(
 }
 
 /**
- * The share of pay saved, as far as the bank shows it, and the owner's target
- * when they set one. There is no bar toward the target: pension and 401(k)
- * contributions come out of pay before the bank sees it, so a bar would make
- * a partial rate look like falling short.
+ * The share of take-home pay saved, as far as the bank shows it, and the
+ * owner's target when they set one. There is no bar toward the target: pension
+ * and 401(k) contributions come out of pay before the bank sees it, so a bar
+ * would make a partial rate look like falling short.
  */
 function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): Meter {
   const target = profile.savingsRateTargetPercent
@@ -91,12 +91,15 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
         : 'Leeway has not seen a month of transfers to savings or investments yet, so it cannot work out your savings rate.'
     return { ...shared, headline: null, detail: needs, tone: 'neutral', progress: null }
   }
-  const of = `of pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`
-  // Below target is said plainly, never as a warning: the bank cannot see everything saved.
+  const of = `of take-home pay: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`
+  // Below target is said plainly, never as a warning: the bank cannot see everything
+  // saved, and either way the comparison says what it counts.
   let against = ''
   if (target !== null) {
     against =
-      rate.percent >= target ? ` Above your ${target}% target.` : ` Your target is ${target}%.`
+      rate.percent >= target
+        ? ` Above your ${target}% target, counting only bank transfers.`
+        : ` Your target is ${target}%, counting only bank transfers.`
   }
   return {
     ...shared,

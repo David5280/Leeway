@@ -94,23 +94,31 @@ export interface CombinedChange extends Change {
  * that far back is left out and counted, rather than its whole balance being
  * taken as a change.
  *
- * With `from`, the window's own first day, only changes measured from that
- * day are added, so the total never mixes starting days under one label. An
- * account measured from its first day of history instead (this month's
- * fallback) is counted as left out, unless no account reaches back to `from`:
- * then the fallbacks are all there is, and the total starts at the latest.
+ * With `from`, the window's own first day, the total never mixes starting
+ * days under one label. Only changes measured from that day are added; an
+ * account measured from a later first day of history (this month's fallback)
+ * is counted as left out. When no account reaches back to `from`, the
+ * accounts measured from the earliest day of history are added instead, and
+ * those seen only later are left out, so "+$500 since Nov 10" means just that.
  * Without `from` (all history), every known change is added.
  */
 export function combineChanges(changes: (Change | null)[], from?: IsoDate): CombinedChange | null {
   const known = changes.filter((change): change is Change => change !== null)
-  const fromStart = known.filter((change) => change.since === from)
-  const added = fromStart.length ? fromStart : known
+  const added = from === undefined ? known : sameStart(known, from)
   if (added.length === 0) return null
   return {
     changeCents: added.reduce((sum, change) => sum + change.changeCents, 0),
     since: added.map((change) => change.since).reduce((a, b) => (a > b ? a : b)),
     accountsLeftOut: changes.length - added.length,
   }
+}
+
+/** The changes measured from `from`, or failing any, from the earliest day any is measured from. */
+function sameStart(changes: Change[], from: IsoDate): Change[] {
+  const fromStart = changes.filter((change) => change.since === from)
+  if (fromStart.length > 0 || changes.length === 0) return fromStart
+  const earliest = changes.map((change) => change.since).reduce((a, b) => (a < b ? a : b))
+  return changes.filter((change) => change.since === earliest)
 }
 
 /** All windows combined, one account's changes per entry. */

@@ -296,6 +296,9 @@ describe('get_financial_profile', () => {
     expect(findAction('summarize_savings')!.description).toMatch(
       /never tell the owner they save too little/,
     )
+    expect(findAction('get_checkin')!.description).toContain(
+      'bankSeenSavingsRatePercent counts only money moved through the bank',
+    )
     expect(MCP_INSTRUCTIONS).toContain(
       'Payroll deductions, such as a pension or a 401(k), are never counted, so never tell the owner they save too little.',
     )

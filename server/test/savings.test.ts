@@ -594,7 +594,7 @@ describe('the check-in', () => {
     expect(savings).toMatchObject({
       totalCents: profile.savings.totalCents,
       emergencyFundMonths: profile.emergencyFund?.monthsCovered ?? null,
-      savingsRatePercent: profile.savingsRate?.percent ?? null,
+      bankSeenSavingsRatePercent: profile.savingsRate?.percent ?? null,
     })
   })
 
@@ -617,7 +617,7 @@ describe('the check-in', () => {
       // No spending or bills yet, and no pay: unknown, never zero.
       emergencyFundMonths: null,
       emergencyFundTargetMonths: null,
-      savingsRatePercent: null,
+      bankSeenSavingsRatePercent: null,
     })
   })
 })

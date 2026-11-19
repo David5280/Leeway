@@ -99,11 +99,26 @@ const HEALTH_SAVINGS_SUBTYPE = 'hsa'
 // as a Rollover IRA reported with subtype "other". Matched as whole words.
 const RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|ira|roth|rollover|pension)\b/i
 
+// The same for a bank account, read more strictly, since a bank account named
+// for retirement is rare and an ordinary one named after a person is not:
+// "IRA" only in capitals, so "Ira's Savings" stays savings, and no bare
+// "rollover", which a bank may call a savings account that rolls over.
+const BANK_IRA_NAME = /\bIRA\b/
+const BANK_RETIREMENT_NAME = /\b(401\s?\(?k\)?|403\s?\(?b\)?|457\s?\(?b\)?|roth|pension)\b/i
+
+/** Whether a bank account's name says it is held for retirement, like "IRA CD" or "Roth IRA Savings". */
+function bankNameSaysRetirement(bankName: string): boolean {
+  return BANK_IRA_NAME.test(bankName) || BANK_RETIREMENT_NAME.test(bankName)
+}
+
 /** What classifying reads from an account. */
 export interface ClassifiableAccount {
   type: string
   subtype: string | null
-  /** The bank's name for the account, used only when the subtype says nothing. */
+  /**
+   * The bank's name for the account (or the name typed for one added by hand),
+   * read for retirement when the subtype does not settle the kind.
+   */
   bankName: string
 }
 
@@ -117,9 +132,10 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
       return 'loan'
     case 'depository':
       if (sub === HEALTH_SAVINGS_SUBTYPE) return 'investment'
-      if (!SAVINGS_SUBTYPES.has(sub)) return 'checking'
-      // A CD or savings account held as an IRA is retirement money, not an emergency fund.
-      return RETIREMENT_NAME.test(bankName) ? 'retirement' : 'savings'
+      // A CD, savings or cash account held as an IRA is retirement money, not an
+      // emergency fund. Only an account the bank calls checking is never read so.
+      if (sub !== 'checking' && bankNameSaysRetirement(bankName)) return 'retirement'
+      return SAVINGS_SUBTYPES.has(sub) ? 'savings' : 'checking'
     case 'investment':
       if (RETIREMENT_SUBTYPES.has(sub)) return 'retirement'
       if (NOT_INVESTED_SUBTYPES.has(sub)) return 'other'

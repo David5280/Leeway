@@ -47,13 +47,38 @@ describe('automaticKind', () => {
     },
   )
 
-  it('reads a bank CD or savings account held as an IRA as retirement', () => {
-    const bank = (subtype: string, bankName: string) => ({ type: 'depository', subtype, bankName })
-    expect(automaticKind(bank('cd', 'IRA CD 12 Month'))).toBe('retirement')
-    expect(automaticKind(bank('savings', 'Roth IRA Savings'))).toBe('retirement')
-    expect(automaticKind(bank('money market', 'Traditional IRA Money Market'))).toBe('retirement')
-    // A checking account keeps its kind, whatever its name says.
-    expect(automaticKind(bank('checking', 'Pension Direct Deposit'))).toBe('checking')
+  describe('a bank account held for retirement', () => {
+    const bank = (subtype: string | null, bankName: string) => ({
+      type: 'depository',
+      subtype,
+      bankName,
+    })
+
+    it.each([
+      ['cd', 'IRA CD 12 Month'],
+      ['savings', 'Roth IRA Savings'],
+      ['money market', 'Traditional IRA Money Market'],
+      ['cash management', 'IRA Cash'],
+      // Added by hand, with no subtype.
+      [null, 'Traditional IRA'],
+      ['savings', 'Pension Savings'],
+      ['cd', '401(k) Rollover CD'],
+    ])('reads a %s named %s as retirement', (subtype, bankName) => {
+      expect(automaticKind(bank(subtype, bankName))).toBe('retirement')
+    })
+
+    it.each([
+      // A person's name, not the account type: only "IRA" in capitals counts.
+      ['savings', "Ira's Savings", 'savings'],
+      ['savings', 'Rollover Savings', 'savings'],
+      ['cd', 'Rollover CD', 'savings'],
+      [null, 'Ira Household', 'checking'],
+      // An account the bank calls checking keeps its kind, whatever its name says.
+      ['checking', 'Pension Direct Deposit', 'checking'],
+      ['checking', 'IRA Funding Checking', 'checking'],
+    ])('reads a %s named %s as %s', (subtype, bankName, kind) => {
+      expect(automaticKind(bank(subtype, bankName))).toBe(kind)
+    })
   })
 
   it('keeps a health savings account out of savings, at a bank or a broker', () => {
