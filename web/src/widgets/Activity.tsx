@@ -11,6 +11,7 @@ import { kindIcon } from '../lib/accountCards'
 import { accountDetail, isOwed, overdrawn } from '../lib/accounts'
 import { allAccountsDrill } from '../lib/drills/accounts'
 import { recentDrill } from '../lib/drills/activity'
+import { merchantsDrill } from '../lib/drills/plan'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
 
@@ -104,25 +105,35 @@ export function AccountsWidget() {
   )
 }
 
+/** The merchants that took the most this period, each bar against the biggest. */
 export function MerchantsWidget({ offset }: WidgetProps) {
   const { money } = useApp()
   const merchants = useAction('top_merchants', { offset, limit: 6 })
-  const top = merchants.data?.[0]?.spentCents ?? 1
+  const head = <SectionHead icon="moneyOut" title="Where did the most go?" />
+  if (!merchants.data || merchants.data.length === 0) {
+    return (
+      <Card static="empty" label="Top merchants" className="stack-sm">
+        {head}
+        <ErrorNote error={merchants.error} />
+        {merchants.data && <p className="empty">No spending yet this period.</p>}
+      </Card>
+    )
+  }
+  const top = merchants.data[0]!.spentCents
   return (
-    <Card static="pending" label="Top merchants" className="stack-sm">
-      <h2>Top merchants</h2>
-      {merchants.data?.length === 0 && <p className="empty">No spending yet this period.</p>}
-      {merchants.data?.map((m) => (
-        <div key={m.merchant} className="stack-sm" style={{ padding: '6px 0' }}>
-          <div className="row-between">
-            <span>{m.merchant}</span>
-            <Money cents={m.spentCents} />
-          </div>
+    <Card drill={merchantsDrill(merchants.data)} label="Top merchants" className="stack-sm">
+      {head}
+      {merchants.data.map((one) => (
+        <span key={one.merchant} className="stack-sm merchant-row">
+          <span className="row-between">
+            <span className="ellipsis">{one.merchant}</span>
+            <Money cents={one.spentCents} />
+          </span>
           <Progress
-            percent={(m.spentCents / top) * 100}
-            aria-label={`${m.merchant}: ${money(m.spentCents)}`}
+            percent={(one.spentCents / top) * 100}
+            aria-label={`${one.merchant}: ${money(one.spentCents)}`}
           />
-        </div>
+        </span>
       ))}
     </Card>
   )

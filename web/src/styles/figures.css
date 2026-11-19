@@ -473,3 +473,8 @@
   flex: none;
   color: var(--accent);
 }
+
+/* Top merchants: a name and amount over a bar, with room between rows. */
+.merchant-row {
+  padding: 6px 0;
+}

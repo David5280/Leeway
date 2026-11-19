@@ -970,12 +970,25 @@ describe('MerchantsWidget', () => {
       '25',
     )
     expect(server.actions('top_merchants')).toEqual([{ offset: -1, limit: 6 }])
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Top merchants' })).getByRole('button'),
+    )
+    const sheet = screen.getByRole('dialog', { name: 'Top merchants' })
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Spent at these merchants $125 = Costco $100 plus Sweet Cow $25',
+    )
   })
 
   it('says when nothing was spent this period', async () => {
     fakeServer({ top_merchants: () => [] })
     renderSignedIn(<MerchantsWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(await screen.findByText('No spending yet this period.')).toBeInTheDocument()
+  })
+
+  it('shows why merchants could not be read', async () => {
+    fakeServer({}, failing('top_merchants', 'Database is down'))
+    renderSignedIn(<MerchantsWidget budget={budgetFor(categories, [])} offset={0} />)
+    expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 })
 
