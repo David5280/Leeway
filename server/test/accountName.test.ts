@@ -496,6 +496,7 @@ describe('distinctAccountNames', () => {
     expect(named('CHECKING - 863', '8863')).toBe('Chase Savings')
     expect(named('CHECKING-863', '8863')).toBe('Chase Savings')
     expect(named('LINKED ...⑻⑼', '889')).toBe('Chase Savings')
+    expect(named('LINKED . 417', '4417')).toBe('Chase Savings')
     // Split up, it is read whole.
     expect(named('LINKED X 8 9', '389')).toBe('Chase Savings')
     expect(named('LINKED ACCT 85 0', '5850')).toBe('Chase Savings')
@@ -511,6 +512,16 @@ describe('distinctAccountNames', () => {
     expect(named('7-ELEVEN CARD', '4477')).toBe('Chase 7-ELEVEN Card')
     expect(named('VENTURE X 2025', '4417')).toBe('Chase Venture X 2025')
     expect(named('BUSINESS X 10', '4417')).toBe('Chase Business X 10')
+  })
+
+  it('keeps the number after an abbreviation', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName, mask: '9921' }))
+    expect(named('SHARE CERT. 12 MO')).toBe('Chase Share Cert. 12 Mo')
+    expect(named('IRA CERT. 18 MONTH')).toBe('Chase IRA Cert. 18 Month')
+    expect(named('MONEY MKT. 30 DAY')).toBe('Chase Money Mkt. 30 Day')
+    expect(named('SAV. 529 PLAN')).toBe('Chase Sav. 529 Plan')
+    expect(named('St. 10 Club')).toBe('Chase St. 10 Club')
+    expect(named('U.S. (12 MONTH) CD')).toBe('Chase U.S. (12 Month) CD')
   })
 
   it('trims a number after ACCOUNT, as the price of never showing a mask', () => {
