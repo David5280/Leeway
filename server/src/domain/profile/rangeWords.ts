@@ -13,13 +13,19 @@ export function range(band: Band, show: (value: number) => string): string {
 }
 
 /**
- * The middle case after a range, like ", most likely 81%", or nothing when
- * the range is one figure already and saying it twice would read oddly.
+ * The middle case of a range, shown, or null when the range is one figure
+ * already and saying it twice would read oddly.
  */
+export function middleFigure(band: Band, show: (value: number) => string): string | null {
+  return band.low === band.high ? null : show(band.mid)
+}
+
+/** The middle case after a range, like ", most likely 81%", or nothing when the ends agree. */
 export function middleCase(
   band: Band,
   show: (value: number) => string,
   words = 'most likely',
 ): string {
-  return band.low === band.high ? '' : `, ${words} ${show(band.mid)}`
+  const middle = middleFigure(band, show)
+  return middle === null ? '' : `, ${words} ${middle}`
 }

@@ -3,7 +3,8 @@
 // words come worked out from the server (project_retirement); this only lays
 // them out.
 
-import { BandChart, rangeText } from '../../../components/charts/BandChart'
+import { middleFigure, range } from '../../../../../server/src/domain/profile/rangeWords'
+import { BandChart } from '../../../components/charts/BandChart'
 import { Card, Progress } from '../../../components/ui'
 import type { RetirementView } from './fields'
 import { Amount, useMoney } from './money'
@@ -41,7 +42,10 @@ function SavingsBand({ meter }: { meter: Meter }) {
   const money = useMoney()
   const first = meter.band[0]!
   const last = meter.band.at(-1)!
-  const description = `Savings at ${first.age}: ${money(first.mid)}. At ${last.age}: ${rangeText(last.low, last.high, money)}, ${money(last.mid)} in the middle case.`
+  // The middle case is named only when the ends differ, so one figure is never said twice.
+  const middle = middleFigure(last, money)
+  const inMiddle = middle === null ? '' : `, ${middle} in the middle case`
+  const description = `Savings at ${first.age}: ${money(first.mid)}. At ${last.age}: ${range(last, money)}${inMiddle}.`
   return (
     <div className="stack-sm">
       <BandChart

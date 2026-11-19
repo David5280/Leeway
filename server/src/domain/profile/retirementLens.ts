@@ -10,7 +10,7 @@ import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/pl
 import type { InsightFormat } from './insights.js'
 import { growthMeter, LENS_QUESTIONS, type Lens, type LensAnswer, type Meter } from './lens.js'
 import { balanceAnswer, contributionsMeter, pick, type LensInput } from './lenses.js'
-import { middleCase, percent, range } from './rangeWords.js'
+import { middleCase, middleFigure, percent, range } from './rangeWords.js'
 
 /** Each pension as its card shows it, in words. */
 export interface PensionCard {
@@ -258,12 +258,15 @@ function incomeMeter(
   ]
   // A bar only where Leeway gives a verdict, so it never shows a shortfall it would not say.
   const compared = target !== null && projection.coverage !== null
+  // Under a range, the middle case; under one figure, nothing to repeat.
+  const middle = middleFigure(income.total, money)
+  const against = incomeAgainst(plan, projection, money)
   return {
     id: 'retirement_income',
     question:
       projection.yearsToGo > 0 ? `Monthly income at ${projection.atAge}` : 'Monthly income now',
     headline: range(income.total, money),
-    detail: `most likely about ${money(income.total.mid)}. ${incomeAgainst(plan, projection, money)}`,
+    detail: middle === null ? against : `most likely about ${middle}. ${against}`,
     tone: 'neutral',
     progress: compared ? { value: income.total.mid, target: target.monthlyCents } : null,
     parts,

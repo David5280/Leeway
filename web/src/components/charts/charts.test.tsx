@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addDays } from '../../lib/dates'
 import { money as format } from '../../lib/format'
 import { fakeServer, renderSignedIn } from '../../test/fake'
-import { ageTicks, BandChart, bandPath, rangeText, type BandPoint } from './BandChart'
+import { range } from '../../../../server/src/domain/profile/rangeWords'
+import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
 import { LineChart } from './LineChart'
 import type { Pace } from './pace'
 import { PaceChart } from './PaceChart'
@@ -247,10 +248,12 @@ describe('ageTicks', () => {
   })
 })
 
-describe('rangeText', () => {
+describe('range, as the chart words its readout', () => {
   it('gives a range, or one figure when the cases agree', () => {
-    expect(rangeText(5_750_000, 14_780_000, money)).toBe('$57,500 to $147,800')
-    expect(rangeText(4_000_000, 4_000_000, money)).toBe('$40,000')
+    expect(range({ low: 5_750_000, mid: 9_000_000, high: 14_780_000 }, money)).toBe(
+      '$57,500 to $147,800',
+    )
+    expect(range({ low: 4_000_000, mid: 4_000_000, high: 4_000_000 }, money)).toBe('$40,000')
   })
 })
 

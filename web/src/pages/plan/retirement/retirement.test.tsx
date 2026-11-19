@@ -104,6 +104,18 @@ describe('the projection', () => {
     expect(fill?.getAttribute('style')).toContain('var(--accent)')
   })
 
+  it('says a figure once when every case agrees, as with nothing saved', async () => {
+    serve(retirementOf({ recentMonthlySpendingCents: 400_000 }, { birthYear: 1986 }))
+    renderPlan('/plan/retirement')
+    const projection = within(await card('Retirement projection'))
+    expect(projection.getByRole('img', { name: 'Savings by age' })).toHaveAccessibleDescription(
+      'Savings at 40: $0. At 65: $0.',
+    )
+    const income = within(projection.getByRole('group', { name: 'Monthly income at 65' }))
+    expect(income.getByText('$0', { selector: '.mid-number' })).toBeVisible()
+    expect(projection.queryByText(/most likely/)).toBeNull()
+  })
+
   it('gives a pension holder short of the target the figures, with no verdict or bar', async () => {
     // Wanting $9,000 a month, more than the pension and savings give.
     serve(
