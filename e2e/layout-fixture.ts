@@ -1,5 +1,5 @@
-// A bare page to prove the layout guard's checks on (layout-checks.spec.ts
-// and layout-clipped.spec.ts).
+// A bare page to prove the layout guard's checks on (layout-checks.spec.ts,
+// layout-clipped.spec.ts and taps.phone.spec.ts).
 
 import type { Page } from '@playwright/test'
 import { findProblems, type LayoutCheck } from './layout'

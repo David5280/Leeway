@@ -190,15 +190,19 @@ first, and removes them afterwards. Each screen fails if text overlaps text
 or a control, is cut off without an ellipsis (or squeezed to a sliver with
 one), breaks a word across lines, scrolls the page sideways, comes to rest
 under a fixed bar, or shows under the status bar, notch or home indicator
-with nothing opaque over it. A few screens run again in Neon's wider font at
-compact density. A failure names each element and what is wrong with it.
+with nothing opaque over it. It also fails on any control a finger's 44px tap
+can miss: drawn smaller with no label or invisible hit area to make up the
+size, covered by a neighbour, or placed where no scrolling reaches it. Links
+inside a sentence are the one exception. A few screens run again in Neon's
+wider font at compact density. A failure names each element and what is
+wrong with it.
 
 The checks live in `e2e/layout/`, one file per check, and run inside the
 page: `e2e/layout.ts` bundles them with esbuild into one script for
-Playwright to run there. `layout-checks.spec.ts` (and, for the clipped
-check, `layout-clipped.spec.ts`) proves each one on small pages broken on
-purpose, and on the same pages fixed; when a check changes,
-add a fixture that fails without the change.
+Playwright to run there. `layout-checks.spec.ts` (with
+`layout-clipped.spec.ts` for the clipped check and `taps.phone.spec.ts` for
+taps) proves each one on small pages broken on purpose, and on the same pages
+fixed; when a check changes, add a fixture that fails without the change.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set
