@@ -2,9 +2,9 @@
 // with the middle case drawn as a line, by age. Used for a retirement
 // projection, where one line would read as a promise.
 
-import { range } from '../../../../server/src/domain/profile/rangeWords'
 import type { BandPoint } from '../../../../server/src/domain/retirement/projection'
 import { useApp } from '../../lib/app'
+import { Money } from '../design/Money'
 import { axisFormat, niceTicks, textWidth } from '../../lib/chartScale'
 import { useWidth } from '../../lib/useWidth'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
@@ -13,18 +13,23 @@ import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from 
 export type { BandPoint }
 
 /**
+ * A year's range, "$1,200 to $1,800", or one figure when the cases agree, as
+ * rangeWords.range words it in a sentence.
+ */
+function BandRange({ point }: { point: BandPoint }) {
+  if (point.low === point.high) return <Money cents={point.mid} />
+  return (
+    <>
+      <Money cents={point.low} /> to <Money cents={point.high} />
+    </>
+  )
+}
+
+/**
  * Every year's figures as a table only a screen reader reads, since the
  * drawing and its readout need a pointer.
  */
-function YearTable({
-  points,
-  label,
-  money,
-}: {
-  points: BandPoint[]
-  label: string
-  money: (cents: number) => string
-}) {
+function YearTable({ points, label }: { points: BandPoint[]; label: string }) {
   return (
     <table className="visually-hidden">
       <caption>{label}, each year</caption>
@@ -39,8 +44,12 @@ function YearTable({
         {points.map((point) => (
           <tr key={point.age}>
             <th scope="row">{point.age}</th>
-            <td>{range(point, money)}</td>
-            <td>{money(point.mid)}</td>
+            <td>
+              <BandRange point={point} />
+            </td>
+            <td>
+              <Money cents={point.mid} />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -74,13 +83,10 @@ export function BandChart({
   points,
   label,
   description,
-  money,
 }: {
   points: BandPoint[]
   label: string
   description: string
-  /** Whole amounts for the readout, from the caller's money format. */
-  money: (cents: number) => string
 }) {
   const { settings } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(640)
@@ -118,8 +124,13 @@ export function BandChart({
               title={`At ${hovered.age}`}
               lines={
                 hovered.low === hovered.high
-                  ? [money(hovered.mid)]
-                  : [range(hovered, money), `Middle ${money(hovered.mid)}`]
+                  ? [<Money cents={hovered.mid} />]
+                  : [
+                      <BandRange point={hovered} />,
+                      <>
+                        Middle <Money cents={hovered.mid} />
+                      </>,
+                    ]
               }
             />
           )
@@ -162,7 +173,7 @@ export function BandChart({
           handlers={pointer.handlers}
         />
       </ChartFrame>
-      <YearTable points={points} label={label} money={money} />
+      <YearTable points={points} label={label} />
     </>
   )
 }

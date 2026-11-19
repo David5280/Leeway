@@ -185,7 +185,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 20000 },
+      previous: { spentCents: 70000, spentToDateCents: 20000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$300')
@@ -196,7 +196,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 45000 },
+      previous: { spentCents: 70000, spentToDateCents: 45000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$150 less than this point last month')
@@ -223,7 +223,7 @@ describe('GlanceWidget', () => {
     serve()
     const budget = {
       ...budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }]),
-      previous: { spentCents: 0, spentToDateCents: 1000 },
+      previous: { spentCents: 0, spentToDateCents: 1000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />, {
       settings: settingsSchema.parse({ timeZone: 'America/Denver', period }),
@@ -680,15 +680,14 @@ describe('RecentWidget', () => {
     fakeServer({ list_transactions: () => ({ transactions: txs, total: txs.length }) })
     renderSignedIn(<RecentWidget budget={budgetFor([...categories, transfer], [])} offset={0} />)
     expect(await screen.findByText('Costco')).toBeInTheDocument()
-    expect(screen.getByText('Nov 17')).toBeInTheDocument()
-    expect(screen.getByText('Groceries')).toBeInTheDocument()
+    expect(screen.getByText('Nov 17 · Groceries')).toBeInTheDocument()
     expect(screen.getByText('$84.50')).toBeInTheDocument()
-    // No merchant name falls back to the bank's description.
-    expect(screen.getByText('SWEET COW')).toBeInTheDocument()
-    expect(screen.getByText('Needs a category, pending')).toBeInTheDocument()
-    // Transfers are left out of the budget, so their category has no row there.
-    expect(screen.getByText('Transfer')).toBeInTheDocument()
-    expect(screen.getByText('+$2,500.00')).toBeInTheDocument()
+    // No merchant name: the bank's description, cleaned.
+    expect(screen.getByText('Sweet Cow')).toBeInTheDocument()
+    expect(screen.getByText('Nov 16 · Needs a category, pending')).toBeInTheDocument()
+    // A transfer only moved money, so it has no sign and a quiet tone.
+    expect(screen.getByText('Nov 9 · Transfer')).toBeInTheDocument()
+    expect(screen.getByText('$2,500.00')).toHaveClass('money-muted')
     expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute(
       'href',
       '/transactions',
@@ -706,9 +705,9 @@ describe('RecentWidget', () => {
     })
     fakeServer({ list_transactions: () => ({ transactions: [arrival], total: 1 }) })
     renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
-    expect(await screen.findByText('Card payment')).toBeInTheDocument()
-    expect(screen.getByText('+$409.30')).toHaveClass('muted')
-    expect(screen.getByText('+$409.30')).not.toHaveClass('good')
+    expect(await screen.findByText('Nov 4 · Card payment')).toBeInTheDocument()
+    expect(screen.getByText('$409.30')).toHaveClass('money-muted')
+    expect(screen.queryByText('+$409.30')).not.toBeInTheDocument()
   })
 
   it('names the person a Zelle came from, as money in', async () => {
@@ -722,7 +721,7 @@ describe('RecentWidget', () => {
     fakeServer({ list_transactions: () => ({ transactions: [zelle], total: 1 }) })
     renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(await screen.findByText('From Jane Doe')).toBeInTheDocument()
-    expect(screen.getByText('+$125.00')).toHaveClass('good')
+    expect(screen.getByText('+$125.00')).toHaveClass('money-in')
   })
 
   it('says when there are no transactions', async () => {
@@ -791,6 +790,27 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
   })
 
+  it("draws a line of each account's recent balance, when it has one", async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: 9000 }),
+        account({ id: 'b', name: 'New savings', balanceCents: 100 }),
+      ],
+      list_recent_balances: () => [
+        { accountId: 'a', balancesCents: [5000, 7000, 9000] },
+        { accountId: 'b', balancesCents: [100] },
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const checking = (await screen.findByText('Checking')).closest('.list-row')!
+    await waitFor(() => expect(checking.querySelector('svg.spark polyline')).not.toBeNull())
+    // Decorative: the row's link still reads as the account.
+    expect(checking.querySelector('svg.spark')).toHaveAttribute('aria-hidden', 'true')
+    // One day of history makes no line.
+    const savings = screen.getByText('New savings').closest('.list-row')!
+    expect(savings.querySelector('svg.spark')).toBeNull()
+  })
+
   it('shows an overdrawn cash balance in red, but never a card balance', async () => {
     fakeServer({
       list_accounts: () => [
@@ -799,8 +819,8 @@ describe('AccountsWidget', () => {
       ],
     })
     renderSignedIn(<AccountsWidget />)
-    expect(await screen.findByText('-$42.10')).toHaveClass('over')
-    expect(screen.getByText('$50.00')).not.toHaveClass('over')
+    expect(await screen.findByText('−$42.10')).toHaveClass('money-problem')
+    expect(screen.getByText('$50.00')).not.toHaveClass('money-problem')
   })
 
   it('shows the name the server gives each account, with its bank and last four digits', async () => {

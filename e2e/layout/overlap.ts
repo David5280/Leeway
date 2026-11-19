@@ -2,7 +2,7 @@
 // page text or controls coming to rest under a fixed bar, like the last row
 // of a page left under the tab bar.
 
-import { CONTROLS, clipArea, describe, isShown, layerOf, shownBox } from './elements'
+import { CONTROLS, clipArea, describe, floatOf, isShown, shownBox } from './elements'
 import {
   boxAround,
   cornersOf,
@@ -30,7 +30,7 @@ interface Piece {
   /** The upright box around the corners, for a quick first test. */
   box: Box
   text: boolean
-  /** The fixed bar it floats in, if any. */
+  /** The fixed bar or held sticky header it floats in, if any. */
   layer: Element | null
 }
 
@@ -39,7 +39,7 @@ const piece = (owner: Element, corners: Point[], text: boolean): Piece => ({
   corners,
   box: boxAround(corners),
   text,
-  layer: layerOf(owner),
+  layer: floatOf(owner),
 })
 
 /** Each line of text on the page, trimmed to its letters and to where it shows. */
@@ -71,7 +71,8 @@ function collide(a: Piece, b: Piece): boolean {
   if (!a.text && !b.text) return false
   // An element and its own parts (a button and its label) always share space.
   if (a.owner === b.owner || a.owner.contains(b.owner) || b.owner.contains(a.owner)) return false
-  // A fixed bar floats over the page as it scrolls; that is what it is for.
+  // A fixed bar or a held sticky header floats over the page as it scrolls;
+  // that is what it is for.
   if (a.layer !== b.layer) return false
   return overlaps(a.box, b.box) && shapesOverlap(a.corners, b.corners)
 }

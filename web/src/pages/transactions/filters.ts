@@ -11,6 +11,16 @@ export const RANGES = [
   { value: 'all', label: 'All' },
 ] as const
 
+/** The range named in the address (?range=), or "This period" for none or one not known. */
+export function parseRange(value: string | null): Range {
+  return RANGES.find((range) => range.value === value)?.value ?? 'period'
+}
+
+/** A range as written in the address: nothing for "This period", the default. */
+export function rangeParam(range: Range): string | null {
+  return range === 'period' ? null : range
+}
+
 /** The first date a range covers, or undefined for all time. */
 export function rangeStart(
   range: Range,

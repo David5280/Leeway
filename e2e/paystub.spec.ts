@@ -64,9 +64,11 @@ test('reads a paystub, lets each figure be checked, and saves it to the pension'
   await expect(card.getByRole('status')).toHaveText('Saved the paystub paid Nov 13, 2026.')
   await expect(review).toBeHidden()
   await expect(card.getByText('From City of Example, paid Nov 13, 2026')).toBeVisible()
-  await expect(card.getByRole('listitem').filter({ hasText: 'Gross pay' })).toContainText(
-    '$3,900.00',
-  )
+  // Only take-home pay reads as money in; gross pay, which holds it, stands plain.
+  const line = (label: string) => card.getByRole('listitem').filter({ hasText: label })
+  await expect(line('Gross pay')).toHaveText('Gross pay$3,900.00')
+  await expect(line('Take-home pay')).toContainText('+$')
+  await expect(line('Pension, paid by your employer')).not.toContainText('+')
   await expect(card.getByRole('listitem').filter({ hasText: 'HSA' })).toContainText('$75.00')
   // The pension now takes its contribution from the paystub.
   await expect(page.getByRole('group', { name: PENSION })).toContainText('$423 a paycheck')

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { transaction } from '../../test/fake'
-import { groupByDay, rangeStart } from './filters'
+import { groupByDay, parseRange, rangeParam, rangeStart } from './filters'
 
 describe('rangeStart', () => {
   const now = Date.UTC(2026, 10, 17, 18, 0)
@@ -37,5 +37,21 @@ describe('groupByDay', () => {
 
   it('returns nothing for no transactions', () => {
     expect(groupByDay([])).toEqual([])
+  })
+})
+
+describe('parseRange and rangeParam', () => {
+  it('reads each range from the address, and anything else as this period', () => {
+    expect(parseRange('30')).toBe('30')
+    expect(parseRange('all')).toBe('all')
+    expect(parseRange('period')).toBe('period')
+    expect(parseRange(null)).toBe('period')
+    expect(parseRange('forever')).toBe('period')
+  })
+
+  it('writes this period, the default, as nothing at all', () => {
+    expect(rangeParam('period')).toBeNull()
+    expect(rangeParam('30')).toBe('30')
+    expect(rangeParam('all')).toBe('all')
   })
 })

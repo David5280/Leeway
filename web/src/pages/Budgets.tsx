@@ -3,8 +3,11 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import type { Budget } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
+import { Money } from '../components/design/Money'
+import { ProgressRing } from '../components/design/ProgressRing'
 import { Shell } from '../components/Shell'
 import { Card, Dot, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
@@ -14,7 +17,7 @@ import { SpendingList } from './budgets/SpendingList'
 import { Suggestions } from './budgets/Suggestions'
 
 export function Budgets() {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
@@ -56,20 +59,25 @@ export function Budgets() {
       <div className="grid">
         <Card className="span-4 stack-sm" label="Budgeted">
           <span className="eyebrow">Budgeted</span>
-          <span className="mid-number num">{money(b.totals.budgetedCents)}</span>
+          <Money cents={b.totals.budgetedCents} className="mid-number" />
         </Card>
-        <Card className="span-4 stack-sm" label="Spent">
-          <span className="eyebrow">Spent in budgets</span>
-          <span className="mid-number num">{money(b.totals.budgetedSpentCents)}</span>
+        <Card className="span-4 row-between" label="Spent">
+          <div className="stack-sm">
+            <span className="eyebrow">Spent in budgets</span>
+            <Money cents={b.totals.budgetedSpentCents} className="mid-number" />
+          </div>
+          <BudgetsUsed totals={b.totals} />
         </Card>
         <Card className="span-4 stack-sm" label="Left">
           <span className="eyebrow">Left</span>
-          <span className={`mid-number num ${b.totals.leftCents < 0 ? 'over' : ''}`}>
-            {money(b.totals.leftCents)}
-          </span>
+          <Money
+            cents={b.totals.leftCents}
+            tone={b.totals.leftCents < 0 ? 'problem' : undefined}
+            className="mid-number"
+          />
           {b.totals.setAsideCents > 0 && (
             <Link to="/plan/goals" className="small muted tap">
-              {money(b.totals.setAsideCents)} of it set aside for goals
+              <Money cents={b.totals.setAsideCents} /> of it set aside for goals
             </Link>
           )}
         </Card>
@@ -119,7 +127,9 @@ export function Budgets() {
             >
               <Dot color={row.color} />
               <span className="grow">{row.name}</span>
-              <span className="num good">{money(row.spentCents)} in</span>
+              <span className="num good">
+                <Money cents={row.spentCents} /> in
+              </span>
             </Link>
           ))}
           {transfers.map((c) => (
@@ -137,5 +147,18 @@ export function Budgets() {
         </Card>
       )}
     </Shell>
+  )
+}
+
+/** How much of everything budgeted is spent, as a ring; nothing until a budget is set. */
+function BudgetsUsed({ totals }: { totals: Budget['totals'] }) {
+  if (totals.budgetedCents <= 0) return null
+  const percent = (totals.budgetedSpentCents / totals.budgetedCents) * 100
+  return (
+    <ProgressRing
+      label="Budgets used"
+      percent={percent}
+      status={totals.budgetedSpentCents > totals.budgetedCents ? 'over' : 'ok'}
+    />
   )
 }

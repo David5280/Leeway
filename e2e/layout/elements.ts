@@ -92,12 +92,15 @@ function isScreenReaderOnly(node: Element): boolean {
 }
 
 /**
- * Hidden on purpose: not rendered, invisible or fully see-through, or inside
- * a screen-reader-only box. Something the layout merely squeezed to nothing
- * (a name in a 0px flex item) is not hidden by design, and the checks report it.
+ * Hidden on purpose: not rendered, invisible or fully see-through, inside a
+ * screen-reader-only box, or behind a modal dialog (inert: nobody can tap,
+ * focus or read it while the dialog is open, and the dialog's scrim covers
+ * it). Something the layout merely squeezed to nothing (a name in a 0px flex
+ * item) is not hidden by design, and the checks report it.
  */
 export function isHiddenByDesign(el: Element): boolean {
   if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return true
+  if (el.closest('[inert]')) return true
   for (let node: Element | null = el; node; node = node.parentElement) {
     if (isScreenReaderOnly(node)) return true
   }
@@ -119,10 +122,41 @@ export function shownBox(el: Element): Box {
   return intersect(toBox(el.getBoundingClientRect()), clipArea(el))
 }
 
+/**
+ * Whether a sticky header is held away from its place in the flow now: stuck
+ * at its edge with the page scrolling under it, or pushed along by the end of
+ * its section, as a day's heading is when that day's last rows go by. One
+ * still in its place in the flow is part of the page, and checked like the rest.
+ */
+function isLifted(node: HTMLElement, style: CSSStyleDeclaration): boolean {
+  if (style.position !== 'sticky') return false
+  const held = node.getBoundingClientRect().top
+  // Where it would be in the flow: drawn in place for a moment, then put back.
+  const inline = node.style.position
+  node.style.position = 'static'
+  const inFlow = node.getBoundingClientRect().top
+  node.style.position = inline
+  return Math.abs(held - inFlow) > 1
+}
+
 /** The fixed bar (like the tab bar) an element is inside, which floats over the page. */
 export function layerOf(el: Element): Element | null {
   for (let node: Element | null = el; node; node = node.parentElement) {
     if (getComputedStyle(node).position === 'fixed') return node
+  }
+  return null
+}
+
+/**
+ * What an element floats over the page in, for telling what may be drawn
+ * over what: a fixed bar, or a sticky header held away from its place (like
+ * a day's heading in a long list, which the day's rows pass under).
+ */
+export function floatOf(el: Element): Element | null {
+  for (let node: Element | null = el; node; node = node.parentElement) {
+    const style = getComputedStyle(node)
+    if (style.position === 'fixed') return node
+    if (node instanceof HTMLElement && isLifted(node, style)) return node
   }
   return null
 }

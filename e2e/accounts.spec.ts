@@ -34,7 +34,8 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await expect(page.getByRole('region', { name: 'Summary' })).toContainText(
     'Everyday is overdrawn by $42.10.',
   )
-  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('-$42.10')
+  // Amounts below zero carry a true minus sign (U+2212), not a hyphen.
+  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('\u2212$42.10')
   await page.reload()
   await expect(picker.getByRole('button', { name: 'Everyday' })).toHaveAttribute(
     'aria-pressed',

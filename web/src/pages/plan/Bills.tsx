@@ -10,12 +10,13 @@ import { shortDate } from '../../lib/format'
 import { FormCard } from './FormCard'
 import { BillForm, billFields, type BillFields } from './BillForm'
 import { BILL_CADENCES, billStatus } from './text'
+import { Money } from '../../components/design/Money'
 
 /** Which bill is open in the form: a new one (with any prefilled fields) or an existing one. */
 type Editing = { bill?: Bill; initial: BillFields } | null
 
 function BillRow({ bill, onEdit }: { bill: Bill; onEdit: () => void }) {
-  const { exact, settings } = useApp()
+  const { settings } = useApp()
   const status = billStatus(bill, settings.locale)
   return (
     <button type="button" className="list-row" onClick={onEdit}>
@@ -28,7 +29,7 @@ function BillRow({ bill, onEdit }: { bill: Bill; onEdit: () => void }) {
         </span>
       </span>
       <span className="stack-sm" style={{ gap: 0, textAlign: 'right' }}>
-        <span className="num">{exact(bill.amountCents)}</span>
+        <Money cents={bill.amountCents} precision="cents" />
         <span className={`small ${status.tone || 'muted'}`}>{status.text}</span>
       </span>
     </button>
@@ -37,7 +38,7 @@ function BillRow({ bill, onEdit }: { bill: Bill; onEdit: () => void }) {
 
 /** Repeating charges not tracked yet, each one tap from becoming a bill. */
 function Suggestions({ onTrack }: { onTrack: (series: RecurringSeries) => void }) {
-  const { exact, settings } = useApp()
+  const { settings } = useApp()
   const found = useAction('find_recurring')
   const dismiss = useActionMutation('dismiss_recurring')
   // Paychecks show up here too; they shape the payday, not the bills.
@@ -55,7 +56,7 @@ function Suggestions({ onTrack }: { onTrack: (series: RecurringSeries) => void }
             <span style={{ fontWeight: 500 }}>{series.name}</span>
             <span className="small muted">
               {series.amountVaries ? 'About ' : ''}
-              <span className="num">{exact(series.typicalAmountCents)}</span>{' '}
+              <Money cents={series.typicalAmountCents} precision="cents" />{' '}
               {BILL_CADENCES[series.cadence].toLowerCase()}, next around{' '}
               {shortDate(series.nextDate, settings.locale)}
             </span>
@@ -111,7 +112,7 @@ function BillEditor({
 }
 
 export function BillsSection() {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const [editing, setEditing] = useState<Editing>(null)
   const bills = useAction('list_bills')
   const categories = useAction('list_categories')
@@ -156,8 +157,8 @@ export function BillsSection() {
             <h2>Bills and subscriptions</h2>
             {monthlyCents > 0 && (
               <span className="small muted">
-                About <span className="num">{money(monthlyCents)}</span> a month, with{' '}
-                <span className="num">{money(subscriptionsMonthlyCents)}</span> in subscriptions
+                About <Money cents={monthlyCents} /> a month, with{' '}
+                <Money cents={subscriptionsMonthlyCents} /> in subscriptions
               </span>
             )}
           </div>

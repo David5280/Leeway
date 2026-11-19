@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addDays } from '../../lib/dates'
-import { money as format } from '../../lib/format'
+import { money as format } from '../../lib/money'
 import { fakeServer, renderSignedIn } from '../../test/fake'
 import { range } from '../../../../server/src/domain/profile/rangeWords'
 import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
@@ -38,7 +38,7 @@ describe('on a phone', () => {
         <PeriodBars bars={bars} budgetCents={80_000} color="teal" label="Groceries" />
         <PaceChart pace={pace()} isCurrent />
         <LineChart points={history} label="Net worth" description="Rising." />
-        <BandChart points={band} label="Savings by age" description="Growing." money={money} />
+        <BandChart points={band} label="Savings by age" description="Growing." />
       </>,
     )
     expect(svgHeights()).toEqual(['200', '210', '210', '200'])
@@ -194,7 +194,7 @@ describe('LineChart', () => {
     fakeServer({})
     renderSignedIn(<LineChart points={history} label="Net worth" description="Rising." />)
     point('first')
-    expect(readout()).toHaveTextContent('Jun 1-$500')
+    expect(readout()).toHaveTextContent('Jun 1\u2212$500')
     fireEvent.pointerLeave(screen.getByTestId('chart-hit'))
     expect(readout()).toBeNull()
   })
@@ -266,9 +266,7 @@ describe('bandPath', () => {
 describe('BandChart', () => {
   it('is one image named and described, with ages along the bottom', () => {
     fakeServer({})
-    renderSignedIn(
-      <BandChart points={band} label="Savings by age" description="Growing." money={money} />,
-    )
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
     const chart = screen.getByRole('img', { name: 'Savings by age' })
     expect(chart).toHaveAccessibleDescription('Growing.')
     expect(chart).toHaveTextContent('40')
@@ -278,9 +276,7 @@ describe('BandChart', () => {
 
   it('reads out the range and the middle case at the age under the pointer', () => {
     fakeServer({})
-    renderSignedIn(
-      <BandChart points={band} label="Savings by age" description="Growing." money={money} />,
-    )
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
     point('last')
     expect(readout()).toHaveTextContent('At 65$57,500 to $147,800Middle $92,600')
     // Today's savings are known, so the cases agree and the readout gives one figure.
@@ -292,9 +288,7 @@ describe('BandChart', () => {
 
   it('gives every year to a screen reader as a table, with no pointer needed', () => {
     fakeServer({})
-    renderSignedIn(
-      <BandChart points={band} label="Savings by age" description="Growing." money={money} />,
-    )
+    renderSignedIn(<BandChart points={band} label="Savings by age" description="Growing." />)
     const table = screen.getByRole('table', { name: 'Savings by age, each year' })
     expect(table).toHaveClass('visually-hidden')
     const rows = screen.getAllByRole('row').map((row) => row.textContent)
@@ -309,12 +303,7 @@ describe('BandChart', () => {
   it('draws a single age without failing', () => {
     fakeServer({})
     renderSignedIn(
-      <BandChart
-        points={band.slice(0, 1)}
-        label="Savings by age"
-        description="Now."
-        money={money}
-      />,
+      <BandChart points={band.slice(0, 1)} label="Savings by age" description="Now." />,
     )
     expect(screen.getByRole('img', { name: 'Savings by age' })).toHaveTextContent('40')
   })

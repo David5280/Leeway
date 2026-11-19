@@ -4,6 +4,7 @@ import type { AccountsView } from '../../api/client'
 import { Card, Dot, Progress } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
+import { Money } from '../../components/design/Money'
 
 /** Categories listed; the rest are summed into one line. */
 export const SPENDING_ROWS = 6
@@ -33,19 +34,19 @@ export function Spending({
               <Dot color={s.color} dashed={s.categoryId === null} />
               {s.name}
             </span>
-            <span className="num">{money(s.spentCents)}</span>
+            <Money cents={s.spentCents} />
           </div>
           <Progress
             percent={(s.spentCents / top) * 100}
             color={s.color ?? 'var(--muted)'}
-            label={`${s.name}: ${money(s.spentCents)}`}
+            aria-label={`${s.name}: ${money(s.spentCents)}`}
           />
         </div>
       ))}
       {rest > 0 && (
         <p className="small muted row-between">
           <span>Everything else</span>
-          <span className="num">{money(rest)}</span>
+          <Money cents={rest} />
         </p>
       )}
     </Card>

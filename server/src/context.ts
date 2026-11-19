@@ -24,4 +24,11 @@ export interface AppContext {
   /** Null until RESEND_API_KEY and MAIL_FROM are set; the weekly email is then unavailable. */
   mailer: EmailSender | null
   now: () => Date
+  /**
+   * True when an AI agent called, through the MCP endpoint. An agent never
+   * reads the bank's own text (see mcp/withoutBankText.ts), so nothing it
+   * asks may match that text either: a search for "4417" would otherwise say
+   * which transactions carry an account's last digits.
+   */
+  agent?: boolean
 }

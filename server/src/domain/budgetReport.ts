@@ -5,6 +5,7 @@ import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
 import { periodContaining, shiftPeriod, type Period } from '../lib/periods.js'
 import { computeBudget, type BudgetSummary, type CategoryTotal, type SetAside } from './budget.js'
 import { listCategories, type Category } from './categories.js'
+import { countedSql, countsAsSpending } from './counted.js'
 import { listGoals } from './goals.js'
 import { rolloverCarries } from './rollover.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -39,7 +40,7 @@ export async function categoryTotalsByRange(
      WHERE NOT t.excluded
        AND CASE WHEN $4::uuid[] IS NULL THEN NOT a.hidden ELSE a.id = ANY($4) END
        AND ($3 OR NOT t.pending)
-       AND (c.kind IS NULL OR c.kind <> 'transfer')
+       AND ${countedSql()}
      GROUP BY r.n, t.category_id
      ORDER BY r.n, t.category_id NULLS LAST`,
     [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds],
@@ -126,8 +127,8 @@ export function sumTotals(
   let spentCents = 0
   let incomeCents = 0
   for (const total of totals) {
-    const kind = total.categoryId === null ? 'expense' : kinds.get(total.categoryId)
-    if (kind === 'expense') spentCents += total.amountCents
+    const kind = total.categoryId === null ? null : kinds.get(total.categoryId)
+    if (countsAsSpending(kind)) spentCents += total.amountCents
     if (kind === 'income') incomeCents -= total.amountCents
   }
   return { spentCents, incomeCents }
@@ -135,7 +136,29 @@ export function sumTotals(
 
 export interface BudgetReport extends BudgetSummary {
   /** The period before, for "more than this point last month" comparisons. */
-  previous: { spentCents: number; spentToDateCents: number }
+  previous: {
+    spentCents: number
+    spentToDateCents: number
+    /**
+     * Each category's amount the same number of days into the period before,
+     * read as its row's spentCents is: spending for an expense, money
+     * received for income. Categories with none are left out.
+     */
+    categories: { categoryId: string; spentToDateCents: number }[]
+  }
+}
+
+/** Each category's total, read as a budget row reads it: money received is positive for income. */
+function byCategory(
+  categories: Category[],
+  totals: CategoryTotal[],
+): BudgetReport['previous']['categories'] {
+  const kinds = new Map(categories.map((c) => [c.id, c.kind]))
+  return totals.flatMap(({ categoryId, amountCents }) => {
+    if (categoryId === null) return []
+    const received = kinds.get(categoryId) === 'income'
+    return [{ categoryId, spentToDateCents: received ? -amountCents : amountCents }]
+  })
 }
 
 /** The budget plus how the previous period looked at the same point. */
@@ -164,6 +187,7 @@ export async function budgetReport(
     previous: {
       spentCents: sumTotals(categories, full).spentCents,
       spentToDateCents: sumTotals(categories, toDate).spentCents,
+      categories: byCategory(categories, toDate),
     },
   }
 }
