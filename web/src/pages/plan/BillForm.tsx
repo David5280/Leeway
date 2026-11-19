@@ -79,7 +79,7 @@ export function BillForm({
         />
       </Setting>
       <Setting label="Amount">
-        <div className="row">
+        <div className="row wrap">
           <input
             className="input num"
             style={{ width: 110 }}

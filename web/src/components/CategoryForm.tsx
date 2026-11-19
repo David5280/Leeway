@@ -178,7 +178,7 @@ export function CategoryForm({
       </Setting>
       {fields.kind !== 'transfer' && (
         <Setting label={expense ? 'Budget' : 'Expected'} hint="Leave blank to just track it">
-          <div className="row">
+          <div className="row wrap">
             <input
               className="input num"
               style={{ width: 110 }}

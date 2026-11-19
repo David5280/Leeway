@@ -208,7 +208,7 @@ test.describe('the status bar backdrop', () => {
       })
 
       // The iPhone's clock stays white on a light page, so the bar turns dark.
-      test(`in ${theme}, light, is the solid ink, and white status text reads on it`, async ({
+      test(`in ${theme}, light, is a solid band of ink, and white status text reads on it`, async ({
         page,
       }) => {
         await lookAs(page, theme, 'light')
@@ -218,23 +218,20 @@ test.describe('the status bar backdrop', () => {
         expectSameColor(fill, ink)
         expect(fill[3]).toBe(255)
         expect(whiteContrast(fill)).toBeGreaterThanOrEqual(AA)
-        // A short fade under the bar eases it into the light page.
+        // A clean band of exactly the status bar's height, with nothing hanging under it.
         await expect(backdrop(page)).toHaveCSS('height', `${UPRIGHT_INSETS.top}px`)
         expect(
-          await backdrop(page).evaluate((bar) => getComputedStyle(bar, '::after').height),
-        ).toBe('10px')
+          await backdrop(page).evaluate((bar) => getComputedStyle(bar, '::after').content),
+        ).toBe('none')
       })
     }
   })
 
-  test('folds away, fade and all, when the phone is turned sideways', async ({ page }) => {
+  test('folds away when the phone is turned sideways', async ({ page }) => {
     await page.setViewportSize(IPHONE_LANDSCAPE.viewport)
     await lookAs(page, 'harbor', 'light')
     await simulateInsets(page, SIDEWAYS_INSETS)
     expect((await backdrop(page).boundingBox())?.height ?? 0).toBe(0)
-    expect(await backdrop(page).evaluate((bar) => getComputedStyle(bar, '::after').height)).toBe(
-      '0px',
-    )
   })
 
   test('takes no room on a computer, which has no status bar', async ({ page }) => {
