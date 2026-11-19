@@ -40,7 +40,7 @@ const SIGNATURES: { mediaType: PaystubMediaType; starts: number[] }[] = [
 /** HEIC and HEIF photos carry "ftyp" and a brand like "heic" from byte 4. */
 const HEIF_BRANDS = ['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1']
 
-const UNSUPPORTED =
+export const UNSUPPORTED =
   'Leeway reads a paystub as a PDF, PNG or JPEG. Save or export it as one of those and try again.'
 
 /**
@@ -48,7 +48,7 @@ const UNSUPPORTED =
  * converting it would need a large image library. Picking the photo in the
  * browser usually sends it as JPEG already; this says what to do when not.
  */
-const HEIC_HELP =
+export const HEIC_HELP =
   'This photo is in HEIC, which Leeway cannot read yet. Take a screenshot of it, or set the iPhone camera to Most Compatible (Settings, Camera, Formats), and try again.'
 
 function startsWith(bytes: Buffer, starts: number[]): boolean {
@@ -86,12 +86,14 @@ const WHAT_FILE: Record<PaystubMediaType, string> = {
   'image/jpeg': 'A photo',
 }
 
-/** The error for a file over its type's limit, or over every limit when the type is not known yet. */
-export function tooLarge(mediaType?: PaystubMediaType): AppError {
+/** What to say of a file over its type's limit, or over every limit when the type is not known yet. */
+export function tooLargeMessage(mediaType?: PaystubMediaType): string {
   const limit = mediaType ? MAX_PAYSTUB_BYTES[mediaType] : MAX_UPLOAD_BYTES
   const what = mediaType ? WHAT_FILE[mediaType] : 'A paystub'
-  return new AppError(
-    'file_too_large',
-    `${what} can be up to ${megabytes(limit)}. Try a smaller file, such as one page of the paystub.`,
-  )
+  return `${what} can be up to ${megabytes(limit)}. Try a smaller file, such as one page of the paystub.`
+}
+
+/** The error for a file over its limit, as tooLargeMessage words it. */
+export function tooLarge(mediaType?: PaystubMediaType): AppError {
+  return new AppError('file_too_large', tooLargeMessage(mediaType))
 }
