@@ -302,6 +302,14 @@ describe('serving the web app', () => {
     expect(response.body).toContain('console.log')
   })
 
+  // Icon links carry a content version (?v=, see web/index.html) so installed
+  // apps fetch a changed icon again; the query must not change what is served.
+  it('serves a built file under a versioned URL', async () => {
+    const response = await site.inject({ url: '/app.js?v=0123abcd' })
+    expect(response.statusCode).toBe(200)
+    expect(response.body).toContain('console.log')
+  })
+
   it('answers any other page with the app, which routes in the browser', async () => {
     const response = await site.inject({ url: '/budget/categories' })
     expect(response.statusCode).toBe(200)

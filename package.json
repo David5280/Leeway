@@ -34,7 +34,7 @@
     "start": "npm run start --workspace server",
     "reset-password": "npm run reset-password --workspace server",
     "test": "npm run test --workspaces",
-    "typecheck": "npm run typecheck --workspaces && tsc -p e2e",
+    "typecheck": "npm run typecheck --workspaces && tsc -p e2e && tsc -p widget",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -1,7 +1,8 @@
 // Leeway's service worker: makes the app installable and keeps the shell
 // available offline. Budget data always comes fresh from your server.
 const CACHE = 'leeway-shell-v1'
-const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png']
+// Icon URLs carry their content version, as in index.html (manifest.test.ts).
+const SHELL = ['/', '/manifest.webmanifest', '/icon.svg?v=c9ee01ae', '/icon-192.png?v=7fa9df39']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)))

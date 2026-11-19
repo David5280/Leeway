@@ -87,6 +87,7 @@ import {
   starterCategoriesAction,
 } from './setup.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
+import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
   getWeeklyEmailAction,
   sendTestWeeklyEmailAction,
@@ -184,6 +185,9 @@ export const actionList = [
   listTokensAction,
   createTokenAction,
   deleteTokenAction,
+  getWidgetTokenAction,
+  createWidgetTokenAction,
+  revokeWidgetTokenAction,
   listConnectedAppsAction,
   disconnectAppAction,
   getConnectRequestAction,

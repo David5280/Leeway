@@ -27,7 +27,7 @@ import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
-const NET_WORTH_DAYS = 30
+export const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
   const [

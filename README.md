@@ -55,6 +55,7 @@ The screenshots use invented demo data.
 - [Bank sync with Plaid](#bank-sync-with-plaid)
 - [Configuration](#configuration)
 - [Connect an AI assistant](#connect-an-ai-assistant)
+- [Home-screen widget](#home-screen-widget)
 - [Security](#security)
 - [Updating and backups](#updating-and-backups)
 - [Contributing](#contributing)
@@ -330,6 +331,40 @@ authorization spec describes, with discovery at
 `/.well-known/oauth-authorization-server`, PKCE, and client metadata documents
 or dynamic registration. Access tokens last an hour; refresh tokens last 90
 days and change on every use.
+
+## Home-screen widget
+
+Leeway has a widget for your iPhone or iPad home screen and, on a Mac with
+Apple silicon, your desktop. It runs in [Scriptable](https://scriptable.app),
+a free app, and shows what you have safe to spend (or, before you set any
+budgets, your cash until payday), this period's budget left, your net worth
+and how it moved in 30 days, the next bills due, and how many accounts are
+overdrawn, over their limit or low. It comes in small, medium and large, follows your Leeway
+theme and dark mode, and refreshes about every 30 minutes.
+
+![Settings > Widget, with the widget's parameter shown once, the script to copy or download, and the setup steps](docs/screenshots/widget-settings.png)
+
+1. In Leeway, open **Settings**, then **Widget**, and choose **Create the
+   widget token**. Copy the widget parameter it shows: your Leeway address
+   and the token, joined by `|`. It is shown only once.
+2. Choose **Copy the script** (or **Download Leeway.js**). In Scriptable, add
+   a script, paste it, and name it Leeway.
+3. Add a Scriptable widget to your home screen or desktop, edit it, set
+   **Script** to Leeway, and paste the parameter into **Parameter**.
+
+To keep the token out of the widget's settings, run the script once in
+Scriptable and choose **Save address and token**: it keeps them in
+Scriptable's Keychain instead.
+
+The widget token can only read this summary, at `GET /api/widget`, and
+nothing else; no other key or session can read the summary. The summary
+names bills by the names Leeway shows, counts account alerts without naming
+the accounts, and never holds an account number, mask or transaction text. A
+bill you made from a recurring charge starts out named as the bank wrote it,
+so rename it under Bills in **Plan** if you'd rather the widget said
+something else. The widget only sends the token over `https`, so it needs
+Leeway at a public address, as Railway gives you. Making a new token
+replaces the old one, and **Revoke** stops it at once.
 
 ## Security
 

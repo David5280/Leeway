@@ -3,32 +3,10 @@
 // is at least 44px tall, from an iPhone at 390px down to the narrowest phone
 // and turned sideways. The reader is stood in for, as on the desktop.
 
-import { expect, test, type Locator } from '@playwright/test'
-import { overflow } from './phone'
+import { expect, test } from '@playwright/test'
+import { boxes, overflow, overlapping, PHONES } from './phone'
 import { deletePaystubs, importPaystub, mockReader } from './paystub'
 import { addPension, tearDownRetirement } from './retirement'
-
-const PHONES = [
-  ['an iPhone 390px across', { width: 390, height: 844 }],
-  ['an iPhone 375px across', { width: 375, height: 667 }],
-  ['the narrowest phone', { width: 320, height: 568 }],
-  ['an iPhone turned sideways', { width: 844, height: 390 }],
-] as const
-
-/** Every element's box, so overlaps and sizes can be checked. */
-async function boxes(elements: Locator) {
-  const all = await elements.all()
-  return Promise.all(all.map(async (element) => (await element.boundingBox())!))
-}
-
-type Box = Awaited<ReturnType<typeof boxes>>[number]
-
-/** Whether two boxes share any area; touching edges do not count. */
-const overlapping = (a: Box, b: Box) =>
-  a.x < b.x + b.width - 0.5 &&
-  b.x < a.x + a.width - 0.5 &&
-  a.y < b.y + b.height - 0.5 &&
-  b.y < a.y + a.height - 0.5
 
 for (const [name, viewport] of PHONES) {
   test.describe(`on ${name}`, () => {
