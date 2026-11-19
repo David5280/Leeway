@@ -16,7 +16,9 @@ import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
+import { spendingSql } from './counted.js'
 import { periodConfig, type Settings } from './settings.js'
+import { merchantDisplayName } from './transactionName.js'
 
 export interface PeriodTrend {
   offset: number
@@ -181,7 +183,12 @@ export interface MerchantTotal {
   count: number
 }
 
-/** Where the money went in a period, by merchant, biggest first. Refunds count against a merchant. */
+/**
+ * Where the money went in a period, by merchant, biggest first. Refunds count
+ * against a merchant. Merchants are named as everywhere else (see
+ * transactionName.ts), so "STARBUCKS STORE 123" and "STARBUCKS STORE 456"
+ * add up as one Starbucks.
+ */
 export async function topMerchants(
   db: Db,
   settings: Settings,
@@ -190,22 +197,30 @@ export async function topMerchants(
   limit: number,
 ): Promise<MerchantTotal[]> {
   const { period } = currentPeriod(settings, now, offset)
-  const { rows } = await db.query<MerchantTotal>(
-    `SELECT coalesce(t.merchant_name, t.name) AS merchant,
+  const { rows } = await db.query<{ name: string; merchantName: string | null } & MerchantTotal>(
+    `SELECT t.name, t.merchant_name AS "merchantName",
             sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.date >= $1 AND t.date < $2
        AND NOT t.excluded AND NOT a.hidden AND ($3 OR NOT t.pending)
-       AND (c.kind IS NULL OR c.kind = 'expense')
-     GROUP BY 1
-     HAVING sum(t.amount_cents) > 0
-     ORDER BY 2 DESC, 1
-     LIMIT $4`,
-    [period.start, period.end, settings.includePending, limit],
+       AND ${spendingSql()}
+     GROUP BY 1, 2`,
+    [period.start, period.end, settings.includePending],
   )
-  return rows
+  const byMerchant = new Map<string, MerchantTotal>()
+  for (const row of rows) {
+    const merchant = merchantDisplayName(row)
+    const total = byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 }
+    total.spentCents += row.spentCents
+    total.count += row.count
+    byMerchant.set(merchant, total)
+  }
+  return [...byMerchant.values()]
+    .filter((total) => total.spentCents > 0)
+    .sort((a, b) => b.spentCents - a.spentCents || a.merchant.localeCompare(b.merchant))
+    .slice(0, limit)
 }
 
 export interface SpendingPace {

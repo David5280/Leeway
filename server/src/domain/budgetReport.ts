@@ -5,6 +5,7 @@ import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
 import { periodContaining, shiftPeriod, type Period } from '../lib/periods.js'
 import { computeBudget, type BudgetSummary, type CategoryTotal, type SetAside } from './budget.js'
 import { listCategories, type Category } from './categories.js'
+import { countedSql, countsAsSpending } from './counted.js'
 import { listGoals } from './goals.js'
 import { rolloverCarries } from './rollover.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -39,7 +40,7 @@ export async function categoryTotalsByRange(
      WHERE NOT t.excluded
        AND CASE WHEN $4::uuid[] IS NULL THEN NOT a.hidden ELSE a.id = ANY($4) END
        AND ($3 OR NOT t.pending)
-       AND (c.kind IS NULL OR c.kind <> 'transfer')
+       AND ${countedSql()}
      GROUP BY r.n, t.category_id
      ORDER BY r.n, t.category_id NULLS LAST`,
     [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds],
@@ -126,8 +127,8 @@ export function sumTotals(
   let spentCents = 0
   let incomeCents = 0
   for (const total of totals) {
-    const kind = total.categoryId === null ? 'expense' : kinds.get(total.categoryId)
-    if (kind === 'expense') spentCents += total.amountCents
+    const kind = total.categoryId === null ? null : kinds.get(total.categoryId)
+    if (countsAsSpending(kind)) spentCents += total.amountCents
     if (kind === 'income') incomeCents -= total.amountCents
   }
   return { spentCents, incomeCents }

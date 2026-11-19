@@ -142,7 +142,7 @@ describe('recurring charges', () => {
     await call('create_bill', { ...netflix, name: 'Gym', matchPattern: null })
     const found = await call('find_recurring')
     expect(found).toMatchObject([
-      { key: 'spotify p a', name: 'SPOTIFY P1A2', cadence: 'month', suggestedKind: 'subscription' },
+      { key: 'spotify p a', name: 'Spotify', cadence: 'month', suggestedKind: 'subscription' },
     ])
   })
 

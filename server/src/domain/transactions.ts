@@ -7,15 +7,32 @@ import { isoDateSchema } from '../lib/schemas.js'
 import { accountNames } from './accounts.js'
 import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
+import { transactionDisplayName } from './transactionName.js'
+import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
+
+/** The other side of a transfer between two of the owner's accounts. */
+export interface TransferPartner {
+  id: string
+  accountId: string
+  accountName: string
+  date: string
+}
 
 export interface Transaction {
   id: string
   accountId: string
   accountName: string
   date: string
+  /** The bank's raw text, kept as sent and shown in the transaction's details. */
   name: string
   merchantName: string | null
+  /**
+   * The name to show: a clean merchant name, the other person in a payment
+   * between people, or for a paired transfer "Chase Checking to BOK Savings".
+   * Built by transactionDisplayName, the one place transaction names are made.
+   */
+  displayName: string
   /** Positive is money out, negative is money in. */
   amountCents: number
   currency: string
@@ -32,16 +49,51 @@ export interface Transaction {
   source: 'bank' | 'manual' | 'import'
   /** Set when one person paid another through an app like Zelle: who, and which way. */
   person: PersonPayment | null
+  /** For a transfer between two of the owner's accounts, the other side (see transferPairs.ts). */
+  transfer: TransferPartner | null
 }
 
 /** A transaction as stored, with the bank codes that only reading `person` needs. */
-type StoredTransaction = Omit<Transaction, 'person' | 'accountName'> &
+type StoredTransaction = Omit<Transaction, 'person' | 'accountName' | 'displayName' | 'transfer'> &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
 
-/** A stored transaction as the app shows it, its account named as everywhere else. */
-function present(row: StoredTransaction, names: Map<string, string>): Transaction {
+/**
+ * A stored transaction as the app shows it: its account named as everywhere
+ * else, its display name, and the other side of a transfer, when paired.
+ */
+function present(
+  row: StoredTransaction,
+  names: Map<string, string>,
+  partners: Map<string, PairCandidate>,
+): Transaction {
   const { providerCategoryPrimary: _primary, providerCategoryDetailed: _detailed, ...tx } = row
-  return { ...tx, accountName: names.get(row.accountId)!, person: personPayment(row) }
+  const accountName = names.get(row.accountId)!
+  const person = personPayment(row)
+  const partner = partners.get(row.id)
+  const transfer = partner
+    ? {
+        id: partner.id,
+        accountId: partner.accountId,
+        accountName: names.get(partner.accountId)!,
+        date: partner.date,
+      }
+    : null
+  // Money out names this account first: "Checking to Savings" on both sides.
+  const accounts = transfer
+    ? {
+        fromAccount: row.amountCents > 0 ? accountName : transfer.accountName,
+        toAccount: row.amountCents > 0 ? transfer.accountName : accountName,
+      }
+    : null
+  const displayName = transactionDisplayName({ ...row, person }, accounts)
+  return { ...tx, accountName, displayName, person, transfer }
+}
+
+/** Transfer pairs around the dates of the given rows (none for no rows). */
+async function pairsAround(db: Db, rows: StoredTransaction[]) {
+  if (rows.length === 0) return new Map<string, PairCandidate>()
+  const dates = rows.map((row) => row.date).sort()
+  return loadTransferPairs(db, dates[0]!, dates.at(-1)!)
 }
 
 export const transactionFilterSchema = z.object({
@@ -115,8 +167,9 @@ export async function listTransactions(
     ),
     accountNames(db),
   ])
+  const partners = await pairsAround(db, list.rows)
   return {
-    transactions: list.rows.map((row) => present(row, names)),
+    transactions: list.rows.map((row) => present(row, names, partners)),
     total: count.rows[0]!.total,
   }
 }
@@ -124,7 +177,9 @@ export async function listTransactions(
 async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
-  return present(rows[0], await accountNames(db))
+  // One query at a time: db may be a transaction's client.
+  const names = await accountNames(db)
+  return present(rows[0], names, await pairsAround(db, rows))
 }
 
 /**
@@ -247,4 +302,6 @@ export async function deleteManualTransaction(db: Db, id: string): Promise<void>
     )
   }
   await db.query('DELETE FROM transactions WHERE id = $1', [id])
+  // Its other side may have been filed as a transfer only because of this one.
+  if (tx.transfer) await recategorize(db, [tx.transfer.id])
 }

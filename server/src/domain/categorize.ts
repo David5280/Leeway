@@ -3,6 +3,7 @@
 import type { Db } from '../db/pool.js'
 import { listCategories, type Category } from './categories.js'
 import { listRules, type Rule } from './rules.js'
+import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
 import { isTransfer, NO_ACCOUNTS, type Movement, type OwnAccounts } from './transfers.js'
 
 /** The fields of a transaction that decide its category. */
@@ -42,9 +43,12 @@ function byDirection(claimants: Category[], tx: Categorizable): Category | undef
  * Picks a category for a transaction the owner has not categorized by hand.
  *
  * 1. Rules win (first match, in order).
- * 2. When the money only moves between the owner's own accounts (see
+ * 2. One side of a transfer paired with another of the owner's accounts
+ *    (see transferPairs.ts) goes to a transfer category: one claiming either
+ *    bank code, or else the first transfer category.
+ * 3. When the money only moves between the owner's own accounts (see
  *    isTransfer), a transfer category claiming either bank code wins.
- * 3. Otherwise transfer categories step aside, so a car payment or a Zelle to
+ * 4. Otherwise transfer categories step aside, so a car payment or a Zelle to
  *    a friend counts instead of vanishing, and the bank's category is mapped,
  *    preferring a category that claims the detailed code (e.g.
  *    FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR) over one that claims the broad code
@@ -56,6 +60,7 @@ export function chooseCategory(
   rules: Rule[],
   categories: Category[],
   accounts: OwnAccounts = NO_ACCOUNTS,
+  paired = false,
 ): CategoryChoice | null {
   const rule = rules.find((r) => ruleMatches(r, tx))
   if (rule) return { categoryId: rule.categoryId, source: 'rule' }
@@ -65,6 +70,15 @@ export function chooseCategory(
   )
   const claimantsOf = (code: string) =>
     categories.filter((c) => c.providerCategories.includes(code))
+
+  if (paired) {
+    const transfers = categories.filter((c) => c.kind === 'transfer')
+    const claiming = transfers.find((c) =>
+      codes.some((code) => c.providerCategories.includes(code)),
+    )
+    const transfer = claiming ?? transfers[0]
+    if (transfer) return { categoryId: transfer.id, source: 'provider' }
+  }
 
   if (isTransfer(tx, accounts)) {
     const transfer = codes.flatMap(claimantsOf).find((c) => c.kind === 'transfer')
@@ -103,6 +117,11 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
   const rules = await listRules(db)
   const categories = await listCategories(db)
   const accounts = await loadOwnAccounts(db)
+  const partners = await pairsFor(db, transactionIds)
+  // A transaction's other side may change category with it, so it is looked at too.
+  const scope = transactionIds && [
+    ...new Set([...transactionIds, ...transactionIds.flatMap((id) => partners.get(id)?.id ?? [])]),
+  ]
   const { rows } = await db.query<
     Categorizable & { id: string; categoryId: string | null; categorySource: string | null }
   >(
@@ -114,14 +133,14 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
      FROM transactions t JOIN accounts a ON a.id = t.account_id
      WHERE t.category_source IS DISTINCT FROM 'manual'
        AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]))`,
-    [transactionIds ?? null],
+    [scope ?? null],
   )
 
   const ids: string[] = []
   const categoryIds: (string | null)[] = []
   const sources: (string | null)[] = []
   for (const tx of rows) {
-    const choice = chooseCategory(tx, rules, categories, accounts)
+    const choice = chooseCategory(tx, rules, categories, accounts, partners.has(tx.id))
     const categoryId = choice?.categoryId ?? null
     const source = choice?.source ?? null
     if (categoryId === tx.categoryId && source === tx.categorySource) continue
@@ -139,4 +158,16 @@ export async function recategorize(db: Db, transactionIds?: string[]): Promise<n
     )
   }
   return ids.length
+}
+
+/** The transfer pairs around the given transactions' dates, or around every transaction's. */
+async function pairsFor(db: Db, transactionIds?: string[]): Promise<Map<string, PairCandidate>> {
+  const { rows } = await db.query<{ first: string | null; last: string | null }>(
+    `SELECT min(date) AS first, max(date) AS last FROM transactions
+     WHERE $1::uuid[] IS NULL OR id = ANY($1::uuid[])`,
+    [transactionIds ?? null],
+  )
+  const { first, last } = rows[0]!
+  if (!first || !last) return new Map()
+  return loadTransferPairs(db, first, last)
 }

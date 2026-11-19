@@ -5,6 +5,8 @@ import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { listBills } from './bills.js'
+import { countedSql } from './counted.js'
+import { merchantDisplayName } from './transactionName.js'
 
 /** One past transaction, as detection needs it. Amounts are positive for money out. */
 export interface PastTransaction {
@@ -119,7 +121,7 @@ function seriesOf(
     direction === 'out' && !amountVaries && (band.cadence === 'month' || band.cadence === 'year')
   return {
     key,
-    name: last.merchantName ?? last.name,
+    name: merchantDisplayName(last),
     direction,
     cadence: band.cadence,
     typicalAmountCents: typical,
@@ -177,7 +179,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<PastTransac
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE NOT t.pending AND NOT t.excluded AND NOT a.hidden AND t.date BETWEEN $1 AND $2
-       AND (c.kind IS NULL OR c.kind <> 'transfer')
+       AND ${countedSql()}
      ORDER BY t.date`,
     [addDays(today, -HISTORY_DAYS), today],
   )
