@@ -16,7 +16,7 @@
 
 /** @typedef {import('../server/src/domain/widget.js').WidgetSummary} Summary */
 /** @typedef {'light' | 'dark'} Mode */
-/** @typedef {'bg' | 'ink' | 'muted' | 'good' | 'warn' | 'over' | 'accent'} Tone */
+/** @typedef {'surface' | 'ink' | 'muted' | 'good' | 'warn' | 'over' | 'accent'} Tone */
 /** @typedef {Record<Tone, string>} Tokens */
 /** @typedef {{ light: Tokens, dark: Tokens, mode: Mode | 'system' }} Palette */
 /** @typedef {'eyebrow' | 'big' | 'title' | 'body' | 'caption'} TextStyle */
@@ -51,12 +51,14 @@ const LIST_LENGTH = 3
 /**
  * The app's colors for each theme, light and dark: the same values as
  * web/src/lib/theme.ts, which a test checks so the two never drift apart.
+ * The widget is painted with the theme's surface, as the app's cards are,
+ * which every tone is readable on.
  * @type {Record<'night' | 'harbor' | 'neon', Record<Mode, Tokens>>}
  */
 const THEME_COLORS = {
   night: {
     light: {
-      bg: '#F6F7F9',
+      surface: '#FFFFFF',
       ink: '#14171B',
       muted: '#5B636D',
       good: '#1B7A47',
@@ -65,7 +67,7 @@ const THEME_COLORS = {
       accent: '#2F54D9',
     },
     dark: {
-      bg: '#0D0F12',
+      surface: '#15181D',
       ink: '#EDEFF2',
       muted: '#9AA1AA',
       good: '#5CCF8C',
@@ -76,7 +78,7 @@ const THEME_COLORS = {
   },
   harbor: {
     light: {
-      bg: '#F3F4EF',
+      surface: '#FFFFFF',
       ink: '#15171A',
       muted: '#596068',
       good: '#1B7A47',
@@ -85,7 +87,7 @@ const THEME_COLORS = {
       accent: '#1F4FE0',
     },
     dark: {
-      bg: '#0E1318',
+      surface: '#151C23',
       ink: '#E8EDF2',
       muted: '#93A0AD',
       good: '#5CCF8C',
@@ -96,7 +98,7 @@ const THEME_COLORS = {
   },
   neon: {
     light: {
-      bg: '#F6F6FB',
+      surface: '#FFFFFF',
       ink: '#0B0B1A',
       muted: '#5A5F80',
       good: '#00866F',
@@ -105,7 +107,7 @@ const THEME_COLORS = {
       accent: '#00866F',
     },
     dark: {
-      bg: '#08080F',
+      surface: '#10101C',
       ink: '#E8F0FF',
       muted: '#8F96BA',
       good: '#00E5C0',
@@ -685,7 +687,7 @@ function drawBlocks(stack, blocks, palette, env) {
  */
 function render(layout, link, now, env) {
   const widget = new env.ListWidget()
-  widget.backgroundColor = colorOf(layout.palette, 'bg', env)
+  widget.backgroundColor = colorOf(layout.palette, 'surface', env)
   widget.setPadding(14, 14, 14, 14)
   widget.refreshAfterDate = new Date(now.getTime() + REFRESH_MINUTES * 60_000)
   if (link) widget.url = link

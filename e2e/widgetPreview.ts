@@ -88,7 +88,7 @@ function widgetHtml(layout: Layout, mode: Mode, title: string, script: WidgetScr
   const { width, height } = SIZES[layout.family]
   const blocks = layout.blocks.map((block) => blockHtml(block, color, script.STYLES)).join('')
   return `<figure>
-  <div class="widget" data-family="${layout.family}" style="width:${width}px;height:${height}px;background:${color('bg')}">
+  <div class="widget" data-family="${layout.family}" style="width:${width}px;height:${height}px;background:${color('surface')}">
     <div class="inner">${blocks}</div>
   </div>
   <figcaption>Preview: ${escape(title)}</figcaption>

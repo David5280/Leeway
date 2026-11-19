@@ -10,12 +10,15 @@ import {
   MENU,
   MESSAGES,
   messageLayout,
+  paletteFor,
   REFRESH_MINUTES,
   render,
   run,
   STYLES,
+  THEME_COLORS,
+  toneColors,
 } from '../../../widget/leeway-widget.js'
-import { widgetSummary } from '../test/widget'
+import { troubledWidgetSummary, widgetSummary } from '../test/widget'
 
 const NOW = new Date('2026-11-17T18:05:00Z')
 const TOKEN = 'lww_secretTOKEN_value123'
@@ -104,6 +107,29 @@ function texts(stack: FakeStack): string[] {
     if (child instanceof FakeStack) return texts(child)
     return 'text' in child ? [child.text] : []
   })
+}
+
+/** Every color a widget draws text in, light and dark. */
+function textColors(stack: FakeStack): FakeColor[] {
+  return stack.children.flatMap((child) => {
+    if (child instanceof FakeStack) return textColors(child)
+    return 'textColor' in child && child.textColor ? [child.textColor] : []
+  })
+}
+
+/** WCAG relative luminance of "#RRGGBB". */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+}
+
+/** WCAG contrast ratio between two colors, from 1 to 21. */
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi! + 0.05) / (lo! + 0.05)
 }
 
 /** A server that answers with a status and body, or cannot be reached. */
@@ -262,7 +288,7 @@ describe('drawing', () => {
       widgetSummary({ appearance: { theme: 'harbor', mode: 'light' } }),
     )
     const widget = render(layout, SERVER, NOW, env) as unknown as FakeWidget
-    expect(widget.backgroundColor).toEqual(new FakeColor('#F3F4EF'))
+    expect(widget.backgroundColor).toEqual(new FakeColor('#FFFFFF'))
     expect(widget.padding).toEqual([14, 14, 14, 14])
     expect(widget.url).toBe(SERVER)
     expect(widget.refreshAfterDate).toEqual(new Date(NOW.getTime() + REFRESH_MINUTES * 60_000))
@@ -298,8 +324,36 @@ describe('drawing', () => {
       widgetSummary({ appearance: { theme: 'night', mode: 'system' } }),
     )
     const widget = render(layout, null, NOW, env) as unknown as FakeWidget
-    expect(widget.backgroundColor).toEqual(new FakeColor('#F6F7F9', '#0D0F12'))
+    expect(widget.backgroundColor).toEqual(new FakeColor('#FFFFFF', '#15181D'))
     expect(widget.url).toBeUndefined()
+  })
+
+  it('keeps every tone readable (WCAG AA) on the color painted behind it, in every theme', () => {
+    const { env } = fakeEnv()
+    const themes = Object.keys(THEME_COLORS) as (keyof typeof THEME_COLORS)[]
+    const appearances = themes.flatMap((theme) =>
+      (['light', 'dark'] as const).map((mode) => ({ theme, mode })),
+    )
+    for (const appearance of appearances) {
+      const { theme, mode } = appearance
+      const palette = paletteFor(appearance)
+      // Every tone the widget can draw text in, whether a summary uses it or not.
+      const tones = Object.keys(THEME_COLORS[theme][mode]).filter((tone) => tone !== 'surface')
+      const colors = tones.map((tone) => toneColors(palette, tone as 'ink').light)
+      // And every color a calm and a troubled summary do draw text in, on what is painted.
+      const summaries = [widgetSummary(), troubledWidgetSummary()]
+      const widgets = summaries.map((summary) => {
+        const layout = layoutFor('large', { ...summary, appearance })
+        return render(layout, SERVER, NOW, env) as unknown as FakeWidget
+      })
+      const painted = widgets[0]!.backgroundColor!.hex
+      expect(widgets[1]!.backgroundColor!.hex).toBe(painted)
+      colors.push(...widgets.flatMap(textColors).map((color) => color.hex))
+      for (const color of colors) {
+        const ratio = contrast(color, painted)
+        expect(ratio, `${theme} ${mode}: ${color} on ${painted}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
   })
 
   it('draws columns side by side, each stacked', () => {
