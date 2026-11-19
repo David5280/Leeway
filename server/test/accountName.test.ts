@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   accountDisplayName,
-  readableCase,
+  bankAcronyms,
   distinctAccountNames,
   shortBankName,
   type AccountNameParts,
   type NamingAccount,
 } from '../src/domain/accountName.js'
+import { readableCase } from '../src/domain/nameWords.js'
 
 /** A linked account the bank calls TOTAL CHECKING at Chase, with no name of the owner's. */
 function parts(fields: Partial<AccountNameParts> = {}): AccountNameParts {
@@ -82,8 +83,39 @@ describe('accountDisplayName', () => {
     expect(named('CREDIT CARD (X4417)')).toBe('Chase Credit Card')
     expect(named('SAVINGS XXXX-4417')).toBe('Chase Savings')
     expect(named('CHECKING ENDING IN 4417')).toBe('Chase Checking')
-    expect(named('CHK4417')).toBe('Chase')
+    expect(named('CHK4417')).toBe('Chase Chk')
     expect(named('Checking *4417')).toBe('Chase Checking')
+  })
+
+  it('leaves out the number however the bank writes it, with what led up to it', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
+    expect(named('CHECKING (ACCT 4417)')).toBe('Chase Checking')
+    expect(named('CHECKING [ACCT #4417]')).toBe('Chase Checking')
+    expect(named('CHECKING #: 4417')).toBe('Chase Checking')
+    expect(named('CREDIT CARD XXXX XXXX XXXX 4417')).toBe('Chase Credit Card')
+    expect(named('CHECKING **** 4417')).toBe('Chase Checking')
+    expect(named('CHECKING-4417')).toBe('Chase Checking')
+    expect(named('MY ACCT 1234567890')).toBe('Chase My')
+    expect(named('SAVINGS (ACCT4417)')).toBe('Chase Savings')
+    expect(named('SAVINGS NO. 4417')).toBe('Chase Savings')
+  })
+
+  it('takes a short number out only when it is masked and is the mask', () => {
+    const named = (bankName: string, mask: string) => accountDisplayName(parts({ bankName, mask }))
+    expect(named('CHECKING X12', '12')).toBe('Chase Checking')
+    expect(named('CHECKING ...417', '417')).toBe('Chase Checking')
+    // The same digits as a word of the name, or masked but not the mask, stay.
+    expect(named('12 MONTH CD', '12')).toBe('Chase 12 Month CD')
+    expect(named('ACME 401K', '01')).toBe('Chase Acme 401k')
+    expect(named('ACME 401K', '40')).toBe('Chase Acme 401k')
+    expect(named('PLAN 401', '01')).toBe('Chase Plan 401')
+    expect(named('PLATINUM X2', '12')).toBe('Chase Platinum X2')
+  })
+
+  it('keeps brackets that still pair up', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
+    expect(named('PLUS (SAVINGS) ...4417')).toBe('Chase Plus (Savings)')
+    expect(named('PLUS (SAVINGS) (ACCT 4417)')).toBe('Chase Plus (Savings)')
   })
 
   it('leaves out any long masked number, even one that is not the mask', () => {
@@ -106,6 +138,28 @@ describe('accountDisplayName', () => {
   it('keeps an acronym in brackets and capitalizes a word after one', () => {
     expect(accountDisplayName(parts({ bankName: 'ROLLOVER (IRA)' }))).toBe('Chase Rollover (IRA)')
     expect(accountDisplayName(parts({ bankName: 'PLUS (SAVINGS)' }))).toBe('Chase Plus (Savings)')
+  })
+
+  it('keeps the kinds of account people know by their letters', () => {
+    const named = (bankName: string) => accountDisplayName(parts({ bankName }))
+    expect(named('CHASE MMA')).toBe('Chase MMA')
+    expect(named('PREMIER HYSA')).toBe('Chase Premier HYSA')
+    expect(named('ROLLOVER IRA')).toBe('Chase Rollover IRA')
+    expect(named('HSA')).toBe('Chase HSA')
+  })
+
+  it("keeps the words a bank writes in capitals, and says the bank's name once", () => {
+    const named = (bankName: string, institutionName: string) =>
+      accountDisplayName(parts({ bankName, institutionName }))
+    expect(named('TIAA TRADITIONAL', 'TIAA')).toBe('TIAA Traditional')
+    expect(named('BBVA CHECKING', 'BBVA USA')).toBe('BBVA USA Checking')
+    expect(named('NFCU CHECKING', 'Navy Federal Credit Union')).toBe(
+      'Navy Federal Credit Union Checking',
+    )
+    expect(named('FREE CHECKING', 'First National Bank')).toBe('First National Bank Free Checking')
+    expect(named('FNB FREE CHECKING', 'First National Bank')).toBe(
+      'First National Bank Free Checking',
+    )
   })
 })
 
@@ -130,18 +184,28 @@ describe('shortBankName', () => {
     expect(shortBankName('  ')).toBe('')
   })
 
-  it('keeps initials and acronyms as the bank writes them', () => {
-    expect(shortBankName('HSBC Bank')).toBe('HSBC')
-    expect(shortBankName('M&T Bank')).toBe('M&T')
-    expect(shortBankName('UMB Bank, N.A.')).toBe('UMB')
+  it('keeps "Bank" after initials, which are not a name on their own', () => {
+    expect(shortBankName('HSBC Bank')).toBe('HSBC Bank')
+    expect(shortBankName('M&T Bank')).toBe('M&T Bank')
+    expect(shortBankName('UMB Bank, N.A.')).toBe('UMB Bank')
+    expect(shortBankName('U.S. Bank')).toBe('U.S. Bank')
+    expect(shortBankName('TD Bank')).toBe('TD Bank')
     expect(shortBankName('BECU')).toBe('BECU')
-    expect(shortBankName('U.S. Bank')).toBe('U.S.')
+  })
+
+  it('keeps "Bank" after one short word, or words many banks share', () => {
+    expect(shortBankName('Ion Bank')).toBe('Ion Bank')
+    expect(shortBankName('First National Bank')).toBe('First National Bank')
+    expect(shortBankName('Citizens Bank')).toBe('Citizens Bank')
+    expect(shortBankName('First Citizens Bank')).toBe('First Citizens Bank')
+    expect(shortBankName('First Horizon Bank')).toBe('First Horizon')
   })
 
   it('keeps initials in a bank name sent in capitals', () => {
-    expect(shortBankName('U.S. BANK')).toBe('U.S.')
-    expect(shortBankName('M&T BANK')).toBe('M&T')
-    expect(shortBankName('UMB BANK, N.A.')).toBe('UMB')
+    expect(shortBankName('U.S. BANK')).toBe('U.S. Bank')
+    expect(shortBankName('M&T BANK')).toBe('M&T Bank')
+    expect(shortBankName('UMB BANK, N.A.')).toBe('UMB Bank')
+    expect(shortBankName('BBVA USA')).toBe('BBVA USA')
     expect(shortBankName('CHASE')).toBe('Chase')
   })
 
@@ -149,6 +213,26 @@ describe('shortBankName', () => {
     expect(shortBankName('WELLS FARGO BANK, N.A.')).toBe('Wells Fargo')
     expect(shortBankName('BANK OF AMERICA')).toBe('Bank of America')
     expect(shortBankName('USAA FEDERAL SAVINGS BANK')).toBe('USAA Federal Savings')
+  })
+})
+
+describe('bankAcronyms', () => {
+  it('finds the short words a bank writes in capitals', () => {
+    expect([...bankAcronyms('TIAA')]).toEqual(['TIAA'])
+    expect([...bankAcronyms('BOK Financial - Online Banking')]).toEqual(['BOK'])
+    expect([...bankAcronyms('BBVA USA')]).toEqual(['BBVA', 'USA'])
+  })
+
+  it("adds a bank's initials when its name has three or four words", () => {
+    expect([...bankAcronyms('Navy Federal Credit Union')]).toEqual(['NFCU'])
+    expect([...bankAcronyms('First National Bank')]).toEqual([])
+    expect([...bankAcronyms('Bank of the Ozarks')]).toEqual([])
+  })
+
+  it('trusts no word of a long name sent all in capitals', () => {
+    expect([...bankAcronyms('CAPITAL ONE')]).toEqual([])
+    expect([...bankAcronyms('WELLS FARGO BANK, N.A.')]).toEqual([])
+    expect([...bankAcronyms('')]).toEqual([])
   })
 })
 
@@ -193,6 +277,17 @@ describe('readableCase', () => {
   it('reads letters beyond English', () => {
     expect(readableCase('ÉPARGNE ÉLITE')).toBe('Épargne Élite')
   })
+
+  it('keeps the words it is given in capitals, even in brackets', () => {
+    const acronyms = new Set(['NFCU'])
+    expect(readableCase('NFCU CHECKING', { acronyms })).toBe('NFCU Checking')
+    expect(readableCase('PLUS (NFCU)', { acronyms })).toBe('Plus (NFCU)')
+  })
+
+  it('can be told a name was sent in capitals, for one word of it', () => {
+    expect(readableCase('BANK', { shouted: false })).toBe('BANK')
+    expect(readableCase('Bank', { shouted: true })).toBe('Bank')
+  })
 })
 
 describe('distinctAccountNames', () => {
@@ -220,8 +315,8 @@ describe('distinctAccountNames', () => {
     ])
     expect([...names.values()]).toEqual([
       'Chase Total Checking',
-      'Chase Total Checking (savings)',
-      'Chase Total Checking (credit card)',
+      'Chase Total Checking (Savings)',
+      'Chase Total Checking (Credit Card)',
     ])
   })
 
@@ -233,8 +328,8 @@ describe('distinctAccountNames', () => {
     ])
     expect([...names.values()]).toEqual([
       'Chase Total Checking',
-      'Chase Total Checking (second checking)',
-      'Chase Total Checking (third checking)',
+      'Chase Total Checking (Second Checking)',
+      'Chase Total Checking (Third Checking)',
     ])
     expect([...names.values()].join(' ')).not.toMatch(/1111|2222|3333/)
   })
@@ -247,8 +342,40 @@ describe('distinctAccountNames', () => {
     ])
     expect([...names.values()]).toEqual([
       'Retirement',
-      'RETIREMENT (roth IRA)',
-      'retirement (second 401k)',
+      'RETIREMENT (Roth IRA)',
+      'retirement (Second 401k)',
+    ])
+  })
+
+  it("never gives two accounts the same name, even when an owner's name looks like a suffix", () => {
+    const names = distinctAccountNames([
+      account('a', { nickname: 'Chase Total Checking (Savings)' }),
+      account('b'),
+      account('c', { subtype: 'savings' }),
+      account('d', { nickname: 'chase total checking (second savings)', subtype: 'savings' }),
+      account('e', { subtype: 'savings' }),
+    ])
+    expect([...names.values()]).toEqual([
+      'Chase Total Checking (Savings)',
+      'Chase Total Checking',
+      'Chase Total Checking (Second Savings)',
+      'chase total checking (second savings) (Savings)',
+      'Chase Total Checking (Third Savings)',
+    ])
+    const lowered = [...names.values()].map((name) => name.toLowerCase())
+    expect(new Set(lowered).size).toBe(lowered.length)
+  })
+
+  it('tells apart names that differ only in case', () => {
+    const names = distinctAccountNames([
+      account('a', { nickname: 'Bills' }),
+      account('b', { nickname: 'BILLS' }),
+      account('c', { nickname: 'bills' }),
+    ])
+    expect([...names.values()]).toEqual([
+      'Bills',
+      'BILLS (Second Checking)',
+      'bills (Third Checking)',
     ])
   })
 
@@ -258,11 +385,11 @@ describe('distinctAccountNames', () => {
       return names.get('b')
     })
     expect(kinds).toEqual([
-      'Chase Total Checking (bank account)',
-      'Chase Total Checking (loan)',
-      'Chase Total Checking (investment)',
-      'Chase Total Checking (property)',
-      'Chase Total Checking (account)',
+      'Chase Total Checking (Bank Account)',
+      'Chase Total Checking (Loan)',
+      'Chase Total Checking (Investment)',
+      'Chase Total Checking (Property)',
+      'Chase Total Checking (Account)',
     ])
   })
 
@@ -270,11 +397,11 @@ describe('distinctAccountNames', () => {
     const many = Array.from({ length: 23 }, (_, index) => account(String(index)))
     const names = [...distinctAccountNames(many).values()]
     expect(names[0]).toBe('Chase Total Checking')
-    expect(names[7]).toBe('Chase Total Checking (eighth checking)')
-    expect(names[8]).toBe('Chase Total Checking (9th checking)')
-    expect(names[10]).toBe('Chase Total Checking (11th checking)')
-    expect(names[20]).toBe('Chase Total Checking (21st checking)')
-    expect(names[21]).toBe('Chase Total Checking (22nd checking)')
-    expect(names[22]).toBe('Chase Total Checking (23rd checking)')
+    expect(names[7]).toBe('Chase Total Checking (Eighth Checking)')
+    expect(names[8]).toBe('Chase Total Checking (9th Checking)')
+    expect(names[10]).toBe('Chase Total Checking (11th Checking)')
+    expect(names[20]).toBe('Chase Total Checking (21st Checking)')
+    expect(names[21]).toBe('Chase Total Checking (22nd Checking)')
+    expect(names[22]).toBe('Chase Total Checking (23rd Checking)')
   })
 })
