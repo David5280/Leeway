@@ -61,6 +61,11 @@ export function readerErrorFrom(error: unknown): ReaderError {
   if (error instanceof Anthropic.RateLimitError) {
     return new ReaderError('Claude is busy right now. Try again in a minute.')
   }
+  if (error instanceof Anthropic.ContentTooLargeError) {
+    return new ReaderError(
+      'This file is too large for Claude to read. Try one page of the paystub.',
+    )
+  }
   if (error instanceof Anthropic.BadRequestError) {
     return new ReaderError(
       'Claude could not open this file. Try a clearer photo or the PDF itself.',

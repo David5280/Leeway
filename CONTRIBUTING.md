@@ -71,7 +71,8 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
 - **Lib** (`server/src/lib/`) is small, pure helpers with no knowledge of
   budgets: dates, time zones, money, periods, durations, schemas, crypto.
 - **Outside services** each sit behind an interface so tests use a fake:
-  banks in `bank/` (Plaid), the summary writer in `ai/` (Anthropic), email
+  banks in `bank/` (Plaid), the summary writer and the paystub reader in
+  `ai/` (Anthropic, behind `writer.ts` and `documents.ts`), email
   in `mail/` (Resend). `context.ts` hands them to every action, as `null`
   when not configured.
 - **Errors** meant for the caller are `AppError`s (`errors.ts`) with a code
@@ -131,6 +132,9 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   and inserts bank data, `actionCaller.ts` calls actions the way the app and
   MCP do, `fakeBank.ts` stands in for Plaid, and `fixtures/` holds shared
   data. HTTP tests build the app with `buildApp` and send it requests.
+  Nothing calls a live model: the Anthropic classes take a fake client, and
+  `fixtures/paystub.ts` has a fake document reader that records each file
+  it is given, so tests check exactly what would leave the server.
 - `web/src/`: tests sit next to what they test. `test/fake.tsx` answers
   actions from a fake server and renders a screen signed in; tests find
   things by role and label, as a person would.

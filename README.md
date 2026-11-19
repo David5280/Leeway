@@ -217,8 +217,9 @@ with a note.
 | `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`. Default `US`.             |
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
-| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary.                               |
+| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary and read imported paystubs.    |
 | `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-haiku-5-5`.          |
+| `PAYSTUB_MODEL`         | No       | The Claude model that reads paystubs, default `claude-haiku-5-5`.      |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
@@ -239,6 +240,29 @@ it, like "Chase Total Checking is down to $35.00". It never gets account
 numbers or transactions. A summary is reused while your numbers stay the same,
 for up to four hours, so it costs a few cents a summary on your own Anthropic
 account.
+
+### Paystub import (optional)
+
+With `ANTHROPIC_API_KEY` set, **Import a paystub** appears in **Plan**, then
+**Retirement**, and on a pension's form. Upload a PDF, PNG or JPEG of a
+paystub (up to 10 MB for a PDF, 5 MB for a photo) and Claude reads its pay,
+pension, 401(k), 457, 403(b) and HSA figures, this period's and the year's.
+You see each figure with the line it came from and how sure Claude is, change
+any of them, and choose whether they update a pension or your monthly
+retirement saving. Nothing is saved until you choose **Save**.
+
+- Only the file and a fixed instruction are sent, in one request. Nothing
+  else of yours goes with it.
+- The file stays in memory for that request: it is never written to disk or
+  to the database. Leeway keeps only the figures you save.
+- Social Security numbers, employee IDs, account and routing numbers and
+  addresses are taken out of every line Leeway keeps or shows.
+- The same file is never read twice in a day, and at most 10 new files are
+  read an hour, which keeps the cost on your own Anthropic account small.
+- No assistant tool can read or save a paystub.
+
+An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set
+the camera to **Most Compatible**.
 
 ### Weekly email (optional)
 

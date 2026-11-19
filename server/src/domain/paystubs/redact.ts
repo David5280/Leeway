@@ -12,15 +12,20 @@ export const MAX_SOURCE_LENGTH = 120
 /** The longest employer name kept. */
 export const MAX_EMPLOYER_LENGTH = 80
 
-/** A Social Security number, plain or masked: 123-45-6789, 123 45 6789, XXX-XX-6789. */
-const SSN = /\b[\dXx*•]{3}[-\s.]?[\dXx*•]{2}[-\s.]?\d{4}\b/g
+/**
+ * A Social Security number, plain or masked: 123-45-6789, 123 45 6789,
+ * XXX-XX-6789, ***-**-6789. A mask is no word character, so the start is
+ * "nothing like it before" rather than a word boundary.
+ */
+const SSN = /(?<![\w*•])[\dXx*•]{3}[-\s.]?[\dXx*•]{2}[-\s.]?\d{4}\b/g
 
 /**
  * A label that names an identifier, with everything after it on the line,
- * since the value may be printed in any format after it.
+ * since the value may be printed in any format after it. A label may end in
+ * "#", so its end is "no word character next" rather than a word boundary.
  */
 const LABELED_ID =
-  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))\b.*$/gim
+  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
 
 /** A street address: a house number, up to four words, and a street word. */
 const STREET =

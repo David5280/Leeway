@@ -69,7 +69,9 @@ export class PaystubReader {
   async read(bytes: Buffer, log: UsageLog): Promise<PaystubRead> {
     const file = checkPaystubFile(bytes)
     const hash = fileHash(bytes)
-    const outcome = this.cached(hash) ?? (await this.readOnce(hash, () => this.ask(file, log)))
+    // A kept "not a paystub" is null, so only undefined means nothing is kept.
+    const kept = this.cached(hash)
+    const outcome = kept === undefined ? await this.readOnce(hash, () => this.ask(file, log)) : kept
     if (outcome === null) throw new AppError('invalid_input', NOT_A_PAYSTUB)
     return { extraction: outcome, readerName: this.reader.name }
   }
