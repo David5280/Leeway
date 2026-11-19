@@ -17,6 +17,7 @@ import { registerAuthRoutes, sessionGuard } from './auth.js'
 import { refuseCrossSiteChanges } from './crossSite.js'
 import { registerErrorHandler } from './errors.js'
 import { registerMcpRoute } from './mcp.js'
+import { registerPaystubRoutes } from './paystubs.js'
 import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 import { proxyTrustFunction } from './proxyTrust.js'
 import { registerSecurityHeaders } from './securityHeaders.js'
@@ -107,6 +108,7 @@ export async function buildApp(
     from: setupCodeFrom,
   })
   registerActionRoutes(app, ctx, sessionGuard(ctx))
+  await registerPaystubRoutes(app, ctx, sessionGuard(ctx))
   await registerWebhookRoutes(app, ctx)
 
   allowCrossOrigin(app)

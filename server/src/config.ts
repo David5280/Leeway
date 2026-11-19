@@ -28,6 +28,12 @@ const ADDRESS_HELP =
  */
 export const DEFAULT_SUMMARY_MODEL = 'claude-haiku-5-5'
 
+/**
+ * Reading a paystub is one short extraction per upload, which a small model
+ * does well. Owners can pick another with PAYSTUB_MODEL.
+ */
+export const DEFAULT_PAYSTUB_MODEL = 'claude-haiku-5-5'
+
 const PROXY_HELP = 'set it to the number of proxies in front of Leeway, like 1, or leave it empty'
 
 /**
@@ -79,6 +85,7 @@ const envSchema = z.object({
     .optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   SUMMARY_MODEL: z.string().default(DEFAULT_SUMMARY_MODEL),
+  PAYSTUB_MODEL: z.string().default(DEFAULT_PAYSTUB_MODEL),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z
     .string()
@@ -118,6 +125,8 @@ export interface AnthropicConfig {
   apiKey: string
   /** The Claude model that writes the dashboard summary. */
   model: string
+  /** The Claude model that reads an uploaded paystub. */
+  paystubModel: string
 }
 
 export interface MailConfig {
@@ -145,7 +154,10 @@ export interface Config {
   plaid: PlaidConfig | null
   /** How often to sync every bank in the background. 0 turns it off. */
   syncIntervalMinutes: number
-  /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
+  /**
+   * Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own
+   * words, and paystub import is turned off.
+   */
   anthropic: AnthropicConfig | null
   /** Null until RESEND_API_KEY and MAIL_FROM are both set; the weekly email is then unavailable. */
   mail: MailConfig | null
@@ -207,7 +219,9 @@ function optionalServices(
       : null
   return {
     plaid,
-    anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL } : null,
+    anthropic: e.ANTHROPIC_API_KEY
+      ? { apiKey: e.ANTHROPIC_API_KEY, model: e.SUMMARY_MODEL, paystubModel: e.PAYSTUB_MODEL }
+      : null,
     mail: e.RESEND_API_KEY && e.MAIL_FROM ? { apiKey: e.RESEND_API_KEY, from: e.MAIL_FROM } : null,
   }
 }
