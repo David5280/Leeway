@@ -168,6 +168,29 @@ function projectionMeter(projection: Projection, { money }: InsightFormat): Mete
 }
 
 /** Monthly income at retirement, from pensions and savings, against the target. */
+/**
+ * What the income range is measured against. A pension with no benefit entered
+ * yet adds nothing to the range, so that comes first: a comparison with the
+ * target would then read as a shortfall the pension may well cover.
+ */
+function incomeAgainst(
+  plan: RetirementPlan,
+  projection: Projection,
+  money: InsightFormat['money'],
+): string {
+  const { income, target } = projection
+  if (plan.pensionsWithoutBenefit > 0) {
+    return 'A pension counts here once its monthly benefit is entered.'
+  }
+  if (!target) return 'Set a target income to compare against.'
+  if (income.pension.mid > 0) {
+    const share = Math.round((income.pension.mid / target.monthlyCents) * 100)
+    return `Your pension alone covers about ${share}% of your ${money(target.monthlyCents)} target.`
+  }
+  const from = target.source === 'spending' ? ', your recent spending' : ''
+  return `Your target is ${money(target.monthlyCents)} a month${from}.`
+}
+
 function incomeMeter(
   plan: RetirementPlan,
   projection: Projection,
@@ -182,21 +205,14 @@ function incomeMeter(
       cents: income.savings.mid,
     },
   ]
-  let against = 'Set a target income to compare against.'
-  if (target && pension > 0) {
-    const share = Math.round((pension / target.monthlyCents) * 100)
-    against = `Your pension alone covers about ${share}% of your ${money(target.monthlyCents)} target.`
-  } else if (target) {
-    const from = target.source === 'spending' ? ', your recent spending' : ''
-    against = `Your target is ${money(target.monthlyCents)} a month${from}.`
-  }
+  const compared = target !== null && plan.pensionsWithoutBenefit === 0
   return {
     id: 'retirement_income',
     question: `Monthly income at ${projection.retirementAge}`,
     headline: range(income.total, money),
-    detail: `most likely about ${money(income.total.mid)}. ${against}`,
+    detail: `most likely about ${money(income.total.mid)}. ${incomeAgainst(plan, projection, money)}`,
     tone: 'neutral',
-    progress: target ? { value: income.total.mid, target: target.monthlyCents } : null,
+    progress: compared ? { value: income.total.mid, target: target.monthlyCents } : null,
     parts,
     series: [],
     band: [],

@@ -160,16 +160,30 @@ interface PensionGlanceInput {
 }
 
 /**
+ * Whether a pension is recorded, and what it takes from pay a month and the
+ * employer adds, where the owner entered enough to say. A recorded pension is
+ * retirement saving, whatever goes into a 401(k) or IRA. Null with none.
+ */
+function pensionGlance({ pensions, pensionPay }: PensionGlanceInput) {
+  if (pensions.length === 0) return null
+  return {
+    count: pensions.length,
+    monthlyContributionCents: pensionPay.memberCents,
+    employerMonthlyCents: pensionPay.employerCents,
+  }
+}
+
+/**
  * Savings at a glance: the total and how it moved this month, the emergency
  * fund, the savings rate and any pension, worked out as the financial profile
  * does. Null with neither savings nor a pension.
  */
 function savingsGlance(
   savings: SavingsGlance,
-  { pensions, pensionPay }: PensionGlanceInput,
+  pension: PensionGlanceInput,
   { emergencyFund, savingsRate }: SavingsMeasures,
 ) {
-  if (!savings.hasSavings && pensions.length === 0) return null
+  if (!savings.hasSavings && pension.pensions.length === 0) return null
   return {
     /** Whether any savings, retirement or investment account is counted; false with only a pension. */
     hasSavingsAccounts: savings.hasSavings,
@@ -188,19 +202,7 @@ function savingsGlance(
     /** The rate with the pension contributions the owner entered; null when none are known. */
     pensionIncludedSavingsRatePercent:
       savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
-    /**
-     * Whether a pension is recorded, and what it takes from pay a month and the
-     * employer adds, where the owner entered enough to say. A recorded pension
-     * is retirement saving, whatever goes into a 401(k) or IRA.
-     */
-    pension:
-      pensions.length === 0
-        ? null
-        : {
-            count: pensions.length,
-            monthlyContributionCents: pensionPay.memberCents,
-            employerMonthlyCents: pensionPay.employerCents,
-          },
+    pension: pensionGlance(pension),
   }
 }
 

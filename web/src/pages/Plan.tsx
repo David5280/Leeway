@@ -1,4 +1,4 @@
-// The Plan screen: cash until payday on top, then bills, goals, debts or net worth.
+// The Plan screen: cash until payday on top, then bills, goals, debts, net worth or retirement.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Shell } from '../components/Shell'
@@ -8,12 +8,14 @@ import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
 import { GoalsSection } from './plan/goals/GoalsSection'
 import { NetWorthSection } from './plan/NetWorth'
+import { RetirementSection } from './plan/retirement/RetirementSection'
 
 const SECTIONS = {
   bills: { label: 'Bills', component: BillsSection },
   goals: { label: 'Goals', component: GoalsSection },
   debts: { label: 'Debts', component: DebtsSection },
   'net-worth': { label: 'Net worth', component: NetWorthSection },
+  retirement: { label: 'Retirement', component: RetirementSection },
 } as const
 
 type Section = keyof typeof SECTIONS

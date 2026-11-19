@@ -11,7 +11,6 @@ import { monthYear, type Insight, type InsightFormat, type InsightTopic } from '
 import {
   accountCount,
   balanceMeter,
-  growthMeter,
   LENS_QUESTIONS,
   longestChange,
   noHistoryYet,

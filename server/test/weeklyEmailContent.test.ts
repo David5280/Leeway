@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BillDue } from '../src/domain/cashFlow.js'
+import type { Checkin } from '../src/domain/checkin.js'
 import type { AttentionItem } from '../src/domain/coach.js'
 import {
   MAX_LIST_ITEMS,
@@ -155,6 +156,9 @@ describe('weeklyEmailContent', () => {
   })
 })
 
+/** What the check-in says goes into the owner's pensions. */
+type PensionGlance = NonNullable<NonNullable<Checkin['savings']>['pension']>
+
 describe('savings in the weekly email', () => {
   const savings = {
     totalCents: 5_800_000,
@@ -188,7 +192,7 @@ describe('savings in the weekly email', () => {
   })
 
   it('shows what goes into a pension, as far as the owner entered it', () => {
-    const items = (pension: typeof savings.pension | object, fields = {}) =>
+    const items = (pension: PensionGlance, fields = {}) =>
       section(
         { checkin: checkin({ savings: { ...savings, ...fields, pension } }) },
         'Savings and investments',

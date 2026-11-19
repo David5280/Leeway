@@ -129,6 +129,10 @@ describe('the retirement lens', () => {
       progress: null,
     })
     expect(retirementInsight(profileWith([pension()]), format)).toBeNull()
+    // Savings alone are no shortfall while the pension may cover the rest.
+    const income = view.lens.meters.find((meter) => meter.id === 'retirement_income')
+    expect(income).toMatchObject({ progress: null, parts: [{ label: 'Savings at 4% a year' }] })
+    expect(income!.detail).toMatch(/A pension counts here once its monthly benefit is entered\.$/)
   })
 
   it('gives the income range alone without a target', () => {

@@ -1458,6 +1458,13 @@ details.more[open] summary {
   stroke-dasharray: 6 5;
 }
 
+/* A range of cases, such as a retirement projection: low to high, shaded. */
+.chart-band {
+  fill: var(--accent);
+  fill-opacity: 0.16;
+  stroke: none;
+}
+
 .chart-line.budget {
   stroke: var(--muted);
   stroke-width: 1.25;
