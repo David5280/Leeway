@@ -65,9 +65,10 @@ export function textWidth(text: string, fontSize = 12): number {
 /**
  * Which of `count` evenly spaced points to label on an axis, at most
  * `maxLabels`: every n-th from the first, so the gaps match (every third day,
- * say), and always the last, dropping the one before it if the two would crowd.
+ * say), and always the last, dropping the one before it if the two would
+ * crowd: closer than `minGap` points, or by default half a step.
  */
-export function axisIndices(count: number, maxLabels: number): number[] {
+export function axisIndices(count: number, maxLabels: number, minGap?: number): number[] {
   if (count <= 0) return []
   const last = count - 1
   if (last === 0) return [0]
@@ -75,8 +76,7 @@ export function axisIndices(count: number, maxLabels: number): number[] {
   const step = Math.ceil(last / (labels - 1))
   const chosen: number[] = []
   for (let index = 0; index < last; index += step) chosen.push(index)
-  // Closer than half a step to the last label reads as a collision.
-  if (chosen.length > 1 && last - chosen.at(-1)! < step / 2) chosen.pop()
+  if (chosen.length > 1 && last - chosen.at(-1)! < (minGap ?? step / 2)) chosen.pop()
   chosen.push(last)
   return chosen
 }

@@ -3,8 +3,10 @@
 import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
+import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
-import { groupBy } from '../../lib/groups'
+import { useApp } from '../../lib/app'
+import { alphabeticalGroups } from '../../lib/alphabetical'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
@@ -14,7 +16,6 @@ import {
   type Start,
   type StarterRow,
 } from './starters'
-import { Money } from '../../components/design/Money'
 
 export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const hasBank = useAction('list_connections').data?.some((c) => c.accountCount > 0)
@@ -122,7 +123,11 @@ function StartChoices({
   )
 }
 
-/** The categories to create, under their group headings. */
+/**
+ * The categories to create, A to Z under their group headings A to Z, so a
+ * name is quick to find. They are still created in the starter set's own
+ * order, which becomes the budget's.
+ */
 function StarterList({
   rows,
   onEdit,
@@ -130,15 +135,21 @@ function StarterList({
   rows: StarterRow[]
   onEdit: (name: string, change: Edits[string]) => void
 }) {
+  const { settings } = useApp()
+  const named = rows.map((row) => ({
+    name: row.category.name,
+    group: row.category.group ?? null,
+    row,
+  }))
   return (
     <div className="stack-sm" aria-label="Categories to create">
       <p className="small muted">
         Monthly budgets. Leave an amount blank for no budget, or untick a category to leave it out.
       </p>
-      {groupBy(rows, (row) => row.category.group ?? null).map(({ group, items }) => (
+      {alphabeticalGroups(named, settings.locale).map(({ group, categories }) => (
         <Fragment key={group ?? ''}>
           {group && <span className="eyebrow">{group}</span>}
-          {items.map((row) => (
+          {categories.map(({ row }) => (
             <StarterItem key={row.category.name} row={row} onEdit={onEdit} />
           ))}
         </Fragment>
@@ -156,23 +167,25 @@ function StarterItem({
   onEdit: (name: string, change: Edits[string]) => void
 }) {
   return (
-    <div className="list-row">
-      <input
-        type="checkbox"
-        checked={include}
-        aria-label={`Include ${category.name}`}
-        onChange={(e) => onEdit(category.name, { include: e.target.checked })}
-      />
-      <Dot color={category.color} />
-      <span className="grow">
-        {category.name}
-        {averageCents !== null && (
-          <span className="small muted">
-            {' '}
-            · you average <Money cents={averageCents} />
-          </span>
-        )}
-      </span>
+    <div className="list-row starter-item">
+      <label className="check grow">
+        <input
+          type="checkbox"
+          checked={include}
+          aria-label={`Include ${category.name}`}
+          onChange={(e) => onEdit(category.name, { include: e.target.checked })}
+        />
+        <Dot color={category.color} />
+        <span className="starter-name">
+          {category.name}
+          {averageCents !== null && (
+            <span className="small muted">
+              {' '}
+              · you average <Money cents={averageCents} />
+            </span>
+          )}
+        </span>
+      </label>
       {category.kind === 'expense' ? (
         <input
           className="input num"

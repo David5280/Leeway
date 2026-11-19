@@ -61,7 +61,7 @@ export function RulesList({
               </span>
               <span className="row" style={{ gap: 6 }}>
                 <Dot color={category?.color} />
-                {category?.name ?? 'Unknown'}
+                <span className="ellipsis">{category?.name ?? 'Unknown'}</span>
               </span>
             </span>
             <span className="rule-actions">

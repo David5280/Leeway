@@ -68,7 +68,7 @@ function CategoryDetail({
   /** This category's last period to the same day, for the trend. */
   previousCents: number
 }) {
-  const { money } = useApp()
+  const { money, settings } = useApp()
   const status = row ? categoryStatus(row, money) : null
   return (
     <Shell>
@@ -95,7 +95,7 @@ function CategoryDetail({
         <InThisCategory category={category} period={period} />
       </div>
       <div className="grid">
-        <CategorySettings category={category} groups={groupNames(categories)} />
+        <CategorySettings category={category} groups={groupNames(categories, settings.locale)} />
         <div className="span-half stack">
           {category.kind === 'expense' && <CategoryRollover category={category} />}
           <CategoryRules category={category} categories={categories} />

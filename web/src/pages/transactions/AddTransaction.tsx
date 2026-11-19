@@ -73,7 +73,7 @@ export function AddTransaction({
           onChange={(e) => setDate(e.target.value)}
         />
         <input
-          className="input grow"
+          className="input grow name-field"
           placeholder="What was it"
           aria-label="Description"
           required

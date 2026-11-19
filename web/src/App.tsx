@@ -17,9 +17,9 @@ import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
 import { Plan } from './pages/Plan'
 import { OldSettingsAddress, SettingsPage } from './pages/Settings'
-import { OLD_SETTINGS_ROUTE, SETTINGS_ROUTE } from './pages/settings/paths'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
+import { CONNECT_ROUTES, SCREEN_ROUTES } from './routes'
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="auth">{children}</div>
@@ -29,17 +29,17 @@ function Centered({ children }: { children: React.ReactNode }) {
 function Screens() {
   return (
     <Routes>
-      <Route path="/" element={<Overview />} />
-      <Route path="/accounts" element={<Accounts />} />
-      <Route path="/alerts" element={<Alerts />} />
-      <Route path="/transactions" element={<Transactions />} />
-      <Route path="/transactions/import" element={<ImportTransactions />} />
-      <Route path="/budgets" element={<Budgets />} />
-      <Route path="/budgets/:id" element={<CategoryPage />} />
-      <Route path="/plan" element={<Plan />} />
-      <Route path="/plan/:section" element={<Plan />} />
-      <Route path={SETTINGS_ROUTE} element={<SettingsPage />} />
-      <Route path={OLD_SETTINGS_ROUTE} element={<OldSettingsAddress />} />
+      <Route path={SCREEN_ROUTES.overview} element={<Overview />} />
+      <Route path={SCREEN_ROUTES.accounts} element={<Accounts />} />
+      <Route path={SCREEN_ROUTES.alerts} element={<Alerts />} />
+      <Route path={SCREEN_ROUTES.transactions} element={<Transactions />} />
+      <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
+      <Route path={SCREEN_ROUTES.budgets} element={<Budgets />} />
+      <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
+      <Route path={SCREEN_ROUTES.plan} element={<Plan />} />
+      <Route path={SCREEN_ROUTES.planSection} element={<Plan />} />
+      <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />
+      <Route path={SCREEN_ROUTES.oldSettings} element={<OldSettingsAddress />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
@@ -98,8 +98,8 @@ export function App() {
     <AppProvider settings={settings.data} status={status.data}>
       <Routes>
         {/* An assistant asking to connect is answered even before setup is finished. */}
-        <Route path="/connect" element={<ConnectProblem />} />
-        <Route path="/connect/:id" element={<Connect />} />
+        <Route path={CONNECT_ROUTES.connectProblem} element={<ConnectProblem />} />
+        <Route path={CONNECT_ROUTES.connect} element={<Connect />} />
         <Route
           path="*"
           element={me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} signedIn />}

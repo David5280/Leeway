@@ -4,6 +4,14 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 import { moneyText } from './eslint/moneyText.js'
 
+// A <Route> path that is neither the catch-all "*" nor a name from routes.ts
+// (ROUTES, SCREEN_ROUTES or CONNECT_ROUTES).
+const ROUTE_PATH_NOT_FROM_ROUTES = [
+  "JSXOpeningElement[name.name='Route'] > JSXAttribute[name.name='path']",
+  ":not([value.value='*'])",
+  ":not([value.expression.type='MemberExpression'][value.expression.object.name=/^(SCREEN_|CONNECT_)?ROUTES$/])",
+].join('')
+
 // The project's code standards (CONTRIBUTING.md), enforced where a tool can.
 
 /** Leeway's own rules, in eslint/. */
@@ -25,6 +33,11 @@ export default tseslint.config(
   {
     files: ['e2e/**/*.{ts,mjs}', 'playwright.config.ts'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // The layout checks run inside the page (see e2e/layout.ts).
+    files: ['e2e/layout/**/*.ts'],
+    languageOptions: { globals: globals.browser },
   },
   {
     files: ['web/public/sw.js'],
@@ -62,7 +75,9 @@ export default tseslint.config(
   {
     // One way to show money (web/src/lib/money.ts and <Money>), so every
     // screen reads amounts alike: no number formatting of its own, and no
-    // amount dropped into the page as bare text.
+    // amount dropped into the page as bare text. And every address the router
+    // answers lives in web/src/routes.ts, where the phone layout guard finds
+    // it: only the catch-all "*" may be written straight onto a <Route>.
     files: ['web/src/**/*.{ts,tsx}'],
     plugins: { leeway },
     ignores: [
@@ -86,6 +101,11 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.property.name='toLocaleString'] Property[key.name='currency']",
           message: 'Format money in web/src/lib/money.ts and show it with <Money>.',
+        },
+        {
+          selector: ROUTE_PATH_NOT_FROM_ROUTES,
+          message:
+            'Give <Route> a path from routes.ts (or "*"), so the phone layout guard covers it.',
         },
       ],
       // A formatted amount reaching the page, however it gets there (eslint/moneyText.js).

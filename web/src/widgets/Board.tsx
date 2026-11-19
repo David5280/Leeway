@@ -98,7 +98,7 @@ function Tools({
   const index = all.indexOf(widget)
   return (
     <div className="widget-tools">
-      <strong className="grow">{name}</strong>
+      <strong className="widget-tools-name ellipsis">{name}</strong>
       <Segmented
         label={`${name} size`}
         value={widget.size}

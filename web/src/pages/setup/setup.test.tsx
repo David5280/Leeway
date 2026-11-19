@@ -194,6 +194,28 @@ describe('starting point', () => {
     expect(await screen.findByRole('heading', { name: "You're set" })).toBeInTheDocument()
   })
 
+  it('lists the starter set A to Z under group headings A to Z', async () => {
+    const starter = [
+      { ...paycheck, name: 'Rent', group: 'Home' },
+      { ...groceries, name: 'Groceries', group: 'Food' },
+      { ...groceries, name: 'Coffee', group: 'Food' },
+      { ...groceries, name: 'Utilities', group: 'Home' },
+    ]
+    serve({ get_starter_categories: () => starter })
+    renderSignedIn(<Setup status={status} signedIn />)
+    await toStartingPoint(userEvent.setup())
+    const list = await screen.findByLabelText('Categories to create')
+    const shown = within(list).getAllByText(/^(Food|Home|Coffee|Groceries|Rent|Utilities)$/)
+    expect(shown.map((e) => e.textContent)).toEqual([
+      'Food',
+      'Coffee',
+      'Groceries',
+      'Home',
+      'Rent',
+      'Utilities',
+    ])
+  })
+
   it('lists the starter set under its group headings', async () => {
     const grouped = [
       { ...groceries, group: 'Food' },

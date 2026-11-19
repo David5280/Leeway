@@ -18,6 +18,7 @@ import {
   resetData,
   TEST_SETUP_CODE,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -603,7 +604,7 @@ describe('MCP endpoint', () => {
       ]),
     )
     for (const result of [...bare, ...named]) {
-      expect(result.text, result.name).not.toMatch(/9876|4321/)
+      expect(withoutUuids(result.text), result.name).not.toMatch(/9876|4321/)
       expect(result.text, result.name).not.toMatch(/"(mask|bankName)"/)
     }
 
