@@ -149,16 +149,29 @@ function savingsSection({ savings }: Checkin, money: Money, locale: string): Ema
     change === null || changeSince === null
       ? ''
       : `, ${change < 0 ? '-' : '+'}${money(Math.abs(change))} since ${shortDate(changeSince, locale)}`
-  const items: EmailItem[] = [
-    { text: 'Saved and invested', detail: `${money(savings.totalCents)}${moved}` },
-  ]
+  const items: EmailItem[] = savings.hasSavingsAccounts
+    ? [{ text: 'Saved and invested', detail: `${money(savings.totalCents)}${moved}` }]
+    : []
   if (savings.emergencyFundMonths !== null) {
     items.push({
       text: 'Emergency fund',
       detail: `${savings.emergencyFundMonths} of ${savings.emergencyFundTargetMonths} months`,
     })
   }
+  if (savings.pension) items.push(pensionItem(savings.pension, money))
   return [{ title: 'Savings and investments', items, empty: '' }]
+}
+
+/** A recorded pension: what goes in a month, as far as the owner entered it. */
+function pensionItem(
+  pension: NonNullable<NonNullable<Checkin['savings']>['pension']>,
+  money: Money,
+): EmailItem {
+  const { monthlyContributionCents: mine, employerMonthlyCents: employer } = pension
+  const text = pension.count === 1 ? 'Pension' : 'Pensions'
+  if (mine === null) return { text, detail: 'recorded, contribution not entered yet' }
+  const plus = employer === null ? '' : `, plus ${money(employer)} from your employer`
+  return { text, detail: `${money(mine)} a month going in${plus}` }
 }
 
 /**

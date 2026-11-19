@@ -14,6 +14,7 @@ const PATHS = [
   '/transactions',
   '/budgets',
   '/plan',
+  '/plan/retirement',
   '/settings/appearance',
   '/settings/budgeting',
   '/settings/accounts',

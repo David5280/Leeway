@@ -3,21 +3,27 @@
 // assistant) can see exactly what was counted and what was not.
 //
 // Payroll deductions (a pension, a 401(k)) leave pay before it reaches the
-// bank, so a rate built from bank transfers alone can read low. Every place
-// that shows the rate says so, with SEEN_AT_BANK. There is no target until the
-// owner sets one, and no progress bar toward it, so a partial rate never
-// reads as falling short.
+// bank, so a rate built from bank transfers alone can read low. A pension's
+// contributions count once the owner enters them (retirement/pensions.ts);
+// nothing else taken from pay ever does. Every place that shows the rate says
+// which, with countedNote. There is no target until the owner sets one, and no
+// progress bar toward it, so a partial rate never reads as falling short.
 
-/** Said to the owner beside every savings rate built from bank transfers alone. */
+/** Said to the owner beside a savings rate built from bank transfers alone. */
 export const SEEN_AT_BANK = 'Payroll deductions, such as a pension or a 401(k), are not counted.'
+
+/** Said to the owner beside a savings rate that counts the pension contributions they entered. */
+export const PENSION_COUNTED =
+  'Pension contributions you entered are counted; other payroll deductions, such as a 401(k), are not.'
 
 /**
  * Said to an assistant wherever it reads the rate, so the guard travels with
- * the number: a rate the bank only partly sees is never grounds to say the
- * owner saves too little.
+ * the number: a rate that misses payroll deductions is never grounds to say
+ * the owner saves too little, and a pension is retirement saving in its own
+ * right, whatever goes into a 401(k), IRA or brokerage account.
  */
 export const RATE_GUARD_FOR_AI =
-  'Payroll deductions, such as a pension or a 401(k), are not counted, so never say this rate is too little.'
+  'Payroll deductions are counted only where the owner entered them, as for a pension, so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {
@@ -25,9 +31,8 @@ export interface SavingSource {
   label: string
   monthlyCents: number
   /**
-   * Taken from pay before it reaches the bank (a pension or 401k deduction),
-   * so it is added back to take-home pay to get the pay it came out of. No
-   * source sets it yet: the pension and retirement plan work will feed it.
+   * Taken from pay before it reaches the bank (a pension contribution), so
+   * it is added back to take-home pay to get the pay it came out of.
    */
   beforePaycheck: boolean
 }
@@ -67,4 +72,38 @@ export function savingsRate(
     payMonthlyCents,
     sources: counted,
   }
+}
+
+/** Whether a rate counts anything taken from pay before the bank sees it. */
+export function countsPayroll(rate: SavingsRate): boolean {
+  return rate.sources.some((source) => source.beforePaycheck)
+}
+
+/**
+ * What the rate is a share of: take-home pay, or pay before the pension
+ * contribution once one is counted, since that is added back.
+ */
+export function payNoun(rate: SavingsRate): string {
+  return countsPayroll(rate) ? 'pay' : 'take-home pay'
+}
+
+/** What the owner is told was counted in a rate, said beside it everywhere. */
+export function countedNote(rate: SavingsRate): string {
+  return countsPayroll(rate) ? PENSION_COUNTED : SEEN_AT_BANK
+}
+
+/**
+ * The same rate counting only what moved through the bank, as if no pension
+ * contribution were entered: what the check-in reports as bank-seen, beside
+ * the full rate. Null when nothing moved through the bank.
+ */
+export function bankSeenRate(rate: SavingsRate | null): SavingsRate | null {
+  if (rate === null) return null
+  const withheld = rate.sources
+    .filter((source) => source.beforePaycheck)
+    .reduce((sum, source) => sum + source.monthlyCents, 0)
+  return savingsRate(
+    rate.payMonthlyCents - withheld,
+    rate.sources.filter((source) => !source.beforePaycheck),
+  )
 }

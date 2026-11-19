@@ -8,11 +8,11 @@ import {
   deleteManualAccount,
   listAccounts,
   manualAccountInputSchema,
-  updateAccount,
 } from '../domain/accounts.js'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../domain/accountAlerts.js'
 import { getAccountsView } from '../domain/accountView.js'
 import { listAlerts } from '../domain/alerts.js'
+import { updateAccountWithinPensionLimit } from '../domain/retirement/pensionStore.js'
 import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
@@ -25,7 +25,7 @@ export const listAccountsAction = defineAction({
   name: 'list_accounts',
   title: 'List accounts',
   description:
-    'List bank and manual accounts with balances in cents. For credit and loan accounts the balance is the amount owed. kind says what each account is (checking, savings, retirement, investment, credit_card, loan or other), from the bank or as the owner set it (kindChoice).',
+    'List bank and manual accounts with balances in cents. For credit and loan accounts the balance is the amount owed. kind says what each account is (checking, savings, retirement, pension, investment, credit_card, loan or other), from the bank or as the owner set it (kindChoice).',
   input: z.object({ includeHidden: z.boolean().default(true) }),
   scope: 'read',
   surface: 'all',
@@ -46,11 +46,12 @@ export const createAccountAction = defineAction({
 export const updateAccountAction = defineAction({
   name: 'update_account',
   title: 'Update an account',
-  description: `Rename or hide an account, set its debt terms, or set lowBalanceCents: warn when the money available drops below it (null follows the default of ${DEFAULT_LOW_BALANCE_CENTS} cents for checking accounts and none for others; 0 turns it off), or kind: what kind of account it is (checking, savings, retirement, investment, credit_card, loan or other; null goes back to the kind worked out from the bank). A card or loan can only be credit_card, loan or other, and an account owned cannot be either. Manual accounts can also change balance, credit limit and type.`,
+  description: `Rename or hide an account, set its debt terms, or set lowBalanceCents: warn when the money available drops below it (null follows the default of ${DEFAULT_LOW_BALANCE_CENTS} cents for checking accounts and none for others; 0 turns it off), or kind: what kind of account it is (checking, savings, retirement, pension, investment, credit_card, loan or other; null goes back to the kind worked out from the bank). A card or loan can only be credit_card, loan or other, and an account owned cannot be either. Manual accounts can also change balance, credit limit and type.`,
   input: accountPatchSchema.extend({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
-  run: (ctx, { id, ...patch }) => updateAccount(ctx.db, id, patch),
+  // Marking an account a pension counts against the pension limit (pensionStore.ts).
+  run: (ctx, { id, ...patch }) => updateAccountWithinPensionLimit(ctx.db, id, patch),
 })
 
 export const deleteAccountAction = defineAction({

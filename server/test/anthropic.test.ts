@@ -58,11 +58,13 @@ describe('AnthropicSummaryWriter', () => {
   })
 
   it('tells Claude never to say the person saves too little', () => {
-    // The bank never sees payroll saving such as a pension, so any such claim could be wrong.
-    expect(SYSTEM_PROMPT).toContain('never payroll deductions such as a pension or a 401(k)')
+    // The bank never sees payroll saving, and a pension is saving in itself, so any such claim could be wrong.
+    expect(SYSTEM_PROMPT).toContain('a pension counts only once the person enters it')
+    expect(SYSTEM_PROMPT).toContain('a pension is retirement saving in itself')
     expect(SYSTEM_PROMPT).toContain(
-      'never say or imply that the person saves too little or should save more',
+      'Never say or imply that the person saves too little or should save more',
     )
+    expect(SYSTEM_PROMPT).not.toContain('never payroll deductions such as a pension')
   })
 
   it('throws when Claude declines, so the dashboard falls back to Leeway’s words', async () => {

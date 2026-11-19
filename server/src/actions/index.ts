@@ -66,6 +66,12 @@ import {
   syncBanksAction,
 } from './connections.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
+import {
+  attachPensionAction,
+  createPensionAction,
+  projectRetirementAction,
+  updatePensionAction,
+} from './retirement.js'
 import { getSettingsAction, updateSettingsAction } from './settings.js'
 import { getSummaryAction, setAiSummaryAction } from './summary.js'
 import {
@@ -135,6 +141,10 @@ export const actionList = [
   deleteAccountAction,
   summarizeSavingsAction,
   getFinancialProfileAction,
+  projectRetirementAction,
+  createPensionAction,
+  attachPensionAction,
+  updatePensionAction,
   listBillsAction,
   createBillAction,
   updateBillAction,

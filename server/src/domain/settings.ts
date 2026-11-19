@@ -6,6 +6,7 @@ import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import type { PeriodConfig } from '../lib/periods.js'
+import { retirementPatchSchema, retirementSchema } from './retirement/assumptions.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
 
 const periodSchema = z.discriminatedUnion('kind', [
@@ -172,11 +173,16 @@ export const settingsSchema = z.object({
    */
   aiSummary: z.boolean().default(false),
   savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
+  /** Assumptions for retirement projections (retirement/assumptions.ts). */
+  retirement: retirementSchema.default(retirementSchema.parse({})),
 })
 
 export type Settings = z.infer<typeof settingsSchema>
 
-/** What a caller may change: any subset; appearance and savingsPlan merge, period and widgets replace. */
+/**
+ * What a caller may change: any subset. appearance, savingsPlan and retirement
+ * merge; period and widgets replace.
+ */
 export const settingsPatchSchema = z
   .object({
     period: periodSchema,
@@ -191,6 +197,7 @@ export const settingsPatchSchema = z
     dashboard: z.object({ widgets: widgetsSchema }),
     accountSelection: accountSelectionSchema,
     savingsPlan: z.object(savingsPlanFields).partial(),
+    retirement: retirementPatchSchema,
   })
   .partial()
   .strict()
@@ -231,6 +238,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     ...patch,
     appearance: { ...current.appearance, ...patch.appearance },
     savingsPlan: { ...current.savingsPlan, ...patch.savingsPlan },
+    retirement: { ...current.retirement, ...patch.retirement },
   })
 }
 

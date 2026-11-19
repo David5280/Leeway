@@ -5,7 +5,7 @@
 import type { IsoDate } from '../../lib/dates.js'
 import { shortDate } from '../../lib/words.js'
 import type { SavingsKind } from '../accountKinds.js'
-import { SEEN_AT_BANK } from '../savings/rate.js'
+import { countedNote, countsPayroll, payNoun } from '../savings/rate.js'
 import type { CombinedChanges } from '../savings/report.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 
@@ -20,6 +20,7 @@ export type InsightTopic =
   | 'change'
   | 'savings_rate'
   | 'contributions'
+  | 'retirement'
 
 export interface Insight {
   /** The lens it belongs to: one savings kind, or the whole picture. */
@@ -127,11 +128,12 @@ function overallInsights(profile: FinancialProfile, { money, locale }: InsightFo
   const insights: Insight[] = []
   const rate = profile.savingsRate
   if (rate) {
+    const through = countsPayroll(rate) ? '' : ' through your bank'
     insights.push({
       about: 'overall',
       topic: 'savings_rate',
       tone: 'neutral',
-      text: `About ${rate.percent}% of your take-home pay goes to savings through your bank: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${SEEN_AT_BANK}`,
+      text: `About ${rate.percent}% of your ${payNoun(rate)} goes to savings${through}: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${countedNote(rate)}`,
     })
   }
   const contributions = profile.savings.contributions
@@ -172,6 +174,40 @@ function goalInsight(
 }
 
 /**
+ * What the middle projection means for the target: the room to spare, or
+ * what savings give and a later age that would meet it. It states figures
+ * and a choice, never that the owner should save more. A projection with a
+ * pension is judged only once it meets the target (plan.ts), so a shortfall
+ * here is always one of savings alone.
+ */
+export function retirementInsight(
+  profile: FinancialProfile,
+  { money }: InsightFormat,
+): Insight | null {
+  const projection = profile.retirement.projection
+  if (!projection?.target || projection.onTrack === null) return null
+  const { income, target, atAge, laterAge } = projection
+  if (projection.gapMonthlyCents === 0) {
+    const spare = income.total.mid - target.monthlyCents
+    return {
+      about: 'retirement',
+      topic: 'retirement',
+      tone: 'good',
+      text: `In the middle case you would have about ${money(income.total.mid)} a month at ${atAge}, ${money(spare)} more than the ${money(target.monthlyCents)} you want.`,
+    }
+  }
+  const later = laterAge
+    ? ` Retiring at ${laterAge} instead of ${atAge} would meet it, with no change to what you put in.`
+    : ''
+  return {
+    about: 'retirement',
+    topic: 'retirement',
+    tone: 'neutral',
+    text: `Of the ${money(target.monthlyCents)} a month you want at ${atAge}, savings give about ${money(income.savings.mid)} a month in the middle case.${later}`,
+  }
+}
+
+/**
  * Every insight for the savings lenses and an assistant: overall ones first,
  * then each kind's. A lens picks among them by topic. goalsOf says which
  * goals belong to a kind (see goalLens in views.ts).
@@ -185,9 +221,11 @@ export function savingsInsights(
     k.kind === 'savings' ? null : changeInsight(k.kind, k.label, k.changes, format),
     goalInsight(goalsOf(k.kind), k.kind, format),
   ])
-  return [
+  const all = [
     ...overallInsights(profile, format),
+    retirementInsight(profile, format),
     ...emergencyInsights(profile, format),
-    ...byKind.filter((insight): insight is Insight => insight !== null),
+    ...byKind,
   ]
+  return all.filter((insight): insight is Insight => insight !== null)
 }

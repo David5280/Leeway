@@ -11,6 +11,7 @@
 import type { IsoDate } from '../../lib/dates.js'
 import { shortDate } from '../../lib/words.js'
 import type { AccountKind } from '../accountKinds.js'
+import type { BandPoint } from '../retirement/projection.js'
 import type { BalancePoint } from '../savings/history.js'
 import type { CombinedChanges, SavingsAccount } from '../savings/report.js'
 import type { Insight, InsightFormat, InsightTone } from './insights.js'
@@ -31,7 +32,14 @@ export interface LensAnswer {
   progress: Progress | null
 }
 
-export type MeterId = 'building' | 'savings_rate' | 'growth' | 'balance' | 'contributions'
+export type MeterId =
+  | 'building'
+  | 'savings_rate'
+  | 'growth'
+  | 'balance'
+  | 'contributions'
+  | 'projection'
+  | 'retirement_income'
 
 /** One part of a meter's total, such as one account's balance. */
 export interface MeterPart {
@@ -52,6 +60,8 @@ export interface Meter {
   parts: MeterPart[]
   /** Points for a small chart, oldest first; empty when there is no history. */
   series: BalancePoint[]
+  /** A low, middle and high case by age, for a projection; empty for every other meter. */
+  band: BandPoint[]
 }
 
 /** A kind's lens: the same four parts for every kind. */
@@ -73,6 +83,7 @@ export const LENS_QUESTIONS: Record<
   checking: { title: 'Checking', question: 'Will I make it to payday?' },
   savings: { title: 'Savings', question: 'How protected am I?' },
   retirement: { title: 'Retirement', question: 'Can I stop working on time?' },
+  pension: { title: 'Pensions', question: 'What will it pay?' },
   investment: { title: 'Investing', question: 'How is it growing?' },
   credit_card: { title: 'Credit cards', question: 'Is it costing me?' },
   loan: { title: 'Loans', question: 'When will it be gone?' },
@@ -117,6 +128,7 @@ export function growthMeter(
       detail: noHistoryYet(historyStartsOn, locale),
       tone: 'neutral',
       series: history,
+      band: [],
     }
   }
   return {
@@ -125,6 +137,7 @@ export function growthMeter(
     detail: `since ${shortDate(change.since, locale)}, counting deposits and market moves together.`,
     tone: change.changeCents > 0 ? 'good' : 'neutral',
     series: history,
+    band: [],
   }
 }
 
@@ -146,5 +159,6 @@ export function balanceMeter(
     progress: null,
     parts: counted.map((a) => ({ label: a.name, cents: a.balanceCents! })),
     series: history,
+    band: [],
   }
 }
