@@ -108,6 +108,18 @@ describe('Transactions list', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it("leads with this period's spending against the same point last period", async () => {
+    serve({
+      get_budget: () => ({
+        ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 24000 }]),
+        previous: { spentCents: 50000, spentToDateCents: 20000, categories: [] },
+      }),
+    })
+    renderTransactions()
+    const figure = (await screen.findByText('Spent this month')).parentElement!
+    expect(figure).toHaveTextContent('Spent this month$240$40 more than this point last month')
+  })
+
   it('asks for everything in the period, including transactions left out of totals', async () => {
     const server = serve()
     renderTransactions()

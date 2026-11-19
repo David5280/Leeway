@@ -4,12 +4,13 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { Budget } from '../api/client'
 import { useAction } from '../api/hooks'
+import { Money } from '../components/design/Money'
+import { SpentComparison } from '../components/SpentComparison'
 import { Dot } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodWord, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
-import { Money } from '../components/design/Money'
 
 export function GlanceWidget({ budget }: WidgetProps) {
   const { settings } = useApp()
@@ -38,21 +39,11 @@ function GlanceCard({ title, children }: { title: string; children: ReactNode })
 
 /** Spending so far, compared with the same point in the last period. */
 function SpentCard({ budget, word }: { budget: Budget; word: string }) {
-  const { totals, previous } = budget
-  const diff = totals.spentCents - previous.spentToDateCents
-  const nothingYet = previous.spentToDateCents === 0 && diff === 0
   return (
     <GlanceCard title="Spent">
-      <Money cents={totals.spentCents} className="mid-number" />
+      <Money cents={budget.totals.spentCents} className="mid-number" />
       <span className="small muted">
-        {nothingYet ? (
-          'Nothing yet'
-        ) : (
-          <>
-            <Money cents={Math.abs(diff)} /> {diff >= 0 ? 'more' : 'less'} than this point last{' '}
-            {word}
-          </>
-        )}
+        <SpentComparison totals={budget.totals} previous={budget.previous} word={word} />
       </span>
     </GlanceCard>
   )

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { KeyFigure } from './KeyFigure'
+import { ProgressRing } from './ProgressRing'
 import { SkeletonRows } from './Skeleton'
 import { sparkPoints, Sparkline } from './Sparkline'
 import { Trend, trendPercent } from './Trend'
@@ -84,6 +85,45 @@ describe('KeyFigure', () => {
     fakeServer({})
     const { container } = renderSignedIn(<KeyFigure label="Spent" cents={100} />)
     expect(container.querySelector('.key-figure-caption')).toBeNull()
+  })
+})
+
+describe('ProgressRing', () => {
+  it('fills to the percent, with the number in the middle and the tone of its status', () => {
+    render(<ProgressRing percent={40.4} label="Groceries budget used" status="watch" />)
+    const ring = screen.getByRole('progressbar', { name: 'Groceries budget used' })
+    expect(ring).toHaveAttribute('aria-valuenow', '40')
+    expect(ring).toHaveTextContent('40%')
+    expect(ring).toHaveClass('ring-watch')
+  })
+
+  it('stays full past 100 while the number says how far over, and never runs below empty', () => {
+    render(
+      <>
+        <ProgressRing percent={135} label="Over" />
+        <ProgressRing percent={-5} label="Refunded" />
+      </>,
+    )
+    const over = screen.getByRole('progressbar', { name: 'Over' })
+    expect(over).toHaveAttribute('aria-valuenow', '100')
+    expect(over).toHaveAttribute('aria-valuetext', '135%')
+    expect(over.querySelector('.ring-fill')).toHaveAttribute('stroke-dashoffset', '0')
+    expect(screen.getByRole('progressbar', { name: 'Refunded' })).toHaveTextContent('0%')
+  })
+
+  it("puts today's tick across the rim, a quarter of the way round at 25", () => {
+    const { container } = render(
+      <>
+        <ProgressRing percent={10} label="With a tick" marker={25} />
+        <ProgressRing percent={10} label="Without" />
+      </>,
+    )
+    const ticks = container.querySelectorAll('.ring-tick')
+    expect(ticks).toHaveLength(1)
+    // The svg is turned a quarter back, so a quarter round is straight down in its own frame.
+    expect(Number(ticks[0]!.getAttribute('x1'))).toBeCloseTo(20)
+    expect(Number(ticks[0]!.getAttribute('y1'))).toBeCloseTo(34)
+    expect(Number(ticks[0]!.getAttribute('y2'))).toBeCloseTo(40)
   })
 })
 

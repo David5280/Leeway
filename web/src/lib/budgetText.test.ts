@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Budget } from '../api/client'
 import { budgetFor, category } from '../test/fake'
-import { budgetStatus, carriedText, overHint } from './budgetText'
+import { budgetStatus, budgetTone, carriedText, overHint } from './budgetText'
 
 const money = (cents: number) => `$${cents / 100}`
 
@@ -76,6 +76,17 @@ describe('budgetStatus', () => {
       text: '$280 left',
       tone: '',
     })
+  })
+})
+
+describe('budgetTone', () => {
+  it.each([
+    ['over', 'over'],
+    ['warning', 'watch'],
+    ['ok', 'ok'],
+    ['no_budget', 'ok'],
+  ] as const)('reads a %s budget as %s', (status, tone) => {
+    expect(budgetTone(status)).toBe(tone)
   })
 })
 

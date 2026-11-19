@@ -84,6 +84,9 @@ describe('budgets page', () => {
     expect(await screen.findByRole('region', { name: 'Budgeted' })).toHaveTextContent('$600')
     expect(screen.getByRole('region', { name: 'Spent' })).toHaveTextContent('$240')
     expect(screen.getByRole('region', { name: 'Left' })).toHaveTextContent('$360')
+    const used = screen.getByRole('progressbar', { name: 'Budgets used' })
+    expect(used).toHaveAttribute('aria-valuenow', '40')
+    expect(used).toHaveClass('ring-ok')
   })
 
   it('marks the amount left as over once spending passes the budgets', async () => {
@@ -94,6 +97,16 @@ describe('budgets page', () => {
     renderBudgets()
     const left = await screen.findByRole('region', { name: 'Left' })
     expect(within(left).getByText('−$100')).toHaveClass('money-problem')
+    const used = screen.getByRole('progressbar', { name: 'Budgets used' })
+    expect(used).toHaveAttribute('aria-valuetext', '117%')
+    expect(used).toHaveClass('ring-over')
+  })
+
+  it('leaves out the ring until something is budgeted', async () => {
+    serve([category('Coffee')])
+    renderBudgets()
+    await screen.findByRole('region', { name: 'Spent' })
+    expect(screen.queryByRole('progressbar', { name: 'Budgets used' })).not.toBeInTheDocument()
   })
 
   it('lists categories under their group headings, with ungrouped ones last', async () => {

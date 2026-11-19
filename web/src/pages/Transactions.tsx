@@ -20,6 +20,7 @@ import { byName } from '../lib/sort'
 import { ActivityList } from './transactions/ActivityList'
 import { AddTransaction } from './transactions/AddTransaction'
 import { FilterBar } from './transactions/FilterBar'
+import { PeriodSpent } from './transactions/PeriodSpent'
 import { TransactionSheet } from './transactions/TransactionSheet'
 import {
   MAX_SHOWN,
@@ -74,6 +75,8 @@ export function Transactions() {
             ]}
           />
         </div>
+
+        {budget.data && <PeriodSpent budget={budget.data} />}
 
         <FilterBar filters={filters} categories={all} />
 

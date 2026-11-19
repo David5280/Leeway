@@ -3,8 +3,11 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import type { Budget } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
+import { Money } from '../components/design/Money'
+import { ProgressRing } from '../components/design/ProgressRing'
 import { Shell } from '../components/Shell'
 import { Card, Dot, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
@@ -12,7 +15,6 @@ import { periodLabel } from '../lib/format'
 import { groupNames } from '../lib/groups'
 import { SpendingList } from './budgets/SpendingList'
 import { Suggestions } from './budgets/Suggestions'
-import { Money } from '../components/design/Money'
 
 export function Budgets() {
   const { settings } = useApp()
@@ -59,9 +61,12 @@ export function Budgets() {
           <span className="eyebrow">Budgeted</span>
           <Money cents={b.totals.budgetedCents} className="mid-number" />
         </Card>
-        <Card className="span-4 stack-sm" label="Spent">
-          <span className="eyebrow">Spent in budgets</span>
-          <Money cents={b.totals.budgetedSpentCents} className="mid-number" />
+        <Card className="span-4 row-between" label="Spent">
+          <div className="stack-sm">
+            <span className="eyebrow">Spent in budgets</span>
+            <Money cents={b.totals.budgetedSpentCents} className="mid-number" />
+          </div>
+          <BudgetsUsed totals={b.totals} />
         </Card>
         <Card className="span-4 stack-sm" label="Left">
           <span className="eyebrow">Left</span>
@@ -142,5 +147,18 @@ export function Budgets() {
         </Card>
       )}
     </Shell>
+  )
+}
+
+/** How much of everything budgeted is spent, as a ring; nothing until a budget is set. */
+function BudgetsUsed({ totals }: { totals: Budget['totals'] }) {
+  if (totals.budgetedCents <= 0) return null
+  const percent = (totals.budgetedSpentCents / totals.budgetedCents) * 100
+  return (
+    <ProgressRing
+      label="Budgets used"
+      percent={percent}
+      status={totals.budgetedSpentCents > totals.budgetedCents ? 'over' : 'ok'}
+    />
   )
 }

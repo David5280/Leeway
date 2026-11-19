@@ -147,6 +147,12 @@ tspan.money-neutral {
   transition: stroke-dashoffset var(--duration-sheet) var(--ease-out);
 }
 
+.ring-tick {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
 .ring-label {
   font: var(--weight-strong) var(--text-xs) var(--font-num);
   font-variant-numeric: tabular-nums;
