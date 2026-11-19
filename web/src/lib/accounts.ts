@@ -29,6 +29,19 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   return parts.filter(Boolean).join(' ')
 }
 
+/**
+ * An account's name without its bank in front, for a tight row whose second
+ * line already names the bank: "Everyday checking" under "First Bank ··4417".
+ * A name the owner typed is kept as typed, and so is one that would be left empty.
+ */
+export function nameUnderBank(
+  account: Pick<Account, 'name' | 'institutionName' | 'manual' | 'nickname'>,
+) {
+  const bank = account.manual || account.nickname ? null : account.institutionName
+  if (!bank || !account.name.startsWith(`${bank} `)) return account.name
+  return account.name.slice(bank.length + 1).trim() || account.name
+}
+
 /** Where every link to an account opens: its own page, with everything Leeway knows about it. */
 export function accountDetailPath(id: string): string {
   return `/accounts/${encodeURIComponent(id)}`

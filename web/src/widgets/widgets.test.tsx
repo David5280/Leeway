@@ -911,7 +911,7 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('$50.00')).not.toHaveClass('money-problem')
   })
 
-  it('shows the name the server gives each account, with its bank and last four digits', async () => {
+  it("shows each account's name under its bank and last four digits", async () => {
     fakeServer({
       list_accounts: () => [
         account({
@@ -928,8 +928,9 @@ describe('AccountsWidget', () => {
     })
     renderSignedIn(<AccountsWidget />)
     expect(await screen.findByText('Chase ··0388')).toBeInTheDocument()
+    // The line under the name names the bank, so the name drops it from the front.
     expect(screen.getByText('Chase ··0388').closest('.list-row')).toHaveTextContent(
-      'Chase Credit Card',
+      /^Credit CardChase ··0388/,
     )
     expect(screen.queryByText('CREDIT CARD')).not.toBeInTheDocument()
     expect(screen.getByText('Added by hand')).toBeInTheDocument()

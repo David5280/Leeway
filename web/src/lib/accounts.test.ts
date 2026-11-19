@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { accountDetail, accountDetailPath, activePick, isOwed, overdrawn } from './accounts'
+import {
+  accountDetail,
+  accountDetailPath,
+  activePick,
+  isOwed,
+  nameUnderBank,
+  overdrawn,
+} from './accounts'
 
 describe('isOwed', () => {
   it('counts cards and loans as owed, and everything else as owned', () => {
@@ -25,6 +32,33 @@ describe('accountDetail', () => {
 
   it('says an account was added by hand', () => {
     expect(accountDetail({ institutionName: null, mask: null, manual: true })).toBe('Added by hand')
+  })
+})
+
+describe('nameUnderBank', () => {
+  const bank = { institutionName: 'First Bank', manual: false, nickname: null }
+  it('drops the bank from the front of the name, since the line under it names the bank', () => {
+    expect(nameUnderBank({ ...bank, name: 'First Bank Everyday checking (second checking)' })).toBe(
+      'Everyday checking (second checking)',
+    )
+  })
+
+  it('keeps the name whole when the bank is not in front, is all of it, or is not known', () => {
+    expect(nameUnderBank({ ...bank, name: 'Everyday checking' })).toBe('Everyday checking')
+    expect(nameUnderBank({ ...bank, name: 'First Bankers checking' })).toBe(
+      'First Bankers checking',
+    )
+    expect(nameUnderBank({ ...bank, name: 'First Bank  ' })).toBe('First Bank  ')
+    expect(nameUnderBank({ ...bank, institutionName: null, name: 'First Bank card' })).toBe(
+      'First Bank card',
+    )
+    // A name the owner typed stays as typed, and so does an account kept by hand.
+    expect(nameUnderBank({ ...bank, nickname: 'First Bank bills', name: 'First Bank bills' })).toBe(
+      'First Bank bills',
+    )
+    expect(nameUnderBank({ ...bank, manual: true, name: 'First Bank cash' })).toBe(
+      'First Bank cash',
+    )
   })
 })
 

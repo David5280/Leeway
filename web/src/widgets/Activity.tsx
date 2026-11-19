@@ -8,7 +8,7 @@ import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
 import { ErrorNote, Icon, Progress } from '../components/ui'
 import { kindIcon } from '../lib/accountCards'
-import { accountDetail, isOwed, overdrawn } from '../lib/accounts'
+import { accountDetail, isOwed, nameUnderBank, overdrawn } from '../lib/accounts'
 import { allAccountsDrill } from '../lib/drills/accounts'
 import { recentDrill } from '../lib/drills/activity'
 import { merchantsDrill } from '../lib/drills/plan'
@@ -77,7 +77,7 @@ export function AccountsWidget() {
             <Icon name={kindIcon(account.kind)} size={16} />
           </span>
           <span className="grow stack-sm" style={{ gap: 0 }}>
-            <span className="account-name">{account.name}</span>
+            <span className="account-name">{nameUnderBank(account)}</span>
             <span className="small muted">
               {accountDetail(account)}
               {account.hidden && ' · ignored for budgets'}
