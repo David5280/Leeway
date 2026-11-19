@@ -65,6 +65,7 @@ import {
   removeConnectionAction,
   syncBanksAction,
 } from './connections.js'
+import { deletePaystubAction, getPaystubAction, savePaystubAction } from './paystubs.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import {
   attachPensionAction,
@@ -145,6 +146,9 @@ export const actionList = [
   createPensionAction,
   attachPensionAction,
   updatePensionAction,
+  getPaystubAction,
+  savePaystubAction,
+  deletePaystubAction,
   listBillsAction,
   createBillAction,
   updateBillAction,
