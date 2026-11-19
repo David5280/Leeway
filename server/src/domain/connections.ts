@@ -23,14 +23,20 @@ export interface Connection {
   status: 'active' | 'needs_reauth' | 'error'
   lastSyncedAt: string | null
   lastError: string | null
+  /** The accounts the bank shares from this login. */
   accountCount: number
+  /** Accounts kept from this login that the bank no longer shares (unshared.ts). */
+  unsharedCount: number
 }
 
 export async function listConnections(db: Db): Promise<Connection[]> {
   const { rows } = await db.query<Connection>(
     `SELECT c.id, c.provider, c.institution_name AS "institutionName", c.status,
        c.last_synced_at AS "lastSyncedAt", c.last_error AS "lastError",
-       (SELECT count(*)::int FROM accounts a WHERE a.connection_id = c.id) AS "accountCount"
+       (SELECT count(*)::int FROM accounts a
+        WHERE a.connection_id = c.id AND a.unshared_at IS NULL) AS "accountCount",
+       (SELECT count(*)::int FROM accounts a
+        WHERE a.connection_id = c.id AND a.unshared_at IS NOT NULL) AS "unsharedCount"
      FROM connections c ORDER BY c.created_at`,
   )
   return rows

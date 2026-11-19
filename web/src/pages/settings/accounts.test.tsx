@@ -64,6 +64,28 @@ describe('Accounts', () => {
     expect(server.actions('list_accounts')).toEqual([{ includeHidden: true }])
   })
 
+  it('lists accounts the bank no longer shares apart, with their own actions', async () => {
+    const old = account({
+      id: 'acct-old',
+      name: 'Old savings',
+      institutionName: 'Chase',
+      balanceUpdatedAt: '2026-11-03T15:00:00Z',
+      unsharedAt: '2026-11-04T15:00:00Z',
+    })
+    serve({ list_accounts: () => [checking, old] })
+    renderSignedIn(<AccountSection />)
+    const apart = await screen.findByRole('region', { name: 'No longer shared' })
+    const row = within(apart).getByRole('group', { name: 'Old savings' })
+    expect(row).toHaveTextContent('No longer shared from Chase')
+    expect(within(row).getByRole('button', { name: 'Share it again' })).toBeInTheDocument()
+    expect(
+      within(row).getByRole('button', { name: 'Remove this account and its history' }),
+    ).toBeInTheDocument()
+    // Not among the counted accounts, which can be renamed and hidden.
+    expect(screen.queryByRole('textbox', { name: 'Name for Old savings' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Name for Everyday' })).toBeInTheDocument()
+  })
+
   it('says there are none yet', async () => {
     fakeServer({ list_accounts: () => [] })
     renderSignedIn(<AccountSection />)

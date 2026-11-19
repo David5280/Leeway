@@ -29,6 +29,24 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   return parts.filter(Boolean).join(' ')
 }
 
+/** Whether the bank still shares the account; one added by hand always counts as shared. */
+export function isShared(account: Pick<Account, 'unsharedAt'>): boolean {
+  return account.unsharedAt === null
+}
+
+/**
+ * Whether the account's balance counts toward totals, as the server counts
+ * it: shown, and still shared by the bank.
+ */
+export function isCounted(account: Pick<Account, 'hidden' | 'unsharedAt'>): boolean {
+  return !account.hidden && isShared(account)
+}
+
+/** "No longer shared from Chase", for an account its bank stopped sharing. */
+export function unsharedLabel(account: Pick<Account, 'institutionName'>): string {
+  return `No longer shared from ${account.institutionName ?? 'its bank'}`
+}
+
 /**
  * Where one account opens: the Accounts dashboard with just that account
  * picked. One page serves one account or several, so every link goes there.

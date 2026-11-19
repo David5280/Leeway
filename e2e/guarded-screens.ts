@@ -6,13 +6,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
+import { BANK_SCREENS } from './bank-screens'
 import { importPaystub, mockReader } from './paystub'
-import {
-  askForSecondLogin,
-  checkConnectedBanks,
-  pickConnectedBankAgain,
-  standInForPlaid,
-} from './plaid'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
 
@@ -271,27 +266,7 @@ export const SCREENS: Screen[] = [
     name: '/settings/assistant showing a new key',
     then: revealKey,
   }),
-  // Adding a bank, with Plaid stood in for (plaid.ts): the banks already
-  // connected come first, then a bank picked again, then a second login.
-  at('settings', '/settings/banks', {
-    name: '/settings/banks with banks connected',
-    before: standInForPlaid,
-  }),
-  at('settings', '/settings/banks', {
-    name: '/settings/banks before adding another bank',
-    before: standInForPlaid,
-    then: checkConnectedBanks,
-  }),
-  at('settings', '/settings/banks', {
-    name: '/settings/banks when the bank picked is already connected',
-    before: standInForPlaid,
-    then: pickConnectedBankAgain,
-  }),
-  at('settings', '/settings/banks', {
-    name: '/settings/banks confirming a second login at the same bank',
-    before: standInForPlaid,
-    then: askForSecondLogin,
-  }),
+  ...BANK_SCREENS,
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),

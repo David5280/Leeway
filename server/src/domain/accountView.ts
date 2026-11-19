@@ -8,7 +8,7 @@ import { formatCents } from '../lib/money.js'
 import { shiftPeriod, type Period } from '../lib/periods.js'
 import { periodWord } from '../lib/words.js'
 import type { AccountAlert } from './accountAlerts.js'
-import { listAccounts, type Account } from './accounts.js'
+import { isShared, listAccounts, type Account } from './accounts.js'
 import {
   accountsSummary,
   combineBalances,
@@ -32,7 +32,10 @@ export const FLOW_PERIODS = 4
 export const RECENT_COUNT = 8
 
 export interface AccountsView {
-  /** The accounts picked, in the usual order. */
+  /**
+   * The accounts picked, in the usual order, with any the bank no longer
+   * shares (unsharedAt set), which the balances, alerts and summary leave out.
+   */
   accounts: Account[]
   /** True when every account is picked, as when none was. */
   allAccounts: boolean
@@ -119,7 +122,11 @@ export async function getAccountsView(
   ])
 
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
-  const balances = combineBalances(accounts)
+  // Only a balance the bank still shares is current, so only those add up;
+  // money in and out still counts every account's history (unshared.ts).
+  const shared = accounts.filter(isShared)
+  const unshared = accounts.filter((account) => !isShared(account))
+  const balances = combineBalances(shared)
   const spending = spendingByCategory(totals!, categories)
   const alerts = alertsFor(accounts, charges, settings)
   const periodFlows = periods.map((p, index) => ({
@@ -138,7 +145,8 @@ export async function getAccountsView(
     alerts,
     summary: accountsSummary(
       {
-        accounts,
+        accounts: shared,
+        unshared,
         balances,
         flows: periodFlows,
         spending,

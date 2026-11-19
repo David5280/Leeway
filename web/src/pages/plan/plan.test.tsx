@@ -135,6 +135,13 @@ describe('Debts', () => {
   })
   const paidOff = account({ id: 'acct-paid', name: 'Old card', type: 'credit', balanceCents: 0 })
   const hidden = account({ id: 'acct-h', name: 'Hidden card', type: 'credit', hidden: true })
+  // Its bank stopped sharing it, so its balance is an old one.
+  const unshared = account({
+    id: 'acct-u',
+    name: 'Unshared card',
+    type: 'credit',
+    unsharedAt: '2026-11-04T15:00:00Z',
+  })
   const checking = account({ id: 'acct-c', name: 'Checking' })
   const rewardsDebt = {
     id: rewards.id,
@@ -163,7 +170,7 @@ describe('Debts', () => {
   const debtsCard = () => screen.findByRole('region', { name: 'Your debts' })
 
   it('lists only cards and loans that are owed, with their terms', async () => {
-    serve([rewards, loan, paidOff, hidden, checking])
+    serve([rewards, loan, paidOff, hidden, unshared, checking])
     renderPlan('/plan/debts')
     const card = within(await debtsCard())
     expect(card.getAllByRole('form').map((f) => f.getAttribute('aria-label'))).toEqual([

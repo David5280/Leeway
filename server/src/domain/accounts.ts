@@ -50,6 +50,12 @@ export interface Account {
   hidden: boolean
   manual: boolean
   balanceUpdatedAt: string | null
+  /**
+   * When the bank stopped sharing this account (see unshared.ts), or null
+   * while it still does. Its balance then stays out of every total, and
+   * balanceUpdatedAt says when it was last read.
+   */
+  unsharedAt: string | null
   /** Yearly interest rate for a card or loan, such as 24.99. Banks rarely send it. */
   aprPercent: number | null
   /** The required monthly payment for a card or loan. */
@@ -71,6 +77,7 @@ const SELECT = `
     a.balance_cents AS "balanceCents", a.available_cents AS "availableCents",
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
+    a.unshared_at AS "unsharedAt",
     a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents",
     a.low_balance_cents AS "lowBalanceCents", a.kind AS "kindChoice"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
@@ -93,10 +100,25 @@ async function namedAccounts(db: Db): Promise<Account[]> {
 const inListOrder = (a: Account, b: Account) =>
   a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
 
+/**
+ * Every account, or with `includeHidden` false only the counted ones: those
+ * neither hidden nor no longer shared by their bank, whose balances add up.
+ */
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
   const accounts = await namedAccounts(db)
-  return accounts.filter((account) => includeHidden || !account.hidden).sort(inListOrder)
+  return accounts.filter((account) => includeHidden || isCounted(account)).sort(inListOrder)
 }
+
+/**
+ * Whether the bank still shares the account, so its balance is current.
+ * An account added by hand always counts as shared.
+ */
+export const isShared = (account: Pick<Account, 'unsharedAt'>): boolean =>
+  account.unsharedAt === null
+
+/** Whether the account's balance counts toward totals: shown, and still shared. */
+export const isCounted = (account: Pick<Account, 'hidden' | 'unsharedAt'>): boolean =>
+  !account.hidden && isShared(account)
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
   const account = (await namedAccounts(db)).find((one) => one.id === id)
@@ -276,13 +298,20 @@ export async function updateAccount(db: Db, id: string, patch: AccountPatch): Pr
   return getAccount(db, id)
 }
 
-export async function deleteManualAccount(db: Db, id: string): Promise<void> {
+/**
+ * Deletes an account and its transactions: one added by hand, or a bank
+ * account the bank no longer shares. One the bank still shares would only
+ * come back on the next sync, so it can be hidden instead.
+ */
+export async function deleteAccount(db: Db, id: string): Promise<void> {
   const account = await getAccount(db, id)
-  if (!account.manual) {
+  if (!account.manual && isShared(account)) {
     throw new AppError(
       'invalid_input',
       'Linked bank accounts go away when you remove their bank connection; you can hide this one instead',
     )
   }
   await db.query('DELETE FROM accounts WHERE id = $1', [id])
+  // Payments to a card no longer here count as spending again (categorize.ts).
+  if (account.type === 'credit' && !account.manual) await recategorize(db)
 }

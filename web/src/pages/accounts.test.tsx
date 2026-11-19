@@ -264,6 +264,46 @@ describe('Accounts dashboard', () => {
   })
 })
 
+describe('accounts the bank no longer shares', () => {
+  const old = account({
+    id: 'dddddddd-0000-4000-8000-000000000004',
+    name: 'Old savings',
+    institutionName: 'Chase',
+    balanceCents: 500000,
+    balanceUpdatedAt: '2026-11-03T15:00:00Z',
+    unsharedAt: '2026-11-04T15:00:00Z',
+  })
+
+  it('shows them apart, out of the balances, with a word in the summary', async () => {
+    server([checking, old])
+    renderSignedIn(<Accounts />)
+    expect(
+      await screen.findByText(
+        'Old savings is no longer shared from Chase and is left out of these figures.',
+      ),
+    ).toBeInTheDocument()
+    const apart = screen.getByRole('region', { name: 'No longer shared' })
+    expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
+      'No longer shared from Chase',
+    )
+    // Only Everyday adds up: $2,500.00 posted, not $7,500.00.
+    const balances = screen.getByRole('region', { name: 'Balances' })
+    expect(within(balances).getByText('$2,500.00')).toBeInTheDocument()
+  })
+
+  it('shows no balances when only those are picked', async () => {
+    server([old])
+    renderSignedIn(<Accounts />)
+    expect(
+      await screen.findByText(
+        'Old savings is no longer shared from Chase, so it has no current balance.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Balances' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'No longer shared' })).toBeInTheDocument()
+  })
+})
+
 describe('updatedNote', () => {
   const now = Date.parse('2026-11-17T18:00:00Z')
 

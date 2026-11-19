@@ -39,7 +39,8 @@ export function BanksSection() {
             <strong>{bankName(c)}</strong>
             <br />
             <span className="small muted">
-              {c.accountCount} {c.accountCount === 1 ? 'account' : 'accounts'}, synced{' '}
+              {c.accountCount} {c.accountCount === 1 ? 'account' : 'accounts'}
+              {c.unsharedCount > 0 && `, ${c.unsharedCount} no longer shared`}, synced{' '}
               {timeAgo(c.lastSyncedAt)}
             </span>
             <br />

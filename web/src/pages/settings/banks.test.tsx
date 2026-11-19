@@ -26,6 +26,7 @@ function connection(fields: Partial<Connection> & Pick<Connection, 'id'>): Conne
     lastSyncedAt: null,
     lastError: null,
     accountCount: 2,
+    unsharedCount: 0,
     ...fields,
   }
 }
@@ -108,6 +109,13 @@ describe('Banks', () => {
     expect(rowOf('Bank')).toHaveTextContent('Sync failed')
     expect(rowOf('Old Bank')).toHaveTextContent('The bank is not answering')
     expect(screen.getByRole('button', { name: 'Connect another bank' })).toBeInTheDocument()
+  })
+
+  it('counts the accounts a bank no longer shares', async () => {
+    serve([connection({ id: 'conn-1', accountCount: 1, unsharedCount: 1 })])
+    renderSignedIn(<BanksSection />, { status: withBank })
+    await screen.findByText('First Bank')
+    expect(rowOf('First Bank')).toHaveTextContent('1 account, 1 no longer shared, synced never')
   })
 
   it('asks to sign in again where a login expired, and repairs it', async () => {

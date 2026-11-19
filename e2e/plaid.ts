@@ -3,7 +3,9 @@
 // says bank sync is on, the bank list holds two long-named banks, Plaid's
 // script is a window that finishes at once on the first of them, and
 // link_bank answers that the bank picked is already connected. Nothing is
-// saved, so the install stays as the other tests expect it.
+// saved, so the install stays as the other tests expect it. The same goes for
+// an account the bank no longer shares, which is added to what the server
+// answers rather than to its database.
 
 import { expect, type Page } from '@playwright/test'
 
@@ -18,6 +20,7 @@ const BANKS = [
     lastSyncedAt: new Date().toISOString(),
     lastError: null,
     accountCount: 3,
+    unsharedCount: 1,
   },
   {
     id: '00000000-0000-4000-8000-0000000000b2',
@@ -28,6 +31,7 @@ const BANKS = [
     lastSyncedAt: null,
     lastError: 'The bank needs you to log in again',
     accountCount: 1,
+    unsharedCount: 0,
   },
 ] as const
 
@@ -113,4 +117,66 @@ export async function askForSecondLogin(page: Page): Promise<void> {
   await pickConnectedBankAgain(page)
   await page.getByRole('button', { name: "It's a different login" }).click()
   await expect(page.getByRole('region', { name: /^Add a second .+ login\?$/ })).toBeVisible()
+}
+
+/**
+ * A savings account the owner un-ticked when reconnecting the first bank:
+ * long-named, with a balance large enough to crowd a phone's row, last read
+ * two weeks ago.
+ */
+const UNSHARED = {
+  id: '00000000-0000-4000-8000-0000000000a1',
+  connectionId: CHASE.id,
+  institutionName: CHASE.institutionName,
+  name: 'JPMorgan Chase Premier Plus Relationship Savings',
+  nickname: null,
+  bankName: 'Premier Plus Relationship Savings',
+  mask: '2222',
+  type: 'depository',
+  subtype: 'savings',
+  balanceCents: 123456789,
+  availableCents: 123456789,
+  creditLimitCents: null,
+  currency: 'USD',
+  hidden: false,
+  manual: false,
+  balanceUpdatedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+  unsharedAt: new Date(Date.now() - 13 * 86_400_000).toISOString(),
+  aprPercent: null,
+  minimumPaymentCents: null,
+  lowBalanceCents: null,
+  kindChoice: null,
+  kind: 'savings',
+}
+
+/**
+ * Adds the account the bank no longer shares to the accounts the server
+ * lists and to the Accounts dashboard, as the server would show it: apart
+ * from the balances, with a word in the summary.
+ */
+export async function standInForUnsharedAccount(page: Page): Promise<void> {
+  await page.route('**/api/actions/list_accounts', async (route) => {
+    const { result } = await (await route.fetch()).json()
+    await route.fulfill({ json: { result: [...result, UNSHARED] } })
+  })
+  await page.route('**/api/actions/summarize_accounts', async (route) => {
+    const { result } = await (await route.fetch()).json()
+    const point = `${UNSHARED.name} is no longer shared from ${UNSHARED.institutionName} and is left out of these figures.`
+    await route.fulfill({
+      json: {
+        result: {
+          ...result,
+          accounts: [...result.accounts, UNSHARED],
+          summary: { ...result.summary, points: [point, ...result.summary.points].slice(0, 4) },
+        },
+      },
+    })
+  })
+}
+
+/** Goes on to the confirm step for removing the account the bank no longer shares. */
+export async function confirmRemovingUnshared(page: Page): Promise<void> {
+  const row = page.getByRole('group', { name: UNSHARED.name })
+  await row.getByRole('button', { name: 'Remove this account and its history' }).click()
+  await expect(row.getByRole('button', { name: 'Remove for good' })).toBeVisible()
 }

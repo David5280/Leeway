@@ -1027,6 +1027,11 @@ button.chip {
   min-width: 180px;
 }
 
+/* Removing an account the bank no longer shares asks on a line of its own. */
+.unshared-confirm {
+  flex-basis: 100%;
+}
+
 /* A step of adding a bank (components/bank): set in from the card it opens in. */
 .bank-step {
   padding: 14px;

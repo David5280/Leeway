@@ -283,7 +283,7 @@ describe('transfers across syncs', () => {
       })
     const late = arrival('2026-11-14')
     bank.pages = [page({ added: [out, late] })]
-    const { connectionId } = await linkBank(ctx, 'public-pairs')
+    const { connectionId } = await linkBank(ctx, newLink('public-pairs'))
     const byBankId = async () =>
       new Map(
         (

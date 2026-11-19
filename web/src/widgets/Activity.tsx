@@ -1,13 +1,15 @@
 // Where the money went: recent transactions, accounts and top merchants.
 
 import { Link } from 'react-router-dom'
+import type { Account } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Money } from '../components/design/Money'
 import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, Progress } from '../components/ui'
-import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
+import { accountDetail, accountPath, isOwed, isShared, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
+import { calendarDate } from '../lib/format'
 import type { WidgetProps } from './types'
 
 export function RecentWidget({ budget }: WidgetProps) {
@@ -54,33 +56,43 @@ export function AccountsWidget() {
         <Link
           key={account.id}
           to={accountPath(account.id)}
-          className={`list-row clickrow account-row ${account.hidden ? 'muted' : ''}`}
+          className={`list-row clickrow account-row ${account.hidden || !isShared(account) ? 'muted' : ''}`}
         >
           <span className="grow stack-sm" style={{ gap: 0 }}>
             <span className="ellipsis">{account.name}</span>
             <span className="small muted">
               {accountDetail(account)}
               {account.hidden && ' · ignored for budgets'}
+              {!isShared(account) && ' · no longer shared'}
             </span>
           </span>
           <Sparkline values={lines.get(account.id) ?? []} />
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
-            {account.balanceCents === null ? (
-              <span>No balance</span>
-            ) : (
-              <Money
-                cents={account.balanceCents}
-                precision="cents"
-                tone={overdrawn(account) ? 'problem' : undefined}
-              />
-            )}
-            {isOwed(account) && account.balanceCents !== null && (
-              <span className="small muted">owed</span>
-            )}
+            <AccountBalance account={account} />
           </span>
         </Link>
       ))}
     </Card>
+  )
+}
+
+/** An account's balance in its row, or, for one the bank no longer shares, when it was last read. */
+function AccountBalance({ account }: { account: Account }) {
+  // An old balance is never shown as if it were current.
+  if (!isShared(account)) {
+    const lastRead = account.balanceUpdatedAt ?? account.unsharedAt!
+    return <span className="small">Last updated {calendarDate(lastRead)}</span>
+  }
+  if (account.balanceCents === null) return <span>No balance</span>
+  return (
+    <>
+      <Money
+        cents={account.balanceCents}
+        precision="cents"
+        tone={overdrawn(account) ? 'problem' : undefined}
+      />
+      {isOwed(account) && <span className="small muted">owed</span>}
+    </>
   )
 }
 

@@ -55,6 +55,7 @@ function connection(fields: Partial<Connection> & Pick<Connection, 'id'>): Conne
     lastSyncedAt: null,
     lastError: null,
     accountCount: 2,
+    unsharedCount: 0,
     ...fields,
   }
 }
@@ -755,6 +756,7 @@ describe('AccountsWidget', () => {
       hidden: false,
       manual: false,
       balanceUpdatedAt: null,
+      unsharedAt: null,
       aprPercent: null,
       minimumPaymentCents: null,
       lowBalanceCents: null,
@@ -788,6 +790,31 @@ describe('AccountsWidget', () => {
     expect(screen.getByRole('link', { name: 'All accounts' })).toHaveAttribute('href', '/accounts')
     // Each account opens the Accounts dashboard with just it picked.
     expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
+  })
+
+  it('dates an account the bank no longer shares instead of showing its old balance', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({
+          id: 'a',
+          name: 'Old card',
+          type: 'credit',
+          balanceCents: 80000,
+          balanceUpdatedAt: '2026-11-03T15:00:00Z',
+          unsharedAt: '2026-11-04T15:00:00Z',
+        }),
+        account({ id: 'b', name: 'Older', balanceCents: 100, unsharedAt: '2026-11-04T15:00:00Z' }),
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const row = (await screen.findByText('Old card')).closest('.list-row')!
+    expect(row).toHaveClass('muted')
+    expect(row).toHaveTextContent('no longer shared')
+    expect(row).toHaveTextContent(/Last updated Nov 3/)
+    expect(row).not.toHaveTextContent('$800.00')
+    expect(row).not.toHaveTextContent('owed')
+    // With no time the balance was read, the day it stopped being shared.
+    expect(screen.getByText('Older').closest('.list-row')).toHaveTextContent(/Last updated Nov 4/)
   })
 
   it("draws a line of each account's recent balance, when it has one", async () => {

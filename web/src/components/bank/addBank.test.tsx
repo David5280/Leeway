@@ -28,6 +28,7 @@ function connection(fields: Partial<Connection> & Pick<Connection, 'id'>): Conne
     lastSyncedAt: null,
     lastError: null,
     accountCount: 2,
+    unsharedCount: 0,
     ...fields,
   }
 }
