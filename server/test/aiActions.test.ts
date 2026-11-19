@@ -3,6 +3,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { findAction } from '../src/actions/index.js'
 import { MICROS_PER_CENT, MODEL_CHOICES } from '../src/ai/models.js'
 import { buildApp } from '../src/http/app.js'
@@ -116,7 +117,7 @@ describe('get_ai_usage', () => {
     await ctx.ai!.run('summary', {
       system: 'x',
       content: [{ type: 'text', text: 'y' }],
-      format: (await import('zod')).z.object({}),
+      format: z.object({}),
       effort: 'low',
       maxTokens: 10,
     })
@@ -129,7 +130,7 @@ describe('get_ai_usage', () => {
       .ai!.run('summary', {
         system: 'x',
         content: [{ type: 'text', text: 'y' }],
-        format: (await import('zod')).z.object({}),
+        format: z.object({}),
         effort: 'low',
         maxTokens: 10,
       })
@@ -233,9 +234,9 @@ describe('the AI actions over the API', () => {
   it('works for the signed-in owner, and for nobody else', async () => {
     const usage = await post('get_ai_usage', {})
     expect(usage.statusCode).toBe(200)
-    expect(usage.json()).toMatchObject({ monthlyCapCents: 500, keySet: true })
+    expect(usage.json()).toMatchObject({ result: { monthlyCapCents: 500, keySet: true } })
     expect((await post('set_ai_limit', { monthlyCapCents: 900 })).json()).toMatchObject({
-      monthlyCapCents: 900,
+      result: { monthlyCapCents: 900 },
     })
     expect((await post('get_ai_usage', {}, {})).statusCode).toBe(401)
     expect((await post('set_ai_limit', { monthlyCapCents: 5 }, {})).statusCode).toBe(401)
