@@ -157,32 +157,61 @@ describe('service worker notification taps', () => {
 })
 
 describe('service worker subscription renewal', () => {
-  /** Records each action the worker calls, answering as the server would. */
-  function serverCalls() {
+  /** The server's current push key, 0x04 0x01 0x02 in base64url, unlike OLD's. */
+  const SERVER_KEY = 'BAEC'
+
+  interface ServerState {
+    /** Whether the server still sends to the old address. */
+    knowsOld?: boolean
+    /** What get_notification_settings answers with, as an HTTP status. */
+    settingsStatus?: number
+    /** What subscribe_push answers with, as an HTTP status. */
+    subscribeStatus?: number
+  }
+
+  /** Answers each action as the server would, recording what the worker sent. */
+  function fakeServer({
+    knowsOld = true,
+    settingsStatus = 200,
+    subscribeStatus = 200,
+  }: ServerState = {}) {
     const calls: { url: string; init: RequestInit }[] = []
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
         calls.push({ url, init })
+        if (url.endsWith('/get_notification_settings')) {
+          const push = { publicKey: SERVER_KEY, devices: knowsOld ? 1 : 0, thisDevice: knowsOld }
+          return Response.json({ result: { push } }, { status: settingsStatus })
+        }
+        if (url.endsWith('/subscribe_push')) return new Response('{}', { status: subscribeStatus })
         return new Response('{}')
       }),
     )
-    return () =>
-      calls.map(({ url, init }) => ({
-        url,
-        credentials: init.credentials,
-        body: JSON.parse(String(init.body)),
-      }))
+    return {
+      sent: () =>
+        calls.map(({ url, init }) => ({
+          url,
+          credentials: init.credentials,
+          body: JSON.parse(String(init.body)),
+        })),
+      urls: () => calls.map((call) => call.url.replace('/api/actions/', '')),
+    }
   }
 
   it('hands the server a renewed address and forgets the old one', async () => {
-    const sent = serverCalls()
+    const server = fakeServer()
     const { listeners } = loadWorker()
     await dispatch(listeners.pushsubscriptionchange, {
       oldSubscription: OLD,
       newSubscription: RENEWED,
     })
-    expect(sent()).toEqual([
+    expect(server.sent()).toEqual([
+      {
+        url: '/api/actions/get_notification_settings',
+        credentials: 'same-origin',
+        body: { endpoint: OLD.endpoint },
+      },
       {
         url: '/api/actions/subscribe_push',
         credentials: 'same-origin',
@@ -200,25 +229,73 @@ describe('service worker subscription renewal', () => {
     ])
   })
 
-  it('subscribes again with the old options when the browser gives no new one', async () => {
-    const sent = serverCalls()
+  it("subscribes again with the server's current key, not the old one, when the browser gives none", async () => {
+    const server = fakeServer()
     const { scope, listeners } = loadWorker()
     await dispatch(listeners.pushsubscriptionchange, { oldSubscription: OLD })
-    expect(scope.registration.pushManager.subscribe).toHaveBeenCalledWith(OLD.options)
-    expect(sent().map((call) => call.url)).toEqual([
-      '/api/actions/subscribe_push',
-      '/api/actions/unsubscribe_push',
+    expect(scope.registration.pushManager.subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: new Uint8Array([4, 1, 2]),
+    })
+    expect(server.urls()).toEqual([
+      'get_notification_settings',
+      'subscribe_push',
+      'unsubscribe_push',
     ])
   })
 
-  it('keeps the address when it did not change, and does nothing with neither', async () => {
-    const sent = serverCalls()
+  it('re-registers nothing after the push keys changed, so Settings offers Turn on', async () => {
+    // A new ENCRYPTION_KEY gave the server new keys and dropped every device.
+    const server = fakeServer({ knowsOld: false })
+    const { scope, listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, { oldSubscription: OLD })
+    expect(scope.registration.pushManager.subscribe).not.toHaveBeenCalled()
+    expect(server.urls()).toEqual(['get_notification_settings'])
+  })
+
+  it('re-registers nothing for a device the server forgot, even with a renewed address', async () => {
+    const server = fakeServer({ knowsOld: false })
+    const { listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, {
+      oldSubscription: OLD,
+      newSubscription: RENEWED,
+    })
+    expect(server.urls()).toEqual(['get_notification_settings'])
+  })
+
+  it('keeps the old address when the server refuses the new one', async () => {
+    const server = fakeServer({ subscribeStatus: 400 })
+    const { listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, {
+      oldSubscription: OLD,
+      newSubscription: RENEWED,
+    })
+    expect(server.urls()).toEqual(['get_notification_settings', 'subscribe_push'])
+  })
+
+  it('does nothing when it cannot ask the server, as when signed out', async () => {
+    const server = fakeServer({ settingsStatus: 401 })
+    const { scope, listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, { oldSubscription: OLD })
+    expect(scope.registration.pushManager.subscribe).not.toHaveBeenCalled()
+    expect(server.urls()).toEqual(['get_notification_settings'])
+  })
+
+  it('does nothing without an old address to ask about', async () => {
+    const server = fakeServer()
+    const { listeners } = loadWorker()
+    await dispatch(listeners.pushsubscriptionchange, { newSubscription: RENEWED })
+    await dispatch(listeners.pushsubscriptionchange, {})
+    expect(server.urls()).toEqual([])
+  })
+
+  it('keeps the address when it did not change', async () => {
+    const server = fakeServer()
     const { listeners } = loadWorker()
     await dispatch(listeners.pushsubscriptionchange, {
       oldSubscription: RENEWED,
       newSubscription: RENEWED,
     })
-    await dispatch(listeners.pushsubscriptionchange, {})
-    expect(sent().map((call) => call.url)).toEqual(['/api/actions/subscribe_push'])
+    expect(server.urls()).toEqual(['get_notification_settings', 'subscribe_push'])
   })
 })

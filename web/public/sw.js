@@ -135,14 +135,46 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil(renewSubscription(event.oldSubscription, event.newSubscription))
 })
 
+/**
+ * Moves push from the old address to the renewed one, only for a device the
+ * server still sends to. One it has forgotten (its push keys were replaced,
+ * its push service said it was gone, or there is no old address to ask
+ * about) is left for the owner to turn on again in Settings, where it shows
+ * as off. Re-registering it here would show push as on while every push to
+ * it is refused. Without a renewed subscription from the browser, a new one
+ * is made with the server's current key, never the old one's.
+ */
 async function renewSubscription(old, renewed) {
-  const fresh = renewed || (old ? await self.registration.pushManager.subscribe(old.options) : null)
-  if (!fresh) return
+  if (!old) return
+  const push = await pushState(old.endpoint)
+  if (!push || !push.thisDevice) return
+  const fresh =
+    renewed ||
+    (await self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyBytes(push.publicKey),
+    }))
   const { endpoint, keys } = fresh.toJSON()
-  await callAction('subscribe_push', { endpoint, keys, origin: self.location.origin })
-  if (old && old.endpoint !== endpoint) {
+  const saved = await callAction('subscribe_push', { endpoint, keys, origin: self.location.origin })
+  // The old address goes only once the new one is kept, so push is never left with neither.
+  if (saved.ok && old.endpoint !== endpoint) {
     await callAction('unsubscribe_push', { endpoint: old.endpoint })
   }
+}
+
+/** The server's push state for an address: its current key, and whether it sends there. */
+async function pushState(endpoint) {
+  const response = await callAction('get_notification_settings', { endpoint })
+  if (!response.ok) return null
+  const { result } = await response.json()
+  return result.push
+}
+
+/** A base64url key as the bytes the Push API takes. */
+function keyBytes(base64Url) {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0))
 }
 
 /** Calls one of the server's actions as the signed-in owner, as the app does. */
