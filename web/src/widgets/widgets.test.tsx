@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, Budget, CategoryBudget, Connection, SpendingPace } from '../api/client'
 import { settingsSchema } from '../../../server/src/domain/settings'
@@ -71,46 +72,56 @@ describe('LeewayWidget', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
-  it('shows what is left, a safe amount per day and how much is used', () => {
+  it('shows what is left as the hero, a safe amount per day and the share used', () => {
     const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
-    expect(region()).toHaveTextContent('$600')
-    expect(region()).toHaveTextContent('left of $800')
+    expect(region()).toHaveTextContent('Left to spend$600')
     // $600 over the 14 days still to spend, today included, is $42.85 a day.
-    expect(region()).toHaveTextContent('About $43 a day for the next 14 days.')
-    expect(region()).toHaveTextContent('$200 spent, 25%')
-    expect(screen.getByRole('progressbar', { name: 'Budget used' })).toHaveAttribute(
-      'aria-valuenow',
-      '25',
-    )
-    expect(region()).toHaveTextContent('Marker: where steady spending would be today')
+    expect(region()).toHaveTextContent('About $43 a day for the next 14 days, of $800')
+    const ring = screen.getByRole('progressbar', { name: 'Budget used' })
+    expect(ring).toHaveAttribute('aria-valuenow', '25')
+    // 25% used by day 17 of 30 is behind the calendar, so the ring reads fine.
+    expect(ring).toHaveClass('ring-ok')
+    expect(region()).toHaveTextContent('25% of the budget used, 57% of the way through the month.')
+    // Nothing was spent by this point last month, so all $200 is more than usual.
+    expect(
+      screen.getByRole('img', { name: '$200 more than this point last month' }),
+    ).toHaveTextContent('▲ $200 more spent')
   })
 
-  it('says how far over it is and that nothing is left to spend', () => {
+  it('warns in the ring when spending runs ahead of the days', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 60000 }])
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    // 75% used against 57% of the month is more than 10 points ahead.
+    expect(screen.getByRole('progressbar', { name: 'Budget used' })).toHaveClass('ring-watch')
+  })
+
+  it('says how far over it is, in red', () => {
     const budget = budgetFor(categories, [
       { categoryId: groceries.id, amountCents: 60000 },
       { categoryId: dining.id, amountCents: 30000 },
     ])
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
-    expect(region()).toHaveTextContent('over $800')
-    expect(region()).not.toHaveTextContent('left of')
-    expect(region()).toHaveTextContent('Nothing left to spend this period.')
-    expect(region()).toHaveTextContent('$900 spent, 113%')
-    // The bar stops at full even though spending went past it.
-    expect(screen.getByRole('progressbar', { name: 'Budget used' })).toHaveAttribute(
-      'aria-valuenow',
-      '100',
+    expect(region()).toHaveTextContent('Over budget$100')
+    expect(region()).toHaveTextContent('Over budget by $100 of $800')
+    expect(screen.getByText('$100', { selector: '.hero-figure-number' })).toHaveClass(
+      'money-problem',
     )
+    // The ring stops at full even though spending went past it, and says how far.
+    const ring = screen.getByRole('progressbar', { name: 'Budget used' })
+    expect(ring).toHaveAttribute('aria-valuenow', '100')
+    expect(ring).toHaveAttribute('aria-valuetext', '113%')
+    expect(ring).toHaveClass('ring-over')
   })
 
-  it('treats a budget spent to the cent as nothing left', () => {
+  it('treats a budget spent to the cent as nothing left, not over', () => {
     const budget = budgetFor(categories, [
       { categoryId: groceries.id, amountCents: 60000 },
       { categoryId: dining.id, amountCents: 20000 },
     ])
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
-    expect(region()).toHaveTextContent('left of $800')
-    expect(region()).toHaveTextContent('Nothing left to spend this period.')
+    expect(region()).toHaveTextContent('Left to spend$0')
+    expect(region()).not.toHaveTextContent('Over budget')
   })
 
   it('says "1 day" on the last day of the period', () => {
@@ -119,20 +130,20 @@ describe('LeewayWidget', () => {
       totals: { safePerDayCents: 80000 },
     })
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
-    expect(region()).toHaveTextContent('About $800 a day for the next 1 day.')
+    expect(region()).toHaveTextContent('About $800 a day for the next 1 day, of $800')
   })
 
-  it('leaves out the daily amount and the pace marker for a past period', () => {
+  it('leaves out the daily amount, the usual and the calendar for a past period', () => {
     const budget = withChanges(
       budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }]),
       { period: { offset: -1 }, totals: { safePerDayCents: null } },
     )
     renderSignedIn(<LeewayWidget budget={budget} offset={-1} />)
-    expect(region()).toHaveTextContent('left of $800')
+    expect(region()).toHaveTextContent('Left of $800')
     expect(region()).not.toHaveTextContent('a day')
-    expect(region()).not.toHaveTextContent('Nothing left')
-    expect(region()).not.toHaveTextContent('Marker')
-    expect(screen.getByRole('progressbar', { name: 'Budget used' })).toBeInTheDocument()
+    expect(region()).not.toHaveTextContent('of the way through')
+    expect(screen.queryByRole('img', { name: /last month/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Budget used' })).not.toHaveClass('ring-watch')
   })
 
   it('holds back what goals set aside, and lists each one', () => {
@@ -144,41 +155,49 @@ describe('LeewayWidget', () => {
     })
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
     // $600 left in the budgets, less $200 for goals.
-    expect(region()).toHaveTextContent('$400left of $800, after $200 set aside')
-    expect(region()).toHaveTextContent('About $29 a day for the next 14 days.')
+    expect(region()).toHaveTextContent('Left to spend$400')
+    expect(region()).toHaveTextContent('About $29 a day for the next 14 days, of $800')
     const list = within(screen.getByRole('list', { name: 'Set aside for goals' }))
     expect(list.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'Set aside for Road bike$150',
       'Set aside for Trip$50',
     ])
-    expect(list.getByRole('link', { name: 'Set aside for Road bike' })).toHaveAttribute(
-      'href',
-      '/plan/goals',
-    )
-    // The striped stretch after the spending shows the share held back: $200 of $800.
-    const held = document.querySelector('.fill.reserved') as HTMLElement
-    expect(held.style.left).toBe('25%')
-    expect(held.style.width).toBe('25%')
   })
 
-  it('says nothing is left once goals take the rest', () => {
-    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 60000 }], {
-      setAsides: [{ goalId: 'goal-bike', name: 'Road bike', color: '#E0622D', amountCents: 30000 }],
+  it('opens the math behind what is left, goals included', async () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }], {
+      setAsides: [{ goalId: 'goal-bike', name: 'Road bike', color: '#E0622D', amountCents: 15000 }],
     })
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
-    expect(region()).toHaveTextContent('$100over $800, after $300 set aside')
-    expect(region()).toHaveTextContent('Nothing left to spend this period.')
-    // $300 held back is more than the $200 the bar has room for, so it stops at full.
-    expect((document.querySelector('.fill.reserved') as HTMLElement).style.width).toBe('25%')
+    await userEvent.click(within(region()).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Left to spend' })
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Left to spend $450 = Budgets this period $800 minus spent in them $200 minus set aside for goals $150',
+    )
+    expect(within(sheet).getByRole('link', { name: /Groceries/ })).toHaveAttribute(
+      'href',
+      `/budgets/${groceries.id}`,
+    )
+  })
+
+  it('opens the math of an overspent budget as how far over', async () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 90000 }])
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    await userEvent.click(within(region()).getByRole('button'))
+    expect(screen.getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Over budget by $100 = Budgets this period $800 minus spent in them $900',
+    )
+    expect(screen.getByText(/Spending in categories without a budget/)).toBeInTheDocument()
   })
 })
 
 describe('GlanceWidget', () => {
-  // Each glance card is its title plus what sits under it.
-  const card = (title: string) => screen.getByText(title, { selector: 'p' }).parentElement!
+  // Each glance tile is a card named by its title.
+  const card = (title: string) => screen.getByRole('region', { name: title })
+  const usual = (sentence: string) => screen.getByRole('img', { name: sentence })
 
   function serve(connections: Connection[] = []) {
-    return fakeServer({ list_connections: () => connections })
+    return fakeServer({ list_connections: () => connections, get_trends: () => [] })
   }
 
   it('compares spending with the same point last month', () => {
@@ -189,7 +208,7 @@ describe('GlanceWidget', () => {
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$300')
-    expect(card('Spent')).toHaveTextContent('$100 more than this point last month')
+    expect(usual('$100 more than this point last month')).toHaveClass('usual-warn')
   })
 
   it('says when spending is lower than at this point last month', () => {
@@ -199,21 +218,28 @@ describe('GlanceWidget', () => {
       previous: { spentCents: 70000, spentToDateCents: 45000, categories: [] },
     }
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(card('Spent')).toHaveTextContent('$150 less than this point last month')
+    expect(usual('$150 less than this point last month')).toHaveClass('usual-good')
   })
 
-  it('says "Nothing yet" when neither period has spending', () => {
+  it('reads as usual when neither period has spending', () => {
     serve()
     renderSignedIn(<GlanceWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$0')
-    expect(card('Spent')).toHaveTextContent('Nothing yet')
+    expect(usual('About the same as this point last month')).toHaveTextContent('= as usual')
   })
 
   it('counts all spending as more when last period had none', () => {
     serve()
     const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }])
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(card('Spent')).toHaveTextContent('$42 more than this point last month')
+    expect(usual('$42 more than this point last month')).toBeInTheDocument()
+  })
+
+  it('leaves the usual out of a past period', () => {
+    serve()
+    const budget = withChanges(budgetFor(categories, []), { period: { offset: -1 } })
+    renderSignedIn(<GlanceWidget budget={budget} offset={-1} />)
+    expect(within(card('Spent')).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -228,11 +254,11 @@ describe('GlanceWidget', () => {
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />, {
       settings: settingsSchema.parse({ timeZone: 'America/Denver', period }),
     })
-    expect(card('Spent')).toHaveTextContent(`$32 more than this point last ${word}`)
+    expect(usual(`$32 more than this point last ${word}`)).toBeInTheDocument()
     expect(card('Income')).toHaveTextContent(`Money in this ${word}`)
   })
 
-  it('shows money in from income categories', () => {
+  it('shows money in from income categories, signed and green', () => {
     serve()
     const paycheck = category('Paycheck', { kind: 'income' })
     const budget = budgetFor(
@@ -240,16 +266,17 @@ describe('GlanceWidget', () => {
       [{ categoryId: paycheck.id, amountCents: -250000 }],
     )
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(card('Income')).toHaveTextContent('$2,500')
+    expect(screen.getByText('+$2,500', { selector: '.mid-number' })).toHaveClass('money-in')
     expect(card('Income')).toHaveTextContent('Money in this month')
   })
 
-  it('links to the transactions that need a category', () => {
+  it('counts what needs a category, and opens where to sort it', async () => {
     serve()
     const budget = budgetFor(categories, [{ categoryId: null, amountCents: 4500 }])
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(card('Needs a category')).toHaveTextContent('1')
-    expect(screen.getByRole('link', { name: 'Sort $45 of spending' })).toHaveAttribute(
+    expect(card('Needs a category')).toHaveTextContent('1$45 of spending to sort')
+    await userEvent.click(within(card('Needs a category')).getByRole('button'))
+    expect(screen.getByRole('link', { name: 'Sort 1 transaction' })).toHaveAttribute(
       'href',
       '/transactions?category=uncategorized',
     )
@@ -259,7 +286,17 @@ describe('GlanceWidget', () => {
     serve()
     renderSignedIn(<GlanceWidget budget={budgetFor(categories, [])} offset={0} />)
     expect(card('Needs a category')).toHaveTextContent('0All sorted')
-    expect(screen.queryByRole('link', { name: /Sort/ })).not.toBeInTheDocument()
+  })
+
+  it('opens the math behind what was spent', async () => {
+    serve()
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }])
+    renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
+    await userEvent.click(within(card('Spent')).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Spent this month' })
+    expect(within(sheet).getByRole('region', { name: 'Compared with usual' })).toHaveTextContent(
+      '$300 more than this point last month',
+    )
   })
 
   it('offers to connect a bank when there is none', async () => {
@@ -296,7 +333,8 @@ describe('GlanceWidget', () => {
   it('does not claim banks are up to date when they could not be read', async () => {
     fakeServer({}, failing('list_connections', 'Could not read banks'))
     renderSignedIn(<GlanceWidget budget={budgetFor(categories, [])} offset={0} />)
-    await waitFor(() => expect(card('Bank sync')).not.toHaveTextContent('Up to date'))
+    expect(await screen.findByText('Could not check your banks')).toBeInTheDocument()
+    expect(card('Bank sync')).not.toHaveTextContent('Up to date')
   })
 })
 
@@ -397,8 +435,8 @@ describe('AlertsWidget', () => {
     await screen.findByText('Chase needs you to log in again to keep syncing.')
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/accounts?select=short',
-      '/accounts?select=low',
+      '/accounts/short',
+      '/accounts/low',
       '/settings/banks',
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
@@ -472,7 +510,7 @@ describe('CategoriesWidget', () => {
     expect(rowNote(row({ status: 'ok', pace: 'on', leftCents: 0 }), money).text).toBe('Fully used')
   })
 
-  it('lists spending categories with their budget, status and what is left', () => {
+  it('draws each spending category against its budget, biggest first', () => {
     const rent = category('Rent')
     const paycheck = category('Paycheck', { kind: 'income', budgetCents: 500000 })
     const budget = budgetFor(
@@ -485,39 +523,49 @@ describe('CategoriesWidget', () => {
       ],
     )
     renderSignedIn(<CategoriesWidget budget={budget} offset={0} />)
-
-    const groceriesRow = screen.getByRole('link', { name: /Groceries/ })
-    expect(groceriesRow).toHaveAttribute('href', '/budgets/cat-groceries')
-    // On track needs no saying: the row just shows what is left.
-    expect(groceriesRow).toHaveTextContent('$200 of $600 · $400 left')
-    expect(groceriesRow).not.toHaveTextContent('On track')
-
-    const diningRow = screen.getByRole('link', { name: /Dining out/ })
-    expect(diningRow).toHaveTextContent('$240 of $200')
-    expect(diningRow).toHaveTextContent('Over by $40')
-    expect(diningRow).not.toHaveTextContent('left')
-    expect(
-      within(diningRow).getByRole('progressbar', {
-        name: 'Dining out: 120 percent of budget used',
-      }),
-    ).toHaveAttribute('aria-valuenow', '100')
-
-    const rentRow = screen.getByRole('link', { name: /Rent/ })
-    expect(rentRow).toHaveTextContent('$1,500')
-    expect(rentRow).toHaveTextContent('$1,500 · No budget')
-    expect(within(rentRow).queryByRole('progressbar')).not.toBeInTheDocument()
-
+    const card = screen.getByRole('region', { name: 'Categories' })
+    expect(within(card).getByText('Where did your money go?')).toBeInTheDocument()
+    const rows = within(card).getAllByRole('listitem')
     // Income is not spending, so it has no row here.
-    expect(screen.queryByText('Paycheck')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Edit budgets' })).toHaveAttribute('href', '/budgets')
+    expect(rows.map((row) => row.querySelector('.cbar-name')?.textContent)).toEqual([
+      'Rent',
+      'Dining out',
+      'Groceries',
+    ])
+    // A row with no budget shows only what it spent; one past its budget says so in a word.
+    expect(rows[0]).toHaveTextContent(/Rent\$1,500$/)
+    expect(rows[1]).toHaveTextContent('Dining outOver$240 of $200')
+    expect(rows[1]!.querySelector('.cbar-past')).not.toBeNull()
+    expect(rows[2]).toHaveTextContent(/Groceries\$200 of \$600$/)
+    expect(card).toHaveTextContent('The line on each bar is its budget.')
   })
 
-  it('shows no amount left once a budget is fully used', () => {
+  it('calls a budget used up to its limit close', () => {
     const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 60000 }])
     renderSignedIn(<CategoriesWidget budget={budget} offset={0} />)
-    const groceriesRow = screen.getByRole('link', { name: /Groceries/ })
-    expect(groceriesRow).toHaveTextContent('100% used, ahead of pace')
-    expect(groceriesRow).not.toHaveTextContent('left')
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('GroceriesClose$600 of $600')
+  })
+
+  it('shows the five biggest and counts the rest, which the drill-down lists', async () => {
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((name) => category(name))
+    const budget = budgetFor(
+      many,
+      many.map((one, index) => ({ categoryId: one.id, amountCents: (index + 1) * 1000 })),
+    )
+    renderSignedIn(<CategoriesWidget budget={budget} offset={0} />)
+    const card = screen.getByRole('region', { name: 'Categories' })
+    expect(within(card).getAllByRole('listitem')).toHaveLength(5)
+    expect(card).toHaveTextContent('2 more categories.')
+    await userEvent.click(within(card).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Where your money went' })
+    expect(within(sheet).getByRole('link', { name: /^A/ })).toHaveAttribute(
+      'href',
+      `/budgets/${many[0]!.id}`,
+    )
+    expect(within(sheet).getByRole('link', { name: 'Open budgets' })).toHaveAttribute(
+      'href',
+      '/budgets',
+    )
   })
 
   it('invites adding a category when there are no spending categories', () => {
@@ -688,7 +736,21 @@ describe('RecentWidget', () => {
     // A transfer only moved money, so it has no sign and a quiet tone.
     expect(screen.getByText('Nov 9 · Transfer')).toBeInTheDocument()
     expect(screen.getByText('$2,500.00')).toHaveClass('money-muted')
-    expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute(
+  })
+
+  it('opens what they add up to, leaving the transfer out', async () => {
+    fakeServer({ list_transactions: () => ({ transactions: txs, total: txs.length }) })
+    renderSignedIn(<RecentWidget budget={budgetFor(categories, [])} offset={0} />)
+    await screen.findByText('Costco')
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Recent transactions' })).getByRole('button'),
+    )
+    const sheet = screen.getByRole('dialog', { name: 'Recent transactions' })
+    // $84.50 and $9 out; the $2,500 is a transfer the budget does not list, so neither.
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Out, after what came in $94 = Money out $94 minus money in $0',
+    )
+    expect(within(sheet).getByRole('link', { name: 'See all transactions' })).toHaveAttribute(
       'href',
       '/transactions',
     )
@@ -785,9 +847,35 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('No balance')).toBeInTheDocument()
     // A cash or house account has no balance owed, so no "owed" under it.
     expect(screen.getAllByText('owed')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'All accounts' })).toHaveAttribute('href', '/accounts')
-    // Each account opens the Accounts dashboard with just it picked.
-    expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
+  })
+
+  it('opens what the counted accounts come to, each opening its own page', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: 123456 }),
+        account({ id: 'b', name: 'Old savings', hidden: true, balanceCents: 500 }),
+        account({ id: 'd', name: 'Travel card', type: 'credit', balanceCents: 80000 }),
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    await screen.findByText('Checking')
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Accounts' })).getByRole('button'),
+    )
+    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
+    // The ignored account is left out of the sum and the list.
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Together $435 = Owned in these accounts $1,235 minus owed on cards and loans $800',
+    )
+    expect(within(sheet).getByRole('link', { name: /Checking/ })).toHaveAttribute(
+      'href',
+      '/accounts/a',
+    )
+    expect(within(sheet).queryByText('Old savings')).not.toBeInTheDocument()
+    expect(within(sheet).getByRole('link', { name: 'Open accounts' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    )
   })
 
   it("draws a line of each account's recent balance, when it has one", async () => {
@@ -804,7 +892,7 @@ describe('AccountsWidget', () => {
     renderSignedIn(<AccountsWidget />)
     const checking = (await screen.findByText('Checking')).closest('.list-row')!
     await waitFor(() => expect(checking.querySelector('svg.spark polyline')).not.toBeNull())
-    // Decorative: the row's link still reads as the account.
+    // Decorative: the card's button still reads as the account list.
     expect(checking.querySelector('svg.spark')).toHaveAttribute('aria-hidden', 'true')
     // One day of history makes no line.
     const savings = screen.getByText('New savings').closest('.list-row')!

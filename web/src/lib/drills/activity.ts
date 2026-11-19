@@ -29,7 +29,8 @@ export function recentDrill(
   transactions: readonly Transaction[],
   categories: ReadonlyMap<string, Pick<Category, 'name' | 'color' | 'icon' | 'kind'>>,
 ): DrillDown {
-  const kindOf = (id: string | null): Kind => (id ? (categories.get(id)?.kind ?? null) : null)
+  // The categories given leave out transfers, so an id they do not know is one.
+  const kindOf = (id: string | null): Kind => (id ? (categories.get(id)?.kind ?? 'transfer') : null)
   const { outCents, inCents } = inAndOut(transactions, kindOf)
   const count = transactions.length
   return {
