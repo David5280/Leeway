@@ -108,7 +108,7 @@ export async function pruneInbox(db: Db, now: Date): Promise<number> {
      WHERE created_at < $1 AND (resolved_at IS NOT NULL OR kind <> ALL($2))`,
     [new Date(now.getTime() - KEEP_DAYS * DAY_MS), STATE_KINDS],
   )
-  return rowCount ?? 0
+  return Number(rowCount)
 }
 
 /** The inbox, newest first, without dismissed notifications. */
