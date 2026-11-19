@@ -3,6 +3,7 @@
 // signed-in session is saved for every other browser test.
 
 import { expect, test } from '@playwright/test'
+import { expectPhoneSizedFields, smallFields } from './fields'
 import { OWNER, OWNER_STATE, SETUP_CODE } from './owner'
 
 test('the setup code comes first, says where to find it, and refuses a wrong one', async ({
@@ -30,6 +31,7 @@ test('the setup code comes first, says where to find it, and refuses a wrong one
     () => document.documentElement.scrollWidth - window.innerWidth,
   )
   expect(overflow).toBeLessThanOrEqual(0)
+  expect(await smallFields(page)).toEqual([])
 })
 
 test('a new owner sets up Leeway without bank sync and is shown how to add money', async ({
@@ -49,6 +51,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page.getByRole('alert')).toHaveText('Use a password of at least 10 characters.')
   await page.getByLabel('Password').fill(OWNER.password)
   await expect(page.getByText('Long enough.')).toBeVisible()
+  await expectPhoneSizedFields(page)
   await page.getByRole('button', { name: 'Create my account' }).click()
 
   // Budget period: paid every other week, warned at 90%.
@@ -56,6 +59,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page.getByText('Step 3 of 6')).toBeVisible()
   await page.getByRole('button', { name: 'Every paycheck' }).click()
   await page.getByRole('spinbutton', { name: 'Warn me at percent' }).fill('90')
+  await expectPhoneSizedFields(page)
   await page.getByRole('button', { name: 'Continue' }).click()
 
   // No Plaid keys on this server: setup says sync is optional, folds away how
@@ -75,6 +79,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page.getByText('Food and drink', { exact: true })).toBeVisible()
   await page.getByRole('textbox', { name: 'Groceries budget' }).fill('650')
   await page.getByRole('checkbox', { name: 'Include Fees' }).uncheck()
+  await expectPhoneSizedFields(page)
   await page.getByRole('button', { name: 'Continue' }).click()
 
   // Without a bank, the last step offers the two other ways money gets in.
