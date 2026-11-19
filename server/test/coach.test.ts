@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { carriesMask } from '../src/domain/accountNumber.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -177,11 +178,27 @@ describe('get_checkin', () => {
     const messages = (await call('get_checkin')).attention.map((a) => a.message)
     expect(messages).toEqual([
       expect.stringContaining(
-        'leave out Test Car loan, Test Store card until they have an interest rate',
+        'leave out Test Car loan and Test Store card until they have an interest rate',
       ),
       '3 transactions need a category this period.',
       '2 repeating charges or deposits are not tracked yet. Tracking bills makes cash flow to payday accurate.',
     ])
+  })
+
+  it('lists debts so the digits of two names never run together', async () => {
+    await insertBankAccount(ctx.db, { name: 'Checking', mask: '4417' })
+    // Owner's own names, each without the mask, that a comma would join as 44179.
+    for (const [name, type] of [
+      ['100 Loan 44', 'loan'],
+      ['179 Card', 'credit'],
+    ]) {
+      await call('create_account', { name, type, balanceCents: 50000 })
+    }
+    const attention = (await call('get_checkin')).attention
+    const debt = attention.find((item) => item.topic === 'debt')!
+    expect(debt.message).toContain('leave out 100 Loan 44 and 179 Card until')
+    expect(carriesMask(debt.message, '4417')).toBe(false)
+    expect(carriesMask(debt.forOwner!, '4417')).toBe(false)
   })
 
   it('sums up the budget, cash, bills, goals, debts and net worth', async () => {
