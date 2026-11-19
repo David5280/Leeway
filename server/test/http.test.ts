@@ -341,6 +341,23 @@ describe('MCP endpoint', () => {
       expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
     }
 
+    // An import names its account, and its file is named by the account's number.
+    const { token: writer } = await createToken(ctx.db, 'Coach', 'write')
+    const imported = await rpc(writer, 'tools/call', {
+      name: 'import_transactions',
+      arguments: {
+        accountId: savings,
+        fileName: 'Chase4417_Activity20261119.CSV',
+        rows: [{ date: day(3), name: 'Deposit', amountCents: -1_000 }],
+      },
+    })
+    const listed = await rpc(token, 'tools/call', { name: 'list_imports', arguments: {} })
+    for (const response of [imported, listed]) {
+      const text = response.json().result.content[0].text as string
+      expect(text).toContain('Test Savings')
+      expect(text).not.toMatch(/4417|"(mask|bankName|fileName)"/)
+    }
+
     // The owner's own app still has the bank's text, for a transaction's details.
     const own = await listTransactions(ctx.db, transactionFilterSchema.parse({}))
     expect(own.transactions.map((tx) => tx.name)).toContain('ONLINE TRANSFER FROM CHK XXXXXX9876')
