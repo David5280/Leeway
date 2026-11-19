@@ -691,8 +691,21 @@ select.input {
   flex-wrap: wrap;
 }
 
+/* A checkbox and the words that name it, in one label, so tapping either ticks it. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The name keeps 8em before the amount drops under it, past the box and dot. */
 .starter-item > .grow {
-  flex: 1 1 8em;
+  flex: 1 1 calc(8em + 56px);
+  min-width: 0;
+}
+
+/* A long category name wraps inside its label rather than widening the row. */
+.starter-name {
   min-width: 0;
 }
 
@@ -2043,5 +2056,63 @@ details.more[open] summary {
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
   .topbar nav .navlink {
     min-height: 44px;
+  }
+}
+
+/* Taps on a touch screen. A finger needs 44px, Apple's smallest comfortable
+   target, and every control here takes a tap that size (the phone layout
+   guard probes each one, e2e/layout/taps.ts). Controls drawn smaller keep
+   their look and take the tap another way: a chip, a row, a disclosure or a
+   small link on a line of its own (.tap) grows to 44px; a swatch or a link
+   sized to its text gets an invisible hit area centred on it; a checkbox
+   takes it through its label (.check). */
+@media (pointer: coarse) {
+  .chip,
+  .cat-row,
+  .list-row {
+    min-height: 44px;
+  }
+
+  details.more summary {
+    padding-block: 12px;
+  }
+
+  .linkbtn,
+  .swatch,
+  a.cat-name {
+    position: relative;
+  }
+
+  .linkbtn::before,
+  .swatch::before,
+  a.cat-name::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  /* A small link on a line of its own takes its 44px as a real box, so links
+     listed close together, or one close under another control, never reach
+     over each other. */
+  .tap {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* A bar only shows; a tap on it reaches the hit area of the name above it. */
+  .track {
+    pointer-events: none;
+  }
+
+  /* The label reaches as far left of its box as it pads, so the box stays put. */
+  .check {
+    min-height: 44px;
+    padding-left: 16px;
+    margin-left: -16px;
   }
 }

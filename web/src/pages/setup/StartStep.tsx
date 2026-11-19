@@ -168,19 +168,21 @@ function StarterItem({
   const { money } = useApp()
   return (
     <div className="list-row starter-item">
-      <input
-        type="checkbox"
-        checked={include}
-        aria-label={`Include ${category.name}`}
-        onChange={(e) => onEdit(category.name, { include: e.target.checked })}
-      />
-      <Dot color={category.color} />
-      <span className="grow">
-        {category.name}
-        {averageCents !== null && (
-          <span className="small muted"> · you average {money(averageCents)}</span>
-        )}
-      </span>
+      <label className="check grow">
+        <input
+          type="checkbox"
+          checked={include}
+          aria-label={`Include ${category.name}`}
+          onChange={(e) => onEdit(category.name, { include: e.target.checked })}
+        />
+        <Dot color={category.color} />
+        <span className="starter-name">
+          {category.name}
+          {averageCents !== null && (
+            <span className="small muted"> · you average {money(averageCents)}</span>
+          )}
+        </span>
+      </label>
       {category.kind === 'expense' ? (
         <input
           className="input num"

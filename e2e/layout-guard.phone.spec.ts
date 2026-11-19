@@ -4,17 +4,22 @@
 // over other text or controls, no text cut off without an ellipsis (or squeezed
 // to a sliver with one), no word split across lines, no sideways scrolling,
 // nothing showing under the status bar, the notch or the home indicator, and
-// no button, segmented option, nav link or header control smaller than a
-// finger's 44px tap. The layout checks themselves are in layout.ts. Every
-// route the app answers (web/src/routes.ts) must have a screen here; a test
-// below makes sure.
+// no control a finger's 44px tap can miss. The checks themselves are in
+// layout.ts. Every route the app answers (web/src/routes.ts) must have a
+// screen here; a test below makes sure.
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, SETTINGS_GROUPS } from './guarded-screens'
-import { describeProblems, findProblems, layoutProblems, type LayoutProblem } from './layout'
+import {
+  describeProblems,
+  findProblems,
+  layoutProblems,
+  missedTaps,
+  type LayoutProblem,
+} from './layout'
 import { OWNER, SETUP_CODE } from './owner'
-import { GUARDED_PHONES, missedTaps, simulateInsets, smallTaps, type Insets } from './phone'
+import { GUARDED_PHONES, simulateInsets, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 /** Waits until the screen has its data, fonts and final layout. */
@@ -54,29 +59,13 @@ async function scrollTo(page: Page, share: number): Promise<void> {
 }
 
 /**
- * Controls too small for a finger: any button, segmented option or nav link
- * on the page under 44px either way, and any control in the header (the theme
- * dots included) whose 44px tap misses it.
- */
-async function tapProblems(page: Page): Promise<string[]> {
-  const small = (await smallTaps(page)).map((control) => `tap: ${control}, under 44px`)
-  const banner = page.getByRole('banner')
-  if ((await banner.count()) === 0) return small
-  const missed = (await missedTaps(banner)).map(
-    (name) => `tap: "${name}" in the header is under 44px`,
-  )
-  return [...small, ...missed]
-}
-
-/**
- * Every layout problem on the screen: all checks at the top, with the
- * tap sizes, then the safe areas again scrolled halfway, where
- * content has moved under the status bar, and at the end, where the last
- * content must also rest clear of the tab bar.
+ * Every problem on the screen: all layout checks at the top, then the safe
+ * areas again scrolled halfway, where content has moved under the status bar,
+ * and at the end, where the last content must also rest clear of the tab bar.
+ * Last, every control's tap, which scrolls each one into view to probe it.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   await scrollTo(page, 0)
-  const taps = await tapProblems(page)
   const problems: LayoutProblem[] = await layoutProblems(page)
   for (const [share, checks] of [
     [0.5, ['safe-area']],
@@ -85,8 +74,9 @@ async function problemsOn(page: Page): Promise<string[]> {
     await scrollTo(page, share)
     for (const check of checks) problems.push(...(await findProblems(page, check)))
   }
+  const taps = (await missedTaps(page)).map((message) => `tap: ${message}`)
   // Each problem once, however many scroll positions found it.
-  return [...taps, ...new Set(describeProblems(problems))]
+  return [...new Set(describeProblems(problems)), ...taps]
 }
 
 /** Loads a screen as an installed app on this phone draws it, ready to check. */
@@ -134,8 +124,8 @@ for (const phone of GUARDED_PHONES) {
         const tabs = page.locator('.tabbar')
         await (width > height ? expect(links).toBeVisible() : expect(links).toBeHidden())
         await (width > height ? expect(tabs).toBeHidden() : expect(tabs).toBeVisible())
-        // The header's tap sizes, checked on every screen (problemsOn), hold
-        // only where the phone reports a finger rather than a mouse.
+        // The tap sizes checked on every screen (problemsOn) hold only where
+        // the phone reports a finger rather than a mouse.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
       })
 

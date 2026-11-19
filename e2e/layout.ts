@@ -12,6 +12,8 @@
 //                  indicator that nothing opaque (like the status bar backdrop)
 //                  covers
 //
+// missedTaps, apart from these, finds controls too small for a finger.
+//
 // The checks measure what the browser drew (boxes, text line boxes, what sits
 // on top at a point), never class names, so they hold for any screen and any
 // theme. They live in layout/, one file per check, and run inside the page:
@@ -28,7 +30,7 @@ let script: string | undefined
 
 /**
  * layout/page.ts and what it imports, as one script that leaves `layout.measure`
- * defined. Bundled once per test run, on first use.
+ * and `layout.missedTaps` defined. Bundled once per test run, on first use.
  */
 function pageScript(): string {
   script ??= buildSync({
@@ -56,6 +58,17 @@ export async function layoutProblems(page: Page): Promise<LayoutProblem[]> {
   const found: LayoutProblem[] = []
   for (const check of LAYOUT_CHECKS) found.push(...(await findProblems(page, check)))
   return found
+}
+
+/**
+ * Each control on the page a finger can miss (layout/taps.ts), named. It
+ * scrolls every control into view to probe it, so the page is left scrolled.
+ */
+export function missedTaps(page: Page): Promise<string[]> {
+  return page.evaluate(`(() => {
+    ${pageScript()}
+    return layout.missedTaps()
+  })()`)
 }
 
 /** Problems as one line each, for a readable test failure. */

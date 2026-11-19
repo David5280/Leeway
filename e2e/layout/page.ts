@@ -6,6 +6,7 @@ import { findClipped } from './clipped'
 import { findOverlaps } from './overlap'
 import { findPageOverflow } from './page-overflow'
 import { findUncoveredInsets } from './safe-area'
+import { findMissedTaps } from './taps'
 import { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem } from './types'
 
 /** Each check's finder, one for every name in LAYOUT_CHECKS (the type makes sure). */
@@ -22,3 +23,6 @@ export function measure(check: LayoutCheck): LayoutProblem[] {
   if (!LAYOUT_CHECKS.includes(check)) throw new Error(`No layout check named ${check}`)
   return CHECKS[check]()
 }
+
+/** Each control a finger can miss (taps.ts). It scrolls, so it runs apart from the checks. */
+export const missedTaps = (): string[] => findMissedTaps()

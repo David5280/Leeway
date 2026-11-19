@@ -68,7 +68,7 @@ export function Budgets() {
             {money(b.totals.leftCents)}
           </span>
           {b.totals.setAsideCents > 0 && (
-            <Link to="/plan/goals" className="small muted">
+            <Link to="/plan/goals" className="small muted tap">
               {money(b.totals.setAsideCents)} of it set aside for goals
             </Link>
           )}

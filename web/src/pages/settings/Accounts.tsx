@@ -133,6 +133,8 @@ function AddAccount({ onDone }: { onDone: () => void }) {
       <div className="row wrap">
         <input
           className="input grow"
+          // Room to read a name: narrower, the type and balance move to the next line.
+          style={{ minWidth: 180 }}
           placeholder="Name, like Cash or Car loan"
           aria-label="Account name"
           required

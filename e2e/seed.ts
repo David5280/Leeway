@@ -180,6 +180,14 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
     targetDate: daysAgo(-160),
     setAside: true,
   })
+  // A second goal set aside for lists them one under the other on Overview.
+  await create('goals', 'create_goal', {
+    name: 'New laptop',
+    kind: 'purchase',
+    targetCents: 240_000,
+    targetDate: daysAgo(-300),
+    setAside: true,
+  })
 
   await create(
     'rules',
