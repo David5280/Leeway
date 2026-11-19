@@ -9,6 +9,7 @@ import {
   failing,
   fakeServer,
   renderSignedIn,
+  sentence,
   settingsWith,
   transaction,
   type Handlers,
@@ -51,6 +52,7 @@ function rule(fields: Partial<Rule> & Pick<Rule, 'id' | 'pattern' | 'categoryId'
     minAmountCents: null,
     maxAmountCents: null,
     position: 0,
+    reads: 'bank_text',
     ...fields,
   }
 }
@@ -244,7 +246,9 @@ describe('Rollover', () => {
     expect(card.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
     expect(card.getByText('Counting from Sep 1, 2026, when it was turned on.')).toBeInTheDocument()
     expect(
-      within(region('This period')).getByText('Includes $40 rolled over from earlier periods.'),
+      within(region('This period')).getByText(
+        sentence('Includes $40 rolled over from earlier periods.'),
+      ),
     ).toBeInTheDocument()
   })
 
@@ -255,7 +259,9 @@ describe('Rollover', () => {
       get_budget: () => budgetFor([rolling], [], { carries: new Map([[groceries.id, -2500]]) }),
     })
     renderCategory()
-    expect(await screen.findByText('Less $25 overspent in earlier periods.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(sentence('Less $25 overspent in earlier periods.')),
+    ).toBeInTheDocument()
   })
 
   it('needs a budget first', async () => {
@@ -321,32 +327,34 @@ describe('Category page', () => {
   })
 
   describe('this period', () => {
-    it('shows spent, budget, left and what can go each day, with the status', async () => {
+    it('leads with what was spent and what is left, then the budget and each day', async () => {
       serve()
       renderCategory()
       await screen.findByRole('heading', { name: 'Groceries', level: 1 })
       const stats = region('This period')
       // November: day 17 of 30, so 13 days left plus today share the $360 left.
-      expect(stats).toHaveTextContent('Spent$240')
+      expect(stats).toHaveTextContent('Spent this month$240$360 left')
       expect(stats).toHaveTextContent('Budget$600')
-      expect(stats).toHaveTextContent('Left$360')
       expect(stats).toHaveTextContent('Per day left$26')
       expect(screen.getByText('On track')).toBeInTheDocument()
     })
 
-    it('shows how much is used, with a marker for today', async () => {
+    it('shows how much is used on a ring, with a tick for today', async () => {
       serve()
       renderCategory()
-      const bar = await screen.findByRole('progressbar', { name: 'Groceries budget used' })
-      expect(bar).toHaveAttribute('aria-valuenow', '40')
-      expect(bar.querySelector('.tick')).toHaveStyle({ left: `${(17 / 30) * 100}%` })
+      const ring = await screen.findByRole('progressbar', { name: 'Groceries budget used' })
+      expect(ring).toHaveAttribute('aria-valuenow', '40')
+      expect(ring).toHaveClass('ring-ok')
+      expect(ring.querySelector('.ring-tick')).toBeInTheDocument()
     })
 
     it('compares spending with a steady pace and the warning threshold', async () => {
       serve()
       renderCategory()
       expect(
-        await screen.findByText('Steady spending would be at $340 by today. You warn at 80%.'),
+        await screen.findByText(
+          sentence('Steady spending would be at $340 by today. You warn at 80%.'),
+        ),
       ).toBeInTheDocument()
     })
 
@@ -355,7 +363,11 @@ describe('Category page', () => {
       renderCategory(dining.id)
       await screen.findByRole('heading', { name: 'Dining out', level: 1 })
       expect(screen.getByText('Over by $30')).toBeInTheDocument()
-      expect(region('This period')).toHaveTextContent('Left-$30')
+      expect(region('This period')).toHaveTextContent('$30 over')
+      expect(screen.getByText('$30')).toHaveClass('money-problem')
+      expect(screen.getByRole('progressbar', { name: 'Dining out budget used' })).toHaveClass(
+        'ring-over',
+      )
       expect(region('This period')).toHaveTextContent('Per day left$0')
     })
 
@@ -364,7 +376,8 @@ describe('Category page', () => {
       renderCategory(coffee.id)
       await screen.findByRole('heading', { name: 'Coffee', level: 1 })
       const stats = region('This period')
-      expect(stats).toHaveTextContent('Spent$18')
+      expect(stats).toHaveTextContent('Spent this month$18')
+      expect(stats.querySelector('.key-figure-caption')).toBeNull()
       expect(stats).toHaveTextContent('BudgetNone')
       expect(stats).not.toHaveTextContent('Per day left')
       expect(within(stats).queryByRole('progressbar')).not.toBeInTheDocument()
@@ -376,11 +389,78 @@ describe('Category page', () => {
       renderCategory(paycheck.id)
       await screen.findByRole('heading', { name: 'Paycheck', level: 1 })
       const stats = region('This period')
-      expect(stats).toHaveTextContent('Received$2,500')
+      expect(stats).toHaveTextContent('Received this month$2,500$2,500 still to come')
       expect(stats).toHaveTextContent('Budget$5,000')
       expect(stats).not.toHaveTextContent('Per day left')
       expect(within(stats).queryByRole('progressbar')).not.toBeInTheDocument()
       expect(stats).not.toHaveTextContent('Steady spending')
+    })
+
+    it('compares spending with this point last period, up being bad news', async () => {
+      serve({
+        get_budget: () => ({
+          ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 24000 }]),
+          previous: {
+            spentCents: 0,
+            spentToDateCents: 0,
+            categories: [{ categoryId: groceries.id, spentToDateCents: 20000 }],
+          },
+        }),
+      })
+      renderCategory()
+      const trend = await screen.findByRole('img', {
+        name: 'Spending compared with this point last month: up 20%',
+      })
+      expect(trend).toHaveClass('trend-bad')
+    })
+
+    it('compares a category with no budget too, with nothing about what is left', async () => {
+      serve({
+        get_budget: () => ({
+          ...budgetFor(categories, [{ categoryId: coffee.id, amountCents: 1800 }]),
+          previous: {
+            spentCents: 0,
+            spentToDateCents: 0,
+            categories: [{ categoryId: coffee.id, spentToDateCents: 2400 }],
+          },
+        }),
+      })
+      renderCategory(coffee.id)
+      const trend = await screen.findByRole('img', {
+        name: 'Spending compared with this point last month: down 25%',
+      })
+      expect(trend).toHaveClass('trend-good')
+      expect(trend.closest('.key-figure-caption')).toHaveTextContent(/^▼ 25%$/)
+    })
+
+    it('compares income with last period, up being good news', async () => {
+      serve({
+        get_budget: () => ({
+          ...budgetFor(categories, [{ categoryId: paycheck.id, amountCents: -250000 }]),
+          previous: {
+            spentCents: 0,
+            spentToDateCents: 0,
+            categories: [{ categoryId: paycheck.id, spentToDateCents: 200000 }],
+          },
+        }),
+      })
+      renderCategory(paycheck.id)
+      const trend = await screen.findByRole('img', {
+        name: 'Income compared with this point last month: up 25%',
+      })
+      expect(trend).toHaveClass('trend-good')
+    })
+
+    it.each([
+      [-600000, '$1,000 more than expected'],
+      [-500000, 'All of it in'],
+    ])('says how income received %i stands against what was expected', async (cents, words) => {
+      serve({
+        get_budget: () => budgetFor(categories, [{ categoryId: paycheck.id, amountCents: cents }]),
+      })
+      renderCategory(paycheck.id)
+      await screen.findByRole('heading', { name: 'Paycheck', level: 1 })
+      expect(region('This period')).toHaveTextContent(words)
     })
 
     it('explains transfers and leaves out the period numbers', async () => {
@@ -403,7 +483,7 @@ describe('Category page', () => {
       await screen.findByRole('heading', { name: 'Rent', level: 1 })
       expect(region('This period')).not.toHaveTextContent('Steady spending')
       expect(
-        screen.getByRole('progressbar', { name: 'Rent budget used' }).querySelector('.tick'),
+        screen.getByRole('progressbar', { name: 'Rent budget used' }).querySelector('.ring-tick'),
       ).toBeNull()
     })
   })
@@ -416,7 +496,7 @@ describe('Category page', () => {
       expect(within(history).getByRole('heading', { name: 'Last six months' })).toBeInTheDocument()
       // (500 + 620 + 580 + 550 + 600) / 5 = 570
       expect(
-        await within(history).findByText('Average $570 against a $600 budget'),
+        await within(history).findByText(sentence('Average $570 against a $600 budget')),
       ).toBeInTheDocument()
       const chart = within(history).getByRole('img', { name: 'Groceries by period' })
       expect(chart).toHaveAccessibleDescription(
@@ -429,7 +509,7 @@ describe('Category page', () => {
       serve()
       renderCategory(coffee.id)
       const history = await screen.findByRole('region', { name: 'Last six periods' })
-      expect(await within(history).findByText('Average $0')).toBeInTheDocument()
+      expect(await within(history).findByText(sentence('Average $0'))).toBeInTheDocument()
     })
 
     it('flips income history to positive amounts', async () => {
@@ -437,7 +517,7 @@ describe('Category page', () => {
       renderCategory(paycheck.id)
       const history = await screen.findByRole('region', { name: 'Last six periods' })
       expect(
-        await within(history).findByText('Average $5,020 against a $5,000 budget'),
+        await within(history).findByText(sentence('Average $5,020 against a $5,000 budget')),
       ).toBeInTheDocument()
     })
 
@@ -471,7 +551,7 @@ describe('Category page', () => {
       renderCategory()
       const list = await screen.findByRole('region', { name: 'In this category' })
       expect(await within(list).findByText('Costco')).toBeInTheDocument()
-      expect(within(list).getByText('KING SOOPERS 0042')).toBeInTheDocument()
+      expect(within(list).getByText('King Soopers')).toBeInTheDocument()
       expect(within(list).getByText('Nov 16')).toBeInTheDocument()
       expect(within(list).getByText('$84.50')).toBeInTheDocument()
       expect(within(list).getByText('+$15.00')).toBeInTheDocument()

@@ -1,15 +1,9 @@
 // Bars per budget period, each labeled with its amount, against the budget.
 
 import { useApp } from '../../lib/app'
-import {
-  axisFormat,
-  axisIndices,
-  compactMoney,
-  niceTicks,
-  textWidth,
-  type Ticks,
-} from '../../lib/chartScale'
-import { money as formatMoney, type MoneyOptions } from '../../lib/format'
+import { axisFormat, axisIndices, niceTicks, textWidth, type Ticks } from '../../lib/chartScale'
+import { formatMoney, type MoneyOptions, type Precision } from '../../lib/money'
+import { Money } from '../design/Money'
 import { useWidth } from '../../lib/useWidth'
 import { ChartFrame, EndLabel, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
 
@@ -56,15 +50,19 @@ export function barLayout(count: number, width: number, tickLabels: string[], bu
 }
 
 /**
- * The amount over each bar: whole units when every one fits its slot, then
- * shortened ("$1.2K"), and only the current period's when even those crowd.
+ * How the amount over each bar is written: whole units when every one fits
+ * its slot, then shortened ("$1.2K"), or null when even those crowd, so only
+ * the current period's is shown.
  */
-export function barAmounts(values: number[], slot: number, options: MoneyOptions): string[] {
-  const fits = (labels: string[]) => labels.every((text) => textWidth(text, 13) <= slot - 4)
-  const whole = values.map((v) => formatMoney(v, options))
-  if (fits(whole)) return whole
-  const short = values.map((v) => compactMoney(v, options))
-  return fits(short) ? short : short.map(() => '')
+export function barPrecision(
+  values: number[],
+  slot: number,
+  options: MoneyOptions,
+): Precision | null {
+  const fits = (precision: Precision) =>
+    values.every((cents) => textWidth(formatMoney(cents, options, { precision }), 13) <= slot - 4)
+  if (fits('whole')) return 'whole'
+  return fits('compact') ? 'compact' : null
 }
 
 export function PeriodBars({
@@ -97,8 +95,12 @@ export function PeriodBars({
   const positions = bars.map((_, i) => center(i))
   const pointer = usePointer(positions, width)
   const hovered = bars[pointer.active]
-  const amounts = barAmounts(values, slot, settings)
-  const dateLabels = new Set(axisIndices(bars.length, Math.floor((right - left) / 52)))
+  const precision = barPrecision(values, slot, settings)
+  // Each date label needs its own width and a gap, so neighbors never touch.
+  const labelRoom = Math.max(0, ...bars.map((bar) => textWidth(bar.label))) + 12
+  const dateLabels = new Set(
+    axisIndices(bars.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
+  )
   const budgetText = budget !== null ? `. Budget ${money(budget)}.` : ''
 
   return (
@@ -114,7 +116,12 @@ export function PeriodBars({
             x={positions[pointer.active]!}
             chartWidth={width}
             title={hovered.label}
-            lines={[`${money(hovered.cents)}${hovered.current ? ' so far' : ''}`]}
+            lines={[
+              <>
+                <Money cents={hovered.cents} />
+                {hovered.current ? ' so far' : ''}
+              </>,
+            ]}
           />
         )
       }
@@ -136,7 +143,12 @@ export function PeriodBars({
       {budget !== null && (
         <>
           <line x1={left} x2={right} y1={y(budget)} y2={y(budget)} className="chart-line budget" />
-          <EndLabel x={right + 10} y={y(budget) - 6} name="Budget" value={money(budget)} />
+          <EndLabel
+            x={right + 10}
+            y={y(budget) - 6}
+            name="Budget"
+            value={<Money as="tspan" cents={budget} />}
+          />
         </>
       )}
       <g aria-hidden="true">
@@ -149,7 +161,10 @@ export function PeriodBars({
                 textAnchor="middle"
                 className="chart-value ink halo"
               >
-                {amounts[i] || (bar.current ? compactMoney(values[i]!, settings) : '')}
+                <BarAmount
+                  cents={values[i]!}
+                  precision={precision ?? (bar.current ? 'compact' : null)}
+                />
               </text>
             )}
             {dateLabels.has(i) && (
@@ -184,4 +199,9 @@ export function PeriodBars({
       />
     </ChartFrame>
   )
+}
+
+/** The amount over a bar, or nothing when there is no room for it. */
+function BarAmount({ cents, precision }: { cents: number; precision: Precision | null }) {
+  return precision && <Money as="tspan" cents={cents} precision={precision} />
 }

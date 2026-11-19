@@ -35,9 +35,10 @@ cents; dates are `YYYY-MM-DD` strings. Nothing ever moves money.
 ## How the code is organized
 
 Leeway is two npm workspaces, `server` and `web`, plus browser tests in
-`e2e/` and the Scriptable home-screen widget in `widget/`. The web app imports the server's action definitions for its types,
-and a few pure server modules (dates, period words, the import's duplicate
-check) for their code, so both sides always agree.
+`e2e/` and the Scriptable home-screen widget in `widget/`. The web app
+imports the server's action definitions for its types, and a few pure server
+modules (dates, period words, the import's duplicate check) for their code,
+so both sides always agree.
 
 ### How a request flows
 
@@ -119,6 +120,12 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   never rename an id once shipped, since links and bookmarks use it.
 - **A dashboard widget:** add its type to `WIDGETS` in `domain/settings.ts`,
   draw it in `web/src/widgets/`, and list it in `widgets/library.ts`.
+- **A screen:** add its address to `web/src/routes.ts` and its route in
+  `App.tsx` from there, then give it a screen in `e2e/guarded-screens.ts`
+  (with long names seeded, and any form people open on it as a `then`
+  step), so the phone layout guard checks it. The guard fails, naming the
+  route, until every route has one, and lint refuses a `<Route>` path
+  written straight into the app (only the catch-all `"*"` may be).
 - **A database change:** add a new file to `server/migrations` numbered after
   the highest one, like `011_something.sql`. Migrations run in filename
   order when the server starts, each once, and installs record them by file
@@ -163,6 +170,15 @@ npm run check
 This runs Prettier, ESLint (which enforces the rules above that a tool can
 check), the type checker and every test with coverage. It must pass.
 
+One of Leeway's own lint rules, `leeway/money-text` (`eslint/moneyText.js`),
+keeps every amount on screen drawn by `<Money cents={...} />`. It catches a
+money formatter's result reaching the page directly, through a variable, or
+through another name for the formatter (`const fmt = money`). It reads code
+without type information, so it cannot follow an amount returned from a
+function, kept in an object or array, passed through another function, or
+assigned to a variable after it was declared. Don't build amounts those ways
+for the page; pass cents to `<Money>` instead.
+
 ## Running the tests
 
 Server tests need Postgres. By default they use
@@ -197,6 +213,31 @@ The test server runs with no Anthropic key, so no browser test can reach a
 model. The paystub specs stand in for the reader at the network
 (`e2e/paystub.ts` answers the upload and tells `get_paystub` the server can
 read); saving and everything after it runs for real.
+
+The **phone layout guard** (`layout-guard.phone.spec.ts`) opens every screen,
+and the forms people open on them (`guarded-screens.ts`), on each phone in
+`GUARDED_PHONES` (`phone.ts`): a 390pt iPhone, a 375pt iPhone SE and the
+320pt first SE upright, and the first two turned sideways, each with its
+status bar, notch and home indicator simulated as an app installed to the
+home screen. `seed.ts` fills the install with the longest names Leeway takes
+first, and removes them afterwards. Each screen fails if text overlaps text
+or a control, is cut off without an ellipsis (or squeezed to a sliver with
+one), breaks a word across lines, scrolls the page sideways, comes to rest
+under a fixed bar, or shows under the status bar, notch or home indicator
+with nothing opaque over it. It also fails on any control a finger's 44px tap
+can miss: drawn smaller with no label or invisible hit area to make up the
+size, covered by a neighbour or by another control's hit area, or placed
+where no scrolling reaches it. Links that share their line with a sentence's
+other words are the one exception. Every screen runs again in Neon's wider
+font at compact density. A failure names each element and what is
+wrong with it.
+
+The checks live in `e2e/layout/`, one file per check, and run inside the
+page: `e2e/layout.ts` bundles them with esbuild into one script for
+Playwright to run there. `layout-checks.spec.ts` (with
+`layout-clipped.spec.ts` for the clipped check and `taps.phone.spec.ts` for
+taps) proves each one on small pages broken on purpose, and on the same pages
+fixed; when a check changes, add a fixture that fails without the change.
 
 They need a database with `e2e` in its name, which every run wipes. The
 default is `postgres://postgres@localhost:5432/leeway_e2e`; set

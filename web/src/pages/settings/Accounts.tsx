@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
+import { Money } from '../../components/design/Money'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
 import { ACCOUNT_TYPES, accountPath, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
@@ -44,7 +45,6 @@ export function AccountSection() {
 }
 
 function AccountRow({ account }: { account: Account }) {
-  const { exact } = useApp()
   // What the owner is typing, held only while they edit and save. Otherwise the
   // field shows the server's name, so a rename made elsewhere (a bank's new name
   // for the account) is never saved back as the owner's own.
@@ -95,9 +95,14 @@ function AccountRow({ account }: { account: Account }) {
         style={{ textAlign: 'right' }}
         aria-label={`Open ${account.name}`}
       >
-        {account.balanceCents === null
-          ? 'Open'
-          : `${exact(account.balanceCents)}${owed ? ' owed' : ''}`}
+        {account.balanceCents === null ? (
+          'Open'
+        ) : (
+          <>
+            <Money cents={account.balanceCents} precision="cents" />
+            {owed ? ' owed' : ''}
+          </>
+        )}
       </Link>
       {account.manual && (
         <button
@@ -132,7 +137,7 @@ function AddAccount({ onDone }: { onDone: () => void }) {
     <form className="card soft stack-sm" onSubmit={submit} aria-label="New account">
       <div className="row wrap">
         <input
-          className="input grow"
+          className="input grow name-field"
           placeholder="Name, like Cash or Car loan"
           aria-label="Account name"
           required

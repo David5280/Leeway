@@ -47,6 +47,9 @@ export function CategoryPage() {
       categories={categories.data ?? []}
       row={row}
       period={budget.data.period}
+      previousCents={
+        budget.data.previous.categories.find((c) => c.categoryId === id)?.spentToDateCents ?? 0
+      }
     />
   )
 }
@@ -56,13 +59,16 @@ function CategoryDetail({
   categories,
   row,
   period,
+  previousCents,
 }: {
   category: Category
   categories: Category[]
   row: CategoryBudget | undefined
   period: Budget['period']
+  /** This category's last period to the same day, for the trend. */
+  previousCents: number
 }) {
-  const { money } = useApp()
+  const { money, settings } = useApp()
   const status = row ? categoryStatus(row, money) : null
   return (
     <Shell>
@@ -83,13 +89,13 @@ function CategoryDetail({
           <span className="muted">Transfers never count toward spending or income.</span>
         )}
       </div>
-      {row && <ThisPeriod category={category} row={row} period={period} />}
+      {row && <ThisPeriod row={row} period={period} previousCents={previousCents} />}
       <div className="grid">
         <History category={category} row={row} />
         <InThisCategory category={category} period={period} />
       </div>
       <div className="grid">
-        <CategorySettings category={category} groups={groupNames(categories)} />
+        <CategorySettings category={category} groups={groupNames(categories, settings.locale)} />
         <div className="span-half stack">
           {category.kind === 'expense' && <CategoryRollover category={category} />}
           <CategoryRules category={category} categories={categories} />

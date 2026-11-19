@@ -1,28 +1,24 @@
 // Spending recorded by hand flows through to the list, its category and the overview.
 
 import { expect, test } from '@playwright/test'
-import { addAccount } from './manual'
+import { addAccount, addSpending } from './manual'
 
 test('cash spending added by hand shows everywhere it counts', async ({ page }) => {
   await addAccount(page, { name: 'Wallet', balance: '200' })
-
-  await page.goto('/transactions')
-  await page.getByRole('button', { name: 'Add by hand' }).click()
-  const form = page.getByRole('form', { name: 'Add a transaction' })
-  await form.getByRole('textbox', { name: 'Description' }).fill('Corner market')
-  await form.getByRole('textbox', { name: 'Amount' }).fill('42.50')
-  await form.getByRole('combobox', { name: 'Account' }).selectOption('Wallet')
-  await form.getByRole('combobox', { name: 'Category' }).selectOption('Groceries')
-  await form.getByRole('button', { name: 'Add' }).click()
+  await addSpending(page, {
+    account: 'Wallet',
+    description: 'Corner market',
+    amount: '42.50',
+    category: 'Groceries',
+  })
 
   const list = page.getByRole('region', { name: 'Transaction list' })
-  await expect(list.getByText('Corner market')).toBeVisible()
-  await expect(list).toContainText('$42.50')
+  await expect(list.getByRole('button', { name: /^Corner market, spent \$42\.50/ })).toBeVisible()
 
   // Search narrows the list, and clearing it brings the transaction back.
   const search = page.getByRole('searchbox', { name: 'Search transactions' })
   await search.fill('nothing like this')
-  await expect(list.getByText('Nothing matches.')).toBeVisible()
+  await expect(list.getByText('Nothing matches these filters.')).toBeVisible()
   await search.fill('corner')
   await expect(list.getByText('Corner market')).toBeVisible()
 

@@ -5,10 +5,11 @@ import { useAction, useActionMutation } from '../../api/hooks'
 import { Card, ErrorNote, Loading } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodLabel } from '../../lib/format'
+import { Money } from '../../components/design/Money'
 
 /** Budgets based on the last three full months, applied one at a time or all at once. */
 export function Suggestions({ onClose }: { onClose: () => void }) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const result = useAction('suggest_budgets')
   const update = useActionMutation('update_category')
   const [applying, setApplying] = useState(false)
@@ -58,10 +59,16 @@ export function Suggestions({ onClose }: { onClose: () => void }) {
         <div key={s.categoryId} className="list-row wrap">
           <span className="grow">{s.name}</span>
           <span className="small muted">
-            you average {money(s.averageMonthlyCents)}
-            {s.currentBudgetCents !== null && `, budget now ${money(s.currentBudgetCents)}`}
+            you average <Money cents={s.averageMonthlyCents} />
+            {s.currentBudgetCents !== null && (
+              <>
+                , budget now <Money cents={s.currentBudgetCents} />
+              </>
+            )}
           </span>
-          <strong className="num">{money(s.suggestedMonthlyCents)}</strong>
+          <strong>
+            <Money cents={s.suggestedMonthlyCents} />
+          </strong>
           <button
             type="button"
             className="btn small"

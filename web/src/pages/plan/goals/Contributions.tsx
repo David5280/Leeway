@@ -7,6 +7,7 @@ import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
+import { Money } from '../../../components/design/Money'
 
 /** How many recent entries the history shows. */
 const HISTORY_SIZE = 5
@@ -46,7 +47,7 @@ export function AddMoney({ goal }: { goal: Goal }) {
 
 /** The latest amounts recorded, newest first, loaded once opened. */
 function HistoryList({ goal }: { goal: Goal }) {
-  const { exact, settings } = useApp()
+  const { settings } = useApp()
   const history = useAction('list_goal_contributions', { id: goal.id, limit: HISTORY_SIZE })
   if (!history.data) {
     return <LoadingOrError error={history.error} />
@@ -62,7 +63,7 @@ function HistoryList({ goal }: { goal: Goal }) {
           {/* Taking money back reads as a minus, putting it in as a plus. */}
           <span className={`num ${entry.amountCents > 0 ? 'good' : ''}`}>
             {entry.amountCents > 0 ? '+' : '-'}
-            {exact(Math.abs(entry.amountCents))}
+            <Money cents={Math.abs(entry.amountCents)} precision="cents" />
           </span>
         </li>
       ))}
@@ -77,7 +78,7 @@ export function History({ goal }: { goal: Goal }) {
     <div className="stack-sm">
       <button
         type="button"
-        className="linkbtn small"
+        className="linkbtn small tap"
         aria-expanded={open}
         style={{ alignSelf: 'flex-start' }}
         onClick={() => setOpen(!open)}

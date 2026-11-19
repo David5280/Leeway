@@ -101,10 +101,10 @@ const THEME_COLORS = {
       surface: '#FFFFFF',
       ink: '#0B0B1A',
       muted: '#5A5F80',
-      good: '#00866F',
-      warn: '#8A6A00',
+      good: '#007864',
+      warn: '#806200',
       over: '#C2185B',
-      accent: '#00866F',
+      accent: '#007864',
     },
     dark: {
       surface: '#10101C',

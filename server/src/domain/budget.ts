@@ -12,6 +12,7 @@ import {
   type PeriodPosition,
 } from './budgetCategory.js'
 import type { Category } from './categories.js'
+import { countsTowardTotals } from './counted.js'
 import type { Settings } from './settings.js'
 
 export type { BudgetAlert, BudgetStatus, CategoryBudget, Pace } from './budgetCategory.js'
@@ -108,7 +109,7 @@ export function computeBudget(input: {
   const byCategory = new Map(totals.map((t) => [t.categoryId, t]))
 
   const rows = categories
-    .filter((category) => category.kind !== 'transfer')
+    .filter((category) => countsTowardTotals(category.kind))
     .map((category) =>
       categoryRow(
         category,

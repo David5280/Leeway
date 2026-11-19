@@ -18,10 +18,13 @@ export function RuleBuilder({
   initial,
   categories,
   onClose,
+  embedded = false,
 }: {
   initial: RuleDraft
   categories: Category[]
   onClose: () => void
+  /** Inside a sheet, which has its own frame and close button. */
+  embedded?: boolean
 }) {
   const [draft, setDraft] = useState(initial)
   const create = useActionMutation('create_rule')
@@ -57,12 +60,18 @@ export function RuleBuilder({
   }
 
   return (
-    <form className="card soft stack" onSubmit={submit} aria-label="New rule">
+    <form
+      className={embedded ? 'stack' : 'card soft stack'}
+      onSubmit={submit}
+      aria-label="New rule"
+    >
       <div className="row-between">
         <h2>{initial.pattern ? `New rule from "${initial.pattern}"` : 'New rule'}</h2>
-        <button type="button" className="iconbtn" aria-label="Close" onClick={onClose}>
-          <Icon name="close" />
-        </button>
+        {!embedded && (
+          <button type="button" className="iconbtn" aria-label="Close" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        )}
       </div>
       <p className="small muted">
         Rules run top to bottom. The first match wins, and your own picks always win over rules.

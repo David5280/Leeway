@@ -115,7 +115,7 @@ function AccentPicker() {
   const { vars } = themeVariables(a, prefersDark)
   return (
     <Setting label="Accent color" hint="Buttons, your leeway number, focus rings">
-      <div className="row wrap" role="radiogroup" aria-label="Accent color">
+      <div className="row wrap swatches" role="radiogroup" aria-label="Accent color">
         <button
           type="button"
           role="radio"

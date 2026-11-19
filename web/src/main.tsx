@@ -7,6 +7,9 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import './fonts'
 import './styles.css'
+import './styles/tokens.css'
+import './styles/design.css'
+import './styles/activity.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
