@@ -16,7 +16,7 @@ import {
 } from '../test/fake'
 import { OldSettingsAddress, SettingsPage } from './Settings'
 import { SETTINGS_GROUPS } from './settings/groups'
-import { OLD_SETTINGS_ROUTE, SETTINGS_ROUTE } from './settings/paths'
+import { SCREEN_ROUTES } from '../routes'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -40,8 +40,8 @@ function renderSettings(route: string, options: Parameters<typeof renderSignedIn
   return renderSignedIn(
     <>
       <Routes>
-        <Route path={SETTINGS_ROUTE} element={<SettingsPage />} />
-        <Route path={OLD_SETTINGS_ROUTE} element={<OldSettingsAddress />} />
+        <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />
+        <Route path={SCREEN_ROUTES.oldSettings} element={<OldSettingsAddress />} />
       </Routes>
       <Address />
     </>,

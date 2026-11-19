@@ -10,6 +10,7 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 /** A stand-in for Claude that records what it was told and can be made to fail. */
 class FakeWriter implements SummaryWriter {
@@ -117,7 +118,7 @@ describe('get_summary and account names', () => {
     await call('set_ai_summary', { on: true })
     await call('get_summary')
     expect(writer.calls[0]!.fixedHeadline).toBe('Test Checking is overdrawn by $42.10.')
-    expect(JSON.stringify(writer.calls[0])).not.toContain('4417')
+    expect(withoutUuids(JSON.stringify(writer.calls[0]))).not.toContain('4417')
   })
 
   it('never hands the AI writer a short mask the bank put in the name', async () => {

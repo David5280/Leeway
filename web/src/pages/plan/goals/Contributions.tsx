@@ -77,7 +77,7 @@ export function History({ goal }: { goal: Goal }) {
     <div className="stack-sm">
       <button
         type="button"
-        className="linkbtn small"
+        className="linkbtn small tap"
         aria-expanded={open}
         style={{ alignSelf: 'flex-start' }}
         onClick={() => setOpen(!open)}

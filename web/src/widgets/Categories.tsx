@@ -85,7 +85,7 @@ export function CategoriesWidget({ budget }: WidgetProps) {
     <Card label="Categories" className="stack-sm cat-list">
       <div className="row-between">
         <h2>Categories</h2>
-        <Link to="/budgets" className="linkbtn">
+        <Link to="/budgets" className="linkbtn tap">
           Edit budgets
         </Link>
       </div>
