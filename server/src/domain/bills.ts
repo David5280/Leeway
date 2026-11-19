@@ -8,7 +8,9 @@ import { isoDateSchema } from '../lib/schemas.js'
 import { convertCadence, type Cadence } from '../lib/periods.js'
 import { lastBefore, nextOnOrAfter, occurrences } from '../lib/schedule.js'
 import { patchOf } from '../lib/schemas.js'
+import { paidByShownName, PAYMENT } from './billPayments.js'
 import { assertCategoryExists } from './categories.js'
+import type { RuleAuthor, RuleReads } from './rules.js'
 
 export const BILL_CADENCES = ['week', 'biweek', 'semimonth', 'month', 'quarter', 'year'] as const
 
@@ -45,6 +47,11 @@ export type BillInput = z.infer<typeof billInputSchema>
 /** A stored bill and the last transaction that paid it. */
 interface BillRow extends BillInput {
   id: string
+  /**
+   * What the pattern is found in: the bank's text, or, for a bill an
+   * assistant added or re-patterned, the transaction's shown name.
+   */
+  reads: RuleReads
   lastPaidDate: IsoDate | null
   lastPaidCents: number | null
 }
@@ -132,13 +139,14 @@ export function dueBefore(bill: Bill, until: IsoDate): IsoDate[] {
 const SELECT = `
   SELECT b.id, b.name, b.kind, b.amount_cents AS "amountCents", b.cadence,
     b.anchor_date AS "anchorDate", b.match_pattern AS "matchPattern",
-    b.category_id AS "categoryId", b.autopay,
+    b.category_id AS "categoryId", b.autopay, b.reads,
     paid.date AS "lastPaidDate", paid.amount_cents AS "lastPaidCents"
   FROM bills b
-  -- The newest counted payment whose merchant or description contains the pattern.
+  -- The newest payment whose merchant or description contains the pattern.
+  -- Bills that read shown names are matched afterwards (paidByShownName).
   LEFT JOIN LATERAL (
     SELECT t.date, t.amount_cents FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE b.match_pattern IS NOT NULL AND t.amount_cents > 0 AND NOT t.excluded AND NOT a.hidden
+    WHERE b.match_pattern IS NOT NULL AND b.reads = 'bank_text' AND ${PAYMENT}
       AND t.date <= $1
       AND position(
         merchant_key(b.match_pattern) IN merchant_key(coalesce(t.merchant_name, '') || ' ' || t.name)
@@ -146,25 +154,43 @@ const SELECT = `
     ORDER BY t.date DESC LIMIT 1
   ) paid ON true`
 
+/** Bills as stored, each with the last payment found for it. */
+async function loadBills(db: Db, today: IsoDate, id?: string): Promise<BillRow[]> {
+  const { rows } = id
+    ? await db.query<BillRow>(`${SELECT} WHERE b.id = $2`, [today, id])
+    : await db.query<BillRow>(SELECT, [today])
+  return paidByShownName(db, rows, today)
+}
+
 /** Every bill, soonest due first. */
 export async function listBills(db: Db, today: IsoDate): Promise<Bill[]> {
-  const { rows } = await db.query<BillRow>(SELECT, [today])
+  const rows = await loadBills(db, today)
   return rows
     .map((row) => scheduleOf(row, today))
     .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.name.localeCompare(b.name))
 }
 
 async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
-  const { rows } = await db.query<BillRow>(`${SELECT} WHERE b.id = $2`, [today, id])
-  if (!rows[0]) throw notFound('Bill')
-  return scheduleOf(rows[0], today)
+  const [row] = await loadBills(db, today, id)
+  if (!row) throw notFound('Bill')
+  return scheduleOf(row, today)
 }
 
-export async function createBill(db: Db, input: BillInput, today: IsoDate): Promise<Bill> {
+/**
+ * Adds a bill. One an assistant adds reads shown names, since the pattern is
+ * its own choice and it may not find out what the bank's text holds.
+ */
+export async function createBill(
+  db: Db,
+  input: BillInput,
+  today: IsoDate,
+  { byAssistant = false }: RuleAuthor = {},
+): Promise<Bill> {
   if (input.categoryId) await assertCategoryExists(db, input.categoryId)
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO bills (name, kind, amount_cents, cadence, anchor_date, match_pattern, category_id, autopay)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    `INSERT INTO bills (name, kind, amount_cents, cadence, anchor_date, match_pattern, category_id,
+       autopay, reads)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
     [
       input.name,
       input.kind,
@@ -174,9 +200,24 @@ export async function createBill(db: Db, input: BillInput, today: IsoDate): Prom
       input.matchPattern,
       input.categoryId,
       input.autopay,
+      byAssistant ? 'shown_name' : 'bank_text',
     ],
   )
   return getBill(db, rows[0]!.id, today)
+}
+
+/**
+ * What a bill reads once changed. An assistant that changes its pattern makes
+ * it read the shown name; one that changes anything else leaves the owner's
+ * bill reading what it did.
+ */
+function readsAfter(
+  bill: BillRow,
+  patch: Partial<BillInput>,
+  { byAssistant }: RuleAuthor,
+): RuleReads {
+  const repatterned = patch.matchPattern !== undefined && patch.matchPattern !== bill.matchPattern
+  return byAssistant && repatterned ? 'shown_name' : bill.reads
 }
 
 export async function updateBill(
@@ -184,13 +225,14 @@ export async function updateBill(
   id: string,
   patch: z.infer<typeof billPatchSchema>,
   today: IsoDate,
+  author: RuleAuthor = {},
 ): Promise<Bill> {
   const current = await getBill(db, id, today)
   if (patch.categoryId) await assertCategoryExists(db, patch.categoryId)
-  const next = { ...current, ...patch }
+  const next = { ...current, ...patch, reads: readsAfter(current, patch, author) }
   await db.query(
     `UPDATE bills SET name = $2, kind = $3, amount_cents = $4, cadence = $5, anchor_date = $6,
-       match_pattern = $7, category_id = $8, autopay = $9
+       match_pattern = $7, category_id = $8, autopay = $9, reads = $10
      WHERE id = $1`,
     [
       id,
@@ -202,6 +244,7 @@ export async function updateBill(
       next.matchPattern,
       next.categoryId,
       next.autopay,
+      next.reads,
     ],
   )
   return getBill(db, id, today)

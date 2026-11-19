@@ -1,11 +1,13 @@
-// The text an assistant's rule reads: a transaction's own name as the app
-// shows it. Pure.
+// The text an assistant's rule or bill reads: a transaction's own name as the
+// app shows it. Pure.
 //
 // An assistant never sees the bank's text, only display names, so the rules
-// it makes or rewrites read only this (see RuleReads in rules.ts). The name is
-// built as every name is (transactionName.ts) and checked against every
-// account's mask (safeName.ts), so no rule can find an account's digits in it,
-// and no category it moves can show which transactions hold them.
+// it makes or rewrites read only this (see RuleReads in rules.ts), and so do
+// the bills it adds or re-patterns (bills.ts) and the keys it is given for
+// repeating charges (recurring.ts). The name is built as every name is
+// (transactionName.ts) and checked against every account's mask
+// (safeName.ts), so nothing an assistant writes can find an account's digits
+// in it, and nothing it changes can show which transactions hold them.
 //
 // It is the display name with two differences, since it must not depend on
 // the category that rules are deciding:
@@ -28,6 +30,14 @@ export function shownName(tx: NameableTransaction, masks: AccountMasks): string 
 }
 
 /**
+ * A stored transaction's own name as shown, with the person it pays or is
+ * paid by worked out from its bank fields, as the Activity list shows it.
+ */
+export function shownNameOf(row: Movement, masks: AccountMasks): string {
+  return shownName({ ...row, person: safePerson(personPayment(row), masks) }, masks)
+}
+
+/**
  * Each stored row with the shown name a rule reads beside its bank text.
  * Worked out only when some rule reads it; with none, every shown name is ''
  * and no rule looks at it.
@@ -40,8 +50,6 @@ export function withShownNames<T extends Movement>(
   const needed = rules.some((rule) => rule.reads === 'shown_name')
   return rows.map((row) => ({
     ...row,
-    shownName: needed
-      ? shownName({ ...row, person: safePerson(personPayment(row), masks) }, masks)
-      : '',
+    shownName: needed ? shownNameOf(row, masks) : '',
   }))
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { detectRecurring, merchantKey, type PastTransaction } from '../src/domain/recurring.js'
+import { merchantKey, textKey } from '../src/domain/merchantKey.js'
+import { detectRecurring, type PastTransaction } from '../src/domain/recurring.js'
 
 /** No accounts with masks: names are only cleaned (see safeName.ts). */
 const NO_MASKS: string[] = []
@@ -30,6 +31,11 @@ describe('merchantKey', () => {
 
   it('prefers the merchant name over the bank description', () => {
     expect(merchantKey({ merchantName: 'Spotify', name: 'SPOTIFY P1A2B3' })).toBe('spotify')
+  })
+
+  it('reduces any text the same way, as a bill pattern is read', () => {
+    expect(textKey('  Netflix.com #1192 ')).toBe('netflix com')
+    expect(textKey('1234')).toBe('')
   })
 })
 
