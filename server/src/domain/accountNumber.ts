@@ -72,33 +72,47 @@ function digitsOf(mask: string | null): string {
   return /^\d+$/.test(key) ? key : ''
 }
 
+/** Whether a mask is digits alone, "4417", as Plaid sends them, rather than one with letters. */
+export function isDigitMask(mask: string | null): boolean {
+  return digitsOf(mask) !== ''
+}
+
 /**
  * Whether a name carries the account's mask, in any form a reader could
  * piece it back from. This is the guarantee: a name for which it is false
  * shows none of the following.
  *
  * A mask of digits: the name's digits, in any script, are read in runs split
- * by letters alone, so spaces, any punctuation and an x between digits join
- * them: "44 17", "441–7", "441/7" and "441x7" are all 4417. A run carries
- * the mask when it contains it ("044170"), is its last two digits or more
- * ("417" or "17" of 4417), or is the mask without its leading zeros, when
- * that leaves two digits or more ("52" of 0052). A lone digit is never
- * checked: "1" of 0001, like a mask of one digit, identifies nothing.
+ * by letters alone, so spaces and any punctuation between digits join them:
+ * "44 17", "441–7" and "441/7" are all 4417. A run carries the mask when it
+ * contains it ("044170"), is its last two digits or more ("417" or "17" of
+ * 4417), or is the mask without its leading zeros, when that leaves two
+ * digits or more ("52" of 0052). A lone digit is never checked: "1" of 0001,
+ * like a mask of one digit, identifies nothing.
+ *
+ * An x between digits may stand for one more, so the runs are read again
+ * with it joining them, but only for what plainly reads as the number: the
+ * whole mask, "441x7" or "3X9" for 39, or a run that mask characters lead
+ * into, "...41x7". Otherwise the x is a letter, and "12X18" or "1X1" (for
+ * 1111) carries nothing.
  *
  * A mask with letters, like 12AB: the name's letters and digits, in capitals
- * and without accents ("Á1" is A1), read as one string with everything else,
- * and an x between digits, taken out. It carries the mask when it contains it
- * ("CARD 12-AB" or "AB1x2"), or when a word of it ends with the mask's last
- * two characters or more, alone or joined to the words before ("2AB", "TAB").
+ * and without accents ("Á1" is A1), read as one string with everything else
+ * taken out, and read again with an x between digits taken out too. It
+ * carries the mask when either contains it ("CARD 12-AB" or "AB1x2"), or
+ * when a word of it ends with the mask's last two characters or more, alone
+ * or joined to the words before ("2AB", "TAB"). A mask's own x is kept, so
+ * 1X2 is found in "1X 2" and "...X2".
  */
 export function carriesMask(name: string, mask: string | null): boolean {
-  const key = joinedAtX(maskKey(mask))
+  const key = maskKey(mask)
   if (key.length < 2) return false
-  const text = joinedAtX(asciiDigits(name).toUpperCase())
-  return /^\d+$/.test(key) ? carriesDigits(text, key) : carriesCharacters(text, key)
+  const text = asciiDigits(name).toUpperCase()
+  if (/^\d+$/.test(key)) return carriesDigits(text, key)
+  return carriesCharacters(text, key) || carriesCharacters(joinedAtX(text), key)
 }
 
-/** Text in capitals without an X between digits, which stands for one more: "441X7" is 4417. */
+/** Text in capitals without an X between digits: "441X7" is 4417. */
 function joinedAtX(text: string): string {
   return text.replace(/(?<=\d)X(?=\d)/g, '')
 }
@@ -106,12 +120,18 @@ function joinedAtX(text: string): string {
 /** carriesMask for a mask of digits only. */
 function carriesDigits(text: string, digits: string): boolean {
   const unpadded = digits.replace(/^0+/, '')
-  const runs = text.split(/\p{L}+/u).map((run) => run.replace(/\D/g, ''))
-  return runs.some((run) => {
-    if (run.includes(digits)) return true
-    if (unpadded.length >= 2 && run === unpadded) return true
-    return run.length >= 2 && digits.endsWith(run)
-  })
+  const digitsIn = (run: string) => run.replace(/\D/g, '')
+  const isWholeMask = (run: string) =>
+    run.includes(digits) || (unpadded.length >= 2 && run === unpadded)
+  const carries = (run: string) => isWholeMask(run) || (run.length >= 2 && digits.endsWith(run))
+  // Read first with each x a letter, then with it joining the digits around it.
+  if (text.split(/\p{L}+/u).some((run) => carries(digitsIn(run)))) return true
+  return joinedAtX(text)
+    .split(/\p{L}+/u)
+    .some((run) => {
+      const marked = /^[*•·.…#-]/.test(run.trim())
+      return marked ? carries(digitsIn(run)) : isWholeMask(digitsIn(run))
+    })
 }
 
 /** carriesMask for a mask with letters. */
@@ -187,8 +207,14 @@ function joinedMask(bankName: string, maskDigits: string): string {
  * number when it has four digits or more (but a year like 2025 stays, unless
  * marked as a number or it is the mask), when it is the mask with or without
  * zeros in front ("052" for 52) and not a bare word that nothing led up to
- * with more of the name after it, or when mask characters lead into it and it
- * ends with the mask or is the mask's end ("...597" for 7597).
+ * with more of the name after it, when mask characters lead into it and it
+ * ends with the mask or is the mask's end ("...597" for 7597), or when it has
+ * two digits or more and is marked as a number ("...417" or "#52"), since it
+ * may be another account's mask.
+ *
+ * An x between digits stands for one more where that reads as the number:
+ * "441x7" is 4417 for that mask, and "...41x7" for any. Otherwise the x is a
+ * letter: "12X18" is 12 and 18, each weighed on its own.
  *
  * A bare mask at the start or in the middle of a name, not led up to, stays:
  * that is how "12 MONTH CD" keeps its 12 when the mask is 12. carriesMask then
@@ -201,27 +227,58 @@ function withoutNumber(word: string, maskDigits: string, standsAsNumber: boolean
   // Brackets around the number go, but not the mask characters before it: "(...417)" is "...417".
   const bare = word.replace(/[^\p{L}\p{N}]+$/u, '').replace(/^[([{"']+/, '')
   const bracketed = bare !== word
-  // An x between digits stands for one more, so "441x7" is read as 4417.
+  // Every digit of the word goes with the number, so "44x17" leaves no "44".
+  const withoutRun = (index: number, length: number) => {
+    const kept = withoutMaskCharacters(bare.slice(0, index).replace(/\d+/g, ''))
+    return [kept, wordAfter(bare.slice(index + length))].filter(Boolean).join(' ')
+  }
   for (const run of bare.matchAll(/\d+(?:x\d+)*/gi)) {
-    const digits = run[0].replace(/x/gi, '')
-    const before = bare.slice(0, run.index)
-    const after = bare.slice(run.index + run[0].length)
-    const marked = MASK_CHARACTERS_AT_END.test(before)
-    const markedPlainly = PLAIN_MASK_CHARACTERS_AT_END.test(before)
-    const alone = bare === digits && !bracketed
-    if (isNumber(digits, maskDigits, { marked, markedPlainly, alone, standsAsNumber })) {
-      // Every digit of the word goes with it, so "44x17" leaves no "44".
-      const kept = withoutMaskCharacters(before.replace(/\d+/g, ''))
-      return [kept, wordAfter(after)].filter(Boolean).join(' ')
+    const joined = run[0].replace(/x/gi, '')
+    const markedAsNumber = isMarkedAsNumber(bare.slice(0, run.index))
+    if (joined !== run[0] && joinsAtX(joined, maskDigits, markedAsNumber)) {
+      return withoutRun(run.index, run[0].length)
+    }
+    for (const part of run[0].matchAll(/\d+/g)) {
+      const digits = part[0]
+      const index = run.index + part.index
+      const before = bare.slice(0, index)
+      const how = {
+        marked: MASK_CHARACTERS_AT_END.test(before),
+        markedPlainly: PLAIN_MASK_CHARACTERS_AT_END.test(before),
+        markedAsNumber: isMarkedAsNumber(before),
+        alone: bare === digits && !bracketed,
+        standsAsNumber,
+      }
+      if (isNumber(digits, maskDigits, how)) return withoutRun(index, digits.length)
     }
   }
   return null
+}
+
+/**
+ * Whether digits an x joins read as the account number: the whole mask is in
+ * them, "441x7" for 4417, or they are marked as a number, "...41x7".
+ */
+function joinsAtX(joined: string, maskDigits: string, markedAsNumber: boolean): boolean {
+  const unpadded = (text: string) => text.replace(/^0+/, '')
+  const isMask = unpadded(joined).length >= 2 && unpadded(joined) === unpadded(maskDigits)
+  return markedAsNumber || (maskDigits.length >= 2 && (joined.includes(maskDigits) || isMask))
+}
+
+/**
+ * Whether what comes before a run marks it as an account number: dots, a
+ * star or a "#" not after a digit ("...", "#", but not the "3." of "3.25"),
+ * or an x standing on its own ("X417", but not the X of "MAX" or "12X18").
+ */
+function isMarkedAsNumber(before: string): boolean {
+  return /(?:^|\P{N})[*•·.…#]+$/u.test(before) || /(?:^|[^\p{L}\p{N}])x+$/iu.test(before)
 }
 
 /** How a run of digits sits in its word, for isNumber. */
 interface RunPlace {
   marked: boolean
   markedPlainly: boolean
+  markedAsNumber: boolean
   alone: boolean
   standsAsNumber: boolean
 }
@@ -233,6 +290,8 @@ function isNumber(digits: string, maskDigits: string, how: RunPlace): boolean {
   if (maskDigits.length >= 2 && unpadded(digits) === unpadded(maskDigits)) {
     return isMaskNumber(digits !== maskDigits && unpadded(digits).length < 2, how)
   }
+  // Marked as a number, it may be another account's mask; a lone digit identifies nothing.
+  if (how.markedAsNumber && digits.length >= 2) return true
   if (how.marked && maskDigits.length >= 2) {
     const endOfMask = digits.length >= 2 && maskDigits.endsWith(digits)
     if (digits.endsWith(maskDigits) || endOfMask) return true
@@ -277,10 +336,13 @@ function withoutLetterMask(word: string, key: string, standsAsNumber: boolean): 
   }
   if (!/\d/.test(key)) return null
   // Its end, marked or standing as a number: "x2AB", or "2AB" in "ENDING 2AB".
-  const unmarked = bare.replace(/^[x*•·.…#-]+/i, '')
-  const marked = unmarked !== bare
-  const endOfMask = unmarked.length >= 2 && key.endsWith(unmarked.toUpperCase())
-  return endOfMask && (marked || standsAsNumber) ? '' : null
+  // The x of a mask like 1X2 may be its own, so "...X2" is read with it too.
+  const ends = [bare.replace(/^[x*•·.…#-]+/i, ''), bare.replace(/^[*•·.…#-]+/, '')]
+  const isEnd = (end: string) => {
+    const marked = end !== bare
+    return end.length >= 2 && key.endsWith(end.toUpperCase()) && (marked || standsAsNumber)
+  }
+  return ends.some(isEnd) ? '' : null
 }
 
 /** Text without the mask characters it ends with: "ACCT#" is ACCT, "CHECKINGX" is CHECKING. */

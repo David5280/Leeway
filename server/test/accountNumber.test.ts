@@ -101,12 +101,40 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('CHK44*17', '4417')).toBe('CHK')
   })
 
-  it('reads an x between digits as one more digit of the number', () => {
+  it('reads an x between digits as one more digit, where that reads as the number', () => {
     expect(withoutAccountNumber('CHECKING 441x7', '4417')).toBe('CHECKING')
     expect(withoutAccountNumber('CHECKING 3X9', '39')).toBe('CHECKING')
     expect(withoutAccountNumber('CHECKING 5x2 PLUS', '52')).toBe('CHECKING PLUS')
+    expect(withoutAccountNumber('CHECKING 1x44179', '4417')).toBe('CHECKING')
+    // Marked as a number, for any mask: it may be another account's.
+    expect(withoutAccountNumber('CHECKING ...41x7', '9921')).toBe('CHECKING')
     // Not between digits, an x is a letter: "2X POINTS" keeps it.
     expect(withoutAccountNumber('2X POINTS CARD', '4417')).toBe('2X POINTS CARD')
+  })
+
+  it('keeps digits an x joins that are not the number', () => {
+    for (const mask of [null, '4417', '0052']) {
+      expect(withoutAccountNumber('CD 12X18 PROMO', mask), String(mask)).toBe('CD 12X18 PROMO')
+    }
+    expect(withoutAccountNumber('CD 12X18 PROMO', '1218')).toBe('CD PROMO')
+    expect(withoutAccountNumber('MARKET 1X1', '1111')).toBe('MARKET 1X1')
+    // Each side is still weighed on its own: 18, marked by the x, ends 4418.
+    expect(withoutAccountNumber('CD 12X18 PROMO', '4418')).toBe('CD PROMO')
+  })
+
+  it("takes out a marked run of two digits or more, which may be another account's mask", () => {
+    expect(withoutAccountNumber('OVERDRAFT PROTECTION ...417', '9921')).toBe('OVERDRAFT PROTECTION')
+    expect(withoutAccountNumber('SAVINGS LINKED TO #52', '9921')).toBe('SAVINGS LINKED TO')
+    expect(withoutAccountNumber('LINKED CARD *88 PLUS', null)).toBe('LINKED CARD PLUS')
+    expect(withoutAccountNumber('LINKED CARD (X417)', '9921')).toBe('LINKED CARD')
+    expect(withoutAccountNumber('LINKED …0417', '9921')).toBe('LINKED')
+  })
+
+  it('keeps a lone marked digit, a decimal and an x inside a word', () => {
+    expect(withoutAccountNumber('PLATINUM X2', '9921')).toBe('PLATINUM X2')
+    expect(withoutAccountNumber('#1 REWARDS', '9921')).toBe('#1 REWARDS')
+    expect(withoutAccountNumber('CD 3.25% APY', '9921')).toBe('CD 3.25% APY')
+    expect(withoutAccountNumber('MAX12 CARD', '9921')).toBe('MAX12 CARD')
   })
 
   it('takes a one-digit mask, once its zeros are off, only where plainly marked or led up to', () => {
@@ -131,6 +159,7 @@ describe('withoutAccountNumber', () => {
     expect(withoutAccountNumber('CARD ending 2AB', '12AB')).toBe('CARD')
     expect(withoutAccountNumber('CARD x2AB PLUS', '12AB')).toBe('CARD PLUS')
     expect(withoutAccountNumber('CARD (ab12)', 'AB12')).toBe('CARD')
+    expect(withoutAccountNumber('CARD ...X2', '1X2')).toBe('CARD')
     // Its end, unmarked and with more of the name after it, is left to the guarantee.
     expect(withoutAccountNumber('TAB CARD', '12AB')).toBe('TAB CARD')
   })
@@ -239,13 +268,32 @@ describe('carriesMask', () => {
     expect(carriesMask('Top 10 Checking', '4417')).toBe(false)
   })
 
-  it('joins digits across an x, which stands for one more', () => {
+  it('joins digits across an x where they read as the number', () => {
     expect(carriesMask('Checking 441x7', '4417')).toBe(true)
     expect(carriesMask('Checking 3X9', '39')).toBe(true)
     expect(carriesMask('Checking 4x4x1x7', '4417')).toBe(true)
+    expect(carriesMask('Checking 44 1x7', '4417')).toBe(true)
+    expect(carriesMask('Checking ...41x7', '4417')).toBe(true)
+    expect(carriesMask('CD 12X18 Promo', '1218')).toBe(true)
     expect(carriesMask('Card AB1x2', 'AB12')).toBe(true)
-    // Not between digits, it stays a letter.
+  })
+
+  it('reads an x as a letter where the joined digits are not the number', () => {
+    expect(carriesMask('CD 12X18 Promo', '4417')).toBe(false)
+    expect(carriesMask('CD 12X18 Promo', '2181')).toBe(false)
+    expect(carriesMask('Market 1X1', '1111')).toBe(false)
+    expect(carriesMask('Checking 41x7', '4417')).toBe(false)
+    // Read as a letter, it still splits off the end of the mask.
+    expect(carriesMask('Checking 4x17', '4417')).toBe(true)
     expect(carriesMask('2X Points', '22')).toBe(false)
+  })
+
+  it("keeps a mask's own x, so it is found however it is split", () => {
+    expect(carriesMask('Checking 1X2', '1X2')).toBe(true)
+    expect(carriesMask('Checking 1X 2', '1X2')).toBe(true)
+    expect(carriesMask('Checking 1X-2', '1X2')).toBe(true)
+    expect(carriesMask('Checking ...X2', '1X2')).toBe(true)
+    expect(carriesMask('Checking 12', '1X2')).toBe(false)
   })
 
   it('finds a mask with letters whole, split, or by its end', () => {
@@ -277,9 +325,10 @@ describe('carriesMask', () => {
 
 /**
  * Masks of two to four characters: leading zeros, down to one digit without
- * them, a year, repeated digits, and letters, with digits or alone.
+ * them, a year, repeated digits, and letters, with digits (an x among them
+ * too) or alone.
  */
-const MASKS = ['52', '417', '4417', '0352', '0001', '2025', '1111', '12AB', 'X9Z1', 'AB']
+const MASKS = ['52', '417', '4417', '0352', '0001', '2025', '1111', '12AB', 'X9Z1', '1X2', 'AB']
 
 /** Characters a bank might put between the halves of a mask. */
 const SEPARATORS = ['/', '_', ',', ':', '+', '(', ')', '‐', '‑', '‒', '–', '−']
@@ -348,6 +397,8 @@ function placements(mask: string): Record<string, string> {
     mixedCase: `Checking ending in ${mask}`,
     mixedCaseAcct: `Checking acct ${mask}`,
     lettersInside: `CHECKING ${head}x${tail}`,
+    splitBeforeLast: `CHECKING ${mask.slice(0, -1)} ${mask.slice(-1)}`,
+    hyphenBeforeLast: `CHECKING ${mask.slice(0, -1)}-${mask.slice(-1)}`,
     xBeforeLast: `CHECKING ${mask.slice(0, -1)}x${mask.slice(-1)}`,
     upperXBeforeLast: `CHECKING ${mask.slice(0, -1)}X${mask.slice(-1)}`,
     ...Object.fromEntries(
@@ -433,25 +484,28 @@ function endings(text: string): Set<string> {
 }
 
 function reveals(name: string, mask: string): boolean {
-  // An x between digits stands for one more: "441x7" reads 4417.
-  const xJoined = (text: string) =>
-    plainDigits(text)
-      .toUpperCase()
-      .replace(/(\d)X(?=\d)/g, '$1')
-  const key = xJoined(mask)
-  const text = xJoined(name)
+  const key = plainDigits(mask).toUpperCase()
+  const text = plainDigits(name).toUpperCase()
+  // An x between digits may stand for one more: "441x7" reads 4417.
+  const xJoined = text.replace(/(\d)X(?=\d)/g, '$1')
   if (/^\d+$/.test(key)) {
-    // Runs of digits, split by letters alone.
+    // Runs of digits, split by letters alone, with each x a letter.
     const unpadded = key.replace(/^0+/, '')
-    return text
-      .split(/\p{L}+/u)
-      .map((part) => [...part].filter((character) => /\d/.test(character)).join(''))
-      .some(
-        (run) =>
-          run.includes(key) || (unpadded.length >= 2 && run === unpadded) || endings(key).has(run),
-      )
+    const runsOf = (part: string) => part.split(/\p{L}+/u)
+    const digitsIn = (run: string) => [...run].filter((character) => /\d/.test(character)).join('')
+    const whole = (run: string) => run.includes(key) || (unpadded.length >= 2 && run === unpadded)
+    const shows = (run: string) => whole(run) || endings(key).has(run)
+    if (runsOf(text).some((run) => shows(digitsIn(run)))) return true
+    // Joined at an x, a run counts when it is the whole mask, or marked as a number.
+    return runsOf(xJoined).some((run) =>
+      /^[*•·.…#-]/.test(run.trim()) ? shows(digitsIn(run)) : whole(digitsIn(run)),
+    )
   }
-  // Letters and digits as one string, checked whole and at each word's end.
+  return lettersReveal(text, key) || lettersReveal(xJoined, key)
+}
+
+/** reveals for a mask with letters: letters and digits as one string, whole and at each word's end. */
+function lettersReveal(text: string, key: string): boolean {
   const words = text.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
   const joined = words.join('')
   if (joined.includes(key)) return true
@@ -484,6 +538,8 @@ const AMBIGUOUS_BEFORE_WORDS = new Set([
   'bare',
   'splitHyphen',
   'splitSpace',
+  'splitBeforeLast',
+  'hyphenBeforeLast',
   'zeroPaddedBare',
   'lettersInside',
 ])
@@ -495,8 +551,16 @@ const AMBIGUOUS_BEFORE_WORDS = new Set([
  * The guarantee then names the account by its kind instead.
  */
 function splitLeftToGuarantee(mask: string, placement: string): boolean {
-  const unjoined = ['splitHyphen', 'splitSpace', 'lettersInside']
-  if (/\D/.test(mask)) return [...unjoined, 'splitAfterX'].includes(placement)
+  const unjoined = [
+    'splitHyphen',
+    'splitSpace',
+    'splitBeforeLast',
+    'hyphenBeforeLast',
+    'lettersInside',
+  ]
+  // An x put into a mask with an x of its own, "1XX2" for 1X2, ends with the mask's end.
+  const intoX = /X/.test(mask) && ['xBeforeLast', 'upperXBeforeLast'].includes(placement)
+  if (/\D/.test(mask)) return intoX || [...unjoined, 'splitAfterX'].includes(placement)
   return mask.length === 2 && unjoined.includes(placement)
 }
 
@@ -528,6 +592,8 @@ describe('the oracle', () => {
     expect(reveals('Chase Card 2AB', '12AB')).toBe(true)
     expect(reveals('Chase Checking 441x7', '4417')).toBe(true)
     expect(reveals('Chase Checking 3X9', '39')).toBe(true)
+    expect(reveals('Chase Checking 1X 2', '1X2')).toBe(true)
+    expect(reveals('Chase Market 1X1', '1111')).toBe(false)
     expect(reveals('Chase Checking ❹❹❶❼', '4417')).toBe(true)
     expect(reveals('Chase Card Á1', 'A1')).toBe(true)
     expect(reveals('Chase Checking', '4417')).toBe(false)
@@ -552,7 +618,7 @@ describe('the guarantee, across masks, placements and real words', () => {
 
   it('covers every pairing', () => {
     const perMask = Object.keys(placements('4417')).length
-    expect(perMask).toBe(65)
+    expect(perMask).toBe(67)
     expect(cases).toHaveLength(MASKS.length * perMask * (1 + REAL_WORDS.length * 2))
   })
 

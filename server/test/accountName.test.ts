@@ -456,12 +456,12 @@ describe('distinctAccountNames', () => {
   })
 
   it('never counts with an ordinal that shows the mask', () => {
-    const many = Array.from({ length: 19 }, (_, index) => account(String(index)))
+    const many = Array.from({ length: 4 }, (_, index) => account(String(index), { mask: 'TH' }))
     const names = [...distinctAccountNames(many).values()]
-    // 17th ends in the mask 4417, so the count skips it.
-    expect(names[15]).toBe('Chase Total Checking (16th Checking)')
-    expect(names[16]).toBe('Chase Total Checking (18th Checking)')
-    expect(names.join(' ')).not.toMatch(/17/)
+    // Third, Fourth and on to Twentieth all hold TH, so the count skips them.
+    expect(names[1]).toBe('Chase Total Checking (Second Checking)')
+    expect(names[2]).toBe('Chase Total Checking (Twenty-First Checking)')
+    expect(names[3]).toBe('Chase Total Checking (Twenty-Second Checking)')
   })
 
   it('never shows the mask run on from the name into its suffix', () => {
@@ -487,21 +487,53 @@ describe('distinctAccountNames', () => {
 
   it('tells apart by type when the kind itself shows the mask', () => {
     const names = distinctAccountNames([
-      account('a', { bankName: 'RETIREMENT', type: 'investment', subtype: '401k' }),
+      account('a', { bankName: 'RETIREMENT', type: 'investment', subtype: 'ira' }),
       account('b', { bankName: 'RETIREMENT', type: 'investment', subtype: '401k', mask: '01' }),
     ])
     expect(names.get('b')).toBe('Chase Retirement (Investment)')
   })
 
-  it('counts on in words, then in numbers', () => {
-    const many = Array.from({ length: 23 }, (_, index) => account(String(index), { mask: null }))
+  it('counts on in words, however far, so the order adds no digits', () => {
+    const many = Array.from({ length: 105 }, (_, index) => account(String(index), { mask: null }))
     const names = [...distinctAccountNames(many).values()]
+    // The second account sharing a name is told apart as the Second, and so on.
+    const nth = (count: number) => /\((.*) Checking\)$/.exec(names[count - 1]!)?.[1]
     expect(names[0]).toBe('Chase Total Checking')
-    expect(names[7]).toBe('Chase Total Checking (Eighth Checking)')
-    expect(names[8]).toBe('Chase Total Checking (9th Checking)')
-    expect(names[10]).toBe('Chase Total Checking (11th Checking)')
-    expect(names[20]).toBe('Chase Total Checking (21st Checking)')
-    expect(names[21]).toBe('Chase Total Checking (22nd Checking)')
-    expect(names[22]).toBe('Chase Total Checking (23rd Checking)')
+    expect([2, 3, 5, 8, 9, 12].map(nth)).toEqual([
+      'Second',
+      'Third',
+      'Fifth',
+      'Eighth',
+      'Ninth',
+      'Twelfth',
+    ])
+    expect([11, 20, 21, 22, 23, 40].map(nth)).toEqual([
+      'Eleventh',
+      'Twentieth',
+      'Twenty-First',
+      'Twenty-Second',
+      'Twenty-Third',
+      'Fortieth',
+    ])
+    expect([100, 101, 105].map(nth)).toEqual([
+      'One Hundredth',
+      'One Hundred First',
+      'One Hundred Fifth',
+    ])
+    expect(names.join(' ')).not.toMatch(/\d/)
+  })
+
+  it('writes large orders in words too', () => {
+    // The count only grows past these with as many accounts of one name.
+    const name = (count: number) => {
+      const many = Array.from({ length: count }, (_, index) =>
+        account(String(index), { mask: null }),
+      )
+      return [...distinctAccountNames(many).values()].at(-1)
+    }
+    expect(name(1000)).toBe('Chase Total Checking (One Thousandth Checking)')
+    expect(name(1999)).toBe(
+      'Chase Total Checking (One Thousand Nine Hundred Ninety-Ninth Checking)',
+    )
   })
 })
