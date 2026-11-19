@@ -55,16 +55,39 @@ export function clipArea(el: Element, ownText = false): Box {
   return area
 }
 
+/** A length from a clip-path inset, in pixels: a percentage is of `whole`. */
+const insetLength = (value: string, whole: number) =>
+  value.endsWith('%') ? (parseFloat(value) / 100) * whole : parseFloat(value)
+
+/**
+ * Whether a clip-path leaves nothing of a box to see: an inset that meets in
+ * the middle (inset(50%)), or a circle or ellipse of no size. A clip-path that
+ * only shapes a box, like a popover's rounded corners, leaves it showing.
+ */
+function clipsToNothing(clipPath: string, box: DOMRect): boolean {
+  if (/^(circle|ellipse)\(0(px|%)?[\s)]/.test(clipPath)) return true
+  const inset = clipPath.match(/^inset\(([^)]*)\)/)
+  if (!inset) return false
+  // inset(top right bottom left round ...), each side defaulting as margins do.
+  const [top = '0', right = top, bottom = top, left = right] = inset[1]!
+    .split(' round ')[0]!
+    .trim()
+    .split(/\s+/)
+  const across = insetLength(left, box.width) + insetLength(right, box.width)
+  const down = insetLength(top, box.height) + insetLength(bottom, box.height)
+  return across >= box.width || down >= box.height
+}
+
 /**
  * Tucked into a box for screen readers only: absolutely placed and clipped
- * away, or shrunk to a single pixel that hides its overflow (the
- * .visually-hidden pattern).
+ * away (the clip property, or a clip-path that leaves nothing), or shrunk to
+ * a single pixel that hides its overflow (the .visually-hidden pattern).
  */
 function isScreenReaderOnly(node: Element): boolean {
   const style = getComputedStyle(node)
   if (style.position !== 'absolute') return false
-  if (style.clip !== 'auto' || style.clipPath !== 'none') return true
   const r = node.getBoundingClientRect()
+  if (style.clip !== 'auto' || clipsToNothing(style.clipPath, r)) return true
   return r.width <= 1 && r.height <= 1 && style.overflowX !== 'visible'
 }
 

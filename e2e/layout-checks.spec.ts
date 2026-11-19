@@ -115,6 +115,23 @@ test.describe('overlap', () => {
     )
     expect(await found(page, 'overlap')).toEqual([])
   })
+
+  test('checks a popover a clip-path only rounds, but not one it clips to nothing', async ({
+    page,
+  }) => {
+    // A menu laid over a row by mistake, drawn through `clip`.
+    const menu = (clip: string) =>
+      `<p style="margin: 0">Groceries</p>
+      <div class="menu" style="position: absolute; top: 0; left: 0; width: 200px; clip-path: ${clip}">
+        <span>Rename</span>
+      </div>`
+    await fixture(page, menu('inset(0 round 12px)'))
+    expect(await found(page, 'overlap')).toEqual(['<p> "Groceries" overlaps <span> "Rename"'])
+    for (const hidden of ['inset(50%)', 'inset(0 0 100% 0)', 'circle(0)']) {
+      await fixture(page, menu(hidden))
+      expect(await found(page, 'overlap'), hidden).toEqual([])
+    }
+  })
 })
 
 test.describe('broken-word', () => {
