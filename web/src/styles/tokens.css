@@ -1,0 +1,87 @@
+/* Leeway's design tokens: the spacing, type, depth, tone and motion every
+   screen is built from. Colors come from the theme (lib/theme.ts sets --bg,
+   --surface, --ink, --good and the rest on the page); these tokens give them
+   meaning and add what themes share. Shared components (styles/design.css)
+   and screens use only these, so a later screen gets the same look for free.
+
+   Readability rules the tokens carry:
+   - Money in is --tone-in (green) with a "+"; ordinary spending stays
+     --tone-neutral, since red on every purchase is noise.
+   - --tone-problem (red) is only for something wrong: overdrawn, over
+     budget, a missed bill. --tone-warn (amber) is for warnings and nearing a
+     limit; --tone-action (the accent) is for what can be pressed.
+   - Color is never the only signal: a sign, an icon or a word goes with it.
+   - Every text tone meets WCAG AA (4.5:1) on every surface in every theme
+     (lib/contrast.test.ts checks). */
+
+:root {
+  /* Spacing: a 4px grid. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Type: one scale. --text-figure is a card's key number, --text-hero a
+     screen's. Secondary text is --tone-muted at --text-sm. */
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-md: 14.5px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-figure: 30px;
+  --text-hero: 40px;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --leading-tight: 1.2;
+  --tracking-tight: -0.02em;
+  --tracking-label: 0.06em;
+
+  /* Tones: what a color means. */
+  --tone-in: var(--good);
+  --tone-neutral: var(--ink);
+  --tone-muted: var(--muted);
+  --tone-warn: var(--warn);
+  --tone-problem: var(--over);
+  --tone-action: var(--accent);
+  --tone-in-soft: color-mix(in srgb, var(--good) 14%, transparent);
+  --tone-warn-soft: var(--warn-soft);
+  --tone-problem-soft: var(--over-soft);
+  --tone-action-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --tone-neutral-soft: var(--surface-2);
+
+  /* Depth: cards sit one step up, sheets and menus two. --hi is the thin
+     light edge along a card's top that makes it read as raised. */
+  --elev-1: 0 1px 2px rgba(20, 23, 26, 0.05), 0 8px 24px rgba(20, 23, 26, 0.06);
+  --elev-2: 0 2px 6px rgba(20, 23, 26, 0.08), 0 22px 48px rgba(20, 23, 26, 0.16);
+  --hi: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --scrim: rgba(10, 12, 16, 0.42);
+
+  /* Sizes. A list row is 60px; anything pressed is at least --tap tall. */
+  --row-height: 60px;
+  --icon-badge: 40px;
+  --tap: 44px;
+  --radius-pill: 999px;
+
+  /* Motion: quick, and none when the device asks for less (design.css). */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-quick: 140ms;
+  --duration-sheet: 240ms;
+
+  /* Layers. */
+  --layer-sticky: 4;
+  --layer-menu: 30;
+  --layer-sheet: 60;
+}
+
+/* Dark modes: shadows only read as depth when darker and wider, and the
+   top edge highlight is fainter. applyAppearance sets data-mode. */
+:root[data-mode='dark'] {
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.45), 0 26px 60px rgba(0, 0, 0, 0.5);
+  --hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --scrim: rgba(0, 0, 0, 0.56);
+}

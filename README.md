@@ -55,6 +55,7 @@ The screenshots use invented demo data.
 - [Bank sync with Plaid](#bank-sync-with-plaid)
 - [Configuration](#configuration)
 - [Connect an AI assistant](#connect-an-ai-assistant)
+- [Home-screen widget](#home-screen-widget)
 - [Security](#security)
 - [Updating and backups](#updating-and-backups)
 - [Contributing](#contributing)
@@ -218,8 +219,8 @@ with a note.
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
 | `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary and read imported paystubs.    |
-| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-haiku-5-5`.          |
-| `PAYSTUB_MODEL`         | No       | The Claude model that reads paystubs, default `claude-haiku-5-5`.      |
+| `SUMMARY_MODEL`         | No       | Fixes the summary's Claude model, instead of choosing it in Settings.  |
+| `PAYSTUB_MODEL`         | No       | Fixes the paystub reader's model, instead of choosing it in Settings.  |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
@@ -238,8 +239,9 @@ turn it on. Claude then gets this period's totals, the Heads up list, bill and
 goal names, and any account alerts, which name the account the way Leeway shows
 it, like "Chase Total Checking is down to $35.00". It never gets account
 numbers or transactions. A summary is reused while your numbers stay the same,
-for up to four hours, so it costs a few cents a summary on your own Anthropic
-account.
+for up to four hours, and with the default model each one costs well under a
+cent on your own Anthropic account. The model and a monthly limit are set in
+[AI models](#ai-models-and-the-monthly-limit).
 
 ### Paystub import (optional)
 
@@ -271,6 +273,54 @@ retirement saving. Nothing is saved until you choose **Save**.
 
 An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set
 the camera to **Most Compatible**.
+
+### AI models and the monthly limit
+
+Every paid AI call, the summary and the paystub reader today, goes through
+one place that picks the model, checks a monthly limit and records what the
+call cost. **Settings**, then **AI models** shows:
+
+- this month's AI spending against the limit, in all and by job;
+- the monthly limit, $5 to start, from $0 (paid AI off) to $1,000;
+- the model for each job, with what it is for and its price per million
+  tokens. Both jobs start on Claude Haiku 5.5, the small, cheap model.
+  Claude Sonnet 5.5 and Claude Opus 5.5 cost about 20 and 40 times as much.
+
+How the limit works:
+
+- The month follows the time zone in **Settings**, then **Budgeting**.
+- Before each call, Leeway works out the most it could cost: the prompt
+  (counted free by Anthropic for a paystub file, estimated from its length
+  for the summary's short text) as if every token were a cache write, plus
+  the most output the call may use. If that would take the month past the
+  limit, the call is not made. The summary is then Leeway's own, and the
+  paystub reader says the limit is reached and when it resets.
+- After the call, the tokens it really used (input, output, cache reads and
+  writes) are priced and recorded. Prices are Anthropic's list prices,
+  checked on 2026-11-19, so your Anthropic bill is the final word.
+- Each call is one attempt; Leeway never retries on its own. A call Anthropic
+  answers with an error (the key refused, rate limited, overloaded, a server
+  error, a request too large or unreadable, or a model it doesn't have) is
+  not billed, so nothing is recorded. Only a call that gets no answer (it
+  times out or loses its connection) or an answer Leeway can't read may have
+  been billed unseen, so its most possible cost is recorded, marked as an
+  estimate.
+- At 80% of the limit a warning shows once in **Heads up** and in Settings,
+  and once the month's spending reaches the limit, a second alert says so.
+  A single call turned away while some of the limit is left only says so
+  where it was asked for. Either alert can be dismissed, and a new limit
+  starts the month's alerts over.
+- Each record holds token counts and a cost, never what was asked or
+  answered.
+
+`SUMMARY_MODEL` or `PAYSTUB_MODEL` fixes that job's model on the server, and
+Settings then shows it locked. When Anthropic says it has no such model
+(retired or mistyped), Settings and the summary card say so and where to pick
+another, and a model with an announced retirement day shows that day. A model
+Leeway has no price for is counted at the price of the dearest model it knows,
+so the limit still holds. No assistant can see or change any of this over MCP,
+since it decides what is spent on your Anthropic account; an assistant still
+sees the chosen models and the limit in Leeway's settings.
 
 ### Weekly email (optional)
 
@@ -386,6 +436,40 @@ authorization spec describes, with discovery at
 `/.well-known/oauth-authorization-server`, PKCE, and client metadata documents
 or dynamic registration. Access tokens last an hour; refresh tokens last 90
 days and change on every use.
+
+## Home-screen widget
+
+Leeway has a widget for your iPhone or iPad home screen and, on a Mac with
+Apple silicon, your desktop. It runs in [Scriptable](https://scriptable.app),
+a free app, and shows what you have safe to spend (or, before you set any
+budgets, your cash until payday), this period's budget left, your net worth
+and how it moved in 30 days, the next bills due, and how many accounts are
+overdrawn, over their limit or low. It comes in small, medium and large, follows your Leeway
+theme and dark mode, and refreshes about every 30 minutes.
+
+![Settings > Widget, with the widget's parameter shown once, the script to copy or download, and the setup steps](docs/screenshots/widget-settings.png)
+
+1. In Leeway, open **Settings**, then **Widget**, and choose **Create the
+   widget token**. Copy the widget parameter it shows: your Leeway address
+   and the token, joined by `|`. It is shown only once.
+2. Choose **Copy the script** (or **Download Leeway.js**). In Scriptable, add
+   a script, paste it, and name it Leeway.
+3. Add a Scriptable widget to your home screen or desktop, edit it, set
+   **Script** to Leeway, and paste the parameter into **Parameter**.
+
+To keep the token out of the widget's settings, run the script once in
+Scriptable and choose **Save address and token**: it keeps them in
+Scriptable's Keychain instead.
+
+The widget token can only read this summary, at `GET /api/widget`, and
+nothing else; no other key or session can read the summary. The summary
+names bills by the names Leeway shows, counts account alerts without naming
+the accounts, and never holds an account number, mask or transaction text. A
+bill you made from a recurring charge starts out named as the bank wrote it,
+so rename it under Bills in **Plan** if you'd rather the widget said
+something else. The widget only sends the token over `https`, so it needs
+Leeway at a public address, as Railway gives you. Making a new token
+replaces the old one, and **Revoke** stops it at once.
 
 ## Security
 

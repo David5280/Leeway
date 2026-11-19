@@ -6,10 +6,12 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
-import { fakeLongInbox, fakePushBrowser, fakePushServer } from './notifications'
+import * as ai from './ai'
+import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
+import { revealWidgetToken } from './widget'
 
 /** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
 export const SETTINGS_GROUPS = [
@@ -20,6 +22,8 @@ export const SETTINGS_GROUPS = [
   'email',
   'notifications',
   'assistant',
+  'ai',
+  'widget',
   'data',
   'sign-in',
 ]
@@ -48,11 +52,49 @@ const at = (route: RouteName, path: string, more: Partial<Screen> = {}): Screen 
   ...more,
 })
 
-/** Presses a button, then waits for what it opens. */
+/**
+ * Presses a button, then waits for what it opens. The button is scrolled into
+ * view a frame ahead, as a finger would find it first, so the scroll is over
+ * before the press: a menu closes when the page or its row scrolls.
+ */
 const open = (button: string | RegExp, opens: (page: Page) => ReturnType<Page['getByRole']>) =>
   async function (page: Page) {
-    await page.getByRole('button', { name: button }).first().click()
+    const pressed = page.getByRole('button', { name: button }).first()
+    await pressed.scrollIntoViewIfNeeded()
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    )
+    await pressed.click()
     await expect(opens(page)).toBeVisible()
+  }
+
+/** Waits until nothing in it is still moving, like a sheet sliding up. */
+async function stillOn(locator: ReturnType<Page['getByRole']>) {
+  await expect.poll(() => locator.evaluate((element) => element.getAnimations().length)).toBe(0)
+}
+
+/** The seeded transaction with the longest name, as its row and its sheet are named. */
+const LONG_TRANSACTION = /^Amazon Marketplace/i
+
+/** Opens the long-named transaction's sheet from the Transactions list. */
+async function openTransaction(page: Page) {
+  await page.getByRole('button', { name: LONG_TRANSACTION }).first().click()
+  const sheet = page.getByRole('dialog', { name: LONG_TRANSACTION })
+  await expect(sheet).toBeVisible()
+  await stillOn(sheet)
+  return sheet
+}
+
+/** Opens the long-named transaction's sheet, then presses a button in it and waits for what it shows. */
+const inTransaction = (
+  button: RegExp,
+  shows: (sheet: ReturnType<Page['getByRole']>) => ReturnType<Page['getByRole']>,
+) =>
+  async function (page: Page) {
+    const sheet = await openTransaction(page)
+    await sheet.getByRole('button', { name: button }).click()
+    await expect(shows(sheet)).toBeVisible()
+    await stillOn(sheet)
   }
 
 /** A key that looks like a new one, answered without making it, so no key is left behind. */
@@ -83,6 +125,12 @@ export const SCREENS: Screen[] = [
     on: (phone) => phone.editsInPlace,
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
   }),
+  at('overview', '/', {
+    name: "/ with Leeway's summary, as the AI model is gone",
+    // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
+    before: ai.pretendSummaryModelGone,
+    then: ai.seeSummaryModelGone,
+  }),
   at('accounts', '/accounts'),
   ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
     name: `the ${kind} account page`,
@@ -97,12 +145,70 @@ export const SCREENS: Screen[] = [
   }),
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {
+    name: '/transactions with the add menu open',
+    then: open('Add or import', (page) => page.getByRole('menu', { name: 'Add or import' })),
+  }),
+  at('transactions', '/transactions', {
     name: '/transactions adding one by hand',
-    then: open('Add by hand', (page) => page.getByRole('form', { name: 'Add a transaction' })),
+    then: async (page) => {
+      await open('Add or import', (on) => on.getByRole('menuitem', { name: 'Add by hand' }))(page)
+      await page.getByRole('menuitem', { name: 'Add by hand' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Add a transaction' })
+      await expect(sheet.getByRole('form')).toBeVisible()
+      await stillOn(sheet)
+    },
+  }),
+  // A transaction's sheet, in each of its three views.
+  at('transactions', '/transactions', {
+    name: "/transactions with a transaction's sheet open",
+    then: async (page) => {
+      await openTransaction(page)
+    },
+  }),
+  at('transactions', '/transactions', {
+    name: "/transactions changing a transaction's category",
+    then: inTransaction(/Change$/, (sheet) => sheet.getByRole('list', { name: /^Category for / })),
   }),
   at('transactions', '/transactions', {
     name: '/transactions making a rule from one',
-    then: open('Make a rule', (page) => page.getByRole('form', { name: 'New rule' })),
+    then: inTransaction(/^Always categorize/, (sheet) =>
+      sheet.getByRole('form', { name: 'New rule' }),
+    ),
+  }),
+  at('transactions', '/transactions', {
+    name: '/transactions starting a new rule',
+    then: async (page) => {
+      await open('+ New rule', (on) => on.getByRole('form', { name: 'New rule' }))(page)
+      await stillOn(page.getByRole('dialog', { name: 'New rule' }))
+    },
+  }),
+  // The filter chips, each open.
+  at('transactions', '/transactions', {
+    name: '/transactions choosing dates',
+    then: open(/^Dates:/, (page) => page.getByRole('menu', { name: /^Dates:/ })),
+  }),
+  at('transactions', '/transactions', {
+    name: '/transactions choosing an account',
+    then: open(/^Account:/, (page) => page.getByRole('menu', { name: /^Account:/ })),
+  }),
+  at('transactions', '/transactions', {
+    name: '/transactions filtering by category',
+    then: async (page) => {
+      await page.getByRole('button', { name: 'Category: all' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Filter by category' })
+      await expect(sheet).toBeVisible()
+      await stillOn(sheet)
+    },
+  }),
+  at('transactions', '/transactions', {
+    name: '/transactions showing only what needs a category',
+    then: async (page) => {
+      await page.getByRole('button', { name: /need a category$/ }).click()
+      await expect(page.getByRole('button', { name: /need a category$/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    },
   }),
   {
     name: "one account's transactions",
@@ -175,16 +281,28 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/notifications', {
     name: '/settings/notifications with push on this device',
     // A fake browser and push service: no test reaches a real one (notifications.ts).
-    before: async (page) => {
-      await fakePushBrowser(page, { subscribed: true })
-      await fakePushServer(page, { subscribed: true })
-    },
-    then: (page) =>
-      expect(page.getByRole('button', { name: 'Send a test notification' })).toBeVisible(),
+    before: pushOnThisDevice,
+    then: seePushOn,
   }),
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',
     then: revealKey,
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with a key set and a month near its limit',
+    // No model is called in the tests: the month's spending is stood in for (ai.ts).
+    before: ai.pretendBusyMonth,
+    then: (page) => expect(page.getByText(/AI has spent \$4\.10/).first()).toBeVisible(),
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with one model gone and unpriced, and one retiring',
+    // Only Anthropic can retire a model: its answer is stood in for (ai.ts).
+    before: ai.pretendModelTrouble,
+    then: ai.seeModelTrouble,
+  }),
+  at('settings', '/settings/widget', {
+    name: '/settings/widget showing a new token',
+    then: revealWidgetToken,
   }),
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),

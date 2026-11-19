@@ -1,6 +1,7 @@
 import pg from 'pg'
 import type { SummaryWriter } from '../src/ai/writer.js'
 import type { BankProvider } from '../src/bank/provider.js'
+import type { AiGateway } from '../src/domain/ai/gateway.js'
 import type { PaystubReader } from '../src/domain/paystubs/reader.js'
 import type { EmailSender } from '../src/mail/sender.js'
 import type { PushSender } from '../src/push/sender.js'
@@ -26,6 +27,7 @@ export async function createTestContext(
   options: {
     now?: Date
     bank?: BankProvider | null
+    ai?: AiGateway | null
     writer?: SummaryWriter | null
     paystubs?: PaystubReader | null
     mailer?: EmailSender | null
@@ -49,6 +51,7 @@ export async function createTestContext(
       NODE_ENV: 'test',
     }),
     bank: options.bank ?? null,
+    ai: options.ai ?? null,
     writer: options.writer ?? null,
     paystubs: options.paystubs ?? null,
     mailer: options.mailer ?? null,
@@ -66,7 +69,8 @@ export async function resetData(db: pg.Pool): Promise<void> {
     `TRUNCATE owner, sessions, api_tokens, oauth_clients, oauth_requests, oauth_grants,
        oauth_codes, oauth_tokens, connections, accounts, categories, rules, transactions,
        bills, goals, goal_contributions, dismissed_recurring, applied_upgrades, ai_summaries,
-       imports, pension_plans, paystubs, notifications, push_subscriptions, push_keys CASCADE;
+       imports, pension_plans, paystubs, ai_usage, ai_spend_alerts, ai_unavailable_models,
+       widget_tokens, notifications, push_subscriptions, push_keys CASCADE;
      UPDATE settings SET data = '{}';
      DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);
      DELETE FROM notification_settings; INSERT INTO notification_settings (id) VALUES (true);`,

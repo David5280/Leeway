@@ -3,6 +3,7 @@
 // the screens so every wording can be tested alone.
 
 import type { Budget, CategoryBudget } from '../api/client'
+import type { Status } from '../components/design/StatusPill'
 import { shortDate } from './format'
 import type { ToneText } from './goalText'
 
@@ -37,6 +38,13 @@ export function budgetStatus(row: CategoryBudget, period: Period, money: Money):
   // Under one unit a day rounds to "about $0 a day", which reads as nothing left.
   const perDay = perDayCents > 0 ? `, about ${money(perDayCents)} a day` : ''
   return { text: `${money(left)} left for ${days(daysToSpend)}${perDay}${ahead}`, tone }
+}
+
+/** The tone a budget's ring or pill takes: over, close to the warning line, or fine. */
+export function budgetTone(status: CategoryBudget['status']): Status {
+  if (status === 'over') return 'over'
+  if (status === 'warning') return 'watch'
+  return 'ok'
 }
 
 /** "+$40 rolled over" or "$12 overspent last time, taken from this budget"; null without rollover. */

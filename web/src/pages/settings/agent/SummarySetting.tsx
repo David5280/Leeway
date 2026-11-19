@@ -1,9 +1,11 @@
 // The owner's switch for Claude writing the dashboard summary. It sends a few
 // of their numbers to Anthropic, so this page says exactly what goes.
 
+import { Link } from 'react-router-dom'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting, Switch } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
+import { settingsPath } from '../paths'
 
 export function SummarySetting() {
   const { settings } = useApp()
@@ -29,8 +31,9 @@ export function SummarySetting() {
       <span className="small muted">
         When on, Leeway sends Anthropic this period&apos;s totals, cash until payday, the Heads up
         list, your bill and goal names, and any account alerts by account name, a few times a day at
-        most. Never account numbers or transactions. Each summary costs a few cents on your own
-        Anthropic account.
+        most. Never account numbers or transactions. With the default model each summary costs well
+        under a cent, on your own Anthropic account. Choose its model and a monthly limit in{' '}
+        <Link to={settingsPath('ai')}>AI models</Link>.
       </span>
       {on && summary.data?.ai === 'no_key' && (
         <p className="notice">

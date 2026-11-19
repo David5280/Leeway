@@ -2,7 +2,10 @@
 // available offline, and shows push notifications. Budget data always comes
 // fresh from your server.
 const CACHE = 'leeway-shell-v2'
-const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png']
+// Icon URLs carry their content version, as in index.html (manifest.test.ts).
+const SHELL = ['/', '/manifest.webmanifest', '/icon.svg?v=c9ee01ae', '/icon-192.png?v=7fa9df39']
+/** The icon a push shows, at the same version as in the shell. */
+const PUSH_ICON = '/icon-192.png?v=7fa9df39'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)))
@@ -64,8 +67,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(message.title, {
       body: message.body,
       tag: message.tag,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: PUSH_ICON,
+      badge: PUSH_ICON,
       data: { url: message.url },
     }),
   )

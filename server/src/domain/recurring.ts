@@ -1,10 +1,23 @@
 // Finding charges and deposits that repeat on a schedule: subscriptions,
 // bills and paychecks, from transaction history alone.
+//
+// A series' key is its merchant key, made from the bank's text. An assistant
+// is given one made from the shown name instead, since the bank's text may
+// hold an account's number (see ruleText.ts): it tracks or dismisses a series
+// by what it can see, and never learns what the bank wrote.
 
 import type { Db } from '../db/pool.js'
+import { notFound } from '../errors.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
-import { listBills } from './bills.js'
+import { accountMasks } from './accounts.js'
+import { listBills, type Bill } from './bills.js'
+import { countedSql } from './counted.js'
+import { merchantKey, textKey } from './merchantKey.js'
+import { shownNameOf } from './ruleText.js'
+import type { AccountMasks } from './safeName.js'
+import { merchantDisplayName } from './transactionName.js'
+import type { Movement } from './transfers.js'
 
 /** One past transaction, as detection needs it. Amounts are positive for money out. */
 export interface PastTransaction {
@@ -14,6 +27,9 @@ export interface PastTransaction {
   amountCents: number
   categoryId: string | null
 }
+
+/** A past transaction as stored, with what its shown name is worked out from. */
+export type StoredTransaction = PastTransaction & Movement
 
 export interface RecurringSeries {
   /** Stable key for the merchant, used to dismiss a suggestion and to match it again. */
@@ -53,19 +69,6 @@ const REGULAR_SHARE = 0.75
 /** Amounts within this share of the median count as the same price. */
 const FIXED_AMOUNT_TOLERANCE = 0.05
 
-/**
- * The merchant name reduced to what stays the same between charges:
- * "NETFLIX.COM 8473 CA" and "Netflix.com 1192 CA" both become "netflix com ca".
- * The SQL function merchant_key() (migration 003) does the same for bill matching.
- */
-export function merchantKey(tx: Pick<PastTransaction, 'merchantName' | 'name'>): string {
-  return (tx.merchantName ?? tx.name)
-    .toLowerCase()
-    .replace(/[0-9#*]+/g, ' ')
-    .replace(/[^a-z]+/g, ' ')
-    .trim()
-}
-
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
   const middle = Math.floor(sorted.length / 2)
@@ -100,6 +103,7 @@ function seriesOf(
   direction: 'out' | 'in',
   charges: PastTransaction[],
   today: IsoDate,
+  masks: AccountMasks,
 ): RecurringSeries | null {
   // Two charges on the same day (a split payment) count as one occurrence.
   const days = [...new Set(charges.map((c) => c.date))]
@@ -119,7 +123,7 @@ function seriesOf(
     direction === 'out' && !amountVaries && (band.cadence === 'month' || band.cadence === 'year')
   return {
     key,
-    name: last.merchantName ?? last.name,
+    name: merchantDisplayName(last, { masks }),
     direction,
     cadence: band.cadence,
     typicalAmountCents: typical,
@@ -132,16 +136,32 @@ function seriesOf(
   }
 }
 
+/** A series found, with the newest transaction in it. */
+interface Found<T extends PastTransaction> {
+  series: RecurringSeries
+  last: T
+}
+
 /**
  * Groups transactions by merchant and direction, and keeps the groups whose
  * dates repeat on a regular cadence and are still going. Sorted with the
- * soonest expected first.
+ * soonest expected first. Names show none of the account masks given.
  */
 export function detectRecurring(
   transactions: PastTransaction[],
   today: IsoDate,
+  masks: AccountMasks,
 ): RecurringSeries[] {
-  const groups = new Map<string, PastTransaction[]>()
+  return findSeries(transactions, today, masks).map(({ series }) => series)
+}
+
+/** detectRecurring, keeping each series' newest transaction beside it. */
+function findSeries<T extends PastTransaction>(
+  transactions: T[],
+  today: IsoDate,
+  masks: AccountMasks,
+): Found<T>[] {
+  const groups = new Map<string, T[]>()
   for (const tx of transactions) {
     const key = merchantKey(tx)
     if (!key || tx.amountCents === 0) continue
@@ -151,14 +171,18 @@ export function detectRecurring(
     if (charges) charges.push(tx)
     else groups.set(group, [tx])
   }
-  const found: RecurringSeries[] = []
+  const found: Found<T>[] = []
   for (const [group, charges] of groups) {
     const [direction, key] = group.split(/:(.*)/s) as ['out' | 'in', string]
     charges.sort((a, b) => a.date.localeCompare(b.date))
-    const series = seriesOf(key, direction, charges, today)
-    if (series) found.push(series)
+    const series = seriesOf(key, direction, charges, today, masks)
+    if (series) found.push({ series, last: charges.at(-1)! })
   }
-  return found.sort((a, b) => a.nextDate.localeCompare(b.nextDate) || a.key.localeCompare(b.key))
+  return found.sort(
+    (a, b) =>
+      a.series.nextDate.localeCompare(b.series.nextDate) ||
+      a.series.key.localeCompare(b.series.key),
+  )
 }
 
 /** How far back detection looks: long enough to see two yearly charges. */
@@ -169,15 +193,17 @@ const HISTORY_DAYS = 400
  * Transfers are left out: a monthly card payment is neither a bill nor, seen
  * from the card's side, a paycheck.
  */
-export async function recentHistory(db: Db, today: IsoDate): Promise<PastTransaction[]> {
-  const { rows } = await db.query<PastTransaction>(
+export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTransaction[]> {
+  const { rows } = await db.query<StoredTransaction>(
     `SELECT t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
-       t.category_id AS "categoryId"
+       t.category_id AS "categoryId",
+       t.provider_category_primary AS "providerCategoryPrimary",
+       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE NOT t.pending AND NOT t.excluded AND NOT a.hidden AND t.date BETWEEN $1 AND $2
-       AND (c.kind IS NULL OR c.kind <> 'transfer')
+       AND ${countedSql()}
      ORDER BY t.date`,
     [addDays(today, -HISTORY_DAYS), today],
   )
@@ -191,28 +217,72 @@ async function dismissedKeys(db: Db): Promise<Set<string>> {
   return new Set(rows.map((row) => row.key))
 }
 
-export async function dismissRecurring(db: Db, key: string): Promise<void> {
-  await db.query(
-    'INSERT INTO dismissed_recurring (merchant_key) VALUES ($1) ON CONFLICT DO NOTHING',
-    [key],
-  )
+/** Who asks for repeating charges: an assistant is given keys made from shown names. */
+interface Asker {
+  forAssistant?: boolean
+}
+
+/** A series not tracked or dismissed yet, with the key made from its shown name. */
+interface Untracked {
+  series: RecurringSeries
+  shownKey: string
 }
 
 /**
- * Series still repeating that are neither dismissed nor tracked yet. A series
- * is tracked when a bill's pattern, read the same way as merchant names, is
- * part of its key.
+ * Whether a bill tracks a series: its pattern, read as a merchant key, is
+ * part of the series' key. A bill that reads shown names is compared with the
+ * key made from the shown name, never the bank's text.
  */
-export async function untrackedRecurring(db: Db, today: IsoDate): Promise<RecurringSeries[]> {
-  const [history, dismissed, bills] = await Promise.all([
+function tracks(bill: Bill, { series, shownKey }: Untracked): boolean {
+  const pattern = bill.matchPattern ? textKey(bill.matchPattern) : ''
+  if (!pattern) return false
+  return (bill.reads === 'shown_name' ? shownKey : series.key).includes(pattern)
+}
+
+/** Series still repeating that are neither dismissed nor tracked by a bill yet. */
+async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
+  const [history, dismissed, bills, masks] = await Promise.all([
     recentHistory(db, today),
     dismissedKeys(db),
     listBills(db, today),
+    accountMasks(db),
   ])
-  const patterns = bills.flatMap((b) =>
-    b.matchPattern ? [merchantKey({ merchantName: b.matchPattern, name: '' })] : [],
-  )
-  return detectRecurring(history, today).filter(
-    (s) => !dismissed.has(s.key) && !patterns.some((p) => s.key.includes(p)),
+  return findSeries(history, today, masks)
+    .map(({ series, last }) => ({ series, shownKey: textKey(shownNameOf(last, masks)) }))
+    .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
+}
+
+/**
+ * Series still repeating that are neither dismissed nor tracked yet. An
+ * assistant gets each one keyed by its shown name ('' when it has no name the
+ * app can show), which is what it passes back to track or dismiss it.
+ */
+export async function untrackedRecurring(
+  db: Db,
+  today: IsoDate,
+  { forAssistant = false }: Asker = {},
+): Promise<RecurringSeries[]> {
+  const found = await untracked(db, today)
+  return found.map(({ series, shownKey }) => (forAssistant ? { ...series, key: shownKey } : series))
+}
+
+/**
+ * Stops suggesting a series. The owner's app passes the series' own key. An
+ * assistant passes the key it was given, which dismisses every series
+ * suggested now under that shown name, and is not found when none is.
+ */
+export async function dismissRecurring(
+  db: Db,
+  key: string,
+  today: IsoDate,
+  { forAssistant = false }: Asker = {},
+): Promise<void> {
+  const keys = forAssistant
+    ? (await untracked(db, today)).filter((f) => f.shownKey === key).map((f) => f.series.key)
+    : [key]
+  if (keys.length === 0) throw notFound('Recurring charge')
+  await db.query(
+    'INSERT INTO dismissed_recurring (merchant_key) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING',
+    [keys],
   )
 }

@@ -132,6 +132,41 @@ test.describe('overlap', () => {
       expect(await found(page, 'overlap'), hidden).toEqual([])
     }
   })
+
+  test('lets rows pass under a held sticky heading, but checks one in its place', async ({
+    page,
+  }) => {
+    // A day's heading kept in view over its rows, then a long way to scroll.
+    const day = (pull: string) =>
+      `<section>
+        <h2 style="position: sticky; top: 0; margin: 0 0 ${pull}; background: #fff; font-size: 16px">Today</h2>
+        ${['Corner market', 'Shell', 'Acme Payroll', 'Xcel Energy'].map((name) => `<p style="margin: 0; height: 40px">${name}</p>`).join('')}
+      </section>
+      <div style="height: 2000px"></div>`
+    // Still in its place, it must not cover the first row.
+    await fixture(page, day('-12px'))
+    expect(await found(page, 'overlap')).toEqual(['<h2> "Today" overlaps <p> "Corner market"'])
+
+    await fixture(page, day('0'))
+    expect(await found(page, 'overlap')).toEqual([])
+    // Stuck at the top as the rows go by, then pushed up by the day's end.
+    for (const y of [70, 400]) {
+      await page.evaluate((top) => window.scrollTo(0, top), y)
+      expect(await found(page, 'overlap'), `scrolled ${y}px`).toEqual([])
+    }
+  })
+
+  test('leaves alone the page behind a modal dialog, which is inert', async ({ page }) => {
+    const behind = (inert: string) =>
+      `<main ${inert}><p style="margin: 0">Groceries</p></main>
+      <div role="dialog" style="position: fixed; top: 0; left: 0; right: 0; background: #fff">
+        <h2 style="margin: 0">Amazon</h2>
+      </div>`
+    await fixture(page, behind(''))
+    expect(await found(page, 'overlap')).toEqual(['<p> "Groceries" rests under <div> "Amazon"'])
+    await fixture(page, behind('inert'))
+    expect(await found(page, 'overlap')).toEqual([])
+  })
 })
 
 test.describe('broken-word', () => {

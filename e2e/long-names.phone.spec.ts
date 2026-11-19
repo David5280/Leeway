@@ -1,97 +1,133 @@
 // Long names stay inside a phone screen: a long category ends in an ellipsis
-// in its picker, and a long unbroken description wraps instead of widening
-// the page.
+// in a transaction's sheet, and a long unbroken description ends in an
+// ellipsis on its row, and wraps in its sheet, instead of widening the page.
+// A long status on the overview's Categories widget wraps under its amounts
+// rather than squeeze a short category name to a letter or two.
 
-import { expect, test, type Locator, type Page } from '@playwright/test'
-import { addAccount, removeAccount } from './manual'
+import { expect, test, type Locator } from '@playwright/test'
+import { action, addAccount, addSpending, removeAccount } from './manual'
 import { IPHONE, NARROWEST, overflow } from './phone'
 
-/** Adds spending by hand to the named account. */
-async function addSpending(
-  page: Page,
-  spending: { account: string; description: string; category?: string },
-) {
-  await page.goto('/transactions')
-  await page.getByRole('button', { name: 'Add by hand' }).click()
-  const form = page.getByRole('form', { name: 'Add a transaction' })
-  await form.getByRole('textbox', { name: 'Description' }).fill(spending.description)
-  await form.getByRole('textbox', { name: 'Amount' }).fill('10.99')
-  await form.getByRole('combobox', { name: 'Account' }).selectOption(spending.account)
-  if (spending.category) {
-    await form.getByRole('combobox', { name: 'Category' }).selectOption(spending.category)
-  }
-  await form.getByRole('button', { name: 'Add' }).click()
+/** Checks that text stays inside the page's 16px gutters rather than spilling past its card. */
+async function expectInsideGutters(text: Locator, screenWidth: number) {
+  const box = await text.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(16)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(screenWidth - 16)
 }
 
-/** Checks that text wraps inside the page's 16px gutters rather than spilling past its card. */
-async function expectInsideGutters(text: Locator) {
-  const box = await text.boundingBox()
-  expect(box!.x + box!.width).toBeLessThanOrEqual(IPHONE.viewport.width - 16)
-}
+/** How a single line of text is set: cut short with an ellipsis, and whether it had to be. */
+const lineFit = (text: Locator) =>
+  text.evaluate((element: HTMLElement) => {
+    const style = getComputedStyle(element)
+    return {
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+      truncated: element.scrollWidth > element.clientWidth,
+    }
+  })
 
 test.describe('on the narrowest phone', () => {
   test.use(NARROWEST)
 
-  test('a long category name ends in an ellipsis inside its picker', async ({ page }) => {
+  test("a long category name ends in an ellipsis in a transaction's sheet", async ({ page }) => {
     await addAccount(page, { name: 'Ellipsis checking', balance: '100' })
     await addSpending(page, {
       account: 'Ellipsis checking',
       description: 'Music app',
+      amount: '10.99',
       category: 'Streaming and apps',
     })
 
-    const picker = page.getByRole('combobox', { name: 'Category for Music app' })
-    await expect(picker).toHaveValue(/.+/)
-    const fit = await picker.evaluate((select: HTMLSelectElement) => {
-      const style = getComputedStyle(select)
-      // The chosen name's width in the picker's own font, against the room left
-      // for text once the padding (and the chevron inside it) is taken out.
-      const context = document.createElement('canvas').getContext('2d')!
-      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-      const text = context.measureText(select.selectedOptions[0]!.text).width
-      const room =
-        select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-      const box = select.getBoundingClientRect()
-      return {
-        textOverflow: style.textOverflow,
-        whiteSpace: style.whiteSpace,
-        truncated: text > room,
-        inside: box.left >= 0 && box.right <= window.innerWidth,
-      }
-    })
-    expect(fit).toEqual({
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      truncated: true,
-      inside: true,
-    })
+    await page.getByRole('button', { name: /^Music app, spent/ }).click()
+    const sheet = page.getByRole('dialog', { name: 'Music app' })
+    const name = sheet.locator('.sheet-choice-name')
+    await expect(name).toHaveText('Streaming and apps')
+    expect(await lineFit(name)).toMatchObject({ textOverflow: 'ellipsis', whiteSpace: 'nowrap' })
+    const box = await sheet.getByRole('button', { name: /Streaming and apps/ }).boundingBox()
+    expect(box!.x + box!.width).toBeLessThanOrEqual(NARROWEST.viewport.width)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
 
+    await page.keyboard.press('Escape')
     await removeAccount(page, 'Ellipsis checking')
+  })
+
+  test("a long status wraps under a category's amounts, leaving its name whole", async ({
+    page,
+  }) => {
+    // Four letters, far over a small budget: "Over by $12,3xx" is the longest kind of status.
+    const kite = await action<{ id: string }>(page, 'create_category', {
+      name: 'Kite',
+      budgetCents: 1_000,
+    })
+    await addAccount(page, { name: 'Status checking', balance: '20000' })
+    await addSpending(page, {
+      account: 'Status checking',
+      description: 'Kite shop',
+      amount: '12345.67',
+      category: 'Kite',
+    })
+
+    await page.goto('/')
+    const row = page
+      .getByRole('region', { name: 'Categories', exact: true })
+      .locator('.cat-row')
+      .filter({ has: page.locator('.cat-label', { hasText: /^Kite$/ }) })
+    const status = row.locator('.cat-status')
+    // The budget is shared out over the period, so the exact figure moves day to day.
+    await expect(status).toHaveText(/^Over by \$12,\d{3}/)
+
+    // The name is whole, not cut to "K…".
+    const label = row.locator('.cat-label')
+    expect(await lineFit(label)).toMatchObject({ truncated: false })
+    // The status took a line of its own, and none of it is clipped or off the screen.
+    const amounts = (await row.locator('.cat-amounts').boundingBox())!
+    const shown = (await status.boundingBox())!
+    const figures = (await row.locator('.cat-summary').boundingBox())!
+    expect(shown.y).toBeGreaterThanOrEqual(amounts.y + amounts.height - 1)
+    expect(shown.x + shown.width).toBeLessThanOrEqual(figures.x + figures.width + 0.5)
+    await expectInsideGutters(status, NARROWEST.viewport.width)
+    expect(await overflow(page)).toBeLessThanOrEqual(0)
+
+    await removeAccount(page, 'Status checking')
+    await action(page, 'delete_category', { id: kite.id })
   })
 })
 
 test.describe('on an iPhone', () => {
   test.use(IPHONE)
 
-  test('a long unbroken description wraps inside the screen', async ({ page }) => {
-    // 120 characters with no space, like a bank's reference code.
-    const description = 'REF'.padEnd(120, '0123456789')
+  test('a long unbroken description ends in an ellipsis inside the screen', async ({ page }) => {
+    // 120 letters with no space. (Digits would be read as a reference number and dropped.)
+    const description = 'Ref'.padEnd(120, 'abcdefghij')
     await addAccount(page, { name: 'Unbroken checking', balance: '100' })
-    await addSpending(page, { account: 'Unbroken checking', description })
+    await addSpending(page, { account: 'Unbroken checking', description, amount: '10.99' })
 
     const list = page.getByRole('region', { name: 'Transaction list' })
     const name = list.getByText(description)
     await expect(name).toBeVisible()
-    // The name wraps inside the screen rather than spilling past its card.
-    await expectInsideGutters(name)
+    expect(await lineFit(name)).toEqual({
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      truncated: true,
+    })
+    await expectInsideGutters(name, IPHONE.viewport.width)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
 
-    // The overview's recent list shows it too.
+    // In its sheet, the text as written wraps inside the screen.
+    await name.click()
+    const sheet = page.getByRole('dialog', { name: description })
+    await sheet.getByText('Bank details').click()
+    const raw = sheet.locator('.bank-raw').first()
+    await expect(raw).toHaveText(description)
+    await expectInsideGutters(raw, IPHONE.viewport.width)
+    expect(await overflow(page)).toBeLessThanOrEqual(0)
+    await page.keyboard.press('Escape')
+
+    // The overview's recent list cuts it short too.
     await page.goto('/')
     const recent = page.getByRole('region', { name: 'Recent transactions' }).getByText(description)
     await expect(recent).toBeVisible()
-    await expectInsideGutters(recent)
+    await expectInsideGutters(recent, IPHONE.viewport.width)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
 
     await removeAccount(page, 'Unbroken checking')

@@ -21,13 +21,14 @@ export const TODAY = '2026-11-17'
 export function bill(
   fields: Partial<Bill> & { name: string; amountCents: number; anchorDate: string },
 ): Bill {
-  const { id, lastPaidDate, lastPaidCents, ...input } = fields
+  const { id, lastPaidDate, lastPaidCents, reads, ...input } = fields
   return scheduleOf(
     {
       // Test category ids are not UUIDs, so the category is checked apart from the schema.
       ...billInputSchema.parse({ cadence: 'month', ...input, categoryId: null }),
       categoryId: input.categoryId ?? null,
       id: id ?? `bill-${fields.name.toLowerCase()}`,
+      reads: reads ?? 'bank_text',
       lastPaidDate: lastPaidDate ?? null,
       lastPaidCents: lastPaidCents ?? null,
     },

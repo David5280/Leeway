@@ -70,8 +70,8 @@ describe('service worker push', () => {
     expect(scope.registration.showNotification).toHaveBeenCalledWith('Overdrawn', {
       body: 'Everyday is below zero.',
       tag: 'n1',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: '/icon-192.png?v=7fa9df39',
+      badge: '/icon-192.png?v=7fa9df39',
       data: { url: '/alerts' },
     })
   })

@@ -1,8 +1,7 @@
 // Starts Leeway: migrates the database, serves the app, and on timers syncs
 // banks, sends notifications and sends the weekly email.
 
-import { AnthropicSummaryWriter } from './ai/anthropic.js'
-import { AnthropicDocumentReader } from './ai/anthropicDocuments.js'
+import { aiServices } from './ai/services.js'
 import { PlaidProvider } from './bank/plaid.js'
 import { ConfigError, loadConfig, type Config } from './config.js'
 import type { AppContext } from './context.js'
@@ -16,7 +15,6 @@ import {
   runNotifier,
 } from './domain/notifications/notifier.js'
 import { getOwner } from './domain/owner.js'
-import { PaystubReader } from './domain/paystubs/reader.js'
 import { getSettings } from './domain/settings.js'
 import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
 import { syncAll } from './domain/sync.js'
@@ -54,20 +52,18 @@ await migrate(db)
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
 
+const now = () => new Date()
 const ctx: AppContext = {
   db,
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
-  writer: config.anthropic ? new AnthropicSummaryWriter(config.anthropic) : null,
-  paystubs: config.anthropic
-    ? new PaystubReader(new AnthropicDocumentReader(config.anthropic))
-    : null,
+  ...aiServices(config, db, now),
   mailer: config.mail ? new ResendSender(config.mail) : null,
   push: new WebPushSender({
     keys: () => loadVapidKeys(db, config.encryptionKey),
     publicUrl: config.publicUrl,
   }),
-  now: () => new Date(),
+  now,
 }
 
 // Until the owner account exists, creating it takes this code, shown only to

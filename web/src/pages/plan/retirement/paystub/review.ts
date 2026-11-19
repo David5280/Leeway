@@ -6,6 +6,7 @@
 
 import type { Input, Output } from '../../../../api/client'
 import { parseMoney } from '../../../../lib/format'
+import { typedAmount } from '../../../../lib/money'
 import type { RetirementView } from '../fields'
 import {
   HEIC_HELP,
@@ -24,7 +25,7 @@ import type {
   YearToDateField,
 } from '../../../../../../server/src/domain/paystubs/reading'
 
-export type { PaystubRead }
+export type { CurrentField, PaystubRead }
 export type Extraction = PaystubRead['extraction']
 export type Paystub = Input<'save_paystub'>['paystub']
 export type PaystubImport = Output<'get_paystub'>
@@ -45,7 +46,7 @@ export const CURRENT_LABELS: Record<CurrentField, string> = {
   grossPay: 'Gross pay',
   netPay: 'Take-home pay',
   pension: 'Pension, your share',
-  pensionEmployer: "Pension, employer's share",
+  pensionEmployer: 'Pension, paid by your employer',
   plan401k: '401(k)',
   plan457: '457',
   plan403b: '403(b)',
@@ -94,7 +95,7 @@ export interface ReviewText {
 
 /** Cents as the dollars a person types, to the cent: 384500 is "3845.00". */
 function centsText(cents: number | null): string {
-  return cents === null ? '' : (cents / 100).toFixed(2)
+  return cents === null ? '' : typedAmount(cents)
 }
 
 function figuresText<F extends string>(

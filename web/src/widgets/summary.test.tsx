@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { Output } from '../api/client'
-import { failing, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
+import { failing, fakeServer, holdRequest, renderSignedIn, settingsWith } from '../test/fake'
 import { Byline, SummaryWidget } from './Summary'
 
 type Summary = Output<'get_summary'>
@@ -31,6 +31,12 @@ describe('SummaryWidget', () => {
       '$900 is free until payday on Dec 1, after bills.',
       'Trip is 25% of the way there.',
     ])
+  })
+
+  it("writes the day the limit resets in the owner's own style", async () => {
+    fakeServer({ get_summary: () => summary({ ai: 'limit', limitResetsOn: '2026-12-01' }) })
+    renderSignedIn(<SummaryWidget />, { settings: settingsWith({ locale: 'en-GB' }) })
+    expect(await screen.findByText(/own summary until 1 Dec\./)).toBeInTheDocument()
   })
 
   it('leaves out the list when there are no points', async () => {
@@ -71,12 +77,36 @@ describe('Byline', () => {
     expect(byline({ ai: 'unavailable' })).toHaveTextContent("Claude couldn't write it just now")
   })
 
+  it("says the chosen model isn't available, and where to pick another", () => {
+    expect(byline({ ai: 'no_model' })).toHaveTextContent(
+      "The AI model chosen for the summary isn't available from Anthropic, so this is Leeway's own summary. Pick another in Settings, then AI models.",
+    )
+    expect(screen.getByRole('link', { name: 'Settings, then AI models' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+  })
+
   it('points to Settings when the key is missing or the AI summary is off', () => {
     expect(byline({ ai: 'no_key' })).toHaveTextContent('needs an Anthropic key')
     expect(screen.getByRole('link', { name: 'Settings, then AI assistant' })).toHaveAttribute(
       'href',
       '/settings/assistant',
     )
+  })
+
+  it('says the monthly AI limit is reached, until when, and where to raise it', () => {
+    expect(byline({ ai: 'limit', limitResetsOn: '2026-12-01' })).toHaveTextContent(
+      "This month's AI limit is reached, so this is Leeway's own summary until Dec 1. See Settings, then AI models.",
+    )
+    expect(screen.getByRole('link', { name: 'Settings, then AI models' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+  })
+
+  it('leaves out the day when the server gives none', () => {
+    expect(byline({ ai: 'limit' })).toHaveTextContent("Leeway's own summary. See Settings")
   })
 
   it('offers to have Claude write it when off', () => {

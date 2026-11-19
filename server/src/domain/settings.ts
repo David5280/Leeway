@@ -5,6 +5,7 @@ import type { Db } from '../db/pool.js'
 import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
+import { aiSettingsSchema } from './ai/settings.js'
 import type { PeriodConfig } from '../lib/periods.js'
 import { retirementPatchSchema, retirementSchema } from './retirement/assumptions.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
@@ -172,6 +173,11 @@ export const settingsSchema = z.object({
    * so it is left out of settingsPatchSchema, and of imports and agents with it.
    */
   aiSummary: z.boolean().default(false),
+  /**
+   * The model for each AI job and the monthly limit on AI spending (ai/settings.ts).
+   * Owner-only for the same reason, and kept out of settingsPatchSchema with it.
+   */
+  ai: aiSettingsSchema.default(aiSettingsSchema.parse({})),
   savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
   /** Assumptions for retirement projections (retirement/assumptions.ts). */
   retirement: retirementSchema.default(retirementSchema.parse({})),

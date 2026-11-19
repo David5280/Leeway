@@ -674,28 +674,6 @@ select.input {
   color: var(--ink);
 }
 
-/* A rule in a rules list: its number, what it matches over where matches
-   go, then its buttons. When the row is too narrow for the text beside the
-   buttons, they drop to a line of their own under it, at the right, so the
-   text keeps the row's width; a long pattern with no spaces wraps rather
-   than widening the row. */
-.rule-row {
-  flex-wrap: wrap;
-}
-
-.rule-text {
-  flex: 1 1 12em;
-  min-width: 0;
-  gap: 2px;
-  overflow-wrap: break-word;
-}
-
-.rule-actions {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
 /* A starter category in setup: its amount drops under its name on a narrow phone. */
 .starter-item {
   flex-wrap: wrap;
@@ -819,15 +797,30 @@ button.chip {
 }
 
 .switch {
+  /* The button is the pressable box; the track and knob are drawn inside it, so
+     on a touch screen the box grows to --tap (design.css) and the look stays. */
+  position: relative;
   width: 48px;
   height: 28px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: none;
+  cursor: pointer;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 14px);
+  left: 0;
+  width: 48px;
+  height: 28px;
+  box-sizing: border-box;
   border-radius: 99px;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  position: relative;
-  cursor: pointer;
-  flex: none;
-  padding: 0;
 }
 
 /* The switch draws 28px tall but takes taps across 44px, Apple's smallest comfortable tap. */
@@ -840,8 +833,8 @@ button.chip {
 .switch::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 4px;
+  top: calc(50% - 10px);
   width: 20px;
   height: 20px;
   border-radius: 99px;
@@ -849,7 +842,7 @@ button.chip {
   transition: transform 0.15s;
 }
 
-.switch[aria-checked='true'] {
+.switch[aria-checked='true']::before {
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -983,6 +976,13 @@ button.chip {
   align-items: center;
   gap: 14px;
   padding: 12px 14px;
+}
+
+/* An account on the home screen: its name and detail, the line of its recent
+   balance, then the balance itself, in one row (a .clickrow stacks). */
+.account-row {
+  flex-direction: row;
+  align-items: center;
 }
 
 .alert-icon {
@@ -1390,6 +1390,134 @@ details.more[open] summary {
   }
 }
 
+/*
+ * Settings > AI models (settings/ai/): a ring for this month's spending, the
+ * limit, and a list of models per job. Every control is at least 44px tall,
+ * so each is easy to hit with a thumb.
+ */
+.ring {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring svg {
+  position: absolute;
+  inset: 0;
+}
+
+.ring-text {
+  position: relative;
+  font: 600 15px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-usage {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ai-usage-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-usage-total {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-models .btn,
+.ai-models .input,
+.ai-alert .btn {
+  min-height: 44px;
+}
+
+/* In the card the alert lines up with the rest; in Heads up it keeps the row's padding. */
+.ai-models .ai-alert {
+  padding: 0;
+}
+
+.ai-models .figures {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The "$" sits just before the amount, which has room for "1000.00" and no more. */
+.ai-limit {
+  flex-wrap: nowrap;
+}
+
+.ai-limit-unit {
+  color: var(--muted);
+}
+
+.ai-limit .input {
+  width: 110px;
+}
+
+.ai-job {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.ai-job legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.model-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.model-choice:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.model-choice:has(input:disabled) {
+  cursor: default;
+}
+
+.model-choice input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.model-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-choice-text .badge {
+  margin-left: 8px;
+}
+
 /* Phones */
 
 /* The narrowest phones (320pt, the first iPhone SE): cards give their
@@ -1588,6 +1716,50 @@ details.more[open] summary {
   font-size: 14px;
 }
 
+/* A home widget row keeps room for its name, five letters or so at the
+   least, however long its status: the figures wrap instead. */
+.cat-row-wrap {
+  grid-template-columns: minmax(min(7em, 50%), 1fr) minmax(0, auto);
+}
+
+/* The home widget's figures: the amounts, a dot, then the status, which
+   wraps under the amounts when the row is too narrow for both. A wrapped dot
+   would end the first line, so the items reach one dot's width past the
+   figures, which clip that strip: the dot falls in it, while the status
+   keeps clear of it by the same width. */
+.cat-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.cat-summary-items {
+  --cat-sep: 0.9em;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  row-gap: 2px;
+  margin-right: calc(-1 * var(--cat-sep));
+}
+
+.cat-amounts {
+  white-space: nowrap;
+}
+
+.cat-sep {
+  flex: none;
+  inline-size: var(--cat-sep);
+  text-align: center;
+}
+
+/* A status too long even for a line of its own wraps within it. */
+.cat-status {
+  min-width: 0;
+  margin-right: var(--cat-sep);
+  text-align: right;
+}
+
 /* A Budgets screen row: the same grid, plus a line of plain words under it. */
 .cat-row.budget-row {
   grid-template-areas:
@@ -1646,6 +1818,20 @@ details.more[open] summary {
 
   .cat-bar:empty {
     display: block;
+  }
+
+  /* The home widget's rows share the list's columns, so every bar starts and
+     ends in the same place, however long one row's status. The figures
+     column is as wide as the widest row's figures needs. */
+  .cat-rows:has(> .cat-row-wrap) {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(90px, 1.5fr) minmax(200px, auto);
+    column-gap: 16px;
+  }
+
+  .cat-rows > .cat-row-wrap {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
   }
 }
 
@@ -1981,6 +2167,16 @@ details.more[open] summary {
   }
 }
 
+/* On a short screen, like a phone turned sideways, the side menu's links
+   stand taller than the screen. Held in place, its last links would stay
+   below the screen however far the page scrolls, so it scrolls with the
+   page instead. */
+@media (min-width: 821px) and (max-height: 520px) {
+  .settings-menu {
+    position: static;
+  }
+}
+
 @media (max-width: 560px) {
   /* A setting's control goes under its label, full width, rather than wrapping beside it. */
   .setting {
@@ -2260,12 +2456,6 @@ details.more[open] summary {
     display: none;
   }
 
-  /* The Settings menu scrolls with the page: held in place, its last groups
-     would sit below the screen's bottom edge, out of reach. */
-  .settings-menu {
-    position: static;
-  }
-
   h1 {
     font-size: 24px;
   }
@@ -2340,4 +2530,12 @@ details.more[open] summary {
     padding-left: 16px;
     margin-left: -16px;
   }
+}
+
+/*
+ * The home-screen widget's setup (Settings > Widget). Every control is at
+ * least 44px tall, so each is easy to hit with a thumb.
+ */
+.widget-setup .btn {
+  min-height: 44px;
 }

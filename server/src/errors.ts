@@ -16,6 +16,7 @@ export type ErrorCode =
   | 'file_too_large'
   | 'unsupported_file'
   | 'reader_error'
+  | 'ai_limit'
 
 const STATUS: Record<ErrorCode, number> = {
   invalid_input: 400,
@@ -32,6 +33,7 @@ const STATUS: Record<ErrorCode, number> = {
   file_too_large: 413,
   unsupported_file: 415,
   reader_error: 502,
+  ai_limit: 429,
 }
 
 export class AppError extends Error {

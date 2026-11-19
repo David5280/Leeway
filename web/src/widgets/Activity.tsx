@@ -2,6 +2,8 @@
 
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
+import { Money } from '../components/design/Money'
+import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, Progress } from '../components/ui'
 import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
@@ -34,8 +36,10 @@ export function RecentWidget({ budget }: WidgetProps) {
 }
 
 export function AccountsWidget() {
-  const { exact } = useApp()
   const accounts = useAction('list_accounts')
+  // The line of each balance is a nicety: the list shows without it.
+  const recent = useAction('list_recent_balances')
+  const lines = new Map(recent.data?.map((one) => [one.accountId, one.balancesCents]))
   return (
     <Card label="Accounts" className="stack-sm">
       <div className="row-between">
@@ -50,7 +54,7 @@ export function AccountsWidget() {
         <Link
           key={account.id}
           to={accountPath(account.id)}
-          className={`list-row clickrow ${account.hidden ? 'muted' : ''}`}
+          className={`list-row clickrow account-row ${account.hidden ? 'muted' : ''}`}
         >
           <span className="grow stack-sm" style={{ gap: 0 }}>
             <span className="ellipsis">{account.name}</span>
@@ -59,10 +63,17 @@ export function AccountsWidget() {
               {account.hidden && ' · ignored for budgets'}
             </span>
           </span>
+          <Sparkline values={lines.get(account.id) ?? []} />
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
-            <span className={overdrawn(account) ? 'num over' : 'num'}>
-              {account.balanceCents === null ? 'No balance' : exact(account.balanceCents)}
-            </span>
+            {account.balanceCents === null ? (
+              <span>No balance</span>
+            ) : (
+              <Money
+                cents={account.balanceCents}
+                precision="cents"
+                tone={overdrawn(account) ? 'problem' : undefined}
+              />
+            )}
             {isOwed(account) && account.balanceCents !== null && (
               <span className="small muted">owed</span>
             )}
@@ -85,11 +96,11 @@ export function MerchantsWidget({ offset }: WidgetProps) {
         <div key={m.merchant} className="stack-sm" style={{ padding: '6px 0' }}>
           <div className="row-between">
             <span>{m.merchant}</span>
-            <span className="num">{money(m.spentCents)}</span>
+            <Money cents={m.spentCents} />
           </div>
           <Progress
             percent={(m.spentCents / top) * 100}
-            label={`${m.merchant}: ${money(m.spentCents)}`}
+            aria-label={`${m.merchant}: ${money(m.spentCents)}`}
           />
         </div>
       ))}

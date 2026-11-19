@@ -9,6 +9,7 @@ import {
   summarizeAccountsAction,
   updateAccountAction,
 } from './accounts.js'
+import { dismissAiAlertAction, getAiUsageAction, setAiLimitAction, setAiModelAction } from './ai.js'
 import {
   createBillAction,
   deleteBillAction,
@@ -59,7 +60,12 @@ import {
   unsubscribePushAction,
   updateNotificationSettingsAction,
 } from './notifications.js'
-import { getCashFlowAction, getNetWorthAction, planDebtPayoffAction } from './planning.js'
+import {
+  getCashFlowAction,
+  getNetWorthAction,
+  listRecentBalancesAction,
+  planDebtPayoffAction,
+} from './planning.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -93,6 +99,7 @@ import {
   starterCategoriesAction,
 } from './setup.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
+import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
   getWeeklyEmailAction,
   sendTestWeeklyEmailAction,
@@ -123,6 +130,10 @@ export const actionList = [
   getSettingsAction,
   updateSettingsAction,
   setAiSummaryAction,
+  getAiUsageAction,
+  setAiModelAction,
+  setAiLimitAction,
+  dismissAiAlertAction,
   getWeeklyEmailAction,
   setWeeklyEmailAction,
   sendTestWeeklyEmailAction,
@@ -182,6 +193,7 @@ export const actionList = [
   listGoalContributionsAction,
   deleteGoalAction,
   getNetWorthAction,
+  listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
   listConnectionsAction,
@@ -198,6 +210,9 @@ export const actionList = [
   listTokensAction,
   createTokenAction,
   deleteTokenAction,
+  getWidgetTokenAction,
+  createWidgetTokenAction,
+  revokeWidgetTokenAction,
   listConnectedAppsAction,
   disconnectAppAction,
   getConnectRequestAction,

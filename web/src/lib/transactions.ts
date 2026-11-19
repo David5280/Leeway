@@ -1,42 +1,31 @@
-// How a transaction reads in a list: its title, what kind of move it is, and its tone.
+// How a transaction reads on screen: whether its amount is money in, money
+// out or money only moved, what kind of move it is, how it is described to a
+// screen reader, and what a rule made from it matches. Its name comes from
+// the server (Transaction.displayName), the one place names are cleaned.
 
 import type { Category, Transaction } from '../api/client'
-import { daysBetween } from './dates'
+import type { MoneySign } from './money'
 
 type CategoryKind = Category['kind'] | null
 
 /**
- * Money in, money out, or money only moved between your own accounts. A
- * transfer is never styled as money in, so a card payment arriving on the
- * card cannot read as money earned.
+ * Whether a transaction only moved money between the owner's own accounts.
+ * The one test, as on the server (counted.ts): it is filed under a transfer
+ * category, which a paired transfer always is. The server shows a pair's
+ * other side only then, so the two never disagree. A move is neither money
+ * in nor money out.
  */
-export type AmountTone = 'in' | 'out' | 'moved'
-
-export function amountTone(tx: Pick<Transaction, 'amountCents'>, kind: CategoryKind): AmountTone {
-  if (kind === 'transfer') return 'moved'
-  return tx.amountCents < 0 ? 'in' : 'out'
-}
-
-/** The class an amount is shown with for its tone. */
-export function amountClass(tone: AmountTone): string {
-  if (tone === 'in') return 'num good'
-  if (tone === 'moved') return 'num muted'
-  return 'num'
+export function isMove(kind: CategoryKind): boolean {
+  return kind === 'transfer'
 }
 
 /**
- * The line a transaction is listed under. A payment between people names
- * the other person, and which way the money went comes from the amount, so
- * money received from someone always reads "From", never "To".
+ * How a transaction's amount is signed by <Money>: a move has no sign and a
+ * quiet tone, so a card payment arriving on the card never reads as money
+ * earned; anything else reads as a bank amount, "+" for money in.
  */
-export function transactionTitle(
-  tx: Pick<Transaction, 'name' | 'merchantName' | 'person'>,
-): string {
-  const person = tx.person
-  if (person?.counterparty) {
-    return `${person.direction === 'in' ? 'From' : 'To'} ${person.counterparty}`
-  }
-  return tx.merchantName ?? tx.name
+export function amountSign(kind: CategoryKind): MoneySign {
+  return isMove(kind) ? 'transfer' : 'transaction'
 }
 
 const CARD_PAYMENT_CODE = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -46,7 +35,7 @@ export function movementTag(
   tx: Pick<Transaction, 'bankCategory' | 'person'>,
   kind: CategoryKind,
 ): string | null {
-  if (kind === 'transfer') {
+  if (isMove(kind)) {
     return tx.bankCategory === CARD_PAYMENT_CODE ? 'Card payment' : 'Transfer'
   }
   if (tx.person) {
@@ -55,32 +44,86 @@ export function movementTag(
   return null
 }
 
-/** How far apart, in days, the two sides of one move may post. */
-const PAIR_WINDOW_DAYS = 5
-
-type Pairable = Pick<Transaction, 'id' | 'accountId' | 'date' | 'amountCents'>
+/** What happened to the money, as a word a screen reader says before the amount. */
+export function amountVerb(tx: Pick<Transaction, 'amountCents'>, kind: CategoryKind): string {
+  if (isMove(kind)) return 'moved'
+  return tx.amountCents < 0 ? 'received' : 'spent'
+}
 
 /**
- * Matches the two sides of each transfer: the money leaving one account and
- * the same amount arriving in another within a few days, like a card payment
- * out of checking and its arrival on the card. Only the given transfers are
- * considered, and each side pairs at most once, closest dates first.
- * Returns each paired transaction's partner, by id.
+ * Everything a list row shows, read in one go: "Blue Bottle, spent $5.75,
+ * Chase Total Checking, Coffee, pending". `amount` is the formatted amount.
+ * A transaction left out of totals says so at the end.
  */
-export function pairTransfers<T extends Pairable>(transfers: T[]): Map<string, T> {
-  const candidates: [T, T, number][] = []
-  for (const out of transfers.filter((tx) => tx.amountCents > 0)) {
-    for (const arrival of transfers) {
-      if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) continue
-      const gap = Math.abs(daysBetween(out.date, arrival.date))
-      if (gap <= PAIR_WINDOW_DAYS) candidates.push([out, arrival, gap])
+export function rowLabel(
+  tx: Pick<Transaction, 'displayName' | 'accountName' | 'pending' | 'excluded' | 'amountCents'>,
+  category: Pick<Category, 'name' | 'kind'> | undefined,
+  amount: string,
+): string {
+  const kind = category?.kind ?? null
+  return [
+    tx.displayName,
+    `${amountVerb(tx, kind)} ${amount}`,
+    tx.accountName,
+    category?.name ?? 'needs a category',
+    tx.pending ? 'pending' : '',
+    tx.excluded ? 'not counted in totals' : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+}
+
+/**
+ * The text an "Always categorize" rule matches. Rules match the bank's own
+ * merchant name or description, so the clean name is used where that text
+ * contains it ("Blue Bottle" inside "SQ *BLUE BOTTLE 0412"). Otherwise it is
+ * the part of the bank's text that stays the same from one charge to the
+ * next: its first run of words with no number in them, so a reference or
+ * store number never ties the rule to a single transaction ("XFER 1234 REF
+ * 99" gives "XFER"). The clean name stands in when no such words are left.
+ */
+export function rulePattern(
+  tx: Pick<Transaction, 'displayName' | 'merchantName' | 'name'>,
+): string {
+  const matched = tx.merchantName ?? tx.name
+  if (matched.toLowerCase().includes(tx.displayName.toLowerCase())) return tx.displayName
+  return steadyPart(matched) || tx.displayName
+}
+
+/** A word that holds a digit or stands for hidden ones: a reference, store number or mask. */
+const NUMBERED = /\p{N}|^[x*.…•#]{2,}$/iu
+
+/**
+ * The first run of the text's words that holds a letter and no number, with
+ * its spacing as the bank wrote it, so a rule's "contains" still finds it.
+ */
+function steadyPart(text: string): string {
+  // Words sit at the even places, the spaces between them at the odd ones.
+  const parts = text.split(/(\s+)/)
+  let run = ''
+  for (let index = 0; index < parts.length; index += 2) {
+    const word = parts[index]!
+    if (!NUMBERED.test(word)) {
+      run += word + (parts[index + 1] ?? '')
+      continue
     }
+    if (/\p{L}/u.test(run)) break
+    run = ''
   }
-  const partners = new Map<string, T>()
-  for (const [out, arrival] of candidates.sort((a, b) => a[2] - b[2])) {
-    if (partners.has(out.id) || partners.has(arrival.id)) continue
-    partners.set(out.id, arrival)
-    partners.set(arrival.id, out)
-  }
-  return partners
+  // Punctuation left at either end, as in "SQ *", ties the rule to nothing.
+  return /\p{L}/u.test(run) ? run.replace(/^[\s*#\-–,.:;/]+|[\s*#\-–,.:;/]+$/g, '') : ''
+}
+
+/**
+ * The net of a day's transactions that count toward totals: money moved
+ * between accounts and transactions left out of totals are skipped. Positive
+ * is money out, like the amounts themselves.
+ */
+export function dayNet(
+  transactions: Pick<Transaction, 'amountCents' | 'excluded' | 'categoryId'>[],
+  kindOf: (categoryId: string | null) => CategoryKind,
+): number {
+  return transactions
+    .filter((tx) => !tx.excluded && !isMove(kindOf(tx.categoryId)))
+    .reduce((sum, tx) => sum + tx.amountCents, 0)
 }

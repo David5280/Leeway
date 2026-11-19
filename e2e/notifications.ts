@@ -3,7 +3,7 @@
 // push actions that would store or reach a device are answered here, so the
 // server never holds a push address and its notifier has nothing to send.
 
-import type { Page, Route } from '@playwright/test'
+import { expect, type Page, type Route } from '@playwright/test'
 import { LONG } from './seed'
 
 /** The address the fake browser subscribes with; it is never sent to the server. */
@@ -144,4 +144,15 @@ export async function fakeLongInbox(page: Page) {
   await page.route('**/api/actions/count_notifications', (route) =>
     route.fulfill({ json: { result: { unread: 2 } } }),
   )
+}
+
+/** Push already on for this browser, faked on both sides (fakePushBrowser and fakePushServer). */
+export async function pushOnThisDevice(page: Page): Promise<void> {
+  await fakePushBrowser(page, { subscribed: true })
+  await fakePushServer(page, { subscribed: true })
+}
+
+/** Waits for Settings to show push as on here, with its test button. */
+export async function seePushOn(page: Page): Promise<void> {
+  await expect(page.getByRole('button', { name: 'Send a test notification' })).toBeVisible()
 }

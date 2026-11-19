@@ -1,8 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
+import { recategorize } from '../src/domain/categorize.js'
 import { createSession, resetPassword } from '../src/domain/owner.js'
+import { createRule, ruleFieldsSchema } from '../src/domain/rules.js'
 import { createToken } from '../src/domain/tokens.js'
+import { listTransactions, transactionFilterSchema } from '../src/domain/transactions.js'
 import { buildApp } from '../src/http/app.js'
 import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
@@ -291,6 +295,216 @@ describe('MCP endpoint', () => {
     expect(bad.json().result).toMatchObject({ isError: true })
   })
 
+  it("never shows an assistant an account's number from a transaction's bank text", async () => {
+    const { accountId: checking } = await insertBankAccount(ctx.db, {
+      name: 'Checking',
+      mask: '9876',
+    })
+    const { accountId: savings } = await insertBankAccount(ctx.db, {
+      name: 'Savings',
+      mask: '4417',
+    })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    // Each side names the other account's number, not its own.
+    await insertBankTransaction(ctx.db, savings, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    await insertBankTransaction(ctx.db, checking, {
+      date: day(1),
+      name: 'ONLINE TRANSFER TO SAV XXXXXX4417 REF 31677300112',
+      amountCents: 50000,
+      primary: 'TRANSFER_OUT',
+    })
+    // A person paid through Zelle, named with the savings mask split by a letter.
+    await insertBankTransaction(ctx.db, checking, {
+      date: day(1),
+      name: 'Zelle payment from JANE 441X7 DOE',
+      amountCents: -2500,
+      primary: 'TRANSFER_IN',
+    })
+    // A monthly charge whose merchant name carries a number, for the merchant and recurring tools.
+    for (const back of [2, 32, 62]) {
+      await insertBankTransaction(ctx.db, checking, {
+        date: day(back),
+        name: 'GYM DUES',
+        merchantName: 'Iron Gym 98 76',
+        amountCents: 4000,
+      })
+    }
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const calls: [string, Record<string, unknown>][] = [
+      ['list_transactions', {}],
+      ['preview_rule', { field: 'description', matchType: 'contains', pattern: 'transfer' }],
+      ['top_merchants', {}],
+      ['find_recurring', {}],
+      ['summarize_accounts', {}],
+    ]
+    for (const [name, args] of calls) {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      const result = response.json().result
+      expect(result.isError, name).toBeFalsy()
+      const text = result.content[0].text as string
+      expect(withoutUuids(text), name).not.toMatch(/9\D?8\D?7\D?6|4\D?4\D?1\D?7|31677300112/)
+      expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
+    }
+    const people = await rpc(token, 'tools/call', { name: 'list_transactions', arguments: {} })
+    expect(people.json().result.content[0].text).toContain('From Jane Doe')
+
+    // An import names its account, and its file is named by the account's number.
+    const { token: writer } = await createToken(ctx.db, 'Coach', 'write')
+    const imported = await rpc(writer, 'tools/call', {
+      name: 'import_transactions',
+      arguments: {
+        accountId: savings,
+        fileName: 'Chase4417_Activity20261119.CSV',
+        rows: [{ date: day(3), name: 'Deposit', amountCents: -1_000 }],
+      },
+    })
+    const listed = await rpc(token, 'tools/call', { name: 'list_imports', arguments: {} })
+    for (const response of [imported, listed]) {
+      const text = response.json().result.content[0].text as string
+      expect(text).toContain('Test Savings')
+      expect(withoutUuids(text)).not.toMatch(/4417|"(mask|bankName|fileName)"/)
+    }
+
+    // The owner's own app still has the bank's text, for a transaction's details.
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({}))
+    expect(own.transactions.map((tx) => tx.name)).toContain('ONLINE TRANSFER FROM CHK XXXXXX9876')
+  })
+
+  it("finds nothing for an assistant by an account's digits, which only the bank's text holds", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '9876' })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    for (const back of [2, 3, 4]) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date: day(back),
+        name: 'GYM DUES 9876',
+        merchantName: 'Iron Gym',
+        amountCents: 4000,
+      })
+    }
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const tool = async (name: string, args: Record<string, unknown>) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      return JSON.parse(response.json().result.content[0].text)
+    }
+
+    // The digits match no display name, so a search and a rule preview find nothing.
+    expect(await tool('list_transactions', { search: '9876' })).toEqual({
+      transactions: [],
+      total: 0,
+    })
+    const preview = { field: 'description', matchType: 'contains', pattern: '9876' }
+    expect(await tool('preview_rule', preview)).toMatchObject({ matchCount: 0 })
+    // What the assistant can read still matches, a page at a time.
+    const gym = await tool('list_transactions', { search: 'iron', limit: 2, offset: 1 })
+    expect(gym.total).toBe(3)
+    expect(gym.transactions.map((tx: { date: string }) => tx.date)).toEqual([day(3), day(4)])
+    expect(await tool('preview_rule', { ...preview, pattern: 'iron gym' })).toMatchObject({
+      matchCount: 3,
+    })
+    await ctx.db.query(`UPDATE transactions SET note = 'Paid for the year' WHERE date = $1`, [
+      day(4),
+    ])
+    expect((await tool('list_transactions', { search: 'the year' })).total).toBe(1)
+
+    // The owner's own app searches the bank's text, as the details show it.
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({ search: '9876' }))
+    expect(own.total).toBe(4)
+  })
+
+  it("learns nothing from a rule an assistant builds on an account's digits, through any field", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '9876' })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    for (const back of [2, 3]) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date: day(back),
+        name: 'GYM DUES 9876',
+        merchantName: 'Iron Gym',
+        amountCents: 4000,
+      })
+    }
+    // The owner's own rule, reading the bank's text, for the assistant to rewrite.
+    const fitness = await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Fitness' }))
+    const owners = await createRule(ctx.db, {
+      ...ruleFieldsSchema.parse({ pattern: 'gym dues', categoryId: fitness.id }),
+      field: 'description',
+    })
+    await recategorize(ctx.db)
+
+    const { token } = await createToken(ctx.db, 'Coach', 'write')
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      return JSON.parse(response.json().result.content[0].text)
+    }
+    // Everything an assistant can read about the transactions, every field.
+    const everything = () => tool('list_transactions', { includeExcluded: true })
+    const before = await everything()
+    expect(before.total).toBe(3)
+
+    // A rule on the digits does exactly what one on letters found nowhere does: nothing.
+    const digits = { field: 'description', pattern: '9876', categoryId: fitness.id }
+    const nowhere = { ...digits, pattern: 'qqqq' }
+    for (const fields of [digits, nowhere]) {
+      expect(await tool('preview_rule', fields)).toEqual({
+        matchCount: 0,
+        examples: [],
+        wouldMove: 0,
+        movingFrom: [],
+      })
+      const made = await tool('create_rule', fields)
+      expect(made).toMatchObject({ rule: { reads: 'shown_name' }, recategorized: 0 })
+      expect(await everything()).toEqual(before)
+    }
+
+    // Rewriting the owner's rule onto the digits is the same as onto letters found nowhere.
+    const rewritten = await tool('update_rule', { id: owners.id, pattern: '9876' })
+    expect(rewritten.rule.reads).toBe('shown_name')
+    const afterDigits = await everything()
+    expect(await tool('update_rule', { id: owners.id, pattern: 'qqqq' })).toMatchObject({
+      recategorized: 0,
+    })
+    expect(await everything()).toEqual(afterDigits)
+
+    // A backup the assistant imports cannot bring back a rule that reads bank text.
+    const bankRule = { field: 'description', pattern: 'gym dues', category: 'Fitness' }
+    const imported = await tool('import_config', {
+      config: { app: 'leeway', version: 1, rules: [{ ...bankRule, reads: 'bank_text' }] },
+      mode: 'merge',
+    })
+    expect(imported).toMatchObject({ rulesAdded: 1 })
+    expect(await everything()).toEqual(afterDigits)
+    const reads = (await tool('list_rules')).map((rule: { reads: string }) => rule.reads)
+    expect(reads).toEqual(['shown_name', 'shown_name', 'shown_name', 'shown_name'])
+
+    // The owner's own rule on the digits reads the bank's text, and finds them.
+    await createRule(ctx.db, {
+      ...ruleFieldsSchema.parse({ pattern: '9876', categoryId: fitness.id }),
+      field: 'description',
+    })
+    await recategorize(ctx.db)
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({}))
+    expect(own.transactions.every((tx) => tx.categoryId === fitness.id)).toBe(true)
+  })
+
   it('never hands an agent an account mask, from any tool, error results included', async () => {
     // A bank name that repeats the number, overdrawn so alerts and summaries name it too.
     const { accountId } = await insertBankAccount(ctx.db, {
@@ -303,6 +517,13 @@ describe('MCP endpoint', () => {
       date: '2026-11-02',
       name: 'Coffee',
       amountCents: 1_000,
+    })
+    // Bank text that names the account by its number, as a transfer's does.
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-03',
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -5_000,
+      primary: 'TRANSFER_IN',
     })
     // A pension at the bank, its number in its name too, for the retirement tools.
     const pension = await insertBankAccount(ctx.db, {

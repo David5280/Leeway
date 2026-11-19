@@ -4,6 +4,7 @@ import type pg from 'pg'
 import type { Config } from './config.js'
 import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
+import type { AiGateway } from './domain/ai/gateway.js'
 import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
 import type { PushSender } from './push/sender.js'
@@ -18,6 +19,11 @@ export interface AppContext {
   config: Config
   /** Null until Plaid keys are configured. */
   bank: BankProvider | null
+  /**
+   * The AI usage layer every paid model call goes through. Null until
+   * ANTHROPIC_API_KEY is set, and so are the writer and the paystub reader.
+   */
+  ai: AiGateway | null
   /** Null until ANTHROPIC_API_KEY is set; the summary then uses Leeway's own words. */
   writer: SummaryWriter | null
   /** Null until ANTHROPIC_API_KEY is set; paystub import is then hidden. */
@@ -32,4 +38,11 @@ export interface AppContext {
    */
   afterBankUpdate?: () => void
   now: () => Date
+  /**
+   * True when an AI agent called, through the MCP endpoint. An agent never
+   * reads the bank's own text (see mcp/withoutBankText.ts), so nothing it
+   * asks may match that text either: a search for "4417" would otherwise say
+   * which transactions carry an account's last digits.
+   */
+  agent?: boolean
 }

@@ -17,6 +17,17 @@ describe('describeRule', () => {
     )
   })
 
+  it("reads an assistant's rule by the shown name, whatever its field", () => {
+    const rule = { matchType: 'contains', pattern: 'Blue Bottle', reads: 'shown_name' } as const
+    expect(describeRule({ ...rule, field: 'description' })).toBe(
+      'Shown name contains "Blue Bottle"',
+    )
+    expect(describeRule({ ...rule, field: 'merchant' })).toBe('Shown name contains "Blue Bottle"')
+    expect(describeRule({ ...rule, field: 'merchant', reads: 'bank_text' })).toBe(
+      'Merchant contains "Blue Bottle"',
+    )
+  })
+
   it('keeps the pattern exactly as typed, quotes included', () => {
     expect(
       describeRule({ field: 'merchant', matchType: 'contains', pattern: 'Joe\'s "Diner"' }),

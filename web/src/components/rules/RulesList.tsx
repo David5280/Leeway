@@ -32,16 +32,17 @@ export function RulesList({
   }
 
   return (
-    <section className="card stack-sm" aria-label="Rules">
+    <section className="card stack-sm rules-list" aria-label="Rules">
       <div className="row-between">
         <h2>{categoryId ? 'Rules' : 'Your rules'}</h2>
-        <button type="button" className="linkbtn" onClick={onNew}>
+        <button type="button" className="linkbtn rules-new" onClick={onNew}>
           + New rule
         </button>
       </div>
       {rules.isSuccess && shown.length === 0 && (
         <p className="empty small">
-          No rules yet. Pick "Make a rule" on any transaction to file ones like it automatically.
+          No rules yet. Open any transaction and pick "Always categorize" to file ones like it
+          automatically.
         </p>
       )}
       {shown.map((rule) => {
@@ -49,11 +50,9 @@ export function RulesList({
         const index = all.indexOf(rule)
         return (
           <div key={rule.id} className="list-row rule-row">
-            <span className="num small muted" style={{ width: 20 }}>
-              {index + 1}
-            </span>
-            {/* What it matches, and under it where matches go: two lines that fit any width. */}
-            <span className="grow stack-sm small rule-text">
+            <span className="rule-number num small muted">{index + 1}</span>
+            {/* What it matches over where it files it, so neither runs into the other on a phone. */}
+            <span className="rule-text small">
               <span>
                 {describeRule(rule)}
                 {(rule.minAmountCents !== null || rule.maxAmountCents !== null) && (
@@ -62,7 +61,7 @@ export function RulesList({
               </span>
               <span className="row" style={{ gap: 6 }}>
                 <Dot color={category?.color} />
-                <span className="ellipsis">{category?.name ?? 'Unknown'}</span>
+                {category?.name ?? 'Unknown'}
               </span>
             </span>
             <span className="rule-actions">

@@ -4,10 +4,11 @@ import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget, Output } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { PeriodBars } from '../../components/charts/PeriodBars'
+import { Money } from '../../components/design/Money'
 import { Card, ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'
-import { amountClass, amountTone, transactionTitle } from '../../lib/transactions'
+import { amountSign } from '../../lib/transactions'
 
 /** How many of this period's transactions to list before linking to the full list. */
 const SHOWN = 12
@@ -43,7 +44,7 @@ export function History({
   category: Category
   row: CategoryBudget | undefined
 }) {
-  const { money, settings } = useApp()
+  const { settings } = useApp()
   const trends = useAction('get_trends', { periods: 6 })
   const history = categoryHistory(
     trends.data ?? [],
@@ -58,8 +59,13 @@ export function History({
       <h2>Last six {settings.period.kind === 'monthly' ? 'months' : 'periods'}</h2>
       {average !== null && (
         <span className="small muted">
-          Average {money(average)}
-          {budget ? ` against a ${money(budget)} budget` : ''}
+          Average <Money cents={average} />
+          {budget ? (
+            <>
+              {' '}
+              against a <Money cents={budget} /> budget
+            </>
+          ) : null}
         </span>
       )}
       <ErrorNote error={trends.error} />
@@ -82,7 +88,7 @@ export function InThisCategory({
   category: Category
   period: Budget['period']
 }) {
-  const { signed, settings } = useApp()
+  const { settings } = useApp()
   const list = useAction('list_transactions', {
     categoryId: category.id,
     start: period.start,
@@ -104,10 +110,8 @@ export function InThisCategory({
           <span className="num small muted" style={{ width: 56 }}>
             {shortDate(tx.date, settings.locale)}
           </span>
-          <span className="grow">{transactionTitle(tx)}</span>
-          <span className={amountClass(amountTone(tx, category.kind))}>
-            {signed(tx.amountCents)}
-          </span>
+          <span className="grow ellipsis">{tx.displayName}</span>
+          <Money cents={tx.amountCents} sign={amountSign(category.kind)} />
         </div>
       ))}
       {total > SHOWN && (

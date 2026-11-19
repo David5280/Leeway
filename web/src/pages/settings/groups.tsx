@@ -5,6 +5,7 @@
 import type { ComponentType } from 'react'
 import { AccountSection } from './Accounts'
 import { AgentSection } from './Agent'
+import { AiModelsSection } from './AiModels'
 import { BanksSection } from './Banks'
 import { BudgetingSection } from './Budgeting'
 import { DataSection } from './Data'
@@ -14,6 +15,7 @@ import { LookSection } from './Look'
 import { NotificationsSection } from './Notifications'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
+import { WidgetSection } from './Widget'
 
 export interface SettingsGroup {
   /** The last part of the group's address: lowercase words joined by hyphens. */
@@ -68,6 +70,18 @@ export const SETTINGS_GROUPS = [
     title: 'AI assistant',
     description: 'Connect Claude or another assistant, manage its keys, and the AI summary.',
     sections: [AgentSection],
+  },
+  {
+    id: 'ai',
+    title: 'AI models',
+    description: 'The Claude model for each AI job, and a monthly limit on what they spend.',
+    sections: [AiModelsSection],
+  },
+  {
+    id: 'widget',
+    title: 'Widget',
+    description: 'Your leeway on your iPhone home screen or Mac desktop, through Scriptable.',
+    sections: [WidgetSection],
   },
   {
     id: 'data',
