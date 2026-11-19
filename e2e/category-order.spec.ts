@@ -15,7 +15,9 @@ test('the Transactions category filter lists categories A to Z', async ({ page }
   const options = sheet.getByRole('list', { name: 'Categories' }).getByRole('button')
   await expect(options.first()).toBeVisible()
 
-  const names = await options.allInnerTexts()
+  // Read the labels, not the whole button: a category with no glyph shows its
+  // initial in the icon, which innerText would put in front of its name.
+  const names = await options.locator('.option-label').allTextContents()
   expect(names.slice(0, 2)).toEqual(['All categories', 'Needs a category'])
   // Setup's starter categories, more than a few of them.
   const categories = names.slice(2)
