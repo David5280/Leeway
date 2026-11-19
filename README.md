@@ -218,8 +218,8 @@ with a note.
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
 | `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary and read imported paystubs.    |
-| `SUMMARY_MODEL`         | No       | The Claude model for the summary, default `claude-haiku-5-5`.          |
-| `PAYSTUB_MODEL`         | No       | The Claude model that reads paystubs, default `claude-haiku-5-5`.      |
+| `SUMMARY_MODEL`         | No       | Fixes the summary's Claude model, instead of choosing it in Settings.  |
+| `PAYSTUB_MODEL`         | No       | Fixes the paystub reader's model, instead of choosing it in Settings.  |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
@@ -238,8 +238,9 @@ turn it on. Claude then gets this period's totals, the Heads up list, bill and
 goal names, and any account alerts, which name the account the way Leeway shows
 it, like "Chase Total Checking is down to $35.00". It never gets account
 numbers or transactions. A summary is reused while your numbers stay the same,
-for up to four hours, so it costs a few cents a summary on your own Anthropic
-account.
+for up to four hours, and with the default model each one costs well under a
+cent on your own Anthropic account. The model and a monthly limit are set in
+[AI models](#ai-models-and-the-monthly-limit).
 
 ### Paystub import (optional)
 
@@ -271,6 +272,43 @@ retirement saving. Nothing is saved until you choose **Save**.
 
 An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set
 the camera to **Most Compatible**.
+
+### AI models and the monthly limit
+
+Every paid AI call, the summary and the paystub reader today, goes through
+one place that picks the model, checks a monthly limit and records what the
+call cost. **Settings**, then **AI models** shows:
+
+- this month's AI spending against the limit, in all and by job;
+- the monthly limit, $5 to start, from $0 (paid AI off) to $1,000;
+- the model for each job, with what it is for and its price per million
+  tokens. Both jobs start on Claude Haiku 5.5, the small, cheap model.
+  Claude Sonnet 5.5 and Claude Opus 5.5 cost about 20 and 40 times as much.
+
+How the limit works:
+
+- The month follows the time zone in **Settings**, then **Budgeting**.
+- Before each call, Leeway works out the most it could cost: the prompt
+  (counted free by Anthropic for a paystub file, estimated from its length
+  for the summary's short text) as if every token were a cache write, plus
+  the most output the call may use. If that would take the month past the
+  limit, the call is not made. The summary is then Leeway's own, and the
+  paystub reader says the limit is reached and when it resets.
+- After the call, the tokens it really used (input, output, cache reads and
+  writes) are priced and recorded. Prices are Anthropic's list prices,
+  checked on 2026-11-19, so your Anthropic bill is the final word.
+- At 80% of the limit a warning shows once in **Heads up** and in Settings,
+  and a refused call raises a second alert. Either can be dismissed, and a
+  new limit starts the month's alerts over.
+- Each record holds token counts and a cost, never what was asked or
+  answered.
+
+`SUMMARY_MODEL` or `PAYSTUB_MODEL` fixes that job's model on the server, and
+Settings then shows it locked. A model Leeway has no price for is counted at
+the price of the dearest model it knows, so the limit still holds. No
+assistant can see or change any of this over MCP, since it decides what is
+spent on your Anthropic account; an assistant still sees the chosen models
+and the limit in Leeway's settings.
 
 ### Weekly email (optional)
 
