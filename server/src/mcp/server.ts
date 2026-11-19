@@ -16,6 +16,7 @@ import { actionList } from '../actions/index.js'
 import type { AppContext } from '../context.js'
 import { AppError, messageOf } from '../errors.js'
 import { getPrompt, listPrompts } from './prompts.js'
+import { withoutBankText } from './withoutBankText.js'
 
 const MCP_INSTRUCTIONS = `Leeway is the owner's personal finance manager: budgets, transactions, accounts, bills, savings goals, debts and bank sync. You are their money coach.
 - Start with get_checkin. It lists what needs attention, most urgent first, with the numbers.
@@ -91,7 +92,7 @@ export function createMcpServer(
       )
     }
     try {
-      const result = await runAction(ctx, action, request.params.arguments ?? {})
+      const result = withoutBankText(await runAction(ctx, action, request.params.arguments ?? {}))
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     } catch (error) {
       if (error instanceof AppError) return errorResult(error.message)

@@ -3,11 +3,18 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { resetPassword } from '../src/domain/owner.js'
 import { createToken } from '../src/domain/tokens.js'
+import { listTransactions, transactionFilterSchema } from '../src/domain/transactions.js'
 import { buildApp } from '../src/http/app.js'
 import { MCP_LIMIT } from '../src/http/mcp.js'
 import { COACH_PROMPTS } from '../src/mcp/prompts.js'
 import { agentTools } from '../src/mcp/server.js'
-import { createTestContext, resetData, TEST_SETUP_CODE } from './helpers.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+  TEST_SETUP_CODE,
+} from './helpers.js'
 
 let ctx: AppContext
 let app: FastifyInstance
@@ -282,6 +289,65 @@ describe('MCP endpoint', () => {
 
     const bad = await rpc(token, 'tools/call', { name: 'create_category', arguments: {} })
     expect(bad.json().result).toMatchObject({ isError: true })
+  })
+
+  it("never shows an assistant an account's number from a transaction's bank text", async () => {
+    const { accountId: checking } = await insertBankAccount(ctx.db, {
+      name: 'Checking',
+      mask: '9876',
+    })
+    const { accountId: savings } = await insertBankAccount(ctx.db, {
+      name: 'Savings',
+      mask: '4417',
+    })
+    const day = (back: number) =>
+      new Date(ctx.now().getTime() - back * 86_400_000).toISOString().slice(0, 10)
+    // Each side names the other account's number, not its own.
+    await insertBankTransaction(ctx.db, savings, {
+      date: day(1),
+      name: 'ONLINE TRANSFER FROM CHK XXXXXX9876',
+      amountCents: -50000,
+      primary: 'TRANSFER_IN',
+    })
+    await insertBankTransaction(ctx.db, checking, {
+      date: day(1),
+      name: 'ONLINE TRANSFER TO SAV XXXXXX4417 REF 31677300112',
+      amountCents: 50000,
+      primary: 'TRANSFER_OUT',
+    })
+    // A monthly charge whose merchant name carries a number, for the merchant and recurring tools.
+    for (const back of [2, 32, 62]) {
+      await insertBankTransaction(ctx.db, checking, {
+        date: day(back),
+        name: 'GYM DUES',
+        merchantName: 'Iron Gym 98 76',
+        amountCents: 4000,
+      })
+    }
+    const { token } = await createToken(ctx.db, 'Reader', 'read')
+    const calls: [string, Record<string, unknown>][] = [
+      ['list_transactions', {}],
+      ['preview_rule', { field: 'description', matchType: 'contains', pattern: 'transfer' }],
+      ['top_merchants', {}],
+      ['find_recurring', {}],
+      ['summarize_accounts', {}],
+    ]
+    for (const [name, args] of calls) {
+      const response = await rpc(token, 'tools/call', { name, arguments: args })
+      const result = response.json().result
+      expect(result.isError, name).toBeFalsy()
+      // An account's own mask and bank name are fields of their own, taken out
+      // by key on the way to an agent (agentOutput.ts); the rest is checked here.
+      const text = JSON.stringify(JSON.parse(result.content[0].text), (key, value: unknown) =>
+        key === 'mask' || key === 'bankName' ? undefined : value,
+      )
+      expect(text, name).not.toMatch(/9\D?8\D?7\D?6|4417|31677300112/)
+      expect(text, name).not.toMatch(/ONLINE TRANSFER|GYM DUES/)
+    }
+
+    // The owner's own app still has the bank's text, for a transaction's details.
+    const own = await listTransactions(ctx.db, transactionFilterSchema.parse({}))
+    expect(own.transactions.map((tx) => tx.name)).toContain('ONLINE TRANSFER FROM CHK XXXXXX9876')
   })
 
   it('offers coaching prompts, filled in with their arguments', async () => {

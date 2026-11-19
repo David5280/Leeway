@@ -3,6 +3,7 @@
 // Pure. The bank's raw text is kept apart and only shown in its details.
 
 import { cleanMerchantName, tidyMerchantName } from './merchantName.js'
+import { safeName, type AccountMasks } from './safeName.js'
 import type { PersonPayment } from './transfers.js'
 
 /** What naming a transaction reads. */
@@ -21,6 +22,20 @@ export interface TransferAccounts {
   toAccount: string
 }
 
+/** How a name is made safe: the owner's account masks, and what to show when no safe name is left. */
+export interface NameGuard {
+  /** The masks of every account the owner has (see safeName.ts). */
+  masks: AccountMasks
+  /** Shown when a merchant name would show an account number: the category's name, say. */
+  fallback?: string
+}
+
+/** What a transaction is called when its own text can't be shown and nothing better is known. */
+export const GENERIC_NAME = 'Bank transaction'
+
+/** What a transfer or a payment between people is called when its names can't be shown. */
+export const TRANSFER_NAME = 'Transfer'
+
 /**
  * The name a transaction is shown under, in this order:
  * 1. a transfer between two of the owner's accounts: "Chase Checking to BOK Savings";
@@ -28,21 +43,36 @@ export interface TransferAccounts {
  *    the direction read from the amount, never from the bank's wording;
  * 3. the merchant name the bank gave, made safe and readable;
  * 4. a readable name made from the bank's raw text (see merchantName.ts).
+ * Whichever it is, it shows no account number (see safeName.ts).
  */
 export function transactionDisplayName(
   tx: NameableTransaction,
-  transfer: TransferAccounts | null = null,
+  transfer: TransferAccounts | null,
+  guard: NameGuard,
 ): string {
-  if (transfer) return `${transfer.fromAccount} to ${transfer.toAccount}`
+  const { masks, fallback = GENERIC_NAME } = guard
+  if (transfer)
+    return safeName(`${transfer.fromAccount} to ${transfer.toAccount}`, masks, TRANSFER_NAME)
   const counterparty = tx.person?.counterparty
-  if (counterparty) return `${tx.person!.direction === 'in' ? 'From' : 'To'} ${counterparty}`
-  if (tx.merchantName?.trim()) return tidyMerchantName(tx.merchantName)
-  return cleanMerchantName(tx.name)
+  if (counterparty) {
+    // The person's name alone is checked, so "From" is never left on its own.
+    const who = safeName(counterparty, masks, '')
+    return who ? `${tx.person!.direction === 'in' ? 'From' : 'To'} ${who}` : TRANSFER_NAME
+  }
+  const name = tx.merchantName?.trim()
+    ? tidyMerchantName(tx.merchantName)
+    : cleanMerchantName(tx.name)
+  // Bank text that only says money moved falls back to "Transfer", not the category.
+  return safeName(name, masks, TRANSFER_WORDS.test(name) ? TRANSFER_NAME : fallback)
 }
+
+/** A clean name that says money moved between accounts: "Transfer from Checking". */
+const TRANSFER_WORDS = /\btransfer\b/i
 
 /** The merchant's name alone, for lists of merchants: the bank's merchant name or a clean one. */
 export function merchantDisplayName(
   tx: Pick<NameableTransaction, 'name' | 'merchantName'>,
+  guard: NameGuard,
 ): string {
-  return transactionDisplayName({ name: tx.name, merchantName: tx.merchantName })
+  return transactionDisplayName({ name: tx.name, merchantName: tx.merchantName }, null, guard)
 }

@@ -14,6 +14,7 @@ import {
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
+import { accountMasks } from './accounts.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { spendingSql } from './counted.js'
@@ -209,9 +210,11 @@ export async function topMerchants(
      GROUP BY 1, 2`,
     [period.start, period.end, settings.includePending],
   )
+  // Merchant names go to assistants and the AI writer, so they show no account number.
+  const masks = await accountMasks(db)
   const byMerchant = new Map<string, MerchantTotal>()
   for (const row of rows) {
-    const merchant = merchantDisplayName(row)
+    const merchant = merchantDisplayName(row, { masks })
     const total = byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 }
     total.spentCents += row.spentCents
     total.count += row.count

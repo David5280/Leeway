@@ -239,11 +239,12 @@ export function transaction(
 ): Transaction {
   return {
     // Named as the server names it, unless the test gives a name of its own.
-    displayName: transactionDisplayName({
-      name: fields.name,
-      merchantName: fields.merchantName ?? null,
-      person: fields.person,
-    }),
+    displayName: transactionDisplayName(
+      { name: fields.name, merchantName: fields.merchantName ?? null, person: fields.person },
+      null,
+      // No account masks: the fake accounts have none.
+      { masks: [] },
+    ),
     transfer: null,
     accountId: 'acct',
     accountName: 'Checking',

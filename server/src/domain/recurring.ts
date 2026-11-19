@@ -4,8 +4,10 @@
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
+import { accountMasks } from './accounts.js'
 import { listBills } from './bills.js'
 import { countedSql } from './counted.js'
+import type { AccountMasks } from './safeName.js'
 import { merchantDisplayName } from './transactionName.js'
 
 /** One past transaction, as detection needs it. Amounts are positive for money out. */
@@ -102,6 +104,7 @@ function seriesOf(
   direction: 'out' | 'in',
   charges: PastTransaction[],
   today: IsoDate,
+  masks: AccountMasks,
 ): RecurringSeries | null {
   // Two charges on the same day (a split payment) count as one occurrence.
   const days = [...new Set(charges.map((c) => c.date))]
@@ -121,7 +124,7 @@ function seriesOf(
     direction === 'out' && !amountVaries && (band.cadence === 'month' || band.cadence === 'year')
   return {
     key,
-    name: merchantDisplayName(last),
+    name: merchantDisplayName(last, { masks }),
     direction,
     cadence: band.cadence,
     typicalAmountCents: typical,
@@ -137,11 +140,12 @@ function seriesOf(
 /**
  * Groups transactions by merchant and direction, and keeps the groups whose
  * dates repeat on a regular cadence and are still going. Sorted with the
- * soonest expected first.
+ * soonest expected first. Names show none of the account masks given.
  */
 export function detectRecurring(
   transactions: PastTransaction[],
   today: IsoDate,
+  masks: AccountMasks,
 ): RecurringSeries[] {
   const groups = new Map<string, PastTransaction[]>()
   for (const tx of transactions) {
@@ -157,7 +161,7 @@ export function detectRecurring(
   for (const [group, charges] of groups) {
     const [direction, key] = group.split(/:(.*)/s) as ['out' | 'in', string]
     charges.sort((a, b) => a.date.localeCompare(b.date))
-    const series = seriesOf(key, direction, charges, today)
+    const series = seriesOf(key, direction, charges, today, masks)
     if (series) found.push(series)
   }
   return found.sort((a, b) => a.nextDate.localeCompare(b.nextDate) || a.key.localeCompare(b.key))
@@ -206,15 +210,16 @@ export async function dismissRecurring(db: Db, key: string): Promise<void> {
  * part of its key.
  */
 export async function untrackedRecurring(db: Db, today: IsoDate): Promise<RecurringSeries[]> {
-  const [history, dismissed, bills] = await Promise.all([
+  const [history, dismissed, bills, masks] = await Promise.all([
     recentHistory(db, today),
     dismissedKeys(db),
     listBills(db, today),
+    accountMasks(db),
   ])
   const patterns = bills.flatMap((b) =>
     b.matchPattern ? [merchantKey({ merchantName: b.matchPattern, name: '' })] : [],
   )
-  return detectRecurring(history, today).filter(
+  return detectRecurring(history, today, masks).filter(
     (s) => !dismissed.has(s.key) && !patterns.some((p) => s.key.includes(p)),
   )
 }

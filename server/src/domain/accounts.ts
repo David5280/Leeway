@@ -100,6 +100,17 @@ export async function accountNames(db: Db): Promise<Map<string, string>> {
   return new Map(accounts.map((account) => [account.id, account.name]))
 }
 
+/**
+ * The masks of every account, hidden ones included, so that no transaction
+ * name shows any of them (see safeName.ts).
+ */
+export async function accountMasks(db: Db): Promise<string[]> {
+  const { rows } = await db.query<{ mask: string }>(
+    'SELECT mask FROM accounts WHERE mask IS NOT NULL',
+  )
+  return rows.map((row) => row.mask)
+}
+
 export const manualAccountInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(ACCOUNT_TYPES),

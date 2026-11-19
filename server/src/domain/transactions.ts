@@ -4,9 +4,10 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
-import { accountNames } from './accounts.js'
+import { accountMasks, accountNames } from './accounts.js'
 import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
+import { safeName, type AccountMasks } from './safeName.js'
 import { transactionDisplayName } from './transactionName.js'
 import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
@@ -53,22 +54,46 @@ export interface Transaction {
   transfer: TransferPartner | null
 }
 
-/** A transaction as stored, with the bank codes that only reading `person` needs. */
+/**
+ * A transaction as stored, with the bank codes that only reading `person`
+ * needs, and its category's name for a name that can't be shown.
+ */
 type StoredTransaction = Omit<Transaction, 'person' | 'accountName' | 'displayName' | 'transfer'> &
-  Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
+  Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'> & {
+    categoryName: string | null
+  }
+
+/** What presenting transactions needs to know about every account and pair. */
+interface Presenting {
+  /** Each account's name by id (accountName.ts). */
+  names: Map<string, string>
+  /** Every account's mask, kept out of every name (safeName.ts). */
+  masks: AccountMasks
+  /** The other side of each paired transfer, by transaction id. */
+  partners: Map<string, PairCandidate>
+}
+
+/** What presenting needs, for these stored rows. One query at a time: db may be a transaction's client. */
+async function presenting(db: Db, rows: StoredTransaction[]): Promise<Presenting> {
+  const names = await accountNames(db)
+  const masks = await accountMasks(db)
+  return { names, masks, partners: await pairsAround(db, rows) }
+}
 
 /**
  * A stored transaction as the app shows it: its account named as everywhere
- * else, its display name, and the other side of a transfer, when paired.
+ * else, its display name, and the other side of a transfer, when paired. The
+ * display name and the other person's name show no account number.
  */
-function present(
-  row: StoredTransaction,
-  names: Map<string, string>,
-  partners: Map<string, PairCandidate>,
-): Transaction {
-  const { providerCategoryPrimary: _primary, providerCategoryDetailed: _detailed, ...tx } = row
+function present(row: StoredTransaction, { names, masks, partners }: Presenting): Transaction {
+  const {
+    providerCategoryPrimary: _primary,
+    providerCategoryDetailed: _detailed,
+    categoryName,
+    ...tx
+  } = row
   const accountName = names.get(row.accountId)!
-  const person = personPayment(row)
+  const person = safePerson(personPayment(row), masks)
   const partner = partners.get(row.id)
   const transfer = partner
     ? {
@@ -85,8 +110,17 @@ function present(
         toAccount: row.amountCents > 0 ? transfer.accountName : accountName,
       }
     : null
-  const displayName = transactionDisplayName({ ...row, person }, accounts)
+  const displayName = transactionDisplayName({ ...row, person }, accounts, {
+    masks,
+    fallback: categoryName ?? undefined,
+  })
   return { ...tx, accountName, displayName, person, transfer }
+}
+
+/** A payment between people, without the other person's name when it would show an account number. */
+function safePerson(person: PersonPayment | null, masks: AccountMasks): PersonPayment | null {
+  if (!person?.counterparty) return person
+  return { ...person, counterparty: safeName(person.counterparty, masks, '') || null }
 }
 
 /** Transfer pairs around the dates of the given rows (none for no rows). */
@@ -125,7 +159,8 @@ const SELECT = `
     CASE WHEN t.provider_transaction_id IS NOT NULL THEN 'bank'
       WHEN t.import_id IS NOT NULL THEN 'import' ELSE 'manual' END AS source,
     t.provider_category_primary AS "providerCategoryPrimary",
-    t.provider_category_detailed AS "providerCategoryDetailed"
+    t.provider_category_detailed AS "providerCategoryDetailed",
+    (SELECT c.name FROM categories c WHERE c.id = t.category_id) AS "categoryName"
   FROM transactions t`
 
 export async function listTransactions(
@@ -155,7 +190,7 @@ export async function listTransactions(
   if (!filter.includeExcluded) where.push('NOT t.excluded')
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const [list, count, names] = await Promise.all([
+  const [list, count] = await Promise.all([
     db.query<StoredTransaction>(
       `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -165,11 +200,10 @@ export async function listTransactions(
       `SELECT count(*)::int AS total FROM transactions t ${whereSql}`,
       params,
     ),
-    accountNames(db),
   ])
-  const partners = await pairsAround(db, list.rows)
+  const context = await presenting(db, list.rows)
   return {
-    transactions: list.rows.map((row) => present(row, names, partners)),
+    transactions: list.rows.map((row) => present(row, context)),
     total: count.rows[0]!.total,
   }
 }
@@ -177,9 +211,7 @@ export async function listTransactions(
 async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
-  // One query at a time: db may be a transaction's client.
-  const names = await accountNames(db)
-  return present(rows[0], names, await pairsAround(db, rows))
+  return present(rows[0], await presenting(db, rows))
 }
 
 /**

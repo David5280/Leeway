@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { detectRecurring, merchantKey, type PastTransaction } from '../src/domain/recurring.js'
 
+/** No accounts with masks: names are only cleaned (see safeName.ts). */
+const NO_MASKS: string[] = []
+
 const TODAY = '2026-11-17'
 
 /** One charge per date, with an optional amount per date. */
@@ -35,6 +38,7 @@ describe('detectRecurring', () => {
     const found = detectRecurring(
       charges('Netflix', ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03'], 1549, 'fun'),
       TODAY,
+      NO_MASKS,
     )
     expect(found).toEqual([
       {
@@ -57,6 +61,7 @@ describe('detectRecurring', () => {
     const [power] = detectRecurring(
       charges('Xcel Energy', ['2026-08-20', '2026-09-19', '2026-10-21'], [8812, 10240, 7655]),
       TODAY,
+      NO_MASKS,
     )
     expect(power).toMatchObject({
       cadence: 'month',
@@ -73,7 +78,7 @@ describe('detectRecurring', () => {
       ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'],
       -250000,
     )
-    expect(detectRecurring(pay, TODAY)).toMatchObject([
+    expect(detectRecurring(pay, TODAY, NO_MASKS)).toMatchObject([
       { direction: 'in', cadence: 'biweek', typicalAmountCents: 250000, nextDate: '2026-11-20' },
     ])
   })
@@ -87,6 +92,7 @@ describe('detectRecurring', () => {
         ...charges('Domain renewal', ['2025-12-01'], 1800),
       ],
       TODAY,
+      NO_MASKS,
     )
     // Soonest first: insurance was expected two days ago and has not posted yet.
     expect(found.map((s) => [s.name, s.cadence, s.nextDate])).toEqual([
@@ -105,21 +111,23 @@ describe('detectRecurring', () => {
       '2026-09-05',
       '2026-10-05',
     ]
-    expect(detectRecurring(charges('Hulu', dates, 1299), '2026-10-20')).toHaveLength(1)
+    expect(detectRecurring(charges('Hulu', dates, 1299), '2026-10-20', NO_MASKS)).toHaveLength(1)
   })
 
   it('ignores a series that has stopped', () => {
     const dates = ['2026-04-01', '2026-05-01', '2026-06-01', '2026-07-01']
-    expect(detectRecurring(charges('Old gym', dates, 4000), TODAY)).toEqual([])
+    expect(detectRecurring(charges('Old gym', dates, 4000), TODAY, NO_MASKS)).toEqual([])
   })
 
   it('ignores spending that is frequent but not regular', () => {
     const dates = ['2026-10-01', '2026-10-04', '2026-10-15', '2026-10-17', '2026-11-09']
-    expect(detectRecurring(charges('Coffee shop', dates, 550), TODAY)).toEqual([])
+    expect(detectRecurring(charges('Coffee shop', dates, 550), TODAY, NO_MASKS)).toEqual([])
   })
 
   it('needs more than two charges for a monthly series', () => {
-    expect(detectRecurring(charges('Trial', ['2026-10-01', '2026-11-01'], 999), TODAY)).toEqual([])
+    expect(
+      detectRecurring(charges('Trial', ['2026-10-01', '2026-11-01'], 999), TODAY, NO_MASKS),
+    ).toEqual([])
   })
 
   it('counts two charges on one day as one, and keeps refunds out of the series', () => {
@@ -133,6 +141,7 @@ describe('detectRecurring', () => {
         ...charges('Phone', ['2026-09-14'], -6000),
       ],
       TODAY,
+      NO_MASKS,
     )
     expect(found).toMatchObject([{ direction: 'out', count: 4 }])
   })
@@ -146,6 +155,7 @@ describe('detectRecurring', () => {
         ...charges('Gas', ['2026-10-10'], 3000, 'travel'),
       ],
       TODAY,
+      NO_MASKS,
     )
     expect(found.map((s) => [s.name, s.categoryId])).toEqual([['Gas', 'auto']])
   })
@@ -157,6 +167,7 @@ describe('detectRecurring', () => {
         ...charges('Early', ['2026-08-20', '2026-09-20', '2026-10-20'], 1000),
       ],
       TODAY,
+      NO_MASKS,
     )
     expect(found.map((s) => s.name)).toEqual(['Early', 'Late'])
   })

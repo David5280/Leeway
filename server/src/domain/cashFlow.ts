@@ -4,6 +4,7 @@
 import type { Db } from '../db/pool.js'
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import { periodContaining } from '../lib/periods.js'
+import { accountMasks } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
 import { detectRecurring, recentHistory } from './recurring.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -55,7 +56,7 @@ export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Pr
     return { date: nextPeriodStart, source: 'pay_period', amountCents: null }
   }
 
-  const income = detectRecurring(await recentHistory(db, today), today)
+  const income = detectRecurring(await recentHistory(db, today), today, await accountMasks(db))
     .filter((s) => s.direction === 'in' && s.nextDate > today)
     .sort((a, b) => b.typicalAmountCents - a.typicalAmountCents)[0]
   if (income) {
