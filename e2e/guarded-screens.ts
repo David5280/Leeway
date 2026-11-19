@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
-import { pretendBusyMonth } from './ai'
+import { pretendBusyMonth, pretendModelTrouble, pretendSummaryModelGone } from './ai'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
@@ -120,6 +120,15 @@ export const SCREENS: Screen[] = [
     name: '/ while editing its layout in place',
     on: (phone) => phone.editsInPlace,
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
+  }),
+  at('overview', '/', {
+    name: "/ with Leeway's summary, as the AI model is gone",
+    // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
+    before: pretendSummaryModelGone,
+    then: (page) =>
+      expect(
+        page.getByRole('region', { name: 'Summary' }).getByText(/isn.t available from Anthropic/),
+      ).toBeVisible(),
   }),
   at('accounts', '/accounts'),
   ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
@@ -272,6 +281,16 @@ export const SCREENS: Screen[] = [
     // No model is called in the tests: the month's spending is stood in for (ai.ts).
     before: pretendBusyMonth,
     then: (page) => expect(page.getByText(/AI has spent \$4\.10/).first()).toBeVisible(),
+  }),
+  at('settings', '/settings/ai', {
+    name: '/settings/ai with one model gone and unpriced, and one retiring',
+    // Only Anthropic can retire a model: its answer is stood in for (ai.ts).
+    before: pretendModelTrouble,
+    then: async (page) => {
+      await expect(page.getByText(/^Anthropic doesn.t have/)).toBeVisible()
+      await expect(page.getByText(/^Leeway has no prices for/)).toBeVisible()
+      await expect(page.getByText(/^Anthropic retires .+ on Nov 30/)).toBeVisible()
+    },
   }),
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),

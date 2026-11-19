@@ -315,11 +315,11 @@ How the limit works:
 `SUMMARY_MODEL` or `PAYSTUB_MODEL` fixes that job's model on the server, and
 Settings then shows it locked. When Anthropic says it has no such model
 (retired or mistyped), Settings and the summary card say so and where to pick
-another, and a model with an announced retirement day shows that day. A model Leeway has no price for is counted at
-the price of the dearest model it knows, so the limit still holds. No
-assistant can see or change any of this over MCP, since it decides what is
-spent on your Anthropic account; an assistant still sees the chosen models
-and the limit in Leeway's settings.
+another, and a model with an announced retirement day shows that day. A model
+Leeway has no price for is counted at the price of the dearest model it knows,
+so the limit still holds. No assistant can see or change any of this over MCP,
+since it decides what is spent on your Anthropic account; an assistant still
+sees the chosen models and the limit in Leeway's settings.
 
 ### Weekly email (optional)
 
