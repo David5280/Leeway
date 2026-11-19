@@ -31,7 +31,9 @@ describe('SummarySetting', () => {
     serve()
     renderSignedIn(<SummarySetting />)
     expect(toggle()).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByText(/Never your accounts or transactions/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/any account alerts by account name.*Never account numbers or transactions/),
+    ).toBeInTheDocument()
   })
 
   it('turns it on through the owner-only action', async () => {

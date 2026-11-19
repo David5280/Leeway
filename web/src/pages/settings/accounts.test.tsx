@@ -9,7 +9,13 @@ import { AccountSection } from './Accounts'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Accounts', () => {
-  const checking = account({ id: 'acct-1', name: 'Everyday', bankName: 'CHECKING 1234' })
+  // Named by the owner; without that name it would be "First Checking 1234" (see accountName.ts).
+  const checking = account({
+    id: 'acct-1',
+    name: 'Everyday',
+    nickname: 'Everyday',
+    bankName: 'CHECKING 1234',
+  })
   const card = account({
     id: 'acct-2',
     name: 'Rewards card',
@@ -67,7 +73,7 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
     await user.clear(name)
     await user.type(name, '  Bills account  ')
     expect(server.actions('update_account')).toEqual([])
@@ -83,24 +89,24 @@ describe('Accounts', () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
     await user.click(name)
     await user.type(name, ' ')
     await user.tab()
     expect(server.actions('update_account')).toEqual([])
   })
 
-  it('goes back to the bank name when the name is cleared', async () => {
+  it("goes back to the name Leeway gives the account when the owner's is cleared", async () => {
     const server = serve()
     renderSignedIn(<AccountSection />)
     const user = userEvent.setup()
-    const name = await screen.findByRole('textbox', { name: 'Name for CHECKING 1234' })
+    const name = await screen.findByRole('textbox', { name: 'Name for First Checking 1234' })
     await user.clear(name)
     await user.tab()
     await waitFor(() =>
       expect(server.actions('update_account')).toEqual([{ id: 'acct-1', displayName: null }]),
     )
-    expect(name).toHaveValue('CHECKING 1234')
+    expect(name).toHaveValue('First Checking 1234')
   })
 
   it('hides and shows accounts in totals', async () => {

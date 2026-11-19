@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom'
 import type { Output } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { accountName } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { longDate } from '../../lib/format'
 
@@ -36,7 +35,7 @@ export function ImportDone({ result }: { result: ImportResult }) {
   const { settings } = useApp()
   const undo = useActionMutation('undo_import')
   const skipped = skippedText(result, settings.locale)
-  const where = accountName(result.account)
+  const where = result.account.name
 
   if (undo.data) {
     return (

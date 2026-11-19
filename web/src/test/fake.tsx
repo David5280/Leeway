@@ -155,6 +155,7 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
   return {
     connectionId: 'conn-1',
     institutionName: 'First Bank',
+    nickname: null,
     bankName: fields.name,
     mask: '1234',
     type: 'depository',

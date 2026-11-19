@@ -28,8 +28,9 @@ export function SummarySetting() {
       </Setting>
       <span className="small muted">
         When on, Leeway sends Anthropic this period&apos;s totals, cash until payday, the Heads up
-        list, and your bill and goal names, a few times a day at most. Never your accounts or
-        transactions. Each summary costs a few cents on your own Anthropic account.
+        list, your bill and goal names, and any account alerts by account name, a few times a day at
+        most. Never account numbers or transactions. Each summary costs a few cents on your own
+        Anthropic account.
       </span>
       {on && summary.data?.ai === 'no_key' && (
         <p className="notice">

@@ -230,8 +230,8 @@ Claude write it instead, set `ANTHROPIC_API_KEY` (from the
 [Anthropic Console](https://console.anthropic.com)), then turn on **Have Claude
 write it** in **Settings**, then **AI assistant**. Nothing is sent until you
 turn it on. Claude then gets this period's totals, the Heads up list, bill and
-goal names, and any account alerts named only by bank and kind of account,
-like "Your Chase checking account". It never gets account names, account
+goal names, and any account alerts, which name the account the way Leeway shows
+it, like "Chase Total Checking is down to $35.00". It never gets account
 numbers or transactions. A summary is reused while your numbers stay the same,
 for up to four hours, so it costs a few cents a summary on your own Anthropic
 account.

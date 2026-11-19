@@ -3,7 +3,7 @@
 
 import type { Account } from '../../api/client'
 import { ErrorNote } from '../../components/ui'
-import { ACCOUNT_TYPES, accountName, type AccountType } from '../../lib/accounts'
+import { ACCOUNT_TYPES, type AccountType } from '../../lib/accounts'
 
 /** Where the rows go: an existing account's id, or "new" for a new manual account. */
 export interface Target {
@@ -88,7 +88,7 @@ export function Destination({
           </option>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {accountName(account)}
+              {account.name}
             </option>
           ))}
           <option value={NEW_ACCOUNT}>A new account</option>

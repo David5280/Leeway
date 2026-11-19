@@ -20,13 +20,18 @@ beforeEach(async () => {
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000'
 
 describe('account edge cases', () => {
-  it('goes back to the bank name when the label is cleared', async () => {
+  it("goes back to Leeway's name for the account when the owner's is cleared", async () => {
     const { accountId } = await insertBankAccount(ctx.db, { name: 'TOTAL CHECKING' })
     await call('update_account', { id: accountId, displayName: 'Bills' })
 
     const cleared = await call('update_account', { id: accountId, displayName: null })
 
-    expect(cleared).toMatchObject({ name: 'TOTAL CHECKING', bankName: 'TOTAL CHECKING' })
+    // The helper's bank is "Test Bank", so the account reads "Test Total Checking".
+    expect(cleared).toMatchObject({
+      name: 'Test Total Checking',
+      nickname: null,
+      bankName: 'TOTAL CHECKING',
+    })
   })
 
   it('names the bank-owned fields it refuses to change', async () => {

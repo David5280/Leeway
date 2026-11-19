@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
+import { ACCOUNT_NAME_COLUMNS, withAccountName, type AccountNameColumns } from './accountName.js'
 import { assertCategoryExists } from './categories.js'
 import { recategorize } from './categorize.js'
 import { personPayment, type Movement, type PersonPayment } from './transfers.js'
@@ -34,12 +35,13 @@ export interface Transaction {
 }
 
 /** A transaction as stored, with the bank codes that only reading `person` needs. */
-type StoredTransaction = Omit<Transaction, 'person'> &
+type StoredTransaction = Omit<Transaction, 'person' | 'accountName'> &
+  AccountNameColumns &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
 
 function present(row: StoredTransaction): Transaction {
   const { providerCategoryPrimary: _primary, providerCategoryDetailed: _detailed, ...tx } = row
-  return { ...tx, person: personPayment(row) }
+  return { ...withAccountName(tx), person: personPayment(row) }
 }
 
 export const transactionFilterSchema = z.object({
@@ -63,7 +65,7 @@ export const transactionFilterSchema = z.object({
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>
 
 const SELECT = `
-  SELECT t.id, t.account_id AS "accountId", coalesce(a.display_name, a.name) AS "accountName",
+  SELECT t.id, t.account_id AS "accountId", ${ACCOUNT_NAME_COLUMNS},
     t.date, t.name, t.merchant_name AS "merchantName", t.amount_cents AS "amountCents",
     t.currency, t.pending, t.category_id AS "categoryId", t.category_source AS "categorySource",
     coalesce(t.provider_category_detailed, t.provider_category_primary) AS "bankCategory",

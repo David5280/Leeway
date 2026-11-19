@@ -6,7 +6,6 @@ import {
   DEFAULT_LOW_BALANCE_CENTS,
   isOverdraftFee,
   lowBalanceThreshold,
-  unnamedAccount,
   type AlertAccount,
   type FeeCandidate,
 } from '../src/domain/accountAlerts.js'
@@ -115,16 +114,6 @@ describe('lowBalanceThreshold', () => {
   })
 })
 
-describe('unnamedAccount', () => {
-  it('names the bank and kind of account, never the account', () => {
-    expect(unnamedAccount(account())).toBe('your Chase checking account')
-    expect(unnamedAccount(account({ type: 'credit', subtype: 'credit card' }))).toBe(
-      'your Chase credit card',
-    )
-    expect(unnamedAccount(account({ institutionName: null, subtype: null }))).toBe('your account')
-  })
-})
-
 describe('accountAlerts', () => {
   it('has nothing to say about healthy accounts', () => {
     expect(accountAlerts([account()], [], format)).toEqual([])
@@ -145,7 +134,7 @@ describe('accountAlerts', () => {
       count: 1,
       date: null,
       message: 'Everyday is overdrawn by $42.10.',
-      summary: 'Your Chase checking account is overdrawn by $42.10.',
+      summary: 'Everyday is overdrawn by $42.10.',
     })
   })
 
@@ -175,7 +164,7 @@ describe('accountAlerts', () => {
       severity: 'warning',
       amountCents: 3500,
       message: 'Everyday is down to $35.00, below your $100.00 warning.',
-      summary: 'Your Chase checking account is down to $35.00.',
+      summary: 'Everyday is down to $35.00.',
     })
   })
 
@@ -218,7 +207,7 @@ describe('accountAlerts', () => {
       severity: 'urgent',
       amountCents: 12000,
       message: 'Sapphire is $120.00 over its $5000.00 limit.',
-      summary: 'Your Chase credit card is $120.00 over its limit.',
+      summary: 'Sapphire is $120.00 over its limit.',
     })
   })
 
@@ -247,7 +236,7 @@ describe('accountAlerts', () => {
       message:
         'Everyday was charged 2 overdraft fees, $70.00 in all, in the last 30 days, most recently on 2026-11-12.',
       summary:
-        'Your Chase checking account was charged 2 overdraft fees, $70.00 in all, in the last 30 days, most recently on 2026-11-12.',
+        'Everyday was charged 2 overdraft fees, $70.00 in all, in the last 30 days, most recently on 2026-11-12.',
     })
   })
 

@@ -18,6 +18,7 @@ import {
   manualAccountInputSchema,
   type Account,
 } from './accounts.js'
+import { ACCOUNT_NAME_COLUMNS, withAccountName, type AccountNameColumns } from './accountName.js'
 import { listCategories } from './categories.js'
 import { recategorize } from './categorize.js'
 import { dateSpan, IMPORT_LIMITS, planImport, type ImportRow } from './importPlan.js'
@@ -196,14 +197,14 @@ export async function importTransactions(
 
 /** Past imports, newest first, for undoing one. */
 export async function listImports(db: Db): Promise<PastImport[]> {
-  const { rows } = await db.query<PastImport>(
-    `SELECT i.id, i.account_id AS "accountId", coalesce(a.display_name, a.name) AS "accountName",
+  const { rows } = await db.query<Omit<PastImport, 'accountName'> & AccountNameColumns>(
+    `SELECT i.id, i.account_id AS "accountId", ${ACCOUNT_NAME_COLUMNS},
        i.file_name AS "fileName", i.added, i.created_at AS "createdAt"
      FROM imports i JOIN accounts a ON a.id = i.account_id
      ORDER BY i.created_at DESC, i.id
      LIMIT 50`,
   )
-  return rows
+  return rows.map(withAccountName)
 }
 
 /**

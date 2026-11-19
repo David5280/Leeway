@@ -3,6 +3,7 @@
 
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { accountDisplayName } from '../../../../server/src/domain/accountName'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
@@ -49,6 +50,8 @@ function AccountRow({ account }: { account: Account }) {
   const update = useActionMutation('update_account')
   const remove = useActionMutation('delete_account')
   const owed = isOwed(account)
+  // What the account is called without the owner's own name, which clearing the field goes back to.
+  const defaultName = accountDisplayName({ ...account, nickname: null })
   return (
     <div className="list-row wrap">
       <Switch
@@ -59,13 +62,12 @@ function AccountRow({ account }: { account: Account }) {
       <span className="grow stack-sm" style={{ gap: 0, minWidth: 180 }}>
         <input
           className="input"
-          aria-label={`Name for ${account.bankName}`}
+          aria-label={`Name for ${defaultName}`}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => {
             const next = name.trim()
-            // Clearing the name goes back to what the bank calls the account.
-            setName(next || account.bankName)
+            setName(next || defaultName)
             if (next !== account.name) update.mutate({ id: account.id, displayName: next || null })
           }}
         />

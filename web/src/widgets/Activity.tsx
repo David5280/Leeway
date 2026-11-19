@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, Progress } from '../components/ui'
-import { accountDetail, accountName, accountPath, isOwed, overdrawn } from '../lib/accounts'
+import { accountDetail, accountPath, isOwed, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import type { WidgetProps } from './types'
 
@@ -53,7 +53,7 @@ export function AccountsWidget() {
           className={`list-row clickrow ${account.hidden ? 'muted' : ''}`}
         >
           <span className="grow stack-sm" style={{ gap: 0 }}>
-            <span className="ellipsis">{accountName(account)}</span>
+            <span className="ellipsis">{account.name}</span>
             <span className="small muted">
               {accountDetail(account)}
               {account.hidden && ' · ignored for budgets'}

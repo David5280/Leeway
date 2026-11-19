@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
+import { accountDisplayName } from './accountName.js'
 import { recategorize } from './categorize.js'
 
 export const ACCOUNT_TYPES = [
@@ -22,8 +23,14 @@ export interface Account {
   id: string
   connectionId: string | null
   institutionName: string | null
-  /** The owner's label if set, otherwise the bank's name for the account. */
+  /**
+   * The name shown everywhere: the owner's own, or the bank's short name and
+   * the account's in plain case, like "Chase Total Checking" (see accountName.ts).
+   */
   name: string
+  /** The owner's own name for the account, or null for none. */
+  nickname: string | null
+  /** The account's name as the bank sends it, or as typed for one added by hand. */
   bankName: string
   mask: string | null
   type: AccountType
@@ -49,7 +56,7 @@ export interface Account {
 
 const SELECT = `
   SELECT a.id, a.connection_id AS "connectionId", c.institution_name AS "institutionName",
-    coalesce(a.display_name, a.name) AS name, a.name AS "bankName", a.mask, a.type, a.subtype,
+    a.display_name AS nickname, a.name AS "bankName", a.mask, a.type, a.subtype,
     a.balance_cents AS "balanceCents", a.available_cents AS "availableCents",
     a.credit_limit_cents AS "creditLimitCents", a.currency, a.hidden,
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
@@ -57,18 +64,25 @@ const SELECT = `
     a.low_balance_cents AS "lowBalanceCents"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
+type AccountRow = Omit<Account, 'name'>
+
+const named = (row: AccountRow): Account => ({ ...row, name: accountDisplayName(row) })
+
+/** By kind of account, then by the name shown. Names are worked out here, so SQL cannot sort them. */
+const inListOrder = (a: Account, b: Account) =>
+  a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
+
 export async function listAccounts(db: Db, includeHidden = true): Promise<Account[]> {
-  const { rows } = await db.query<Account>(
-    `${SELECT} ${includeHidden ? '' : 'WHERE NOT a.hidden'}
-     ORDER BY a.type, coalesce(a.display_name, a.name)`,
+  const { rows } = await db.query<AccountRow>(
+    `${SELECT} ${includeHidden ? '' : 'WHERE NOT a.hidden'}`,
   )
-  return rows
+  return rows.map(named).sort(inListOrder)
 }
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
-  const { rows } = await db.query<Account>(`${SELECT} WHERE a.id = $1`, [id])
+  const { rows } = await db.query<AccountRow>(`${SELECT} WHERE a.id = $1`, [id])
   if (!rows[0]) throw notFound('Account')
-  return rows[0]
+  return named(rows[0])
 }
 
 export const manualAccountInputSchema = z.object({
