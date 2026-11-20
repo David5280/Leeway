@@ -328,12 +328,17 @@ describe('GlanceWidget', () => {
 describe('AlertsWidget', () => {
   const region = () => screen.getByRole('region', { name: 'Heads up' })
 
-  it('says nothing needs you when all is well', async () => {
-    const server = fakeServer({ list_connections: () => [connection({ id: 'a' })] })
-    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
-    await waitFor(() => expect(server.actions('list_connections')).toHaveLength(1))
-    expect(region()).toHaveTextContent('Nothing needs you right now. Every budget is on track.')
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  it('takes no room at all when nothing needs the owner', async () => {
+    const server = fakeServer({
+      list_connections: () => [connection({ id: 'a' })],
+      list_alerts: () => [],
+      get_ai_usage: () => ({ alert: null }),
+    })
+    const { container } = renderSignedIn(
+      <AlertsWidget budget={budgetFor(categories, [])} offset={0} />,
+    )
+    await waitFor(() => expect(server.actions('get_ai_usage')).toHaveLength(1))
+    expect(container).toBeEmptyDOMElement()
   })
 
   it('keeps to three rows, banks then budgets worst first, and leads to every alert', async () => {
@@ -400,8 +405,8 @@ describe('AlertsWidget', () => {
     })
     renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
     await waitFor(() => expect(server.actions('list_connections')).toHaveLength(1))
+    expect(await screen.findByText('Chase stopped syncing. Open Banks to see why.')).toBeVisible()
     expect(region()).not.toHaveTextContent('log in again')
-    expect(region()).toHaveTextContent('Nothing needs you right now.')
   })
 
   it('uses the singular for one transaction that needs a category', () => {
@@ -479,11 +484,10 @@ describe('AlertsWidget and the AI spending alert', () => {
     })
   }
 
-  it('shows the alert last, with a way to AI models, in place of "nothing needs you"', async () => {
+  it('shows the alert on its own, with a way to AI models, when nothing else needs the owner', async () => {
     serveAlert()
     renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
-    expect(await within(region()).findByText(/AI limit of \$5.00 is reached/)).toBeInTheDocument()
-    expect(region()).not.toHaveTextContent('Nothing needs you')
+    expect(await screen.findByText(/AI limit of \$5.00 is reached/)).toBeInTheDocument()
     expect(within(region()).getByRole('link', { name: 'AI models' })).toHaveAttribute(
       'href',
       '/settings/ai',
@@ -523,7 +527,10 @@ describe('AlertsWidget and the AI spending alert', () => {
       await screen.findByRole('button', { name: 'Dismiss the AI spending alert' }),
     )
     await waitFor(() => expect(server.actions('dismiss_ai_alert')).toEqual([{}]))
-    expect(await within(region()).findByText(/Nothing needs you/)).toBeInTheDocument()
+    // With the alert gone nothing needs the owner, so Heads up steps aside.
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument(),
+    )
   })
 })
 

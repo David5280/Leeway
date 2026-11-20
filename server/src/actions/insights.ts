@@ -10,6 +10,7 @@ import {
   topMerchants,
   trends,
 } from '../domain/insights.js'
+import { monthlyTotals } from '../domain/monthlyTotals.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
 
@@ -24,6 +25,18 @@ export const getTrendsAction = defineAction({
   scope: 'read',
   surface: 'all',
   run: async (ctx, { periods }) => trends(ctx.db, await getSettings(ctx.db), ctx.now(), periods),
+})
+
+export const getMonthlyTotalsAction = defineAction({
+  name: 'get_monthly_totals',
+  title: 'Money in and out by month',
+  description:
+    'Spending, income and per-category totals for each of the last N calendar months, oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither. Use it for month-by-month questions whatever the budget period is.',
+  input: z.object({ months: z.number().int().min(2).max(36).default(12) }),
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { months }) =>
+    monthlyTotals(ctx.db, await getSettings(ctx.db), ctx.now(), months),
 })
 
 export const suggestBudgetsAction = defineAction({

@@ -22,8 +22,7 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await page.goto('/')
   const headsUp = page.getByRole('region', { name: 'Heads up' })
   await expect(headsUp).toContainText('Everyday is overdrawn by $42.10.')
-  // Said once: no banner above the hero, and the summary leaves it to Heads up.
-  await expect(page.getByRole('region', { name: 'Summary' })).not.toContainText('Everyday')
+  // Said once: no banner above the hero, only Heads up.
   await expect(page.getByText('Everyday is overdrawn by $42.10.')).toHaveCount(1)
   await expect(page.getByRole('region', { name: 'Account alerts' })).toHaveCount(0)
   await headsUp.getByRole('link', { name: /Everyday is overdrawn/ }).click()
@@ -73,8 +72,8 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
 
   await removeAccounts(page, ['Everyday', 'Rainy day'])
   await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Summary' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Heads up' })).not.toContainText('Everyday')
+  await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
+  await expect(page.getByText(/Everyday is overdrawn/)).toHaveCount(0)
 })
 
 test('a low-balance warning set in Settings becomes an alert', async ({ page }) => {

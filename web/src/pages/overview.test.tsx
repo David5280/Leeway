@@ -58,21 +58,30 @@ const REGION: Record<string, string> = {
   accounts: 'Accounts',
   merchants: 'Top merchants',
   trends: 'Spending by period',
+  'net-worth': 'Net worth',
+  flows: 'Money in and out',
 }
 
 /**
- * The default widgets in page order. Wide widgets stack in the main column
- * and half ones beside them, so Recent comes before Accounts.
+ * The default widgets in page order: the leeway hero with net worth beside it,
+ * then money in and out and the pace. Heads up says nothing, and takes no
+ * room, while nothing needs the owner.
  */
-const DEFAULT_PAGE_ORDER = [
-  'Your leeway',
-  'Heads up',
-  'Summary',
-  'Spending pace',
-  'This period at a glance',
-  'Categories',
-  'Recent transactions',
-  'Accounts',
+const DEFAULT_PAGE_ORDER = ['Your leeway', 'Net worth', 'Money in and out', 'Spending pace']
+
+/**
+ * A fuller dashboard for the editing tests, with wide and half widgets in
+ * columns between full ones, so every way a widget moves can be tried.
+ */
+const EDITABLE_WIDGETS: Partial<Widget>[] = [
+  { type: 'leeway', size: 'wide' },
+  { type: 'alerts', size: 'full' },
+  { type: 'summary', size: 'full' },
+  { type: 'pace', size: 'full' },
+  { type: 'glance', size: 'full' },
+  { type: 'categories', size: 'wide' },
+  { type: 'accounts', size: 'half' },
+  { type: 'recent', size: 'wide' },
 ]
 
 function layout(widgets: Partial<Widget>[]): Settings {
@@ -108,7 +117,15 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
       }),
       list_transactions: () => ({ transactions: [], total: 0 }),
       list_accounts: () => [],
+      list_alerts: () => [],
       top_merchants: () => [],
+      get_net_worth: () => ({
+        assetsCents: 0,
+        liabilitiesCents: 0,
+        netWorthCents: 0,
+        history: [],
+      }),
+      get_monthly_totals: () => [],
       // The server always returns the periods asked for, oldest first.
       get_trends: () =>
         [-2, -1, 0].map((offset) => ({
@@ -198,8 +215,9 @@ describe('account alerts on the Overview', () => {
   })
 
   it('says each alert once, in Heads up, with no banner above the hero', async () => {
-    serve(settings, { list_alerts: () => alerts, get_summary: alertSummary })
-    renderOverview()
+    const withSummary = layout(EDITABLE_WIDGETS)
+    serve(withSummary, { list_alerts: () => alerts, get_summary: alertSummary })
+    renderOverview(withSummary)
     const headsUp = await screen.findByRole('region', { name: 'Heads up' })
     await within(headsUp).findByText('Everyday is overdrawn by $42.10.')
     await screen.findByText("You're on track.")
@@ -385,8 +403,9 @@ describe('Overview edit mode', () => {
   })
 
   it('moves a widget and saves the new order', async () => {
-    const server = serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    const server = serve(editable)
+    renderOverview(editable)
     const user = await startEditing()
     await user.click(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
@@ -402,13 +421,14 @@ describe('Overview edit mode', () => {
       'categories',
     ])
     await waitFor(() =>
-      expect(shownWidgets().slice(5, 7)).toEqual(['Recent transactions', 'Categories']),
+      expect(shownWidgets().slice(4, 6)).toEqual(['Recent transactions', 'Categories']),
     )
   })
 
   it('cannot move the first widget up or the last one down', async () => {
-    serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    serve(editable)
+    renderOverview(editable)
     await startEditing()
     expect(
       toolsFor('Your leeway').getByRole('button', { name: 'Move Your leeway up' }),
@@ -438,8 +458,9 @@ describe('Overview edit mode', () => {
   })
 
   it('hides a widget, keeping it in edit mode to show again', async () => {
-    const server = serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    const server = serve(editable)
+    renderOverview(editable)
     const user = await startEditing()
     await user.click(toolsFor('Heads up').getByRole('button', { name: 'Hide' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))

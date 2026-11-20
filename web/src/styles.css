@@ -1152,6 +1152,11 @@ code.code {
   min-width: 0;
 }
 
+/* A widget with nothing to say (Heads up when all is well) takes no room. */
+.widget:empty {
+  display: none;
+}
+
 /* Four quick numbers: four across when there is room, two otherwise. */
 .glance {
   display: grid;

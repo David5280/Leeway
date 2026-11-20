@@ -1,6 +1,7 @@
 // Making a category and changing its budget, and the overview's list of them.
 
 import { expect, test } from '@playwright/test'
+import { showWidgets } from './dashboard'
 import { action, addAccount, addSpending, removeAccount } from './manual'
 
 test('a new category gets a budget, which can be changed on its own page', async ({ page }) => {
@@ -53,6 +54,7 @@ test("the overview's category bars line up, however wide a row's figures", async
     category: 'Overspent',
   })
 
+  await showWidgets(page, ['categories'])
   await page.goto('/')
   const widget = page.getByRole('region', { name: 'Categories', exact: true })
   await expect(widget.locator('.cbar', { hasText: 'Overspent' })).toContainText(/Over\s*\$12,/)

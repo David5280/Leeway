@@ -10,6 +10,14 @@ import { DEFAULT_WIDGETS, getSettings, saveSettings, type Settings } from './set
 /** The name this upgrade is recorded under in applied_upgrades. */
 const SUMMARY_WIDGET_UPGRADE = 'summary-widget'
 
+/** Whether the stored settings hold a dashboard, rather than falling back to the default. */
+async function dashboardSaved(db: pg.PoolClient): Promise<boolean> {
+  const { rows } = await db.query<{ saved: boolean }>(
+    "SELECT coalesce(data ? 'dashboard', false) AS saved FROM settings",
+  )
+  return rows[0]?.saved ?? false
+}
+
 /** Returns true when the summary was added to a saved dashboard. */
 export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {
   return withTransaction(pool, async (db) => {
@@ -19,6 +27,8 @@ export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {
     )
     // Already applied on an earlier start.
     if (rowCount === 0) return false
+    // A dashboard never saved opens with today's default, which needs no upgrade.
+    if (!(await dashboardSaved(db))) return false
     const settings = await getSettings(db)
     const { widgets } = settings.dashboard
     if (widgets.some((w) => w.type === 'summary')) return false

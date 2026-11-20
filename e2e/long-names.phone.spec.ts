@@ -5,6 +5,7 @@
 // name whole beside its figures rather than squeeze it to a letter or two.
 
 import { expect, test, type Locator } from '@playwright/test'
+import { showWidgets } from './dashboard'
 import { action, addAccount, addSpending, removeAccount } from './manual'
 import { IPHONE, NARROWEST, overflow } from './phone'
 
@@ -65,6 +66,7 @@ test.describe('on the narrowest phone', () => {
       category: 'Kite',
     })
 
+    await showWidgets(page, ['categories'])
     await page.goto('/')
     const row = page
       .getByRole('region', { name: 'Categories', exact: true })
@@ -115,6 +117,7 @@ test.describe('on an iPhone', () => {
     await page.keyboard.press('Escape')
 
     // The overview's recent list cuts it short too.
+    await showWidgets(page, ['recent'])
     await page.goto('/')
     const recent = page.getByRole('region', { name: 'Recent transactions' }).getByText(description)
     await expect(recent).toBeVisible()

@@ -479,3 +479,22 @@
 .merchant-row {
   padding: 6px 0;
 }
+
+/* The key under money in and out: a word beside each bar's color, so color is never alone. */
+.flow-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--tone-muted);
+}
+.flow-swatch.in {
+  background: var(--tone-in);
+}
+.flow-swatch.out {
+  margin-left: 10px;
+}

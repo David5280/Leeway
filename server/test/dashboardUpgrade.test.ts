@@ -39,8 +39,16 @@ describe('addSummaryWidget', () => {
   })
 
   it('leaves a dashboard that already has the summary alone', async () => {
-    expect(await types()).toContain('summary')
+    await call('update_settings', {
+      dashboard: { widgets: [{ type: 'summary' }, { type: 'leeway' }] },
+    })
+    expect(await addSummaryWidget(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['summary', 'leeway'])
+  })
+
+  it("leaves a new install's default alone, as it never saved a dashboard", async () => {
     const before = await types()
+    expect(before).not.toContain('summary')
     expect(await addSummaryWidget(ctx.db)).toBe(false)
     expect(await types()).toEqual(before)
   })
@@ -64,16 +72,7 @@ describe('leadWithLeeway', () => {
   it('gives a dashboard still in the old default order the new one, once', async () => {
     await saveOldDefault()
     expect(await leadWithLeeway(ctx.db)).toBe(true)
-    expect(await types()).toEqual([
-      'leeway',
-      'alerts',
-      'summary',
-      'pace',
-      'glance',
-      'categories',
-      'accounts',
-      'recent',
-    ])
+    expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'flows', 'pace'])
 
     // Put back by the owner afterwards, it stays as they put it.
     await saveOldDefault()

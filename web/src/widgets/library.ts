@@ -4,6 +4,7 @@ import type { ComponentType } from 'react'
 import type { Settings } from '../api/client'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
+import { FlowsWidget } from './Flows'
 import { CategoriesWidget } from './Categories'
 import { GlanceWidget } from './Glance'
 import { LeewayWidget } from './Leeway'
@@ -49,22 +50,21 @@ export const WIDGET_LIBRARY: Partial<
   goals: { name: 'Goals', component: GoalsWidget, depth: 'list' },
   debts: { name: 'Debt payoff', component: DebtsWidget, depth: 'breakdown' },
   'net-worth': { name: 'Net worth', component: NetWorthWidget, depth: 'answer' },
+  flows: { name: 'Money in and out', component: FlowsWidget, depth: 'trend' },
 }
 
 /**
- * The Overview as it first opens, and what "Reset layout" puts back, from the
- * most general answer to the most detail (DEPTHS): the same list as the
- * server's DEFAULT_WIDGETS (server/src/domain/settings.ts).
+ * The Overview as it first opens, and what "Reset layout" puts back: only
+ * what answers "am I OK?", from the most general answer to the most detail
+ * (DEPTHS). The same list as the server's DEFAULT_WIDGETS
+ * (server/src/domain/settings.ts).
  */
 export const DEFAULT_LAYOUT: Widget[] = [
   { type: 'leeway', size: 'wide', visible: true },
+  { type: 'net-worth', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'summary', size: 'full', visible: true },
+  { type: 'flows', size: 'full', visible: true },
   { type: 'pace', size: 'full', visible: true },
-  { type: 'glance', size: 'full', visible: true },
-  { type: 'categories', size: 'wide', visible: true },
-  { type: 'accounts', size: 'half', visible: true },
-  { type: 'recent', size: 'wide', visible: true },
 ]
 
 /**

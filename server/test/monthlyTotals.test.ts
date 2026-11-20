@@ -1,0 +1,83 @@
+// Money in and out by calendar month (get_monthly_totals), whatever the budget period.
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { AppContext } from '../src/context.js'
+import { monthStarts } from '../src/domain/monthlyTotals.js'
+import { actionCaller } from './actionCaller.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+} from './helpers.js'
+
+let ctx: AppContext
+const { call } = actionCaller(() => ctx)
+
+beforeAll(async () => {
+  // Today is Nov 17, 2026.
+  ctx = await createTestContext()
+})
+afterAll(async () => {
+  await ctx.db.end()
+})
+
+let accountId: string
+beforeEach(async () => {
+  await resetData(ctx.db)
+  accountId = (await insertBankAccount(ctx.db)).accountId
+})
+
+const spend = (date: string, name: string, amountCents: number) =>
+  insertBankTransaction(ctx.db, accountId, { date, name, amountCents })
+
+describe('monthStarts', () => {
+  it('counts back across a new year, oldest first', () => {
+    expect(monthStarts('2026-02-28', 4)).toEqual([
+      '2025-11-01',
+      '2025-12-01',
+      '2026-01-01',
+      '2026-02-01',
+    ])
+  })
+})
+
+describe('get_monthly_totals', () => {
+  it('totals each calendar month even when the budget runs by the week', async () => {
+    await call('update_settings', { period: { kind: 'weekly' } })
+    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    const transfers = await call('create_category', { name: 'Moves', kind: 'transfer' })
+    await call('create_rule', { pattern: 'paycheck', field: 'description', categoryId: pay.id })
+    await call('create_rule', {
+      pattern: 'to savings',
+      field: 'description',
+      categoryId: transfers.id,
+    })
+    await spend('2026-09-30', 'Grocer', 5000)
+    await spend('2026-10-01', 'Paycheck', -300000)
+    await spend('2026-10-02', 'Grocer', 12000)
+    await spend('2026-10-31', 'To savings', 50000)
+    await spend('2026-11-03', 'Grocer', 4000)
+    await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
+
+    const months = await call('get_monthly_totals', { months: 3 })
+    expect(months.map((m) => [m.start, m.end, m.current])).toEqual([
+      ['2026-09-01', '2026-09-30', false],
+      ['2026-10-01', '2026-10-31', false],
+      ['2026-11-01', '2026-11-30', true],
+    ])
+    expect(months.map((m) => [m.incomeCents, m.spentCents])).toEqual([
+      [0, 5000],
+      // The move to savings is a transfer, so it is neither in nor out.
+      [300000, 12000],
+      [0, 4000],
+    ])
+    expect(months[1]!.categories.map((c) => c.categoryId)).not.toContain(transfers.id)
+  })
+
+  it('gives twelve months by default, empty ones included', async () => {
+    const months = await call('get_monthly_totals', {})
+    expect(months).toHaveLength(12)
+    expect(months[0]).toMatchObject({ start: '2025-12-01', spentCents: 0, categories: [] })
+  })
+})

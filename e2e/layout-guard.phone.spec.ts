@@ -19,6 +19,7 @@ import {
   type LayoutProblem,
 } from './layout'
 import { OWNER, SETUP_CODE } from './owner'
+import { patchSettings } from './patchSettings'
 import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
@@ -281,17 +282,11 @@ test.describe('in the widest theme, packed tight', () => {
 
   for (const screen of screensFor(phone)) {
     test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request }) => {
-      // The look is changed on its way to the page, so the install keeps its
-      // own. Saving any setting answers with them all, so that answer too.
-      for (const action of ['get_settings', 'update_settings']) {
-        await page.route(`**/api/actions/${action}`, async (route) => {
-          const response = await route.fetch()
-          if (!response.ok()) return route.fulfill({ response })
-          const { result } = await response.json()
-          const appearance = { ...result.appearance, theme: 'neon', density: 'compact' }
-          await route.fulfill({ response, json: { result: { ...result, appearance } } })
-        })
-      }
+      // The look is changed on its way to the page, so the install keeps its own.
+      await patchSettings(page, (settings) => ({
+        ...settings,
+        appearance: { ...(settings.appearance as object), theme: 'neon', density: 'compact' },
+      }))
       await open(page, screen, phone, await screen.path(seeded, request))
       await expect(page.locator('html')).toHaveCSS('--pad', '16px')
       expect(await problemsOn(page)).toEqual([])

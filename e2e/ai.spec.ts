@@ -5,6 +5,7 @@
 
 import { expect, test } from '@playwright/test'
 import { openAiModels, pretendBusyMonth, resetAi, SCREENSHOTS } from './ai'
+import { showWidgets } from './dashboard'
 
 test.afterEach(async ({ page }) => resetAi(page))
 
@@ -84,6 +85,8 @@ test('the overview says when the limit is why Leeway wrote the summary', async (
     const limited = { ...result, ai: 'limit', limitResetsOn: '2026-12-01' }
     await route.fulfill({ response, json: { result: limited } })
   })
+  // The summary is a widget the owner adds; this page stands in for having added it.
+  await showWidgets(page, ['summary'])
   await page.goto('/')
   const summary = page.getByRole('region', { name: 'Summary' })
   await expect(summary).toContainText(

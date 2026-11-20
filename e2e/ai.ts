@@ -5,6 +5,7 @@
 // what get_ai_usage and get_summary answer.
 
 import { expect, type Page } from '@playwright/test'
+import { showEveryWidget } from './dashboard'
 
 /**
  * A folder to save pictures of Settings > AI models in, for review. Unset in
@@ -97,8 +98,13 @@ export async function seeModelTrouble(page: Page): Promise<void> {
   await expect(page.getByText(/^Anthropic retires .+ on Nov 30/)).toBeVisible()
 }
 
-/** Makes get_summary answer as if Anthropic had no model for the summary, so Leeway wrote it. */
+/**
+ * Makes get_summary answer as if Anthropic had no model for the summary, so
+ * Leeway wrote it, on an Overview with every widget the owner can add, the
+ * summary among them.
+ */
 export async function pretendSummaryModelGone(page: Page): Promise<void> {
+  await showEveryWidget(page)
   await patchAnswer(page, 'get_summary', (result) => ({ ...result, ai: 'no_model' }))
 }
 

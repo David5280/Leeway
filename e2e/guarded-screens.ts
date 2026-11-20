@@ -140,7 +140,7 @@ export const SCREENS: Screen[] = [
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
   }),
   at('overview', '/', {
-    name: "/ with Leeway's summary, as the AI model is gone",
+    name: "/ with every widget, and Leeway's summary as the AI model is gone",
     // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,

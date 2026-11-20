@@ -184,6 +184,6 @@ test('dashboard rows shorten a long name with an ellipsis rather than clipping i
     spans.filter((span) => span.scrollWidth <= span.clientWidth).map((span) => span.textContent),
   )
   expect(shown).toContain('Spending pace')
-  expect(shown).toContain('Categories')
+  expect(shown).toContain('Money in and out')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 })
