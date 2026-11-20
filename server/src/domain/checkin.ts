@@ -122,6 +122,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       onTrack: g.onTrack,
       heldBackCents: g.heldBackCents,
       status: g.status,
+      balanceAsOf: g.balanceAsOf,
     })),
     debts:
       plans.debts.length === 0

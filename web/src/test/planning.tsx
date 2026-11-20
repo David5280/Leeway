@@ -67,7 +67,7 @@ export function goal(
   fields: { name: string; targetCents: number } & Partial<Goal>,
   facts: GoalProgressFacts = NO_PROGRESS,
 ): Goal {
-  const { id, accountName, accountBalanceCents, createdOn, ...input } = fields
+  const { id, accountName, accountBalanceCents, balanceAsOf, createdOn, ...input } = fields
   return goalOf(
     {
       // Test account ids are not UUIDs, so the account is checked apart from the schema.
@@ -76,6 +76,7 @@ export function goal(
       id: id ?? `goal-${fields.name.toLowerCase().replaceAll(' ', '-')}`,
       accountName: accountName ?? null,
       accountBalanceCents: accountBalanceCents ?? null,
+      balanceAsOf: balanceAsOf ?? null,
       createdOn: createdOn ?? '2026-09-01',
     },
     facts,

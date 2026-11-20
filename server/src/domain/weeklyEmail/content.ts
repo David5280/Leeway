@@ -126,6 +126,13 @@ function goalItem(goal: Checkin['goals'][number], money: Money, locale: string):
   if (goal.status === 'past_due') {
     return { text: `${goal.name}: past its date`, detail: `${money(goal.remainingCents)} to go` }
   }
+  if (goal.status === 'stale') {
+    // Its account's bank stopped sharing it, so the progress is from that day.
+    return {
+      text: `${goal.name}: its account is no longer shared`,
+      detail: `${progress} as of ${shortDate(goal.balanceAsOf!, locale)}`,
+    }
+  }
   const note =
     goal.onTrack === false && goal.targetDate
       ? `, behind pace for ${shortDate(goal.targetDate, locale)}`

@@ -143,6 +143,23 @@ describe('planOf', () => {
     })
   })
 
+  it('plans nothing for a stale goal, whose progress is only known as of an earlier day', () => {
+    const stale = planOf(
+      { ...trip, status: 'stale', setAside: true },
+      { savedThisPeriodCents: 0, recentSavedCents: 30000, recentDays: 30 },
+      TODAY,
+      monthly,
+    )
+    expect(stale).toMatchObject({
+      periodsLeft: null,
+      perPeriodCents: null,
+      thisPeriodLeftCents: null,
+      projectedDate: null,
+      onTrack: null,
+      heldBackCents: 0,
+    })
+  })
+
   it('has no per-period amount or verdict without a date, but still projects', () => {
     const plan = planOf(
       { ...trip, targetDate: null },
