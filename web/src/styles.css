@@ -1073,10 +1073,11 @@ button.chip {
   align-items: center;
 }
 
+/* As a tight card's own rows do, it keeps inside the card's edges. */
 .alert-hideable > .alert-row {
   flex: 1;
   min-width: 0;
-  margin-right: 0;
+  margin: 0;
 }
 
 .alert-hide {
@@ -1094,9 +1095,12 @@ button.chip {
   cursor: pointer;
 }
 
-.alert-hide:hover {
-  background: var(--surface-2);
-  color: var(--ink);
+/* Only where a pointer hovers, so a tap does not leave it lit on a touch screen. */
+@media (hover: hover) {
+  .alert-hide:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
 }
 
 /* A finger needs 44px (Apple's minimum touch target); a mouse does with less. */
