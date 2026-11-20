@@ -7,9 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
-import { fakeLongHomeAlerts } from './homeAlerts'
-import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import type { Seeded } from './seed'
@@ -133,7 +132,6 @@ export const SCREENS: Screen[] = [
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,
   }),
-  at('overview', '/', { name: '/ with long account alerts to hide', before: fakeLongHomeAlerts }),
   at('accounts', '/accounts'),
   ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
     name: `the ${kind} account page`,
@@ -142,10 +140,6 @@ export const SCREENS: Screen[] = [
   })),
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
-  at('inbox', '/inbox', {
-    name: '/inbox with long alerts, read, unread and cleared',
-    before: fakeLongInbox,
-  }),
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {
     name: '/transactions with the add menu open',
@@ -281,12 +275,6 @@ export const SCREENS: Screen[] = [
     name: '/settings/accounts adding an account by hand',
     then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),
   }),
-  at('settings', '/settings/notifications', {
-    name: '/settings/notifications with push on this device',
-    // A fake browser and push service: no test reaches a real one (notifications.ts).
-    before: pushOnThisDevice,
-    then: seePushOn,
-  }),
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',
     then: revealKey,
@@ -308,6 +296,7 @@ export const SCREENS: Screen[] = [
     then: revealWidgetToken,
   }),
   ...BANK_SCREENS,
+  ...ALERT_SCREENS,
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),
