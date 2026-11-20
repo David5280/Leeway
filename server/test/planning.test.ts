@@ -88,6 +88,32 @@ describe('get_net_worth', () => {
     })
   })
 
+  it('counts an overpaid card as owned and an overdrawn account as owed, never a negative total', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 100000 })
+    // The card was paid $50 too much, so the bank owes the owner.
+    await insertBankAccount(ctx.db, { type: 'credit', balanceCents: -5000 })
+    await insertBankAccount(ctx.db, { balanceCents: -2000 })
+    const worth = await call('get_net_worth', {})
+    expect(worth).toMatchObject({
+      assetsCents: 105000,
+      liabilitiesCents: 2000,
+      netWorthCents: 103000,
+    })
+    expect(
+      netWorthSeries(
+        [
+          { accountId: 'card', day: '2026-11-01', balanceCents: -5000 },
+          { accountId: 'bank', day: '2026-11-01', balanceCents: -100 },
+        ],
+        new Set(['card']),
+        '2026-11-01',
+        '2026-11-17',
+      ),
+    ).toEqual([
+      { date: '2026-11-01', netWorthCents: 4900, assetsCents: 5000, liabilitiesCents: 100 },
+    ])
+  })
+
   it('records a balance every time it changes, through sync or by hand', async () => {
     const house = await call('create_account', {
       name: 'House',

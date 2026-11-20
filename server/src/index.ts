@@ -8,7 +8,7 @@ import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
-import { addSummaryWidget, leadWithLeeway } from './domain/dashboardUpgrade.js'
+import { addFlowsWidget, addSummaryWidget, leadWithLeeway } from './domain/dashboardUpgrade.js'
 import {
   NOTIFIER_MINUTES,
   NOTIFY_AFTER_SYNC_MS,
@@ -52,6 +52,7 @@ await migrate(db)
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
 await leadWithLeeway(db)
+await addFlowsWidget(db)
 
 const now = () => new Date()
 const ctx: AppContext = {

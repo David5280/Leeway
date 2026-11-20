@@ -48,6 +48,31 @@
   transform: scale(0.985);
 }
 
+/* A card whose title and figure are the button, with a chart under it that
+   keeps its own readout: the card lifts only while the button is hovered,
+   and the chart sits in the card's padding, outside the button. */
+@media (hover: hover) {
+  .card.card-split:hover {
+    transform: none;
+    box-shadow: var(--elev-1), var(--hi);
+  }
+  .card.card-split:has(.card-press:hover) {
+    transform: translateY(-1px);
+    box-shadow: var(--elev-2), var(--hi);
+  }
+}
+
+.card-split .card-press {
+  padding-bottom: var(--space-2);
+}
+
+.card-below {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  padding: 0 var(--pad) var(--pad);
+}
+
 /* Hero figure -------------------------------------------------------------- */
 
 .hero-figure {
@@ -495,6 +520,9 @@
 }
 .flow-swatch.in {
   background: var(--tone-in);
+}
+.flow-swatch.out {
+  background: var(--tone-out);
 }
 .flow-swatch.out,
 .flow-swatch.over {

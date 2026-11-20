@@ -4,7 +4,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import type { MonthTotals } from '../src/domain/monthlyTotals.js'
 import { planMonthlyCents } from '../src/domain/paystubs/paystubs.js'
-import { countingWords, payrollNote, savingsRate } from '../src/domain/savings/rate.js'
+import type { PayrollStream } from '../src/domain/savings/payrollMonths.js'
+import {
+  countingWords,
+  payrollNote,
+  savingsRate,
+  type PayrollKind,
+} from '../src/domain/savings/rate.js'
 import { monthRates } from '../src/domain/savingsRates.js'
 import { actionCaller } from './actionCaller.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
@@ -31,7 +37,14 @@ const transfer = (date: string, amountCents: number) => ({
 })
 
 /** No payroll deduction known. */
-const NONE = { pensionCents: null, planCents: null }
+const NONE: PayrollStream[] = []
+
+/** A payroll deduction counted in every month. */
+const stream = (kind: PayrollKind, monthlyCents: number, since: string | null = null) => ({
+  kind,
+  monthlyCents,
+  since,
+})
 
 describe('monthRates', () => {
   const october = month('2026-10-01', '2026-10-31', 400000)
@@ -56,27 +69,46 @@ describe('monthRates', () => {
     const [tookBack] = monthRates([october], [transfer('2026-10-05', -90000)], NONE)
     expect(tookBack).toMatchObject({ percent: null, savedCents: 0 })
     // Refunds outweighing pay leave no pay to share out.
-    const [noPay] = monthRates([month('2026-10-01', '2026-10-31', -500)], [], {
-      pensionCents: 30000,
-      planCents: null,
-    })
+    const [noPay] = monthRates(
+      [month('2026-10-01', '2026-10-31', -500)],
+      [],
+      [stream('pension', 30000)],
+    )
     expect(noPay).toMatchObject({ percent: null, payCents: 0 })
   })
 
   it('counts a pension the owner entered, adding it to the pay it came from', () => {
-    const [rate] = monthRates([october], [], { pensionCents: 44000, planCents: null })
+    const [rate] = monthRates([october], [], [stream('pension', 44000)])
     expect(rate).toMatchObject({ percent: 10, savedCents: 44000, payCents: 444000 })
   })
 
   it('counts a workplace plan a paystub shows beside the pension, both from pay', () => {
-    const [plan] = monthRates([october], [], { pensionCents: null, planCents: 44000 })
+    const [plan] = monthRates([october], [], [stream('plan', 44000)])
     expect(plan).toMatchObject({ percent: 10, savedCents: 44000, payCents: 444000 })
-    const [both] = monthRates([october], [transfer('2026-10-02', 12000)], {
-      pensionCents: 44000,
-      planCents: 44000,
-    })
+    const [both] = monthRates(
+      [october],
+      [transfer('2026-10-02', 12000)],
+      [stream('pension', 44000), stream('plan', 44000)],
+    )
     // $120 + $440 + $440 saved, of $4,000 take-home plus the $880 taken before it.
     expect(both).toMatchObject({ percent: 20, savedCents: 100000, payCents: 488000 })
+  })
+
+  it('counts a deduction only from the month it began', () => {
+    const september = month('2026-09-01', '2026-09-30', 400000)
+    const rates = monthRates([september, october], [], [stream('plan', 44000, '2026-10-15')])
+    // September came before the paystub, so nothing Leeway knows was taken from its pay.
+    expect(rates.map((rate) => rate.percent)).toEqual([null, 10])
+  })
+
+  it('counts the running month’s deductions only for the pay it has seen so far', () => {
+    const half = month('2026-11-01', '2026-11-30', 200000, true)
+    const [, running] = monthRates([october, half], [], [stream('pension', 44000)])
+    // Half a usual month's pay so far, so half a month of the pension: $220 of $2,220.
+    expect(running).toMatchObject({ percent: 10, savedCents: 22000, payCents: 222000 })
+    // With no finished month of pay to go by, the running month counts none yet.
+    const [alone] = monthRates([half], [], [stream('pension', 44000)])
+    expect(alone).toMatchObject({ percent: null, payCents: 200000 })
   })
 
   it('keeps huge amounts whole', () => {
@@ -170,7 +202,19 @@ describe('get_savings_rates', () => {
 
     await call('update_settings', { savingsPlan: { savingsRateTargetPercent: 15 } })
     expect((await call('get_savings_rates', {})).targetPercent).toBe(15)
-    expect((await call('get_savings_rates', {})).months).toHaveLength(6)
+    // Six months asked, but the history starts in October, so the months before it are left off.
+    expect((await call('get_savings_rates', {})).months).toHaveLength(2)
+  })
+
+  it('leaves off a month the bank history starts partway through', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-09-20',
+      name: 'Paycheck',
+      amountCents: -150000,
+    })
+    const rates = await call('get_savings_rates', { months: 3 })
+    expect(rates.months.map((month) => month.start)).toEqual(['2026-10-01', '2026-11-01'])
   })
 
   it('says a pension is counted once one with a known contribution is entered', async () => {
@@ -191,6 +235,15 @@ describe('get_savings_rates', () => {
     await call('save_paystub', { paystub })
     expect((await call('get_savings_rates', {})).note).toBe(
       payrollNote({ pension: false, plan: true }),
+    )
+  })
+
+  it('leaves out a paystub too old to say what pay takes now', async () => {
+    const paystub = confirmedPaystub({ payDate: '2026-04-15' })
+    paystub.current = { ...paystub.current, pension: null }
+    await call('save_paystub', { paystub })
+    expect((await call('get_savings_rates', {})).note).toBe(
+      payrollNote({ pension: false, plan: false }),
     )
   })
 })

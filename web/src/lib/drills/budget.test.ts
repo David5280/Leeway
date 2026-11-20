@@ -205,6 +205,8 @@ describe('paceDrill', () => {
       'Lands near $960 = Spent so far $440 plus the rest of the period at this rate $520',
     )
     expect(drill.figure).toEqual({ cents: 96000, tone: 'warn' })
+    // It is measured against the budget, not a usual month, and says so.
+    expect(drill.usual).toMatchObject({ usualCents: 80000, heading: 'Compared with the budget' })
     expect(drill.items!.rows.map((one) => one.label)).toEqual(['Groceries', 'Dining out'])
   })
 

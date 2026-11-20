@@ -1,10 +1,16 @@
 // Money in beside money out for each month: a green bar for what came in and
-// a plain one for what went out, red only for a finished month where more
+// a darker plain one for what went out, red only for a finished month where more
 // went out than came in. A dashed line marks the usual month's spending, so
 // each month reads against where it should be. Tap a month for its numbers.
 
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, niceTicks, textWidth } from '../../lib/chartScale'
+import {
+  axisFormat,
+  axisIndices,
+  niceTicks,
+  RUNNING_FILL_OPACITY,
+  textWidth,
+} from '../../lib/chartScale'
 import { overspent, type FlowMonth } from '../../lib/flows'
 import { monthYear } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
@@ -64,6 +70,7 @@ export function FlowBars({
   const shown = new Set(
     axisIndices(months.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
   )
+  const empty = values.every((value) => value === 0)
 
   return (
     <ChartFrame
@@ -95,12 +102,18 @@ export function FlowBars({
         )
       }
     >
-      <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
+      {/* With nothing to measure, a scale means nothing: one plain baseline and the note. */}
+      {empty ? (
+        <line x1={left} x2={right} y1={bottom} y2={bottom} className="chart-baseline" />
+      ) : (
+        <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
+      )}
       {months.map((month, i) => {
         const dim = hovered && hovered !== month ? 0.55 : 1
         // The running month is drawn lighter and outlined: it is still filling up.
-        const running = month.current ? { fillOpacity: 0.45, strokeWidth: 1.5 } : {}
-        const out = overspent(month) ? 'var(--tone-problem)' : 'var(--tone-muted)'
+        const running = month.current ? { fillOpacity: RUNNING_FILL_OPACITY, strokeWidth: 1.5 } : {}
+        // Money out is darker than money in, so the pair differs in lightness as well as hue.
+        const out = overspent(month) ? 'var(--tone-problem)' : 'var(--tone-out)'
         return (
           <g key={month.start} opacity={dim} aria-hidden="true">
             <path
@@ -145,7 +158,7 @@ export function FlowBars({
             ),
         )}
       </g>
-      {values.every((value) => value === 0) && (
+      {empty && (
         <text
           x={(left + right) / 2}
           y={(top + bottom) / 2}

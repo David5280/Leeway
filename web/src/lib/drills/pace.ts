@@ -33,6 +33,7 @@ export function paceDrill(pace: SpendingPace, budget: Budget, isCurrent: boolean
       usualCents: pace.budgetCents,
       goodWhen: 'down',
       basis: 'the flexible budget',
+      heading: 'Compared with the budget',
     },
     items: {
       title: 'Categories followed',

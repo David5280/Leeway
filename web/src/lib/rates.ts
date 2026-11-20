@@ -1,7 +1,11 @@
 // The savings rate month by month, as the Plan's chart reads it: what a
 // finished month usually saves, and the level each month is drawn against.
-// Pure. A month with no rate is unknown, never zero, since payroll
-// deductions other than a pension the owner entered never reach the bank.
+// Pure. The server counts each month (bank transfers to savings, plus the
+// pension and the 401(k), 457 or 403(b) Leeway knows from when each began)
+// and leaves off a month the bank history starts partway through. A month with
+// no rate is unknown, never zero, since a payroll deduction Leeway does not
+// know never reaches the bank. The usual month is the middle one, so a single
+// month that moved a lump into savings does not set what usual means.
 
 import type { Output } from '../api/client'
 
@@ -16,11 +20,17 @@ export function fromFirstMonth(months: MonthRate[]): MonthRate[] {
   return months.slice(Math.max(0, first))
 }
 
-/** The average rate of the finished months that have one, or null before there is one. */
+/** The middle rate of the finished months that have one, or null before there is one. */
 export function usualRate(months: MonthRate[]): number | null {
-  const known = months.filter((month) => !month.current && month.percent !== null)
+  const known = months
+    .filter((month) => !month.current && month.percent !== null)
+    .map((month) => month.percent!)
+    .sort((a, b) => a - b)
   if (known.length === 0) return null
-  return Math.round(known.reduce((sum, month) => sum + month.percent!, 0) / known.length)
+  const middle = Math.floor(known.length / 2)
+  // An even count has two middles; their average is the median.
+  const median = known.length % 2 ? known[middle]! : (known[middle - 1]! + known[middle]!) / 2
+  return Math.round(median)
 }
 
 /**

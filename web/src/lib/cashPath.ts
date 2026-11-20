@@ -1,7 +1,8 @@
 // The cash in checking from today to payday, drawn as it drops with each
 // bill: "Will the cash last until payday?" Pure. Day-to-day spending is left
-// out, since the line shows what the bills leave. A bill already overdue
-// counts as due today.
+// out, since the line shows what the bills leave. The line starts at what
+// checking holds now, so its first point is the real balance; a bill already
+// overdue, or due today, is a step down on today.
 
 import type { CashFlow } from '../api/client'
 import { addDays } from './dates'
@@ -23,12 +24,8 @@ export function cashPath(flow: CashFlow): CashPoint[] {
     byDay.set(day, { cents: known.cents + bill.amountCents, names: [...known.names, bill.name] })
   }
   let cents = flow.cashCents
-  const points: CashPoint[] = []
-  const today = byDay.get(flow.today)
-  if (today) cents -= today.cents
-  points.push({ date: flow.today, cents, bills: today?.names ?? [] })
+  const points: CashPoint[] = [{ date: flow.today, cents, bills: [] }]
   for (const [day, due] of [...byDay].sort(([a], [b]) => a.localeCompare(b))) {
-    if (day === flow.today) continue
     // A point the day before keeps the line flat until the bill comes out.
     const before = addDays(day, -1)
     if (before > points.at(-1)!.date) points.push({ date: before, cents, bills: [] })

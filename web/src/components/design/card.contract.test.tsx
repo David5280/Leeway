@@ -123,8 +123,9 @@ function serve() {
         incomeCents: 250000,
         categories: [{ categoryId: groceries.id, spentToDateCents: 20000 }],
       })),
-    get_monthly_totals: () =>
-      ['2026-09-01', '2026-10-01', '2026-11-01'].map((start, i) => ({
+    get_monthly_totals: () => ({
+      firstTransactionDate: '2026-09-01',
+      months: ['2026-09-01', '2026-10-01', '2026-11-01'].map((start, i) => ({
         start,
         end: start,
         current: i === 2,
@@ -132,6 +133,7 @@ function serve() {
         spentCents: 180000,
         categories: [],
       })),
+    }),
     list_transactions: () => ({ transactions: charges, total: charges.length }),
     list_accounts: () => everyAccount,
     list_recent_balances: () =>

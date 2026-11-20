@@ -16,8 +16,8 @@ bank, and nothing in Leeway can ever move money.
   and a warning before you go over.
 - **Bank sync** through Plaid, or **CSV import** and accounts added by hand
   if you'd rather not connect a bank.
-- **An overview dashboard** you arrange yourself, with a summary that says in
-  a sentence how the period is going and what needs you.
+- **An overview dashboard** you arrange yourself: what is left to spend, net
+  worth, account alerts, money in against money out, and your spending pace.
 - **An accounts dashboard** for one account or several: balances, money in and
   out, spending by category and recent transactions.
 - **Account alerts** when an account is overdrawn, a card is over its limit, a
@@ -35,7 +35,7 @@ bank, and nothing in Leeway can ever move money.
 
 ## Screenshots
 
-![The overview dashboard, with an overdrawn account alert at the top and a summary that leads with it](docs/screenshots/overview.png)
+![The overview dashboard: what is left to spend, net worth, an account alert, money in against money out and the spending pace](docs/screenshots/overview.png)
 
 | Accounts dashboard                                                                 | Budgets                                                                          |
 | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |

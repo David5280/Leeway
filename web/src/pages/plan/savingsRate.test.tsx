@@ -1,6 +1,7 @@
 // "How much of your pay do you save?" under net worth on Plan.
 
 import { fireEvent, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn } from '../../test/fake'
 import { RATE_MONTHS, SavingsRateCard } from './SavingsRate'
@@ -22,7 +23,7 @@ const rate = (start: string, percent: number | null, current = false) => ({
 
 const region = () => screen.getByRole('region', { name: 'Savings rate' })
 const fills = () =>
-  [...region().querySelectorAll('svg.chart-svg path[aria-hidden]')].map((path) =>
+  [...region().querySelectorAll('svg.chart-svg g[aria-hidden] > path')].map((path) =>
     path.getAttribute('fill'),
   )
 
@@ -102,6 +103,44 @@ describe('SavingsRateCard', () => {
     })
     renderSignedIn(<SavingsRateCard />)
     expect(await screen.findByText('90%', { selector: '.mid-number' })).toBeInTheDocument()
+  })
+
+  it('stops a month over 100% at the top and writes its real rate over it', async () => {
+    fakeServer({
+      get_savings_rates: () => ({
+        months: [rate('2026-09-01', 10), rate('2026-10-01', 140), rate('2026-11-01', 12)],
+        targetPercent: null,
+        note: NOTE,
+      }),
+    })
+    renderSignedIn(<SavingsRateCard />)
+    // The usual month is the middle one, so the big month does not set it.
+    expect(await screen.findByText('12%', { selector: '.mid-number' })).toBeInTheDocument()
+    const chart = within(region()).getByRole('img')
+    expect(chart).toHaveTextContent('140%')
+    // The scale stops at all of pay rather than stretching to fit the one month.
+    expect(chart).toHaveTextContent('100%')
+    expect(chart).not.toHaveTextContent('150%')
+  })
+
+  it('opens the math from its question, while the bars keep their readout', async () => {
+    fakeServer({
+      get_savings_rates: () => ({
+        months: [rate('2026-09-01', 10), rate('2026-10-01', 14), rate('2026-11-01', 3, true)],
+        targetPercent: null,
+        note: NOTE,
+      }),
+    })
+    renderSignedIn(<SavingsRateCard />)
+    await screen.findByText('of pay, in a usual month')
+    const button = within(region()).getByRole('button')
+    // The chart is outside the button, so a finger on it reads the chart.
+    expect(button).not.toContainElement(within(region()).getByRole('img'))
+    await userEvent.click(button)
+    const sheet = screen.getByRole('dialog', { name: 'Savings rate' })
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Share of pay saved 14% = Saved in Oct 2026 $560 out of pay $4,000',
+    )
   })
 
   it('says why the rates could not be read', async () => {

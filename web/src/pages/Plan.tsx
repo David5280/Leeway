@@ -1,4 +1,6 @@
-// The Plan screen: cash until payday on top, then bills, goals, debts, net worth or retirement.
+// The Plan screen: bills, goals, debts, net worth or retirement, one section
+// at a time. Cash until payday leads the bills, the section it answers for,
+// and stays off the others so each opens on its own subject.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Shell } from '../components/Shell'
@@ -40,7 +42,7 @@ export function Plan() {
         options={OPTIONS}
         onChange={(next) => navigate(`/plan/${next}`)}
       />
-      <CashFlowCard />
+      {current === 'bills' && <CashFlowCard />}
       <Content />
     </Shell>
   )

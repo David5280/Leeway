@@ -1,6 +1,7 @@
 // "Are you spending less than you earn?": money in beside money out for the
-// last six months, with what a usual month keeps as the answer. The card
-// opens each month and the math behind the answer (lib/drills/flows.ts).
+// last six months, with what a usual month keeps as the answer. The title and
+// answer open each month and the math behind it (lib/drills/flows.ts); the
+// bars under them keep their own readout under a finger.
 
 import { useAction } from '../api/hooks'
 import { FlowBars } from '../components/charts/FlowBars'
@@ -10,7 +11,7 @@ import { SectionHead } from '../components/design/SectionHead'
 import { LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { flowsDrill } from '../lib/drills/flows'
-import { flowsFrom, flowsHeadline, overspent } from '../lib/flows'
+import { flowsFrom, flowsHeadline, overspent, type Flows } from '../lib/flows'
 import { monthYear } from '../lib/format'
 
 /** Months the Overview's chart shows: enough to see a pattern, few enough to read on a phone. */
@@ -35,6 +36,7 @@ export function FlowsWidget() {
   return (
     <Card
       drill={flowsDrill(flows, (iso) => monthYear(iso, settings.locale))}
+      below={<FlowsChart flows={flows} />}
       label="Money in and out"
       className="stack-sm"
     >
@@ -51,6 +53,14 @@ export function FlowsWidget() {
       ) : (
         <p className="small muted">Your first full month shows here once it ends.</p>
       )}
+    </Card>
+  )
+}
+
+/** The bars and their key, outside the card's button so a finger reads them. */
+function FlowsChart({ flows }: { flows: Flows }) {
+  return (
+    <>
       <FlowBars
         months={flows.months}
         usualSpentCents={flows.usual?.spentCents ?? null}
@@ -65,6 +75,6 @@ export function FlowsWidget() {
           </>
         )}
       </p>
-    </Card>
+    </>
   )
 }

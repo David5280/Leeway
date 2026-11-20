@@ -23,6 +23,7 @@ import {
   type PensionMonthlyTotals,
 } from './retirement/pensions.js'
 import { pensionsOf } from './retirement/pensionStore.js'
+import { freshPaystub } from './savings/payrollMonths.js'
 import { bankSeenRate, countsPayroll } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -147,7 +148,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
         cashCents: savings.cashCents,
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
-        planMonthlyCents: planMonthlyCents(paystub),
+        planMonthlyCents: planMonthlyCents(freshPaystub(paystub, today)),
         monthly,
         billsMonthlyCents,
         settings,
@@ -205,9 +206,9 @@ function savingsGlance(
     bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
     /**
      * The rate with the payroll deductions Leeway knows (a pension the owner
-     * entered, a workplace plan a saved paystub shows); null when none are known.
+     * entered, a 401(k), 457 or 403(b) a recent paystub shows); null when none are known.
      */
-    pensionIncludedSavingsRatePercent:
+    payrollIncludedSavingsRatePercent:
       savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
     pension: pensionGlance(pension),
   }

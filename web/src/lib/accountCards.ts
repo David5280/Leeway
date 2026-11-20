@@ -176,7 +176,11 @@ export function accountFacts(
   }
 }
 
-/** What a set of accounts adds up to: what is owned, what is owed, and the difference. */
+/**
+ * What a set of accounts adds up to: what is owned, what is owed, and the
+ * difference. A balance on the other side of zero counts on the other side,
+ * as net worth counts it: an overpaid card is owned, an overdrawn account owed.
+ */
 export function combine(accounts: readonly Pick<Account, 'type' | 'balanceCents'>[]): {
   ownedCents: number
   owedCents: number
@@ -186,8 +190,9 @@ export function combine(accounts: readonly Pick<Account, 'type' | 'balanceCents'
   let owedCents = 0
   for (const account of accounts) {
     const balance = account.balanceCents ?? 0
-    if (isOwed(account)) owedCents += balance
-    else ownedCents += balance
+    const held = isOwed(account) ? -balance : balance
+    if (held >= 0) ownedCents += held
+    else owedCents -= held
   }
   return { ownedCents, owedCents, netCents: ownedCents - owedCents }
 }

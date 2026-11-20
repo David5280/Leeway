@@ -2,10 +2,13 @@
 // the owner's own target, or the usual month when they set none. Green only
 // marks a month that reached their target, and nothing is ever red, since
 // payroll deductions Leeway cannot see may make up the rest. A month with no
-// rate has no bar and reads "Not known". Tap a month for its numbers.
+// rate has no bar and reads "Not known". A month over 100% (more moved to
+// savings than came in as pay) stops at the top with its real figure written
+// over it, so one odd month does not flatten the rest. Tap a month for its
+// numbers.
 
 import { useApp } from '../../lib/app'
-import { axisIndices, niceTicks, textWidth } from '../../lib/chartScale'
+import { axisIndices, niceTicks, textWidth, RUNNING_FILL_OPACITY } from '../../lib/chartScale'
 import { monthYear } from '../../lib/format'
 import { reachedTarget, type MonthRate } from '../../lib/rates'
 import { useWidth } from '../../lib/useWidth'
@@ -15,6 +18,9 @@ import { ChartFrame, EndLabel, PointerLayer, Readout, usePointer, ValueAxis } fr
 import { barLayout, barPath } from './PeriodBars'
 
 const percentText = (value: number) => `${value}%`
+
+/** The tallest a bar is drawn: all of pay. */
+const FULL = 100
 
 export function RateBars({
   months,
@@ -30,8 +36,8 @@ export function RateBars({
 }) {
   const { settings } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(540)
-  const values = months.map((month) => month.percent ?? 0)
-  const axis = niceTicks(0, Math.max(level?.percent ?? 0, 10, ...values) * 1.1, 4)
+  const values = months.map((month) => Math.min(FULL, month.percent ?? 0))
+  const axis = niceTicks(0, Math.min(FULL, Math.max(level?.percent ?? 0, 10, ...values) * 1.1), 4)
   const layout = barLayout(
     months.length,
     width,
@@ -72,18 +78,33 @@ export function RateBars({
       {months.map((month, i) => {
         if (month.percent === null) return null
         const fill = reachedTarget(month, targetPercent) ? 'var(--tone-in)' : 'var(--tone-muted)'
+        const capped = month.percent > FULL
         return (
-          <path
-            key={month.start}
-            aria-hidden="true"
-            d={barPath(center(i) - barWidth / 2, y(month.percent), barWidth, bottom)}
-            fill={fill}
-            // The running month is lighter and outlined: it is still filling up.
-            fillOpacity={month.current ? 0.45 : 1}
-            stroke={month.current ? fill : 'none'}
-            strokeWidth={1.5}
-            opacity={hovered && hovered !== month ? 0.55 : 1}
-          />
+          <g key={month.start} aria-hidden="true" opacity={hovered && hovered !== month ? 0.55 : 1}>
+            <path
+              d={barPath(
+                center(i) - barWidth / 2,
+                y(Math.min(FULL, month.percent)),
+                barWidth,
+                bottom,
+              )}
+              fill={fill}
+              // The running month is lighter and outlined: it is still filling up.
+              fillOpacity={month.current ? RUNNING_FILL_OPACITY : 1}
+              stroke={month.current ? fill : 'none'}
+              strokeWidth={1.5}
+            />
+            {capped && (
+              <text
+                x={center(i)}
+                y={y(FULL) - 6}
+                textAnchor="middle"
+                className="chart-axis strong-label"
+              >
+                {percentText(month.percent)}
+              </text>
+            )}
+          </g>
         )
       })}
       {level && (

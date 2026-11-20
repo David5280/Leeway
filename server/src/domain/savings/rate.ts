@@ -5,7 +5,7 @@
 // Payroll deductions leave pay before it reaches the bank, so a rate built
 // from bank transfers alone can read low. Two count once Leeway knows them: a
 // pension's contributions the owner entered (retirement/pensions.ts), and the
-// 401(k), 457 or 403(b) a saved paystub shows (paystubs/paystubs.ts). Every
+// 401(k), 457 or 403(b) a recent paystub shows (paystubs/paystubs.ts). Every
 // place that shows the rate says which, with countedNote. There is no target
 // until the owner sets one, and no progress bar toward it, so a partial rate
 // never reads as falling short.
@@ -28,7 +28,7 @@ export function payrollNote({ pension, plan }: PayrollCounted): string {
     return 'Counts your pension and workplace plan contributions from pay, as well as transfers your bank shows.'
   }
   if (pension) {
-    return 'Counts your pension contributions as well as transfers your bank shows. A 401(k) or similar plan counts once a saved paystub shows it.'
+    return 'Counts your pension contributions as well as transfers your bank shows. A 401(k) or similar plan counts once a paystub from the last six months shows it.'
   }
   if (plan) {
     return 'Counts the 401(k), 457 or 403(b) contributions your paystub shows, as well as transfers your bank shows. A pension counts once you enter it.'
@@ -43,7 +43,7 @@ export function payrollNote({ pension, plan }: PayrollCounted): string {
  * right, whatever goes into a 401(k), IRA or brokerage account.
  */
 export const RATE_GUARD_FOR_AI =
-  'Payroll deductions are counted only where Leeway knows them (a pension the owner entered, or a 401(k), 457 or 403(b) a saved paystub shows), so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
+  'Payroll deductions are counted only where Leeway knows them (a pension the owner entered, or a 401(k), 457 or 403(b) a paystub from the last six months shows), so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {

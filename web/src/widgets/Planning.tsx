@@ -13,7 +13,7 @@ import { useApp } from '../lib/app'
 import { cashFlowDrill, debtsDrill, netWorthDrill } from '../lib/drills/plan'
 import { dayLabel, monthYear, periodWord, shortDate } from '../lib/format'
 import { shortPlan } from '../lib/goalText'
-import { CashFlowSummary } from '../pages/plan/CashFlow'
+import { CashFacts } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
 import { worthChange } from '../lib/worth'
 import { WorthChangeLine } from '../components/WorthChange'
@@ -49,7 +49,7 @@ export function CashFlowWidget() {
   return (
     <Card drill={cashFlowDrill(cash.data, date)} label="Until payday" className="stack-sm">
       <SectionHead icon="wallet" title={title} />
-      <CashFlowSummary compact />
+      <CashFacts flow={cash.data} />
     </Card>
   )
 }

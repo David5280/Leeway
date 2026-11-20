@@ -279,7 +279,7 @@ describe('summaryFacts', () => {
       emergencyFundTargetMonths: 6,
       // Known, but never handed to the summary writer (see the next test).
       bankSeenSavingsRatePercent: 4,
-      pensionIncludedSavingsRatePercent: null,
+      payrollIncludedSavingsRatePercent: null,
       pension: null,
     }
     expect(summaryFacts(checkin({ savings }), monthly, money).savingsAndInvestments).toEqual({
@@ -313,7 +313,7 @@ describe('summaryFacts', () => {
       emergencyFundTargetMonths: null,
       bankSeenSavingsRatePercent: 4,
       hasSavingsAccounts: true,
-      pensionIncludedSavingsRatePercent: 12,
+      payrollIncludedSavingsRatePercent: 12,
       pension: { count: 1, monthlyContributionCents: 42_300, employerMonthlyCents: 82_283 },
     }
     const facts = JSON.stringify(summaryFacts(checkin({ savings }), monthly, money))

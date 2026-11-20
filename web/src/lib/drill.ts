@@ -16,11 +16,22 @@ import type { MoneySign, MoneyTone } from './money'
 export type DrillValue =
   { cents: number; sign?: MoneySign; tone?: MoneyTone } | { text: string; tone?: MoneyTone }
 
-/** One term of the math: added to or taken from what came before; the first has no operation. */
+/** How a term joins what came before: added, taken away, or what it is a share of. */
+export type MathOp = 'plus' | 'minus' | 'over'
+
+/** One term of the math, joined to what came before by its operation; the first has none. */
 export interface MathTerm {
   label: string
   value: DrillValue
-  op?: 'plus' | 'minus'
+  op?: MathOp
+}
+
+/** Each operation as a sign in the equation and as words in the sentence read aloud. */
+export const MATH_OPS: Record<MathOp, { sign: string; words: string }> = {
+  plus: { sign: '+', words: 'plus' },
+  // The true minus sign, not a hyphen.
+  minus: { sign: '−', words: 'minus' },
+  over: { sign: '÷', words: 'out of' },
 }
 
 /** The math behind a figure: the terms, in order, and the result they come to. */
@@ -62,6 +73,11 @@ export interface DrillUsual {
   basis: string
   /** What is compared, for a chip's few words: "spent" reads "▼ $40 less spent". */
   subject?: string
+  /**
+   * The section's title when the figure is measured against something other
+   * than its usual, like a budget: "Compared with the budget".
+   */
+  heading?: string
 }
 
 /** One thing that makes up the figure: a transaction, a category or an account. */
@@ -102,7 +118,7 @@ export function mathSentence(math: DrillMath, money: (cents: number) => string):
     .map((term, index) => {
       const words = `${term.label} ${valueText(term.value, money)}`
       if (index === 0 || !term.op) return words
-      return `${term.op === 'minus' ? 'minus' : 'plus'} ${words}`
+      return `${MATH_OPS[term.op].words} ${words}`
     })
     .join(' ')
   return `${math.result.label} ${valueText(math.result.value, money)} = ${terms}`

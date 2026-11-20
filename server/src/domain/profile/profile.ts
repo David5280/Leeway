@@ -34,6 +34,7 @@ import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/p
 import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
+import { freshPaystub } from '../savings/payrollMonths.js'
 import {
   payrollSources,
   savingsRate,
@@ -137,7 +138,7 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
 /**
  * The streams of saving Leeway can see, for the savings rate: transfers the
  * bank shows, the pension contributions the owner entered, and the 401(k),
- * 457 or 403(b) a saved paystub shows. The last two leave pay before the bank
+ * 457 or 403(b) a recent paystub shows. The last two leave pay before the bank
  * sees it. An employer's share is not the owner's pay, so it is left out.
  */
 export function savingSources(
@@ -243,7 +244,7 @@ export async function getFinancialProfile(
     cashCents: cashSaved(savings),
     contributions: savings.contributions,
     pensionMonthlyCents: pensionPay.memberCents,
-    planMonthlyCents: planMonthlyCents(paystub),
+    planMonthlyCents: planMonthlyCents(freshPaystub(paystub, today)),
     monthly,
     billsMonthlyCents,
     settings,

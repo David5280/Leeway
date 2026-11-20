@@ -102,6 +102,9 @@ describe('PeriodBars', () => {
     expect(readout()).toHaveTextContent('Nov$340 so far')
     point('first')
     expect(readout()).toHaveTextContent('Sep$500')
+    // A finger lifting fires leave at once on a phone, so the readout stays to be read.
+    fireEvent.pointerLeave(screen.getByTestId('chart-hit'), { pointerType: 'touch' })
+    expect(readout()).toHaveTextContent('Sep$500')
     fireEvent.pointerLeave(screen.getByTestId('chart-hit'))
     expect(readout()).toBeNull()
   })

@@ -38,9 +38,12 @@ describe('Plan screen', () => {
     expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
     const sections = within(screen.getByRole('group', { name: 'Plan section' }))
     expect(sections.getByRole('button', { name: 'Bills' })).toHaveAttribute('aria-pressed', 'true')
+    // Cash until payday leads the bills, and stays off the other sections.
+    expect(screen.getByRole('region', { name: 'Until payday' })).toBeVisible()
 
     await user.click(sections.getByRole('button', { name: 'Goals' }))
     expect(await screen.findByRole('button', { name: 'Add a goal' })).toBeVisible()
+    expect(screen.queryByRole('region', { name: 'Until payday' })).not.toBeInTheDocument()
     await user.click(sections.getByRole('button', { name: 'Debts' }))
     expect(await screen.findByText(/No credit cards or loans/)).toBeVisible()
     await user.click(sections.getByRole('button', { name: 'Net worth' }))
@@ -60,9 +63,9 @@ describe('Until payday', () => {
   async function show(flow: CashFlow) {
     planServer({ ...quietBills, get_cash_flow: () => flow })
     renderPlan('/plan')
-    const card = await screen.findByRole('region', { name: 'Until payday' })
-    await within(card).findByText(/in checking/)
-    return card
+    // The card is drawn anew once the numbers arrive, so it is found after them.
+    await screen.findByText(/in checking/)
+    return screen.getByRole('region', { name: 'Until payday' })
   }
 
   it('leads with what is left at payday, then checking, the bills and when payday is', async () => {
@@ -71,6 +74,15 @@ describe('Until payday', () => {
     expect(card).toHaveTextContent('$1,500 in checking, minus $60 in bills.')
     expect(card).toHaveTextContent('Next payday Fri, Nov 27.')
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
+  })
+
+  it('opens the math from its answer, with the line and the bills outside the button', async () => {
+    const card = await show(cashFlow())
+    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    expect(open).not.toContainElement(within(card).getByRole('img'))
+    expect(open).not.toContainElement(within(card).getByText('Phone'))
+    await userEvent.setup().click(open)
+    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Left at payday')
   })
 
   it('draws checking dropping with each bill to payday, close up, and names the bills', async () => {
@@ -128,7 +140,9 @@ describe('Until payday', () => {
     expect(card).toHaveTextContent('$80 short of the bills due before payday.')
     expect(within(card).getByText('No payment found')).toBeInTheDocument()
     expect(card).toHaveTextContent('Stay above: $0')
-    expect(card).toHaveTextContent('Checking goes below $0 on Nov 17, when Water comes out.')
+    expect(card).toHaveTextContent('Checking goes below $0 today, when Water comes out.')
+    // The line starts at the balance now, before the overdue bill comes out.
+    expect(within(card).getByRole('img')).toHaveAccessibleDescription(/^Checking from \$10 today/)
     expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
   })
 
@@ -387,6 +401,12 @@ describe('Net worth', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))
+    // The question and its answer open the drill-down; the range and the chart sit outside it.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const open = within(chart).getByRole('button', { name: /Is your net worth growing/ })
+    expect(open).not.toContainElement(within(chart).getByRole('img'))
+    await userEvent.setup().click(open)
+    expect(screen.getByRole('dialog', { name: 'Net worth' })).toBeVisible()
   })
 
   it('marks a negative net worth and explains a short history', async () => {

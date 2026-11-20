@@ -178,3 +178,10 @@ export function timeTicks(first: string, last: string, maxTicks: number): TimeTi
 export function svgNumber(value: number): number {
   return Math.round(value * 10) / 10
 }
+
+/**
+ * How strongly a bar for the period still running is filled: lighter than a
+ * finished one, as it is still filling up, yet at 3:1 or more on the card in
+ * every theme (lib/contrast.test.ts), so it never fades into it.
+ */
+export const RUNNING_FILL_OPACITY = 0.8

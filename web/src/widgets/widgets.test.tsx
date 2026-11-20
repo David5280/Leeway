@@ -82,7 +82,9 @@ describe('LeewayWidget', () => {
     expect(ring).toHaveAttribute('aria-valuenow', '25')
     // 25% used by day 17 of 30 is behind the calendar, so the ring reads fine.
     expect(ring).toHaveClass('ring-ok')
-    expect(region()).toHaveTextContent('25% of the budget used, 57% of the way through the month.')
+    // The ring shows the share used, so the line under it only names the ring's mark.
+    expect(region()).toHaveTextContent('57% of the way through the month, marked on the ring.')
+    expect(region()).not.toHaveTextContent('of the budget used')
     // The comparison with last month belongs to the Activity hero, not this one.
     expect(within(region()).queryByRole('img', { name: /last month/ })).not.toBeInTheDocument()
   })

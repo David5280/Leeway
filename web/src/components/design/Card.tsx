@@ -1,7 +1,8 @@
 // <Card>: the one surface every screen is built from. A card that shows a
 // figure must explain it, so its props demand one of three things:
-//   - `drill`: the whole card is one button that opens the figure's
-//     drill-down (lib/drill.ts) in a sheet;
+//   - `drill`: the card is one button that opens the figure's drill-down
+//     (lib/drill.ts) in a sheet; a chart with its own readout goes in
+//     `below`, after the button, so a finger on it reads the chart;
 //   - `to`: the whole card is one link to the figure's own full page, which
 //     carries the same drill-down sections (an account's detail page);
 //   - `static`: no figure of its own, with the reason why (StaticReason).
@@ -42,7 +43,17 @@ interface Base {
 /** Exactly one of drill, to or static: a figure card cannot leave its explanation out. */
 export type CardProps = Base &
   (
-    | { drill: DrillDown; to?: never; static?: never }
+    | {
+        drill: DrillDown
+        /**
+         * What follows the button inside the card: a chart whose readout
+         * answers a finger or pointer, so a tap there reads the chart
+         * instead of opening the sheet.
+         */
+        below?: ReactNode
+        to?: never
+        static?: never
+      }
     | { to: string; drill?: never; static?: never }
     | { static: StaticReason; drill?: never; to?: never }
   )
@@ -51,7 +62,13 @@ export function Card(props: CardProps) {
   const { children, className = '', label, style } = props
   if (props.drill) {
     return (
-      <DrillCard drill={props.drill} className={className} label={label} style={style}>
+      <DrillCard
+        drill={props.drill}
+        below={props.below}
+        className={className}
+        label={label}
+        style={style}
+      >
         {children}
       </DrillCard>
     )
@@ -78,17 +95,23 @@ export function Card(props: CardProps) {
   )
 }
 
-/** A card that is one button, opening its drill-down in a sheet. */
+/** A card that is one button, opening its drill-down in a sheet, with any chart after it. */
 function DrillCard({
   drill,
+  below,
   children,
   className,
   label,
   style,
-}: Base & { drill: DrillDown; className: string }) {
+}: Base & { drill: DrillDown; below?: ReactNode; className: string }) {
   const [open, setOpen] = useState(false)
+  const split = below !== undefined
   return (
-    <section className={`card card-tap ${className}`} aria-label={label} style={style}>
+    <section
+      className={`card card-tap${split ? ' card-split' : ''} ${className}`}
+      aria-label={label}
+      style={style}
+    >
       <button
         type="button"
         className="card-press"
@@ -99,6 +122,7 @@ function DrillCard({
         {children}
         <span className="visually-hidden">, show how it adds up</span>
       </button>
+      {split && <div className="card-below">{below}</div>}
       {open && <DrillSheet drill={drill} onClose={() => setOpen(false)} />}
     </section>
   )

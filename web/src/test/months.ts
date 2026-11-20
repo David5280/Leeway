@@ -1,6 +1,14 @@
 // A calendar month's totals as get_monthly_totals returns them, for tests.
 
-import type { MonthTotals } from '../lib/flows'
+import type { MonthlyTotals, MonthTotals } from '../lib/flows'
+
+/** The months as get_monthly_totals returns them, the history starting where given. */
+export function totalsOf(
+  months: MonthTotals[],
+  firstTransactionDate: string | null = null,
+): MonthlyTotals {
+  return { firstTransactionDate, months }
+}
 
 export function month(
   start: string,

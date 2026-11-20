@@ -1,6 +1,7 @@
 // Flexible spending so far against an even pace, with where it is heading.
-// The chart is drawn as it always has been; the card around it opens the
-// math behind where spending lands (lib/drills/pace.ts).
+// The chart is drawn as it always has been, with its readout under a finger;
+// the title and sentence above it open the math behind where spending lands
+// (lib/drills/pace.ts).
 
 import { Card } from '../components/design/Card'
 import type { SpendingPace } from '../api/client'
@@ -32,22 +33,19 @@ export function PaceWidget({ budget, offset }: WidgetProps) {
     return (
       <Card static="empty" label="Spending pace" className="stack-sm">
         {head}
-        {pace.error ? (
-          <ErrorNote error={pace.error} />
-        ) : (
-          <PaceBody pace={pace.data} isCurrent={offset === 0} />
-        )}
+        {pace.error ? <ErrorNote error={pace.error} /> : <PaceBody pace={pace.data} />}
       </Card>
     )
   }
   return (
     <Card
       drill={paceDrill(pace.data, budget, offset === 0)}
+      below={<PaceChart pace={pace.data} isCurrent={offset === 0} />}
       label="Spending pace"
       className="stack-sm"
     >
       {head}
-      <PaceBody pace={pace.data} isCurrent={offset === 0} />
+      <PaceSummary pace={pace.data} isCurrent={offset === 0} />
     </Card>
   )
 }
@@ -58,20 +56,13 @@ export function followedText(names: string[]): string {
   return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 }
 
-function PaceBody({ pace, isCurrent }: { pace: SpendingPace | undefined; isCurrent: boolean }) {
+/** Before there is a pace to explain: still loading, or no category with pace on. */
+function PaceBody({ pace }: { pace: SpendingPace | undefined }) {
   if (!pace) return <Loading />
-  if (pace.categoryIds.length === 0) {
-    return (
-      <p className="muted">
-        Give a category a budget with pace on to see whether you're spending steadily.
-      </p>
-    )
-  }
   return (
-    <>
-      <PaceSummary pace={pace} isCurrent={isCurrent} />
-      <PaceChart pace={pace} isCurrent={isCurrent} />
-    </>
+    <p className="muted">
+      Give a category a budget with pace on to see whether you're spending steadily.
+    </p>
   )
 }
 

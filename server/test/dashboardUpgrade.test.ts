@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { addSummaryWidget, leadWithLeeway } from '../src/domain/dashboardUpgrade.js'
+import {
+  addFlowsWidget,
+  addSummaryWidget,
+  leadWithLeeway,
+  withFlows,
+} from '../src/domain/dashboardUpgrade.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, resetData } from './helpers.js'
 
@@ -85,5 +90,51 @@ describe('leadWithLeeway', () => {
     await call('update_settings', { dashboard: { widgets: resized } })
     expect(await leadWithLeeway(ctx.db)).toBe(false)
     expect(await types()).toEqual(oldDefault.map((w) => w.type))
+  })
+})
+
+describe('addFlowsWidget', () => {
+  it('adds the income and spending chart to an arranged dashboard, keeping its order, once', async () => {
+    await call('update_settings', {
+      dashboard: {
+        widgets: [
+          { type: 'alerts' },
+          { type: 'leeway', size: 'wide' },
+          { type: 'pace', size: 'half', visible: false },
+          { type: 'recent' },
+        ],
+      },
+    })
+    expect(await addFlowsWidget(ctx.db)).toBe(true)
+    expect(await types()).toEqual(['alerts', 'leeway', 'flows', 'pace', 'recent'])
+    const widgets = (await call('get_settings')).dashboard.widgets
+    expect(widgets[2]).toEqual({ type: 'flows', size: 'full', visible: true })
+    // The others keep their sizes and whether they show.
+    expect(widgets[3]).toEqual({ type: 'pace', size: 'half', visible: false })
+
+    // Removed by the owner afterwards, it stays removed.
+    await call('update_settings', { dashboard: { widgets: [{ type: 'leeway' }] } })
+    expect(await addFlowsWidget(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['leeway'])
+  })
+
+  it('leaves a dashboard that has it, and a default never saved, alone', async () => {
+    const before = await types()
+    expect(await addFlowsWidget(ctx.db)).toBe(false)
+    expect(await types()).toEqual(before)
+
+    await resetData(ctx.db)
+    await call('update_settings', { dashboard: { widgets: [{ type: 'pace' }, { type: 'flows' }] } })
+    expect(await addFlowsWidget(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['pace', 'flows'])
+  })
+
+  it('puts it before the spending pace, or after what is left to spend, or last', () => {
+    const order = (types: ('leeway' | 'pace' | 'recent' | 'alerts')[]) =>
+      withFlows(types.map((type) => ({ type, size: 'half', visible: true }))).map((w) => w.type)
+    expect(order(['recent', 'pace', 'leeway'])).toEqual(['recent', 'flows', 'pace', 'leeway'])
+    expect(order(['leeway', 'recent'])).toEqual(['leeway', 'flows', 'recent'])
+    expect(order(['recent', 'alerts'])).toEqual(['recent', 'alerts', 'flows'])
+    expect(order([])).toEqual(['flows'])
   })
 })

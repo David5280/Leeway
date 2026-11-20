@@ -2,7 +2,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { monthStarts } from '../src/domain/monthlyTotals.js'
+import { monthStarts, wholeMonths } from '../src/domain/monthlyTotals.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -60,7 +60,13 @@ describe('get_monthly_totals', () => {
     await spend('2026-11-03', 'Grocer', 4000)
     await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
 
-    const months = await call('get_monthly_totals', { months: 3 })
+    const { firstTransactionDate, months } = await call('get_monthly_totals', { months: 3 })
+    // September holds only its last day, so it is not a whole month of history.
+    expect(firstTransactionDate).toBe('2026-09-30')
+    expect(wholeMonths({ firstTransactionDate, months }).map((m) => m.start)).toEqual([
+      '2026-10-01',
+      '2026-11-01',
+    ])
     expect(months.map((m) => [m.start, m.end, m.current])).toEqual([
       ['2026-09-01', '2026-09-30', false],
       ['2026-10-01', '2026-10-31', false],
@@ -76,8 +82,24 @@ describe('get_monthly_totals', () => {
   })
 
   it('gives twelve months by default, empty ones included', async () => {
-    const months = await call('get_monthly_totals', {})
+    const { firstTransactionDate, months } = await call('get_monthly_totals', {})
+    expect(firstTransactionDate).toBeNull()
     expect(months).toHaveLength(12)
     expect(months[0]).toMatchObject({ start: '2025-12-01', spentCents: 0, categories: [] })
+    // With no history yet, nothing is cut: every month is simply empty.
+    expect(wholeMonths({ firstTransactionDate, months })).toHaveLength(12)
+  })
+
+  it('keeps the running month even when the history starts partway through it', () => {
+    const month = (start: string, current: boolean) => ({
+      start,
+      end: start,
+      current,
+      spentCents: 0,
+      incomeCents: 0,
+      categories: [],
+    })
+    const months = [month('2026-10-01', false), month('2026-11-01', true)]
+    expect(wholeMonths({ firstTransactionDate: '2026-11-10', months })).toEqual([months[1]])
   })
 })

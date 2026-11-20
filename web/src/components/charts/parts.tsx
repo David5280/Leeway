@@ -123,7 +123,9 @@ export const END_LABEL_GAP = AXIS_FONT + LABEL_FONT + 6
 /**
  * Tracks which data point the pointer (mouse, pen or finger) is nearest, from
  * the x position of each point. Returns the active index (-1 for none) and the
- * handlers for a transparent rectangle laid over the plot.
+ * handlers for a transparent rectangle laid over the plot. A mouse moving off
+ * the plot clears the readout; a finger lifting does not, since a phone fires
+ * leave the moment a tap ends and the readout would vanish before it is read.
  */
 export function usePointer(positions: number[], width: number) {
   const [active, setActive] = useState(-1)
@@ -140,7 +142,9 @@ export function usePointer(positions: number[], width: number) {
     handlers: {
       onPointerMove: track,
       onPointerDown: track,
-      onPointerLeave: () => setActive(-1),
+      onPointerLeave: (event: PointerEvent<SVGRectElement>) => {
+        if (event.pointerType !== 'touch') setActive(-1)
+      },
     },
   }
 }

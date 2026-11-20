@@ -112,9 +112,9 @@ export function LeewayWidget({ budget }: WidgetProps) {
       />
       <SetAsideList setAsides={budget.setAsides} />
       {through !== null && (
+        // The ring shows the share used; this says what its mark is.
         <p className="small muted">
-          {used}% of the budget used, {through}% of the way through the{' '}
-          {periodWord(settings.period.kind)}.
+          {through}% of the way through the {periodWord(settings.period.kind)}, marked on the ring.
         </p>
       )}
     </Card>

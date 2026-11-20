@@ -125,7 +125,7 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
         netWorthCents: 0,
         history: [],
       }),
-      get_monthly_totals: () => [],
+      get_monthly_totals: () => ({ firstTransactionDate: null, months: [] }),
       // The server always returns the periods asked for, oldest first.
       get_trends: () =>
         [-2, -1, 0].map((offset) => ({

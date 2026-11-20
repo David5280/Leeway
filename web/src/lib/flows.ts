@@ -1,11 +1,14 @@
 // Money in against money out, month by month: the shape the income and
 // spending chart, its card and its drill-down read. Pure, so the math is
 // tested on its own. The month still running is shown but never averaged,
-// since its totals are only so far.
+// since its totals are only so far. A month the bank history starts partway
+// through is left off altogether: it holds only part of its money, so it
+// would read as a month of little in and out.
 
 import type { Output } from '../api/client'
 
-export type MonthTotals = Output<'get_monthly_totals'>[number]
+export type MonthlyTotals = Output<'get_monthly_totals'>
+export type MonthTotals = MonthlyTotals['months'][number]
 
 export interface FlowMonth {
   start: string
@@ -26,10 +29,14 @@ const average = (values: number[]) =>
   Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
 
 /** Each month's money in, out and kept, and what a finished month usually comes to. */
-export function flowsFrom(totals: MonthTotals[]): Flows {
-  // Empty months before the bank history starts are left off the chart, not drawn as zeros.
+export function flowsFrom({ firstTransactionDate, months: totals }: MonthlyTotals): Flows {
+  // Empty months before the bank history starts are left off the chart, not drawn as zeros,
+  // and so is a month it starts partway through.
   const first = totals.findIndex(
-    (month) => month.current || month.incomeCents !== 0 || month.spentCents !== 0,
+    (month) =>
+      month.current ||
+      (month.start >= (firstTransactionDate ?? '') &&
+        (month.incomeCents !== 0 || month.spentCents !== 0)),
   )
   const months = totals.slice(Math.max(0, first)).map((month) => ({
     start: month.start,

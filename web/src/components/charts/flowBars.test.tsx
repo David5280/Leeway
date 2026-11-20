@@ -38,17 +38,17 @@ const fills = () =>
 const readout = () => document.querySelector('.chart-readout')
 
 describe('FlowBars', () => {
-  it('pairs green money in with plain money out, red only for a finished month that ran short', () => {
+  it('pairs green money in with darker plain money out, red only for a finished month that ran short', () => {
     fakeServer({})
     renderSignedIn(<FlowBars months={months} usualSpentCents={230000} label="In and out" />)
     expect(fills()).toEqual([
       'var(--tone-in)',
-      'var(--tone-muted)',
+      'var(--tone-out)',
       'var(--tone-in)',
       'var(--tone-problem)',
       'var(--tone-in)',
       // November is still running, so it is not judged yet.
-      'var(--tone-muted)',
+      'var(--tone-out)',
     ])
     expect(screen.getByRole('img', { name: 'In and out' })).toBeInTheDocument()
     expect(document.querySelector('.chart-line.budget')).not.toBeNull()
@@ -86,6 +86,10 @@ describe('FlowBars', () => {
     )
     expect(screen.getByText('Nothing in or out yet')).toBeInTheDocument()
     expect(document.querySelector('.chart-line.budget')).toBeNull()
+    // No scale on an empty install: a $0 to $100 axis would measure nothing.
+    expect(screen.getByRole('img')).not.toHaveTextContent('$0')
+    expect(document.querySelector('.chart-grid')).toBeNull()
+    expect(document.querySelectorAll('.chart-baseline')).toHaveLength(1)
   })
 
   it('keeps huge amounts on the axis', () => {

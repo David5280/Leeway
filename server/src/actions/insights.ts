@@ -33,7 +33,7 @@ export const getMonthlyTotalsAction = defineAction({
   name: 'get_monthly_totals',
   title: 'Money in and out by month',
   description:
-    'Spending, income and per-category totals for each of the last N calendar months, oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither. Use it for month-by-month questions whatever the budget period is.',
+    'Spending, income and per-category totals for each of the last N calendar months (months), oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither. firstTransactionDate is where the bank history starts: a month that began before it holds only part of its money, so never compare it with whole months. Use it for month-by-month questions whatever the budget period is.',
   input: z.object({ months: z.number().int().min(2).max(36).default(12) }),
   scope: 'read',
   surface: 'all',
@@ -44,7 +44,7 @@ export const getMonthlyTotalsAction = defineAction({
 export const getSavingsRatesAction = defineAction({
   name: 'get_savings_rates',
   title: 'Savings rate by month',
-  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) the newest saved paystub shows), as a whole percent of that month's pay. note says, in words for the owner, what was counted and what was not. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
+  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) a paystub from the last six months shows), each counted from when it is known to begin and in the current month only for the pay seen so far, as a whole percent of that month's pay. A month the bank history starts partway through is left off. note says, in words for the owner, what was counted and what was not. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
   input: z.object({ months: z.number().int().min(2).max(12).default(6) }),
   scope: 'read',
   surface: 'all',

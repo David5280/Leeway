@@ -4,7 +4,13 @@
 // gap reads as $0 rather than a missing period.
 
 import { useApp } from '../../lib/app'
-import { axisFormat, niceTicks, textWidth, type Ticks } from '../../lib/chartScale'
+import {
+  axisFormat,
+  niceTicks,
+  textWidth,
+  type Ticks,
+  RUNNING_FILL_OPACITY,
+} from '../../lib/chartScale'
 import { formatMoney, type MoneyOptions, type Precision } from '../../lib/money'
 import { Money } from '../design/Money'
 import { useWidth } from '../../lib/useWidth'
@@ -177,7 +183,7 @@ export function PeriodBars({
             d={barPath(center(i) - barWidth / 2, top, barWidth, bottom)}
             fill={fill}
             // The running period is drawn lighter and outlined: it is still filling up.
-            fillOpacity={bar.current ? 0.45 : 1}
+            fillOpacity={bar.current ? RUNNING_FILL_OPACITY : 1}
             stroke={bar.current ? fill : 'none'}
             strokeWidth="1.5"
             opacity={hovered && hovered !== bar ? 0.55 : 1}

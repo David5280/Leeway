@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../../lib/app'
 import {
   compareToUsual,
+  MATH_OPS,
   mathSentence,
   trendDescription,
   usualSentence,
@@ -15,6 +16,7 @@ import {
   type DrillTrend,
   type DrillUsual,
   type DrillValue,
+  type MathOp,
 } from '../../lib/drill'
 import { LineChart } from '../charts/LineChart'
 import { Icon } from '../ui'
@@ -117,19 +119,20 @@ function MathSection({ math }: { math: DrillMath }) {
   )
 }
 
-/** The sign before a term: none for the first, else plus or the true minus sign. */
-function operator(op: 'plus' | 'minus' | undefined, index: number): string {
+/** The sign before a term: none for the first, else its operation's. */
+function operator(op: MathOp | undefined, index: number): string {
   if (index === 0 || !op) return ''
-  return op === 'minus' ? '−' : '+'
+  return MATH_OPS[op].sign
 }
 
 /** The figure against its usual: an arrow, the words and a tone, never color alone. */
 function UsualSection({ usual }: { usual: DrillUsual }) {
   const { money } = useApp()
   const comparison = compareToUsual(usual)
+  const heading = usual.heading ?? 'Compared with usual'
   return (
-    <section className="sheet-section" aria-label="Compared with usual">
-      <h3 className="sheet-section-title">Compared with usual</h3>
+    <section className="sheet-section" aria-label={heading}>
+      <h3 className="sheet-section-title">{heading}</h3>
       <p className={`drill-usual drill-usual-${comparison.tone}`}>
         <span className="drill-usual-arrow" aria-hidden="true">
           {comparison.arrow}

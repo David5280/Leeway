@@ -44,6 +44,10 @@
   --tone-in: var(--good);
   --tone-neutral: var(--ink);
   --tone-muted: var(--muted);
+  /* Money out on a chart: the muted tone darkened, so beside money in it
+     differs in lightness as well as hue, for anyone who cannot tell the two
+     colors apart (lib/contrast.test.ts holds it to that in every theme). */
+  --tone-out: color-mix(in srgb, var(--muted) 80%, black);
   --tone-warn: var(--warn);
   --tone-problem: var(--over);
   --tone-action: var(--accent);

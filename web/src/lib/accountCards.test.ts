@@ -181,4 +181,13 @@ describe('goalsOn and combine', () => {
       ]),
     ).toEqual({ ownedCents: 250000, owedCents: 130000, netCents: 120000 })
   })
+
+  it('counts an overpaid card as owned and an overdrawn account as owed', () => {
+    expect(
+      combine([
+        { type: 'credit', balanceCents: -5000 },
+        { type: 'depository', balanceCents: -2000 },
+      ]),
+    ).toEqual({ ownedCents: 5000, owedCents: 2000, netCents: 3000 })
+  })
 })

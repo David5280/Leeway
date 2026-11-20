@@ -12,7 +12,12 @@ const rate = (start: string, percent: number | null, current = false): MonthRate
 })
 
 describe('usualRate', () => {
-  it('averages the finished months that have a rate', () => {
+  it('takes the middle finished month, so one big month does not set what usual means', () => {
+    const months = [rate('2026-08-01', 9), rate('2026-09-01', 80), rate('2026-10-01', 11)]
+    expect(usualRate(months)).toBe(11)
+  })
+
+  it('averages the two middle months of an even count', () => {
     expect(
       usualRate([rate('2026-09-01', 10), rate('2026-10-01', null), rate('2026-11-01', 15)]),
     ).toBe(13)

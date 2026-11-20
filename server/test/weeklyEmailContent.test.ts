@@ -168,7 +168,7 @@ describe('savings in the weekly email', () => {
     emergencyFundTargetMonths: 6,
     bankSeenSavingsRatePercent: 9,
     hasSavingsAccounts: true,
-    pensionIncludedSavingsRatePercent: null,
+    payrollIncludedSavingsRatePercent: null,
     pension: null,
   }
 

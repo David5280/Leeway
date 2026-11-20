@@ -1,21 +1,31 @@
 // The savings rate month by month, counted exactly as the profile's rate is
 // (savings/rate.ts): money the bank labeled as moved to savings or
 // investments, plus the payroll deductions Leeway knows (a pension the owner
-// entered, a 401(k), 457 or 403(b) a saved paystub shows), out of each
-// month's pay. A month with no pay seen, or nothing saved that Leeway can
-// see, has no rate rather than a rate of zero, since a payroll deduction it
-// does not know never reaches the bank. There is no target until the owner
-// sets one, so no month ever reads as falling short of one they did not choose.
+// entered, a 401(k), 457 or 403(b) a recent paystub shows), out of each
+// month's pay. Each deduction counts only from when it is known to exist, and
+// the running month only in proportion to the pay it has seen so far
+// (savings/payrollMonths.ts). A month that began before the bank history did
+// is left off, since it holds only part of its pay. A month with no pay seen,
+// or nothing saved that Leeway can see, has no rate rather than a rate of
+// zero, since a payroll deduction it does not know never reaches the bank.
+// There is no target until the owner sets one, so no month ever reads as
+// falling short of one they did not choose.
 
 import type { Db } from '../db/pool.js'
 import { listAccounts } from './accounts.js'
 import { currentPeriod } from './budgetReport.js'
-import { monthlyTotals, type MonthTotals } from './monthlyTotals.js'
+import { monthlyTotals, wholeMonths, type MonthTotals } from './monthlyTotals.js'
+import { latestPaystub } from './paystubs/paystubs.js'
 import { paySchedule } from './profile/income.js'
-import { pensionMonthlyTotals } from './retirement/pensions.js'
 import { pensionsOf } from './retirement/pensionStore.js'
-import { latestPaystub, planMonthlyCents } from './paystubs/paystubs.js'
 import { savingsTransferDestination, type TransferCandidate } from './savings/contributions.js'
+import {
+  monthPayroll,
+  payrollStreams,
+  runningPayShare,
+  streamKinds,
+  type PayrollStream,
+} from './savings/payrollMonths.js'
 import { payrollNote, payrollSources, savingsRate, type SavingSource } from './savings/rate.js'
 import { splitAccounts } from './savings/report.js'
 import { transferCandidates } from './savings/store.js'
@@ -29,7 +39,7 @@ export interface MonthRate {
   /** Whole percent of pay saved, or null when it cannot be known. */
   percent: number | null
   savedCents: number
-  /** Take-home pay, plus pension contributions once they are counted. */
+  /** Take-home pay, plus the payroll deductions counted that month. */
   payCents: number
 }
 
@@ -53,27 +63,23 @@ function savedByMonth(months: MonthTotals[], transfers: TransferCandidate[]): nu
   })
 }
 
-/** The payroll deductions Leeway knows a month: a pension's and a workplace plan's. */
-export interface MonthlyPayroll {
-  pensionCents: number | null
-  planCents: number | null
-}
-
-/** Each month's rate from its pay, what moved to savings, and the payroll deductions known. */
+/** Each month's rate from its pay, what moved to savings, and the payroll deductions known then. */
 export function monthRates(
   months: MonthTotals[],
   transfers: TransferCandidate[],
-  payroll: MonthlyPayroll,
+  payroll: PayrollStream[],
 ): MonthRate[] {
   const saved = savedByMonth(months, transfers)
+  const runningShare = runningPayShare(months)
   return months.map((month, i) => {
+    const { pensionCents, planCents } = monthPayroll(payroll, month, runningShare)
     const sources: SavingSource[] = [
       {
         label: 'Transfers to savings and investments',
         monthlyCents: saved[i]!,
         beforePaycheck: false,
       },
-      ...payrollSources(payroll.pensionCents, payroll.planCents),
+      ...payrollSources(pensionCents, planCents),
     ]
     const rate = savingsRate(month.incomeCents, sources)
     return {
@@ -95,7 +101,7 @@ export async function savingsRates(
 ): Promise<SavingsRates> {
   const { today } = currentPeriod(settings, now)
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const months = await monthlyTotals(db, settings, now, count)
+  const months = wholeMonths(await monthlyTotals(db, settings, now, count))
   const accounts = await listAccounts(db, false)
   const transfers = await transferCandidates(
     db,
@@ -105,16 +111,10 @@ export async function savingsRates(
   )
   const pensions = await pensionsOf(db, accounts)
   const pay = await paySchedule(db, settings, today)
-  const payroll = {
-    pensionCents: pensionMonthlyTotals(pensions, pay.cadence).memberCents,
-    planCents: planMonthlyCents(await latestPaystub(db)),
-  }
+  const payroll = payrollStreams(pensions, pay.cadence, await latestPaystub(db), today)
   return {
     months: monthRates(months, transfers, payroll),
     targetPercent: settings.savingsPlan.savingsRateTargetPercent,
-    note: payrollNote({
-      pension: Boolean(payroll.pensionCents),
-      plan: Boolean(payroll.planCents),
-    }),
+    note: payrollNote(streamKinds(payroll)),
   }
 }

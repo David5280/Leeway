@@ -55,6 +55,20 @@ const everything: DrillDown = {
 }
 
 describe('DrillSheet', () => {
+  it('names what the figure is measured against when it is not its usual', () => {
+    const usual = {
+      ...spentLess,
+      basis: 'the flexible budget',
+      heading: 'Compared with the budget',
+    }
+    renderSignedIn(<DrillSheet drill={{ ...everything, usual }} onClose={() => {}} />)
+    const sheet = screen.getByRole('dialog', { name: 'Debt payoff' })
+    expect(
+      within(sheet).getByRole('region', { name: 'Compared with the budget' }),
+    ).toHaveTextContent('$40 less than the flexible budget')
+    expect(within(sheet).queryByText('Compared with usual')).not.toBeInTheDocument()
+  })
+
   it('draws every section in order: figure, math, trend, usual, items and the way on', () => {
     renderSignedIn(<DrillSheet drill={everything} onClose={() => {}} />)
     const sheet = screen.getByRole('dialog', { name: 'Debt payoff' })
@@ -131,6 +145,28 @@ describe('Card', () => {
     const card = screen.getByRole('region', { name: 'Everyday checking' })
     expect(within(card).getByRole('link')).toHaveAttribute('href', '/accounts/a')
     expect(within(card).getByRole('link')).toHaveTextContent('Everyday checking, open details')
+  })
+
+  it('with a chart below, keeps the chart out of the button so a tap reads the chart', async () => {
+    renderSignedIn(
+      <Card
+        drill={everything}
+        label="Spending pace"
+        below={<button type="button">the chart</button>}
+      >
+        <span>Flexible spending pace</span>
+      </Card>,
+    )
+    const card = screen.getByRole('region', { name: 'Spending pace' })
+    expect(card).toHaveClass('card-split')
+    const open = within(card).getByRole('button', {
+      name: 'Flexible spending pace, show how it adds up',
+    })
+    expect(open).not.toContainElement(within(card).getByText('the chart'))
+    await userEvent.click(within(card).getByText('the chart'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(open)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
 

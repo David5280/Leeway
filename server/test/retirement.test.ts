@@ -352,7 +352,7 @@ describe('a pension in the savings rate and the check-in', () => {
     expect(savings).toMatchObject({
       hasSavingsAccounts: false,
       bankSeenSavingsRatePercent: null,
-      pensionIncludedSavingsRatePercent: 8,
+      payrollIncludedSavingsRatePercent: 8,
       pension: {
         count: 1,
         monthlyContributionCents: 42_300,
@@ -366,7 +366,7 @@ describe('a pension in the savings rate and the check-in', () => {
     const { savings } = await call('get_checkin')
     expect(savings).toMatchObject({
       hasSavingsAccounts: true,
-      pensionIncludedSavingsRatePercent: null,
+      payrollIncludedSavingsRatePercent: null,
       pension: null,
     })
     await resetData(ctx.db)
