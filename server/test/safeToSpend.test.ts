@@ -142,7 +142,18 @@ describe('spendable', () => {
       payday(),
       TODAY,
     )
-    expect(room(140_400, overdrawn)).toMatchObject({ safeCents: 12_800, problem: true })
+    expect(room(140_400, overdrawn)).toMatchObject({
+      safeCents: 12_800,
+      problem: true,
+      note: 'Your budget has $1,404 left, but you have $128 you can safely spend before payday on Nov 30. That is after $50 to bring an overdraft back to zero.',
+    })
+    // The budget leads, but an overdraft is still red, so the note says why.
+    expect(room(10_000, overdrawn)).toMatchObject({
+      leadCents: 10_000,
+      limitedBy: 'budget',
+      problem: true,
+      note: 'An overdrawn account needs $50 to get back to zero.',
+    })
     const short = safeToSpend([everyday], [bill('Rent', '2026-11-20', 30_000)], payday(), TODAY)
     expect(room(140_400, short)).toMatchObject({
       leadCents: 0,

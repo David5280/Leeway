@@ -32,9 +32,9 @@ export interface Spendable {
   payday: IsoDate
   paydaySource: CashFlow['paydaySource']
   paydayEstimate: boolean
-  /** One short line when the budget has more room than the cash, or the cash falls short; else null. */
+  /** One short line when the budget has more room than the cash, the cash falls short or an account is overdrawn; else null. */
   note: string | null
-  /** Whether the note is a problem (an overdraft or a shortfall), the only time it is red. */
+  /** Whether the note is a problem (an overdraft or a shortfall), the only time it is red; there is always a note then. */
   problem: boolean
 }
 
@@ -60,9 +60,9 @@ type NoteFacts = Until &
   Pick<Spendable, 'safeCents' | 'shortfallCents' | 'overdraftCents' | 'budgetLeftCents'>
 
 /**
- * The one line beside the lead figure: the cash falling short, or the budget
- * having more room than the cash; null when neither. Exported so a summary
- * can write it again with its own money format.
+ * The one line beside the lead figure: the cash falling short, the budget
+ * having more room than the cash, or an overdraft; null when none. Exported
+ * so a summary can write it again with its own money format.
  */
 export function spendableNote(facts: NoteFacts, money: Money, locale: string): string | null {
   const until = untilWords(facts, locale)
@@ -70,9 +70,17 @@ export function spendableNote(facts: NoteFacts, money: Money, locale: string): s
     const owed = facts.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
     return `Checking is ${money(facts.shortfallCents)} short of ${owed} ${until}.`
   }
+  const overdraft = money(facts.overdraftCents)
   if (facts.budgetLeftCents !== null && facts.budgetLeftCents > facts.safeCents) {
-    return `Your budget has ${money(facts.budgetLeftCents)} left, but you have ${money(facts.safeCents)} you can safely spend ${until}.`
+    const after =
+      facts.overdraftCents > 0
+        ? ` That is after ${overdraft} to bring an overdraft back to zero.`
+        : ''
+    return `Your budget has ${money(facts.budgetLeftCents)} left, but you have ${money(facts.safeCents)} you can safely spend ${until}.${after}`
   }
+  // Red, so it always says why: an overdrawn account is owed back first.
+  if (facts.overdraftCents > 0)
+    return `An overdrawn account needs ${overdraft} to get back to zero.`
   return null
 }
 

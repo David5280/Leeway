@@ -55,8 +55,9 @@ function budgetSentence(
     return `Spending has dipped ${money(-budget.leewayCents)} into what you set aside for goals.`
   }
   // The budget has more room than checking can cover: the cash is what can be spent.
+  // While the budget leads, an overdraft's line is a point of its own instead.
   const cashLine = cashNote(checkin, money, locale)
-  if (cashLine) return cashLine
+  if (cashLine && checkin.spendable?.limitedBy !== 'budget') return cashLine
   const afterGoals =
     budget.setAsideCents > 0 ? ` after ${money(budget.setAsideCents)} set aside for goals` : ''
   const perDay =

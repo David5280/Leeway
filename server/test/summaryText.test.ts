@@ -126,6 +126,35 @@ describe('the points', () => {
     })
   })
 
+  it('keeps the budget headline while it leads, and says an overdraft as a point', () => {
+    const cashFlow = {
+      cashKnown: true,
+      cashCents: 500000,
+      overdraftCents: 5000,
+      safeCents: 495000,
+      paydaySource: 'detected_income' as const,
+    }
+    const overdrawn = checkin({
+      cashFlow,
+      spendable: {
+        ...cashFlow,
+        shortfallCents: 0,
+        budgetLeftCents: 120000,
+        leadCents: 120000,
+        limitedBy: 'budget',
+        perDayCents: 8571,
+        payday: '2026-12-01',
+        paydayEstimate: false,
+        note: 'An overdrawn account needs $50 to get back to zero.',
+        problem: true,
+      },
+    })
+    expect(summarize(overdrawn)).toEqual({
+      headline: "You're on track: $1,200 left, about $85.71 a day for 15 days.",
+      points: ['An overdrawn account needs $50 to get back to zero.'],
+    })
+  })
+
   it('says payday is today on payday, and the period end when no payday is known', () => {
     const payday = checkin({
       cashFlow: { cashKnown: true, cashCents: 1000, safeCents: 1000, nextPayday: '2026-11-17' },
