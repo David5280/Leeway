@@ -99,10 +99,19 @@ describe('LeewayWidget', () => {
     // 75% used against 57% of the month is more than 10 points ahead.
     expect(screen.getByRole('progressbar', { name: 'Budget used' })).toHaveClass('ring-watch')
     expect(region()).toHaveTextContent(
-      "The mark is today, 57% of the way through the month. You're ahead of pace.",
+      "The mark is today, 57% of the way through the month. You're over pace.",
     )
     // Plain words: the ring's color carries the warning.
     expect(screen.getByText(/The mark is today/)).toHaveClass('muted')
+  })
+
+  it('leaves pace out once spending is over budget, which the figure already says', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 90000 }])
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    expect(region()).toHaveTextContent('Over budget by $100 of $800')
+    expect(screen.getByText(/The mark is today/)).toHaveTextContent(
+      /^The mark is today, 57% of the way through the month\.$/,
+    )
   })
 
   it('says spending is right on pace within a couple of points of the calendar', () => {

@@ -60,7 +60,7 @@ const ON_PACE_POINTS = 2
 /** How the share used compares with the share of the period gone, in plain words. */
 export function paceWords(used: number, through: number): string {
   if (Math.abs(used - through) <= ON_PACE_POINTS) return "You're right on pace."
-  return used < through ? "You're under pace." : "You're ahead of pace."
+  return used < through ? "You're under pace." : "You're over pace."
 }
 
 /** What the room left means, in words: per day now, or plainly over. */
@@ -124,8 +124,9 @@ export function LeewayWidget({ budget }: WidgetProps) {
         // The ring shows the share used and marks today; this says what the two mean together.
         // Plain words, never red: the ring's color already carries any warning.
         <p className="small muted">
-          The mark is today, {through}% of the way through the {periodWord(settings.period.kind)}.{' '}
-          {paceWords(used, through)}
+          The mark is today, {through}% of the way through the {periodWord(settings.period.kind)}.
+          {/* Over budget, the figure above already says so; pace would only say it again. */}
+          {!over && ` ${paceWords(used, through)}`}
         </p>
       )}
     </Card>
