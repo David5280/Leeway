@@ -2,35 +2,17 @@
 // every route the app answers (web/src/routes.ts), with long names seeded,
 // and the forms people open on them.
 
-import { createHash, randomBytes } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
+import { CONNECT_SCREEN } from './connect-screen'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
-import type { Seeded } from './seed'
+import { SEEDED_ACCOUNTS, type Seeded } from './seed'
+import { SETTINGS_GROUPS } from './settings-groups'
 import { revealWidgetToken } from './widget'
-
-/** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
-export const SETTINGS_GROUPS = [
-  'appearance',
-  'budgeting',
-  'accounts',
-  'banks',
-  'email',
-  'notifications',
-  'assistant',
-  'ai',
-  'widget',
-  'data',
-  'sign-in',
-]
-
-/** A bank's CSV export, as the import tests use. */
-const CSV = fileURLToPath(new URL('./fixtures/old-checking.csv', import.meta.url))
 
 export interface Screen {
   name: string
@@ -127,16 +109,20 @@ export const SCREENS: Screen[] = [
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
   }),
   at('overview', '/', {
-    name: "/ with Leeway's summary, as the AI model is gone",
+    name: "/ with every widget, and Leeway's summary as the AI model is gone",
     // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,
   }),
   at('accounts', '/accounts'),
-  ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
-    name: `the ${kind} account page`,
-    route: 'accounts',
-    path: (seeded) => `/accounts?select=${seeded.accounts[index]}`,
+  at('accounts', '/accounts', {
+    name: '/accounts picking accounts to add up',
+    then: open('Select', (page) => page.getByRole('region', { name: 'Picked accounts' })),
+  }),
+  // Each account's own page, named for its kind.
+  ...SEEDED_ACCOUNTS.map((kind, index) => ({
+    ...at('account', `the ${kind} account page`),
+    path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
   })),
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
@@ -216,7 +202,7 @@ export const SCREENS: Screen[] = [
   at('importTransactions', '/transactions/import', {
     name: '/transactions/import with a file chosen',
     then: async (page) => {
-      await page.getByLabel('Choose a CSV file').setInputFiles(CSV)
+      await page.getByLabel('Choose a CSV file').setInputFiles('e2e/fixtures/old-checking.csv')
       await expect(page.getByText('old-checking.csv')).toBeVisible()
     },
   }),
@@ -300,36 +286,5 @@ export const SCREENS: Screen[] = [
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),
-  {
-    name: "an assistant's connect screen",
-    route: 'connect',
-    path: (_, request) => connectAddress(request),
-    then: (page) =>
-      expect(page.getByRole('heading', { name: /^Connect .+ to Leeway\?$/ })).toBeVisible(),
-  },
+  CONNECT_SCREEN,
 ]
-
-/** A sign-in screen an assistant is sent to, as Claude would be (see connect.spec.ts). */
-async function connectAddress(request: APIRequestContext): Promise<string> {
-  const callback = 'http://127.0.0.1:33418/callback'
-  const server = await (await request.get('/.well-known/oauth-authorization-server')).json()
-  const resource = await (await request.get('/.well-known/oauth-protected-resource/mcp')).json()
-  const app = await (
-    await request.post('/oauth/register', {
-      data: { client_name: 'Claude on the laptop upstairs', redirect_uris: [callback] },
-    })
-  ).json()
-  const verifier = randomBytes(32).toString('base64url')
-  const address = new URL(server.authorization_endpoint)
-  address.search = new URLSearchParams({
-    response_type: 'code',
-    client_id: app.client_id,
-    redirect_uri: callback,
-    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256',
-    state: 'layout-guard',
-    scope: 'read write',
-    resource: resource.resource,
-  }).toString()
-  return address.toString()
-}

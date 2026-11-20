@@ -51,6 +51,8 @@ export function ProgressRing({
           r={RADIUS}
           strokeDasharray={CIRCUMFERENCE}
           strokeDashoffset={CIRCUMFERENCE * (1 - filled)}
+          // Where the fill animates in from: empty (styles/motion.css).
+          style={{ ['--ring-empty' as string]: CIRCUMFERENCE }}
         />
         {marker !== null && <RimTick percent={marker} />}
       </svg>

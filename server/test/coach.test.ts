@@ -149,7 +149,7 @@ describe('get_checkin', () => {
     expect(attention.map((a) => a.message)).toEqual([
       'Test Bank needs the owner to log in again before it can sync. This is done in the Leeway app.',
       'A bank failed to sync. Try sync_banks; if it keeps failing, check the bank in the Leeway app.',
-      'Bills due before payday on 2026-12-01 come to $250, but checking and savings hold $10: $240 short.',
+      'Bills due before payday on 2026-12-01 come to $250, but checking holds $10: $240 short.',
       'No payment found for Water ($50), due 2026-10-20. It may be unpaid, or paid under a different name.',
       'Phone ($60) is due 2026-11-20.',
       'Dining is over budget by $10 ($20 of $10).',

@@ -1,0 +1,534 @@
+/* Figures and their explanations: tappable cards, the hero number, the
+   usual chip, sparkline fills, category bars, the drill-down sheet and the
+   page heads that title each screen (components/design/Card, HeroFigure,
+   UsualChip, Sparkline, DrillSheet). */
+
+/* Tappable cards ---------------------------------------------------------- */
+
+/* The card is the frame; its one button or link fills it edge to edge, so
+   the whole card is the tap target and its press shows on the card. */
+.card.card-tap {
+  padding: 0;
+  transition:
+    transform var(--duration-quick) var(--ease-out),
+    box-shadow var(--duration-quick) var(--ease-out);
+}
+
+.card-press {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  width: 100%;
+  height: 100%;
+  min-height: var(--tap);
+  padding: var(--pad);
+  border: none;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card-press:focus-visible {
+  outline-offset: -3px;
+}
+
+/* A gentle lift under a pointer, and a press that sinks the card a little. */
+@media (hover: hover) {
+  .card.card-tap:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--elev-2), var(--hi);
+  }
+}
+
+.card.card-tap:has(.card-press:active) {
+  transform: scale(0.985);
+}
+
+/* A card whose title and figure are the button, with a chart under it that
+   keeps its own readout: the card lifts only while the button is hovered,
+   and the chart sits in the card's padding, outside the button. */
+@media (hover: hover) {
+  .card.card-split:hover {
+    transform: none;
+    box-shadow: var(--elev-1), var(--hi);
+  }
+  .card.card-split:has(.card-press:hover) {
+    transform: translateY(-1px);
+    box-shadow: var(--elev-2), var(--hi);
+  }
+}
+
+.card-split .card-press {
+  padding-bottom: var(--space-2);
+}
+
+.card-below {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  padding: 0 var(--pad) var(--pad);
+}
+
+/* Hero figure -------------------------------------------------------------- */
+
+.hero-figure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.hero-figure-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.hero-figure-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.hero-figure-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.hero-figure-number {
+  font-size: var(--text-hero);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+.hero-figure-caption {
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+
+.hero-figure-caption b {
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+
+.hero-figure-aside {
+  flex: none;
+}
+
+/* Usual chip --------------------------------------------------------------- */
+
+/* The arrow and words carry the meaning; the tint repeats it (drill.ts tones). */
+.usual-chip {
+  --t: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--t) 14%, var(--surface));
+  color: color-mix(in srgb, var(--t) 80%, var(--ink));
+  /* A sentence, so the UI font; tabular figures keep its amount steady. */
+  font: var(--weight-strong) var(--text-sm) var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  /* On the narrowest phones its words wrap inside the chip rather than spill. */
+  max-width: 100%;
+  padding-block: 3px;
+}
+
+.usual-good {
+  --t: var(--good);
+}
+
+.usual-warn {
+  --t: var(--warn);
+}
+
+/* Sparkline fill ----------------------------------------------------------- */
+
+.spark-fill-top {
+  stop-color: var(--accent);
+  stop-opacity: 0.32;
+}
+
+.spark-fill-bottom {
+  stop-color: var(--accent);
+  stop-opacity: 0;
+}
+
+.spark-area {
+  stroke: none;
+}
+
+.spark-end {
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Drill-down sheet ---------------------------------------------------------- */
+
+.drill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.drill-figure .money-xl {
+  font-size: var(--text-hero);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+/* The math as an equation: an operator column, the words, the amount. */
+.drill-math {
+  margin: 0;
+  padding: var(--space-1) 0;
+  border-radius: 14px;
+  background: var(--raised);
+  box-shadow: var(--hi);
+}
+
+.drill-math-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+}
+
+.drill-math-row dt {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+
+.drill-math-row dd {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.drill-op {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+  font-family: var(--font-num);
+  text-align: center;
+}
+
+.drill-math-result {
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-3);
+}
+
+.drill-math-result dt {
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+
+.drill-usual {
+  --t: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--t) 14%, var(--surface));
+  color: color-mix(in srgb, var(--t) 80%, var(--ink));
+  font-weight: var(--weight-medium);
+}
+
+.drill-usual-good {
+  --t: var(--good);
+}
+
+.drill-usual-warn {
+  --t: var(--warn);
+}
+
+.drill-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--raised);
+  box-shadow: var(--hi);
+  overflow: hidden;
+}
+
+.drill-items > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.drill-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+
+.drill-item-link:active {
+  background: var(--surface-2);
+}
+
+@media (hover: hover) {
+  .drill-item-link:hover {
+    background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  }
+}
+
+.drill-item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.drill-item-label {
+  overflow-wrap: anywhere;
+  font-weight: var(--weight-medium);
+}
+
+.drill-item-detail {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.drill-more {
+  align-self: stretch;
+  min-height: var(--tap);
+}
+
+/* Overview tiles ------------------------------------------------------------ */
+
+.glance > .card.card-tap {
+  padding: 0;
+}
+
+.glance > .card-tap .card-press {
+  padding: calc(var(--pad) * 0.75);
+}
+
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A tile's icon: accent by default, green for money in, amber when it needs you. */
+.tile-icon,
+.kind-chip {
+  --t: var(--accent);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--t) 16%, var(--surface));
+  color: color-mix(in srgb, var(--t) 70%, var(--ink));
+  box-shadow: var(--hi);
+}
+
+.tile-icon-in {
+  --t: var(--good);
+}
+
+.tile-icon-warn {
+  --t: var(--warn);
+}
+
+.kind-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+.tile-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 18px;
+  font-weight: var(--weight-strong);
+}
+
+/* The hero's ring is larger, so its percent is too. */
+.hero .ring-label {
+  font-size: var(--text-md);
+}
+
+.hero .ring circle {
+  stroke-width: 3.4;
+}
+
+/* Category bars -------------------------------------------------------------- */
+
+.cbars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cbar-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cbar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cbar-name {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cbar-figures {
+  flex: none;
+  font-size: var(--text-sm);
+}
+
+.cbar-word {
+  margin-right: 6px;
+  font-weight: var(--weight-strong);
+}
+
+.cbar-word.warn {
+  color: var(--tone-warn);
+}
+
+.cbar-word.over {
+  color: var(--tone-problem);
+}
+
+/* The track stands for the largest amount shown, so bars compare at a glance. */
+.cbar-track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+}
+
+.cbar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.cbar-warn {
+  background: var(--warn-fill);
+}
+
+.cbar-over,
+.cbar-past {
+  background: var(--over-fill);
+}
+
+/* The budget: a line across the bar, where spending should stop. */
+.cbar-limit {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.7;
+}
+
+/* Page heads: a screen's title with its icon, and what sits beside it -- */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-title > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+/* Top merchants: a name and amount over a bar, with room between rows. */
+.merchant-row {
+  padding: 6px 0;
+}
+
+/* The key under money in and out: a word beside each bar's color, so color is never alone. */
+.flow-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.flow-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--tone-muted);
+}
+.flow-swatch.in {
+  background: var(--tone-in);
+}
+.flow-swatch.out {
+  background: var(--tone-out);
+}
+.flow-swatch.out,
+.flow-swatch.over {
+  margin-left: 10px;
+}
+/* A finished month where more went out than came in; the running month never turns red. */
+.flow-swatch.over {
+  background: var(--tone-short);
+}

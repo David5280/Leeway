@@ -2,6 +2,7 @@
 // connecting an AI assistant, and the weekly email.
 
 import { expect, test } from '@playwright/test'
+import { showWidgets } from './dashboard'
 
 test('the theme switch changes the look and sticks after a reload', async ({ page }) => {
   await page.goto('/')
@@ -81,23 +82,23 @@ test('an accent color applies right away', async ({ page }) => {
 test('a dashboard card can be hidden and shown again', async ({ page }) => {
   // The switch flips at once, before the save lands; leaving the page too soon
   // would cancel the save, so each click waits for the server to answer.
-  const toggleHeadsUp = async () => {
+  const toggleFlows = async () => {
     const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_settings'))
-    await page.getByRole('switch', { name: 'Show Heads up' }).click()
+    await page.getByRole('switch', { name: 'Show Money in and out' }).click()
     expect((await saved).ok()).toBe(true)
   }
 
   await page.goto('/settings/appearance')
-  await toggleHeadsUp()
-  await expect(page.getByRole('switch', { name: 'Show Heads up' })).not.toBeChecked()
+  await toggleFlows()
+  await expect(page.getByRole('switch', { name: 'Show Money in and out' })).not.toBeChecked()
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Heads up' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Money in and out' })).toHaveCount(0)
 
   await page.goto('/settings/appearance')
-  await toggleHeadsUp()
+  await toggleFlows()
   await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Heads up' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Money in and out' })).toBeVisible()
 })
 
 test('a key for an AI assistant is shown once, ready to copy', async ({ page }) => {
@@ -114,6 +115,8 @@ test('a key for an AI assistant is shown once, ready to copy', async ({ page }) 
 test('the dashboard summary says how to have Claude write it, and what a missing key means', async ({
   page,
 }) => {
+  // The summary is a widget the owner adds; this page stands in for having added it.
+  await showWidgets(page, ['summary'])
   await page.goto('/')
   const summary = page.getByRole('region', { name: 'Summary' })
   await expect(summary).toContainText('Want Claude to write this?')

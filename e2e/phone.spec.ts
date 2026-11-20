@@ -104,13 +104,15 @@ test('an account alert and its account fit a phone screen', async ({ page }) => 
   await addAccount(page, { name: 'Phone checking with a long name', balance: '-1234.56' })
 
   await page.goto('/')
-  const banner = page.getByRole('region', { name: 'Account alerts' })
-  await expect(banner).toContainText('is overdrawn by $1,234.56.')
+  const headsUp = page.getByRole('region', { name: 'Heads up' })
+  await expect(headsUp).toContainText('is overdrawn by $1,234.56.')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
-  await banner.getByRole('link', { name: /Phone checking with a long name is overdrawn/ }).click()
-  // Amounts below zero carry a true minus sign (U+2212), not a hyphen.
-  await expect(page.getByRole('region', { name: 'Balances' })).toContainText('\u2212$1,234.56')
+  await headsUp.getByRole('link', { name: /Phone checking with a long name is overdrawn/ }).click()
+  // The alert opens the account's own page, which leads with the overdraft.
+  await expect(
+    page.getByRole('region', { name: 'Phone checking with a long name balance' }),
+  ).toContainText(/Overdrawn by\s*\$1,234\.56/)
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
   // Removed again, so the other tests see the install as before.
@@ -182,6 +184,6 @@ test('dashboard rows shorten a long name with an ellipsis rather than clipping i
     spans.filter((span) => span.scrollWidth <= span.clientWidth).map((span) => span.textContent),
   )
   expect(shown).toContain('Spending pace')
-  expect(shown).toContain('Categories')
+  expect(shown).toContain('Money in and out')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 })

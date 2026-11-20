@@ -81,6 +81,7 @@ describe('AiSummaryWriter', () => {
   it('tells the model never to say the person saves too little', () => {
     // The bank never sees payroll saving, and a pension is saving in itself, so any such claim could be wrong.
     expect(SYSTEM_PROMPT).toContain('a pension counts only once the person enters it')
+    expect(SYSTEM_PROMPT).toContain('a 401(k) only once they save a recent paystub that shows it')
     expect(SYSTEM_PROMPT).toContain('a pension is retirement saving in itself')
     expect(SYSTEM_PROMPT).toContain(
       'Never say or imply that the person saves too little or should save more',

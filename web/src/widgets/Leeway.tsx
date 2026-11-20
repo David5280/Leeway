@@ -1,23 +1,31 @@
-// The headline widget: how much room is left in the budget, and per day.
-// Goals set aside from the budget are held back from that room and listed.
+// The headline widget and the Overview's hero: how much room is left in the
+// budget, what that is per day, and a ring of how much of the budget is used against how far through the period
+// today is. Tapping it shows the math (lib/drills/budget.ts).
 
 import { Link } from 'react-router-dom'
 import type { Budget } from '../api/client'
-import { Card, Dot, Progress } from '../components/ui'
-import type { WidgetProps } from './types'
+import { Card } from '../components/design/Card'
+import { HeroFigure } from '../components/design/HeroFigure'
 import { Money } from '../components/design/Money'
+import { ProgressRing } from '../components/design/ProgressRing'
+import type { Status } from '../components/design/StatusPill'
+import { Dot } from '../components/ui'
+import { useApp } from '../lib/app'
+import { leewayDrill } from '../lib/drills/budget'
+import { periodWord } from '../lib/format'
+import type { WidgetProps } from './types'
 
-/** Each goal's share held back this period, linked to the goals it is for. */
+/** Each goal's share held back this period, which the drill-down's math takes out. */
 function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
   if (setAsides.length === 0) return null
   return (
     <ul className="plain-list small" aria-label="Set aside for goals">
       {setAsides.map((item) => (
         <li key={item.goalId} className="row-between">
-          <Link to="/plan/goals" className="row tap" style={{ gap: 8, color: 'inherit' }}>
+          <span className="row" style={{ gap: 8 }}>
             <Dot color={item.color} />
             Set aside for {item.name}
-          </Link>
+          </span>
           <Money cents={item.amountCents} tone="muted" />
         </li>
       ))}
@@ -27,78 +35,100 @@ function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
 
 function NoBudgets() {
   return (
-    <Card label="Your leeway" className="stack">
+    <Card static="empty" label="Your leeway" className="stack">
       <p className="eyebrow">Your leeway</p>
       <p style={{ fontSize: 17 }}>
         Give a few categories a budget and this shows how much room you have left.
       </p>
-      <Link to="/budgets" className="btn primary" style={{ alignSelf: 'flex-start' }}>
+      <Link to="/budgets" className="btn primary tap" style={{ alignSelf: 'flex-start' }}>
         Set budgets
       </Link>
     </Card>
   )
 }
 
-export function LeewayWidget({ budget }: WidgetProps) {
+/** The ring's tone: over the budget, used faster than the days, or fine. */
+function usedStatus(used: number, through: number | null): Status {
+  if (used > 100) return 'over'
+  if (through !== null && used > through + 10) return 'watch'
+  return 'ok'
+}
+
+/** Within this many points of the calendar, spending reads as right on pace. */
+const ON_PACE_POINTS = 2
+
+/** How the share used compares with the share of the period gone, in plain words. */
+export function paceWords(used: number, through: number): string {
+  if (Math.abs(used - through) <= ON_PACE_POINTS) return "You're right on pace."
+  return used < through ? "You're under pace." : "You're over pace."
+}
+
+/** What the room left means, in words: per day now, or plainly over. */
+function Caption({ budget }: { budget: Budget }) {
   const { totals, period } = budget
-  const isCurrent = budget.period.offset === 0
-  if (totals.budgetedCents === 0) return <NoBudgets />
-  // The room left is what the budgets have left, less what goals hold back.
-  const leeway = totals.leewayCents
-  const used = (totals.budgetedSpentCents / totals.budgetedCents) * 100
-  const held = (totals.setAsideCents / totals.budgetedCents) * 100
   const daysToSpend = period.daysLeft + 1
+  if (totals.leewayCents < 0) {
+    return (
+      <>
+        <b>Over budget</b> by <Money cents={-totals.leewayCents} /> of{' '}
+        <Money cents={totals.budgetedCents} />
+      </>
+    )
+  }
+  if (period.offset !== 0 || totals.safePerDayCents === null) {
+    return (
+      <>
+        Left of <Money cents={totals.budgetedCents} />
+      </>
+    )
+  }
   return (
-    <Card label="Your leeway" className="stack">
-      <p className="eyebrow">Your leeway</p>
-      <div className="row wrap" style={{ alignItems: 'baseline' }}>
-        <span className={`num big-number ${leeway < 0 ? 'over' : ''}`}>
-          <Money cents={Math.abs(leeway)} />
-        </span>
-        <span className="muted" style={{ fontSize: 16 }}>
-          {leeway < 0 ? 'over' : 'left of'} <Money cents={totals.budgetedCents} />
-          {totals.setAsideCents > 0 && (
-            <>
-              , after <Money cents={totals.setAsideCents} /> set aside
-            </>
-          )}
-        </span>
-      </div>
-      {isCurrent && totals.safePerDayCents !== null && (
-        <p style={{ fontSize: 17 }}>
-          {leeway > 0 ? (
-            <>
-              About{' '}
-              <strong>
-                <Money cents={totals.safePerDayCents} />
-              </strong>{' '}
-              a day for the next {daysToSpend} {daysToSpend === 1 ? 'day' : 'days'}.
-            </>
-          ) : (
-            'Nothing left to spend this period.'
-          )}
+    <>
+      About{' '}
+      <b>
+        <Money cents={totals.safePerDayCents} />
+      </b>{' '}
+      a day for the next {daysToSpend} {daysToSpend === 1 ? 'day' : 'days'}, of{' '}
+      <Money cents={totals.budgetedCents} />
+    </>
+  )
+}
+
+export function LeewayWidget({ budget }: WidgetProps) {
+  const { money, settings } = useApp()
+  const { totals, period } = budget
+  if (totals.budgetedCents === 0) return <NoBudgets />
+  const isCurrent = period.offset === 0
+  const over = totals.leewayCents < 0
+  const used = Math.round((totals.budgetedSpentCents / totals.budgetedCents) * 100)
+  const through = isCurrent ? Math.round((period.daysElapsed / period.days) * 100) : null
+  return (
+    <Card drill={leewayDrill(budget, money)} label="Your leeway" className="hero stack">
+      <HeroFigure
+        label={over ? 'Over budget' : 'Left to spend'}
+        cents={Math.abs(totals.leewayCents)}
+        tone={over ? 'problem' : undefined}
+        caption={<Caption budget={budget} />}
+        aside={
+          <ProgressRing
+            percent={used}
+            label="Budget used"
+            status={usedStatus(used, through)}
+            size={76}
+            marker={through}
+          />
+        }
+      />
+      <SetAsideList setAsides={budget.setAsides} />
+      {through !== null && (
+        // The ring shows the share used and marks today; this says what the two mean together.
+        // Plain words, never red: the ring's color already carries any warning.
+        <p className="small muted">
+          The mark is today, {through}% of the way through the {periodWord(settings.period.kind)}.
+          {/* Over budget, the figure above already says so; pace would only say it again. */}
+          {!over && ` ${paceWords(used, through)}`}
         </p>
       )}
-      <SetAsideList setAsides={budget.setAsides} />
-      {/* Pinned to the bottom, so the card reads well when its column stretches it. */}
-      <div className="stack-sm" style={{ marginTop: 'auto' }}>
-        <Progress
-          thick
-          percent={used}
-          reserved={held}
-          color={used > 100 ? 'var(--over-fill)' : 'var(--accent)'}
-          marker={isCurrent ? (period.daysElapsed / period.days) * 100 : null}
-          aria-label="Budget used"
-        />
-        <div className="row-between small muted">
-          <span>
-            <Money cents={totals.budgetedSpentCents} /> spent, {Math.round(used)}%
-          </span>
-          {isCurrent && (
-            <span className="hide-sm">Marker: where steady spending would be today</span>
-          )}
-        </div>
-      </div>
     </Card>
   )
 }

@@ -1,10 +1,16 @@
-// Each category's spending against its budget, with pace.
+// Where the money went this period: each category's spending on a shared
+// scale with its budget marked, biggest first. Tapping it lists every category
+// and adds them up (lib/drills/budget.ts). Also the words for a category's
+// status, shared with its own page.
 
 import { Link } from 'react-router-dom'
-import type { Budget, CategoryBudget } from '../api/client'
-import { Money } from '../components/design/Money'
-import { Card, Dot, Progress } from '../components/ui'
+import type { CategoryBudget } from '../api/client'
+import { CategoryBars } from '../components/charts/CategoryBars'
+import { Card } from '../components/design/Card'
+import { SectionHead } from '../components/design/SectionHead'
 import { useApp } from '../lib/app'
+import { categoriesDrill } from '../lib/drills/budget'
+import { periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
 
 /** How a category is doing, in words, with the color to say it in. */
@@ -39,76 +45,34 @@ export function rowNote(row: CategoryBudget, money: (cents: number) => string) {
   return { text: 'Fully used', className: 'muted' }
 }
 
-/**
- * One category on a line or two: name, bar, then "$208 of $621 · $413 left".
- * The list it sits in decides the layout by its width (.cat-list in styles.css),
- * and a long status wraps under the amounts rather than squeeze the name
- * (.cat-summary).
- */
-function CategoryRow({ row, budget }: { row: CategoryBudget; budget: Budget }) {
-  const { money } = useApp()
-  const note = rowNote(row, money)
-  const isCurrent = budget.period.offset === 0
-  const marker =
-    isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
-  return (
-    <Link to={`/budgets/${row.categoryId}`} className="cat-row cat-row-wrap">
-      <span className="cat-name">
-        <Dot color={row.color} />
-        <span className="cat-label">{row.name}</span>
-      </span>
-      <span className="cat-bar">
-        {row.budgetCents !== null && (
-          <Progress
-            percent={row.percentUsed ?? 0}
-            color={row.status === 'over' ? 'var(--over-fill)' : row.color}
-            marker={marker}
-            aria-label={`${row.name}: ${row.percentUsed ?? 0} percent of budget used`}
-          />
-        )}
-      </span>
-      <span className="cat-figures cat-summary">
-        <span className="cat-summary-items">
-          <span className="cat-amounts">
-            <Money cents={row.spentCents} />
-            {row.budgetCents !== null && (
-              <>
-                {' '}
-                of <Money cents={row.budgetCents} />
-              </>
-            )}
-          </span>
-          <span className="cat-sep muted" aria-hidden="true">
-            {' · '}
-          </span>
-          <span className={`cat-status ${note.className}`}>{note.text}</span>
-        </span>
-      </span>
-    </Link>
-  )
-}
+/** How many categories the card shows; the drill-down lists every one. */
+const SHOWN = 5
 
 export function CategoriesWidget({ budget }: WidgetProps) {
-  const rows = budget.categories.filter((c) => c.kind === 'expense')
-  return (
-    <Card label="Categories" className="stack-sm cat-list">
-      <div className="row-between">
-        <h2>Categories</h2>
-        <Link to="/budgets" className="linkbtn tap">
-          Edit budgets
-        </Link>
-      </div>
-      {rows.length === 0 ? (
+  const { money, settings } = useApp()
+  const rows = budget.categories
+    .filter((c) => c.kind === 'expense' && (c.spentCents > 0 || c.budgetCents !== null))
+    .sort((a, b) => b.spentCents - a.spentCents)
+  if (rows.length === 0) {
+    return (
+      <Card static="empty" label="Categories" className="stack-sm">
+        <SectionHead icon="budgets" title="Where did your money go?" />
         <p className="empty">
           No categories yet. <Link to="/budgets">Add one</Link>
         </p>
-      ) : (
-        <div className="cat-rows">
-          {rows.map((row) => (
-            <CategoryRow key={row.categoryId} row={row} budget={budget} />
-          ))}
-        </div>
-      )}
+      </Card>
+    )
+  }
+  const word = periodWord(settings.period.kind)
+  const rest = rows.length - SHOWN
+  return (
+    <Card drill={categoriesDrill(budget, word, money)} label="Categories" className="stack-sm">
+      <SectionHead icon="budgets" title="Where did your money go?" />
+      <CategoryBars rows={rows.slice(0, SHOWN)} />
+      <p className="small muted">
+        {rest > 0 ? `${rest} more ${rest === 1 ? 'category' : 'categories'}. ` : ''}The line on each
+        bar is its budget.
+      </p>
     </Card>
   )
 }

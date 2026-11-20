@@ -1,4 +1,4 @@
-// The Transactions screen (Activity on a phone): every transaction, newest
+// The Activity screen: every transaction, newest
 // first, grouped by day. Filters narrow the list; a row opens its sheet,
 // where its category, rule, note and the rest are changed. Adding by hand
 // and importing sit behind the "+" menu, and rules are listed below.
@@ -64,8 +64,9 @@ export function Transactions() {
       <div className="act-page">
         <div className="act-head">
           {/* Focusable from code only: where focus lands when nothing nearer is left. */}
-          <h1 ref={heading} tabIndex={-1}>
-            Transactions
+          <h1 ref={heading} tabIndex={-1} className="page-title">
+            <Icon name="activity" size={22} />
+            Activity
           </h1>
           <Menu
             label="Add or import"

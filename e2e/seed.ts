@@ -62,9 +62,13 @@ export const LONG = {
   pension: 'Public Employees Retirement Association of Colorado, the defined benefit plan',
 } as const
 
+/** What each seeded account is, in the order of `seeded.accounts`. */
+export const SEEDED_ACCOUNTS = ['checking', 'savings', 'credit card', 'loan', 'overdrawn checking']
+
 /**
- * Adds four accounts (checking, savings, a credit card and a loan, in that
- * order in `seeded.accounts`), a category, spending, bills, goals, a rule, an
+ * Adds five accounts (checking, savings, a credit card, a loan and a second
+ * checking account that is overdrawn, in that order in `seeded.accounts`),
+ * a category, spending, bills, goals, a rule, an
  * assistant key, and a pension with the birth year a projection needs.
  */
 export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded): Promise<void> {
@@ -113,6 +117,13 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
     type: 'loan',
     balanceCents: 1_412_000,
   })
+  // Overdrawn after two overdraft fees: two alerts on one account at once,
+  // one under the other, wherever alerts show.
+  const overdrawn = await create('accounts', 'create_account', {
+    name: 'Everyday checking (second checking)',
+    type: 'depository',
+    balanceCents: -14_210,
+  })
   // Debt terms, so the payoff plan has something to plan.
   await action(request, 'update_account', {
     id: card,
@@ -134,6 +145,8 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
     ['ACME PAYROLL', null, -248_500, checking],
     ['Shell', null, 4_820, card],
     ['Corner market', 'Groceries', 4_250, checking],
+    ['OVERDRAFT FEE', 'Fees', 3_400, overdrawn],
+    ['OVERDRAFT FEE', 'Fees', 3_400, overdrawn],
   ]
   // Spending falls in the current budget period, so "This period" lists it at
   // any hour: a paycheck period that began today takes it all on today.

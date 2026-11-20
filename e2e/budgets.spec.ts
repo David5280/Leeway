@@ -1,6 +1,7 @@
 // Making a category and changing its budget, and the overview's list of them.
 
 import { expect, test } from '@playwright/test'
+import { showWidgets } from './dashboard'
 import { action, addAccount, addSpending, removeAccount } from './manual'
 
 test('a new category gets a budget, which can be changed on its own page', async ({ page }) => {
@@ -34,9 +35,9 @@ test('a new category gets a budget, which can be changed on its own page', async
   ).toBeVisible()
 })
 
-test("the overview's category bars line up, however long a row's status", async ({ page }) => {
+test("the overview's category bars line up, however wide a row's figures", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
-  // One category on track and one far over budget, whose status runs long.
+  // One category on track and one far over budget, whose figures run wide.
   const calm = await action<{ id: string }>(page, 'create_category', {
     name: 'Calm',
     budgetCents: 100_000,
@@ -53,10 +54,11 @@ test("the overview's category bars line up, however long a row's status", async 
     category: 'Overspent',
   })
 
+  await showWidgets(page, ['categories'])
   await page.goto('/')
   const widget = page.getByRole('region', { name: 'Categories', exact: true })
-  await expect(widget.getByText(/^Over by \$12,/)).toBeVisible()
-  const edges = await widget.locator('.cat-bar').evaluateAll((bars) =>
+  await expect(widget.locator('.cbar', { hasText: 'Overspent' })).toContainText(/Over\s*\$12,/)
+  const edges = await widget.locator('.cbar-track').evaluateAll((bars) =>
     bars.map((bar) => {
       const box = bar.getBoundingClientRect()
       return `${Math.round(box.left)} to ${Math.round(box.right)}`

@@ -4,7 +4,7 @@ import {
   automaticKind,
   choiceThatFits,
   isSavingsKind,
-  isSpendableCash,
+  paysBills,
   kindFitsType,
   kindOf,
   kindsForType,
@@ -153,7 +153,7 @@ describe('kinds the owner may pick', () => {
   })
 })
 
-describe('isSpendableCash', () => {
+describe('paysBills', () => {
   const account = (
     type: string,
     subtype: string | null,
@@ -161,24 +161,16 @@ describe('isSpendableCash', () => {
     kindChoice: AccountKind | null = null,
   ) => ({ type, subtype, bankName, kindChoice })
 
-  it('counts checking and savings the owner can draw on', () => {
-    expect(isSpendableCash(account('depository', 'checking'))).toBe(true)
-    expect(isSpendableCash(account('depository', 'savings'))).toBe(true)
-    expect(isSpendableCash(account('depository', 'money market'))).toBe(true)
-  })
-
-  it('leaves out a CD, a bank IRA, a bank HSA and anything that is not a bank account', () => {
-    expect(isSpendableCash(account('depository', 'cd'))).toBe(false)
-    expect(isSpendableCash(account('depository', 'savings', 'IRA Savings'))).toBe(false)
-    expect(isSpendableCash(account('depository', 'hsa'))).toBe(false)
-    expect(isSpendableCash(account('investment', 'brokerage'))).toBe(false)
-    expect(isSpendableCash(account('credit', 'credit card'))).toBe(false)
+  it('counts checking, the money the bills come out of', () => {
+    expect(paysBills(account('depository', 'checking'))).toBe(true)
+    expect(paysBills(account('depository', 'savings'))).toBe(false)
+    expect(paysBills(account('depository', 'money market'))).toBe(false)
+    expect(paysBills(account('depository', 'hsa'))).toBe(false)
+    expect(paysBills(account('credit', 'credit card'))).toBe(false)
   })
 
   it('follows the kind the owner picked', () => {
-    expect(isSpendableCash(account('depository', 'savings', 'Bank', 'retirement'))).toBe(false)
-    expect(isSpendableCash(account('depository', 'checking', 'Bank', 'savings'))).toBe(true)
-    // A manual account with no subtype, called savings.
-    expect(isSpendableCash(account('depository', null, 'Jar', 'savings'))).toBe(true)
+    expect(paysBills(account('depository', 'checking', 'Bank', 'savings'))).toBe(false)
+    expect(paysBills(account('depository', 'savings', 'Bank', 'checking'))).toBe(true)
   })
 })

@@ -3,6 +3,7 @@
 import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
+import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
 import { alphabeticalGroups } from '../../lib/alphabetical'
 import { useApp } from '../../lib/app'
@@ -15,7 +16,6 @@ import {
   type Start,
   type StarterRow,
 } from './starters'
-import { Money } from '../../components/design/Money'
 
 export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const hasBank = useAction('list_connections').data?.some((c) => c.accountCount > 0)

@@ -8,7 +8,8 @@ import type { Output } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { useBellCount } from '../components/Bell'
 import { Shell } from '../components/Shell'
-import { Card, ErrorNote, LoadingOrError } from '../components/ui'
+import { Card } from '../components/design/Card'
+import { ErrorNote, LoadingOrError } from '../components/ui'
 import { timeAgo } from '../lib/format'
 import { settingsPath } from './settings/paths'
 
@@ -34,7 +35,7 @@ export function Inbox() {
           </button>
         )}
       </div>
-      <Card label="Notifications" className="tight">
+      <Card static="list" label="Notifications" className="tight">
         {inbox.data ? (
           <InboxList items={inbox.data.items} />
         ) : (

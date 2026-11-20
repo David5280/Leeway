@@ -3,11 +3,12 @@
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here.
 
+import { Card } from '../../../components/design/Card'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Account, Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
-import { Card, LoadingOrError } from '../../../components/ui'
+import { LoadingOrError } from '../../../components/ui'
 import { FormCard } from '../FormCard'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
@@ -110,7 +111,7 @@ export function GoalsSection() {
         </div>
       </div>
       {goals.data.length === 0 ? (
-        <Card label="No goals">
+        <Card static="empty" label="No goals">
           <p className="empty">
             No goals yet. Save for something you want to buy, or start an emergency fund of one
             month of spending.

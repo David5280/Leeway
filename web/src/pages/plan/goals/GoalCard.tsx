@@ -1,9 +1,10 @@
 // One goal's card: how much is saved, what each budget period needs, whether
 // recent progress makes the date, and a timeline that shows it.
 
+import { Card } from '../../../components/design/Card'
 import type { Goal } from '../../../api/client'
 import { GoalTimeline } from '../../../components/charts/GoalTimeline'
-import { Card, Progress } from '../../../components/ui'
+import { Progress } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { periodWord } from '../../../lib/format'
 import { paceText, planText, thisPeriodText } from '../../../lib/goalText'
@@ -39,7 +40,7 @@ export function GoalCard({
   const pace = paceText(goal, settings.locale)
   const thisPeriod = thisPeriodText(goal, money, word)
   return (
-    <Card label={goal.name} className="span-6 stack-sm">
+    <Card static="pending" label={goal.name} className="span-6 stack-sm">
       <div className="row-between">
         <h2>{goal.name}</h2>
         <button type="button" className="linkbtn" onClick={onEdit}>

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, CashFlow } from '../../api/client'
@@ -11,6 +11,7 @@ import {
   renderPlan,
   retirementOf,
 } from '../../test/planning'
+import { worthPoint } from '../../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -37,9 +38,12 @@ describe('Plan screen', () => {
     expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
     const sections = within(screen.getByRole('group', { name: 'Plan section' }))
     expect(sections.getByRole('button', { name: 'Bills' })).toHaveAttribute('aria-pressed', 'true')
+    // Cash until payday leads the bills, and stays off the other sections.
+    expect(screen.getByRole('region', { name: 'Until payday' })).toBeVisible()
 
     await user.click(sections.getByRole('button', { name: 'Goals' }))
     expect(await screen.findByRole('button', { name: 'Add a goal' })).toBeVisible()
+    expect(screen.queryByRole('region', { name: 'Until payday' })).not.toBeInTheDocument()
     await user.click(sections.getByRole('button', { name: 'Debts' }))
     expect(await screen.findByText(/No credit cards or loans/)).toBeVisible()
     await user.click(sections.getByRole('button', { name: 'Net worth' }))
@@ -59,17 +63,65 @@ describe('Until payday', () => {
   async function show(flow: CashFlow) {
     planServer({ ...quietBills, get_cash_flow: () => flow })
     renderPlan('/plan')
-    const card = await screen.findByRole('region', { name: 'Until payday' })
-    await within(card).findByText(/in checking and savings/)
-    return card
+    // The card is drawn anew once the numbers arrive, so it is found after them.
+    await screen.findByText(/in checking/)
+    return screen.getByRole('region', { name: 'Until payday' })
   }
 
-  it('shows what is left a day, the cash, the bills and when payday is', async () => {
+  it('leads with what is left at payday, then checking, the bills and when payday is', async () => {
     const card = await show(cashFlow())
-    expect(card).toHaveTextContent('$144 a day for the next 10 days.')
-    expect(card).toHaveTextContent('$1,500 in checking and savings, minus $60 in bills.')
+    expect(card).toHaveTextContent('$1,440 left at payday, after bills.')
+    expect(card).toHaveTextContent('$1,500 in checking, minus $60 in bills.')
     expect(card).toHaveTextContent('Next payday Fri, Nov 27.')
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
+  })
+
+  it('opens the math from its answer, with the line and the bills outside the button', async () => {
+    const card = await show(cashFlow())
+    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    expect(open).not.toContainElement(within(card).getByRole('img'))
+    expect(open).not.toContainElement(within(card).getByText('Phone'))
+    await userEvent.setup().click(open)
+    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Left at payday')
+  })
+
+  it('draws checking dropping with each bill to payday, close up, and names the bills', async () => {
+    const card = await show(cashFlow())
+    expect(
+      within(card).getByRole('heading', { name: 'Will the cash last until payday?' }),
+    ).toBeVisible()
+    expect(
+      within(card).getByRole('img', { name: 'Checking until payday' }),
+    ).toHaveAccessibleDescription(
+      'Checking from $1,500 today to $1,440 on payday, Fri, Nov 27, at its lowest $1,440 on Nov 20.',
+    )
+    // Far above $0, the scale is a close-up so the $60 step shows, with no $0 to stay above.
+    expect(card).not.toHaveTextContent('Stay above')
+    expect(card).toHaveTextContent('$1,500')
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 640,
+    } as DOMRect)
+    const hit = within(card).getByTestId('chart-hit')
+    // Points: today, the day before the phone bill, the bill's day, payday.
+    fireEvent.pointerMove(hit, { clientX: 260 })
+    expect(card.querySelector('.chart-readout')).toHaveTextContent('Nov 20$1,440Phone due')
+    fireEvent.pointerMove(hit, { clientX: 630 })
+    expect(card.querySelector('.chart-readout')).toHaveTextContent('Nov 27$1,440')
+    expect(card.querySelector('.chart-readout')).not.toHaveTextContent('due')
+    vi.restoreAllMocks()
+  })
+
+  it('leaves the line out when no bill comes before payday, or payday is today', async () => {
+    const quiet = await show(cashFlow({ billsDue: [], billsDueCents: 0 }))
+    expect(within(quiet).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('leaves the line out when payday is today', async () => {
+    const card = await show(
+      cashFlow({ nextPayday: '2026-11-17', billsDue: [], daysUntilPayday: 0 }),
+    )
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('says how short the bills leave you, and flags a missed one', async () => {
@@ -87,6 +139,54 @@ describe('Until payday', () => {
     )
     expect(card).toHaveTextContent('$80 short of the bills due before payday.')
     expect(within(card).getByText('No payment found')).toBeInTheDocument()
+    expect(card).toHaveTextContent('Stay above: $0')
+    expect(card).toHaveTextContent('Checking goes below $0 today, when Water comes out.')
+    // The line starts at the balance now, before the overdue bill comes out.
+    expect(within(card).getByRole('img')).toHaveAccessibleDescription(/^Checking from \$10 today/)
+    expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
+  })
+
+  it('draws $0 to stay above once the line comes near it', async () => {
+    const card = await show(
+      cashFlow({ cashCents: 10_000, billsDueCents: 6000, leftAfterBillsCents: 4000 }),
+    )
+    expect(card).toHaveTextContent('Stay above: $0')
+    expect(card).not.toHaveTextContent('goes below')
+    expect(card.querySelector('.chart-line.problem')).not.toBeInTheDocument()
+  })
+
+  it('says when checking is already below $0', async () => {
+    const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
+    const card = await show(
+      cashFlow({
+        cashCents: -500,
+        billsDue: [
+          { ...rent, overdue: false },
+          { ...rent, billId: 'p', name: 'Power', overdue: false },
+        ],
+        billsDueCents: 18_000,
+        leftAfterBillsCents: -18_500,
+      }),
+    )
+    expect(card).toHaveTextContent('Checking is already below $0.')
+  })
+
+  it('names the bills that take checking below $0 together', async () => {
+    const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
+    const later = await show(
+      cashFlow({
+        cashCents: 10_000,
+        billsDue: [
+          { ...rent, overdue: false },
+          { ...rent, billId: 'p', name: 'Power', overdue: false },
+        ],
+        billsDueCents: 18_000,
+        leftAfterBillsCents: -8_000,
+      }),
+    )
+    expect(later).toHaveTextContent(
+      'Checking goes below $0 on Nov 20, when Rent and Power come out.',
+    )
   })
 
   it('says where the payday came from', async () => {
@@ -98,7 +198,6 @@ describe('Until payday', () => {
         daysUntilPayday: 1,
       }),
     )
-    expect(card).toHaveTextContent('a day for the next 1 day.')
     expect(card).toHaveTextContent(
       'Next payday looks like Fri, Nov 20, about $2,500, going by your past deposits.',
     )
@@ -268,12 +367,9 @@ describe('Debts', () => {
 })
 
 describe('Net worth', () => {
-  const history = [
-    { date: '2026-06-01', netWorthCents: -50000 },
-    { date: '2026-11-17', netWorthCents: 700000 },
-  ]
+  const history = [worthPoint('2026-06-01', -50000), worthPoint('2026-11-17', 700000)]
 
-  it('shows what is owned, owed and the change over time', async () => {
+  it('leads with the figure, owned less owed, then whether it is growing', async () => {
     const server = planServer({
       ...quietBills,
       get_net_worth: () => ({
@@ -284,12 +380,26 @@ describe('Net worth', () => {
       }),
     })
     renderPlan('/plan/net-worth')
-    expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent('$7,000')
-    expect(screen.getByRole('region', { name: 'Assets' })).toHaveTextContent('$8,200')
-    expect(screen.getByRole('region', { name: 'Debts' })).toHaveTextContent('$1,200')
-    expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
-      'Net worth from −$500 on Jun 1 to $7,000 on Nov 17.',
+    expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent(
+      'Net worth$7,000$8,200 owned, less $1,200 owed',
     )
+    const chart = screen.getByRole('region', { name: 'Net worth over time' })
+    expect(chart).toHaveTextContent('Is your net worth growing?')
+    expect(chart).toHaveTextContent('Up $7,500 since Jun 2026')
+    expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
+      'Net worth from −$500 on Jun 1 to $7,000 today.',
+    )
+    // Where it started is the level to stay above, its words at the far end, clear of the line's start.
+    expect(chart).toHaveTextContent('Where you started: −$500')
+    expect(within(chart).getByText(/Where you started/)).toHaveAttribute('text-anchor', 'end')
+    // A tapped day says what was owned and owed then.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 640,
+    } as DOMRect)
+    fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
+    expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
+    vi.restoreAllMocks()
     // A house or a car counts once it is added by hand, in Settings.
     expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
       'href',
@@ -298,6 +408,14 @@ describe('Net worth', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))
+    // The chart card is the chart alone; the hero figure above is what opens the math.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(chart).toHaveAttribute('data-static', 'chart')
+    expect(within(chart).queryByRole('button', { name: /Is your net worth growing/ })).toBeNull()
+    await userEvent
+      .setup()
+      .click(within(screen.getByRole('region', { name: 'Net worth' })).getByRole('button'))
+    expect(screen.getByRole('dialog', { name: 'Net worth' })).toBeVisible()
   })
 
   it('marks a negative net worth and explains a short history', async () => {

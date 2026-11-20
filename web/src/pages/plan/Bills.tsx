@@ -1,9 +1,10 @@
 // Bills and subscriptions: what is due and when, and repeating charges found in history.
 
+import { Card } from '../../components/design/Card'
 import { useState } from 'react'
 import type { Bill, Category, RecurringSeries } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
-import { Card, ErrorNote, LoadingOrError } from '../../components/ui'
+import { ErrorNote, LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
@@ -46,7 +47,7 @@ function Suggestions({ onTrack }: { onTrack: (series: RecurringSeries) => void }
   if (found.error) return <ErrorNote error={found.error} />
   if (charges.length === 0) return null
   return (
-    <Card label="Found in your history" className="stack-sm">
+    <Card static="list" label="Found in your history" className="stack-sm">
       <h2>Found in your history</h2>
       <p className="small muted">These repeat on a schedule but are not tracked as bills yet.</p>
       <ErrorNote error={dismiss.error} />
@@ -151,7 +152,7 @@ export function BillsSection() {
         />
       )}
 
-      <Card label="Bills and subscriptions" className="stack-sm">
+      <Card static="list" label="Bills and subscriptions" className="stack-sm">
         <div className="row-between wrap">
           <div>
             <h2>Bills and subscriptions</h2>

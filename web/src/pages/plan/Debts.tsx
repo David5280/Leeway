@@ -1,10 +1,11 @@
 // Debt payoff: the terms of each card and loan, and how fast each strategy clears them.
 
+import { Card } from '../../components/design/Card'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { Card, LoadingOrError, Segmented, Setting } from '../../components/ui'
+import { LoadingOrError, Segmented, Setting } from '../../components/ui'
 import { isCounted, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
@@ -97,14 +98,14 @@ export function DebtsSection() {
   const debts = accounts.data.filter((a) => isOwed(a) && isCounted(a) && (a.balanceCents ?? 0) > 0)
   if (debts.length === 0) {
     return (
-      <Card label="Debts">
+      <Card static="empty" label="Debts">
         <p className="empty">No credit cards or loans with a balance. Nothing to pay off.</p>
       </Card>
     )
   }
   return (
     <>
-      <Card label="Your debts" className="stack-sm">
+      <Card static="list" label="Your debts" className="stack-sm">
         <h2>Your debts</h2>
         <p className="small muted">
           Banks rarely send interest rates. Find them on each statement and add them here.
@@ -113,7 +114,7 @@ export function DebtsSection() {
           <DebtTerms key={account.id} account={account} />
         ))}
       </Card>
-      <Card label="Payoff plan" className="stack">
+      <Card static="pending" label="Payoff plan" className="stack">
         <div className="row-between wrap">
           <h2>Payoff plan</h2>
           <Setting label="Extra each month">

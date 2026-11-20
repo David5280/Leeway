@@ -11,7 +11,7 @@ import { Icon, Logo, type IconName } from './ui'
 const LINKS: { to: string; label: string; short: string; icon: IconName }[] = [
   { to: '/', label: 'Overview', short: 'Overview', icon: 'overview' },
   { to: '/accounts', label: 'Accounts', short: 'Accounts', icon: 'accounts' },
-  { to: '/transactions', label: 'Transactions', short: 'Activity', icon: 'activity' },
+  { to: '/transactions', label: 'Activity', short: 'Activity', icon: 'activity' },
   { to: '/budgets', label: 'Budgets', short: 'Budgets', icon: 'budgets' },
   { to: '/plan', label: 'Plan', short: 'Plan', icon: 'plan' },
   { to: '/settings', label: 'Settings', short: 'Settings', icon: 'sliders' },

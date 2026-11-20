@@ -1,7 +1,7 @@
 // Pieces every chart shares: the frame with its accessible name, the value
 // axis, line-end labels, and a hover or tap readout.
 
-import { useId, useState, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { nearestIndex } from '../../lib/chartScale'
 
 /** Axis and label text: the interface font, sized to read at a glance. */
@@ -123,10 +123,29 @@ export const END_LABEL_GAP = AXIS_FONT + LABEL_FONT + 6
 /**
  * Tracks which data point the pointer (mouse, pen or finger) is nearest, from
  * the x position of each point. Returns the active index (-1 for none) and the
- * handlers for a transparent rectangle laid over the plot.
+ * handlers (with the ref) for a transparent rectangle laid over the plot.
+ *
+ * A mouse moving off the plot clears the readout; a finger lifting does not,
+ * since a phone fires leave the moment a tap ends and the readout would vanish
+ * before it is read. A finger's readout clears instead when the touch turns
+ * into a scroll (the browser cancels the pointer) or the next touch lands
+ * anywhere off the plot.
  */
 export function usePointer(positions: number[], width: number) {
   const [active, setActive] = useState(-1)
+  const layer = useRef<SVGRectElement>(null)
+  const showing = active >= 0
+
+  // Listen for a press elsewhere only while a readout is up.
+  useEffect(() => {
+    if (!showing) return
+    const clearOutside = (event: globalThis.PointerEvent) => {
+      if (!layer.current?.contains(event.target as Node)) setActive(-1)
+    }
+    document.addEventListener('pointerdown', clearOutside)
+    return () => document.removeEventListener('pointerdown', clearOutside)
+  }, [showing])
+
   const track = (event: PointerEvent<SVGRectElement>) => {
     const svg = event.currentTarget.ownerSVGElement
     const box = svg?.getBoundingClientRect()
@@ -138,9 +157,13 @@ export function usePointer(positions: number[], width: number) {
   return {
     active: active < positions.length ? active : -1,
     handlers: {
+      ref: layer,
       onPointerMove: track,
       onPointerDown: track,
-      onPointerLeave: () => setActive(-1),
+      onPointerCancel: () => setActive(-1),
+      onPointerLeave: (event: PointerEvent<SVGRectElement>) => {
+        if (event.pointerType !== 'touch') setActive(-1)
+      },
     },
   }
 }

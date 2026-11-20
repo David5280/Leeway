@@ -1,10 +1,11 @@
-// Cash flow until the next paycheck: the cash on hand, the bills still due
-// before payday, and what that leaves to spend each day.
+// Cash flow until the next paycheck: the cash in checking, the bills still
+// due before payday, and what that leaves at payday and to spend each day.
+// Savings is left out: it is money set aside, not what the bills come out of.
 
 import type { Db } from '../db/pool.js'
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import { periodContaining, type Cadence } from '../lib/periods.js'
-import { isSpendableCash } from './accountKinds.js'
+import { paysBills } from './accountKinds.js'
 import { accountMasks, listAccounts } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
 import { detectRecurring, recentHistory } from './recurring.js'
@@ -28,7 +29,7 @@ export interface CashFlow {
   /** The paycheck detected from history, when that is where the payday came from. */
   expectedPayCents: number | null
   daysUntilPayday: number
-  /** Available balance (or balance) across counted checking and savings accounts. */
+  /** Available balance (or balance) across counted checking accounts. */
   cashCents: number
   billsDue: BillDue[]
   billsDueCents: number
@@ -102,14 +103,14 @@ function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] 
 }
 
 /**
- * Money available to spend before payday: counted checking and savings
- * accounts that are not locked up (see isSpendableCash). Available balance
- * where the bank gives one, since it already takes out pending charges.
+ * Money the bills come out of before payday: counted checking accounts (see
+ * paysBills). Available balance where the bank gives one, since it already
+ * takes out pending charges.
  */
 async function cashOnHand(db: Db): Promise<number> {
   const accounts = await listAccounts(db, false)
   return accounts
-    .filter(isSpendableCash)
+    .filter(paysBills)
     .reduce((sum, a) => sum + (a.availableCents ?? a.balanceCents ?? 0), 0)
 }
 

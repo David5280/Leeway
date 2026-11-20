@@ -1,6 +1,7 @@
 // The Budgets screen: every category this period, with budgets editable in
 // place and a plain sentence on each, plus new categories and suggestions.
 
+import { Card } from '../components/design/Card'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Budget } from '../api/client'
@@ -9,7 +10,7 @@ import { CategoryForm } from '../components/CategoryForm'
 import { Money } from '../components/design/Money'
 import { ProgressRing } from '../components/design/ProgressRing'
 import { Shell } from '../components/Shell'
-import { Card, Dot, LoadingOrError } from '../components/ui'
+import { Dot, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
 import { groupNames } from '../lib/groups'
@@ -57,18 +58,18 @@ export function Budgets() {
       </div>
 
       <div className="grid">
-        <Card className="span-4 stack-sm" label="Budgeted">
+        <Card static="pending" className="span-4 stack-sm" label="Budgeted">
           <span className="eyebrow">Budgeted</span>
           <Money cents={b.totals.budgetedCents} className="mid-number" />
         </Card>
-        <Card className="span-4 row-between" label="Spent">
+        <Card static="pending" className="span-4 row-between" label="Spent">
           <div className="stack-sm">
             <span className="eyebrow">Spent in budgets</span>
             <Money cents={b.totals.budgetedSpentCents} className="mid-number" />
           </div>
           <BudgetsUsed totals={b.totals} />
         </Card>
-        <Card className="span-4 stack-sm" label="Left">
+        <Card static="pending" className="span-4 stack-sm" label="Left">
           <span className="eyebrow">Left</span>
           <Money
             cents={b.totals.leftCents}
@@ -84,7 +85,7 @@ export function Budgets() {
       </div>
 
       {adding && (
-        <Card label="New category" className="stack">
+        <Card static="form" label="New category" className="stack">
           <h2>New category</h2>
           <CategoryForm
             groups={groupNames(categories.data, settings.locale)}
@@ -103,7 +104,7 @@ export function Budgets() {
 
       {suggesting && <Suggestions onClose={() => setSuggesting(false)} />}
 
-      <Card label="Spending categories" className="stack-sm cat-list">
+      <Card static="list" label="Spending categories" className="stack-sm cat-list">
         <div className="row-between wrap">
           <h2>Spending</h2>
           <span className="small muted">Click an amount to change its budget</span>
@@ -116,7 +117,7 @@ export function Budgets() {
       </Card>
 
       {(income.length > 0 || transfers.length > 0) && (
-        <Card label="Income and transfers" className="stack-sm">
+        <Card static="list" label="Income and transfers" className="stack-sm">
           <h2>Income and transfers</h2>
           {income.map((row) => (
             <Link

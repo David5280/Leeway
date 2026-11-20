@@ -1,6 +1,6 @@
-// Hiding an account alert from the home screen: gone from the banner and from
-// Heads up at once, and still gone after a reload, while the inbox and the
-// Alerts page keep it.
+// Hiding an account alert from the home screen: gone from Heads up at once,
+// and still gone after a reload, while the inbox and the Alerts page keep it.
+// (The banner stands in for Heads up only when Heads up is hidden.)
 
 import { expect, test, type Page } from '@playwright/test'
 import { action } from './seed'
@@ -31,17 +31,17 @@ test.describe('hiding an alert from home', () => {
     accountId = account.id
 
     await page.goto('/')
-    await expect(rowIn(page, 'Account alerts')).toContainText('is overdrawn')
     await expect(rowIn(page, 'Heads up')).toContainText('is overdrawn')
+    // Heads up says it once, so no banner says it again.
+    await expect(page.getByRole('region', { name: 'Account alerts' })).toHaveCount(0)
 
-    await rowIn(page, 'Account alerts')
+    await rowIn(page, 'Heads up')
       .getByRole('button', { name: new RegExp(`^Hide from home: .*${NAME}`) })
       .click()
-    await expect(rowIn(page, 'Account alerts')).toHaveCount(0)
     await expect(rowIn(page, 'Heads up')).toHaveCount(0)
     await expect(page).toHaveURL(/\/$/)
     await page.reload()
-    await expect(page.getByRole('region', { name: 'Heads up' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
     await expect(rowIn(page, 'Heads up')).toHaveCount(0)
 
     // The inbox still has it, unread, and so does the Alerts page.

@@ -1,8 +1,10 @@
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn } from '../test/fake'
 import { bill, cashFlow, debtPlans, goal } from '../test/planning'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
+import { worthPoint } from '../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -14,16 +16,39 @@ const card = {
   minimumCents: 6000,
 }
 
+/** Opens the card's drill-down and returns what it says it adds up to. */
+async function openMath(card: HTMLElement, title: string) {
+  await userEvent.click(within(card).getByRole('button'))
+  const sheet = screen.getByRole('dialog', { name: title })
+  return within(sheet).getByRole('region', { name: 'How it adds up' })
+}
+
 describe('Until payday widget', () => {
-  it('shows the per-day amount without the list of bills, and links to the plan', async () => {
+  it('asks whether the cash lasts, shows what is left at payday, and opens its math', async () => {
     fakeServer({ get_cash_flow: () => cashFlow() })
     renderSignedIn(<CashFlowWidget />)
-    const widget = await screen.findByRole('region', { name: 'Until payday' })
-    expect(await within(widget).findByText(/a day for the next/)).toHaveTextContent(
-      '$144 a day for the next 10 days.',
+    expect(await screen.findByText(/left at payday/)).toHaveTextContent(
+      '$1,440 left at payday, after bills.',
     )
+    const widget = screen.getByRole('region', { name: 'Until payday' })
+    expect(
+      within(widget).getByRole('heading', { name: 'Will the cash last until payday?' }),
+    ).toBeInTheDocument()
     expect(within(widget).queryByText('Phone')).not.toBeInTheDocument()
-    expect(within(widget).getByRole('link', { name: 'Plan' })).toHaveAttribute('href', '/plan')
+    expect(within(widget).queryByRole('link')).not.toBeInTheDocument()
+    expect(await openMath(widget, 'Until payday')).toHaveTextContent(
+      'Left at payday $1,440 = In checking $1,500 minus bills due before payday $60',
+    )
+  })
+
+  it('shows why the cash could not be read', async () => {
+    fakeServer({}, { '/api/actions/get_cash_flow': failing('Database is down', 500) })
+    renderSignedIn(<CashFlowWidget />)
+    expect(await screen.findByText('Database is down')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Until payday' })).toHaveAttribute(
+      'data-static',
+      'empty',
+    )
   })
 })
 
@@ -38,6 +63,7 @@ describe('Bills widget', () => {
     expect(await widget.findByText('Bill A')).toBeInTheDocument()
     expect(widget.getByText('Bill E').parentElement).toHaveTextContent('Bill EDue Dec 5$10.00')
     expect(widget.queryByText('Bill F')).not.toBeInTheDocument()
+    expect(widget.getByRole('link', { name: /Bill A/ })).toHaveAttribute('href', '/plan/bills')
   })
 
   it('says when there are none', async () => {
@@ -65,6 +91,7 @@ describe('Goals widget', () => {
     expect(widget.getByText('Trip').parentElement).toHaveTextContent('$250 of $1,000')
     expect(widget.getAllByRole('progressbar')).toHaveLength(4)
     expect(widget.queryByText('Boat')).not.toBeInTheDocument()
+    expect(widget.getByRole('link', { name: /Trip/ })).toHaveAttribute('href', '/plan/goals')
   })
 
   it('gives what each goal needs per period and whether it is on track', async () => {
@@ -101,11 +128,20 @@ describe('Debt payoff widget', () => {
   it('shows when the debts are gone with no extra payment', async () => {
     const server = fakeServer({ plan_debt_payoff: () => debtPlans([card]) })
     renderSignedIn(<DebtsWidget />)
-    const widget = within(await screen.findByRole('region', { name: 'Debt payoff' }))
-    expect(await widget.findByText(/Debt free in/)).toHaveTextContent(
+    expect(await screen.findByText(/Debt free in/)).toHaveTextContent(
       'Debt free in 4 years 10 months, paying $60 a month on $2,000 owed.',
     )
     expect(server.actions('plan_debt_payoff')).toEqual([{ extraCents: 0 }])
+    const math = await openMath(screen.getByRole('region', { name: 'Debt payoff' }), 'Debt payoff')
+    expect(math).toHaveTextContent(
+      'Paid in all $3,449 = Owed now $2,000 plus interest along the way $1,449',
+    )
+  })
+
+  it('shows why the plan could not be read', async () => {
+    fakeServer({}, { '/api/actions/plan_debt_payoff': failing('Database is down', 500) })
+    renderSignedIn(<DebtsWidget />)
+    expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 
   it('says when payments never clear the debt', async () => {
@@ -133,23 +169,48 @@ describe('Debt payoff widget', () => {
 })
 
 describe('Net worth widget', () => {
-  it('shows the number and a line of the last year', async () => {
+  it('answers whether it is growing: the number, how far it came this year, and its line', async () => {
     const server = fakeServer({
       get_net_worth: () => ({
         assetsCents: 900000,
         liabilitiesCents: 200000,
         netWorthCents: 700000,
-        history: [
-          { date: '2026-01-01', netWorthCents: 500000 },
-          { date: '2026-11-17', netWorthCents: 700000 },
-        ],
+        history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
       }),
     })
     renderSignedIn(<NetWorthWidget />)
-    const widget = within(await screen.findByRole('region', { name: 'Net worth' }))
-    expect(await widget.findByText('$7,000')).toBeInTheDocument()
+    expect(await screen.findByText('$7,000')).toBeInTheDocument()
+    const widget = within(screen.getByRole('region', { name: 'Net worth' }))
+    expect(widget.getByText('Is your net worth growing?')).toBeInTheDocument()
+    expect(widget.getByText(/^Up/)).toHaveTextContent('Up $2,000 since Jan 2026')
+    expect(widget.getByText('$2,000')).toHaveClass('money-in')
     expect(widget.getByRole('img', { name: 'Net worth over the last year' })).toBeInTheDocument()
     expect(server.actions('get_net_worth')).toEqual([{ days: 365 }])
+    const math = await openMath(screen.getByRole('region', { name: 'Net worth' }), 'Net worth')
+    expect(math).toHaveTextContent(
+      'Net worth $7,000 = What you own $9,000 minus what you owe $2,000',
+    )
+  })
+
+  it('says in red how far it fell', async () => {
+    fakeServer({
+      get_net_worth: () => ({
+        assetsCents: 300000,
+        liabilitiesCents: 0,
+        netWorthCents: 300000,
+        history: [worthPoint('2025-12-01', 500000), worthPoint('2026-11-17', 300000)],
+      }),
+    })
+    renderSignedIn(<NetWorthWidget />)
+    const line = await screen.findByText(/^Down/)
+    expect(line).toHaveTextContent('Down $2,000 since Dec 2025')
+    expect(within(line).getByText('$2,000')).toHaveClass('money-problem')
+  })
+
+  it('shows why net worth could not be read', async () => {
+    fakeServer({}, { '/api/actions/get_net_worth': failing('Database is down', 500) })
+    renderSignedIn(<NetWorthWidget />)
+    expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 
   it('marks a negative net worth and leaves out a line with one point', async () => {
@@ -158,7 +219,7 @@ describe('Net worth widget', () => {
         assetsCents: 0,
         liabilitiesCents: 5000,
         netWorthCents: -5000,
-        history: [{ date: '2026-11-17', netWorthCents: -5000 }],
+        history: [worthPoint('2026-11-17', -5000)],
       }),
     })
     renderSignedIn(<NetWorthWidget />)

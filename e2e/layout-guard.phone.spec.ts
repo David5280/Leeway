@@ -10,7 +10,8 @@
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
-import { SCREENS, SETTINGS_GROUPS, type Screen } from './guarded-screens'
+import { SCREENS, type Screen } from './guarded-screens'
+import { SETTINGS_GROUPS } from './settings-groups'
 import {
   describeProblems,
   findProblems,
@@ -19,6 +20,7 @@ import {
   type LayoutProblem,
 } from './layout'
 import { OWNER, SETUP_CODE } from './owner'
+import { patchSettings } from './patchSettings'
 import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
@@ -27,9 +29,17 @@ async function settle(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
   await page.waitForLoadState('networkidle')
   await expect(page.locator('.spinner')).toHaveCount(0)
+  // Hero figures count up to their amount; measure them at rest.
+  await expect(page.locator('.count-up')).toHaveCount(0)
   // Fonts swap in late, and charts measure their width a frame after they mount.
+  // Cards rise in and rings fill; boxes are measured once those have finished
+  // (an endless animation, like a skeleton's shimmer, is never waited for).
   await page.evaluate(async () => {
     await document.fonts.ready
+    const finite = document
+      .getAnimations()
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+    await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)))
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
   })
 }
@@ -60,15 +70,17 @@ async function scrollTo(page: Page, share: number): Promise<void> {
 
 /**
  * Every problem on the screen: all layout checks at the top, then the safe
- * areas again scrolled halfway, where content has moved under the status bar,
- * and at the end, where the last content must also rest clear of the tab bar.
+ * areas and overlaps again scrolled halfway, where content has moved under the
+ * status bar and the middle of the page is on screen (what covers text is
+ * found only on screen), and at the end, where the last content must also
+ * rest clear of the tab bar.
  * Last, every control's tap, which scrolls each one into view to probe it.
  */
 async function problemsOn(page: Page): Promise<string[]> {
   await scrollTo(page, 0)
   const problems: LayoutProblem[] = await layoutProblems(page)
   for (const [share, checks] of [
-    [0.5, ['safe-area']],
+    [0.5, ['safe-area', 'overlap']],
     [1, ['safe-area', 'overlap']],
   ] as const) {
     await scrollTo(page, share)
@@ -146,7 +158,7 @@ for (const phone of GUARDED_PHONES) {
         // Either way, Settings arranges it too, and the guard checks it there on every phone.
         await load(page, '/settings/appearance', phone.insets)
         await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-        await expect(page.getByRole('group', { name: 'Summary order' })).toBeVisible()
+        await expect(page.getByRole('group', { name: 'Money in and out order' })).toBeVisible()
       })
 
       test('the Settings menu has every group the guard visits', async ({ page }) => {
@@ -271,17 +283,11 @@ test.describe('in the widest theme, packed tight', () => {
 
   for (const screen of screensFor(phone)) {
     test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request }) => {
-      // The look is changed on its way to the page, so the install keeps its
-      // own. Saving any setting answers with them all, so that answer too.
-      for (const action of ['get_settings', 'update_settings']) {
-        await page.route(`**/api/actions/${action}`, async (route) => {
-          const response = await route.fetch()
-          if (!response.ok()) return route.fulfill({ response })
-          const { result } = await response.json()
-          const appearance = { ...result.appearance, theme: 'neon', density: 'compact' }
-          await route.fulfill({ response, json: { result: { ...result, appearance } } })
-        })
-      }
+      // The look is changed on its way to the page, so the install keeps its own.
+      await patchSettings(page, (settings) => ({
+        ...settings,
+        appearance: { ...(settings.appearance as object), theme: 'neon', density: 'compact' },
+      }))
       await open(page, screen, phone, await screen.path(seeded, request))
       await expect(page.locator('html')).toHaveCSS('--pad', '16px')
       expect(await problemsOn(page)).toEqual([])

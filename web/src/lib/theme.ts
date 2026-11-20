@@ -2,10 +2,10 @@
 // the rest of the look (accent, font, corners, density) layers on top.
 
 import type { Settings } from '../api/client'
+import { DEPTH, type Mode } from './depth'
 
 export type Appearance = Settings['appearance']
 export type ThemeId = Appearance['theme']
-type Mode = 'light' | 'dark'
 
 type Tokens = Record<
   | 'bg'
@@ -265,7 +265,9 @@ export function themeVariables(
     '--pad': compact ? '16px' : '24px',
     '--gap': compact ? '12px' : '20px',
   }
+  // Colors first, then the depth that layers the surfaces (lib/depth.ts).
   for (const [key, value] of Object.entries(tokens)) vars[`--${key}`] = value
+  for (const [key, value] of Object.entries(DEPTH[appearance.theme][mode])) vars[`--${key}`] = value
   return { mode, vars }
 }
 

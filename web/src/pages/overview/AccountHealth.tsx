@@ -1,14 +1,14 @@
 // The account health banner at the top of the dashboard: any account that is
-// overdrawn, over its limit, low or charged an overdraft fee lately. It is not
-// a widget, so it cannot be hidden or moved below the fold, but each alert
-// in it can be hidden from home (useHideHomeAlert).
+// overdrawn, over its limit, low or charged an overdraft fee lately. Heads up
+// lists these first; the banner stands in when the owner hides Heads up, so
+// money going wrong in an account is never hidden or moved below the fold.
+// Each alert in it can still be hidden from home (useHideHomeAlert).
 
 import { Link } from 'react-router-dom'
 import { useHomeAlerts } from '../../api/homeAlerts'
 import { AlertRows } from '../../components/AccountAlerts'
-
-/** Rows shown before "See all alerts", so the banner stays short. */
-export const BANNER_ROWS = 3
+import { Card } from '../../components/design/Card'
+import { ALERT_ROWS, moreAlerts } from '../../lib/alertRows'
 
 /** Nothing at all when every account is fine. */
 export function AccountHealth() {
@@ -16,24 +16,23 @@ export function AccountHealth() {
   const list = alerts.data?.alerts ?? []
   if (list.length === 0) return null
   const urgent = list.some((alert) => alert.severity === 'urgent')
-  const more = list.length - BANNER_ROWS
+  const more = list.length - ALERT_ROWS
   return (
-    <section
-      aria-label="Account alerts"
-      className={`card tight ${urgent ? 'over-card' : 'warn-card'}`}
+    <Card
+      static="list"
+      label="Account alerts"
+      className={`tight ${urgent ? 'over-card' : 'warn-card'}`}
     >
-      <AlertRows alerts={list.slice(0, BANNER_ROWS)} hideable />
+      <AlertRows alerts={list.slice(0, ALERT_ROWS)} hideable />
       <div className="row-between" style={{ padding: '4px 14px 8px' }}>
         <span className="small muted">
-          {more > 0
-            ? `${more} more ${more === 1 ? 'alert' : 'alerts'}`
-            : 'From your last bank sync'}
+          {more > 0 ? moreAlerts(more) : 'From your last bank sync'}
         </span>
-        {/* A real 44px box on a phone, so its tap never reaches the alert above. */}
+        {/* A real 44px box, so its tap never reaches up into the last alert. */}
         <Link to="/alerts" className="linkbtn small tap">
           See all alerts
         </Link>
       </div>
-    </section>
+    </Card>
   )
 }

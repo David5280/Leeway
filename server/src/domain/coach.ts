@@ -80,7 +80,7 @@ function cashItems({ cashFlow }: CoachSources, money: Money): AttentionItem[] {
     {
       priority: 'now',
       topic: 'cash',
-      message: `Bills due before payday on ${cashFlow.nextPayday} come to ${money(cashFlow.billsDueCents)}, but checking and savings hold ${money(cashFlow.cashCents)}: ${money(-cashFlow.leftAfterBillsCents)} short.`,
+      message: `Bills due before payday on ${cashFlow.nextPayday} come to ${money(cashFlow.billsDueCents)}, but checking holds ${money(cashFlow.cashCents)}: ${money(-cashFlow.leftAfterBillsCents)} short.`,
       tool: 'get_cash_flow',
     },
   ]

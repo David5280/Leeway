@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { AccountAlert } from '../src/domain/accountAlerts.js'
 import {
   accountsSummary,
   combineBalances,
@@ -97,18 +96,6 @@ describe('spendingByCategory', () => {
   })
 })
 
-const overdrawn: AccountAlert = {
-  kind: 'overdrawn',
-  severity: 'urgent',
-  accountId: 'a',
-  accountName: 'Everyday',
-  amountCents: 4210,
-  count: 1,
-  date: null,
-  message: 'Everyday is overdrawn by $42.10.',
-  summary: 'Your checking account is overdrawn by $42.10.',
-}
-
 function input(fields: Partial<AccountsSummaryInput> = {}): AccountsSummaryInput {
   const accounts = [account()]
   return {
@@ -117,17 +104,17 @@ function input(fields: Partial<AccountsSummaryInput> = {}): AccountsSummaryInput
     balances: combineBalances(accounts),
     flows: [flow(0, 0), flow(0, 0)],
     spending: [],
-    alerts: [],
     periodWord: 'month',
     ...fields,
   }
 }
 
 describe('accountsSummary', () => {
-  it('leads with an urgent alert', () => {
-    expect(accountsSummary(input({ alerts: [overdrawn] }), money).headline).toBe(
-      'Everyday is overdrawn by $42.10.',
-    )
+  it('leaves an overdrawn account to its alert, saying only that nothing is available', () => {
+    const accounts = [account({ balanceCents: -4210, availableCents: -4210 })]
+    expect(
+      accountsSummary(input({ accounts, balances: combineBalances(accounts) }), money).headline,
+    ).toBe('Nothing is available in Everyday.')
   })
 
   it('says what one cash account has available', () => {
@@ -137,16 +124,9 @@ describe('accountsSummary', () => {
     })
   })
 
-  it('says what several cash accounts have available, apart from a warning', () => {
+  it('says what several cash accounts have available', () => {
     const accounts = [account(), account({ name: 'Savings' })]
-    const summary = accountsSummary(
-      input({
-        accounts,
-        balances: combineBalances(accounts),
-        alerts: [{ ...overdrawn, severity: 'warning' }],
-      }),
-      money,
-    )
+    const summary = accountsSummary(input({ accounts, balances: combineBalances(accounts) }), money)
     expect(summary.headline).toBe('$1800.00 available across 2 checking and savings accounts.')
   })
 

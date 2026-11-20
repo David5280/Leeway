@@ -37,9 +37,10 @@ describe('netWorthSeries', () => {
       '2026-10-01',
       '2026-11-17',
     )
+    // Each day keeps what was owned and owed apart, so a chart can show both.
     expect(points).toEqual([
-      { date: '2026-11-01', netWorthCents: 400000 },
-      { date: '2026-11-10', netWorthCents: 350000 },
+      { date: '2026-11-01', netWorthCents: 400000, assetsCents: 500000, liabilitiesCents: 100000 },
+      { date: '2026-11-10', netWorthCents: 350000, assetsCents: 450000, liabilitiesCents: 100000 },
     ])
   })
 
@@ -54,7 +55,7 @@ describe('netWorthSeries', () => {
       '2026-11-01',
       '2026-11-17',
     )
-    expect(points).toEqual([
+    expect(points.map(({ date, netWorthCents }) => ({ date, netWorthCents }))).toEqual([
       { date: '2026-11-01', netWorthCents: 100 },
       { date: '2026-11-05', netWorthCents: 300 },
     ])
@@ -66,7 +67,7 @@ describe('netWorthSeries', () => {
         '2026-11-10',
         '2026-11-17',
       ),
-    ).toEqual([{ date: '2026-11-10', netWorthCents: 300 }])
+    ).toEqual([{ date: '2026-11-10', netWorthCents: 300, assetsCents: 300, liabilitiesCents: 0 }])
     expect(netWorthSeries([], card, '2026-11-01', '2026-11-17')).toEqual([])
   })
 })
@@ -85,6 +86,32 @@ describe('get_net_worth', () => {
       liabilitiesCents: 120000,
       netWorthCents: 700000,
     })
+  })
+
+  it('counts an overpaid card as owned and an overdrawn account as owed, never a negative total', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 100000 })
+    // The card was paid $50 too much, so the bank owes the owner.
+    await insertBankAccount(ctx.db, { type: 'credit', balanceCents: -5000 })
+    await insertBankAccount(ctx.db, { balanceCents: -2000 })
+    const worth = await call('get_net_worth', {})
+    expect(worth).toMatchObject({
+      assetsCents: 105000,
+      liabilitiesCents: 2000,
+      netWorthCents: 103000,
+    })
+    expect(
+      netWorthSeries(
+        [
+          { accountId: 'card', day: '2026-11-01', balanceCents: -5000 },
+          { accountId: 'bank', day: '2026-11-01', balanceCents: -100 },
+        ],
+        new Set(['card']),
+        '2026-11-01',
+        '2026-11-17',
+      ),
+    ).toEqual([
+      { date: '2026-11-01', netWorthCents: 4900, assetsCents: 5000, liabilitiesCents: 100 },
+    ])
   })
 
   it('records a balance every time it changes, through sync or by hand', async () => {
@@ -111,8 +138,8 @@ describe('get_net_worth', () => {
     )
     const worth = await call('get_net_worth', { days: 30 })
     expect(worth.history).toEqual([
-      { date: '2026-10-18', netWorthCents: 300000 },
-      { date: '2026-11-01', netWorthCents: 450000 },
+      { date: '2026-10-18', netWorthCents: 300000, assetsCents: 300000, liabilitiesCents: 0 },
+      { date: '2026-11-01', netWorthCents: 450000, assetsCents: 450000, liabilitiesCents: 0 },
     ])
   })
 })
@@ -209,27 +236,22 @@ describe('get_cash_flow', () => {
     })
   })
 
-  it('counts only checking and savings the owner can spend as cash', async () => {
+  it('counts only checking, the money the bills come out of', async () => {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 100_000 })
     // What the bank says is available already takes out pending charges.
     await ctx.db.query('UPDATE accounts SET available_cents = 90000 WHERE id = $1', [
       checking.accountId,
     ])
     // No balance from the bank yet: nothing to count.
-    await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: null })
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: null })
+    // Money set aside, not what the bills come out of.
     await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: 20_000 })
-    // Money at the bank that is not for spending before payday.
     await insertBankAccount(ctx.db, { subtype: 'hsa', balanceCents: 300_000 })
     await insertBankAccount(ctx.db, { subtype: 'cd', balanceCents: 400_000 })
-    await insertBankAccount(ctx.db, {
-      name: 'IRA Savings',
-      subtype: 'savings',
-      balanceCents: 500_000,
-    })
-    // A savings account the owner calls retirement is not spending money either.
-    const picked = await insertBankAccount(ctx.db, { subtype: 'savings', balanceCents: 600_000 })
-    await call('update_account', { id: picked.accountId, kind: 'retirement' })
-    expect((await call('get_cash_flow')).cashCents).toBe(110_000)
+    // A checking account the owner calls savings is set aside too.
+    const picked = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 600_000 })
+    await call('update_account', { id: picked.accountId, kind: 'savings' })
+    expect((await call('get_cash_flow')).cashCents).toBe(90_000)
   })
 
   it('finds payday from regular deposits, and never goes below zero per day', async () => {

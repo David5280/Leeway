@@ -1,21 +1,29 @@
-// The Transactions screen's main number: what has gone out this period, with
-// how that compares to the same point in the last one. The list below may
-// cover another range; this figure always speaks for the current period.
+// The Transactions screen's hero: what has gone out this period, against the
+// same point in the last one, opening the math behind it (lib/drills/budget.ts).
+// The list below may cover another range; this figure always speaks for the
+// current period.
 
 import type { Budget } from '../../api/client'
-import { KeyFigure } from '../../components/design/KeyFigure'
-import { SpentComparison } from '../../components/SpentComparison'
+import { useAction } from '../../api/hooks'
+import { Card } from '../../components/design/Card'
+import { HeroFigure } from '../../components/design/HeroFigure'
 import { useApp } from '../../lib/app'
+import { spendingUsual, spentDrill } from '../../lib/drills/budget'
 import { periodWord } from '../../lib/format'
 
 export function PeriodSpent({ budget }: { budget: Budget }) {
   const { settings } = useApp()
   const word = periodWord(settings.period.kind)
+  // The trend is a nicety: the figure shows without it.
+  const trends = useAction('get_trends', { periods: 6 })
+  const label = `Spent this ${word}`
   return (
-    <KeyFigure
-      label={`Spent this ${word}`}
-      cents={budget.totals.spentCents}
-      caption={<SpentComparison totals={budget.totals} previous={budget.previous} word={word} />}
-    />
+    <Card drill={spentDrill(budget, word, trends.data)} label={label} className="hero">
+      <HeroFigure
+        label={label}
+        cents={budget.totals.spentCents}
+        usual={spendingUsual(budget, word)}
+      />
+    </Card>
   )
 }

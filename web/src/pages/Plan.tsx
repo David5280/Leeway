@@ -1,8 +1,10 @@
-// The Plan screen: cash until payday on top, then bills, goals, debts, net worth or retirement.
+// The Plan screen: bills, goals, debts, net worth or retirement, one section
+// at a time. Cash until payday leads the bills, the section it answers for,
+// and stays off the others so each opens on its own subject.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Shell } from '../components/Shell'
-import { Segmented } from '../components/ui'
+import { TabRow } from '../components/TabRow'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
@@ -33,16 +35,14 @@ export function Plan() {
   const Content = SECTIONS[current].component
   return (
     <Shell>
-      <div className="row-between wrap">
-        <h1>Plan</h1>
-        <Segmented
-          label="Plan section"
-          value={current}
-          options={OPTIONS}
-          onChange={(next) => navigate(`/plan/${next}`)}
-        />
-      </div>
-      <CashFlowCard />
+      <h1>Plan</h1>
+      <TabRow
+        label="Plan section"
+        value={current}
+        options={OPTIONS}
+        onChange={(next) => navigate(`/plan/${next}`)}
+      />
+      {current === 'bills' && <CashFlowCard />}
       <Content />
     </Shell>
   )

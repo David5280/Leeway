@@ -29,6 +29,8 @@ export function Overview() {
   const widgets = drawable(all)
   const saveWidgets = (next: Widget[]) => update.mutate({ dashboard: { widgets: next } })
   const addable = addableTypes(all)
+  // Heads up lists the account alerts; the banner stands in only when it is hidden.
+  const headsUpShown = widgets.some((widget) => widget.type === 'alerts' && widget.visible)
 
   return (
     <Shell
@@ -57,7 +59,7 @@ export function Overview() {
         </div>
       )}
 
-      <AccountHealth />
+      {!headsUpShown && <AccountHealth />}
 
       <section className="row-between" style={{ alignItems: 'end' }}>
         <div>

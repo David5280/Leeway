@@ -1,4 +1,4 @@
-// The Transactions list: opening a transaction in its sheet, changing its
+// The Activity list: opening a transaction in its sheet, changing its
 // category, making a rule from it, and narrowing the list with its chips.
 
 import { expect, test, type Page } from '@playwright/test'
@@ -10,6 +10,22 @@ const list = (page: Page) => page.getByRole('region', { name: 'Transaction list'
 /** The rows showing, by the names they are listed under, A to Z. */
 const rowNames = async (page: Page) =>
   (await list(page).locator('.act-row-name').allTextContents()).sort()
+
+test('Activity is named the same on the page and in the menu, its chip in the UI font', async ({
+  page,
+}) => {
+  await page.goto('/transactions')
+  await expect(page.getByRole('heading', { level: 1, name: 'Activity' })).toBeVisible()
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Activity' }),
+  ).toBeVisible()
+  // The comparison chip is a sentence, so it reads in Geist, not the monospaced money face.
+  const chip = page.locator('.usual-chip').first()
+  await expect(chip).toBeVisible()
+  const font = await chip.evaluate((el) => getComputedStyle(el).fontFamily)
+  expect(font).toMatch(/^"?Geist"?,/)
+  expect(await chip.evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toBe('tabular-nums')
+})
 
 test('a transaction opens in a sheet, takes a new category, and makes a rule', async ({ page }) => {
   await addAccount(page, { name: 'Sheet checking', balance: '100' })

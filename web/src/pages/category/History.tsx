@@ -1,11 +1,12 @@
 // A category over the last six periods, and its transactions this period.
 
+import { Card } from '../../components/design/Card'
 import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget, Output } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { PeriodBars } from '../../components/charts/PeriodBars'
 import { Money } from '../../components/design/Money'
-import { Card, ErrorNote } from '../../components/ui'
+import { ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'
 import { amountSign } from '../../lib/transactions'
@@ -37,6 +38,18 @@ export function pastAverage(history: { cents: number; current: boolean }[]): num
   return Math.round(past.reduce((sum, h) => sum + h.cents, 0) / past.length)
 }
 
+/** The chart's one question: against the budget when there is one, else against the usual. */
+export function historyQuestion(
+  category: Pick<Category, 'kind'>,
+  budget: number | null,
+  kind: string,
+): string {
+  if (category.kind !== 'expense') {
+    return `Last six ${kind === 'monthly' ? 'months' : 'periods'}`
+  }
+  return budget ? 'Are you staying under budget?' : 'Is this more than usual?'
+}
+
 export function History({
   category,
   row,
@@ -55,8 +68,8 @@ export function History({
   const average = pastAverage(history)
   const budget = row?.budgetCents ?? null
   return (
-    <Card label="Last six periods" className="span-wide stack-sm">
-      <h2>Last six {settings.period.kind === 'monthly' ? 'months' : 'periods'}</h2>
+    <Card static="chart" label="Last six periods" className="span-wide stack-sm">
+      <h2>{historyQuestion(category, budget, settings.period.kind)}</h2>
       {average !== null && (
         <span className="small muted">
           Average <Money cents={average} />
@@ -73,8 +86,12 @@ export function History({
         <PeriodBars
           label={`${category.name} by period`}
           bars={history}
-          budgetCents={budget}
-          color={category.color}
+          // Without a budget, each period reads against the usual one.
+          budgetCents={budget ?? average}
+          levelName={budget ? 'Budget' : 'Usual'}
+          moneyIn={category.kind === 'income'}
+          // Only a budget is a limit: a period over the usual one is not a problem.
+          overIsProblem={category.kind === 'expense' && budget !== null}
         />
       )}
     </Card>
@@ -98,7 +115,7 @@ export function InThisCategory({
   const transactions = list.data
   const total = transactions?.total ?? 0
   return (
-    <Card label="In this category" className="span-half stack-sm">
+    <Card static="list" label="In this category" className="span-half stack-sm">
       <div className="row-between">
         <h2>In this category</h2>
         {transactions && <span className="small muted">{total} this period</span>}

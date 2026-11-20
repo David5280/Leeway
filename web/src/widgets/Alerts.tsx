@@ -1,155 +1,84 @@
-// "Heads up": everything that needs the owner, worst first: account alerts,
-// banks that stopped syncing, budgets, transactions to sort, then this
-// month's AI spending alert. Account alerts can be hidden from home here.
+// "Heads up": everything that needs the owner, worst first, in one compact
+// card under the hero, and nothing at all when nothing does: account alerts, banks that stopped syncing, budgets,
+// transactions to sort, then this month's AI spending alert. It keeps to a
+// few rows and leads to the Alerts page for the rest. Account alerts can be
+// hidden from home here.
 
 import { Link } from 'react-router-dom'
-import type { AccountAlert, Connection } from '../api/client'
 import { useHomeAlerts } from '../api/homeAlerts'
 import { useAction } from '../api/hooks'
+import { HideableRow } from '../components/AccountAlerts'
 import { AiSpendAlert } from '../components/AiSpendAlert'
-import { ALERT_LABELS as ACCOUNT_ALERT_LABELS, HideableRow } from '../components/AccountAlerts'
-import { Card, Icon } from '../components/ui'
-import { accountPath } from '../lib/accounts'
+import { Card } from '../components/design/Card'
+import { Icon } from '../components/ui'
 import { useApp } from '../lib/app'
-import { settingsPath } from '../pages/settings/paths'
+import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
+import { headsUpItems, headsUpTint, type HeadsUpItem } from './headsUp'
 import type { WidgetProps } from './types'
-
-const ALERT_LABELS: Record<WidgetProps['budget']['alerts'][number]['level'], string> = {
-  over: 'Over',
-  pace: 'Pace',
-  warning: 'Warning',
-}
-
-/** One row of the card. */
-interface HeadsUpItem {
-  key: string
-  tone: 'over' | 'warn' | 'info'
-  text: string
-  level: string
-  to: string
-  /** The account alert a row stands for, which the owner may hide from home. */
-  alert?: AccountAlert
-}
 
 export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
-  const home = useHomeAlerts().data
+  // The home list: every account alert less those the owner hid from home.
+  const accountAlerts = useHomeAlerts()
   const aiAlert = useAction('get_ai_usage').data?.alert
-  // Money going wrong in an account comes before everything else.
-  const items = [
-    ...accountItems(home?.alerts),
-    ...bankItems(connections.data),
-    ...budgetItems(budget.alerts),
-    ...uncategorizedItems(budget.totals, money),
-  ]
+  const items = headsUpItems({
+    accountAlerts: accountAlerts.data?.alerts ?? [],
+    connections: connections.data ?? [],
+    budget,
+    money,
+  })
+  const total = items.length + (aiAlert ? 1 : 0)
+  // Nothing to say is said by saying nothing: no card until something needs the owner.
+  if (total === 0) return null
+  const more = total - ALERT_ROWS
   return (
-    <Card label="Heads up" className="tight">
-      {items.length === 0 && !aiAlert ? (
-        <div className="alert-row">
-          <span className="alert-icon info">
-            <Icon name="info" size={16} />
-          </span>
-          <span className="grow">{nothingText(home?.hidden)}</span>
+    <Card static="list" label="Heads up" className={`tight ${headsUpTint(items)}`}>
+      {/* With another row left, hiding the last account alert keeps the card. */}
+      <HeadsUpRows items={items.slice(0, ALERT_ROWS)} hideable={{ regionStays: total > 1 }} />
+      {aiAlert && items.length < ALERT_ROWS && <AiSpendAlert alert={aiAlert} linked />}
+      {more > 0 && (
+        <div className="row-between" style={{ padding: '4px 14px 8px' }}>
+          <span className="small muted">{moreAlerts(more)}</span>
+          {/* A real 44px box, so its tap never reaches up into the last row. */}
+          <Link to="/alerts" className="linkbtn small tap">
+            See all alerts
+          </Link>
         </div>
-      ) : (
-        <>
-          {items.map((item) => (
-            <HideableRow key={item.key} alert={item.alert}>
-              <Link
-                to={item.to}
-                className="alert-row clickrow"
-                style={{ margin: 0, flexDirection: 'row' }}
-              >
-                <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
-                  <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
-                </span>
-                <span className="grow">{item.text}</span>
-                <span
-                  className="small muted strong hide-sm"
-                  style={{ textTransform: 'uppercase', letterSpacing: '.06em' }}
-                >
-                  {item.level}
-                </span>
-              </Link>
-            </HideableRow>
-          ))}
-          {aiAlert && <AiSpendAlert alert={aiAlert} linked />}
-        </>
       )}
     </Card>
   )
 }
 
-/** A row for each account alert on the home list. */
-function accountItems(alerts: AccountAlert[] = []): HeadsUpItem[] {
-  return alerts.map((alert) => ({
-    key: `${alert.kind}-${alert.accountId}`,
-    tone: alert.severity === 'urgent' ? 'over' : 'warn',
-    text: alert.message,
-    level: ACCOUNT_ALERT_LABELS[alert.kind],
-    to: accountPath(alert.accountId),
-    alert,
-  }))
-}
-
-/** A row for each bank that is not syncing. */
-function bankItems(connections: Connection[] = []): HeadsUpItem[] {
-  return connections.flatMap((connection): HeadsUpItem[] => {
-    const text = bankAlertText(connection)
-    if (!text) return []
-    return [{ key: connection.id, tone: 'warn', text, level: 'Bank', to: settingsPath('banks') }]
-  })
-}
-
-/** A row for each budget over, or on pace to go over. */
-function budgetItems(alerts: WidgetProps['budget']['alerts']): HeadsUpItem[] {
-  return alerts.map((alert) => ({
-    key: `${alert.categoryId}-${alert.level}`,
-    tone: alert.level === 'over' ? 'over' : 'warn',
-    text: alert.message,
-    level: ALERT_LABELS[alert.level],
-    to: `/budgets/${alert.categoryId}`,
-  }))
-}
-
-/** One row for the transactions waiting for a category, if any are. */
-function uncategorizedItems(
-  totals: WidgetProps['budget']['totals'],
-  money: (cents: number) => string,
-): HeadsUpItem[] {
-  if (totals.uncategorizedCount <= 0) return []
-  return [
-    {
-      key: 'uncategorized',
-      tone: 'info',
-      text: uncategorizedText(totals.uncategorizedCount, money(totals.uncategorizedCents)),
-      level: 'Info',
-      to: '/transactions?category=uncategorized',
-    },
-  ]
-}
-
 /**
- * What to say when no row is left. With an account alert hidden from home,
- * something may still be wrong, so it claims no more than what is shown.
+ * Heads-up items as rows, each opening where it can be dealt with. On the home
+ * screen (`hideable`), each account alert also has a button that hides it
+ * there; `regionStays` says whether the card outlives its last such row.
  */
-function nothingText(hidden = 0): string {
-  if (hidden > 0) return 'Nothing else needs you right now.'
-  return 'Nothing needs you right now. Every budget is on track.'
-}
-
-/** "1 transaction ($45) needs a category." or "3 transactions ($90) need a category." */
-function uncategorizedText(count: number, amount: string): string {
-  if (count === 1) return `1 transaction (${amount}) needs a category.`
-  return `${count} transactions (${amount}) need a category.`
-}
-
-/** What to tell the owner about a bank that is not syncing, or null when it is fine. */
-function bankAlertText(connection: Pick<Connection, 'status' | 'institutionName'>) {
-  const name = connection.institutionName ?? 'A bank'
-  if (connection.status === 'needs_reauth')
-    return `${name} needs you to log in again to keep syncing.`
-  if (connection.status === 'error') return `${name} stopped syncing. Open Banks to see why.`
-  return null
+export function HeadsUpRows({
+  items,
+  hideable,
+}: {
+  items: HeadsUpItem[]
+  hideable?: { regionStays: boolean }
+}) {
+  return (
+    <>
+      {items.map((item) => (
+        <HideableRow
+          key={item.key}
+          alert={hideable ? item.alert : undefined}
+          regionStays={hideable?.regionStays}
+        >
+          <Link to={item.to} className="alert-row clickrow">
+            <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
+              <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
+            </span>
+            <span className="grow">{item.text}</span>
+            <span className="small muted strong hide-sm eyebrow">{item.level}</span>
+          </Link>
+        </HideableRow>
+      ))}
+    </>
+  )
 }

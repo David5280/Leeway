@@ -8,6 +8,8 @@ export const LAYOUT_CHECKS = [
   'broken-word',
   'page-overflow',
   'safe-area',
+  'spill',
+  'sticky-hover',
 ] as const
 
 export type LayoutCheck = (typeof LAYOUT_CHECKS)[number]

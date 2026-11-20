@@ -37,6 +37,8 @@ import {
 import {
   getSpendingPaceAction,
   getTrendsAction,
+  getMonthlyTotalsAction,
+  getSavingsRatesAction,
   suggestBudgetsAction,
   suggestStarterBudgetsAction,
   topMerchantsAction,
@@ -125,6 +127,8 @@ export const actionList = [
   whenCanIAffordAction,
   getBudgetAction,
   getTrendsAction,
+  getMonthlyTotalsAction,
+  getSavingsRatesAction,
   getSpendingPaceAction,
   topMerchantsAction,
   suggestBudgetsAction,

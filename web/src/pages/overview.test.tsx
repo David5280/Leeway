@@ -8,6 +8,8 @@ import {
 } from '../../../server/src/domain/settings'
 import type { Settings } from '../api/client'
 import {
+  account,
+  alertsFor,
   budgetFor,
   category,
   fakeServer,
@@ -16,6 +18,7 @@ import {
   settings,
   type Handlers,
 } from '../test/fake'
+import { homeList } from '../test/homeAlerts'
 import { DEFAULT_LAYOUT, moveWidget, WIDGET_LIBRARY } from '../widgets/library'
 import { Overview } from './Overview'
 
@@ -56,21 +59,30 @@ const REGION: Record<string, string> = {
   accounts: 'Accounts',
   merchants: 'Top merchants',
   trends: 'Spending by period',
+  'net-worth': 'Net worth',
+  flows: 'Money in and out',
 }
 
 /**
- * The default widgets in page order. Wide widgets stack in the main column
- * and half ones beside them, so Recent comes before the pace chart.
+ * The default widgets in page order: the leeway hero with net worth beside it,
+ * then money in and out and the pace. Heads up says nothing, and takes no
+ * room, while nothing needs the owner.
  */
-const DEFAULT_PAGE_ORDER = [
-  'Summary',
-  'Your leeway',
-  'This period at a glance',
-  'Heads up',
-  'Categories',
-  'Recent transactions',
-  'Spending pace',
-  'Accounts',
+const DEFAULT_PAGE_ORDER = ['Your leeway', 'Net worth', 'Money in and out', 'Spending pace']
+
+/**
+ * A fuller dashboard for the editing tests, with wide and half widgets in
+ * columns between full ones, so every way a widget moves can be tried.
+ */
+const EDITABLE_WIDGETS: Partial<Widget>[] = [
+  { type: 'leeway', size: 'wide' },
+  { type: 'alerts', size: 'full' },
+  { type: 'summary', size: 'full' },
+  { type: 'pace', size: 'full' },
+  { type: 'glance', size: 'full' },
+  { type: 'categories', size: 'wide' },
+  { type: 'accounts', size: 'half' },
+  { type: 'recent', size: 'wide' },
 ]
 
 function layout(widgets: Partial<Widget>[]): Settings {
@@ -106,7 +118,15 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
       }),
       list_transactions: () => ({ transactions: [], total: 0 }),
       list_accounts: () => [],
+      list_alerts: () => [],
       top_merchants: () => [],
+      get_net_worth: () => ({
+        assetsCents: 0,
+        liabilitiesCents: 0,
+        netWorthCents: 0,
+        history: [],
+      }),
+      get_monthly_totals: () => ({ firstTransactionDate: null, months: [] }),
       // The server always returns the periods asked for, oldest first.
       get_trends: () =>
         [-2, -1, 0].map((offset) => ({
@@ -161,7 +181,11 @@ async function startEditing() {
 }
 
 describe('moveWidget', () => {
-  const widgets = DEFAULT_LAYOUT.slice(1, 4)
+  const widgets = layout([
+    { type: 'leeway', size: 'wide' },
+    { type: 'glance', size: 'half' },
+    { type: 'alerts', size: 'full' },
+  ]).dashboard.widgets
 
   it('swaps a widget with the next one in its column, or a full one, either way', () => {
     expect(moveWidget(widgets, 2, -1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
@@ -174,6 +198,50 @@ describe('moveWidget', () => {
     expect(moveWidget(widgets, 0, -1)).toBe(widgets)
     moveWidget(widgets, 0, 1)
     expect(widgets.map((w) => w.type)).toEqual(['leeway', 'glance', 'alerts'])
+  })
+})
+
+describe('account alerts on the Overview', () => {
+  const alerts = alertsFor([
+    account({ id: 'a', name: 'Everyday', balanceCents: -4210 }),
+    account({ id: 'b', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+  ])
+  /** The summary as Leeway writes it with these alerts: the worst leads, the rest counted. */
+  const alertSummary = () => ({
+    headline: alerts[0]!.summary,
+    points: ['1 more account alert is in Heads up on the dashboard.', "You're on track."],
+    writtenBy: 'Leeway',
+    writtenAt: '2026-11-17T18:00:00Z',
+    ai: 'off',
+  })
+
+  it('says each alert once, in Heads up, with no banner above the hero', async () => {
+    const withSummary = layout(EDITABLE_WIDGETS)
+    serve(withSummary, {
+      list_alerts: () => alerts,
+      list_home_alerts: () => homeList(alerts),
+      get_summary: alertSummary,
+    })
+    renderOverview(withSummary)
+    const headsUp = await screen.findByRole('region', { name: 'Heads up' })
+    await within(headsUp).findByText('Everyday is overdrawn by $42.10.')
+    await screen.findByText("You're on track.")
+    expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument()
+    const summary = screen.getByRole('region', { name: 'Summary' })
+    for (const alert of alerts) {
+      expect(screen.getAllByText(alert.message)).toHaveLength(1)
+      expect(within(summary).queryByText(alert.summary)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/in Heads up on the dashboard/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {
+    const hidden = layout([{ type: 'leeway' }, { type: 'alerts', visible: false }])
+    serve(hidden, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
+    renderOverview(hidden)
+    const banner = await screen.findByRole('region', { name: 'Account alerts' })
+    expect(within(banner).getByText('Everyday is overdrawn by $42.10.')).toBeInTheDocument()
+    expect(screen.getAllByText('Everyday is overdrawn by $42.10.')).toHaveLength(1)
   })
 })
 
@@ -340,21 +408,22 @@ describe('Overview edit mode', () => {
   })
 
   it('moves a widget and saves the new order', async () => {
-    const server = serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    const server = serve(editable)
+    renderOverview(editable)
     const user = await startEditing()
     await user.click(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    // Recent swaps with Categories, the wide widget above it, not the pace chart beside it.
+    // Recent swaps with Categories, the wide widget above it, not Accounts beside it.
     expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual([
-      'summary',
       'leeway',
-      'glance',
       'alerts',
-      'recent',
+      'summary',
       'pace',
-      'categories',
+      'glance',
+      'recent',
       'accounts',
+      'categories',
     ])
     await waitFor(() =>
       expect(shownWidgets().slice(4, 6)).toEqual(['Recent transactions', 'Categories']),
@@ -362,16 +431,17 @@ describe('Overview edit mode', () => {
   })
 
   it('cannot move the first widget up or the last one down', async () => {
-    serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    serve(editable)
+    renderOverview(editable)
     await startEditing()
-    expect(toolsFor('Summary').getByRole('button', { name: 'Move Summary up' })).toBeDisabled()
-    expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts down' })).toBeDisabled()
-    expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeEnabled()
-    // At a glance tops the side column, so moving it up trades places with the full-width summary.
     expect(
-      toolsFor('At a glance').getByRole('button', { name: 'Move At a glance up' }),
-    ).toBeEnabled()
+      toolsFor('Your leeway').getByRole('button', { name: 'Move Your leeway up' }),
+    ).toBeDisabled()
+    expect(toolsFor('Recent').getByRole('button', { name: 'Move Recent down' })).toBeDisabled()
+    expect(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' })).toBeEnabled()
+    // Accounts tops the side column, so moving it up trades places with the full-width glance.
+    expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeEnabled()
   })
 
   it('resizes a widget', async () => {
@@ -385,7 +455,7 @@ describe('Overview edit mode', () => {
     )
     await user.click(within(size).getByRole('button', { name: 'Full' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![1]).toEqual({ type: 'leeway', size: 'full', visible: true })
+    expect(sentLayouts(server)[0]![0]).toEqual({ type: 'leeway', size: 'full', visible: true })
     expect(screen.getByRole('region', { name: 'Your leeway' }).closest('.widget')).toHaveAttribute(
       'data-size',
       'full',
@@ -393,12 +463,13 @@ describe('Overview edit mode', () => {
   })
 
   it('hides a widget, keeping it in edit mode to show again', async () => {
-    const server = serve()
-    renderOverview()
+    const editable = layout(EDITABLE_WIDGETS)
+    const server = serve(editable)
+    renderOverview(editable)
     const user = await startEditing()
     await user.click(toolsFor('Heads up').getByRole('button', { name: 'Hide' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![3]).toEqual({ type: 'alerts', size: 'full', visible: false })
+    expect(sentLayouts(server)[0]![1]).toEqual({ type: 'alerts', size: 'full', visible: false })
     // While editing the widget keeps its place, faded and without its content.
     expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
     expect(toolsFor('Heads up').getByRole('button', { name: 'Show' })).toBeInTheDocument()

@@ -49,6 +49,7 @@ const WIDGETS = [
   'goals',
   'debts',
   'trends',
+  'flows',
 ] as const
 const WIDGET_SIZES = ['half', 'wide', 'full'] as const
 
@@ -81,15 +82,20 @@ const widgetSchema = z.object({
   visible: z.boolean().default(true),
 })
 
-const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
-  { type: 'summary', size: 'full', visible: true },
+/**
+ * The Overview as it first opens: only what answers "am I OK?", from the most
+ * general answer to the most detail. What is left to spend beside net worth,
+ * Heads up (shown only when something needs the owner), money in against
+ * money out by month, then the spending pace. Everything else is a widget the
+ * owner can add, or lives on its own page. web/src/widgets/library.ts keeps
+ * the same list for "Reset layout".
+ */
+export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
   { type: 'leeway', size: 'wide', visible: true },
-  { type: 'glance', size: 'half', visible: true },
+  { type: 'net-worth', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'categories', size: 'wide', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'recent', size: 'wide', visible: true },
-  { type: 'accounts', size: 'half', visible: true },
+  { type: 'flows', size: 'full', visible: true },
+  { type: 'pace', size: 'full', visible: true },
 ]
 
 const widgetsSchema = z

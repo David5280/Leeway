@@ -3,9 +3,10 @@
 // words come worked out from the server (project_retirement); this only lays
 // them out.
 
+import { Card } from '../../../components/design/Card'
 import { middleFigure, range } from '../../../../../server/src/domain/profile/rangeWords'
 import { BandChart } from '../../../components/charts/BandChart'
-import { Card, Progress } from '../../../components/ui'
+import { Progress } from '../../../components/ui'
 import type { RetirementView } from './fields'
 import { Amount, useMoney } from './money'
 
@@ -63,7 +64,7 @@ export function ProjectionCard({ view }: { view: RetirementView }) {
   // the Savings screen and this card speaks only of what the projection counts.
   const shown = lens.meters.filter((meter) => meter.id !== 'contributions')
   return (
-    <Card label="Retirement projection" className="stack">
+    <Card static="pending" label="Retirement projection" className="stack">
       <span className="eyebrow">{lens.question}</span>
       {answer.headline && <span className="mid-number num range">{answer.headline}</span>}
       <p className={answer.headline ? 'small' : ''}>{answer.detail}</p>

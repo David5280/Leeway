@@ -3,7 +3,7 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, spreadLabels, svgNumber, textWidth } from '../../lib/chartScale'
+import { axisFormat, axisIndices, spreadLabels, svgNumber } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
@@ -14,11 +14,15 @@ import {
   paceEndLabels,
   paceFrame,
   paceState,
+  spentLabel,
   steadyAt,
+  steadyLabel,
+  type Box,
   type Pace,
+  type Point,
+  type SteadyLabelSpot,
 } from './pace'
 import {
-  AXIS_FONT,
   ChartFrame,
   END_LABEL_GAP,
   EndLabel,
@@ -28,11 +32,6 @@ import {
   usePointer,
   ValueAxis,
 } from './parts'
-
-interface Point {
-  x: number
-  y: number
-}
 
 export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean }) {
   const { settings, money } = useApp()
@@ -69,6 +68,11 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
     bottom - END_LABEL_GAP / 2,
   )
   const today = points[state.lastIndex]
+  // Today's amount, which the steady pace's label keeps clear of.
+  const spent =
+    state.projecting && today ? spentLabel(today, money(state.spentCents), left) : undefined
+  const steady = { from: { x: x(0), y: y(0) }, to: { x: x(pace.days - 1), y: y(pace.budgetCents) } }
+  const steadyText = steadyTextFor(pace, steady, { left, bottom }, today, spent?.box)
 
   return (
     <ChartFrame
@@ -115,13 +119,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
       {state.projecting && today && <TodayMarker x={today.x} top={top} bottom={bottom} />}
       <g clipPath={`url(#${clipId})`}>
         {pace.budgetCents > 0 && (
-          <SteadyPace
-            from={{ x: x(0), y: y(0) }}
-            to={{ x: x(pace.days - 1), y: y(pace.budgetCents) }}
-            left={left}
-            right={right}
-            labelBelow={pace.projectedCents > pace.budgetCents}
-          />
+          <SteadyPace {...steady} left={left} right={right} label={steadyText} />
         )}
         <ActualLine points={points} bottom={bottom} fill={`url(#${clipId}-fill)`} />
         {state.projecting && today && (
@@ -131,7 +129,9 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
           />
         )}
       </g>
-      {state.projecting && today && <SpentDot at={today} cents={state.spentCents} left={left} />}
+      {/* A label moved off its usual place may cross the spending line, so it is drawn over it. */}
+      <MovedSteadyText label={steadyText} />
+      {spent && today && <SpentDot at={today} cents={state.spentCents} x={spent.x} />}
       {ends.map((label, i) => (
         <EndLabel
           key={label.name}
@@ -227,53 +227,79 @@ function TodayMarker({ x, top, bottom }: { x: number; top: number; bottom: numbe
   )
 }
 
-/**
- * The budget line, and the steady pace climbing to it, labeled along the
- * slope on whichever side the projection line is not.
- */
+/** Where "Steady pace" sits on this chart, or nothing with no budget to climb to. */
+function steadyTextFor(
+  pace: Pace,
+  steady: { from: Point; to: Point },
+  plot: { left: number; bottom: number },
+  today: Point | undefined,
+  spent: Box | undefined,
+): SteadyLabelSpot | undefined {
+  if (pace.budgetCents <= 0) return undefined
+  // Today's dot and the box of its amount, when there is one to keep clear of.
+  const avoid = today && spent ? { today, spent } : undefined
+  return steadyLabel({
+    label: STEADY_LABEL,
+    ...steady,
+    ...plot,
+    labelBelow: pace.projectedCents > pace.budgetCents,
+    avoid,
+  })
+}
+
+/** The budget line and the steady pace climbing to it, with its label where it usually sits. */
 function SteadyPace({
   from,
   to,
   left,
   right,
-  labelBelow,
+  label,
 }: {
   from: Point
   to: Point
   left: number
   right: number
-  labelBelow: boolean
+  label?: SteadyLabelSpot
 }) {
-  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
-  // Two thirds along, where the actual line has usually not reached yet.
-  const at = { x: from.x + (to.x - from.x) * 0.66, y: from.y + (to.y - from.y) * 0.66 }
-  const offset = labelBelow ? AXIS_FONT + 4 : -6
   return (
     <g aria-hidden="true">
       <line x1={left} x2={right} y1={to.y} y2={to.y} className="chart-line budget" />
       <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} className="chart-line steady" />
-      <text
-        x={at.x}
-        y={at.y + offset}
-        textAnchor="middle"
-        transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
-        className="chart-axis"
-      >
-        Steady pace
-      </text>
+      {label && !label.moved && <SteadyText label={label} />}
     </g>
   )
 }
 
-/** Today's spending: a dot on the line with its amount beside it. */
-function SpentDot({ at, cents, left }: { at: Point; cents: number; left: number }) {
-  const { money } = useApp()
-  // The amount sits up and to the left of the dot, clear of the line climbing away to the right.
-  const labelX = Math.max(left + textWidth(money(cents), 13), at.x - 8)
+/** The steady pace's label over the spending line, only when it moved off its usual place. */
+function MovedSteadyText({ label }: { label: SteadyLabelSpot | undefined }) {
+  return label?.moved ? <SteadyText label={label} halo /> : null
+}
+
+/** "Steady pace", turned along the slope; with a halo when it sits over the spending line. */
+function SteadyText({ label, halo = false }: { label: SteadyLabelSpot; halo?: boolean }) {
+  const { at, offset, angle } = label
+  return (
+    <text
+      x={at.x}
+      y={at.y + offset}
+      textAnchor="middle"
+      transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
+      className={halo ? 'chart-axis halo' : 'chart-axis'}
+      aria-hidden={halo || undefined}
+    >
+      {STEADY_LABEL}
+    </text>
+  )
+}
+
+const STEADY_LABEL = 'Steady pace'
+
+/** Today's spending: a dot on the line with its amount up and to the left, ending at `x`. */
+function SpentDot({ at, cents, x }: { at: Point; cents: number; x: number }) {
   return (
     <g aria-hidden="true">
       <circle cx={at.x} cy={at.y} r="5" className="chart-dot" />
-      <text x={labelX} y={at.y - 12} textAnchor="end" className="chart-value ink halo">
+      <text x={x} y={at.y - 12} textAnchor="end" className="chart-value ink halo">
         <Money as="tspan" cents={cents} />
       </text>
     </g>

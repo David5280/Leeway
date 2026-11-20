@@ -3,7 +3,6 @@
 // accounts and totals come in, nothing is read here.
 
 import type { IsoDate } from '../lib/dates.js'
-import type { AccountAlert } from './accountAlerts.js'
 import type { Account } from './accounts.js'
 import type { CategoryTotal } from './budget.js'
 import type { Category } from './categories.js'
@@ -130,15 +129,15 @@ export interface AccountsSummaryInput {
   /** Oldest first; the last is the current period. */
   flows: PeriodFlow[]
   spending: CategorySpending[]
-  alerts: AccountAlert[]
   /** The everyday word for a budget period: "month", "week" or "paycheck". */
   periodWord: string
 }
 
-/** Where the picked accounts stand, in one sentence: an urgent alert first, then the money. */
+/**
+ * Where the picked accounts stand, in one sentence of money. Alerts are left
+ * to the alert card beside it, so an overdrawn account is not said twice.
+ */
 function headline(input: AccountsSummaryInput, money: Money): string {
-  const urgent = input.alerts.find((alert) => alert.severity === 'urgent')
-  if (urgent) return urgent.message
   const { balances, accounts, unshared } = input
   if (accounts.length === 0 && unshared.length > 0) return onlyUnsharedHeadline(unshared)
   if (accounts.length === 0) return 'No accounts yet. Connect a bank or add one in Settings.'
@@ -147,7 +146,10 @@ function headline(input: AccountsSummaryInput, money: Money): string {
     const where =
       only ??
       plural(balances.cashAccounts, 'checking or savings account', 'checking and savings accounts')
-    return `${money(balances.availableCents)} available ${only ? 'in' : 'across'} ${where}.`
+    const preposition = only ? 'in' : 'across'
+    // Below zero, the alert card has the amount; the summary just says there is nothing to spend.
+    if (balances.availableCents <= 0) return `Nothing is available ${preposition} ${where}.`
+    return `${money(balances.availableCents)} available ${preposition} ${where}.`
   }
   if (balances.debtAccounts > 0) {
     const where = only

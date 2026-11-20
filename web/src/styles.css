@@ -327,8 +327,12 @@ button.list-row {
   cursor: pointer;
 }
 
-button.list-row:hover {
-  background: var(--surface-2);
+/* Hover looks only where there is a pointer: a touch screen keeps :hover on
+   whatever was tapped last, which painted a stuck row over its neighbours. */
+@media (hover: hover) {
+  button.list-row:hover {
+    background: var(--surface-2);
+  }
 }
 
 .dot {
@@ -394,8 +398,10 @@ button.list-row:hover {
   font-weight: 500;
 }
 
-.navlink:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .navlink:hover {
+    color: var(--ink);
+  }
 }
 
 .navlink.active {
@@ -491,8 +497,10 @@ button.list-row:hover {
   white-space: nowrap;
 }
 
-.btn:hover {
-  border-color: var(--muted);
+@media (hover: hover) {
+  .btn:hover {
+    border-color: var(--muted);
+  }
 }
 
 .btn:disabled {
@@ -512,8 +520,10 @@ button.list-row:hover {
   color: var(--muted);
 }
 
-.btn.ghost:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .btn.ghost:hover {
+    color: var(--ink);
+  }
 }
 
 .btn.danger {
@@ -788,6 +798,27 @@ button.chip {
   }
 }
 
+/* A page's sections in one row under its title (TabRow): it scrolls sideways
+   rather than wrapping when the sections do not all fit, as on a phone. */
+.seg.seg-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seg.seg-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.seg.seg-scroll button {
+  flex: none;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
 .seg button[aria-pressed='true'] {
   background: var(--surface);
   color: var(--ink);
@@ -958,8 +989,21 @@ button.chip {
   color: inherit;
 }
 
-.clickrow:hover {
+@media (hover: hover) {
+  .clickrow:hover {
+    background: var(--surface-2);
+  }
+}
+
+/* A finger's press shows too, for as long as the press lasts. */
+.clickrow:active {
   background: var(--surface-2);
+}
+
+/* A tight card's padding is narrower than a row's reach into it, so its rows
+   stay inside; reaching out, their press reached past the card's edges. */
+.card.tight > .clickrow {
+  margin: 0;
 }
 
 /* A list row that is also a link, like an account on the overview, stays one
@@ -983,6 +1027,21 @@ button.chip {
 .account-row {
   flex-direction: row;
   align-items: center;
+}
+
+/* A long account name takes a second line before it is cut short. */
+.account-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* On a phone the line of the balance gives its width to the name. */
+@media (max-width: 480px) {
+  .account-row .spark {
+    width: 44px;
+  }
 }
 
 .alert-icon {
@@ -1014,10 +1073,11 @@ button.chip {
   align-items: center;
 }
 
+/* As a tight card's own rows do, it keeps inside the card's edges. */
 .alert-hideable > .alert-row {
   flex: 1;
   min-width: 0;
-  margin-right: 0;
+  margin: 0;
 }
 
 .alert-hide {
@@ -1035,9 +1095,12 @@ button.chip {
   cursor: pointer;
 }
 
-.alert-hide:hover {
-  background: var(--surface-2);
-  color: var(--ink);
+/* Only where a pointer hovers, so a tap does not leave it lit on a touch screen. */
+@media (hover: hover) {
+  .alert-hide:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
 }
 
 /* A finger needs 44px (Apple's minimum touch target); a mouse does with less. */
@@ -1183,6 +1246,11 @@ code.code {
 .widget {
   position: relative;
   min-width: 0;
+}
+
+/* A widget with nothing to say (Heads up when all is well) takes no room. */
+.widget:empty {
+  display: none;
 }
 
 /* Four quick numbers: four across when there is room, two otherwise. */
@@ -1742,8 +1810,10 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.cat-row:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .cat-row:hover {
+    background: var(--surface-2);
+  }
 }
 
 .cat-name {
@@ -1844,8 +1914,10 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.budget-row .cat-name:hover .cat-label {
-  text-decoration: underline;
+@media (hover: hover) {
+  .budget-row .cat-name:hover .cat-label {
+    text-decoration: underline;
+  }
 }
 
 .cat-note {
@@ -1948,7 +2020,8 @@ details.more[open] summary {
 }
 
 /* A ring of card color behind text that sits over lines, so it stays legible. */
-.chart-value.halo {
+.chart-value.halo,
+.chart-axis.halo {
   paint-order: stroke;
   stroke: var(--surface);
   stroke-width: 4px;
@@ -1972,6 +2045,12 @@ details.more[open] summary {
 
 .chart-line.actual {
   stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* The part of a line below where it should stay, such as cash under $0. */
+.chart-line.problem {
+  stroke: var(--tone-problem);
   stroke-width: 2.5;
 }
 
@@ -2136,9 +2215,11 @@ details.more[open] summary {
   text-decoration: none;
 }
 
-.settings-link:hover {
-  color: var(--ink);
-  background: var(--surface-2);
+@media (hover: hover) {
+  .settings-link:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
 }
 
 .settings-link[aria-current='page'] {

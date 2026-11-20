@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   accountDetail,
-  accountPath,
+  accountDetailPath,
   activePick,
   isOwed,
+  nameUnderBank,
   overdrawn,
-  toggleAccount,
 } from './accounts'
 
 describe('isOwed', () => {
@@ -35,28 +35,39 @@ describe('accountDetail', () => {
   })
 })
 
-describe('accountPath', () => {
-  it('opens the Accounts dashboard with just that account picked', () => {
-    expect(accountPath('abc')).toBe('/accounts?select=abc')
-    expect(accountPath('a b')).toBe('/accounts?select=a%20b')
+describe('nameUnderBank', () => {
+  const bank = { institutionName: 'First Bank', manual: false, nickname: null }
+  it('drops the bank from the front of the name, since the line under it names the bank', () => {
+    expect(nameUnderBank({ ...bank, name: 'First Bank Everyday checking (second checking)' })).toBe(
+      'Everyday checking (second checking)',
+    )
+  })
+
+  it('keeps the name whole when the bank is not in front, is all of it, or is not known', () => {
+    expect(nameUnderBank({ ...bank, name: 'Everyday checking' })).toBe('Everyday checking')
+    expect(nameUnderBank({ ...bank, name: 'First Bankers checking' })).toBe(
+      'First Bankers checking',
+    )
+    expect(nameUnderBank({ ...bank, name: 'First Bank  ' })).toBe('First Bank  ')
+    expect(nameUnderBank({ ...bank, name: 'First Bank loan' })).toBe('First Bank loan')
+    expect(nameUnderBank({ ...bank, name: 'First Bank 457(b) plan' })).toBe('457(b) plan')
+    expect(nameUnderBank({ ...bank, institutionName: null, name: 'First Bank card' })).toBe(
+      'First Bank card',
+    )
+    // A name the owner typed stays as typed, and so does an account kept by hand.
+    expect(nameUnderBank({ ...bank, nickname: 'First Bank bills', name: 'First Bank bills' })).toBe(
+      'First Bank bills',
+    )
+    expect(nameUnderBank({ ...bank, manual: true, name: 'First Bank cash' })).toBe(
+      'First Bank cash',
+    )
   })
 })
 
-describe('toggleAccount', () => {
-  const all = ['a', 'b', 'c']
-
-  it('narrows every account to the one tapped', () => {
-    expect(toggleAccount([], 'b', all)).toEqual(['b'])
-  })
-
-  it('adds and removes accounts from a pick', () => {
-    expect(toggleAccount(['a'], 'b', all)).toEqual(['a', 'b'])
-    expect(toggleAccount(['a', 'b'], 'a', all)).toEqual(['b'])
-  })
-
-  it('goes back to every account when the last is removed or all are picked', () => {
-    expect(toggleAccount(['a'], 'a', all)).toEqual([])
-    expect(toggleAccount(['a', 'b'], 'c', all)).toEqual([])
+describe('accountDetailPath', () => {
+  it("opens the account's own page, its id made safe for an address", () => {
+    expect(accountDetailPath('abc')).toBe('/accounts/abc')
+    expect(accountDetailPath('a b')).toBe('/accounts/a%20b')
   })
 })
 

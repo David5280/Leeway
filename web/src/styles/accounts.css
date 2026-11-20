@@ -1,0 +1,228 @@
+/* The Accounts screen and an account's own page: the account's title, cards
+   grouped by kind, Select mode's bar, and the rows of the detail lists
+   (pages/Accounts.tsx, pages/AccountDetail.tsx, pages/accounts/). */
+
+/* An account's page head ------------------------------------------------ */
+
+/* An account's name is shown as typed, however long: it wraps, never cut. */
+.acct-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.page-sub {
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+}
+
+/* Groups and cards ------------------------------------------------------- */
+
+.acct-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.acct-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--gap);
+}
+
+.acct-card .card-press {
+  gap: var(--space-3);
+}
+
+.acct-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.acct-names {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.acct-name {
+  font-weight: var(--weight-strong);
+  overflow-wrap: anywhere;
+}
+
+/* The bank and last digits: secondary, there to tell twins apart. */
+.acct-detail {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.acct-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.acct-figure {
+  font-size: var(--text-figure);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.acct-owed {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.acct-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+}
+
+.acct-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.acct-fact-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.acct-fact-spark {
+  flex: 1;
+  min-width: 96px;
+}
+
+.acct-fact-spark .spark {
+  width: 100%;
+  height: 32px;
+}
+
+.word-warn {
+  color: var(--tone-warn);
+}
+
+.word-problem {
+  color: var(--tone-problem);
+}
+
+/* Select mode: the tick box sits in the card's corner, and a ticked card
+   wears an accent ring as well as its tick. */
+.acct-card .card-press:has(.acct-tick) {
+  position: relative;
+  padding-right: calc(var(--pad) + 44px);
+}
+
+.acct-tick {
+  position: absolute;
+  top: calc(var(--pad) - 10px);
+  right: calc(var(--pad) - 10px);
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+}
+
+.acct-tick input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+
+.acct-card.acct-picked {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--elev-1);
+}
+
+/* Rides above the tab bar while the cards scroll, and rests after them. */
+.select-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--raised) 88%, transparent);
+  box-shadow: var(--elev-2), var(--hi);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+@media (max-width: 820px) {
+  .select-bar {
+    bottom: calc(76px + var(--sab));
+  }
+}
+
+/* A phone turned sideways hides the tab bar (styles.css), so the bar rides
+   just above the home indicator instead, off the cards it would cover. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .select-bar {
+    bottom: calc(8px + var(--sab));
+  }
+}
+
+.select-bar-total {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+/* The two buttons wrap as one, so on a narrow phone they share a line at the right. */
+.select-bar-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Money in and out, and spending ------------------------------------------ */
+
+.flow-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.flow-word {
+  flex: none;
+  width: 28px;
+}
+
+.flow-amount {
+  min-width: 72px;
+  text-align: right;
+}
+
+.spend-row {
+  padding: 4px 0;
+}
+
+/* Detail lists ------------------------------------------------------------ */
+
+.detail-row {
+  align-items: center;
+}
+
+.detail-row-name {
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}

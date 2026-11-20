@@ -39,25 +39,24 @@ export function unsharedLabel(account: Pick<Account, 'institutionName'>): string
 }
 
 /**
- * Where one account opens: the Accounts dashboard with just that account
- * picked. One page serves one account or several, so every link goes there.
+ * An account's name without its bank in front, for a tight row whose second
+ * line already names the bank: "Everyday checking" under "First Bank ··4417".
+ * A name the owner typed is kept as typed, and so is one that would be left
+ * empty or start with a word in lower case.
  */
-export function accountPath(id: string): string {
-  return `/accounts?select=${encodeURIComponent(id)}`
+export function nameUnderBank(
+  account: Pick<Account, 'name' | 'institutionName' | 'manual' | 'nickname'>,
+) {
+  const bank = account.manual || account.nickname ? null : account.institutionName
+  if (!bank || !account.name.startsWith(`${bank} `)) return account.name
+  const rest = account.name.slice(bank.length + 1).trim()
+  // A bare word in lower case ("loan") reads as part of the bank's name, not as a name.
+  return rest && rest[0] === rest[0]!.toUpperCase() ? rest : account.name
 }
 
-/**
- * The pick after tapping an account's chip. An empty pick means every
- * account. From every account, a tap narrows to the one tapped; otherwise it
- * adds or removes that one, and removing the last goes back to every account.
- * A pick naming every account is saved as empty, so it still means "all"
- * once more accounts are added.
- */
-export function toggleAccount(picked: string[], id: string, allIds: string[]): string[] {
-  if (picked.length === 0) return [id]
-  const next = picked.includes(id) ? picked.filter((other) => other !== id) : [...picked, id]
-  const coversAll = allIds.every((other) => next.includes(other))
-  return coversAll ? [] : next
+/** Where every link to an account opens: its own page, with everything Leeway knows about it. */
+export function accountDetailPath(id: string): string {
+  return `/accounts/${encodeURIComponent(id)}`
 }
 
 /**

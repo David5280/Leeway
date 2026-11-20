@@ -293,7 +293,7 @@ describe('get_financial_profile', () => {
 
   it('warns an assistant, in its descriptions and instructions, that the rate leaves out payroll', () => {
     expect(findAction('get_financial_profile')!.description).toContain(
-      'never other payroll deductions such as a 401(k), so never say it is too little',
+      'Any other payroll deduction is left out, so never say it is too little.',
     )
     expect(findAction('summarize_savings')!.description).toMatch(
       /never tell the owner they save too little/,
@@ -302,7 +302,7 @@ describe('get_financial_profile', () => {
       'bankSeenSavingsRatePercent counts only money moved through the bank',
     )
     expect(MCP_INSTRUCTIONS).toContain(
-      'never other payroll deductions such as a 401(k), so never tell the owner they save too little.',
+      'Any other payroll deduction is left out, so never tell the owner they save too little.',
     )
   })
 
@@ -330,7 +330,7 @@ describe('summarize_savings', () => {
     const view = await call('summarize_savings')
     expect(view.savingsRate?.percent).toBe(8)
     expect(view.insights.map((i) => i.text)).toEqual([
-      'About 8% of your take-home pay goes to savings through your bank: $411 a month of $5,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+      'About 8% of your take-home pay goes to savings through your bank: $411 a month of $5,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
     ])
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({

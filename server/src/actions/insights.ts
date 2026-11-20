@@ -10,6 +10,9 @@ import {
   topMerchants,
   trends,
 } from '../domain/insights.js'
+import { monthlyTotals } from '../domain/monthlyTotals.js'
+import { RATE_GUARD_FOR_AI } from '../domain/savings/rate.js'
+import { savingsRates } from '../domain/savingsRates.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
 
@@ -24,6 +27,29 @@ export const getTrendsAction = defineAction({
   scope: 'read',
   surface: 'all',
   run: async (ctx, { periods }) => trends(ctx.db, await getSettings(ctx.db), ctx.now(), periods),
+})
+
+export const getMonthlyTotalsAction = defineAction({
+  name: 'get_monthly_totals',
+  title: 'Money in and out by month',
+  description:
+    'Spending, income and per-category totals for each of the last N calendar months (months), oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither, filed or not: two unfiled lines of the same amount, out of one own account and into another within a few days, are one move. Other unfiled money counts by sign: purchases (and other money out) in spentCents, deposits and refunds in unfiledInCents, never in incomeCents, which is filed income only and is the pay the savings rate divides by; money in on the chart is incomeCents plus unfiledInCents. firstTransactionDate is where the bank history starts: a month that began before it holds only part of its money, so never compare it with whole months. Use it for month-by-month questions whatever the budget period is.',
+  input: z.object({ months: z.number().int().min(2).max(36).default(12) }),
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { months }) =>
+    monthlyTotals(ctx.db, await getSettings(ctx.db), ctx.now(), months),
+})
+
+export const getSavingsRatesAction = defineAction({
+  name: 'get_savings_rates',
+  title: 'Savings rate by month',
+  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) a paystub from the last six months shows), each counted from when it is known to begin and in the current month only for the pay seen so far, as a whole percent of that month's pay. A month the bank history starts partway through is left off. note says, in words for the owner, what was counted and what was not. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
+  input: z.object({ months: z.number().int().min(2).max(12).default(6) }),
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { months }) =>
+    savingsRates(ctx.db, await getSettings(ctx.db), ctx.now(), months),
 })
 
 export const suggestBudgetsAction = defineAction({

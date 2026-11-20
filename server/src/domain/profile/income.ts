@@ -111,7 +111,8 @@ export function averageMonths(
   }
 }
 
-async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
+/** The earliest transaction held on any shown account: where the bank history starts. */
+export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
   const { rows } = await db.query<{ first: IsoDate | null }>(
     `SELECT min(t.date) AS first FROM transactions t
      JOIN accounts a ON a.id = t.account_id WHERE NOT a.hidden`,

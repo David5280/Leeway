@@ -14,12 +14,12 @@ function names(band: Band) {
 }
 
 describe('arrange', () => {
-  it('lays the default dashboard out as main and side columns between the summary and alerts', () => {
+  it('lays the default dashboard out with net worth beside the hero, then full width', () => {
     expect(arrange(DEFAULT_LAYOUT).map(names)).toEqual([
-      { full: 'summary' },
-      { main: ['leeway'], side: ['glance'] },
+      { main: ['leeway'], side: ['net-worth'] },
       { full: 'alerts' },
-      { main: ['categories', 'recent'], side: ['pace', 'accounts'] },
+      { full: 'flows' },
+      { full: 'pace' },
     ])
   })
 

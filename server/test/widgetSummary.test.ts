@@ -84,8 +84,8 @@ describe('widgetSummary', () => {
       liabilitiesCents: 0,
       netWorthCents: 500_000,
       history: [
-        { date: '2026-10-18', netWorthCents: 420_000 },
-        { date: '2026-11-17', netWorthCents: 500_000 },
+        { date: '2026-10-18', netWorthCents: 420_000, assetsCents: 420_000, liabilitiesCents: 0 },
+        { date: '2026-11-17', netWorthCents: 500_000, assetsCents: 500_000, liabilitiesCents: 0 },
       ],
     }
     expect(widgetSummary(sources({ netWorth })).netWorth).toEqual({

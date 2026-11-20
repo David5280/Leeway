@@ -1,35 +1,21 @@
 // A line over time, used for net worth. It can go below zero, unlike the
 // spending charts, and points are placed by date so a month's gap looks like one.
 
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { useApp } from '../../lib/app'
-import {
-  axisFormat,
-  niceTicks,
-  svgNumber,
-  textWidth,
-  type TimeTick,
-  timeTicks,
-} from '../../lib/chartScale'
+import { axisFormat, niceTicks, textWidth } from '../../lib/chartScale'
 import { toDayNumber } from '../../lib/dates'
-import { monthYear, shortDate } from '../../lib/format'
+import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import { Money } from '../design/Money'
+import { EndPoint, type LineReference, ReferenceLine, ShadedLine, TimeAxis } from './lineParts'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
+
+export type { LineReference } from './lineParts'
 
 export interface LinePoint {
   date: string
   cents: number
-}
-
-/** A time axis label: "Mar 4" for days, "Mar" for months, "Jan 2026" where the year shows. */
-export function timeTickLabel(tick: TimeTick, locale: string): string {
-  if (!tick.monthly) return shortDate(tick.date, locale)
-  if (tick.showYear) return monthYear(tick.date, locale)
-  return new Date(`${tick.date}T00:00:00Z`).toLocaleDateString(locale, {
-    month: 'short',
-    timeZone: 'UTC',
-  })
 }
 
 /**
@@ -52,22 +38,30 @@ export function lineFrame(compact: boolean, width: number, tickLabels: string[],
 /**
  * The full chart has value and date axes and the latest value at the line's
  * end. Compact draws the line and its shading alone, for a dashboard widget.
+ * A reference, when given, is a dashed level labelled with where the line
+ * should be; without one the chart draws exactly as before. Details add lines
+ * under a tapped point's amount, like what was owned and owed that day.
  */
 export function LineChart({
   points,
   label,
   description,
   compact = false,
+  reference,
+  details,
 }: {
   points: LinePoint[]
   label: string
   description: string
   compact?: boolean
+  reference?: LineReference
+  /** More lines for the readout of the point at this index. */
+  details?: (index: number) => ReactNode[]
 }) {
   const { money, settings } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(640)
   const gradientId = useId()
-  const values = points.map((p) => p.cents)
+  const values = axisValues(points, reference)
   const axis = niceTicks(Math.min(...values), Math.max(...values), width < 420 ? 4 : 5)
   const format = axisFormat(axis.values, settings)
   const last = points.at(-1)
@@ -98,7 +92,7 @@ export function LineChart({
             x={placed[pointer.active]!.x}
             chartWidth={width}
             title={shortDate(hovered.date, settings.locale)}
-            lines={[<Money cents={hovered.cents} />]}
+            lines={readoutLines(hovered.cents, pointer.active, details)}
           />
         )
       }
@@ -113,11 +107,20 @@ export function LineChart({
         <>
           <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
           <TimeAxis
-            points={points}
+            dates={points.map((p) => p.date)}
             x={x}
+            left={left}
+            right={right}
             y={height - 8}
-            width={right - left}
-            locale={settings.locale}
+          />
+          <ReferenceLine
+            reference={reference}
+            y={y}
+            left={left}
+            right={right}
+            top={top}
+            bottom={bottom}
+            line={placed}
           />
         </>
       )}
@@ -149,75 +152,17 @@ export function LineChart({
   )
 }
 
-/** Date labels along the bottom, about one per 80 pixels. */
-function TimeAxis({
-  points,
-  x,
-  y,
-  width,
-  locale,
-}: {
-  points: LinePoint[]
-  x: (date: string) => number
-  y: number
-  width: number
-  locale: string
-}) {
-  if (points.length < 2) return null
-  const ticks = timeTicks(points[0]!.date, points.at(-1)!.date, Math.floor(width / 80))
-  return (
-    <g aria-hidden="true">
-      {ticks.map((tick) => (
-        <text key={tick.date} x={x(tick.date)} y={y} textAnchor="middle" className="chart-axis">
-          {timeTickLabel(tick, locale)}
-        </text>
-      ))}
-    </g>
-  )
+/** A tapped point's amount, then any details for it. */
+function readoutLines(
+  cents: number,
+  index: number,
+  details: ((index: number) => ReactNode[]) | undefined,
+): ReactNode[] {
+  return [<Money cents={cents} />, ...(details ? details(index) : [])]
 }
 
-/** The line with a soft fill down to the baseline. */
-function ShadedLine({
-  points,
-  baseline,
-  fill,
-}: {
-  points: { x: number; y: number }[]
-  baseline: number
-  fill: string
-}) {
-  if (points.length < 2) return null
-  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
-  return (
-    <>
-      <path
-        d={`M${points[0]!.x},${baseline} L${line} L${points.at(-1)!.x},${baseline} Z`}
-        fill={fill}
-      />
-      <path d={`M${line}`} className="chart-line actual" />
-    </>
-  )
-}
-
-/** The latest point, with its value in the right-hand gutter when there is one. */
-function EndPoint({
-  at,
-  cents,
-  labelX,
-}: {
-  at: { x: number; y: number }
-  /** The amount written beside the point, or null for none. */
-  cents: number | null
-  labelX: number
-}) {
-  return (
-    <>
-      <circle cx={at.x} cy={at.y} r="4" className="chart-dot" />
-      {cents !== null && (
-        <text x={labelX} y={at.y + 4} className="chart-value ink" aria-hidden="true">
-          <Money as="tspan" cents={cents} />
-        </text>
-      )}
-    </>
-  )
+/** The amounts the value axis must show: every point, and the reference level if any. */
+function axisValues(points: LinePoint[], reference: LineReference | undefined): number[] {
+  const values = points.map((p) => p.cents)
+  return reference ? [...values, reference.cents] : values
 }

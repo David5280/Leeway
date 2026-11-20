@@ -4,12 +4,13 @@ import type { ComponentType } from 'react'
 import type { Settings } from '../api/client'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
+import { FlowsWidget } from './Flows'
 import { CategoriesWidget } from './Categories'
 import { GlanceWidget } from './Glance'
 import { LeewayWidget } from './Leeway'
 import { PaceWidget } from './Pace'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
-import { sharesLane } from './arrange'
+import { arrange, sharesLane } from './arrange'
 import { SummaryWidget } from './Summary'
 import { TrendsWidget } from './Trends'
 import type { WidgetProps } from './types'
@@ -18,40 +19,66 @@ export type Widget = Settings['dashboard']['widgets'][number]
 export type WidgetType = Widget['type']
 
 /**
+ * How general a widget's answer is, most general first: "am I OK?", what needs
+ * the owner, the period in words, how it is trending, the quick numbers that
+ * need action, where the money went, and the lists. The default Overview reads
+ * in this order, from the most general answer down to the most detail.
+ */
+export const DEPTHS = ['answer', 'alerts', 'words', 'trend', 'tiles', 'breakdown', 'list'] as const
+export type Depth = (typeof DEPTHS)[number]
+
+/**
  * The widgets that exist so far, in the order the library lists them. Settings
  * may also name widgets a newer Leeway (or an agent) added; those are kept in
  * the saved list but not drawn.
  */
 export const WIDGET_LIBRARY: Partial<
-  Record<WidgetType, { name: string; component: ComponentType<WidgetProps> }>
+  Record<WidgetType, { name: string; component: ComponentType<WidgetProps>; depth: Depth }>
 > = {
-  summary: { name: 'Summary', component: SummaryWidget },
-  leeway: { name: 'Your leeway', component: LeewayWidget },
-  glance: { name: 'At a glance', component: GlanceWidget },
-  alerts: { name: 'Heads up', component: AlertsWidget },
-  categories: { name: 'Categories', component: CategoriesWidget },
-  pace: { name: 'Spending pace', component: PaceWidget },
-  recent: { name: 'Recent', component: RecentWidget },
-  accounts: { name: 'Accounts', component: AccountsWidget },
-  merchants: { name: 'Top merchants', component: MerchantsWidget },
-  trends: { name: 'Spending over time', component: TrendsWidget },
-  'cash-flow': { name: 'Until payday', component: CashFlowWidget },
-  bills: { name: 'Bills', component: BillsWidget },
-  goals: { name: 'Goals', component: GoalsWidget },
-  debts: { name: 'Debt payoff', component: DebtsWidget },
-  'net-worth': { name: 'Net worth', component: NetWorthWidget },
+  summary: { name: 'Summary', component: SummaryWidget, depth: 'words' },
+  leeway: { name: 'Your leeway', component: LeewayWidget, depth: 'answer' },
+  glance: { name: 'At a glance', component: GlanceWidget, depth: 'tiles' },
+  alerts: { name: 'Heads up', component: AlertsWidget, depth: 'alerts' },
+  categories: { name: 'Categories', component: CategoriesWidget, depth: 'breakdown' },
+  pace: { name: 'Spending pace', component: PaceWidget, depth: 'trend' },
+  recent: { name: 'Recent', component: RecentWidget, depth: 'list' },
+  accounts: { name: 'Accounts', component: AccountsWidget, depth: 'list' },
+  merchants: { name: 'Top merchants', component: MerchantsWidget, depth: 'breakdown' },
+  trends: { name: 'Spending over time', component: TrendsWidget, depth: 'trend' },
+  'cash-flow': { name: 'Until payday', component: CashFlowWidget, depth: 'trend' },
+  bills: { name: 'Bills', component: BillsWidget, depth: 'list' },
+  goals: { name: 'Goals', component: GoalsWidget, depth: 'list' },
+  debts: { name: 'Debt payoff', component: DebtsWidget, depth: 'breakdown' },
+  'net-worth': { name: 'Net worth', component: NetWorthWidget, depth: 'answer' },
+  flows: { name: 'Money in and out', component: FlowsWidget, depth: 'trend' },
 }
 
+/**
+ * The Overview as it first opens, and what "Reset layout" puts back: only
+ * what answers "am I OK?", from the most general answer to the most detail
+ * (DEPTHS). The same list as the server's DEFAULT_WIDGETS
+ * (server/src/domain/settings.ts).
+ */
 export const DEFAULT_LAYOUT: Widget[] = [
-  { type: 'summary', size: 'full', visible: true },
   { type: 'leeway', size: 'wide', visible: true },
-  { type: 'glance', size: 'half', visible: true },
+  { type: 'net-worth', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'categories', size: 'wide', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'recent', size: 'wide', visible: true },
-  { type: 'accounts', size: 'half', visible: true },
+  { type: 'flows', size: 'full', visible: true },
+  { type: 'pace', size: 'full', visible: true },
 ]
+
+/**
+ * Whether widgets read from the most general answer down to the most detail
+ * (DEPTHS) as a phone stacks them: each band's columns one after another.
+ */
+export function readsGeneralFirst(widgets: Widget[]): boolean {
+  const drawn = arrange(drawable(widgets)).flatMap((band) => {
+    if (band.kind === 'full') return [band.widget]
+    return band.kind === 'split' ? [...band.main, ...band.side] : band.columns.flat()
+  })
+  const depths = drawn.map((widget) => DEPTHS.indexOf(WIDGET_LIBRARY[widget.type]!.depth))
+  return depths.every((depth, i) => i === 0 || depth >= depths[i - 1]!)
+}
 
 export const SIZES = [
   { value: 'half', label: 'Half' },

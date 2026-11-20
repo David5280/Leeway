@@ -243,7 +243,7 @@ export function accountsViewFor(
     recent: fields.recent ?? [],
     alerts,
     summary: accountsSummary(
-      { accounts: shared, unshared, balances, flows, spending, alerts, periodWord: 'month' },
+      { accounts: shared, unshared, balances, flows, spending, periodWord: 'month' },
       dollars,
     ),
   }

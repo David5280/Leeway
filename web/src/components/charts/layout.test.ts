@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest'
+import { textWidth } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
-import { lineFrame, timeTickLabel } from './LineChart'
+import { lineFrame } from './LineChart'
+import { labelSide, lineYsAcross, timeLabels, timeTickLabel } from './lineParts'
 import {
+  boxCorners,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
   paceFrame,
   paceState,
+  spentLabel,
   steadyAt,
+  steadyLabel,
+  shapesMeet,
+  overlapDepth,
+  turnedCorners,
+  type Box,
   type Pace,
+  type Point,
 } from './pace'
+import { AXIS_FONT } from './parts'
 import { barAxis, barLayout, barPath, barPrecision } from './PeriodBars'
 
 const usd = { currency: 'USD', locale: 'en-US' }
@@ -211,5 +222,171 @@ describe('lineFrame', () => {
       top: 14,
       bottom: 220,
     })
+  })
+})
+
+describe('timeLabels', () => {
+  // A plot from 40 to 340 pixels, one pixel a day from Nov 20, 2025.
+  const x = (date: string) =>
+    40 + (Date.parse(`${date}T00:00:00Z`) - Date.parse('2025-11-20T00:00:00Z')) / 86_400_000
+
+  it('names the first and last months at the two ends, so the start always shows', () => {
+    const labels = timeLabels('2025-11-20', '2026-09-16', x, 40, 340, 'en-US')
+    expect(labels[0]).toEqual({ x: 40, text: 'Nov 2025', anchor: 'start' })
+    expect(labels.at(-1)).toEqual({ x: 340, text: 'Sep 2026', anchor: 'end' })
+    // Months between come only where they clear both ends.
+    for (const label of labels.slice(1, -1)) {
+      expect(label.anchor).toBe('middle')
+      expect(label.x).toBeGreaterThan(40 + 60)
+      expect(label.x).toBeLessThan(340 - 60)
+    }
+  })
+
+  it('drops months between that would crowd the ends, and names one month once', () => {
+    expect(timeLabels('2025-11-20', '2026-02-20', x, 40, 132, 'en-US').map((l) => l.text)).toEqual([
+      'Nov 2025',
+      'Feb 2026',
+    ])
+    expect(timeLabels('2025-11-01', '2026-01-10', () => 40, 40, 340, 'en-US')[0]!.text).toBe(
+      'Nov 2025',
+    )
+  })
+
+  it('spaces days evenly over a short span', () => {
+    const labels = timeLabels('2025-11-20', '2025-11-28', x, 40, 340, 'en-US')
+    expect(labels[0]).toEqual({ x: 40, text: 'Nov 20', anchor: 'middle' })
+    expect(labels.every((label) => label.anchor === 'middle')).toBe(true)
+  })
+})
+
+describe('lineYsAcross', () => {
+  it('reads the line between its points, and nothing past its end', () => {
+    const line = [
+      { x: 0, y: 100 },
+      { x: 8, y: 60 },
+    ]
+    expect(lineYsAcross(line, 0, 12)).toEqual([100, 80, 60])
+    expect(lineYsAcross([{ x: 4, y: 50 }], 0, 4)).toEqual([50, 50])
+  })
+})
+
+describe('labelSide', () => {
+  it('writes above the level unless the line runs through the words there', () => {
+    expect(labelSide([200, 210], 150, 0, 300)).toBe('above')
+    // The line just above the level, as where net worth started once it grew.
+    expect(labelSide([140, 145], 150, 0, 300)).toBe('below')
+  })
+
+  it('keeps the words inside the plot, and picks the side the line crosses less', () => {
+    expect(labelSide([140], 10, 0, 300)).toBe('below')
+    expect(labelSide([295], 290, 0, 300)).toBe('above')
+    expect(labelSide([140, 145, 155], 150, 0, 300)).toBe('below')
+    expect(labelSide([140, 155, 160], 150, 0, 300)).toBe('above')
+    expect(labelSide([140, 155], 290, 0, 300)).toBe('above')
+    expect(labelSide([140, 155], 5, 0, 300)).toBe('below')
+  })
+})
+
+describe('the steady pace label beside today', () => {
+  it("puts today's amount up and to the left of its dot, inside the plot", () => {
+    // "$400" is 4 characters at 13px: 32 wide.
+    expect(spentLabel({ x: 200, y: 100 }, '$400', 40)).toEqual({
+      x: 192,
+      box: { left: 160, right: 192, top: 75, bottom: 92 },
+    })
+    expect(spentLabel({ x: 50, y: 100 }, '$400', 40).x).toBe(72)
+  })
+
+  it("turns a label's corners about its point on the slope", () => {
+    expect(turnedCorners({ x: 100, y: 100 }, 80, 12, 0, -6)).toEqual([
+      { x: 60, y: 82 },
+      { x: 140, y: 82 },
+      { x: 140, y: 98 },
+      { x: 60, y: 98 },
+    ])
+    // Turned a quarter, it stands as tall as it was wide.
+    const upright = turnedCorners({ x: 100, y: 100 }, 80, 12, 90, 0)
+    const ys = upright.map((corner) => corner.y)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(80)
+  })
+
+  it('tells overlapping shapes from ones that only touch or sit apart', () => {
+    const box = boxCorners({ left: 0, right: 10, top: 0, bottom: 10 })
+    expect(shapesMeet(box, boxCorners({ left: 5, right: 15, top: 5, bottom: 15 }))).toBe(true)
+    expect(shapesMeet(box, boxCorners({ left: 10, right: 20, top: 0, bottom: 10 }))).toBe(false)
+    expect(shapesMeet(box, boxCorners({ left: 0, right: 10, top: 11, bottom: 20 }))).toBe(false)
+    // A label turned 45 degrees passes beside a box its square outline would cover.
+    const slanted = turnedCorners({ x: 0, y: 0 }, 40, 4, 45, 0)
+    expect(shapesMeet(slanted, boxCorners({ left: 8, right: 14, top: -14, bottom: -8 }))).toBe(
+      false,
+    )
+    expect(shapesMeet(slanted, boxCorners({ left: -2, right: 2, top: -2, bottom: 2 }))).toBe(true)
+  })
+
+  const slope = { from: { x: 40, y: 200 }, to: { x: 340, y: 20 }, left: 40, bottom: 200 }
+  const steady = (today: Point, spent: Box) =>
+    steadyLabel({ label: 'Steady pace', ...slope, labelBelow: false, avoid: { today, spent } })
+  /** The turned label's corners, and their leftmost and rightmost x. */
+  const shape = (spot: ReturnType<typeof steady>) => {
+    const corners = turnedCorners(
+      spot.at,
+      textWidth('Steady pace', AXIS_FONT),
+      AXIS_FONT,
+      spot.angle,
+      spot.offset,
+    )
+    const xs = corners.map((corner) => corner.x)
+    return { corners, low: Math.min(...xs), high: Math.max(...xs) }
+  }
+  /** Today's amount, 32 wide, up and to the left of a dot at x and y. */
+  const spentAt = (x: number, y: number) => ({
+    left: x - 40,
+    right: x - 8,
+    top: y - 30,
+    bottom: y - 8,
+  })
+
+  it('leaves it two thirds along when the amount is clear of it', () => {
+    const spot = steady({ x: 60, y: 190 }, spentAt(60, 190))
+    expect(spot.moved).toBe(false)
+    expect(spot.at.x).toBeCloseTo(40 + 300 * 0.66)
+  })
+
+  it('centres its whole turned shape in the room past today and the amount', () => {
+    // An amount 32 wide on the label's usual place: past 200 + 32 + 8 = 240, up to 340.
+    const amount = { left: 200, right: 232, top: 60, bottom: 100 }
+    const spot = steady({ x: 200, y: 100 }, amount)
+    const { corners, low, high } = shape(spot)
+    expect(spot.moved).toBe(true)
+    expect(low).toBeGreaterThanOrEqual(240)
+    expect(high).toBeLessThanOrEqual(340)
+    expect(low - 240).toBeCloseTo(340 - high)
+    expect(shapesMeet(corners, boxCorners(amount))).toBe(false)
+  })
+
+  it('goes back before the amount when the room past it is too short', () => {
+    const spot = steady({ x: 280, y: 56 }, spentAt(280, 56))
+    const { corners, low, high } = shape(spot)
+    expect(spot.moved).toBe(true)
+    expect(high).toBeLessThan(280)
+    expect(low).toBeGreaterThanOrEqual(40)
+    expect(shapesMeet(corners, boxCorners(spentAt(280, 56)))).toBe(false)
+  })
+
+  it('never reaches past the left edge, even with little room before the amount', () => {
+    // A wide amount starting 40px in leaves too little room before it.
+    const spot = steady({ x: 300, y: 44 }, { left: 80, right: 292, top: 14, bottom: 100 })
+    expect(shape(spot).low).toBeCloseTo(40)
+  })
+
+  it('measures how deeply shapes overlap, and none when they only touch', () => {
+    const box = boxCorners({ left: 0, right: 10, top: 0, bottom: 10 })
+    expect(overlapDepth(box, boxCorners({ left: 7, right: 20, top: 2, bottom: 8 }))).toBeCloseTo(3)
+    expect(overlapDepth(box, boxCorners({ left: 10, right: 20, top: 0, bottom: 10 }))).toBe(0)
+    // Touching at one corner only, or along the bottom edge: still no depth.
+    const corner = boxCorners({ left: 10, right: 20, top: 10, bottom: 20 })
+    expect(overlapDepth(box, corner)).toBe(0)
+    expect(overlapDepth(boxCorners({ left: 2, right: 8, top: 10, bottom: 14 }), box)).toBe(0)
+    expect(shapesMeet(box, corner)).toBe(false)
   })
 })

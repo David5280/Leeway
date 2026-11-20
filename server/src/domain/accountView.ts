@@ -151,7 +151,6 @@ export async function getAccountsView(
         balances,
         flows: periodFlows,
         spending,
-        alerts,
         periodWord: periodWord(settings.period.kind),
       },
       money,

@@ -4,7 +4,9 @@ import {
   filedElsewhere,
   pairTransfers,
   transferHint,
+  unfiledLeg,
   PAIR_WINDOW_DAYS,
+  type HintTest,
   type PairCandidate,
 } from '../src/domain/transferPairs.js'
 
@@ -26,8 +28,8 @@ function tx(
 }
 
 /** The pairs found, as sorted "out:arrival" ids, so a test reads them at a glance. */
-function pairsOf(transactions: PairCandidate[]): string[] {
-  const partners = pairTransfers(transactions)
+function pairsOf(transactions: PairCandidate[], hintOk?: HintTest): string[] {
+  const partners = pairTransfers(transactions, hintOk)
   return [...partners.entries()]
     .filter(([id]) => transactions.find((t) => t.id === id)!.amountCents > 0)
     .map(([id, partner]) => `${id}:${partner.id}`)
@@ -141,6 +143,23 @@ describe('pairTransfers', () => {
         tx('in', { accountId: 'card', amountCents: -2500, name: 'REFUND' }),
       ]),
     ).toEqual([])
+  })
+
+  it('pairs unfiled legs that say nothing, but never one that says it is something else', () => {
+    const silent = [
+      tx('out', { accountId: 'checking', amountCents: 300000, name: 'ONLINE BANKING' }),
+      tx('in', { accountId: 'savings', amountCents: -300000, name: 'DEPOSIT', date: '2026-11-12' }),
+    ]
+    expect(pairsOf(silent, unfiledLeg)).toEqual(['out:in'])
+    // The usual test still wants both sides to say so.
+    expect(pairsOf(silent)).toEqual([])
+    const pay = tx('in', {
+      accountId: 'savings',
+      amountCents: -300000,
+      name: 'ACME PAYROLL',
+      providerCategoryDetailed: 'INCOME_WAGES',
+    })
+    expect(pairsOf([silent[0]!, pay], unfiledLeg)).toEqual([])
   })
 
   it('does not pair a paycheck or a purchase with a transfer of the same amount', () => {

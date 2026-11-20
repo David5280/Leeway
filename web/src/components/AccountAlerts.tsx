@@ -1,13 +1,15 @@
 // Account alerts as rows: an overdrawn account, a card over its limit, a fee
 // or a low balance, each opening its account. Shared by the dashboard banner,
-// the Alerts page and the Accounts dashboard. On the home screen each row
-// also has a button that hides it there.
+// the Alerts page, the Accounts screen and each account's page. On the home
+// screen each row also has a button that hides it there.
 
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { AccountAlert } from '../api/client'
 import { useHideHomeAlert } from '../api/homeAlerts'
-import { accountPath } from '../lib/accounts'
+import { accountDetailPath } from '../lib/accounts'
+import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
+import { Card } from './design/Card'
 import { Icon } from './ui'
 
 /** A short word for each kind of alert, shown beside it on wider screens. */
@@ -84,7 +86,7 @@ function HideFromHome({ alert, regionStays }: { alert: AccountAlert; regionStays
 export function AlertRow({ alert }: { alert: AccountAlert }) {
   const urgent = alert.severity === 'urgent'
   return (
-    <Link to={accountPath(alert.accountId)} className="alert-row clickrow">
+    <Link to={accountDetailPath(alert.accountId)} className="alert-row clickrow">
       <span className={urgent ? 'alert-icon over' : 'alert-icon'}>
         <Icon name="warn" size={16} />
       </span>
@@ -117,5 +119,29 @@ export function AlertRows({
         </HideableRow>
       ))}
     </>
+  )
+}
+
+/**
+ * Alerts in a compact card, red when any is urgent and amber otherwise, with
+ * the first few rows and a way to the rest; nothing when there are none.
+ */
+export function AlertsCard({ alerts, label }: { alerts: AccountAlert[]; label: string }) {
+  if (alerts.length === 0) return null
+  const urgent = alerts.some((alert) => alert.severity === 'urgent')
+  const more = alerts.length - ALERT_ROWS
+  return (
+    <Card static="list" label={label} className={`tight ${urgent ? 'over-card' : 'warn-card'}`}>
+      <AlertRows alerts={alerts.slice(0, ALERT_ROWS)} />
+      {more > 0 && (
+        <div className="row-between" style={{ padding: '4px 14px 8px' }}>
+          <span className="small muted">{moreAlerts(more)}</span>
+          {/* A real 44px box, so its tap never reaches up into the last alert. */}
+          <Link to="/alerts" className="linkbtn small tap">
+            See all alerts
+          </Link>
+        </div>
+      )}
+    </Card>
   )
 }

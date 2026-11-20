@@ -1,8 +1,9 @@
 // Spending per period over the last six, against the total budget.
 
+import { Card } from '../components/design/Card'
 import { useAction } from '../api/hooks'
 import { PeriodBars } from '../components/charts/PeriodBars'
-import { Card } from '../components/ui'
+
 import { useApp } from '../lib/app'
 import { periodBarLabel, periodLabel } from '../lib/format'
 
@@ -13,12 +14,12 @@ export function TrendsWidget() {
   const first = trends.data?.at(0)
   const last = trends.data?.at(-1)
   return (
-    <Card label="Spending by period" className="stack-sm">
+    <Card static="chart" label="Spending by period" className="stack-sm">
       <h2>Spending over time</h2>
       {trends.data && (
         <PeriodBars
           label="Spending by period"
-          color="var(--accent)"
+          overIsProblem
           budgetCents={budget.data?.totals.budgetedCents || null}
           bars={trends.data.map((p) => ({
             label: periodBarLabel(p.start, settings.period.kind, settings.locale),

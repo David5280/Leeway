@@ -1,28 +1,49 @@
-// Money in and out of the picked accounts, period by period, newest first.
+// Money in and out of the accounts shown, period by period, newest first,
+// answering one question: did more come in than went out? Each period is a
+// pair of labelled bars against the biggest amount, so periods compare; the
+// card opens the math for this period (lib/drills/accountView.ts).
 
 import type { AccountsView } from '../../api/client'
-import { Card, Progress } from '../../components/ui'
-import { useApp } from '../../lib/app'
-import { periodLabel } from '../../lib/format'
+import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
+import { SectionHead } from '../../components/design/SectionHead'
+import { Progress } from '../../components/ui'
+import { useApp } from '../../lib/app'
+import { flowsDrill, leftOver } from '../../lib/drills/accountView'
+import { periodLabel } from '../../lib/format'
 
 export function Flows({ flows }: { flows: AccountsView['flows'] }) {
   const { money, settings } = useApp()
+  const range = (start: string, end: string) => periodLabel(start, end, settings.locale)
+  const drill = flowsDrill(flows, range, money)
+  if (!drill) return null
   // Every bar is measured against the biggest amount, in or out, so periods compare.
   const biggest = Math.max(1, ...flows.flatMap((f) => [f.inCents, f.outCents]))
+  const current = flows.at(-1)!
+  const ahead = leftOver(current) >= 0
   return (
-    <Card label="Money in and out" className="span-half stack">
-      <div className="stack-sm" style={{ gap: 2 }}>
-        <h2>Money in and out</h2>
-        <p className="small muted">Transfers between your accounts are left out.</p>
-      </div>
+    <Card drill={drill} label="Money in and out" className="span-half stack">
+      <SectionHead icon="moneyIn" title="Did more come in than went out?" />
+      <p className="small muted">
+        {ahead ? (
+          <>
+            Yes so far: <Money cents={leftOver(current)} sign="change" tone="in" /> left over this
+            period.
+          </>
+        ) : (
+          <>
+            Not so far: <Money cents={-leftOver(current)} /> more went out than came in this period.
+          </>
+        )}{' '}
+        Transfers between your accounts are left out.
+      </p>
       {[...flows].reverse().map((flow, index) => {
-        const label = periodLabel(flow.start, flow.end, settings.locale)
+        const label = range(flow.start, flow.end)
         return (
           <div key={flow.start} className="stack-sm">
-            <span className="strong">{index === 0 ? `${label}, so far` : label}</span>
-            <FlowBar label={`In, ${label}`} cents={flow.inCents} of={biggest} money={money} good />
-            <FlowBar label={`Out, ${label}`} cents={flow.outCents} of={biggest} money={money} />
+            <span className="strong small">{index === 0 ? `${label}, so far` : label}</span>
+            <FlowBar label={label} cents={flow.inCents} of={biggest} money={money} cameIn />
+            <FlowBar label={label} cents={flow.outCents} of={biggest} money={money} />
           </div>
         )
       })}
@@ -30,37 +51,37 @@ export function Flows({ flows }: { flows: AccountsView['flows'] }) {
   )
 }
 
+/** One labelled bar: money in is green with a +, money out is the plain accent. */
 function FlowBar({
   label,
   cents,
   of,
   money,
-  good = false,
+  cameIn = false,
 }: {
   label: string
   cents: number
   of: number
   money: (cents: number) => string
-  good?: boolean
+  cameIn?: boolean
 }) {
+  const word = cameIn ? 'In' : 'Out'
   return (
-    <div className="row" style={{ gap: 10 }}>
-      <span className="small muted" style={{ width: 28, flex: 'none' }}>
-        {good ? 'In' : 'Out'}
-      </span>
+    <div className="flow-bar">
+      <span className="small muted flow-word">{word}</span>
       <span className="grow">
         <Progress
           percent={(cents / of) * 100}
-          color={good ? 'var(--good)' : 'var(--accent)'}
-          aria-label={`${label}: ${money(cents)}`}
+          color={cameIn ? 'var(--good)' : 'var(--accent)'}
+          aria-label={`${word}, ${label}: ${money(cents)}`}
         />
       </span>
-      <span
-        className={good ? 'num small good' : 'num small'}
-        style={{ minWidth: 72, textAlign: 'right' }}
-      >
-        <Money cents={cents} />
-      </span>
+      <Money
+        cents={cents}
+        sign={cameIn ? 'change' : undefined}
+        tone={cameIn && cents > 0 ? 'in' : undefined}
+        className="small flow-amount"
+      />
     </div>
   )
 }

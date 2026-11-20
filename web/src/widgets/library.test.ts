@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_WIDGETS } from '../../../server/src/domain/settings'
 import {
   addableTypes,
   canMove,
   changeWidget,
   DEFAULT_LAYOUT,
+  DEPTHS,
   drawable,
   moveWidget,
+  readsGeneralFirst,
   WIDGET_LIBRARY,
   type Widget,
 } from './library'
@@ -17,6 +20,35 @@ const types = (widgets: Widget[]) => widgets.map((w) => w.type as string)
 describe('the default layout', () => {
   it('only uses widgets this build can draw', () => {
     expect(drawable(DEFAULT_LAYOUT)).toEqual(DEFAULT_LAYOUT)
+  })
+
+  it("is the server's default", () => {
+    expect(DEFAULT_LAYOUT).toEqual(DEFAULT_WIDGETS)
+  })
+
+  it('reads from the most general answer down to the most detail, on a phone too', () => {
+    expect(readsGeneralFirst(DEFAULT_LAYOUT)).toBe(true)
+    expect(DEFAULT_LAYOUT[0]!.type).toBe('leeway')
+    for (const entry of Object.values(WIDGET_LIBRARY)) expect(DEPTHS).toContain(entry!.depth)
+  })
+
+  it('keeps to what answers "am I OK?", leaving the rest to add or to their own pages', () => {
+    expect(types(DEFAULT_LAYOUT)).toEqual(['leeway', 'net-worth', 'alerts', 'flows', 'pace'])
+  })
+
+  it('catches a detailed card placed above a general one', () => {
+    const [leeway, netWorth, alerts, ...rest] = DEFAULT_LAYOUT
+    expect(readsGeneralFirst([alerts!, leeway!, netWorth!, ...rest])).toBe(false)
+    expect(readsGeneralFirst([leeway!, netWorth!, ...rest, alerts!])).toBe(false)
+    // Side by side on a computer, a phone still stacks the half widget under the wide one.
+    const recentBesideLeeway = [leeway!, { type: 'recent', size: 'half', visible: true } as Widget]
+    expect(readsGeneralFirst(recentBesideLeeway)).toBe(true)
+    expect(
+      readsGeneralFirst([
+        { ...recentBesideLeeway[1]!, size: 'wide' },
+        { ...leeway!, size: 'half' },
+      ]),
+    ).toBe(false)
   })
 })
 
@@ -84,14 +116,14 @@ describe('canMove', () => {
 
 describe('changeWidget', () => {
   it('changes only the widget of that type', () => {
-    const next = changeWidget(DEFAULT_LAYOUT, 'glance', { visible: false, size: 'full' })
-    expect(next.find((w) => w.type === 'glance')).toEqual({
-      type: 'glance',
-      size: 'full',
+    const next = changeWidget(DEFAULT_LAYOUT, 'pace', { visible: false, size: 'half' })
+    expect(next.find((w) => w.type === 'pace')).toEqual({
+      type: 'pace',
+      size: 'half',
       visible: false,
     })
-    expect(next.filter((w) => w.type !== 'glance')).toEqual(
-      DEFAULT_LAYOUT.filter((w) => w.type !== 'glance'),
+    expect(next.filter((w) => w.type !== 'pace')).toEqual(
+      DEFAULT_LAYOUT.filter((w) => w.type !== 'pace'),
     )
   })
 })
@@ -99,13 +131,17 @@ describe('changeWidget', () => {
 describe('addableTypes', () => {
   it('lists library widgets not on the dashboard, in library order', () => {
     expect(addableTypes(DEFAULT_LAYOUT)).toEqual([
+      'summary',
+      'glance',
+      'categories',
+      'recent',
+      'accounts',
       'merchants',
       'trends',
       'cash-flow',
       'bills',
       'goals',
       'debts',
-      'net-worth',
     ])
   })
 

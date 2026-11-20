@@ -1,13 +1,17 @@
 // Four quick numbers: spent, income, what needs a category, and bank sync.
+// Each tile is a card of its own with an icon chip, and each opens the math
+// behind its number (lib/drills/).
 
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { Budget } from '../api/client'
 import { useAction } from '../api/hooks'
+import { Card } from '../components/design/Card'
 import { Money } from '../components/design/Money'
-import { SpentComparison } from '../components/SpentComparison'
-import { Dot } from '../components/ui'
+import { Icon, type IconName } from '../components/ui'
 import { useApp } from '../lib/app'
+import { incomeDrill, spentDrill, uncategorizedDrill, usualPeriodSpend } from '../lib/drills/budget'
+import { syncDrill } from '../lib/drills/pace'
 import { periodWord, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
 import type { WidgetProps } from './types'
@@ -18,50 +22,80 @@ export function GlanceWidget({ budget }: WidgetProps) {
   return (
     <section aria-label="This period at a glance" className="glance">
       <SpentCard budget={budget} word={word} />
-      <GlanceCard title="Income">
-        <Money cents={budget.totals.incomeCents} className="mid-number" />
-        <span className="small muted">Money in this {word}</span>
-      </GlanceCard>
+      <IncomeCard budget={budget} word={word} />
       <UncategorizedCard budget={budget} />
       <BankSyncCard />
     </section>
   )
 }
 
-function GlanceCard({ title, children }: { title: string; children: ReactNode }) {
+/** A tile's head: its icon chip, tinted by what it means, and its title. */
+function TileHead({ icon, title, tone }: { icon: IconName; title: string; tone?: 'in' | 'warn' }) {
   return (
-    <div className="card stack-sm">
-      <p className="eyebrow">{title}</p>
-      {children}
-    </div>
+    <span className="tile-head">
+      <span className={`tile-icon ${tone ? `tile-icon-${tone}` : ''}`} aria-hidden="true">
+        <Icon name={icon} size={16} />
+      </span>
+      <span className="eyebrow">{title}</span>
+    </span>
   )
 }
 
-/** Spending so far, compared with the same point in the last period. */
+/**
+ * Spending so far, beside what a whole period usually comes to. The Activity
+ * hero and the drill-down compare it with the same point last period, so the
+ * tile answers a different question: how big a period usually gets.
+ */
 function SpentCard({ budget, word }: { budget: Budget; word: string }) {
+  const trends = useAction('get_trends', { periods: 6 })
+  const usual = usualPeriodSpend(trends.data)
   return (
-    <GlanceCard title="Spent">
+    <Card drill={spentDrill(budget, word, trends.data)} label="Spent" className="stack-sm">
+      <TileHead icon="moneyOut" title="Spent" />
       <Money cents={budget.totals.spentCents} className="mid-number" />
       <span className="small muted">
-        <SpentComparison totals={budget.totals} previous={budget.previous} word={word} />
+        {usual === null ? (
+          `Spent this ${word}`
+        ) : (
+          <>
+            Usually about <Money cents={usual} /> a {word}
+          </>
+        )}
       </span>
-    </GlanceCard>
+    </Card>
+  )
+}
+
+function IncomeCard({ budget, word }: { budget: Budget; word: string }) {
+  return (
+    <Card drill={incomeDrill(budget, word)} label="Income" className="stack-sm">
+      <TileHead icon="moneyIn" title="Income" tone="in" />
+      <Money cents={budget.totals.incomeCents} sign="change" tone="in" className="mid-number" />
+      <span className="small muted">Money in this {word}</span>
+    </Card>
   )
 }
 
 function UncategorizedCard({ budget }: { budget: Budget }) {
   const { uncategorizedCount, uncategorizedCents } = budget.totals
   return (
-    <GlanceCard title="Needs a category">
+    <Card drill={uncategorizedDrill(budget)} label="Needs a category" className="stack-sm">
+      <TileHead
+        icon="tag"
+        title="Needs a category"
+        tone={uncategorizedCount > 0 ? 'warn' : undefined}
+      />
       <span className="num mid-number">{uncategorizedCount}</span>
-      {uncategorizedCount > 0 ? (
-        <Link to="/transactions?category=uncategorized" className="linkbtn small">
-          Sort <Money cents={uncategorizedCents} /> of spending
-        </Link>
-      ) : (
-        <span className="small muted">All sorted</span>
-      )}
-    </GlanceCard>
+      <span className="small muted">
+        {uncategorizedCount > 0 ? (
+          <>
+            <Money cents={uncategorizedCents} /> of spending to sort
+          </>
+        ) : (
+          'All sorted'
+        )}
+      </span>
+    </Card>
   )
 }
 
@@ -71,19 +105,19 @@ function BankSyncCard() {
   // Never claim "up to date" before the banks have been read.
   if (!connections) {
     return (
-      <GlanceCard title="Bank sync">
+      <SyncFrame>
         <span className="small muted">{error ? 'Could not check your banks' : 'Checking'}</span>
-      </GlanceCard>
+      </SyncFrame>
     )
   }
   if (connections.length === 0) {
     return (
-      <GlanceCard title="Bank sync">
+      <SyncFrame>
         <span style={{ fontSize: 18, fontWeight: 600 }}>No banks yet</span>
-        <Link to={settingsPath('banks')} className="linkbtn small">
+        <Link to={settingsPath('banks')} className="linkbtn small tap">
           Connect a bank
         </Link>
-      </GlanceCard>
+      </SyncFrame>
     )
   }
   const count = connections.length
@@ -95,14 +129,25 @@ function BankSyncCard() {
     .sort()
     .at(-1)
   return (
-    <GlanceCard title="Bank sync">
-      <span className="row" style={{ fontSize: 18, fontWeight: 600, gap: 8 }}>
-        <Dot color={needsYou ? 'var(--warn)' : 'var(--good)'} />
+    <Card drill={syncDrill(connections, timeAgo)} label="Bank sync" className="stack-sm">
+      <TileHead icon="sync" title="Bank sync" tone={needsYou ? 'warn' : 'in'} />
+      <span className="tile-status">
         {needsYou ? 'Needs you' : 'Up to date'}
+        <Icon name={needsYou ? 'warn' : 'check'} size={16} />
       </span>
       <span className="small muted">
         {count} {count === 1 ? 'bank' : 'banks'}, synced {timeAgo(lastSync ?? null)}
       </span>
-    </GlanceCard>
+    </Card>
+  )
+}
+
+/** The sync tile before there is a figure to explain: no banks yet, or still checking. */
+function SyncFrame({ children }: { children: ReactNode }) {
+  return (
+    <Card static="empty" label="Bank sync" className="stack-sm">
+      <TileHead icon="sync" title="Bank sync" />
+      {children}
+    </Card>
   )
 }

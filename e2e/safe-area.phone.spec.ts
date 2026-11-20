@@ -136,7 +136,8 @@ test.describe('the status bar backdrop', () => {
       const backdrop = document.querySelector('.status-backdrop')!
       return {
         backdrop: pixel(getComputedStyle(backdrop).backgroundColor),
-        page: pixel(getComputedStyle(document.body).backgroundColor),
+        // The page's color is the root's: the canvas takes it, and the body is clear.
+        page: pixel(getComputedStyle(document.documentElement).backgroundColor),
         ink: pixel(getComputedStyle(document.documentElement).getPropertyValue('--ink')),
       }
     })

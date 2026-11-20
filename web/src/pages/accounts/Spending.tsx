@@ -1,10 +1,15 @@
-// Where the picked accounts' money went this period, by category.
+// Where the money in the accounts shown went this period, biggest category
+// first: each a labelled bar against the biggest, the rest added into one
+// line. The card opens the math and every category (lib/drills/accountView.ts).
 
 import type { AccountsView } from '../../api/client'
-import { Card, Dot, Progress } from '../../components/ui'
-import { useApp } from '../../lib/app'
-import { periodLabel } from '../../lib/format'
+import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
+import { SectionHead } from '../../components/design/SectionHead'
+import { Progress } from '../../components/ui'
+import { useApp } from '../../lib/app'
+import { spendingDrill } from '../../lib/drills/accountView'
+import { periodLabel } from '../../lib/format'
 
 /** Categories listed; the rest are summed into one line. */
 export const SPENDING_ROWS = 6
@@ -17,37 +22,43 @@ export function Spending({
   period: AccountsView['period']
 }) {
   const { money, settings } = useApp()
-  const top = spending[0]?.spentCents ?? 1
-  const shown = spending.slice(0, SPENDING_ROWS)
+  const range = (start: string, end: string) => periodLabel(start, end, settings.locale)
+  const title = <SectionHead icon="budgets" title="Where did the money go?" />
+  if (spending.length === 0) {
+    return (
+      <Card static="empty" label="Spending by category" className="span-wide stack-sm">
+        {title}
+        <p className="empty">No spending yet this period.</p>
+      </Card>
+    )
+  }
+  const top = spending[0]!.spentCents || 1
   const rest = spending.slice(SPENDING_ROWS).reduce((sum, s) => sum + s.spentCents, 0)
   return (
-    <Card label="Spending by category" className="span-wide stack-sm">
-      <div className="stack-sm" style={{ gap: 2 }}>
-        <h2>Spending by category</h2>
-        <p className="small muted">{periodLabel(period.start, period.end, settings.locale)}</p>
-      </div>
-      {spending.length === 0 && <p className="empty">No spending yet this period.</p>}
-      {shown.map((s) => (
-        <div key={s.categoryId ?? 'none'} className="stack-sm" style={{ padding: '6px 0' }}>
-          <div className="row-between">
-            <span className="row" style={{ gap: 8 }}>
-              <Dot color={s.color} dashed={s.categoryId === null} />
-              {s.name}
-            </span>
+    <Card
+      drill={spendingDrill(spending, period, range)}
+      label="Spending by category"
+      className="span-wide stack-sm"
+    >
+      {title}
+      <p className="small muted">{range(period.start, period.end)}, biggest first</p>
+      {spending.slice(0, SPENDING_ROWS).map((s) => (
+        <div key={s.categoryId ?? 'none'} className="stack-sm spend-row">
+          <span className="row-between">
+            <span className="ellipsis">{s.name}</span>
             <Money cents={s.spentCents} />
-          </div>
+          </span>
           <Progress
             percent={(s.spentCents / top) * 100}
-            color={s.color ?? 'var(--muted)'}
             aria-label={`${s.name}: ${money(s.spentCents)}`}
           />
         </div>
       ))}
       {rest > 0 && (
-        <p className="small muted row-between">
+        <span className="small muted row-between">
           <span>Everything else</span>
           <Money cents={rest} />
-        </p>
+        </span>
       )}
     </Card>
   )

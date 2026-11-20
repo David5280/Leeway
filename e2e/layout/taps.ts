@@ -10,7 +10,7 @@
 // and so are links in running text, which a sentence carries and no layout
 // can enlarge.
 
-import { blockOf, CONTROLS, describe, isHiddenByDesign } from './elements'
+import { blockOf, CONTROLS, describe, floatOf, isHiddenByDesign } from './elements'
 
 /** The smallest comfortable tap for a finger, in CSS pixels (Apple's 44pt). */
 export const TAP = 44
@@ -148,11 +148,25 @@ function stealerOf(control: Element): Element | null {
   for (const [x, y] of edgePoints(control.getBoundingClientRect())) {
     const found = hitAt(x, y)
     if (!found?.control || isOn(control, found.hit) || found.control.contains(control)) continue
+    if (underBar(found.control, control, x, y)) continue
     const box = found.control.getBoundingClientRect()
     const inBox = x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
     if (!inBox) return found.control
   }
   return null
+}
+
+/**
+ * Whether a point on a control's edge is covered by a bar floating over the
+ * page (the tab bar over a card taller than the screen): the page scrolls it
+ * clear, so the bar's controls there take nothing from it. A bar's hit area
+ * reaching out past the bar itself is still theft.
+ */
+function underBar(found: Element, control: Element, x: number, y: number): boolean {
+  const bar = floatOf(found)
+  if (!bar || bar === floatOf(control)) return false
+  const box = bar.getBoundingClientRect()
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
 }
 
 /** What is wrong with a control's tap, if anything, as it now shows. */

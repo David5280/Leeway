@@ -1,242 +1,144 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Account, AccountsView } from '../api/client'
-import {
-  account,
-  accountsViewFor,
-  category,
-  failing,
-  fakeServer,
-  renderSignedIn,
-  sentence,
-  settingsHandlers,
-  settingsWith,
-  transaction,
-  type Handlers,
-} from '../test/fake'
-import { Accounts } from './Accounts'
-import { updatedNote } from './accounts/Balances'
-
-type CategorySpending = AccountsView['spending'][number]
+import { A, B, C, checking, everyAccount, group, renderAccounts, server } from '../test/accounts'
+import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
+import { worthPoint } from '../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
-// Saved picks are checked as account ids, so these look like real ones.
-const A = 'aaaaaaaa-0000-4000-8000-000000000001'
-const B = 'bbbbbbbb-0000-4000-8000-000000000002'
-const C = 'cccccccc-0000-4000-8000-000000000003'
+describe('Accounts screen', () => {
+  it('shows each account as a card in its kind, opening its own page', async () => {
+    server()
+    renderAccounts()
+    await screen.findByRole('region', { name: 'Checking' })
 
-const checking = account({
-  id: A,
-  name: 'Everyday',
-  balanceCents: 250000,
-  availableCents: 240000,
-  subtype: 'checking',
-})
-const savings = account({ id: B, name: 'Rainy day', mask: null, balanceCents: 900000 })
-const card = account({
-  id: C,
-  name: 'Travel card',
-  type: 'credit',
-  balanceCents: 30000,
-  creditLimitCents: 100000,
-})
-const everyAccount = [checking, savings, card]
-const groceries = category('Groceries')
-
-/**
- * A server that answers summarize_accounts for whichever accounts are asked
- * for, or every account for none, and keeps the saved pick in settings.
- */
-function server(accounts: Account[] = everyAccount, extra: Handlers = {}) {
-  return fakeServer({
-    ...settingsHandlers(),
-    list_accounts: () => accounts,
-    list_categories: () => [groceries],
-    summarize_accounts: (input) => {
-      const ids = (input.accountIds as string[] | undefined) ?? []
-      const picked = ids.length ? accounts.filter((a) => ids.includes(a.id)) : accounts
-      return accountsViewFor(picked, { allAccounts: picked.length === accounts.length })
-    },
-    ...extra,
-  })
-}
-
-const picker = () => screen.getByRole('group', { name: 'Accounts to show' })
-const chip = (name: string | RegExp) => within(picker()).getByRole('button', { name })
-
-describe('Accounts dashboard', () => {
-  it('shows every account together until some are picked', async () => {
-    const fake = server()
-    renderSignedIn(<Accounts />)
-
-    expect(
-      await screen.findByText('$11,400 available across 2 checking and savings accounts.'),
-    ).toBeInTheDocument()
-    expect(chip('All accounts')).toHaveAttribute('aria-pressed', 'true')
-    expect(chip(/Everyday/)).toHaveAttribute('aria-pressed', 'false')
-    expect(fake.actions('summarize_accounts')).toEqual([{ accountIds: [] }])
-
-    const balances = screen.getByRole('region', { name: 'Balances' })
-    for (const title of ['Available', 'Current balance', 'Owed', 'Credit left', 'Net']) {
-      expect(within(balances).getByText(title)).toBeInTheDocument()
-    }
-    expect(within(balances).getByText(sentence('Of a $1,000.00 limit'))).toBeInTheDocument()
-    expect(
-      screen.getByRole('progressbar', { name: 'In, November 2026: $2,500' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('November 2026, so far')).toBeInTheDocument()
-    expect(screen.getByText('No spending yet this period.')).toBeInTheDocument()
-    expect(screen.getByText('No transactions yet.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute(
+    const everyday = within(group('Checking')).getByRole('link', { name: /Everyday/ })
+    expect(everyday).toHaveAttribute('href', `/accounts/${A}`)
+    // Checking shows what is available once pending charges clear.
+    expect(everyday).toHaveTextContent('$2,500.00$2,400available')
+    expect(within(group('Savings')).getByRole('link', { name: /Rainy day/ })).toHaveAttribute(
       'href',
-      '/transactions',
+      `/accounts/${B}`,
+    )
+
+    // A card's balance is owed, with how much of the limit is used and what is due.
+    const travel = within(group('Credit cards')).getByRole('link', { name: /Travel card/ })
+    expect(travel).toHaveTextContent('$300.00owed')
+    expect(travel).toHaveTextContent('$35minimum due')
+    expect(within(travel).getByRole('progressbar', { name: 'of limit used' })).toHaveAttribute(
+      'aria-valuenow',
+      '30',
     )
   })
 
-  it('saves each pick, so the phone and laptop show the same accounts', async () => {
-    const fake = server()
-    renderSignedIn(<Accounts />)
-    await screen.findByText(/available across/)
-
-    await userEvent.click(chip(/Everyday/))
-    expect(await screen.findByText('$2,400 available in Everyday.')).toBeInTheDocument()
-    expect(chip(/Everyday/)).toHaveAttribute('aria-pressed', 'true')
-    expect(chip('All accounts')).toHaveAttribute('aria-pressed', 'false')
-
-    await userEvent.click(chip(/Travel card/))
-    await waitFor(() => expect(fake.actions('update_settings')).toHaveLength(2))
-    expect(fake.actions('update_settings')).toEqual([
-      { accountSelection: [A] },
-      { accountSelection: [A, C] },
-    ])
-
-    // Taking off the last one shows every account again.
-    await userEvent.click(chip(/Everyday/))
-    await userEvent.click(chip(/Travel card/))
-    await waitFor(() =>
-      expect(fake.actions('update_settings').at(-1)).toEqual({ accountSelection: [] }),
-    )
-    expect(chip('All accounts')).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('goes back to every account from the All accounts chip', async () => {
-    const fake = server()
-    renderSignedIn(<Accounts />, { settings: settingsWith({ accountSelection: [B] }) })
-    expect(await screen.findByText('$9,000 available in Rainy day.')).toBeInTheDocument()
-    await userEvent.click(chip('All accounts'))
-    expect(fake.actions('update_settings')).toEqual([{ accountSelection: [] }])
-  })
-
-  it('opens one account from a link, saving it as the pick', async () => {
-    const fake = server()
-    renderSignedIn(<Accounts />, { route: `/accounts?select=${C}` })
-
-    expect(await screen.findByText('$300 owed on Travel card.')).toBeInTheDocument()
-    expect(fake.actions('update_settings')).toEqual([{ accountSelection: [C] }])
-    expect(fake.actions('summarize_accounts')).toContainEqual({ accountIds: [C] })
-    // A card alone has nothing to spend and no net worth of its own.
-    const balances = screen.getByRole('region', { name: 'Balances' })
-    expect(within(balances).queryByText('Available')).not.toBeInTheDocument()
-    expect(within(balances).queryByText('Net')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute(
-      'href',
-      `/transactions?account=${C}`,
-    )
-  })
-
-  it('shows every account when the saved pick names only accounts that are gone', async () => {
-    const fake = server()
-    renderSignedIn(<Accounts />, {
-      settings: settingsWith({ accountSelection: [crypto.randomUUID()] }),
+  it("draws an investment's month as a line beside how far it moved", async () => {
+    const brokerage = account({
+      id: 'inv',
+      name: 'Brokerage',
+      type: 'investment',
+      kind: 'investment',
+      balanceCents: 1_000_000,
     })
-    await screen.findByText(/available across/)
-    expect(fake.actions('summarize_accounts')).toEqual([{ accountIds: [] }])
-    expect(chip('All accounts')).toHaveAttribute('aria-pressed', 'true')
+    const month = Array.from({ length: 30 }, (_, day) => 970_000 + day * 1000)
+    server([brokerage], {
+      list_recent_balances: () => [{ accountId: 'inv', balancesCents: month }],
+    })
+    renderAccounts()
+    await screen.findByRole('region', { name: 'Investments' })
+    const card = within(group('Investments')).getByRole('link', { name: /Brokerage/ })
+    expect(within(card).getByRole('img', { name: 'Balance over 30 days' })).toBeInTheDocument()
   })
 
-  it('leads with the picked accounts alerts, red when one is urgent', async () => {
-    const short = account({ id: 'a', name: 'Everyday', balanceCents: -4210, subtype: 'checking' })
+  it('leads with what every counted account comes to, opening how it adds up', async () => {
+    server()
+    renderAccounts()
+    const together = await screen.findByRole('region', { name: 'All accounts together' })
+    // $2,500 and $9,000 owned, less $300 owed on the card.
+    expect(together).toHaveTextContent('$11,200.00')
+    expect(together).toHaveTextContent('$11,500 owned, less $300 owed')
+
+    await userEvent.click(within(together).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
+    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Together $11,200 = Owned in these accounts $11,500 minus owed on cards and loans $300',
+    )
+  })
+
+  it("draws net worth's year beside the total when there is a history", async () => {
+    server(everyAccount, {
+      get_net_worth: () => ({
+        history: [worthPoint('2026-01-01', 900000), worthPoint('2026-11-17', 1120000)],
+      }),
+    })
+    renderAccounts()
+    expect(await screen.findByRole('img', { name: 'Net worth over the last year' })).toBeVisible()
+  })
+
+  it('reads an overdrawn total in red', async () => {
+    const short = account({ id: A, name: 'Short', balanceCents: -5000, subtype: 'checking' })
     server([short])
-    renderSignedIn(<Accounts />)
+    renderAccounts()
+    const together = await screen.findByRole('region', { name: 'All accounts together' })
+    expect(within(together).getByText('−$50.00')).toHaveClass('money-problem')
+  })
+
+  it('puts the alerts under the total, red when one is urgent, each opening its account', async () => {
+    const short = account({ id: 'a', name: 'Everyday', balanceCents: -4210, subtype: 'checking' })
+    server([short], {
+      list_alerts: () => accountsViewFor([short]).alerts,
+    })
+    renderAccounts()
     const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
     expect(alerts).toHaveClass('over-card')
     expect(
       within(alerts).getByRole('link', { name: /Everyday is overdrawn by \$42\.10/ }),
-    ).toHaveAttribute('href', '/accounts?select=a')
-    // Both balances are below zero, so both read in red.
-    for (const figure of screen.getAllByText('−$42.10', { selector: '.mid-number' })) {
-      expect(figure).toHaveClass('money-problem')
-    }
+    ).toHaveAttribute('href', '/accounts/a')
+    const together = screen.getByRole('region', { name: 'All accounts together' })
+    expect(together.compareDocumentPosition(alerts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    // Said once: the summary leaves the overdrawn account to the alert.
+    await screen.findByRole('region', { name: 'Summary' })
+    expect(screen.getAllByText(/overdrawn by \$42\.10/)).toHaveLength(1)
   })
 
-  it('shows a low balance in amber', async () => {
+  it('keeps to three alerts and leads to the rest', async () => {
+    const low = ['b', 'c', 'd', 'e', 'f'].map((id) =>
+      account({ id, name: `Low ${id}`, balanceCents: 2000, subtype: 'checking' }),
+    )
+    server(low, { list_alerts: () => accountsViewFor(low).alerts })
+    renderAccounts()
+    const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
+    expect(within(alerts).getAllByRole('link')).toHaveLength(4)
+    expect(alerts).toHaveTextContent('2 more alerts')
+    expect(within(alerts).getByRole('link', { name: 'See all alerts' })).toHaveAttribute(
+      'href',
+      '/alerts',
+    )
+  })
+
+  it('shows a low balance alert in amber', async () => {
     const low = account({ id: 'a', name: 'Everyday', balanceCents: 5000, subtype: 'checking' })
-    server([low])
-    renderSignedIn(<Accounts />)
+    server([low], { list_alerts: () => accountsViewFor([low]).alerts })
+    renderAccounts()
     const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
     expect(alerts).toHaveClass('warn-card')
   })
 
-  it('lists spending by category, summing past the top six', async () => {
-    const spending: CategorySpending[] = Array.from({ length: 8 }, (_, index) => ({
-      categoryId: `cat-${index}`,
-      name: `Category ${index}`,
-      color: '#3987E5',
-      spentCents: (8 - index) * 1000,
-    }))
-    spending.push({ categoryId: null, name: 'Needs a category', color: null, spentCents: 500 })
-    server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { spending }) })
-    renderSignedIn(<Accounts />)
-    const card = await screen.findByRole('region', { name: 'Spending by category' })
-    expect(within(card).getByText('Category 0')).toBeInTheDocument()
-    expect(within(card).queryByText('Category 6')).not.toBeInTheDocument()
-    // Two categories of $20 and $10, and $5 with no category: $35 in all.
-    expect(within(card).getByText('Everything else').parentElement).toHaveTextContent('$35')
-  })
-
-  it('marks spending with no category, and a card past its limit', async () => {
-    const maxed = account({
-      id: C,
-      name: 'Maxed',
-      type: 'credit',
-      balanceCents: 120000,
-      creditLimitCents: 100000,
-    })
-    const spending: CategorySpending[] = [
-      { categoryId: null, name: 'Needs a category', color: null, spentCents: 500 },
-    ]
-    server([maxed], { summarize_accounts: () => accountsViewFor([maxed], { spending }) })
-    renderSignedIn(<Accounts />)
-    expect(await screen.findByText('Needs a category')).toBeInTheDocument()
-    expect(screen.getByText('−$200.00', { selector: '.mid-number' })).toHaveClass('money-problem')
-  })
-
-  it('lists recent transactions with their categories', async () => {
-    const recent = [
-      transaction({ id: 't1', date: '2026-11-12', name: 'MARKET', categoryId: groceries.id }),
-      transaction({ id: 't2', date: '2026-11-10', name: 'MOVE', categoryId: 'cat-transfer' }),
-      transaction({ id: 't3', date: '2026-11-09', name: 'MYSTERY', categoryId: null }),
-    ]
-    server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { recent }) })
-    renderSignedIn(<Accounts />)
-    const card = await screen.findByRole('region', { name: 'Recent transactions' })
-    expect(await within(card).findByText('Nov 12 · Groceries')).toBeInTheDocument()
-    // A category the list does not know is a transfer.
-    expect(within(card).getByText('Nov 10 · Transfer')).toBeInTheDocument()
-    expect(within(card).getByText('Nov 9 · Needs a category')).toBeInTheDocument()
+  it('opens an account from an old ?select= link on its own page', async () => {
+    server()
+    renderAccounts({ route: `/accounts?select=${C}` })
+    expect(await screen.findByText("One account's page")).toBeInTheDocument()
   })
 
   it('says how to start when there are no accounts', async () => {
     server([])
-    renderSignedIn(<Accounts />)
+    renderAccounts()
     expect(await screen.findByText(/No accounts yet/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Connect a bank' })).toHaveAttribute(
       'href',
       '/settings/banks',
     )
-    expect(screen.queryByRole('group', { name: 'Accounts to show' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
   })
 
   it('says why the accounts could not be read', async () => {
@@ -244,23 +146,8 @@ describe('Accounts dashboard', () => {
       { ...settingsHandlers() },
       { '/api/actions/list_accounts': failing('Database is down') },
     )
-    renderSignedIn(<Accounts />)
+    renderAccounts()
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
-  })
-
-  it('says why a pick could not be saved', async () => {
-    fakeServer(
-      {
-        ...settingsHandlers(),
-        list_accounts: () => everyAccount,
-        summarize_accounts: () => accountsViewFor(everyAccount),
-      },
-      { '/api/actions/update_settings': failing('Could not save') },
-    )
-    renderSignedIn(<Accounts />)
-    await screen.findByText(/available across/)
-    await userEvent.click(chip(/Everyday/))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save')
   })
 })
 
@@ -270,53 +157,48 @@ describe('accounts the bank no longer shares', () => {
     name: 'Old savings',
     institutionName: 'Chase',
     balanceCents: 500000,
+    subtype: 'savings',
     balanceUpdatedAt: '2026-11-03T15:00:00Z',
     unsharedAt: '2026-11-04T15:00:00Z',
   })
 
-  it('shows them apart, out of the balances, with a word in the summary', async () => {
+  it('shows them apart, out of the total and the cards, with a word in the summary', async () => {
     server([checking, old])
-    renderSignedIn(<Accounts />)
+    renderAccounts()
+    const together = await screen.findByRole('region', { name: 'All accounts together' })
+    // Only Everyday adds up: $2,500.00, not $7,500.00.
+    expect(together).toHaveTextContent('$2,500.00')
+    expect(screen.queryByRole('link', { name: /Old savings/ })).not.toBeInTheDocument()
+    const apart = screen.getByRole('region', { name: 'No longer shared' })
+    expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
+      'No longer shared from Chase',
+    )
     expect(
       await screen.findByText(
         'Old savings is no longer shared from Chase and is left out of these figures.',
       ),
     ).toBeInTheDocument()
-    const apart = screen.getByRole('region', { name: 'No longer shared' })
-    expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
-      'No longer shared from Chase',
-    )
-    // Only Everyday adds up: $2,500.00 posted, not $7,500.00.
-    const balances = screen.getByRole('region', { name: 'Balances' })
-    expect(within(balances).getByText('$2,500.00')).toBeInTheDocument()
+    // The math leaves it out too.
+    await userEvent.click(within(together).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
+    expect(within(sheet).queryByText('Old savings')).not.toBeInTheDocument()
   })
 
-  it('shows no balances when only those are picked', async () => {
+  it('offers no select for one shared account, and keeps the unshared out of picking', async () => {
+    server([checking, old])
+    renderAccounts()
+    await screen.findByRole('region', { name: 'No longer shared' })
+    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
+  })
+
+  it('says there is no current balance when every account is no longer shared', async () => {
     server([old])
-    renderSignedIn(<Accounts />)
+    renderAccounts()
     expect(
       await screen.findByText(
         'Old savings is no longer shared from Chase, so it has no current balance.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Balances' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'No longer shared' })).toBeInTheDocument()
-  })
-})
-
-describe('updatedNote', () => {
-  const now = Date.parse('2026-11-17T18:00:00Z')
-
-  it("says when one account's balance was read", () => {
-    const read = account({ id: 'a', name: 'A', balanceUpdatedAt: '2026-11-17T17:30:00Z' })
-    expect(updatedNote([read], now)).toBe('Balance updated 30 min ago.')
-  })
-
-  it('gives the oldest of several, and says when none was read', () => {
-    const newer = account({ id: 'a', name: 'A', balanceUpdatedAt: '2026-11-17T17:30:00Z' })
-    const older = account({ id: 'b', name: 'B', balanceUpdatedAt: '2026-11-17T15:00:00Z' })
-    const never = account({ id: 'c', name: 'C', balanceUpdatedAt: null })
-    expect(updatedNote([newer, older, never], now)).toBe('Balances updated 3 h ago at the oldest.')
-    expect(updatedNote([never], now)).toBe('No balance has been read yet.')
   })
 })

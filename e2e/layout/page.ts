@@ -6,6 +6,8 @@ import { findClipped } from './clipped'
 import { findOverlaps } from './overlap'
 import { findPageOverflow } from './page-overflow'
 import { findUncoveredInsets } from './safe-area'
+import { findSpills } from './spill'
+import { findStickyHovers } from './sticky-hover'
 import { findMissedTaps } from './taps'
 import { LAYOUT_CHECKS, type LayoutCheck, type LayoutProblem } from './types'
 
@@ -16,6 +18,8 @@ const CHECKS: Record<LayoutCheck, () => LayoutProblem[]> = {
   'broken-word': findBrokenWords,
   'page-overflow': findPageOverflow,
   'safe-area': findUncoveredInsets,
+  spill: findSpills,
+  'sticky-hover': findStickyHovers,
 }
 
 /** Runs one check on the page as it is drawn now. */
