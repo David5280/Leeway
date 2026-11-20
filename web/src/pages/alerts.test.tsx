@@ -113,6 +113,16 @@ describe('hiding an alert from the banner', () => {
     expect(screen.queryByText(/Everyday is overdrawn/)).not.toBeInTheDocument()
   })
 
+  it('moves focus back to the alert before when the last one is hidden', async () => {
+    renderBanner()
+    await screen.findByText(/Low b is down/)
+    await userEvent.click(hideButtons()[1]!)
+    await waitFor(() => expect(screen.queryByText(/Low b is down/)).not.toBeInTheDocument())
+    expect(hideButtons()).toHaveLength(1)
+    expect(hideButtons()[0]).toHaveFocus()
+    expect(hideButtons()[0]).toHaveAccessibleName(/Everyday is overdrawn/)
+  })
+
   it('goes altogether once its last alert is hidden, leaving focus on the heading below', async () => {
     renderBanner(alertsFor([overdrawn]))
     await screen.findByText(/Everyday is overdrawn/)

@@ -7,7 +7,9 @@
 // flickers stays away. Every push goes to a fake.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { runAction } from '../src/actions/action.js'
 import { findAction } from '../src/actions/index.js'
+import type { AppContext } from '../src/context.js'
 import type { AccountAlert } from '../src/domain/accountAlerts.js'
 import {
   REARM_AFTER_MS,
@@ -99,6 +101,20 @@ const notifyAt = async (ms: number) => {
 
 const hideCount = async () =>
   (await ctx.db.query<{ n: number }>('SELECT count(*)::int AS n FROM alert_hides')).rows[0]!.n
+
+/** The test context with a database that fails every query matching `pattern`. */
+const failingOn = (pattern: RegExp, onQuietFailure?: AppContext['onQuietFailure']): AppContext => ({
+  ...ctx,
+  db: {
+    query: (text: string, values?: unknown[]) =>
+      pattern.test(text) ? Promise.reject(new Error('Database down')) : ctx.db.query(text, values),
+  } as unknown as AppContext['db'],
+  onQuietFailure,
+})
+
+/** Hides an alert from home with the given context, as the app's request would. */
+const hideWith = (context: AppContext, accountId: string) =>
+  runAction(context, findAction('hide_home_alert')!, { kind: 'overdrawn', accountId })
 
 /** Whether the one stored notification is still dismissed, read without refreshing. */
 const stillDismissed = async () =>
@@ -276,6 +292,61 @@ describe('hiding an alert from home', () => {
     expect(await hideCount()).toBe(0)
   })
 
+  it('keeps a fee hidden for good, even once fee notifications go on and record it', async () => {
+    // The hide is for that one fee, so its notification arriving later is no new run of it.
+    await updateNotificationSettings(ctx.db, { kinds: { overdraft_fee: false } })
+    const accountId = await feeCharged()
+    await call('hide_home_alert', { kind: 'overdraft_fee', accountId })
+    await updateNotificationSettings(ctx.db, { kinds: { overdraft_fee: true } })
+    await notifyAt(MINUTE_MS)
+    expect(await inbox()).toEqual({ titles: ['Overdraft fee'], unread: 1 })
+    await notifyAt(3 * DAY_MS)
+    expect(await home()).toEqual([])
+    expect(await hideCount()).toBe(1)
+  })
+
+  it('counts a fresh hide of an alert the notifier last saw gone', async () => {
+    const accountId = await overdrawn()
+    await call('hide_home_alert', { kind: 'overdrawn', accountId })
+    await setBalance(accountId, 50_000)
+    await notifyAt(MINUTE_MS)
+    // Back two hours on: a new run, shown before the notifier catches up, then hidden again.
+    await setBalance(accountId, -100)
+    ctx.setNow(at(2 * HOUR_MS))
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+    await call('hide_home_alert', { kind: 'overdrawn', accountId })
+    expect(await home()).toEqual([])
+    await notifyAt(2 * HOUR_MS + MINUTE_MS)
+    expect(await home()).toEqual([])
+  })
+
+  it('hides even when a source that has nothing to do with accounts cannot be read', async () => {
+    const accountId = await overdrawn()
+    const quiet: string[] = []
+    const billsDown = failingOn(/FROM bills/, (_error, step) => quiet.push(step))
+    // The full inbox check reads bills, so it fails; the hide never reads them.
+    await expect(refreshInbox(billsDown)).rejects.toThrow('Database down')
+    expect(await hideWith(billsDown, accountId)).toEqual({ hidden: true })
+    expect(quiet).toEqual([])
+    expect(await home()).toEqual([])
+    expect(await inbox()).toEqual({ titles: ['Overdrawn'], unread: 1 })
+  })
+
+  it('still hides when the alerts cannot be recorded first, and reports it', async () => {
+    const everyday = await overdrawn('Everyday')
+    const joint = await overdrawn('Joint')
+    const quiet: string[] = []
+    const recordDown = /INSERT INTO notifications/
+    expect(await hideWith(failingOn(recordDown), everyday)).toEqual({ hidden: true })
+    await hideWith(
+      failingOn(recordDown, (_error, step) => quiet.push(step)),
+      joint,
+    )
+    expect(quiet).toEqual(['record the account alerts before hiding one'])
+    expect(await home()).toEqual([])
+    expect(await inbox()).toEqual({ titles: ['Overdrawn', 'Overdrawn'], unread: 2 })
+  })
+
   it('keeps the order of the alerts it leaves', async () => {
     await overdrawn('Everyday')
     const joint = await overdrawn('Joint')
@@ -434,6 +505,19 @@ describe('dismissing an alert in the inbox', () => {
     await resurfaceDismissed(ctx.db, ['overdraft_fee'], ctx.now())
     expect(await stillDismissed()).toBe(true)
     // Home goes by its own day all the same.
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+  })
+
+  it('counts only while its kind is on, as nothing keeps a kind turned off current', async () => {
+    const accountId = await overdrawn()
+    await call('dismiss_notification', { id: await onlyItemId() })
+    await updateNotificationSettings(ctx.db, { kinds: { overdrawn: false } })
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+    // Fixed for four hours, then overdrawn again: a new run, shown at once.
+    await setBalance(accountId, 50_000)
+    await notifyAt(MINUTE_MS)
+    await notifyAt(4 * HOUR_MS)
+    await setBalance(accountId, -100)
     expect(await home()).toEqual(['overdrawn Test Everyday'])
   })
 

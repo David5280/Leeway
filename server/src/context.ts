@@ -37,6 +37,11 @@ export interface AppContext {
    * inbox and pushes catch up soon after. Unset where nothing listens, as in tests.
    */
   afterBankUpdate?: () => void
+  /**
+   * Told of a side step left to fail quietly, so the work it serves still goes
+   * through. The server logs it as a warning; unset where nothing listens, as in tests.
+   */
+  onQuietFailure?: (error: unknown, step: string) => void
   now: () => Date
   /**
    * True when an AI agent called, through the MCP endpoint. An agent never

@@ -110,6 +110,7 @@ const notifySoon = coalesced(
   NOTIFY_AFTER_SYNC_MS,
 )
 ctx.afterBankUpdate = notifySoon
+ctx.onQuietFailure = (error, step) => app.log.warn({ err: error }, `Could not ${step}`)
 
 // The inbox follows the data, and pushes wait out quiet hours, so the notifier
 // runs on its own timer as well as after each sync. The first run is at start.

@@ -2,12 +2,13 @@
 // with the data and sends any push owed. Every step can run again safely.
 
 import type { AppContext } from '../../context.js'
+import type { AccountAlert } from '../accountAlerts.js'
 import { SECOND_MS } from '../../lib/time.js'
 import { deliverPushes, type DeliveryResult } from './delivery.js'
 import { currentAlerts, trackHomeHides } from './homeAlerts.js'
 import { pruneInbox, recordCandidates, resolveCleared, resurfaceDismissed } from './inbox.js'
 import { getNotificationSettings, kindsOn, type NotificationSettings } from './settings.js'
-import { gatherCandidates } from './sources.js'
+import { accountAlertCandidates, gatherCandidates } from './sources.js'
 
 /** How often the notifier runs, besides right after a sync. */
 export const NOTIFIER_MINUTES = 5
@@ -35,6 +36,20 @@ export async function refreshInbox(ctx: AppContext): Promise<NotificationSetting
   await trackHomeHides(ctx.db, await currentAlerts(ctx.db, now), now)
   await pruneInbox(ctx.db, now, on)
   return choices
+}
+
+/**
+ * Records these account alerts, of the kinds turned on, and nothing else: all
+ * a hide from home needs on record first. Leaving the other sources out means
+ * trouble reading a budget or a bill cannot stop a hide.
+ */
+export async function recordAccountAlerts(
+  ctx: AppContext,
+  alerts: AccountAlert[],
+  now: Date,
+): Promise<void> {
+  const choices = await getNotificationSettings(ctx.db)
+  await recordCandidates(ctx.db, accountAlertCandidates(alerts, choices.kinds), now)
 }
 
 /** One run: the inbox brought up to date, then any push owed sent. */

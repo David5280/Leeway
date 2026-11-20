@@ -26,7 +26,7 @@ interface HeadsUpItem {
   tone: 'over' | 'warn' | 'info'
   text: string
   level: string
-  to?: string
+  to: string
   /** The account alert a row stands for, which the owner may hide from home. */
   alert?: AccountAlert
 }
@@ -37,28 +37,12 @@ export function AlertsWidget({ budget }: WidgetProps) {
   const home = useHomeAlerts().data
   const aiAlert = useAction('get_ai_usage').data?.alert
   // Money going wrong in an account comes before everything else.
-  const items = [...accountItems(home?.alerts), ...bankItems(connections.data)]
-  for (const alert of budget.alerts) {
-    items.push({
-      key: `${alert.categoryId}-${alert.level}`,
-      tone: alert.level === 'over' ? 'over' : 'warn',
-      text: alert.message,
-      level: ALERT_LABELS[alert.level],
-      to: `/budgets/${alert.categoryId}`,
-    })
-  }
-  if (budget.totals.uncategorizedCount > 0) {
-    items.push({
-      key: 'uncategorized',
-      tone: 'info',
-      text: uncategorizedText(
-        budget.totals.uncategorizedCount,
-        money(budget.totals.uncategorizedCents),
-      ),
-      level: 'Info',
-      to: '/transactions?category=uncategorized',
-    })
-  }
+  const items = [
+    ...accountItems(home?.alerts),
+    ...bankItems(connections.data),
+    ...budgetItems(budget.alerts),
+    ...uncategorizedItems(budget.totals, money),
+  ]
   return (
     <Card label="Heads up" className="tight">
       {items.length === 0 && !aiAlert ? (
@@ -73,7 +57,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
           {items.map((item) => (
             <HideableRow key={item.key} alert={item.alert}>
               <Link
-                to={item.to ?? '/'}
+                to={item.to}
                 className="alert-row clickrow"
                 style={{ margin: 0, flexDirection: 'row' }}
               >
@@ -111,13 +95,39 @@ function accountItems(alerts: AccountAlert[] = []): HeadsUpItem[] {
 
 /** A row for each bank that is not syncing. */
 function bankItems(connections: Connection[] = []): HeadsUpItem[] {
-  return connections.flatMap((connection) => {
+  return connections.flatMap((connection): HeadsUpItem[] => {
     const text = bankAlertText(connection)
     if (!text) return []
-    return [
-      { key: connection.id, tone: 'warn' as const, text, level: 'Bank', to: settingsPath('banks') },
-    ]
+    return [{ key: connection.id, tone: 'warn', text, level: 'Bank', to: settingsPath('banks') }]
   })
+}
+
+/** A row for each budget over, or on pace to go over. */
+function budgetItems(alerts: WidgetProps['budget']['alerts']): HeadsUpItem[] {
+  return alerts.map((alert) => ({
+    key: `${alert.categoryId}-${alert.level}`,
+    tone: alert.level === 'over' ? 'over' : 'warn',
+    text: alert.message,
+    level: ALERT_LABELS[alert.level],
+    to: `/budgets/${alert.categoryId}`,
+  }))
+}
+
+/** One row for the transactions waiting for a category, if any are. */
+function uncategorizedItems(
+  totals: WidgetProps['budget']['totals'],
+  money: (cents: number) => string,
+): HeadsUpItem[] {
+  if (totals.uncategorizedCount <= 0) return []
+  return [
+    {
+      key: 'uncategorized',
+      tone: 'info',
+      text: uncategorizedText(totals.uncategorizedCount, money(totals.uncategorizedCents)),
+      level: 'Info',
+      to: '/transactions?category=uncategorized',
+    },
+  ]
 }
 
 /**
