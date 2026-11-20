@@ -81,6 +81,17 @@ describe('flowsFrom', () => {
     expect(flows.usual).toMatchObject({ incomeCents: -5000, spentCents: -20000 })
   })
 
+  it('counts unfiled deposits as money in beside filed income', () => {
+    // $2,000 filed pay and a $500 unfiled deposit: $2,500 came in.
+    const flows = flowsFrom(totalsOf([month('2026-10-01', 200000, 100000, false, 50000)]))
+    expect(flows.months[0]).toMatchObject({ incomeCents: 250000, keptCents: 150000 })
+    // A month whose only money in is unfiled still starts the history.
+    const only = flowsFrom(
+      totalsOf([month('2026-09-01', 0, 0, false, 1000), month('2026-10-01', 0, 0)]),
+    )
+    expect(only.months).toHaveLength(2)
+  })
+
   it('keeps huge amounts exact', () => {
     const huge = 900_000_000_000_00
     const flows = flowsFrom(totalsOf([month('2026-10-01', huge, huge - 1)]))

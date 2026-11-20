@@ -1,12 +1,21 @@
 // Money in and out for each calendar month, whatever the budget period is.
 // The month-by-month charts (income against spending, the savings rate and
 // spending by category) read these, and so can an agent. Transfers between
-// the owner's own accounts count as neither, as everywhere else. A
-// transaction with no category yet counts by its sign here: a purchase as
-// money out and a deposit as money in, so uncategorized pay never reads as
-// negative spending (the budget still nets them, as sumTotals does). The date the
+// the owner's own accounts count as neither, as everywhere else. The date the
 // bank history starts comes with them: a month that began before it holds
 // only part of the month, so it is never judged or averaged as a whole one.
+//
+// A transaction with no category yet (unfiled) counts this way:
+// - two unfiled legs that pair as one move between the owner's own accounts
+//   (same amount, opposite sign, two accounts, within days) count as neither;
+// - any other unfiled purchase counts as money out, so an unfiled deposit
+//   never lowers spending or makes it negative (the budget still nets them,
+//   as sumTotals does);
+// - any other unfiled deposit counts as money in, but in unfiledInCents, not
+//   incomeCents: pay is filed income only, so the savings rate agrees with
+//   the check-in, the profile and the agent. An unfiled refund lands here
+//   too, as money in, rather than lowering money out: matching it to a past
+//   purchase would be a guess, and counting it here counts it once.
 
 import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
@@ -22,6 +31,7 @@ import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
 import { firstTransactionDay } from './profile/income.js'
 import type { Settings } from './settings.js'
+import { PAIR_WINDOW_DAYS, pairTransfers, unfiledLeg, type PairCandidate } from './transferPairs.js'
 
 export interface MonthTotals {
   /** First day of the month. */
@@ -30,8 +40,12 @@ export interface MonthTotals {
   end: IsoDate
   /** The month still running, so its totals are only so far. */
   current: boolean
+  /** Filed spending plus unfiled money out. */
   spentCents: number
+  /** Filed income only: the pay the savings rate divides by. */
   incomeCents: number
+  /** Unfiled money in that is not one side of a move between own accounts. */
+  unfiledInCents: number
   /** Net amount per category; income categories are negative (money in). */
   categories: { categoryId: string | null; amountCents: number }[]
 }
@@ -72,7 +86,7 @@ export async function monthlyTotals(
   // One at a time: db may be a transaction's client, which runs one query at once.
   const categories = await listCategories(db)
   const totalsByMonth = await categoryTotalsByRange(db, ranges, settings.includePending)
-  const uncategorized = await uncategorizedFlows(db, ranges, settings.includePending)
+  const unfiled = await unfiledFlows(db, ranges, settings.includePending)
   const firstTransactionDate = await firstTransactionDay(db)
   const months = ranges.map((range, i) => {
     const totals = totalsByMonth[i]!
@@ -80,7 +94,7 @@ export async function monthlyTotals(
       start: range.start,
       end: addDays(range.end, -1),
       current: i === ranges.length - 1,
-      ...flowTotals(sumTotals(categories, totals), totals, uncategorized[i]!),
+      ...flowTotals(sumTotals(categories, totals), totals, unfiled[i]!),
       categories: totals.map(({ categoryId, amountCents }) => ({ categoryId, amountCents })),
     }
   })
@@ -93,40 +107,55 @@ interface Flows {
   inCents: number
 }
 
-/** The uncategorized transactions of each range, split by sign, in the ranges' order. */
-async function uncategorizedFlows(
+/**
+ * The unfiled transactions of each range, split by sign, in the ranges'
+ * order, less the legs that pair as moves between own accounts. Legs up to a
+ * pairing window either side are read too, so a move whose other side posted
+ * in the next or last month still pairs.
+ */
+async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
 ): Promise<Flows[]> {
-  const { rows } = await db.query<Flows & { range: number }>(
-    `SELECT r.n::int AS range,
-       coalesce(sum(t.amount_cents) FILTER (WHERE t.amount_cents > 0), 0)::bigint AS "outCents",
-       coalesce(-sum(t.amount_cents) FILTER (WHERE t.amount_cents < 0), 0)::bigint AS "inCents"
+  const span = {
+    start: addDays(ranges[0]!.start, -PAIR_WINDOW_DAYS),
+    end: addDays(ranges[ranges.length - 1]!.end, PAIR_WINDOW_DAYS),
+  }
+  const { rows } = await db.query<PairCandidate>(
+    `SELECT t.id, t.account_id AS "accountId", t.date, t.name, t.merchant_name AS "merchantName",
+       t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
+       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
      ${COUNTED_IN_RANGES_SQL}
-       AND t.category_id IS NULL
-     GROUP BY r.n`,
-    rangeParams(ranges, includePending),
+       AND t.category_id IS NULL`,
+    rangeParams([span], includePending),
   )
+  const paired = pairTransfers(rows, unfiledLeg)
   const flows = ranges.map((): Flows => ({ outCents: 0, inCents: 0 }))
-  // WITH ORDINALITY counts from 1.
-  for (const { range, ...flow } of rows) flows[range - 1] = flow
+  for (const tx of rows) {
+    const i = ranges.findIndex((range) => tx.date >= range.start && tx.date < range.end)
+    // Outside every month (read only to pair), or one side of an own move.
+    if (i < 0 || paired.has(tx.id)) continue
+    if (tx.amountCents > 0) flows[i]!.outCents += tx.amountCents
+    else flows[i]!.inCents -= tx.amountCents
+  }
   return flows
 }
 
 /**
- * Spending and income for a month: the budget's sums, with the uncategorized
- * bucket (which the budget nets into spending) taken back out and put in by
- * sign instead.
+ * Spending and income for a month: the budget's sums, with the unfiled
+ * bucket (which the budget nets into spending) taken back out. Unfiled money
+ * out goes back into spending; unfiled money in stays apart from income.
  */
 function flowTotals(
   budget: { spentCents: number; incomeCents: number },
   totals: CategoryTotal[],
   { outCents, inCents }: Flows,
-): { spentCents: number; incomeCents: number } {
-  const netUncategorized = totals.find((total) => total.categoryId === null)?.amountCents ?? 0
+): { spentCents: number; incomeCents: number; unfiledInCents: number } {
+  const netUnfiled = totals.find((total) => total.categoryId === null)?.amountCents ?? 0
   return {
-    spentCents: budget.spentCents - netUncategorized + outCents,
-    incomeCents: budget.incomeCents + inCents,
+    spentCents: budget.spentCents - netUnfiled + outCents,
+    incomeCents: budget.incomeCents,
+    unfiledInCents: inCents,
   }
 }

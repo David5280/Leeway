@@ -44,6 +44,7 @@ const month = (start: string, end: string, incomeCents: number, current = false)
   current,
   incomeCents,
   spentCents: 0,
+  unfiledInCents: 0,
   categories: [],
 })
 
@@ -77,6 +78,8 @@ describe('a workplace plan on a paystub', () => {
     // $200 a paycheck, twice a month: $1,600 so far is eight paychecks, July 15 to October 31.
     const october = withYearToDate('2026-10-31', 160_000)
     expect(planStart(october)).toBe('2026-07-16')
+    // $1,500 is seven and a half paychecks: a part paycheck still counts, so July 16 again.
+    expect(planStart(withYearToDate('2026-10-31', 150_000))).toBe('2026-07-16')
     const [plan] = payrollStreams([], 'month', october, TODAY)
     expect(plan!.since).toBe('2026-07-16')
     expect(

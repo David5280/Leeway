@@ -27,6 +27,7 @@ const month = (start: string, end: string, incomeCents: number, current = false)
   current,
   incomeCents,
   spentCents: 0,
+  unfiledInCents: 0,
   categories: [],
 })
 
@@ -219,6 +220,37 @@ describe('get_savings_rates', () => {
     expect((await call('get_savings_rates', {})).targetPercent).toBe(15)
     // Six months asked, but the history starts in October, so the months before it are left off.
     expect((await call('get_savings_rates', {})).months).toHaveLength(2)
+  })
+
+  it('divides by filed pay only, leaving unfiled deposits out of pay', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    await call('create_rule', { pattern: 'paycheck', field: 'description', categoryId: pay.id })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-10-01',
+      name: 'Paycheck',
+      amountCents: -300000,
+    })
+    // An unfiled deposit is money in on the chart, but not pay.
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-10-09',
+      name: 'Mobile deposit',
+      amountCents: -100000,
+    })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-10-02',
+      name: 'To savings',
+      amountCents: 30000,
+      detailed: 'TRANSFER_OUT_SAVINGS',
+    })
+    await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
+
+    const october = (await call('get_savings_rates', { months: 2 })).months[0]
+    expect(october).toMatchObject({ payCents: 300000, percent: 10 })
+    expect((await call('get_monthly_totals', { months: 2 })).months[0]).toMatchObject({
+      incomeCents: 300000,
+      unfiledInCents: 100000,
+    })
   })
 
   it('leaves off a month the bank history starts partway through', async () => {

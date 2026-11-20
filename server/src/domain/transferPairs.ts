@@ -77,10 +77,29 @@ interface Match<T> {
   gap: number
 }
 
-/** Whether two transactions may be the two sides of one transfer: both must say they are one. */
-function mayPair(out: PairCandidate, arrival: PairCandidate, hints: Map<string, TransferHint>) {
+/** Which hints a side may give and still pair. */
+export type HintTest = (hint: TransferHint) => boolean
+
+/** The usual test: a side must say it is a transfer. */
+const saysTransfer: HintTest = (hint) => hint === 'transfer'
+
+/**
+ * For legs nobody has filed yet, as monthly totals reads them: a side that
+ * says nothing either way may pair too, since two equal amounts moving
+ * between the owner's own accounts within days are one move whatever the
+ * lines say. A side that says it is something else still never pairs.
+ */
+export const unfiledLeg: HintTest = (hint) => hint !== 'other'
+
+/** Whether two transactions may be the two sides of one transfer: both must pass the hint test. */
+function mayPair(
+  out: PairCandidate,
+  arrival: PairCandidate,
+  hints: Map<string, TransferHint>,
+  hintOk: HintTest,
+) {
   if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) return false
-  return hints.get(out.id) === 'transfer' && hints.get(arrival.id) === 'transfer'
+  return hintOk(hints.get(out.id)!) && hintOk(hints.get(arrival.id)!)
 }
 
 /** Closest dates first; then by date and id, so equal gaps always pair the same way. */
@@ -95,10 +114,13 @@ function byClosest<T extends PairCandidate>(a: Match<T>, b: Match<T>): number {
 
 /**
  * Pairs the two sides of each transfer among the given transactions (see the
- * top of this file for the rules). Returns each paired transaction's partner,
- * by id.
+ * top of this file for the rules; hintOk loosens the last one for unfiled
+ * legs). Returns each paired transaction's partner, by id.
  */
-export function pairTransfers<T extends PairCandidate>(transactions: readonly T[]): Map<string, T> {
+export function pairTransfers<T extends PairCandidate>(
+  transactions: readonly T[],
+  hintOk: HintTest = saysTransfer,
+): Map<string, T> {
   const hints = new Map(transactions.map((tx) => [tx.id, transferHint(tx)]))
   // Money arriving, by amount, so each payment out only meets its own amount.
   const arrivals = new Map<number, T[]>()
@@ -111,7 +133,7 @@ export function pairTransfers<T extends PairCandidate>(transactions: readonly T[
     if (out.amountCents <= 0) continue
     for (const arrival of arrivals.get(-out.amountCents) ?? []) {
       const gap = Math.abs(daysBetween(out.date, arrival.date))
-      if (gap <= PAIR_WINDOW_DAYS && mayPair(out, arrival, hints)) {
+      if (gap <= PAIR_WINDOW_DAYS && mayPair(out, arrival, hints, hintOk)) {
         matches.push({ out, arrival, gap })
       }
     }

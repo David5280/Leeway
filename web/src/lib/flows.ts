@@ -3,7 +3,9 @@
 // tested on its own. The month still running is shown but never averaged,
 // since its totals are only so far. A month the bank history starts partway
 // through is left off altogether: it holds only part of its money, so it
-// would read as a month of little in and out.
+// would read as a month of little in and out. Money in is filed income plus
+// unfiled deposits, so the chart shows every dollar that arrived; the savings
+// rate divides by filed income alone.
 
 import type { Output } from '../api/client'
 
@@ -12,6 +14,7 @@ export type MonthTotals = MonthlyTotals['months'][number]
 
 export interface FlowMonth {
   start: string
+  /** Money in: filed income plus unfiled deposits. */
   incomeCents: number
   spentCents: number
   /** What was left after spending: income less spending, negative when more went out. */
@@ -32,17 +35,18 @@ const average = (values: number[]) =>
 export function flowsFrom({ firstTransactionDate, months: totals }: MonthlyTotals): Flows {
   // Empty months before the bank history starts are left off the chart, not drawn as zeros,
   // and so is a month it starts partway through.
+  const inOf = (month: MonthTotals) => month.incomeCents + month.unfiledInCents
   const first = totals.findIndex(
     (month) =>
       month.current ||
       (month.start >= (firstTransactionDate ?? '') &&
-        (month.incomeCents !== 0 || month.spentCents !== 0)),
+        (inOf(month) !== 0 || month.spentCents !== 0)),
   )
   const months = totals.slice(Math.max(0, first)).map((month) => ({
     start: month.start,
-    incomeCents: month.incomeCents,
+    incomeCents: inOf(month),
     spentCents: month.spentCents,
-    keptCents: month.incomeCents - month.spentCents,
+    keptCents: inOf(month) - month.spentCents,
     current: month.current,
   }))
   // A month with nothing in or out is a gap in the history, not a month of zeros.

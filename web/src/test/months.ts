@@ -15,6 +15,7 @@ export function month(
   incomeCents: number,
   spentCents: number,
   current = false,
+  unfiledInCents = 0,
 ): MonthTotals {
-  return { start, end: start, current, incomeCents, spentCents, categories: [] }
+  return { start, end: start, current, incomeCents, spentCents, unfiledInCents, categories: [] }
 }

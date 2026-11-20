@@ -130,6 +130,7 @@ function serve() {
         end: start,
         current: i === 2,
         incomeCents: 250000,
+        unfiledInCents: 0,
         spentCents: 180000,
         categories: [],
       })),

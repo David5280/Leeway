@@ -33,7 +33,7 @@ export const getMonthlyTotalsAction = defineAction({
   name: 'get_monthly_totals',
   title: 'Money in and out by month',
   description:
-    'Spending, income and per-category totals for each of the last N calendar months (months), oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither. firstTransactionDate is where the bank history starts: a month that began before it holds only part of its money, so never compare it with whole months. Use it for month-by-month questions whatever the budget period is.',
+    'Spending, income and per-category totals for each of the last N calendar months (months), oldest first, ending with the current month (current: true, totals so far). Transfers between your own accounts count as neither, filed or not: two unfiled lines of the same amount, out of one own account and into another within a few days, are one move. Other unfiled money counts by sign: purchases (and other money out) in spentCents, deposits and refunds in unfiledInCents, never in incomeCents, which is filed income only and is the pay the savings rate divides by; money in on the chart is incomeCents plus unfiledInCents. firstTransactionDate is where the bank history starts: a month that began before it holds only part of its money, so never compare it with whole months. Use it for month-by-month questions whatever the budget period is.',
   input: z.object({ months: z.number().int().min(2).max(36).default(12) }),
   scope: 'read',
   surface: 'all',

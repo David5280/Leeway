@@ -383,5 +383,10 @@ describe('the steady pace label beside today', () => {
     const box = boxCorners({ left: 0, right: 10, top: 0, bottom: 10 })
     expect(overlapDepth(box, boxCorners({ left: 7, right: 20, top: 2, bottom: 8 }))).toBeCloseTo(3)
     expect(overlapDepth(box, boxCorners({ left: 10, right: 20, top: 0, bottom: 10 }))).toBe(0)
+    // Touching at one corner only, or along the bottom edge: still no depth.
+    const corner = boxCorners({ left: 10, right: 20, top: 10, bottom: 20 })
+    expect(overlapDepth(box, corner)).toBe(0)
+    expect(overlapDepth(boxCorners({ left: 2, right: 8, top: 10, bottom: 14 }), box)).toBe(0)
+    expect(shapesMeet(box, corner)).toBe(false)
   })
 })
