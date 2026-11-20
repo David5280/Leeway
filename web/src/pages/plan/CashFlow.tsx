@@ -48,7 +48,8 @@ function Headline({ flow }: { flow: CashFlow }) {
 function CashPathChart({ flow }: { flow: CashFlow }) {
   const { money, settings } = useApp()
   const points = cashPath(flow)
-  if (points.length < 2) return null
+  // With no bill before payday the line is flat, so the sentence above says it all.
+  if (points.every((point) => point.bills.length === 0)) return null
   const low = lowestPoint(points)
   return (
     <LineChart

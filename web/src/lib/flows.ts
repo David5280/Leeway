@@ -27,14 +27,18 @@ const average = (values: number[]) =>
 
 /** Each month's money in, out and kept, and what a finished month usually comes to. */
 export function flowsFrom(totals: MonthTotals[]): Flows {
-  const months = totals.map((month) => ({
+  // Empty months before the bank history starts are left off the chart, not drawn as zeros.
+  const first = totals.findIndex(
+    (month) => month.current || month.incomeCents !== 0 || month.spentCents !== 0,
+  )
+  const months = totals.slice(Math.max(0, first)).map((month) => ({
     start: month.start,
     incomeCents: month.incomeCents,
     spentCents: month.spentCents,
     keptCents: month.incomeCents - month.spentCents,
     current: month.current,
   }))
-  // A month with nothing in or out is before the bank history starts, not a month of zeros.
+  // A month with nothing in or out is a gap in the history, not a month of zeros.
   const finished = months.filter(
     (month) => !month.current && (month.incomeCents !== 0 || month.spentCents !== 0),
   )

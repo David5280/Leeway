@@ -22,20 +22,31 @@ describe('flowsFrom', () => {
     expect(overspent(flows.months[0]!)).toBe(false)
   })
 
-  it('averages the finished months with money moving, skipping empty ones from before the bank history', () => {
+  it('averages the finished months with money moving, leaving off empty ones from before the bank history', () => {
     const flows = flowsFrom([
+      month('2026-07-01', 0, 0),
       month('2026-08-01', 0, 0),
       month('2026-09-01', 300000, 100000),
-      month('2026-10-01', 300000, 200001),
+      month('2026-10-01', 0, 0),
       month('2026-11-01', 0, 50000, true),
     ])
+    // A gap inside the history stays on the chart; it just is not averaged.
+    expect(flows.months.map((one) => one.start)).toEqual(['2026-09-01', '2026-10-01', '2026-11-01'])
+    expect(
+      flowsFrom([month('2026-10-01', 0, 0), month('2026-11-01', 0, 0, true)]).months,
+    ).toHaveLength(1)
     expect(flows.usual).toEqual({
       incomeCents: 300000,
-      spentCents: 150001,
-      keptCents: 149999,
-      count: 2,
+      spentCents: 100000,
+      keptCents: 200000,
+      count: 1,
     })
-    expect(flowsHeadline(flows)).toEqual({ cents: 149999, words: 'kept a month, on average' })
+    expect(flowsHeadline(flows)).toEqual({ cents: 200000, words: 'kept a month, on average' })
+    const two = flowsFrom([
+      month('2026-09-01', 300000, 100000),
+      month('2026-10-01', 300000, 200001),
+    ])
+    expect(two.usual).toMatchObject({ spentCents: 150001, keptCents: 149999, count: 2 })
   })
 
   it('reads a month with more out than in as short, and a run of them as a problem', () => {

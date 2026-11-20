@@ -1,7 +1,7 @@
 // What a usual month saves, and the level the savings rate chart reads against.
 
 import { describe, expect, it } from 'vitest'
-import { reachedTarget, rateLevel, usualRate, type MonthRate } from './rates'
+import { fromFirstMonth, reachedTarget, rateLevel, usualRate, type MonthRate } from './rates'
 
 const rate = (start: string, percent: number | null, current = false): MonthRate => ({
   start,
@@ -26,6 +26,18 @@ describe('usualRate', () => {
 
   it('keeps a month that saved nothing it could see as unknown, not zero', () => {
     expect(usualRate([rate('2026-10-01', null), rate('2026-09-01', 90)])).toBe(90)
+  })
+})
+
+describe('fromFirstMonth', () => {
+  it('leaves off the months before any pay or saving was seen, but keeps later gaps', () => {
+    const empty = rate('2026-08-01', null)
+    const paid = { ...rate('2026-09-01', null), payCents: 100 }
+    const gap = rate('2026-10-01', null)
+    const now = rate('2026-11-01', null, true)
+    expect(fromFirstMonth([empty, paid, gap, now])).toEqual([paid, gap, now])
+    expect(fromFirstMonth([empty, now])).toEqual([now])
+    expect(fromFirstMonth([])).toEqual([])
   })
 })
 

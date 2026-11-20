@@ -39,7 +39,7 @@ export interface DrillTrend {
   /** One sentence on what the line shows, for screen readers. */
   description: string
   /** Where the line should be, drawn as a dashed level: "Under 30% of the limit". */
-  reference?: { cents: number; label: string }
+  reference?: { cents: number; label: string; at?: 'start' | 'end' }
 }
 
 /**

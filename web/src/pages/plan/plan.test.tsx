@@ -98,6 +98,11 @@ describe('Until payday', () => {
     vi.restoreAllMocks()
   })
 
+  it('leaves the line out when no bill comes before payday, or payday is today', async () => {
+    const quiet = await show(cashFlow({ billsDue: [], billsDueCents: 0 }))
+    expect(within(quiet).queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('leaves the line out when payday is today', async () => {
     const card = await show(
       cashFlow({ nextPayday: '2026-11-17', billsDue: [], daysUntilPayday: 0 }),
@@ -316,8 +321,9 @@ describe('Net worth', () => {
     expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
       'Net worth from −$500 on Jun 1 to $7,000 today.',
     )
-    // Where it started is the level to stay above.
+    // Where it started is the level to stay above, its words at the far end, clear of the line's start.
     expect(chart).toHaveTextContent('Where you started: −$500')
+    expect(within(chart).getByText(/Where you started/)).toHaveAttribute('text-anchor', 'end')
     // A tapped day says what was owned and owed then.
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       left: 0,

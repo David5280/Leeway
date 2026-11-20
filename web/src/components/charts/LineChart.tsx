@@ -54,6 +54,11 @@ export interface LineReference {
   cents: number
   /** Where the line should be, in words, drawn on the line: "Under 30% of the limit". */
   label: string
+  /**
+   * Which end its words sit at: the start by default, or the end for a level
+   * the line starts on, like where net worth started, so the two never cross.
+   */
+  at?: 'start' | 'end'
 }
 
 /**
@@ -197,7 +202,12 @@ function ReferenceLine({
   return (
     <g aria-hidden="true">
       <line x1={left} x2={right} y1={at} y2={at} className="chart-line budget" />
-      <text x={left + 4} y={at - 6} className="chart-axis strong-label">
+      <text
+        x={reference.at === 'end' ? right - 4 : left + 4}
+        y={at - 6}
+        textAnchor={reference.at === 'end' ? 'end' : 'start'}
+        className="chart-axis strong-label"
+      >
         {reference.label}: <Money as="tspan" cents={reference.cents} />
       </text>
     </g>

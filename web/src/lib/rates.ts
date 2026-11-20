@@ -8,6 +8,14 @@ import type { Output } from '../api/client'
 export type SavingsRates = Output<'get_savings_rates'>
 export type MonthRate = SavingsRates['months'][number]
 
+/** The months from the first with pay or saving seen, leaving off those before the bank history. */
+export function fromFirstMonth(months: MonthRate[]): MonthRate[] {
+  const first = months.findIndex(
+    (month) => month.current || month.payCents > 0 || month.savedCents > 0,
+  )
+  return months.slice(Math.max(0, first))
+}
+
 /** The average rate of the finished months that have one, or null before there is one. */
 export function usualRate(months: MonthRate[]): number | null {
   const known = months.filter((month) => !month.current && month.percent !== null)

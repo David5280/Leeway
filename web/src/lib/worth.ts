@@ -35,6 +35,7 @@ export function changeWords(change: WorthChange): { word: 'Up' | 'Down'; falling
 /** The dashed level a net worth line should stay above: where it started. */
 export function startReference(
   change: WorthChange | null,
-): { cents: number; label: string } | undefined {
-  return change ? { cents: change.fromCents, label: 'Where you started' } : undefined
+): { cents: number; label: string; at: 'end' } | undefined {
+  // The line starts on this level, so its words sit at the far end.
+  return change ? { cents: change.fromCents, label: 'Where you started', at: 'end' } : undefined
 }

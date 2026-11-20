@@ -19,7 +19,11 @@ describe('worthChange', () => {
     )
     expect(change).toEqual({ fromDate: '2026-01-01', fromCents: 500000, changeCents: 200000 })
     expect(changeWords(change!)).toEqual({ word: 'Up', falling: false })
-    expect(startReference(change)).toEqual({ cents: 500000, label: 'Where you started' })
+    expect(startReference(change)).toEqual({
+      cents: 500000,
+      label: 'Where you started',
+      at: 'end',
+    })
   })
 
   it('has nothing to compare with no history or a single day', () => {

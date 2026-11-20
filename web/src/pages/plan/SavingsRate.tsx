@@ -7,7 +7,7 @@ import { useAction } from '../../api/hooks'
 import { RateBars } from '../../components/charts/RateBars'
 import { Card } from '../../components/design/Card'
 import { LoadingOrError } from '../../components/ui'
-import { rateLevel, usualRate } from '../../lib/rates'
+import { fromFirstMonth, rateLevel, usualRate } from '../../lib/rates'
 
 /** Months the chart shows: enough to see a habit, few enough to read on a phone. */
 export const RATE_MONTHS = 6
@@ -29,7 +29,7 @@ export function SavingsRateCard() {
             </p>
           )}
           <RateBars
-            months={rates.data.months}
+            months={fromFirstMonth(rates.data.months)}
             level={rateLevel(rates.data)}
             targetPercent={rates.data.targetPercent}
             label="Savings rate each month"
