@@ -104,11 +104,11 @@ test('an account alert and its account fit a phone screen', async ({ page }) => 
   await addAccount(page, { name: 'Phone checking with a long name', balance: '-1234.56' })
 
   await page.goto('/')
-  const banner = page.getByRole('region', { name: 'Account alerts' })
-  await expect(banner).toContainText('is overdrawn by $1,234.56.')
+  const headsUp = page.getByRole('region', { name: 'Heads up' })
+  await expect(headsUp).toContainText('is overdrawn by $1,234.56.')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 
-  await banner.getByRole('link', { name: /Phone checking with a long name is overdrawn/ }).click()
+  await headsUp.getByRole('link', { name: /Phone checking with a long name is overdrawn/ }).click()
   // The alert opens the account's own page, which leads with the overdraft.
   await expect(
     page.getByRole('region', { name: 'Phone checking with a long name balance' }),
