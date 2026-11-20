@@ -106,6 +106,7 @@ export function PeriodBars({
     axisIndices(bars.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
   )
   const budgetText = budget !== null ? `. ${levelName} ${money(budget)}.` : ''
+  const empty = values.every((v) => v === 0)
 
   return (
     <ChartFrame
@@ -130,7 +131,8 @@ export function PeriodBars({
         )
       }
     >
-      <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
+      {/* With nothing to measure the scale means nothing, and its labels would crowd the note. */}
+      {!empty && <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />}
       {bars.map((bar, i) => (
         <path
           key={bar.label}
@@ -184,7 +186,7 @@ export function PeriodBars({
           </g>
         ))}
       </g>
-      {values.every((v) => v === 0) && (
+      {empty && (
         <text
           x={(left + right) / 2}
           y={(top + bottom) / 2}

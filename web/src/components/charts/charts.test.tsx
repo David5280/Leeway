@@ -124,6 +124,23 @@ describe('PeriodBars', () => {
     expect(screen.getByRole('img')).toHaveTextContent('Nothing in these periods yet')
     expect(screen.getByRole('img')).not.toHaveTextContent('Budget')
   })
+
+  it('leaves the scale off an empty chart, so its note has the middle to itself', () => {
+    fakeServer({})
+    renderSignedIn(
+      <PeriodBars
+        bars={[
+          { label: 'Oct', cents: 0, current: false },
+          { label: 'Nov', cents: 0, current: true },
+        ]}
+        budgetCents={200_000}
+        color="teal"
+        label="Groceries"
+      />,
+    )
+    expect(screen.getByRole('img')).toHaveTextContent('Nothing in these periods yet')
+    expect(screen.getByRole('img')).not.toHaveTextContent('$1,000')
+  })
 })
 
 function pace(fields: Partial<Pace> = {}): Pace {

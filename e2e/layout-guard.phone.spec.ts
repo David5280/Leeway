@@ -157,7 +157,7 @@ for (const phone of GUARDED_PHONES) {
         // Either way, Settings arranges it too, and the guard checks it there on every phone.
         await load(page, '/settings/appearance', phone.insets)
         await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-        await expect(page.getByRole('group', { name: 'Summary order' })).toBeVisible()
+        await expect(page.getByRole('group', { name: 'Money in and out order' })).toBeVisible()
       })
 
       test('the Settings menu has every group the guard visits', async ({ page }) => {
