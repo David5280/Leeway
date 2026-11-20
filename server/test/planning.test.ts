@@ -333,9 +333,10 @@ describe('get_cash_flow', () => {
       await deposit(date, 'OLD CO PAYROLL', -300000, 'INCOME_SALARY')
     await deposit('2026-11-13', 'NEW CO PAYROLL', -210000, 'INCOME_SALARY')
     const flow = await call('get_cash_flow')
-    // The likeliest cadence from a 15th payday is twice a month: next on the 30th.
+    // One paycheck cannot show how often pay comes, so the cautious monthly guess
+    // projects the latest payday: a month on.
     expect(flow).toMatchObject({
-      nextPayday: '2026-11-30',
+      nextPayday: '2026-12-13',
       paydaySource: 'detected_income',
       paydayEstimate: true,
       expectedPayCents: 210000,

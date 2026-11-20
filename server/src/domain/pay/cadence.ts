@@ -1,24 +1,37 @@
 // How often a payroll pays, read from paydays, and when it pays next. Pure.
 //
-// A semimonthly payroll pays on the 15th and the last business day of the
-// month (or the business day before, when either falls on a weekend), so
-// its gaps run from 13 to 18 days and look biweekly by length alone. It is
-// told apart by where the paydays fall in the month.
+// Every two weeks and twice a month both pay about every 14 to 16 days, so
+// gap length alone cannot tell them apart. Two signs do:
+// - a biweekly payroll keeps to a 14-day grid: every payday is a whole
+//   number of fortnights from the others, give or take a holiday;
+// - a semimonthly one keeps to two days of the month (semimonthly.ts), so it
+//   drifts off any 14-day grid within a few paydays.
+// When both fit, as over a few paydays they can, the closer fit wins, and a
+// dead heat goes to twice a month: paydays that land exactly on a
+// semimonthly schedule (Jan 31, Feb 14, Feb 28) are far likelier to be one.
 
-import {
-  addDays,
-  addMonths,
-  dateParts,
-  dayOfWeek,
-  daysBetween,
-  daysInMonth,
-  makeDate,
-  type IsoDate,
-} from '../../lib/dates.js'
+import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
 import { addCadence, type Cadence } from '../../lib/periods.js'
+import {
+  bestSchedule,
+  businessDaysApart,
+  COMMON_SCHEDULES,
+  nextSemimonthlyPayday,
+  PAYDAY_SLACK,
+  semimonthlyFit,
+  STANDARD_SCHEDULE,
+  type SemimonthSchedule,
+} from './semimonthly.js'
 
 /** The pay cadences a payroll uses. */
 export type PayCadence = Extract<Cadence, 'week' | 'biweek' | 'semimonth' | 'month'>
+
+/** How often a payroll pays, and for twice a month, on which days. */
+export interface PayPattern {
+  cadence: PayCadence
+  /** The two days of the month it pays on; null unless it pays twice a month. */
+  schedule: SemimonthSchedule | null
+}
 
 /** About how many days apart each cadence's paydays are, at most. */
 export const CYCLE_DAYS: Record<Cadence, number> = {
@@ -30,74 +43,117 @@ export const CYCLE_DAYS: Record<Cadence, number> = {
   year: 366,
 }
 
-const isWeekend = (date: IsoDate) => dayOfWeek(date) === 0 || dayOfWeek(date) === 6
+/** Gaps this long, in the middle, read as each cadence; others say nothing. */
+const GAP_RANGES = { week: [5, 9], fortnight: [10, 19], month: [26, 35] } as const
 
-/** The date, or the business day before it when it falls on a weekend. */
-function businessDayOnOrBefore(date: IsoDate): IsoDate {
-  let day = date
-  while (isWeekend(day)) day = addDays(day, -1)
-  return day
+const FORTNIGHT = 14
+
+const within = (value: number, [least, most]: readonly [number, number]) =>
+  value >= least && value <= most
+
+/**
+ * How far paydays sit off a 14-day grid, in business days added up, or null
+ * when one sits more than PAYDAY_SLACK off it. The grid is anchored on
+ * whichever payday fits the rest best, so a first payday moved by a holiday
+ * does not throw the others off.
+ */
+export function biweeklyOffBy(dates: IsoDate[]): number | null {
+  let best: number | null = null
+  for (const anchor of dates) {
+    let total = 0
+    for (const date of dates) {
+      const fortnights = Math.round(daysBetween(anchor, date) / FORTNIGHT)
+      const off = businessDaysApart(date, addDays(anchor, fortnights * FORTNIGHT))
+      if (off > PAYDAY_SLACK) {
+        total = Infinity
+        break
+      }
+      total += off
+    }
+    if (total !== Infinity && (best === null || total < best)) best = total
+  }
+  return best
 }
 
-/** The two semimonthly paydays of a month: the 15th and the last day, each moved off a weekend. */
-function semimonthlyPaydays(year: number, month: number): IsoDate[] {
-  return [
-    businessDayOnOrBefore(makeDate(year, month, 15)),
-    businessDayOnOrBefore(makeDate(year, month, daysInMonth(year, month))),
-  ]
+const BIWEEKLY: PayPattern = { cadence: 'biweek', schedule: null }
+
+/** Most business days off, in all, two paydays may be and still read as twice a month. */
+const PAIR_OFF_BY = 1
+
+/**
+ * Two paydays, one gap: too few to test a grid, and any two days half a
+ * month apart fit some schedule. So they read as twice a month only when
+ * both land on a common schedule's days, a business day off at most.
+ */
+function pairPattern(dates: IsoDate[]): PayPattern {
+  const fit = bestSchedule(dates, COMMON_SCHEDULES)
+  const onSchedule = fit.matched === 2 && fit.bothDays && fit.offBy <= PAIR_OFF_BY
+  return onSchedule ? { cadence: 'semimonth', schedule: fit.schedule } : BIWEEKLY
 }
 
-/** Whether a date is a semimonthly payday, give or take a day for a bank posting late. */
-export function onSemimonthlyPayday(date: IsoDate): boolean {
-  const { year, month } = dateParts(date)
-  const before = addMonths(makeDate(year, month, 1), -1)
-  const paydays = [
-    ...semimonthlyPaydays(year, month),
-    // A payday at the end of last month can post on the 1st.
-    ...semimonthlyPaydays(dateParts(before).year, dateParts(before).month),
-  ]
-  return paydays.some((payday) => {
-    const late = daysBetween(payday, date)
-    return late >= 0 && late <= 1
-  })
+/** Biweekly or semimonthly, for paydays about two weeks apart. */
+function fortnightlyPattern(dates: IsoDate[]): PayPattern {
+  if (dates.length === 2) return pairPattern(dates)
+  const semi = semimonthlyFit(dates)
+  const grid = biweeklyOffBy(dates)
+  // The closer fit wins; a tie goes to twice a month, as the header says.
+  if (semi && (grid === null || semi.offBy <= grid)) {
+    return { cadence: 'semimonth', schedule: semi.schedule }
+  }
+  return BIWEEKLY
 }
 
-/** The cadence whose cycle the middle gap fits, telling semimonthly by its paydays. */
-export function cadenceOfDates(dates: IsoDate[]): PayCadence | null {
-  const gaps = dates.slice(1).map((date, i) => daysBetween(dates[i]!, date))
-  const middle = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)]!
-  if (middle >= 5 && middle <= 9) return 'week'
-  // Two weeks to the day, again and again, is biweekly even when the dates
-  // happen to land near the 15th and the month's end.
-  if (gaps.length > 1 && gaps.every((gap) => gap === 14)) return 'biweek'
-  if (middle >= 10 && middle <= 19) return dates.every(onSemimonthlyPayday) ? 'semimonth' : 'biweek'
-  if (middle >= 26 && middle <= 35) return 'month'
-  return null
+/** How often paydays (oldest first, two or more) come, or null when their gaps fit no cadence. */
+export function payPattern(dates: IsoDate[]): PayPattern | null {
+  const rough = roughCadence(dates)
+  if (rough === 'semimonth') return fortnightlyPattern(dates)
+  return rough && { cadence: rough, schedule: null }
 }
 
 /**
- * The likeliest cadence from a single payday: semimonthly when it falls on
- * a semimonthly payday, otherwise biweekly, the most common payroll.
+ * The cadence paydays roughly come at, by their gaps alone: about two weeks
+ * reads as twice a month, the longer of the two cycles. Quick, for telling
+ * where a payer's runs break; payPattern says which it really is.
  */
-export function likelyCadence(date: IsoDate): PayCadence {
-  return onSemimonthlyPayday(date) ? 'semimonth' : 'biweek'
+export function roughCadence(dates: IsoDate[]): PayCadence | null {
+  const gaps = dates.slice(1).map((date, i) => daysBetween(dates[i]!, date))
+  if (gaps.length === 0) return null
+  const middle = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)]!
+  if (within(middle, GAP_RANGES.week)) return 'week'
+  if (within(middle, GAP_RANGES.fortnight)) return 'semimonth'
+  if (within(middle, GAP_RANGES.month)) return 'month'
+  return null
 }
 
-/** The first semimonthly payday after a date. */
-function nextSemimonthlyPayday(after: IsoDate): IsoDate {
-  const { year, month } = dateParts(after)
-  const next = dateParts(addMonths(makeDate(year, month, 1), 1))
-  const candidates = [
-    ...semimonthlyPaydays(year, month),
-    ...semimonthlyPaydays(next.year, next.month),
-  ]
-  return candidates.find((payday) => payday > after)!
+/** The cadence paydays come at, or null when their gaps fit none. */
+export function cadenceOfDates(dates: IsoDate[]): PayCadence | null {
+  return payPattern(dates)?.cadence ?? null
+}
+
+/**
+ * The pattern for a cadence the owner gave (a paystub's), with the
+ * semimonthly days read from the paydays seen so far.
+ */
+export function givenPattern(
+  cadence: Cadence,
+  dates: IsoDate[],
+): {
+  cadence: Cadence
+  schedule: SemimonthSchedule | null
+} {
+  if (cadence !== 'semimonth') return { cadence, schedule: null }
+  return { cadence, schedule: dates.length ? bestSchedule(dates).schedule : STANDARD_SCHEDULE }
 }
 
 /** The payday after `last` on this cadence, rolled forward until it is after today. */
-export function nextPaydayAfter(last: IsoDate, cadence: Cadence, today: IsoDate): IsoDate {
+export function nextPaydayAfter(
+  last: IsoDate,
+  cadence: Cadence,
+  today: IsoDate,
+  schedule: SemimonthSchedule = STANDARD_SCHEDULE,
+): IsoDate {
   const step = (date: IsoDate) =>
-    cadence === 'semimonth' ? nextSemimonthlyPayday(date) : addCadence(date, cadence)
+    cadence === 'semimonth' ? nextSemimonthlyPayday(date, schedule) : addCadence(date, cadence)
   let next = step(last)
   while (next <= today) next = step(next)
   return next

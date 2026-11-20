@@ -76,6 +76,7 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
       nextPayday: null,
       estimate: false,
       employer: null,
+      employers: [],
       since: null,
     },
     monthly: {

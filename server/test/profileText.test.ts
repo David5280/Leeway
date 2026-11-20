@@ -172,6 +172,17 @@ describe('profileDigest', () => {
         nextPayday: '2026-12-04',
         estimate: false,
         employer: 'Acme Payroll',
+        employers: [
+          {
+            name: 'Acme Payroll',
+            cadence: 'biweek',
+            typicalPayCents: 240_000,
+            monthlyCents: 520_000,
+            since: '2026-06-05',
+            nextPayday: '2026-12-04',
+            estimate: false,
+          },
+        ],
         since: '2026-06-05',
       },
       monthly: {
@@ -271,6 +282,17 @@ describe('profileDigest', () => {
         nextPayday: '2026-12-01',
         estimate: true,
         employer: 'Acme Payroll',
+        employers: [
+          {
+            name: 'Acme Payroll',
+            cadence: 'month',
+            typicalPayCents: 250_000,
+            monthlyCents: 250_000,
+            since: '2026-11-14',
+            nextPayday: '2026-12-01',
+            estimate: true,
+          },
+        ],
         since: '2026-11-14',
       },
       monthly: {
@@ -334,6 +356,48 @@ describe('profileDigest', () => {
     ])
   })
 
+  it('names each employer paying now, and adds their pay up', () => {
+    const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
+      name,
+      cadence,
+      typicalPayCents: cents,
+      monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
+      since: '2026-09-25',
+      nextPayday: '2026-11-20',
+      estimate: false,
+    })
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-20',
+        estimate: false,
+        employer: 'Initech Payroll',
+        employers: [
+          employer('Initech Payroll', 'semimonth', 200_000),
+          employer('Bluth Co Payroll', 'biweek', 60_000),
+        ],
+        since: '2026-09-25',
+      },
+      monthly: {
+        incomeCents: 530_446,
+        incomeEstimated: false,
+        spendingCents: 300_000,
+        essentialSpendingCents: 300_000,
+        spendingSince: '2026-09-25',
+        spendingDays: 55,
+      },
+    })
+    const lines = profileDigest(profile, dollars).split('\n')
+    expect(lines).toContain(
+      'Pay: from 2 employers: Initech Payroll twice a month since Sep 25, about $2,000 each; Bluth Co Payroll every 2 weeks since Sep 25, about $600 each. Next payday Nov 20.',
+    )
+    expect(lines).toContain(
+      'Typical month (spending since Sep 25, pay from paychecks only): $5,304 take-home pay in from the 2 current employers, $3,000 spent.',
+    )
+  })
+
   it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
     const profile = emptyProfile({
       pay: {
@@ -343,6 +407,7 @@ describe('profileDigest', () => {
         nextPayday: null,
         estimate: false,
         employer: null,
+        employers: [],
         since: null,
       },
       monthly: {

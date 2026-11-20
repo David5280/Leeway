@@ -32,19 +32,42 @@ function paceWords(onTrack: boolean | null): string {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
+/** "Initech twice a month since Nov 13, about $2,000 each", for one of several employers. */
+function employerWords(
+  employer: FinancialProfile['pay']['employers'][number],
+  locale: string,
+  money: Money,
+): string {
+  const since = shortDate(employer.since, locale)
+  return `${employer.name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
+}
+
 function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
   if (!pay.cadence || !pay.nextPayday) return null
+  const estimate = pay.estimate
+    ? ' This is an estimate: an employer that has paid once is confirmed by its second paycheck.'
+    : ''
+  if (pay.employers.length > 1) {
+    // A second job counts beside the first, so each is named with its own schedule.
+    const each = pay.employers.map((employer) => employerWords(employer, locale, money))
+    return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${estimate}`
+  }
   const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
   const from = pay.employer ? ` from ${pay.employer}` : ''
   const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
   // One paycheck cannot show how often pay comes, so the schedule is said to be a guess.
-  const estimate = pay.estimate
+  const oneEstimate = pay.estimate
     ? ' This is an estimate from one paycheck: the schedule is confirmed by the second.'
     : ''
-  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${estimate}`
+  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${oneEstimate}`
 }
 
-function monthLine({ monthly, locale }: FinancialProfile, money: Money): string | null {
+/** "current employer", or "2 current employers" when a second job pays too. */
+function employersWord({ employers }: FinancialProfile['pay']): string {
+  return employers.length > 1 ? `${employers.length} current employers` : 'current employer'
+}
+
+function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): string | null {
   if (monthly.spendingCents === null) return null
   const essential =
     monthly.essentialSpendingCents === monthly.spendingCents
@@ -55,7 +78,7 @@ function monthLine({ monthly, locale }: FinancialProfile, money: Money): string 
   const payIn =
     monthly.incomeCents === null
       ? ''
-      : `${money(monthly.incomeCents)} take-home pay in from the current employer${estimated}, `
+      : `${money(monthly.incomeCents)} take-home pay in from the ${employersWord(pay)}${estimated}, `
   const since = shortDate(monthly.spendingSince!, locale)
   return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent${essential}.`
 }

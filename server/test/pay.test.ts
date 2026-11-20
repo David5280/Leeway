@@ -1,15 +1,11 @@
 // Pay from paychecks only (domain/pay): what a deposit is, paychecks split
-// across accounts read as one, the current employer after a job ends, and a
-// single new paycheck projected as an estimate. Every amount and name here is
-// made up.
+// across accounts (and days) read as one, every employer paying now counted,
+// the current employer after a job ends, and a single new paycheck projected
+// cautiously as an estimate. How often pay comes is in payCadence.test.ts.
+// Every amount and name here is made up.
 
 import { describe, expect, it } from 'vitest'
-import {
-  cadenceOfDates,
-  likelyCadence,
-  nextPaydayAfter,
-  onSemimonthlyPayday,
-} from '../src/domain/pay/cadence.js'
+import { addDays } from '../src/lib/dates.js'
 import { currentPay, paidBetween } from '../src/domain/pay/current.js'
 import { depositKind, type Deposit } from '../src/domain/pay/deposits.js'
 import { groupPaychecks, runsOf, usualPaycheckCents } from '../src/domain/pay/paychecks.js'
@@ -132,31 +128,15 @@ describe('depositKind', () => {
     expect(kind('INTEREST')).toBe('interest')
     expect(kind('DEPOSIT')).toBe('other')
   })
-})
 
-describe('paydays', () => {
-  it('tells twice a month from every two weeks by where the paydays fall', () => {
-    expect(onSemimonthlyPayday('2026-11-13')).toBe(true)
-    expect(onSemimonthlyPayday('2026-10-30')).toBe(true)
-    // A day late, as a bank can post it, and the 1st after a month's end.
-    expect(onSemimonthlyPayday('2026-10-16')).toBe(true)
-    expect(onSemimonthlyPayday('2026-12-01')).toBe(true)
-    expect(onSemimonthlyPayday('2026-11-06')).toBe(false)
-    expect(cadenceOfDates(['2026-10-15', '2026-10-30', '2026-11-13'])).toBe('semimonth')
-    expect(cadenceOfDates(['2026-10-02', '2026-10-16', '2026-10-30'])).toBe('biweek')
-    // Fridays two weeks apart that fall by chance on the 15th and the month's end.
-    expect(cadenceOfDates(['2026-10-16', '2026-10-30', '2026-11-13'])).toBe('biweek')
-    expect(cadenceOfDates(['2026-10-02', '2026-10-09', '2026-10-16'])).toBe('week')
-    expect(cadenceOfDates(['2026-08-28', '2026-09-28', '2026-10-28'])).toBe('month')
-    expect(cadenceOfDates(['2026-01-01', '2026-06-01'])).toBeNull()
-    expect(likelyCadence('2026-11-13')).toBe('semimonth')
-    expect(likelyCadence('2026-11-06')).toBe('biweek')
-  })
-
-  it('finds the next payday after today', () => {
-    expect(nextPaydayAfter('2026-11-13', 'semimonth', TODAY)).toBe('2026-11-30')
-    expect(nextPaydayAfter('2026-10-30', 'biweek', TODAY)).toBe('2026-11-27')
-    expect(nextPaydayAfter('2026-11-01', 'month', TODAY)).toBe('2026-12-01')
+  it('reads the words of a line filed under a broad income code', () => {
+    const kind = (name: string, fields: Partial<Deposit>) =>
+      depositKind(deposit('2026-11-01', name, 1_000, fields))
+    expect(kind('ACME PAYROLL', { providerCategoryDetailed: 'INCOME_OTHER_INCOME' })).toBe(
+      'payroll',
+    )
+    expect(kind('ACME PAYROLL', { providerCategoryPrimary: 'INCOME' })).toBe('payroll')
+    expect(kind('BONUS POINTS', { providerCategoryDetailed: 'INCOME_OTHER_INCOME' })).toBe('other')
   })
 })
 
@@ -173,6 +153,32 @@ describe('paychecks', () => {
     ])
   })
 
+  it('reads the parts of a split paycheck that land a day apart as one', () => {
+    const paydays = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13']
+    const deposits = paydays.flatMap((date) => [
+      salary(date, 'INITECH PAYROLL', 100_000, 'bills'),
+      salary(addDays(date, 1), 'INITECH PAYROLL', 180_000, 'checking'),
+    ])
+    expect(groupPaychecks(deposits).map((p) => [p.date, p.amountCents])).toEqual(
+      paydays.map((date) => [date, 280_000]),
+    )
+    // $2,800 twice a month, confirmed, not $1,400 forever an estimate.
+    expect(currentPay(deposits, TODAY)).toMatchObject({
+      cadence: 'semimonth',
+      estimate: false,
+      paycheckCents: 280_000,
+      monthlyCents: 560_000,
+    })
+  })
+
+  it('keeps paychecks a week apart from one payer apart', () => {
+    const paychecks = groupPaychecks([
+      salary('2026-11-06', 'ACME PAYROLL', 50_000),
+      salary('2026-11-10', 'ACME PAYROLL', 50_000),
+    ])
+    expect(paychecks).toHaveLength(2)
+  })
+
   it('leaves a final check more than twice the usual out of a usual paycheck', () => {
     const deposits = [
       ...['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30'].map((date) =>
@@ -187,21 +193,51 @@ describe('paychecks', () => {
     const raise = [...deposits.slice(0, 4), salary('2026-11-13', 'GLOBEX', 400_000)]
     expect(runsOf(groupPaychecks(raise), raise.at(-1)!)[0]!.outliers).toEqual([])
   })
+
+  it('reads a usual paycheck from the newest three, so a raise shows', () => {
+    const before = ['2026-06-05', '2026-06-19', '2026-07-03', '2026-07-17', '2026-07-31']
+    const after = ['2026-08-14', '2026-08-28', '2026-09-11']
+    const deposits = [
+      ...before.map((date) => salary(date, 'HOOLI PAYROLL', 200_000)),
+      salary('2026-05-22', 'HOOLI PAYROLL', 200_000),
+      ...after.map((date) => salary(date, 'HOOLI PAYROLL', 230_000)),
+    ].sort((a, b) => a.date.localeCompare(b.date))
+    const [run] = runsOf(groupPaychecks(deposits), deposits.at(-1)!)
+    expect(usualPaycheckCents(run!)).toBe(230_000)
+  })
 })
 
 describe('currentPay', () => {
-  it('takes pay from the new job only, projected from its one paycheck as an estimate', () => {
+  it('takes pay from the new job only, projected cautiously from its one paycheck', () => {
     const pay = currentPay(history(), TODAY)
     expect(pay).toMatchObject({
       employer: { firstPaycheck: '2026-11-13', lastPaycheck: '2026-11-13', paychecks: 1 },
-      // A paycheck on the Friday before the 15th looks twice-monthly: $2,100 twice a month.
-      cadence: 'semimonth',
+      // One paycheck cannot show how often pay comes, so it is read as monthly,
+      // the guess that projects the least pay and the latest next payday.
+      cadence: 'month',
       estimate: true,
       paycheckCents: 210_000,
-      monthlyCents: 420_000,
-      nextPayday: '2026-11-30',
+      monthlyCents: 210_000,
+      nextPayday: '2026-12-13',
     })
     expect(pay.employer!.newest.name).toBe('INITECH PAYROLL')
+  })
+
+  it('reads a lone paycheck from a monthly payer as monthly, never as every two weeks', () => {
+    const pay = currentPay([salary('2026-11-06', 'UMBRELLA PAYROLL', 400_000)], TODAY)
+    expect(pay).toMatchObject({ cadence: 'month', estimate: true, monthlyCents: 400_000 })
+  })
+
+  it('takes the cadence from a saved paystub over what the paydays suggest', () => {
+    const fridays = ['2026-10-02', '2026-10-16', '2026-10-30'].map((date) =>
+      salary(date, 'ACME PAYROLL', 200_000),
+    )
+    expect(currentPay(fridays, TODAY).cadence).toBe('biweek')
+    expect(currentPay(fridays, TODAY, 'semimonth')).toMatchObject({
+      cadence: 'semimonth',
+      estimate: false,
+      monthlyCents: 400_000,
+    })
   })
 
   it('takes the cadence from a saved paystub while there is one paycheck', () => {
@@ -252,6 +288,55 @@ describe('currentPay', () => {
       nextPayday: '2026-11-27',
     })
     expect(pay.employer!.newest.name).toBe('PIED PIPER PAYROLL')
+  })
+
+  it('ignores a small payment weeks after a final check, rather than calling it a job', () => {
+    const globex = SEMIMONTHLY_2025.map((date) => salary(date, 'GLOBEX CORP PAYROLL', 210_000))
+    const final = salary('2025-12-31', 'GLOBEX CORP PAYROLL', 900_000)
+    // $12 more than 35 days on, far below a usual paycheck.
+    const trailer = salary('2026-02-10', 'GLOBEX CORP PAYROLL', 1_200)
+    const pay = currentPay([...globex, final, trailer], '2026-02-20')
+    expect(pay).toMatchObject({ employer: null, monthlyCents: null })
+    // A real paycheck that size after a gap is a job again.
+    const back = salary('2026-02-10', 'GLOBEX CORP PAYROLL', 210_000)
+    expect(currentPay([...globex, final, back], '2026-02-20').employer).not.toBeNull()
+  })
+
+  it('counts every job paying now, and the main one stays put whoever paid last', () => {
+    const main = ['2026-10-15', '2026-10-30', '2026-11-13'].map((date) =>
+      salary(date, 'INITECH PAYROLL', 200_000),
+    )
+    const side = ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'].map((date) =>
+      salary(date, 'BLUTH CO PAYROLL', 60_000),
+    )
+    const pay = currentPay([...main, ...side], TODAY)
+    expect(pay).toMatchObject({
+      cadence: 'semimonth',
+      paycheckCents: 200_000,
+      // $4,000 a month, plus $600 every two weeks (about $1,304 a month).
+      monthlyCents: 400_000 + 130_446,
+      // The side job pays first.
+      nextPayday: '2026-11-20',
+      nextPaycheckCents: 60_000,
+      estimate: false,
+    })
+    expect(pay.employers.map((e) => [e.newest.name, e.cadence, e.monthlyCents])).toEqual([
+      ['INITECH PAYROLL', 'semimonth', 400_000],
+      ['BLUTH CO PAYROLL', 'biweek', 130_446],
+    ])
+    // The side job paying last does not make it the main one.
+    const later = [...main, ...side, salary('2026-11-20', 'BLUTH CO PAYROLL', 60_000)]
+    const after = currentPay(later, '2026-11-21')
+    expect(after.employer!.newest.name).toBe('INITECH PAYROLL')
+    expect(after.monthlyCents).toBe(400_000 + 130_446)
+  })
+
+  it('calls the month an estimate while any job has paid only once', () => {
+    const main = ['2026-10-15', '2026-10-30', '2026-11-13'].map((date) =>
+      salary(date, 'INITECH PAYROLL', 200_000),
+    )
+    const pay = currentPay([...main, salary('2026-11-10', 'BLUTH CO PAYROLL', 60_000)], TODAY)
+    expect(pay).toMatchObject({ estimate: true, monthlyCents: 460_000 })
   })
 
   it('reads one contract payout as a one-off, and repeated contract pay as a job', () => {

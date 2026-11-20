@@ -52,7 +52,7 @@ const INTEREST_WORDS = /\b(interest|dividend)\b/i
 /** A line's code, most specific first, or '' without one. */
 const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 
-/** What a line with no bank code is, from its words alone. */
+/** What a line is from its words alone, when it has no bank code or only a broad income one. */
 function kindFromWords(tx: Deposit): DepositKind {
   const words = `${tx.name} ${tx.merchantName ?? ''}`
   if (PAYROLL_WORDS.test(words)) return 'payroll'
@@ -75,5 +75,7 @@ export function depositKind(tx: Deposit): DepositKind {
   if (code.startsWith('TRANSFER_IN')) return 'deposit'
   // Money in under any other code (a store's, a restaurant's) is money back.
   if (code && !code.startsWith('INCOME')) return 'refund'
-  return code ? 'other' : kindFromWords(tx)
+  // No code, or a broad income one ("INCOME", INCOME_OTHER_INCOME) that does
+  // not say what kind: the line's words still tell a paycheck.
+  return kindFromWords(tx)
 }

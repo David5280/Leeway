@@ -40,19 +40,36 @@ export const SPENDING_MIN_DAYS = 56
 /** Less bank history than this is too little to call any month typical. */
 export const SPENDING_LEAST_DAYS = 28
 
+/** One employer paying now, named as the app names its deposits. */
+export interface PayingEmployer {
+  name: string
+  cadence: Cadence
+  /** A usual paycheck from it. */
+  typicalPayCents: number
+  /** A usual month of pay from it. */
+  monthlyCents: number
+  since: IsoDate
+  nextPayday: IsoDate
+  /** True while it has paid once, so its cadence is a guess. */
+  estimate: boolean
+}
+
 export interface PaySchedule {
-  /** How often pay comes; null when no employer is paying now. */
+  /** How often the main employer pays; null when no employer is paying now. */
   cadence: Cadence | null
   /** Where the schedule came from; null when nothing gave one. */
   source: Exclude<PaydaySource, 'period_end'> | null
-  /** A usual paycheck from the current employer. */
+  /** A usual paycheck from the main employer, the one paying the most a month. */
   typicalPayCents: number | null
+  /** The soonest next payday from any employer. */
   nextPayday: IsoDate | null
-  /** True while one paycheck is all there is: the cadence, and so the month, are a projection. */
+  /** True while any employer has paid once: its cadence, and so the month, are a projection. */
   estimate: boolean
-  /** The current employer, named as the app names its deposits, or null. */
+  /** The main employer, named as the app names its deposits, or null. */
   employer: string | null
-  /** The current employer's first paycheck: where typical income starts. */
+  /** Every employer paying now, the main one first: a second job counts beside the first. */
+  employers: PayingEmployer[]
+  /** The first paycheck from any employer paying now: where typical income starts. */
   since: IsoDate | null
 }
 
@@ -147,6 +164,12 @@ async function monthlySpending(
   }
 }
 
+/** The first paycheck from any employer paying now, or null with none. */
+export function payingSince(pay: CurrentPay): IsoDate | null {
+  const firsts = pay.employers.map((employer) => employer.firstPaycheck).sort()
+  return firsts[0] ?? null
+}
+
 /** How often pay comes and when next, as the profile and an agent read it. */
 async function payScheduleOf(
   db: Db,
@@ -155,15 +178,27 @@ async function payScheduleOf(
   today: IsoDate,
 ): Promise<PaySchedule> {
   const payday = paydayFrom(pay, settings, today)
-  const employer = pay.employer
+  const source = payday.source === 'period_end' ? null : payday.source
+  // Named only as the app names deposits: never an account number or mask.
+  const masks = await accountMasks(db)
+  const employers = pay.employers.map((employer) => ({
+    name: merchantDisplayName(employer.newest, { masks }),
+    cadence: employer.cadence,
+    typicalPayCents: employer.paycheckCents,
+    monthlyCents: employer.monthlyCents,
+    since: employer.firstPaycheck,
+    nextPayday: employer.nextPayday,
+    estimate: employer.estimate,
+  }))
   return {
-    cadence: payday.source === 'period_end' ? null : payday.cadence,
-    source: payday.source === 'period_end' ? null : payday.source,
+    cadence: source ? payday.cadence : null,
+    source,
     typicalPayCents: pay.paycheckCents,
-    nextPayday: payday.source === 'period_end' ? null : payday.date,
+    nextPayday: source ? payday.date : null,
     estimate: payday.estimate,
-    employer: employer && merchantDisplayName(employer.newest, { masks: await accountMasks(db) }),
-    since: employer?.firstPaycheck ?? null,
+    employer: employers[0]?.name ?? null,
+    employers,
+    since: payingSince(pay),
   }
 }
 
@@ -175,7 +210,7 @@ export async function typicalMonth(
 ): Promise<TypicalMonth> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const currentPay = await readCurrentPay(db, settings, today)
-  const since = currentPay.employer?.firstPaycheck ?? null
+  const since = payingSince(currentPay)
   const window = spendingWindow(today, since, await firstTransactionDay(db))
   const spending = await monthlySpending(db, settings, window, today)
   return {

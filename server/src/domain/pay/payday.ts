@@ -11,7 +11,7 @@ export type PaydaySource = 'pay_period' | 'detected_income' | 'period_end'
 export interface Payday {
   date: IsoDate
   source: PaydaySource
-  /** A usual paycheck, when paychecks were found. */
+  /** A usual paycheck expected that day, when paychecks were found. */
   amountCents: number | null
   /** How often pay comes, when the pay period or the paychecks say. */
   cadence: Cadence | null
@@ -29,7 +29,7 @@ export const PAY_CADENCE: Record<'weekly' | 'biweekly' | 'semimonthly' | 'monthl
 
 /**
  * The next payday. A paycheck budget period knows it exactly. Otherwise the
- * current employer's paychecks say (see current.ts), and with no employer
+ * soonest paycheck from an employer paying now says (see current.ts), and with no employer
  * paying, the end of the budget period stands in, which the app says.
  */
 export function paydayFrom(pay: CurrentPay, settings: Settings, today: IsoDate): Payday {
@@ -49,7 +49,8 @@ export function paydayFrom(pay: CurrentPay, settings: Settings, today: IsoDate):
     return {
       date: pay.nextPayday,
       source: 'detected_income',
-      amountCents: pay.paycheckCents,
+      // With two jobs, the paycheck that lands on that day.
+      amountCents: pay.nextPaycheckCents,
       cadence: pay.cadence,
       estimate: pay.estimate,
     }

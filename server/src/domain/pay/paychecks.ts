@@ -1,21 +1,24 @@
 // Paychecks and the employers that pay them, from payroll deposits. Pure.
 //
 // A payroll can split one paycheck across accounts (a fixed part into one,
-// the rest into another), so deposits from the same payer on the same day
-// are one paycheck. A payer's paychecks form a run while they keep coming;
-// a gap of more than two cycles ends it, so a job that stopped, or a payer
-// that comes back after a long gap, is told apart from one still paying.
+// the rest into another), and the parts do not always post the same day, so
+// deposits from one payer within SPLIT_DAYS of each other are one paycheck.
+// A payer's paychecks form a run while they keep coming; a gap of more than
+// two cycles ends it, so a job that stopped, or a payer that comes back after
+// a long gap, is told apart from one still paying.
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { merchantKey } from '../merchantKey.js'
-import { likelyCadence, cadenceOfDates, CYCLE_DAYS } from './cadence.js'
+import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
 import type { Deposit } from './deposits.js'
+import type { SemimonthSchedule } from './semimonthly.js'
 
-/** One paycheck: every deposit one payer made on one day, added up. */
+/** One paycheck: every deposit one payer made within a few days, added up. */
 export interface Paycheck {
   /** Who paid, as merchantKey reads the bank's text. */
   payerKey: string
+  /** The day its first part landed. */
   date: IsoDate
   /** Positive: what the paycheck brought in, across every account it landed in. */
   amountCents: number
@@ -29,9 +32,11 @@ export interface EmployerRun {
   /** The newest deposit, for naming the payer the way the app names it. */
   newest: Deposit
   paychecks: Paycheck[]
-  /** How often it pays: from its paychecks, or the likeliest guess from one. */
+  /** How often it pays: from its paychecks, a paystub's, or a cautious guess from one. */
   cadence: Cadence
-  /** False while one paycheck is all there is, so the cadence is only a guess. */
+  /** For twice a month, the two days of the month it pays on; else null. */
+  schedule: SemimonthSchedule | null
+  /** False while the cadence is only a guess: one paycheck, or paydays that fit no cadence. */
   cadenceConfirmed: boolean
   /**
    * Paychecks left out of what a usual one is: more than OUTLIER_SHARE times
@@ -44,8 +49,24 @@ export interface EmployerRun {
 /** A paycheck this many times the middle one, at the end of a run, is not a usual one. */
 export const OUTLIER_SHARE = 2
 
+/** A lone paycheck under this share of the payer's usual one is a trailing payment, not a job. */
+export const TRAILER_SHARE = 0.25
+
 /** Cycles a payer may miss before its run counts as stopped. */
 export const MISSED_CYCLES = 2
+
+/** Deposits from one payer this many days apart or fewer are parts of one paycheck. */
+export const SPLIT_DAYS = 3
+
+/** How many of the newest paychecks a usual one is read from, so a raise shows within a month or so. */
+export const RECENT_PAYCHECKS = 3
+
+/**
+ * The cadence a lone paycheck is taken to come at, with no paystub to say:
+ * monthly, the guess that projects the least pay a month and the latest
+ * next payday, so an estimate never promises more than may come.
+ */
+export const CAUTIOUS_CADENCE: Cadence = 'month'
 
 /** Slack for a payroll that posts a few days late. */
 const SLACK_DAYS = 3
@@ -59,23 +80,29 @@ export function median(values: number[]): number {
     : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
 }
 
-/** Same-day payroll deposits from one payer, across every account, as one paycheck each. */
+/**
+ * Payroll deposits as paychecks: one payer's deposits within SPLIT_DAYS of a
+ * paycheck's first part, across every account, are that paycheck.
+ */
 export function groupPaychecks(deposits: Deposit[]): Paycheck[] {
-  const byDay = new Map<string, Paycheck>()
-  for (const deposit of deposits) {
-    const payerKey = merchantKey(deposit)
-    const key = `${payerKey}|${deposit.date}`
-    const paycheck = byDay.get(key) ?? {
-      payerKey,
-      date: deposit.date,
-      amountCents: 0,
-      depositIds: [],
-    }
+  const keyed = deposits
+    .map((deposit) => ({ deposit, payerKey: merchantKey(deposit) }))
+    .sort(
+      (a, b) =>
+        a.payerKey.localeCompare(b.payerKey) || a.deposit.date.localeCompare(b.deposit.date),
+    )
+  const paychecks: Paycheck[] = []
+  for (const { deposit, payerKey } of keyed) {
+    const last = paychecks.at(-1)
+    const joins = last?.payerKey === payerKey && daysBetween(last.date, deposit.date) <= SPLIT_DAYS
+    const paycheck = joins
+      ? last
+      : { payerKey, date: deposit.date, amountCents: 0, depositIds: [] as string[] }
+    if (!joins) paychecks.push(paycheck)
     paycheck.amountCents -= deposit.amountCents
     paycheck.depositIds.push(deposit.id)
-    byDay.set(key, paycheck)
   }
-  return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
+  return paychecks.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /** Whether a gap this long means the payer stopped: more than MISSED_CYCLES of its cycles. */
@@ -83,14 +110,16 @@ export function stoppedAfter(gapDays: number, cadence: Cadence): boolean {
   return gapDays > MISSED_CYCLES * CYCLE_DAYS[cadence] + SLACK_DAYS
 }
 
-/** The cadence of a run so far: from its dates once there are two, else a guess from the one. */
-function runCadence(
+/** How a run pays: a paystub's cadence first, else read from its paydays, else the cautious guess. */
+function runPattern(
   dates: IsoDate[],
-  hint: Cadence | null,
-): { cadence: Cadence; confirmed: boolean } {
-  const found = dates.length > 1 ? cadenceOfDates(dates) : null
-  if (found) return { cadence: found, confirmed: true }
-  return { cadence: hint ?? likelyCadence(dates.at(-1)!), confirmed: false }
+  given: Cadence | null,
+): Pick<EmployerRun, 'cadence' | 'schedule' | 'cadenceConfirmed'> {
+  const found = dates.length > 1 ? payPattern(dates) : null
+  // The owner's paystub says how often pay comes; a second paycheck still confirms it is landing.
+  if (given) return { ...givenPattern(given, dates), cadenceConfirmed: dates.length > 1 }
+  if (found) return { ...found, cadenceConfirmed: true }
+  return { cadence: CAUTIOUS_CADENCE, schedule: null, cadenceConfirmed: false }
 }
 
 /** Big paychecks at the end of a run: a final check, not what the job usually paid. */
@@ -101,67 +130,73 @@ function outliersOf(paychecks: Paycheck[]): Paycheck[] {
   return paychecks.slice(-2).filter((paycheck) => paycheck.amountCents > OUTLIER_SHARE * usual)
 }
 
+/** A run of a payer's paychecks, its cadence read from them (or given). */
+export function runOf(paychecks: Paycheck[], newest: Deposit, given: Cadence | null): EmployerRun {
+  return {
+    payerKey: paychecks[0]!.payerKey,
+    newest,
+    paychecks,
+    ...runPattern(
+      paychecks.map((p) => p.date),
+      given,
+    ),
+    outliers: outliersOf(paychecks),
+  }
+}
+
+/** The same run, read with the cadence a paystub gives. */
+export function withGivenCadence(run: EmployerRun, given: Cadence): EmployerRun {
+  return runOf(run.paychecks, run.newest, given)
+}
+
+/**
+ * Leaves out a lone paycheck far below what the run before it usually paid:
+ * a small payment trailing a final check by weeks, not a new job.
+ */
+function withoutTrailers(runs: EmployerRun[]): EmployerRun[] {
+  return runs.filter((run, i) => {
+    const before = runs[i - 1]
+    if (!before || run.paychecks.length > 1) return true
+    return run.paychecks[0]!.amountCents >= TRAILER_SHARE * usualPaycheckCents(before)
+  })
+}
+
 /**
  * Splits one payer's paychecks (oldest first) into runs, starting a new run
- * after a gap of more than MISSED_CYCLES cycles. `hint` is the cadence a
- * paystub gives, used while a run has a single paycheck.
+ * after a gap of more than MISSED_CYCLES cycles.
  */
-export function runsOf(
-  paychecks: Paycheck[],
-  newest: Deposit,
-  hint: Cadence | null = null,
-): EmployerRun[] {
+export function runsOf(paychecks: Paycheck[], newest: Deposit): EmployerRun[] {
   const groups: Paycheck[][] = []
   for (const paycheck of paychecks) {
     const run = groups.at(-1)
     const last = run?.at(-1)
-    const gap = last ? daysBetween(last.date, paycheck.date) : 0
-    if (
-      run &&
-      !stoppedAfter(
-        gap,
-        runCadence(
-          run.map((p) => p.date),
-          null,
-        ).cadence,
-      )
-    )
+    // Gaps alone are enough to say where a run breaks, and quick to read.
+    const cadence = run && (roughCadence(run.map((p) => p.date)) ?? CAUTIOUS_CADENCE)
+    if (run && last && !stoppedAfter(daysBetween(last.date, paycheck.date), cadence!)) {
       run.push(paycheck)
-    else groups.push([paycheck])
-  }
-  return groups.map((run) => {
-    const { cadence, confirmed } = runCadence(
-      run.map((p) => p.date),
-      hint,
-    )
-    return {
-      payerKey: run[0]!.payerKey,
-      newest,
-      paychecks: run,
-      cadence,
-      cadenceConfirmed: confirmed,
-      outliers: outliersOf(run),
+    } else {
+      groups.push([paycheck])
     }
-  })
+  }
+  return withoutTrailers(groups.map((run) => runOf(run, newest, null)))
 }
+
+/**
+ * The cycle a run whose cadence is only a guess is held to: twice a month, so
+ * the cautious monthly guess does not keep a lone paycheck current for two months.
+ */
+const GUESSED_CYCLE: Cadence = 'semimonth'
 
 /** Whether a run is still paying: its last paycheck is within MISSED_CYCLES cycles of today. */
 export function stillPaying(run: EmployerRun, today: IsoDate): boolean {
-  return !stoppedAfter(daysBetween(run.paychecks.at(-1)!.date, today), run.cadence)
+  const cycle = run.cadenceConfirmed ? run.cadence : GUESSED_CYCLE
+  return !stoppedAfter(daysBetween(run.paychecks.at(-1)!.date, today), cycle)
 }
 
-/** The run with the newest paycheck: who pays the owner now, if it is still paying. */
-export function currentRun(runs: EmployerRun[], today: IsoDate): EmployerRun | null {
-  const newest = [...runs].sort((a, b) =>
-    b.paychecks.at(-1)!.date.localeCompare(a.paychecks.at(-1)!.date),
-  )[0]
-  return newest && stillPaying(newest, today) ? newest : null
-}
-
-/** A usual paycheck in a run: the middle one, leaving out the outliers. */
+/** A usual paycheck in a run: the middle of the newest few, leaving out the outliers. */
 export function usualPaycheckCents(run: EmployerRun): number {
   const outliers = new Set(run.outliers)
   // Recent paychecks say most about pay now, after a raise.
-  const usual = run.paychecks.filter((paycheck) => !outliers.has(paycheck)).slice(-6)
+  const usual = run.paychecks.filter((paycheck) => !outliers.has(paycheck)).slice(-RECENT_PAYCHECKS)
   return median(usual.map((paycheck) => paycheck.amountCents))
 }

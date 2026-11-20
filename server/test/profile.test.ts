@@ -115,6 +115,7 @@ describe('getFinancialProfile', () => {
         nextPayday: null,
         estimate: false,
         employer: null,
+        employers: [],
         since: null,
       },
       monthly: {
@@ -226,6 +227,37 @@ describe('getFinancialProfile', () => {
     })
   })
 
+  it('counts a second job beside the first, naming each without account numbers', async () => {
+    const checking = await insertBankAccount(ctx.db, { subtype: 'checking', mask: '4821' })
+    const pay = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, checking.accountId, {
+        date,
+        name,
+        amountCents: -amountCents,
+        detailed: 'INCOME_SALARY',
+      })
+    for (const date of ['2026-10-15', '2026-10-30', '2026-11-13']) {
+      await pay(date, 'INITECH PAYROLL', 200_000)
+    }
+    for (const date of ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
+      await pay(date, 'BLUTH CO PAYROLL ACCT 4821', 60_000)
+    }
+    const result = await profile()
+    // $4,000 a month plus $600 every two weeks.
+    expect(result.monthly.incomeCents).toBe(400_000 + 130_446)
+    expect(result.pay).toMatchObject({
+      cadence: 'semimonth',
+      employer: 'Initech Payroll',
+      nextPayday: '2026-11-20',
+      since: '2026-09-25',
+    })
+    expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
+      ['Initech Payroll', 'semimonth', 400_000],
+      ['Bluth Co Payroll', 'biweek', 130_446],
+    ])
+    expect(JSON.stringify(result.pay)).not.toContain('4821')
+  })
+
   it('counts only the essential categories the owner picked, and their target', async () => {
     const { rent } = await steadyOwner()
     await call('update_settings', {
@@ -330,6 +362,7 @@ describe('getFinancialProfile', () => {
       nextPayday: '2026-11-27',
       estimate: false,
       employer: null,
+      employers: [],
       since: null,
     })
   })

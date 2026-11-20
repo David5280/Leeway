@@ -92,6 +92,7 @@ export function retirementProfile(
       nextPayday: null,
       estimate: false,
       employer: null,
+      employers: [],
       since: null,
     },
     monthly: {
