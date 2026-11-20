@@ -1,10 +1,13 @@
 // "Heads up": everything that needs the owner, worst first, in one compact
 // card under the hero, and nothing at all when nothing does: account alerts, banks that stopped syncing, budgets,
 // transactions to sort, then this month's AI spending alert. It keeps to a
-// few rows and leads to the Alerts page for the rest.
+// few rows and leads to the Alerts page for the rest. Account alerts can be
+// hidden from home here.
 
 import { Link } from 'react-router-dom'
+import { useHomeAlerts } from '../api/homeAlerts'
 import { useAction } from '../api/hooks'
+import { HideableRow } from '../components/AccountAlerts'
 import { AiSpendAlert } from '../components/AiSpendAlert'
 import { Card } from '../components/design/Card'
 import { Icon } from '../components/ui'
@@ -16,10 +19,11 @@ import type { WidgetProps } from './types'
 export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
-  const accountAlerts = useAction('list_alerts')
+  // The home list: every account alert less those the owner hid from home.
+  const accountAlerts = useHomeAlerts()
   const aiAlert = useAction('get_ai_usage').data?.alert
   const items = headsUpItems({
-    accountAlerts: accountAlerts.data ?? [],
+    accountAlerts: accountAlerts.data?.alerts ?? [],
     connections: connections.data ?? [],
     budget,
     money,
@@ -30,7 +34,8 @@ export function AlertsWidget({ budget }: WidgetProps) {
   const more = total - ALERT_ROWS
   return (
     <Card static="list" label="Heads up" className={`tight ${headsUpTint(items)}`}>
-      <HeadsUpRows items={items.slice(0, ALERT_ROWS)} />
+      {/* With another row left, hiding the last account alert keeps the card. */}
+      <HeadsUpRows items={items.slice(0, ALERT_ROWS)} hideable={{ regionStays: total > 1 }} />
       {aiAlert && items.length < ALERT_ROWS && <AiSpendAlert alert={aiAlert} linked />}
       {more > 0 && (
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>
@@ -45,18 +50,34 @@ export function AlertsWidget({ budget }: WidgetProps) {
   )
 }
 
-/** Heads-up items as rows, each opening where it can be dealt with. */
-export function HeadsUpRows({ items }: { items: HeadsUpItem[] }) {
+/**
+ * Heads-up items as rows, each opening where it can be dealt with. On the home
+ * screen (`hideable`), each account alert also has a button that hides it
+ * there; `regionStays` says whether the card outlives its last such row.
+ */
+export function HeadsUpRows({
+  items,
+  hideable,
+}: {
+  items: HeadsUpItem[]
+  hideable?: { regionStays: boolean }
+}) {
   return (
     <>
       {items.map((item) => (
-        <Link key={item.key} to={item.to} className="alert-row clickrow">
-          <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
-            <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
-          </span>
-          <span className="grow">{item.text}</span>
-          <span className="small muted strong hide-sm eyebrow">{item.level}</span>
-        </Link>
+        <HideableRow
+          key={item.key}
+          alert={hideable ? item.alert : undefined}
+          regionStays={hideable?.regionStays}
+        >
+          <Link to={item.to} className="alert-row clickrow">
+            <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
+              <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
+            </span>
+            <span className="grow">{item.text}</span>
+            <span className="small muted strong hide-sm eyebrow">{item.level}</span>
+          </Link>
+        </HideableRow>
       ))}
     </>
   )

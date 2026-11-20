@@ -12,6 +12,7 @@ import {
   renderSignedIn,
   transaction,
 } from '../test/fake'
+import { homeAlertHandlers, homeList } from '../test/homeAlerts'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
 import { CategoriesWidget, categoryStatus, rowNote } from './Categories'
@@ -361,7 +362,7 @@ describe('AlertsWidget', () => {
   it('takes no room at all when nothing needs the owner', async () => {
     const server = fakeServer({
       list_connections: () => [connection({ id: 'a' })],
-      list_alerts: () => [],
+      list_home_alerts: () => homeList([]),
       get_ai_usage: () => ({ alert: null }),
     })
     const { container } = renderSignedIn(
@@ -449,11 +450,13 @@ describe('AlertsWidget', () => {
   it('puts account alerts before everything else, each opening its account', async () => {
     fakeServer({
       list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
-      list_alerts: () =>
-        alertsFor([
-          bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
-          bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
-        ]),
+      list_home_alerts: () =>
+        homeList(
+          alertsFor([
+            bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+            bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
+          ]),
+        ),
     })
     renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
     await screen.findByText('Everyday is overdrawn by $42.10.')
@@ -473,15 +476,83 @@ describe('AlertsWidget', () => {
   it('is amber when the only account alert is a warning', async () => {
     fakeServer({
       list_connections: () => [],
-      list_alerts: () =>
-        alertsFor([
-          bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
-        ]),
+      list_home_alerts: () =>
+        homeList(
+          alertsFor([
+            bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+          ]),
+        ),
     })
     renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
     await screen.findByText(/Bills is down to/)
     expect(region()).toHaveClass('warn-card')
     expect(within(region()).queryByRole('link', { name: 'See all alerts' })).toBeNull()
+  })
+
+  it('hides an account alert from home at once, leaving the rest and the other rows', async () => {
+    const { handlers } = homeAlertHandlers(
+      alertsFor([
+        bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+        bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
+      ]),
+    )
+    const server = fakeServer({
+      ...handlers,
+      list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
+    })
+    const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }])
+    renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    // One button per account alert, named by it; banks and budgets are not hidden from here.
+    const buttons = within(region()).getAllByRole('button', { name: /^Hide from home: / })
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]).toHaveAccessibleName('Hide from home: Everyday is overdrawn by $42.10.')
+
+    await userEvent.click(buttons[0]!)
+    await waitFor(() =>
+      expect(screen.queryByText('Everyday is overdrawn by $42.10.')).not.toBeInTheDocument(),
+    )
+    // Focus moves on to the next alert's button.
+    expect(buttons[1]).toHaveFocus()
+    expect(server.actions('hide_home_alert')).toEqual([{ kind: 'overdrawn', accountId: 'short' }])
+    expect(
+      within(region())
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/accounts/low', '/settings/banks', '/budgets/cat-dining-out'])
+  })
+
+  it('keeps the card, and focus in it, when a row is left after the last alert is hidden', async () => {
+    const { handlers } = homeAlertHandlers(
+      alertsFor([bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 })]),
+    )
+    fakeServer({
+      ...handlers,
+      list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    await userEvent.click(await screen.findByRole('button', { name: /^Hide from home: / }))
+    await waitFor(() => expect(region()).not.toHaveTextContent('Everyday is overdrawn'))
+    expect(region()).toHaveTextContent('Chase needs you to log in again')
+    expect(region()).toHaveFocus()
+  })
+
+  it('goes altogether once its only row is hidden, leaving focus on the heading below', async () => {
+    const { handlers } = homeAlertHandlers(
+      alertsFor([bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 })]),
+    )
+    fakeServer({ ...handlers, list_connections: () => [] })
+    renderSignedIn(
+      <>
+        <AlertsWidget budget={budgetFor(categories, [])} offset={0} />
+        <h1>November</h1>
+      </>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /^Hide from home: / }))
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('heading', { name: 'November' })).toHaveFocus()
   })
 
   it('still shows budget alerts when the banks cannot be read', async () => {

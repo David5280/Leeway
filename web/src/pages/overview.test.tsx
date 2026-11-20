@@ -18,6 +18,7 @@ import {
   settings,
   type Handlers,
 } from '../test/fake'
+import { homeList } from '../test/homeAlerts'
 import { DEFAULT_LAYOUT, moveWidget, WIDGET_LIBRARY } from '../widgets/library'
 import { Overview } from './Overview'
 
@@ -216,7 +217,11 @@ describe('account alerts on the Overview', () => {
 
   it('says each alert once, in Heads up, with no banner above the hero', async () => {
     const withSummary = layout(EDITABLE_WIDGETS)
-    serve(withSummary, { list_alerts: () => alerts, get_summary: alertSummary })
+    serve(withSummary, {
+      list_alerts: () => alerts,
+      list_home_alerts: () => homeList(alerts),
+      get_summary: alertSummary,
+    })
     renderOverview(withSummary)
     const headsUp = await screen.findByRole('region', { name: 'Heads up' })
     await within(headsUp).findByText('Everyday is overdrawn by $42.10.')
@@ -232,7 +237,7 @@ describe('account alerts on the Overview', () => {
 
   it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {
     const hidden = layout([{ type: 'leeway' }, { type: 'alerts', visible: false }])
-    serve(hidden, { list_alerts: () => alerts })
+    serve(hidden, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
     renderOverview(hidden)
     const banner = await screen.findByRole('region', { name: 'Account alerts' })
     expect(within(banner).getByText('Everyday is overdrawn by $42.10.')).toBeInTheDocument()

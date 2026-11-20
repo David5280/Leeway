@@ -16,6 +16,8 @@ export interface HeadsUpItem {
   /** A short word for the kind, shown beside it on wider screens. */
   level: string
   to: string
+  /** The account alert an account row stands for, which home may hide. */
+  alert?: AccountAlert
 }
 
 const BUDGET_LABELS: Record<Budget['alerts'][number]['level'], string> = {
@@ -43,6 +45,7 @@ export function headsUpItems({
     text: alert.message,
     level: ACCOUNT_ALERT_LABELS[alert.kind],
     to: accountDetailPath(alert.accountId),
+    alert,
   }))
   for (const connection of connections) {
     const text = bankAlertText(connection)

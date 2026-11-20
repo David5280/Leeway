@@ -2,12 +2,12 @@
 // every route the app answers (web/src/routes.ts), with long names seeded,
 // and the forms people open on them.
 
-import { createHash, randomBytes } from 'node:crypto'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
-import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
+import { CONNECT_SCREEN } from './connect-screen'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
@@ -126,10 +126,6 @@ export const SCREENS: Screen[] = [
   })),
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
-  at('inbox', '/inbox', {
-    name: '/inbox with long alerts, read, unread and cleared',
-    before: fakeLongInbox,
-  }),
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {
     name: '/transactions with the add menu open',
@@ -265,12 +261,6 @@ export const SCREENS: Screen[] = [
     name: '/settings/accounts adding an account by hand',
     then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),
   }),
-  at('settings', '/settings/notifications', {
-    name: '/settings/notifications with push on this device',
-    // A fake browser and push service: no test reaches a real one (notifications.ts).
-    before: pushOnThisDevice,
-    then: seePushOn,
-  }),
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',
     then: revealKey,
@@ -292,39 +282,9 @@ export const SCREENS: Screen[] = [
     then: revealWidgetToken,
   }),
   ...BANK_SCREENS,
+  ...ALERT_SCREENS,
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),
-  {
-    name: "an assistant's connect screen",
-    route: 'connect',
-    path: (_, request) => connectAddress(request),
-    then: (page) =>
-      expect(page.getByRole('heading', { name: /^Connect .+ to Leeway\?$/ })).toBeVisible(),
-  },
+  CONNECT_SCREEN,
 ]
-
-/** A sign-in screen an assistant is sent to, as Claude would be (see connect.spec.ts). */
-async function connectAddress(request: APIRequestContext): Promise<string> {
-  const callback = 'http://127.0.0.1:33418/callback'
-  const server = await (await request.get('/.well-known/oauth-authorization-server')).json()
-  const resource = await (await request.get('/.well-known/oauth-protected-resource/mcp')).json()
-  const app = await (
-    await request.post('/oauth/register', {
-      data: { client_name: 'Claude on the laptop upstairs', redirect_uris: [callback] },
-    })
-  ).json()
-  const verifier = randomBytes(32).toString('base64url')
-  const address = new URL(server.authorization_endpoint)
-  address.search = new URLSearchParams({
-    response_type: 'code',
-    client_id: app.client_id,
-    redirect_uri: callback,
-    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256',
-    state: 'layout-guard',
-    scope: 'read write',
-    resource: resource.resource,
-  }).toString()
-  return address.toString()
-}
