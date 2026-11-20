@@ -38,6 +38,18 @@ export function pastAverage(history: { cents: number; current: boolean }[]): num
   return Math.round(past.reduce((sum, h) => sum + h.cents, 0) / past.length)
 }
 
+/** The chart's one question: against the budget when there is one, else against the usual. */
+export function historyQuestion(
+  category: Pick<Category, 'kind'>,
+  budget: number | null,
+  kind: string,
+): string {
+  if (category.kind !== 'expense') {
+    return `Last six ${kind === 'monthly' ? 'months' : 'periods'}`
+  }
+  return budget ? 'Are you staying under budget?' : 'Is this more than usual?'
+}
+
 export function History({
   category,
   row,
@@ -57,7 +69,7 @@ export function History({
   const budget = row?.budgetCents ?? null
   return (
     <Card static="chart" label="Last six periods" className="span-wide stack-sm">
-      <h2>Last six {settings.period.kind === 'monthly' ? 'months' : 'periods'}</h2>
+      <h2>{historyQuestion(category, budget, settings.period.kind)}</h2>
       {average !== null && (
         <span className="small muted">
           Average <Money cents={average} />
@@ -74,7 +86,9 @@ export function History({
         <PeriodBars
           label={`${category.name} by period`}
           bars={history}
-          budgetCents={budget}
+          // Without a budget, each period reads against the usual one.
+          budgetCents={budget ?? average}
+          levelName={budget ? 'Budget' : 'Usual'}
           color={category.color}
         />
       )}

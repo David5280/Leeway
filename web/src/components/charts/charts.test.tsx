@@ -86,6 +86,17 @@ describe('PeriodBars', () => {
     )
   })
 
+  it('names the level the usual period when there is no budget', () => {
+    fakeServer({})
+    renderSignedIn(
+      <PeriodBars bars={bars} budgetCents={56_000} levelName="Usual" color="teal" label="Coffee" />,
+    )
+    expect(screen.getByText('Usual')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Coffee' })).toHaveAccessibleDescription(
+      'Sep $500, Oct $620, Nov $340. Usual $560.',
+    )
+  })
+
   it('reads out the bar under the pointer, marking the running period as so far', () => {
     fakeServer({})
     renderSignedIn(<PeriodBars bars={bars} budgetCents={null} color="teal" label="Groceries" />)

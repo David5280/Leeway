@@ -493,7 +493,9 @@ describe('Category page', () => {
       const server = serve()
       renderCategory()
       const history = await screen.findByRole('region', { name: 'Last six periods' })
-      expect(within(history).getByRole('heading', { name: 'Last six months' })).toBeInTheDocument()
+      expect(
+        within(history).getByRole('heading', { name: 'Are you staying under budget?' }),
+      ).toBeInTheDocument()
       // (500 + 620 + 580 + 550 + 600) / 5 = 570
       expect(
         await within(history).findByText(sentence('Average $570 against a $600 budget')),
@@ -510,6 +512,10 @@ describe('Category page', () => {
       renderCategory(coffee.id)
       const history = await screen.findByRole('region', { name: 'Last six periods' })
       expect(await within(history).findByText(sentence('Average $0'))).toBeInTheDocument()
+      // With no budget, the question is whether this is more than usual.
+      expect(
+        within(history).getByRole('heading', { name: 'Is this more than usual?' }),
+      ).toBeInTheDocument()
     })
 
     it('flips income history to positive amounts', async () => {
@@ -519,11 +525,12 @@ describe('Category page', () => {
       expect(
         await within(history).findByText(sentence('Average $5,020 against a $5,000 budget')),
       ).toBeInTheDocument()
+      expect(within(history).getByRole('heading', { name: 'Last six months' })).toBeInTheDocument()
     })
 
     it('calls them periods when the budget is not monthly', async () => {
       serve()
-      renderCategory(groceries.id, {
+      renderCategory(paycheck.id, {
         settings: settingsWith({ period: { kind: 'weekly' } }),
       })
       expect(await screen.findByRole('heading', { name: 'Last six periods' })).toBeInTheDocument()

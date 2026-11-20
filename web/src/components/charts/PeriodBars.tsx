@@ -70,11 +70,15 @@ export function PeriodBars({
   budgetCents,
   color,
   label,
+  levelName = 'Budget',
 }: {
   bars: PeriodBar[]
+  /** The dashed level each bar reads against; null leaves it out. */
   budgetCents: number | null
   color: string
   label: string
+  /** What the level is, written at its end: the budget, or the usual period without one. */
+  levelName?: string
 }) {
   const { settings, money } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(540)
@@ -101,7 +105,7 @@ export function PeriodBars({
   const dateLabels = new Set(
     axisIndices(bars.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
   )
-  const budgetText = budget !== null ? `. Budget ${money(budget)}.` : ''
+  const budgetText = budget !== null ? `. ${levelName} ${money(budget)}.` : ''
 
   return (
     <ChartFrame
@@ -146,7 +150,7 @@ export function PeriodBars({
           <EndLabel
             x={right + 10}
             y={y(budget) - 6}
-            name="Budget"
+            name={levelName}
             value={<Money as="tspan" cents={budget} />}
           />
         </>
