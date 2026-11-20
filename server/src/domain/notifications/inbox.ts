@@ -85,6 +85,38 @@ export async function recordCandidates(db: Db, candidates: Candidate[], now: Dat
 }
 
 /**
+ * Moves notifications of one kind to new subjects, when what they are about
+ * is known by a new id (a charge the bank sends again under a new id). One
+ * already kept under the new subject gives way to the one moved, so the
+ * notification is kept once, with its read and push state, and not pushed
+ * again.
+ */
+export async function moveSubjects(
+  db: Db,
+  kind: NotificationKind,
+  moves: { from: string; to: string }[],
+): Promise<void> {
+  const changed = [
+    ...new Map(moves.filter(({ from, to }) => from !== to).map((m) => [m.to, m])).values(),
+  ]
+  if (changed.length === 0) return
+  const from = changed.map((move) => move.from)
+  const to = changed.map((move) => move.to)
+  await db.query(
+    `DELETE FROM notifications n USING unnest($2::text[], $3::text[]) AS m(old, new)
+     WHERE n.kind = $1 AND n.subject = m.new
+       AND EXISTS (SELECT 1 FROM notifications o WHERE o.kind = $1 AND o.subject = m.old)`,
+    [kind, from, to],
+  )
+  await db.query(
+    `UPDATE notifications n SET subject = m.new
+     FROM unnest($2::text[], $3::text[]) AS m(old, new)
+     WHERE n.kind = $1 AND n.subject = m.old`,
+    [kind, from, to],
+  )
+}
+
+/**
  * Marks conditions of these kinds that the data no longer calls for as
  * cleared. Only kinds that were checked are touched: a kind turned off keeps
  * its notifications as they were.

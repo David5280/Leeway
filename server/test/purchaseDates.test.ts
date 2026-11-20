@@ -12,7 +12,7 @@ import {
   type PurchaseDatesResult,
 } from '../src/domain/purchaseDates.js'
 import { actionCaller } from './actionCaller.js'
-import { bankTx, FakeBank, page } from './fakeBank.js'
+import { bankTx, FakeBank, newLink, page } from './fakeBank.js'
 import { createTestContext, resetData } from './helpers.js'
 
 let ctx: AppContext
@@ -60,7 +60,7 @@ describe('catching up purchase dates for banks linked earlier', () => {
     const rent = bankTx({ name: 'Rent', amountCents: 150000, date: '2026-11-01' })
     const gas = bankTx({ name: 'Gas', amountCents: 4000, date: '2026-11-05' })
     bank.pages = [page({ added: [coffee, rent, gas] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     await linkedBeforePurchaseDates()
     const cursorBefore = await cursors()
 
@@ -118,7 +118,7 @@ describe('catching up purchase dates for banks linked earlier', () => {
   it('runs once per bank: a second catch-up asks no bank for anything', async () => {
     const coffee = bankTx({ name: 'Coffee', amountCents: 500, date: '2026-11-10' })
     bank.pages = [page({ added: [coffee] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     await linkedBeforePurchaseDates()
 
     bank.pages = [page({ added: [{ ...coffee, date: '2026-11-08' }] })]
@@ -131,7 +131,7 @@ describe('catching up purchase dates for banks linked earlier', () => {
 
   it('leaves banks linked from now on alone, since their dates are already right', async () => {
     bank.pages = [page({ added: [bankTx({ name: 'Coffee', amountCents: 500 })] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     expect(await correctedBanks()).toEqual([true])
     const asked = bank.cursorsSeen.length
     expect(await catchUp()).toEqual([])
@@ -141,9 +141,9 @@ describe('catching up purchase dates for banks linked earlier', () => {
   it('matches by the bank id within the connection, never another bank with the same ids', async () => {
     const coffee = bankTx({ name: 'Coffee', amountCents: 500, date: '2026-11-10' })
     bank.pages = [page({ added: [coffee] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     bank.pages = [page({ added: [coffee] })]
-    await linkBank(ctx, 'public-2')
+    await linkBank(ctx, newLink('public-2'))
     await linkedBeforePurchaseDates()
 
     // Only the first connection's history says the date moved.
@@ -156,9 +156,9 @@ describe('catching up purchase dates for banks linked earlier', () => {
   it('carries on past a bank that fails, and tries that bank again next time', async () => {
     const coffee = bankTx({ name: 'Coffee', amountCents: 500, date: '2026-11-10' })
     bank.pages = [page({ added: [coffee] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     bank.pages = [page({ added: [coffee] })]
-    await linkBank(ctx, 'public-2')
+    await linkBank(ctx, newLink('public-2'))
     await linkedBeforePurchaseDates()
 
     const sync = bank.syncTransactions.bind(bank)
@@ -188,7 +188,7 @@ describe('catching up purchase dates for banks linked earlier', () => {
 
   it('lets an unexpected failure through, leaving the bank to try again', async () => {
     bank.pages = [page({ added: [bankTx({ name: 'Coffee', amountCents: 500 })] })]
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     await linkedBeforePurchaseDates()
     bank.syncTransactions = async () => {
       throw new Error('boom')
@@ -199,14 +199,14 @@ describe('catching up purchase dates for banks linked earlier', () => {
 
   it('handles a bank with no transactions, and no banks at all', async () => {
     expect(await catchUp()).toEqual([])
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     await linkedBeforePurchaseDates()
     expect((await catchUp())[0]).toMatchObject({ checked: 0, changed: 0 })
     expect(await correctedBanks()).toEqual([true])
   })
 
   it('does nothing when bank sync is not set up', async () => {
-    await linkBank(ctx, 'public-1')
+    await linkBank(ctx, newLink('public-1'))
     await linkedBeforePurchaseDates()
     ctx.bank = null
     expect(await catchUp()).toEqual([])

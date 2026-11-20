@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { A, B, C, everyAccount, group, renderAccounts, server } from '../test/accounts'
+import { A, B, C, checking, everyAccount, group, renderAccounts, server } from '../test/accounts'
 import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
 import { worthPoint } from '../test/worth'
 
@@ -148,5 +148,57 @@ describe('Accounts screen', () => {
     )
     renderAccounts()
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
+  })
+})
+
+describe('accounts the bank no longer shares', () => {
+  const old = account({
+    id: 'dddddddd-0000-4000-8000-000000000004',
+    name: 'Old savings',
+    institutionName: 'Chase',
+    balanceCents: 500000,
+    subtype: 'savings',
+    balanceUpdatedAt: '2026-11-03T15:00:00Z',
+    unsharedAt: '2026-11-04T15:00:00Z',
+  })
+
+  it('shows them apart, out of the total and the cards, with a word in the summary', async () => {
+    server([checking, old])
+    renderAccounts()
+    const together = await screen.findByRole('region', { name: 'All accounts together' })
+    // Only Everyday adds up: $2,500.00, not $7,500.00.
+    expect(together).toHaveTextContent('$2,500.00')
+    expect(screen.queryByRole('link', { name: /Old savings/ })).not.toBeInTheDocument()
+    const apart = screen.getByRole('region', { name: 'No longer shared' })
+    expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
+      'No longer shared from Chase',
+    )
+    expect(
+      await screen.findByText(
+        'Old savings is no longer shared from Chase and is left out of these figures.',
+      ),
+    ).toBeInTheDocument()
+    // The math leaves it out too.
+    await userEvent.click(within(together).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
+    expect(within(sheet).queryByText('Old savings')).not.toBeInTheDocument()
+  })
+
+  it('offers no select for one shared account, and keeps the unshared out of picking', async () => {
+    server([checking, old])
+    renderAccounts()
+    await screen.findByRole('region', { name: 'No longer shared' })
+    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
+  })
+
+  it('says there is no current balance when every account is no longer shared', async () => {
+    server([old])
+    renderAccounts()
+    expect(
+      await screen.findByText(
+        'Old savings is no longer shared from Chase, so it has no current balance.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'No longer shared' })).toBeInTheDocument()
   })
 })

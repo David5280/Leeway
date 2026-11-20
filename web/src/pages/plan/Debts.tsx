@@ -6,7 +6,7 @@ import { useState } from 'react'
 import type { DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
-import { isOwed } from '../../lib/accounts'
+import { isCounted, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
@@ -94,7 +94,8 @@ export function DebtsSection() {
   const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
   const accounts = useAction('list_accounts')
   if (!accounts.data) return <LoadingOrError error={accounts.error} />
-  const debts = accounts.data.filter((a) => isOwed(a) && !a.hidden && (a.balanceCents ?? 0) > 0)
+  // The ones the payoff plan counts: shown, still shared by the bank, and owing.
+  const debts = accounts.data.filter((a) => isOwed(a) && isCounted(a) && (a.balanceCents ?? 0) > 0)
   if (debts.length === 0) {
     return (
       <Card static="empty" label="Debts">

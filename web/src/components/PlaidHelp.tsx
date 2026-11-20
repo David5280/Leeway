@@ -80,8 +80,9 @@ export function RealBanks() {
       <ul className="how-to">
         <li>
           <strong>In the US and Canada</strong>, a new Plaid account can use the free Trial plan,
-          for up to 10 bank logins. Plaid approves most right after an identity check, and answers
-          the rest by email within 2 to 3 business days.
+          for a set number of bank logins that its dashboard shows. Every login linked counts for
+          good, even after it is removed. Plaid approves most right after an identity check, and
+          answers the rest by email within 2 to 3 business days.
         </li>
         <li>
           <strong>Elsewhere, or for more banks</strong>, choose Get production access in the Plaid

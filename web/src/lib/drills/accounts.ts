@@ -5,7 +5,7 @@
 
 import type { Account, NetWorth, Transaction } from '../../api/client'
 import { combine, utilization, UTILIZATION_WATCH } from '../accountCards'
-import { accountDetailPath } from '../accounts'
+import { accountDetailPath, isCounted } from '../accounts'
 import { addDays } from '../dates'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
 import { startReference, worthChange } from '../worth'
@@ -190,14 +190,14 @@ function combinedMath(accounts: readonly Account[]): DrillDown['math'] {
 
 /** Every counted account together, with net worth's history as the trend. */
 export function allAccountsDrill(accounts: readonly Account[], netWorth?: NetWorth): DrillDown {
-  const counted = accounts.filter((account) => !account.hidden)
+  const counted = accounts.filter(isCounted)
   const history = netWorth?.history ?? []
   return {
     title: 'Your accounts',
     figure: { cents: combine(counted).netCents },
     math: {
       ...combinedMath(counted),
-      note: 'Accounts you ignore for budgets are left out, as they are from net worth.',
+      note: 'Accounts you ignore for budgets, and any your bank no longer shares, are left out, as they are from net worth.',
     },
     trend:
       history.length > 1

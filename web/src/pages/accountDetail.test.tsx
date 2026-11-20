@@ -113,6 +113,29 @@ describe("an account's own page", () => {
     expect(back).toHaveAttribute('href', '/accounts')
   })
 
+  it('shows an account the bank no longer shares as such, never its old balance as current', async () => {
+    const old = account({
+      id: 'old',
+      name: 'Old savings',
+      institutionName: 'Chase',
+      subtype: 'savings',
+      balanceCents: 500000,
+      balanceUpdatedAt: '2026-11-03T15:00:00Z',
+      unsharedAt: '2026-11-04T15:00:00Z',
+    })
+    server([checking, old])
+    renderAccount('old')
+    await screen.findByRole('heading', { name: 'Old savings' })
+    const apart = screen.getByRole('region', { name: 'No longer shared' })
+    expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
+      'No longer shared from Chase',
+    )
+    expect(apart).toHaveTextContent('Left out of every total')
+    // No balance hero and no balance line: both would read the old balance as today's.
+    expect(screen.queryByRole('region', { name: /balance$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Balance over time' })).not.toBeInTheDocument()
+  })
+
   it('leads with the balance against its usual, opening the math behind it', async () => {
     server()
     renderAccount('chk')

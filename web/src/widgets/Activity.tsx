@@ -1,18 +1,20 @@
 // Where the money went: recent transactions, accounts and top merchants.
 
-import { Card } from '../components/design/Card'
+import type { Account } from '../api/client'
 import { useAction } from '../api/hooks'
+import { Card } from '../components/design/Card'
 import { Money } from '../components/design/Money'
 import { SectionHead } from '../components/design/SectionHead'
 import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
 import { ErrorNote, Icon, Progress } from '../components/ui'
 import { kindIcon } from '../lib/accountCards'
-import { accountDetail, isOwed, nameUnderBank, overdrawn } from '../lib/accounts'
+import { accountDetail, isOwed, isShared, nameUnderBank, overdrawn } from '../lib/accounts'
 import { allAccountsDrill } from '../lib/drills/accounts'
 import { recentDrill } from '../lib/drills/activity'
 import { merchantsDrill } from '../lib/drills/plan'
 import { useApp } from '../lib/app'
+import { calendarDate } from '../lib/format'
 import type { WidgetProps } from './types'
 
 export function RecentWidget({ budget }: WidgetProps) {
@@ -72,7 +74,10 @@ export function AccountsWidget() {
     >
       {head}
       {accounts.data.map((account) => (
-        <span key={account.id} className={`list-row account-row ${account.hidden ? 'muted' : ''}`}>
+        <span
+          key={account.id}
+          className={`list-row account-row ${account.hidden || !isShared(account) ? 'muted' : ''}`}
+        >
           <span className="kind-chip" aria-hidden="true">
             <Icon name={kindIcon(account.kind)} size={16} />
           </span>
@@ -81,27 +86,38 @@ export function AccountsWidget() {
             <span className="small muted">
               {accountDetail(account)}
               {account.hidden && ' · ignored for budgets'}
+              {!isShared(account) && ' · no longer shared'}
             </span>
           </span>
-          <Sparkline values={lines.get(account.id) ?? []} />
+          {/* An unshared balance stopped changing, so its line would only run flat to today. */}
+          <Sparkline values={isShared(account) ? (lines.get(account.id) ?? []) : []} />
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
-            {account.balanceCents === null ? (
-              <span>No balance</span>
-            ) : (
-              <Money
-                cents={account.balanceCents}
-                precision="cents"
-                tone={overdrawn(account) ? 'problem' : undefined}
-              />
-            )}
-            {isOwed(account) && account.balanceCents !== null && (
-              <span className="small muted">owed</span>
-            )}
-            {overdrawn(account) && <span className="small over strong">Overdrawn</span>}
+            <AccountBalance account={account} />
           </span>
         </span>
       ))}
     </Card>
+  )
+}
+
+/** An account's balance in its row, or, for one the bank no longer shares, when it was last read. */
+function AccountBalance({ account }: { account: Account }) {
+  // An old balance is never shown as if it were current.
+  if (!isShared(account)) {
+    const lastRead = account.balanceUpdatedAt ?? account.unsharedAt!
+    return <span className="small">Last updated {calendarDate(lastRead)}</span>
+  }
+  if (account.balanceCents === null) return <span>No balance</span>
+  return (
+    <>
+      <Money
+        cents={account.balanceCents}
+        precision="cents"
+        tone={overdrawn(account) ? 'problem' : undefined}
+      />
+      {isOwed(account) && <span className="small muted">owed</span>}
+      {overdrawn(account) && <span className="small over strong">Overdrawn</span>}
+    </>
   )
 }
 

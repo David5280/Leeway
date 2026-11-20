@@ -1,5 +1,6 @@
 // One account's own page (/accounts/:id), from the most general to the most
-// detail: its balance and the math behind it, any alerts and the summary,
+// detail: its balance and the math behind it (or, for one the bank no longer
+// shares, when it was last read and the ways on), any alerts and the summary,
 // the balance over the last 30 days against where it should be, money in and
 // out, spending, bills and repeating charges paid from it, fees, its goals,
 // then recent activity.
@@ -8,6 +9,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { Account, Goal, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
 import { AlertsCard } from '../components/AccountAlerts'
+import { UnsharedAccount } from '../components/bank/UnsharedAccount'
 import { LineChart } from '../components/charts/LineChart'
 import { Card } from '../components/design/Card'
 import { HeroFigure } from '../components/design/HeroFigure'
@@ -16,7 +18,7 @@ import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { goalsOn, kindIcon } from '../lib/accountCards'
 import { balanceReference, billsPaidFrom, feesCharged, recurringFrom } from '../lib/accountDetail'
-import { accountDetail, isOwed, overdrawn } from '../lib/accounts'
+import { accountDetail, isOwed, isShared, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { isoDaysAgo } from '../lib/dates'
 import { trendDescription } from '../lib/drill'
@@ -86,25 +88,32 @@ function DetailBody({ account }: { account: Account }) {
         </h1>
       </div>
       <p className="muted page-sub">{accountDetail(account)}</p>
-      <BalanceHero
-        account={account}
-        balances={data.balances}
-        today={data.today}
-        goals={data.goals}
-        recent={view.data?.recent ?? []}
-      />
+      {isShared(account) ? (
+        <BalanceHero
+          account={account}
+          balances={data.balances}
+          today={data.today}
+          goals={data.goals}
+          recent={view.data?.recent ?? []}
+        />
+      ) : (
+        <NoLongerShared account={account} />
+      )}
       <AlertsCard alerts={view.data?.alerts ?? []} label="Alerts for this account" />
       {view.data ? (
         <SummaryCard summary={view.data.summary} />
       ) : (
         <LoadingOrError error={view.error} />
       )}
-      <BalanceChart
-        account={account}
-        balances={data.balances}
-        today={data.today}
-        goals={data.goals}
-      />
+      {/* An unshared balance stopped changing, so its line would only run flat to today. */}
+      {isShared(account) && (
+        <BalanceChart
+          account={account}
+          balances={data.balances}
+          today={data.today}
+          goals={data.goals}
+        />
+      )}
       {view.data && <ViewBreakdowns view={view.data} />}
       <BillsCard bills={billsPaidFrom(data.bills, charges)} />
       <RecurringCard series={recurringFrom(data.recurring, charges)} />
@@ -112,6 +121,22 @@ function DetailBody({ account }: { account: Account }) {
       <GoalsCard goals={data.goals} />
       {view.data && <RecentCard recent={view.data.recent} />}
     </>
+  )
+}
+
+/**
+ * In place of the balance, for an account the bank no longer shares: its old
+ * balance is never shown as if it were current, and it counts in no total.
+ */
+function NoLongerShared({ account }: { account: Account }) {
+  return (
+    <Card static="form" label="No longer shared" className="stack-sm">
+      <p className="small muted">
+        Left out of every total, since the bank no longer updates it. Its past transactions still
+        count.
+      </p>
+      <UnsharedAccount account={account} />
+    </Card>
   )
 }
 

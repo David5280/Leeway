@@ -5,7 +5,7 @@ import { z } from 'zod'
 import {
   accountPatchSchema,
   createManualAccount,
-  deleteManualAccount,
+  deleteAccount,
   listAccounts,
   manualAccountInputSchema,
 } from '../domain/accounts.js'
@@ -25,7 +25,7 @@ export const listAccountsAction = defineAction({
   name: 'list_accounts',
   title: 'List accounts',
   description:
-    'List bank and manual accounts with balances in cents. For credit and loan accounts the balance is the amount owed. kind says what each account is (checking, savings, retirement, pension, investment, credit_card, loan or other), from the bank or as the owner set it (kindChoice).',
+    'List bank and manual accounts with balances in cents. For credit and loan accounts the balance is the amount owed. kind says what each account is (checking, savings, retirement, pension, investment, credit_card, loan or other), from the bank or as the owner set it (kindChoice). unsharedAt is set when the bank no longer shares the account: its balance is as of balanceUpdatedAt and stays out of every total. includeHidden false lists only counted accounts, leaving out hidden and unshared ones.',
   input: z.object({ includeHidden: z.boolean().default(true) }),
   scope: 'read',
   surface: 'all',
@@ -56,13 +56,14 @@ export const updateAccountAction = defineAction({
 
 export const deleteAccountAction = defineAction({
   name: 'delete_account',
-  title: 'Delete a manual account',
-  description: 'Delete a manual account and its transactions. Bank accounts can only be hidden.',
+  title: 'Delete an account',
+  description:
+    'Delete an account and its transactions: a manual account, or a bank account whose bank no longer shares it (unsharedAt is set). Bank accounts still shared can only be hidden.',
   input: z.object({ id: z.uuid() }),
   scope: 'write',
   surface: 'all',
   run: async (ctx, { id }) => {
-    await deleteManualAccount(ctx.db, id)
+    await deleteAccount(ctx.db, id)
     return { deleted: true }
   },
 })
@@ -84,7 +85,7 @@ export const summarizeAccountsAction = defineAction({
   name: 'summarize_accounts',
   title: 'Summarize accounts',
   description:
-    'One or several accounts together, as the Accounts dashboard shows them: combined balances (cash as posted, available to spend, owed on cards and loans, credit left, net), money in and out over the last 4 budget periods (transfers left out), spending by category this period, recent transactions, alerts, and a short summary in plain words. Give accountIds to pick accounts; none means all. Amounts are in cents.',
+    'One or several accounts together, as the Accounts dashboard shows them: combined balances (cash as posted, available to spend, owed on cards and loans, credit left, net), money in and out over the last 4 budget periods (transfers left out), spending by category this period, recent transactions, alerts, and a short summary in plain words. Accounts the bank no longer shares (unsharedAt set) are listed but left out of the balances and alerts. Give accountIds to pick accounts; none means all. Amounts are in cents.',
   input: accountIdsInput,
   scope: 'read',
   surface: 'all',

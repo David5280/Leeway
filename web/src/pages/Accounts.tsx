@@ -1,5 +1,6 @@
 // The Accounts screen: what every account comes to together, then any
-// alerts, then every account as a card, grouped by kind. A card opens its account's own
+// alerts, then every account as a card, grouped by kind, and apart from
+// them any the bank no longer shares, which stay out of every total. A card opens its account's own
 // page (AccountDetail). Select mode turns the cards into tick boxes: the
 // ticked accounts are added up in a bar, and the money in and out, spending
 // and recent activity below follow the pick, which is saved in settings.
@@ -10,6 +11,7 @@ import type { Account, NetWorth } from '../api/client'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { AlertsCard } from '../components/AccountAlerts'
+import { UnsharedAccount } from '../components/bank/UnsharedAccount'
 import { Card } from '../components/design/Card'
 import { HeroFigure } from '../components/design/HeroFigure'
 import { Money } from '../components/design/Money'
@@ -18,7 +20,7 @@ import { Sparkline } from '../components/design/Sparkline'
 import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, LoadingOrError } from '../components/ui'
 import { combine } from '../lib/accountCards'
-import { accountDetailPath, activePick } from '../lib/accounts'
+import { accountDetailPath, activePick, isCounted, isShared } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { allAccountsDrill } from '../lib/drills/accounts'
 import { settingsPath } from './settings/paths'
@@ -46,6 +48,9 @@ function AccountsScreen() {
   const alerts = useAction('list_alerts')
 
   const all = accounts.data ?? []
+  // Only accounts the bank still shares are cards to open or pick; the rest show apart.
+  const shared = all.filter(isShared)
+  const unshared = all.filter((account) => !isShared(account))
   // Only accounts that still exist; none of them means every account.
   const picked = activePick(settings.accountSelection, all)
   const toggle = (id: string) =>
@@ -61,7 +66,7 @@ function AccountsScreen() {
           <Icon name="accounts" size={22} />
           Accounts
         </h1>
-        {all.length > 1 && !selecting && (
+        {shared.length > 1 && !selecting && (
           <button type="button" className="btn" onClick={() => setSelecting(true)}>
             Select
           </button>
@@ -72,19 +77,23 @@ function AccountsScreen() {
       {!accounts.data && <LoadingOrError error={accounts.error} />}
       {all.length > 0 && (
         <>
-          {!selecting && <TogetherCard accounts={all} netWorth={netWorth.data} />}
+          {/* While picking, the cards and the bar's total are all there is. */}
           {!selecting && (
-            <AlertsCard alerts={alerts.data ?? []} label="Alerts for these accounts" />
+            <>
+              <TogetherCard accounts={all} netWorth={netWorth.data} />
+              <AlertsCard alerts={alerts.data ?? []} label="Alerts for these accounts" />
+            </>
           )}
           <AccountGroups
-            accounts={all}
+            accounts={shared}
             balances={lines}
             goals={goals.data ?? []}
             picking={selecting ? { picked, toggle } : null}
           />
+          {!selecting && <NoLongerShared accounts={unshared} />}
           {selecting && (
             <SelectBar
-              picked={all.filter((account) => picked.includes(account.id))}
+              picked={shared.filter((account) => picked.includes(account.id))}
               onDone={() => setSelecting(false)}
             />
           )}
@@ -104,9 +113,29 @@ function NoAccounts() {
   )
 }
 
+/**
+ * Accounts the bank no longer shares: left out of every total, since nothing
+ * keeps their balances current, with their history kept until removed.
+ */
+function NoLongerShared({ accounts }: { accounts: Account[] }) {
+  if (accounts.length === 0) return null
+  return (
+    <Card static="form" label="No longer shared" className="stack-sm">
+      <SectionHead icon="accounts" title="No longer shared" />
+      <p className="small muted">
+        Left out of the balances and alerts, since the bank no longer updates them. Their past
+        transactions still count.
+      </p>
+      {accounts.map((account) => (
+        <UnsharedAccount key={account.id} account={account} />
+      ))}
+    </Card>
+  )
+}
+
 /** What every counted account comes to: owned less owed, with net worth's line. */
 function TogetherCard({ accounts, netWorth }: { accounts: Account[]; netWorth?: NetWorth }) {
-  const counted = accounts.filter((account) => !account.hidden)
+  const counted = accounts.filter(isCounted)
   const { ownedCents, owedCents, netCents } = combine(counted)
   const history = netWorth?.history.map((point) => point.netWorthCents) ?? []
   return (

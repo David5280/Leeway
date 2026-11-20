@@ -77,13 +77,20 @@ export function netWorthSeries(
   return points
 }
 
-/** Current net worth from counted accounts, and its history over the last `days`. */
+/**
+ * Current net worth from counted accounts, and its history over the last
+ * `days`. Hidden accounts and ones the bank no longer shares are left out:
+ * nothing keeps the balance of an unshared one current (unshared.ts).
+ */
 export async function getNetWorth(db: Db, today: IsoDate, days: number): Promise<NetWorth> {
   const { rows: accounts } = await db.query<{
     id: string
     type: AccountType
     balanceCents: number | null
-  }>(`SELECT id, type, balance_cents AS "balanceCents" FROM accounts WHERE NOT hidden`)
+  }>(
+    `SELECT id, type, balance_cents AS "balanceCents" FROM accounts
+     WHERE NOT hidden AND unshared_at IS NULL`,
+  )
   const liabilities = new Set(
     accounts.filter((a) => LIABILITY_TYPES.includes(a.type)).map((a) => a.id),
   )
@@ -97,7 +104,7 @@ export async function getNetWorth(db: Db, today: IsoDate, days: number): Promise
   const { rows: snapshots } = await db.query<BalanceSnapshot>(
     `SELECT h.account_id AS "accountId", h.day, h.balance_cents AS "balanceCents"
      FROM balance_history h JOIN accounts a ON a.id = h.account_id
-     WHERE NOT a.hidden AND h.day <= $1`,
+     WHERE NOT a.hidden AND a.unshared_at IS NULL AND h.day <= $1`,
     [today],
   )
   return {

@@ -6,26 +6,13 @@ import { createHash, randomBytes } from 'node:crypto'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { BANK_SCREENS } from './bank-screens'
 import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
+import { SETTINGS_GROUPS } from './settings-groups'
 import { revealWidgetToken } from './widget'
-
-/** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
-export const SETTINGS_GROUPS = [
-  'appearance',
-  'budgeting',
-  'accounts',
-  'banks',
-  'email',
-  'notifications',
-  'assistant',
-  'ai',
-  'widget',
-  'data',
-  'sign-in',
-]
 
 export interface Screen {
   name: string
@@ -304,6 +291,7 @@ export const SCREENS: Screen[] = [
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
   }),
+  ...BANK_SCREENS,
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),

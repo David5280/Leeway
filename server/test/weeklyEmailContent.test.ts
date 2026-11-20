@@ -127,6 +127,7 @@ describe('weeklyEmailContent', () => {
       goal('Laptop', { status: 'past_due', remainingCents: 20000 }),
       goal('Bike', { kind: 'purchase', status: 'reached', percent: 100 }),
       goal('Cushion', { status: 'reached', percent: 100 }),
+      goal('House', { status: 'stale', percent: 6, balanceAsOf: '2026-11-10' }),
     ]
     expect(section({ checkin: checkin({ goals }) }, 'Goals').items).toEqual([
       { text: 'Fund', detail: '40% saved, $600 to go' },
@@ -134,6 +135,7 @@ describe('weeklyEmailContent', () => {
       { text: 'Laptop: past its date', detail: '$200 to go' },
       { text: 'Bike: saved, ready to buy', detail: '100% saved' },
       { text: 'Cushion: reached', detail: '100% saved' },
+      { text: 'House: its account is no longer shared', detail: '6% saved as of Nov 10' },
     ])
     expect(section({}, 'Goals').empty).toBe('No goals yet. Add one from the Plan tab.')
   })

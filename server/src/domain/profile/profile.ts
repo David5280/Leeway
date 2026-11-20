@@ -73,6 +73,8 @@ export interface ProfileGoal {
   projectedDate: IsoDate | null
   onTrack: boolean | null
   status: Goal['status']
+  /** For a stale goal, the day its account stopped being shared, which its progress is as of. */
+  balanceAsOf: IsoDate | null
 }
 
 export interface FinancialProfile {
@@ -132,6 +134,7 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
     projectedDate: goal.projectedDate,
     onTrack: goal.onTrack,
     status: goal.status,
+    balanceAsOf: goal.balanceAsOf,
   }
 }
 

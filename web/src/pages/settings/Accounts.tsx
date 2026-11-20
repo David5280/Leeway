@@ -6,8 +6,9 @@ import { Link } from 'react-router-dom'
 import type { Account, Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
+import { UnsharedAccount } from '../../components/bank/UnsharedAccount'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
-import { ACCOUNT_TYPES, accountDetailPath, isOwed } from '../../lib/accounts'
+import { ACCOUNT_TYPES, accountDetailPath, isOwed, isShared } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { parseMoney } from '../../lib/format'
 import { LowBalanceField } from './LowBalance'
@@ -16,6 +17,8 @@ import { Section } from './Section'
 export function AccountSection() {
   const accounts = useAction('list_accounts', { includeHidden: true })
   const [adding, setAdding] = useState(false)
+  const shared = accounts.data?.filter(isShared)
+  const unshared = accounts.data?.filter((account) => !isShared(account)) ?? []
   return (
     <Section
       id="accounts"
@@ -27,9 +30,21 @@ export function AccountSection() {
           No accounts yet. Connect a bank under Banks, or add one by hand below.
         </p>
       )}
-      {accounts.data?.map((account) => (
+      {shared?.map((account) => (
         <AccountRow key={account.id} account={account} />
       ))}
+      {unshared.length > 0 && (
+        <section className="stack-sm" aria-label="No longer shared">
+          <h3>No longer shared</h3>
+          <p className="small muted">
+            These were left out when a bank was reconnected. They stay out of every total, and their
+            history is kept until you remove them.
+          </p>
+          {unshared.map((account) => (
+            <UnsharedAccount key={account.id} account={account} />
+          ))}
+        </section>
+      )}
       <ErrorNote error={accounts.error} />
       {adding ? (
         <AddAccount onDone={() => setAdding(false)} />

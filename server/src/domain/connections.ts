@@ -7,6 +7,12 @@ import type { Db } from '../db/pool.js'
 import { encrypt } from '../lib/crypto.js'
 import { accessTokenOf, bankFailure, requireBank } from './bank.js'
 import { recategorize } from './categorize.js'
+import {
+  duplicateBankError,
+  loginsAtBank,
+  type PickedAccount,
+  type PickedBank,
+} from './sameBank.js'
 import { syncConnection, type SyncResult } from './sync.js'
 
 /** One login at one bank, as the owner sees it in Settings. */
@@ -17,14 +23,20 @@ export interface Connection {
   status: 'active' | 'needs_reauth' | 'error'
   lastSyncedAt: string | null
   lastError: string | null
+  /** The accounts the bank shares from this login. */
   accountCount: number
+  /** Accounts kept from this login that the bank no longer shares (unshared.ts). */
+  unsharedCount: number
 }
 
 export async function listConnections(db: Db): Promise<Connection[]> {
   const { rows } = await db.query<Connection>(
     `SELECT c.id, c.provider, c.institution_name AS "institutionName", c.status,
        c.last_synced_at AS "lastSyncedAt", c.last_error AS "lastError",
-       (SELECT count(*)::int FROM accounts a WHERE a.connection_id = c.id) AS "accountCount"
+       (SELECT count(*)::int FROM accounts a
+        WHERE a.connection_id = c.id AND a.unshared_at IS NULL) AS "accountCount",
+       (SELECT count(*)::int FROM accounts a
+        WHERE a.connection_id = c.id AND a.unshared_at IS NOT NULL) AS "unsharedCount"
      FROM connections c ORDER BY c.created_at`,
   )
   return rows
@@ -35,13 +47,21 @@ function webhookUrl(ctx: AppContext): string | null {
   return ctx.config.publicUrl ? `${ctx.config.publicUrl}/api/webhooks/plaid` : null
 }
 
-/** A token the browser uses to open the bank login. Pass a connection to repair its login. */
-export async function createLinkToken(ctx: AppContext, connectionId?: string): Promise<string> {
+/**
+ * A token the browser uses to open the bank login. Pass a connection to open
+ * it for that login instead (Plaid's update mode), which repairs it without a
+ * new Item; `chooseAccounts` also lets the owner share accounts they left out.
+ */
+export async function createLinkToken(
+  ctx: AppContext,
+  connectionId?: string,
+  options: { chooseAccounts?: boolean } = {},
+): Promise<string> {
   const bank = requireBank(ctx)
   try {
     const token = connectionId ? await accessTokenOf(ctx, connectionId) : undefined
     return await bank.createLinkToken({
-      ...(token ? { accessToken: token } : {}),
+      ...(token ? { accessToken: token, chooseAccounts: options.chooseAccounts ?? false } : {}),
       webhookUrl: webhookUrl(ctx),
     })
   } catch (error) {
@@ -49,15 +69,54 @@ export async function createLinkToken(ctx: AppContext, connectionId?: string): P
   }
 }
 
-/** Saves a newly linked bank and pulls its accounts and history. */
-export async function linkBank(ctx: AppContext, publicToken: string): Promise<SyncResult> {
+/** A bank picked in the login window, as the window reported it when it closed. */
+export interface NewLink {
+  publicToken: string
+  /** The bank the window says was picked; null when it did not say. */
+  institution: PickedBank | null
+  /** The accounts the owner picked in the window. */
+  accounts: PickedAccount[]
+  /** The owner confirmed this is a second, separate login at a bank already connected. */
+  allowSecondLogin: boolean
+}
+
+export interface LinkResult extends SyncResult {
+  /**
+   * An older connection at the same bank, when the window did not say which
+   * bank it was and the duplicate showed only after Plaid had counted it.
+   */
+  possibleDuplicateOf: string | null
+}
+
+/**
+ * Saves a newly linked bank and pulls its accounts and history.
+ *
+ * A bank that is already connected is refused before the public token is
+ * exchanged, since the exchange is when Plaid counts a new Item, unless the
+ * owner confirmed a second login there. If the window did not say which bank
+ * it was, the check runs again on what Plaid says after the exchange. By then
+ * the Item is counted, removing it would not give its place back on the Trial
+ * plan, and at some banks (Chase among them) a new login cuts off the old one,
+ * so the new connection is kept and flagged for the owner to decide.
+ */
+export async function linkBank(ctx: AppContext, link: NewLink): Promise<LinkResult> {
   const bank = requireBank(ctx)
+  if (link.institution && !link.allowSecondLogin) {
+    const logins = await loginsAtBank(ctx.db, link.institution.id, link.accounts)
+    if (logins.length > 0) throw duplicateBankError(link.institution, logins)
+  }
+
   let item
   try {
-    item = await bank.exchangePublicToken(publicToken)
+    item = await bank.exchangePublicToken(link.publicToken)
   } catch (error) {
     throw bankFailure(error)
   }
+  // The second look, at the bank Plaid itself names; the login just saved is not its own duplicate.
+  const missed = link.allowSecondLogin
+    ? []
+    : await loginsAtBank(ctx.db, item.institutionId, link.accounts, item.itemId)
+
   // Linking the same bank login again replaces its token and keeps its data.
   const { rows } = await ctx.db.query<{ id: string }>(
     `INSERT INTO connections (provider, provider_item_id, access_token_encrypted, institution_id, institution_name)
@@ -73,7 +132,8 @@ export async function linkBank(ctx: AppContext, publicToken: string): Promise<Sy
       item.institutionName,
     ],
   )
-  return synced(ctx, await syncConnection(ctx, rows[0]!.id))
+  const result = synced(ctx, await syncConnection(ctx, rows[0]!.id))
+  return { ...result, possibleDuplicateOf: missed[0]?.connectionId ?? null }
 }
 
 /** A sync's result, after telling whoever listens that bank data changed. */

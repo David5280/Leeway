@@ -29,6 +29,15 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
   return parts.filter(Boolean).join(' ')
 }
 
+// Whether an account still shares its balance and counts toward totals: the
+// server's own rule, so a screen never adds up an account the server leaves out.
+export { isCounted, isShared } from '../../../server/src/domain/accountSharing'
+
+/** "No longer shared from Chase", for an account its bank stopped sharing. */
+export function unsharedLabel(account: Pick<Account, 'institutionName'>): string {
+  return `No longer shared from ${account.institutionName ?? 'its bank'}`
+}
+
 /**
  * An account's name without its bank in front, for a tight row whose second
  * line already names the bank: "Everyday checking" under "First Bank ··4417".

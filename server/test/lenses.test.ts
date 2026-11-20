@@ -44,6 +44,7 @@ function goal(name: string, fields: Partial<ProfileGoal> = {}): ProfileGoal {
     projectedDate: null,
     onTrack: null,
     status: 'in_progress',
+    balanceAsOf: null,
     ...fields,
   }
 }

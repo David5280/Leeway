@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   KEEP_DAYS,
   listNotifications,
+  moveSubjects,
   pruneInbox,
   REARM_AFTER_MS,
   unreadCount,
@@ -309,6 +310,46 @@ describe('large charges', () => {
     await ctx.db.query('DELETE FROM transactions WHERE id = $1', [pending])
     await refreshInbox(ctx)
     expect(await inbox()).toHaveLength(1)
+  })
+
+  it('follows a charge to a new id, kept once with its push state', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await charge(accountId)
+    await charge(accountId, { date: '2026-11-16' })
+    await refreshInbox(ctx)
+    const { rows } = await ctx.db.query<{ subject: string }>(
+      `UPDATE notifications SET push_state = 'sent' WHERE id = (
+         SELECT id FROM notifications ORDER BY subject LIMIT 1)
+       RETURNING subject`,
+    )
+    const { rows: others } = await ctx.db.query<{ subject: string }>(
+      `SELECT subject FROM notifications WHERE subject <> $1`,
+      [rows[0]!.subject],
+    )
+    const [sent, other] = [rows[0]!.subject, others[0]!.subject]
+    // The pushed one now goes by the other's id, which is already kept.
+    await moveSubjects(ctx.db, 'large_transaction', [
+      { from: sent, to: other },
+      { from: 'same', to: 'same' },
+    ])
+    const { rows: after } = await ctx.db.query(
+      `SELECT subject, push_state FROM notifications ORDER BY subject`,
+    )
+    expect(after).toEqual([{ subject: other, push_state: 'sent' }])
+  })
+
+  it('leaves every notification as it was when no charge changed its id', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await charge(accountId)
+    await refreshInbox(ctx)
+    const kept = async () =>
+      (await ctx.db.query(`SELECT subject, push_state FROM notifications ORDER BY subject`)).rows
+    const before = await kept()
+    await moveSubjects(ctx.db, 'large_transaction', [])
+    await moveSubjects(ctx.db, 'large_transaction', [
+      { from: before[0]!.subject, to: before[0]!.subject },
+    ])
+    expect(await kept()).toEqual(before)
   })
 
   it('leaves out old history, hidden accounts, hidden or imported charges, and transfers', async () => {

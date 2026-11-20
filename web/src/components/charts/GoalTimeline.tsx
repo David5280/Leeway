@@ -47,7 +47,8 @@ export function GoalTimeline({ goal, today }: { goal: Goal; today: string }) {
     },
     width,
   )
-  if (!layout || goal.status === 'reached') return null
+  // A stale goal's progress is frozen, so it has no pace to place on the line.
+  if (!layout || goal.status === 'reached' || goal.status === 'stale') return null
   const { left, right, lineY, target, projected } = layout
   // Behind means the dot lands past the flag; the line then warns.
   const color = goal.onTrack === false ? 'var(--warn)' : goal.color

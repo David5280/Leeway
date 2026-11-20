@@ -29,6 +29,14 @@ import {
 const LARGE_CHARGE_DAYS = 3
 
 /**
+ * What a large-charge notification is kept under: the charge's bank id, or
+ * the id it had while pending, so the charge posting is not news again.
+ * Written for a transactions table aliased t.
+ */
+export const CHARGE_SUBJECT =
+  'coalesce(t.pending_provider_transaction_id, t.provider_transaction_id)'
+
+/**
  * Bank charges of at least `minCents`, recent by date and new to Leeway, so
  * linking a bank with old history notifies about none of it. Left out:
  * hidden accounts, imported or hidden transactions, and transfers between
@@ -41,7 +49,7 @@ export async function recentLargeCharges(
   now: Date,
 ): Promise<LargeCharge[]> {
   const { rows } = await db.query<LargeCharge>(
-    `SELECT coalesce(t.pending_provider_transaction_id, t.provider_transaction_id) AS subject,
+    `SELECT ${CHARGE_SUBJECT} AS subject,
        t.account_id AS "accountId", coalesce(t.merchant_name, t.name) AS label,
        t.amount_cents::int AS "amountCents", to_char(t.date, 'YYYY-MM-DD') AS date
      FROM transactions t

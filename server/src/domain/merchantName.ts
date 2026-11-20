@@ -20,6 +20,16 @@ import { asciiDigits } from './accountNumber.js'
 /** What a transaction is called when the bank's text holds nothing readable or safe to show. */
 export const GENERIC_NAME = 'Bank transaction'
 
+/** What a card's own side of a payment to it is called. */
+const CARD_PAYMENT_NAME = 'Card payment'
+
+/**
+ * What a transfer is called, alone or before where it went ("Transfer to
+ * Savings"), and what a transfer or a payment between people is shown as when
+ * its names can't be shown (transactionName.ts).
+ */
+export const TRANSFER_NAME = 'Transfer'
+
 /** Short words that stay uppercase: acronyms people know in merchant and bank names. */
 const ACRONYMS = new Set([
   'ACH',
@@ -51,7 +61,18 @@ const ACRONYMS = new Set([
 ])
 
 /** Small words that stay lowercase inside a name, as in "Bank of America". */
-const SMALL_WORDS = new Set(['of', 'and', 'the', 'for', 'at', 'by', 'in', 'on', 'to', 'from'])
+export const SMALL_WORDS: ReadonlySet<string> = new Set([
+  'of',
+  'and',
+  'the',
+  'for',
+  'at',
+  'by',
+  'in',
+  'on',
+  'to',
+  'from',
+])
 
 /** Abbreviations banks use that have one plain meaning, spelled out. */
 const SPELLED_OUT = new Map([
@@ -95,7 +116,7 @@ const PROCESSORS = new Set([
 const LEADING_NOISE = [
   /^purchase authorized on \d{1,2}\/\d{1,2}\s+/i,
   /^recurring payment authorized on \d{1,2}\/\d{1,2}\s+/i,
-  /^(pos|debit card|dbt crd|visa dda|checkcard|check card)( purchase| pur| debit)?\s+(\d{4}\s+)?/i,
+  /^(pos|debit card|dbt crd|visa dda|checkcard|check card)( purchase| pur| debit| withdrawal)?\s+(\d{4}\s+)?/i,
   /^(ach|ppd|web)\s+(debit|credit|deposit|withdrawal|pmt)\s+/i,
   /^(www\.)/i,
 ]
@@ -345,7 +366,7 @@ function transferName(direction: string, rest: string): string {
   while (named.length > 0 && endsName(named[0]!)) named.shift()
   const name = trimEnds(withoutNumbers(namePart(named.join(' '))))
   const way = direction.toLowerCase()
-  return name ? `Transfer ${way} ${readableName(name)}` : 'Transfer'
+  return name ? `${TRANSFER_NAME} ${way} ${readableName(name)}` : TRANSFER_NAME
 }
 
 /** The bank's line with its leading purchase or ACH wording taken off. */
@@ -372,7 +393,7 @@ function merchantWords(text: string): string {
 export function cleanMerchantName(raw: string): string {
   // "BP#1234": a store number glued to the brand is split off, so the brand stays.
   const text = words(raw.replace(/(\p{L})#(?=\p{N})/gu, '$1 #')).join(' ')
-  if (CARD_PAYMENT.test(text)) return 'Card payment'
+  if (CARD_PAYMENT.test(text)) return CARD_PAYMENT_NAME
   const transfer = TRANSFER.exec(text)
   if (transfer) return transferName(transfer[1]!, transfer[2]!)
   const name = merchantWords(text)
@@ -386,4 +407,17 @@ export function cleanMerchantName(raw: string): string {
 export function tidyMerchantName(merchantName: string): string {
   const name = trimEnds(withoutNumbers(words(merchantName).join(' ')))
   return name ? readableName(name) : GENERIC_NAME
+}
+
+/**
+ * Whether a name cleanMerchantName gave names no merchant: nothing readable,
+ * a payment to a card, or a transfer, which only say that money moved.
+ */
+export function namesNoMerchant(name: string): boolean {
+  return (
+    name === GENERIC_NAME ||
+    name === CARD_PAYMENT_NAME ||
+    name === TRANSFER_NAME ||
+    name.startsWith(`${TRANSFER_NAME} `)
+  )
 }

@@ -56,7 +56,11 @@ describe('real banks', () => {
     render(<RealBanks />)
     expect(screen.getByText('user_good')).toBeInTheDocument()
     expect(screen.getByText('pass_good')).toBeInTheDocument()
-    expect(screen.getByText(/free Trial plan, for up to 10 bank logins/)).toBeInTheDocument()
+    // Plaid's limit differs by account, so the help gives no number, and says removing frees nothing.
+    const trial = screen.getByText(/free Trial plan/)
+    expect(trial).toHaveTextContent('for a set number of bank logins that its dashboard shows')
+    expect(trial).toHaveTextContent('counts for good, even after it is removed')
+    expect(trial.textContent).not.toMatch(/\d+ bank logins/)
     expect(screen.getByText(/couple of business days/)).toBeInTheDocument()
     expect(screen.getByText(/Once approved, set/)).toHaveTextContent(
       'set PLAID_ENV to production and PLAID_SECRET to your Production secret',

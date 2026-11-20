@@ -135,7 +135,9 @@ export function weeklyEmailHandlers(initial: Partial<WeeklyEmailView> = {}): Han
 }
 
 /** A server status with Plaid keys set, so bank features show. */
-export const withBank: Partial<Status> = { bank: { provider: 'plaid', environment: 'sandbox' } }
+export const withBank: Partial<Status> = {
+  bank: { provider: 'plaid', environment: 'sandbox', chooseAccounts: true },
+}
 
 export const status: Status = {
   version: '0.1.0',
@@ -187,6 +189,8 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
     hidden: false,
     manual: false,
     balanceUpdatedAt: null,
+    unsharedAt: null,
+    mayBeBackAs: null,
     aprPercent: null,
     minimumPaymentCents: null,
     lowBalanceCents: null,
@@ -224,8 +228,11 @@ export function accountsViewFor(
     { start: '2026-11-01', end: '2026-11-30', inCents: 250000, outCents: 120000 },
   ]
   const spending = fields.spending ?? []
-  const alerts = fields.alerts ?? alertsFor(accounts)
-  const balances = combineBalances(accounts)
+  // As the server works it out: only accounts the bank still shares add up.
+  const shared = accounts.filter((account) => account.unsharedAt === null)
+  const unshared = accounts.filter((account) => account.unsharedAt !== null)
+  const alerts = fields.alerts ?? alertsFor(shared)
+  const balances = combineBalances(shared)
   return {
     accounts,
     allAccounts: fields.allAccounts ?? true,
@@ -235,7 +242,10 @@ export function accountsViewFor(
     spending,
     recent: fields.recent ?? [],
     alerts,
-    summary: accountsSummary({ accounts, balances, flows, spending, periodWord: 'month' }, dollars),
+    summary: accountsSummary(
+      { accounts: shared, unshared, balances, flows, spending, periodWord: 'month' },
+      dollars,
+    ),
   }
 }
 

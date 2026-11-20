@@ -241,6 +241,47 @@ describe('Plaid provider', () => {
       expect(calls[0]!.body).not.toHaveProperty('webhook')
     })
 
+    describe('reconnecting an existing login', () => {
+      const tokenCalls = (countryCodes: string[]) => {
+        const { calls, fetchImpl } = fakeFetch({
+          '/link/token/create': { body: { link_token: 'lt-1' } },
+        })
+        return { calls, plaid: new PlaidProvider({ ...config, countryCodes }, fetchImpl) }
+      }
+
+      it('repairs the login alone unless asked to let the owner choose accounts', async () => {
+        const { calls, plaid } = tokenCalls(['US'])
+        await plaid.createLinkToken({ accessToken: 'access-1' })
+        await plaid.createLinkToken({ accessToken: 'access-1', chooseAccounts: false })
+        expect(calls[0]!.body).not.toHaveProperty('update')
+        expect(calls[1]!.body).not.toHaveProperty('update')
+      })
+
+      it('turns on account selection in update mode, which adds no new Item', async () => {
+        const { calls, plaid } = tokenCalls(['US', 'CA'])
+        await plaid.createLinkToken({ accessToken: 'access-1', chooseAccounts: true })
+        expect(calls[0]!.body).toMatchObject({
+          access_token: 'access-1',
+          update: { account_selection_enabled: true },
+        })
+        expect(calls[0]!.body).not.toHaveProperty('products')
+      })
+
+      it('leaves account selection off where Plaid does not offer it, like the UK', async () => {
+        const { calls, plaid } = tokenCalls(['US', 'GB'])
+        await plaid.createLinkToken({ accessToken: 'access-1', chooseAccounts: true })
+        expect(calls[0]!.body).toMatchObject({ access_token: 'access-1' })
+        expect(calls[0]!.body).not.toHaveProperty('update')
+      })
+
+      it('never chooses accounts for a new bank, which has no login to update', async () => {
+        const { calls, plaid } = tokenCalls(['US'])
+        await plaid.createLinkToken({ chooseAccounts: true })
+        expect(calls[0]!.body).toMatchObject({ products: ['transactions'] })
+        expect(calls[0]!.body).not.toHaveProperty('update')
+      })
+    })
+
     it('exchanges a public token and looks up the bank it belongs to', async () => {
       const { calls, fetchImpl } = fakeFetch({
         '/item/public_token/exchange': { body: { access_token: 'access-1', item_id: 'item-1' } },
