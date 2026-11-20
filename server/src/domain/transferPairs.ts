@@ -54,7 +54,7 @@ const TRANSFER_WORDS =
  * Words for pay or money paid back in a line with no code: a paycheck, a
  * payout, a refund. Such a line is money coming in from outside, so it never
  * pairs, even beside an equal purchase on another account, and even when it
- * also says "transfer", as in "Payroll transfer ACME".
+ * also says "transfer", as in "Payroll transfer ACME" (see wordsHint).
  */
 const PAY_WORDS =
   /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate)\b/i
@@ -65,6 +65,9 @@ const PAY_WORDS =
  * Savings" is a move. Interest and dividends only in their paid forms.
  */
 const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+
+/** A "to ..." or "from ..." tail, which names the other side of a move, often an account. */
+const COUNTERPARTY_TAIL = /\b(to|from)\b.*$/i
 
 /** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
 const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
@@ -88,12 +91,21 @@ export function transferHint(tx: Movement): TransferHint {
   return code ? 'other' : wordsHint(tx)
 }
 
-/** What a line with no code says by its words. */
+/**
+ * What a line with no code says by its words. Pay words win over transfer
+ * words only ahead of a "to" or "from" tail: "Payroll transfer from ACME" is
+ * pay, but "Transfer from Tax Refund Savings" names an account and is a move.
+ * Each of the bank's two fields loses its own tail, so one never hides the
+ * other. With no transfer word, a pay word anywhere still says pay.
+ */
 function wordsHint(tx: Movement): TransferHint {
-  const words = `${tx.name} ${tx.merchantName ?? ''}`
-  if (PAY_WORDS.test(words)) return 'other'
+  const fields = [tx.name, tx.merchantName ?? '']
+  const words = fields.join(' ')
+  const lead = fields.map((field) => field.replace(COUNTERPARTY_TAIL, '')).join(' ')
+  if (PAY_WORDS.test(lead)) return 'other'
   if (TRANSFER_WORDS.test(words)) return 'transfer'
-  return EARNED_WORDS.test(words) || PAID_ALONE.test(tx.name) ? 'other' : 'none'
+  const paidIn = [PAY_WORDS, EARNED_WORDS].some((paid) => paid.test(words))
+  return paidIn || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */

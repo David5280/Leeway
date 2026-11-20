@@ -82,6 +82,7 @@ describe('transferHint', () => {
       'INT PD 11/30',
       'Dividend paid',
       'Interest',
+      'CASH BACK REWARD',
     ]) {
       expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('other')
     }
@@ -117,6 +118,35 @@ describe('transferHint', () => {
       'Transfer from Dividend Paid Account',
     ]) {
       expect(transferHint({ ...base, name })).toBe('transfer')
+    }
+  })
+
+  it('reads pay words only before a "to" or "from" tail, which names an account', () => {
+    const base = tx('a', { accountId: 'x', amountCents: -100 })
+    for (const name of [
+      'Online Transfer to PAYROLL CHK 1234',
+      'Transfer from Tax Refund Savings',
+      'Transfer to Rebate account',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('transfer')
+    }
+    // The bank's two fields are read apart, so a tail in one never hides the other.
+    expect(transferHint({ ...base, name: 'Transfer', merchantName: 'From Refund Savings' })).toBe(
+      'transfer',
+    )
+    expect(transferHint({ ...base, name: 'Payroll transfer', merchantName: 'to ACME' })).toBe(
+      'other',
+    )
+    // Pay words ahead of the tail still win, and a pay word in a tail with no
+    // transfer word still says the line is pay.
+    for (const name of [
+      'Payroll transfer ACME',
+      'Payroll transfer from ACME',
+      'DIR DEP XFER',
+      'Refund transfer',
+      'ACH Deposit from ACME PAYROLL',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('other')
     }
   })
 })
@@ -190,6 +220,23 @@ describe('pairTransfers', () => {
           accountId: 'savings',
           amountCents: -2500,
           name: 'Online Transfer from Interest Checking',
+        }),
+      ]),
+    ).toEqual(['out:in'])
+  })
+
+  it('pairs a move to or from an own account named for pay', () => {
+    expect(
+      pairsOf([
+        tx('out', {
+          accountId: 'checking',
+          amountCents: 2500,
+          name: 'Online Transfer to PAYROLL CHK 1234',
+        }),
+        tx('in', {
+          accountId: 'savings',
+          amountCents: -2500,
+          name: 'Transfer from Tax Refund Savings',
         }),
       ]),
     ).toEqual(['out:in'])
