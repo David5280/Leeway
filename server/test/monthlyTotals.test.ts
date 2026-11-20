@@ -81,6 +81,42 @@ describe('get_monthly_totals', () => {
     expect(months[1]!.categories.map((c) => c.categoryId)).not.toContain(transfers.id)
   })
 
+  it('counts an uncategorized deposit as money in, never as negative spending', async () => {
+    const food = await call('create_category', { name: 'Food', kind: 'expense' })
+    await call('create_rule', { pattern: 'grocer', field: 'description', categoryId: food.id })
+    await spend('2026-11-02', 'Grocer', 4000)
+    // Pay and a purchase the owner has not filed yet.
+    await spend('2026-11-03', 'ACME PAYROLL', -248500)
+    await spend('2026-11-04', 'Corner shop', 1500)
+    // Rules file what is already stored once they are applied.
+    await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
+
+    // The month still running is the last of the two asked for.
+    const november = (await call('get_monthly_totals', { months: 2 })).months[1]
+    // Spending is the filed purchase and the unfiled one; the pay never takes from it.
+    expect(november!.spentCents).toBe(5500)
+    expect(november!.incomeCents).toBe(248500)
+    // The budget's own view still nets the unfiled bucket, as before.
+    expect(november!.categories.find((c) => c.categoryId === null)?.amountCents).toBe(-247000)
+  })
+
+  it("counts a transfer between the owner's own accounts as neither in nor out", async () => {
+    const moves = await call('create_category', { name: 'Moves', kind: 'transfer' })
+    await call('create_rule', { pattern: 'savings', field: 'description', categoryId: moves.id })
+    const savings = (await insertBankAccount(ctx.db)).accountId
+    await spend('2026-11-05', 'To savings', 50000)
+    await insertBankTransaction(ctx.db, savings, {
+      date: '2026-11-05',
+      name: 'From checking savings',
+      amountCents: -50000,
+    })
+    // Rules file what is already stored once they are applied.
+    await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
+
+    const november = (await call('get_monthly_totals', { months: 2 })).months[1]
+    expect([november!.spentCents, november!.incomeCents]).toEqual([0, 0])
+  })
+
   it('gives twelve months by default, empty ones included', async () => {
     const { firstTransactionDate, months } = await call('get_monthly_totals', {})
     expect(firstTransactionDate).toBeNull()

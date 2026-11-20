@@ -8,8 +8,25 @@ import { showWidgets } from './dashboard'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 const CHARTS = [
-  { region: 'Spending pace', title: /Flexible spending pace/ },
-  { region: 'Money in and out', title: /Are you spending less than you earn/ },
+  {
+    region: 'Spending pace',
+    title: /Flexible spending pace/,
+    reads: async (readout: Locator) => {
+      await expect(readout).toContainText(/\$[1-9][\d,]* spent/)
+    },
+  },
+  {
+    region: 'Money in and out',
+    title: /Are you spending less than you earn/,
+    reads: async (readout: Locator) => {
+      // At least the $3,000 paycheck filed below came in (the seed's unfiled pay may add to it).
+      const moneyIn = /\$([\d,]+) in/.exec(await readout.innerText())
+      expect(Number(moneyIn?.[1]?.replaceAll(',', ''))).toBeGreaterThanOrEqual(3_000)
+      // Unfiled pay is money in, never negative spending.
+      await expect(readout).toContainText(/\$[\d,]+ out/)
+      await expect(readout).not.toContainText(/[−-]\$[\d,]+ out/)
+    },
+  },
 ]
 
 test.describe('Overview charts under a finger', () => {
@@ -42,7 +59,9 @@ test.describe('Overview charts under a finger', () => {
     }) => {
       const { card, centre } = await openChart(page, chart.region)
       await page.touchscreen.tap(centre.x, centre.y)
-      await expect(card.locator('.chart-readout')).toBeVisible()
+      const readout = card.locator('.chart-readout')
+      await expect(readout).toBeVisible()
+      await chart.reads(readout)
       await expect(page.getByRole('dialog')).toHaveCount(0)
 
       await card.getByRole('button', { name: chart.title }).click()

@@ -17,6 +17,32 @@ export interface DateRange {
 }
 
 /**
+ * The transactions that count in each of a set of ranges, as `r.n` (the
+ * range's place, from 1) beside `t` (the transaction) and `c` (its category,
+ * if any). Its parameters: $1 the ranges' starts, $2 their exclusive ends, $3
+ * whether pending ones count, and $4 the account ids, or null for every
+ * account not hidden from budgets.
+ */
+export const COUNTED_IN_RANGES_SQL = `
+  FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS r(start_date, end_date, n)
+  JOIN transactions t ON t.date >= r.start_date AND t.date < r.end_date
+  JOIN accounts a ON a.id = t.account_id
+  LEFT JOIN categories c ON c.id = t.category_id
+  WHERE NOT t.excluded
+    AND CASE WHEN $4::uuid[] IS NULL THEN NOT a.hidden ELSE a.id = ANY($4) END
+    AND ($3 OR NOT t.pending)
+    AND ${countedSql()}`
+
+/** COUNTED_IN_RANGES_SQL's parameters, in order. */
+export function rangeParams(
+  ranges: DateRange[],
+  includePending: boolean,
+  accountIds: string[] | null = null,
+) {
+  return [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds]
+}
+
+/**
  * Net amount per category in each range, in one query however many ranges
  * there are, returned in the ranges' order. Transfers, excluded transactions,
  * hidden accounts and (if the owner says so) pending transactions are left out.
@@ -33,17 +59,10 @@ export async function categoryTotalsByRange(
   const { rows } = await db.query<CategoryTotal & { range: number }>(
     `SELECT r.n::int AS range, t.category_id AS "categoryId",
        sum(t.amount_cents)::bigint AS "amountCents", count(*)::int AS count
-     FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS r(start_date, end_date, n)
-     JOIN transactions t ON t.date >= r.start_date AND t.date < r.end_date
-     JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN categories c ON c.id = t.category_id
-     WHERE NOT t.excluded
-       AND CASE WHEN $4::uuid[] IS NULL THEN NOT a.hidden ELSE a.id = ANY($4) END
-       AND ($3 OR NOT t.pending)
-       AND ${countedSql()}
+     ${COUNTED_IN_RANGES_SQL}
      GROUP BY r.n, t.category_id
      ORDER BY r.n, t.category_id NULLS LAST`,
-    [ranges.map((r) => r.start), ranges.map((r) => r.end), includePending, accountIds],
+    rangeParams(ranges, includePending, accountIds),
   )
   const totals = ranges.map((): CategoryTotal[] => [])
   // WITH ORDINALITY counts from 1.
