@@ -231,7 +231,7 @@ describe('account alerts in the weekly email', () => {
       summary: {
         headline: "You're on track.",
         points: [
-          `${overdrawn.summary} 1 more account alert is at the top of the dashboard.`,
+          `${overdrawn.summary} 1 more account alert is in Heads up on the dashboard.`,
           'Payday is Dec 1.',
         ],
         writtenBy: 'Leeway',
@@ -260,7 +260,7 @@ describe('account alerts in the weekly email', () => {
       summary: {
         headline: overdrawn.summary,
         points: [
-          '1 more account alert is at the top of the dashboard.',
+          '1 more account alert is in Heads up on the dashboard.',
           'Your budgets are on track: $1,200 left.',
           'Payday is Dec 1.',
         ],

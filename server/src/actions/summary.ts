@@ -10,7 +10,7 @@ export const getSummaryAction = defineAction({
   name: 'get_summary',
   title: 'Dashboard summary',
   description:
-    'The summary at the top of the dashboard: a headline on how this budget period is going and up to four short points, in plain words. writtenBy is "Leeway" or the AI that wrote it. For the numbers behind it, use get_checkin.',
+    'The summary on the dashboard: a headline on how this budget period is going and up to four short points, in plain words. writtenBy is "Leeway" or the AI that wrote it. For the numbers behind it, use get_checkin.',
   input: z.object({}),
   scope: 'read',
   surface: 'all',

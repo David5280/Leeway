@@ -9,7 +9,7 @@ import { periodWord, shortDate } from '../../lib/words.js'
 import type { BillDue } from '../cashFlow.js'
 import type { Checkin } from '../checkin.js'
 import type { Settings } from '../settings.js'
-import { MORE_ALERTS_ENDING, type SummaryText } from '../summaryText.js'
+import { withoutAlertLines, type SummaryText } from '../summaryText.js'
 
 type Money = (cents: number) => string
 
@@ -172,21 +172,6 @@ function pensionItem(
   if (mine === null) return { text, detail: 'recorded, contribution not entered yet' }
   const plus = employer === null ? '' : `, plus ${money(employer)} from your employer`
   return { text, detail: `${money(mine)} a month going in${plus}` }
-}
-
-/**
- * The summary without the lines the alert block already says. Leeway's own
- * summary leads with the worst alert, in its headline or first point, and
- * counts the rest; the email lists every alert above it instead. When the
- * headline was an alert, the next line takes its place.
- */
-function withoutAlertLines(summary: SummaryText, alerts: string[]): SummaryText {
-  const repeatsAlerts = (line: string) =>
-    alerts.some((alert) => line.startsWith(alert)) || line.endsWith(MORE_ALERTS_ENDING)
-  const [headline = summary.headline, ...points] = [summary.headline, ...summary.points].filter(
-    (line) => !repeatsAlerts(line),
-  )
-  return { headline, points }
 }
 
 /** The weekly email's content, in the order it reads. */

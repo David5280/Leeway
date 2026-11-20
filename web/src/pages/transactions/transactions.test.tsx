@@ -134,7 +134,7 @@ describe('Transactions list', () => {
   it('names the screen with its icon beside the title', async () => {
     serve()
     renderTransactions()
-    const title = await screen.findByRole('heading', { level: 1, name: 'Transactions' })
+    const title = await screen.findByRole('heading', { level: 1, name: 'Activity' })
     expect(title).toHaveClass('page-title')
     expect(title.querySelector('svg')).not.toBeNull()
   })
@@ -160,7 +160,7 @@ describe('Transactions list', () => {
     expect(
       next
         ? screen.getByRole('button', { name: next })
-        : screen.getByRole('heading', { name: 'Transactions', level: 1 }),
+        : screen.getByRole('heading', { name: 'Activity', level: 1 }),
     ).toHaveFocus()
   })
 

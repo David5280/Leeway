@@ -8,10 +8,9 @@ import type { Budget } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Card } from '../components/design/Card'
 import { Money } from '../components/design/Money'
-import { UsualChip } from '../components/design/UsualChip'
 import { Icon, type IconName } from '../components/ui'
 import { useApp } from '../lib/app'
-import { incomeDrill, spendingUsual, spentDrill, uncategorizedDrill } from '../lib/drills/budget'
+import { incomeDrill, spentDrill, uncategorizedDrill, usualPeriodSpend } from '../lib/drills/budget'
 import { syncDrill } from '../lib/drills/pace'
 import { periodWord, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
@@ -42,14 +41,27 @@ function TileHead({ icon, title, tone }: { icon: IconName; title: string; tone?:
   )
 }
 
-/** Spending so far, with the usual chip, against the same point in the last period. */
+/**
+ * Spending so far, beside what a whole period usually comes to. The Activity
+ * hero and the drill-down compare it with the same point last period, so the
+ * tile answers a different question: how big a period usually gets.
+ */
 function SpentCard({ budget, word }: { budget: Budget; word: string }) {
   const trends = useAction('get_trends', { periods: 6 })
+  const usual = usualPeriodSpend(trends.data)
   return (
     <Card drill={spentDrill(budget, word, trends.data)} label="Spent" className="stack-sm">
       <TileHead icon="moneyOut" title="Spent" />
       <Money cents={budget.totals.spentCents} className="mid-number" />
-      {budget.period.offset === 0 && <UsualChip usual={spendingUsual(budget, word)} />}
+      <span className="small muted">
+        {usual === null ? (
+          `Spent this ${word}`
+        ) : (
+          <>
+            Usually about <Money cents={usual} /> a {word}
+          </>
+        )}
+      </span>
     </Card>
   )
 }

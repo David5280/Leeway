@@ -8,6 +8,8 @@ import {
 } from '../../../server/src/domain/settings'
 import type { Settings } from '../api/client'
 import {
+  account,
+  alertsFor,
   budgetFor,
   category,
   fakeServer,
@@ -178,6 +180,45 @@ describe('moveWidget', () => {
     expect(moveWidget(widgets, 0, -1)).toBe(widgets)
     moveWidget(widgets, 0, 1)
     expect(widgets.map((w) => w.type)).toEqual(['leeway', 'glance', 'alerts'])
+  })
+})
+
+describe('account alerts on the Overview', () => {
+  const alerts = alertsFor([
+    account({ id: 'a', name: 'Everyday', balanceCents: -4210 }),
+    account({ id: 'b', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+  ])
+  /** The summary as Leeway writes it with these alerts: the worst leads, the rest counted. */
+  const alertSummary = () => ({
+    headline: alerts[0]!.summary,
+    points: ['1 more account alert is in Heads up on the dashboard.', "You're on track."],
+    writtenBy: 'Leeway',
+    writtenAt: '2026-11-17T18:00:00Z',
+    ai: 'off',
+  })
+
+  it('says each alert once, in Heads up, with no banner above the hero', async () => {
+    serve(settings, { list_alerts: () => alerts, get_summary: alertSummary })
+    renderOverview()
+    const headsUp = await screen.findByRole('region', { name: 'Heads up' })
+    await within(headsUp).findByText('Everyday is overdrawn by $42.10.')
+    await screen.findByText("You're on track.")
+    expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument()
+    const summary = screen.getByRole('region', { name: 'Summary' })
+    for (const alert of alerts) {
+      expect(screen.getAllByText(alert.message)).toHaveLength(1)
+      expect(within(summary).queryByText(alert.summary)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/in Heads up on the dashboard/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {
+    const hidden = layout([{ type: 'leeway' }, { type: 'alerts', visible: false }])
+    serve(hidden, { list_alerts: () => alerts })
+    renderOverview(hidden)
+    const banner = await screen.findByRole('region', { name: 'Account alerts' })
+    expect(within(banner).getByText('Everyday is overdrawn by $42.10.')).toBeInTheDocument()
+    expect(screen.getAllByText('Everyday is overdrawn by $42.10.')).toHaveLength(1)
   })
 })
 

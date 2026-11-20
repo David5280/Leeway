@@ -1,10 +1,18 @@
-// The summary at the top of the dashboard.
+// The summary on the dashboard.
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { Output } from '../api/client'
-import { failing, fakeServer, holdRequest, renderSignedIn, settingsWith } from '../test/fake'
+import {
+  account,
+  alertsFor,
+  failing,
+  fakeServer,
+  holdRequest,
+  renderSignedIn,
+  settingsWith,
+} from '../test/fake'
 import { Byline, SummaryWidget } from './Summary'
 
 type Summary = Output<'get_summary'>
@@ -31,6 +39,33 @@ describe('SummaryWidget', () => {
       '$900 is free until payday on Dec 1, after bills.',
       'Trip is 25% of the way there.',
     ])
+  })
+
+  it('leaves out the account alerts Heads up already lists, once they are read', async () => {
+    const alerts = alertsFor([
+      account({ id: 'a', name: 'Everyday', balanceCents: -4210 }),
+      account({ id: 'b', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+    ])
+    const server = fakeServer({
+      list_alerts: () => alerts,
+      get_summary: () =>
+        summary({
+          headline: alerts[0]!.summary,
+          points: [
+            '1 more account alert is in Heads up on the dashboard.',
+            'Your budgets are on track: $1,200 left for 15 days.',
+            '$900 is free until payday on Dec 1, after bills.',
+          ],
+        }),
+    })
+    renderSignedIn(<SummaryWidget />)
+    await waitFor(() => expect(server.actions('list_alerts')).toHaveLength(1))
+    // The budget takes the headline the overdrawn account had.
+    expect(await screen.findByText(/Your budgets are on track/)).toHaveClass('summary-headline')
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      '$900 is free until payday on Dec 1, after bills.',
+    ])
+    expect(screen.queryByText(/Everyday/)).not.toBeInTheDocument()
   })
 
   it("writes the day the limit resets in the owner's own style", async () => {

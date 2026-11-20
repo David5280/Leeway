@@ -1,6 +1,5 @@
 // The headline widget and the Overview's hero: how much room is left in the
-// budget, what that is per day, how spending compares with the usual, and a
-// ring of how much of the budget is used against how far through the period
+// budget, what that is per day, and a ring of how much of the budget is used against how far through the period
 // today is. Tapping it shows the math (lib/drills/budget.ts).
 
 import { Link } from 'react-router-dom'
@@ -12,7 +11,7 @@ import { ProgressRing } from '../components/design/ProgressRing'
 import type { Status } from '../components/design/StatusPill'
 import { Dot } from '../components/ui'
 import { useApp } from '../lib/app'
-import { leewayDrill, spendingUsual } from '../lib/drills/budget'
+import { leewayDrill } from '../lib/drills/budget'
 import { periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
 
@@ -101,7 +100,6 @@ export function LeewayWidget({ budget }: WidgetProps) {
         cents={Math.abs(totals.leewayCents)}
         tone={over ? 'problem' : undefined}
         caption={<Caption budget={budget} />}
-        usual={isCurrent ? spendingUsual(budget, periodWord(settings.period.kind)) : undefined}
         aside={
           <ProgressRing
             percent={used}

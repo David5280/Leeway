@@ -235,10 +235,7 @@ export function accountsViewFor(
     spending,
     recent: fields.recent ?? [],
     alerts,
-    summary: accountsSummary(
-      { accounts, balances, flows, spending, alerts, periodWord: 'month' },
-      dollars,
-    ),
+    summary: accountsSummary({ accounts, balances, flows, spending, periodWord: 'month' }, dollars),
   }
 }
 

@@ -1,7 +1,8 @@
-// One account's own page (/accounts/:id), in clear sections: its balance
-// and the math behind it, the balance over the last 30 days against where
-// it should be, any alerts, money in and out, spending, recent activity,
-// bills and repeating charges paid from it, fees, and its goals.
+// One account's own page (/accounts/:id), from the most general to the most
+// detail: its balance and the math behind it, any alerts and the summary,
+// the balance over the last 30 days against where it should be, money in and
+// out, spending, bills and repeating charges paid from it, fees, its goals,
+// then recent activity.
 
 import { Link, useParams } from 'react-router-dom'
 import type { Account, Goal, Transaction } from '../api/client'
@@ -22,7 +23,7 @@ import { trendDescription } from '../lib/drill'
 import { accountDrill, balanceTrend } from '../lib/drills/accounts'
 import { shortDate } from '../lib/format'
 import { BillsCard, FeesCard, GoalsCard, RecurringCard } from './accounts/DetailLists'
-import { SummaryCard, ViewParts } from './accounts/ViewParts'
+import { RecentCard, SummaryCard, ViewBreakdowns } from './accounts/ViewParts'
 
 /** Transactions read to find this account's bills, repeating charges and fees. */
 const HISTORY_DAYS = 90
@@ -92,25 +93,24 @@ function DetailBody({ account }: { account: Account }) {
         goals={data.goals}
         recent={view.data?.recent ?? []}
       />
+      <AlertsCard alerts={view.data?.alerts ?? []} label="Alerts for this account" />
+      {view.data ? (
+        <SummaryCard summary={view.data.summary} />
+      ) : (
+        <LoadingOrError error={view.error} />
+      )}
       <BalanceChart
         account={account}
         balances={data.balances}
         today={data.today}
         goals={data.goals}
       />
-      <AlertsCard alerts={view.data?.alerts ?? []} label="Alerts for this account" />
-      {view.data ? (
-        <>
-          <SummaryCard summary={view.data.summary} />
-          <ViewParts view={view.data} />
-        </>
-      ) : (
-        <LoadingOrError error={view.error} />
-      )}
+      {view.data && <ViewBreakdowns view={view.data} />}
       <BillsCard bills={billsPaidFrom(data.bills, charges)} />
       <RecurringCard series={recurringFrom(data.recurring, charges)} />
       <FeesCard fees={feesCharged(charges)} accountId={account.id} />
       <GoalsCard goals={data.goals} />
+      {view.data && <RecentCard recent={view.data.recent} />}
     </>
   )
 }

@@ -49,6 +49,18 @@ export function spendingTrend(trends: Trends | undefined, word: string): DrillTr
   }
 }
 
+/**
+ * What a whole period usually comes to: the average spent in the finished
+ * periods that had spending. Null until one finished period has any, so the
+ * Spent tile says something other than the hero's comparison.
+ */
+export function usualPeriodSpend(trends: Trends | undefined): number | null {
+  const finished = (trends ?? []).filter((period) => period.offset < 0 && period.spentCents > 0)
+  if (finished.length === 0) return null
+  const total = finished.reduce((sum, period) => sum + period.spentCents, 0)
+  return Math.round(total / finished.length)
+}
+
 /** Left to spend: the budgets, less what they have spent and what goals hold back. */
 export function leewayDrill(budget: Budget, money: Money): DrillDown {
   const { totals, period } = budget

@@ -1,5 +1,5 @@
-// The Accounts screen: every account as a card, grouped by kind, under what
-// they all come to together and any alerts. A card opens its account's own
+// The Accounts screen: what every account comes to together, then any
+// alerts, then every account as a card, grouped by kind. A card opens its account's own
 // page (AccountDetail). Select mode turns the cards into tick boxes: the
 // ticked accounts are added up in a bar, and the money in and out, spending
 // and recent activity below follow the pick, which is saved in settings.
@@ -72,10 +72,10 @@ function AccountsScreen() {
       {!accounts.data && <LoadingOrError error={accounts.error} />}
       {all.length > 0 && (
         <>
+          {!selecting && <TogetherCard accounts={all} netWorth={netWorth.data} />}
           {!selecting && (
             <AlertsCard alerts={alerts.data ?? []} label="Alerts for these accounts" />
           )}
-          {!selecting && <TogetherCard accounts={all} netWorth={netWorth.data} />}
           <AccountGroups
             accounts={all}
             balances={lines}

@@ -109,7 +109,7 @@ describe('summarize_accounts', () => {
       'MARKET',
     ])
     expect(view.alerts.map((a) => a.kind)).toEqual(['overdrawn'])
-    expect(view.summary.headline).toBe('Test Everyday is overdrawn by $42.10.')
+    expect(view.summary.headline).toBe('Nothing is available in Test Everyday.')
 
     const both = await call('summarize_accounts', { accountIds: [everyday, card] })
     expect(both.allAccounts).toBe(true)

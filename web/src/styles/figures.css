@@ -114,7 +114,8 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--t) 14%, var(--surface));
   color: color-mix(in srgb, var(--t) 80%, var(--ink));
-  font: var(--weight-strong) var(--text-sm) var(--font-num);
+  /* A sentence, so the UI font; tabular figures keep its amount steady. */
+  font: var(--weight-strong) var(--text-sm) var(--font-ui);
   font-variant-numeric: tabular-nums;
   /* On the narrowest phones its words wrap inside the chip rather than spill. */
   max-width: 100%;

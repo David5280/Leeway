@@ -5,6 +5,7 @@
 import { Link } from 'react-router-dom'
 import type { AccountAlert } from '../api/client'
 import { accountDetailPath } from '../lib/accounts'
+import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
 import { Card } from './design/Card'
 import { Icon } from './ui'
 
@@ -41,13 +42,26 @@ export function AlertRows({ alerts }: { alerts: AccountAlert[] }) {
   )
 }
 
-/** Alerts in a tight card, red when any is urgent and amber otherwise; nothing when there are none. */
+/**
+ * Alerts in a compact card, red when any is urgent and amber otherwise, with
+ * the first few rows and a way to the rest; nothing when there are none.
+ */
 export function AlertsCard({ alerts, label }: { alerts: AccountAlert[]; label: string }) {
   if (alerts.length === 0) return null
   const urgent = alerts.some((alert) => alert.severity === 'urgent')
+  const more = alerts.length - ALERT_ROWS
   return (
     <Card static="list" label={label} className={`tight ${urgent ? 'over-card' : 'warn-card'}`}>
-      <AlertRows alerts={alerts} />
+      <AlertRows alerts={alerts.slice(0, ALERT_ROWS)} />
+      {more > 0 && (
+        <div className="row-between" style={{ padding: '4px 14px 8px' }}>
+          <span className="small muted">{moreAlerts(more)}</span>
+          {/* A real 44px box, so its tap never reaches up into the last alert. */}
+          <Link to="/alerts" className="linkbtn small tap">
+            See all alerts
+          </Link>
+        </div>
+      )}
     </Card>
   )
 }

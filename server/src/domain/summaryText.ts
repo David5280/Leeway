@@ -1,4 +1,4 @@
-// The summary at the top of the dashboard, written from the check-in in plain
+// The summary on the dashboard, written from the check-in in plain
 // words. Pure: the check-in comes in, sentences come out, nothing is read here.
 // It is always available, and it is the fallback when an AI writer is off or fails.
 
@@ -19,8 +19,8 @@ type Money = (cents: number) => string
 /** The most points the dashboard shows, so the summary stays a glance. */
 export const MAX_POINTS = 4
 
-/** How a point counts alerts it does not spell out; the weekly email lists them all instead. */
-export const MORE_ALERTS_ENDING = 'at the top of the dashboard.'
+/** How a point counts alerts it does not spell out; Heads up and the weekly email list them all. */
+export const MORE_ALERTS_ENDING = 'in Heads up on the dashboard.'
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
@@ -103,7 +103,7 @@ function urgentPoint({ attention }: Checkin): string | null {
   // Account alerts have their own point above.
   const now = attention.filter((item) => item.priority === 'now' && item.topic !== 'account').length
   if (now === 0) return null
-  return `${plural(now, 'thing needs', 'things need')} you today. See Heads up below.`
+  return `${plural(now, 'thing needs', 'things need')} you today. See Heads up.`
 }
 
 function cashPoint({ cashFlow, today }: Checkin, money: Money, locale: string): string | null {
@@ -244,3 +244,19 @@ export function summaryFacts(
 }
 
 export type SummaryFacts = ReturnType<typeof summaryFacts>
+
+/**
+ * The summary without the lines an alert list beside it already says, for
+ * the weekly email and the dashboard's Heads up. Leeway's own summary leads
+ * with the worst alert, in its headline or first point, and counts the rest;
+ * those lists show every alert instead. When the headline was an alert, the
+ * next line takes its place.
+ */
+export function withoutAlertLines(summary: SummaryText, alerts: string[]): SummaryText {
+  const repeatsAlerts = (line: string) =>
+    alerts.some((alert) => line.startsWith(alert)) || line.endsWith(MORE_ALERTS_ENDING)
+  const [headline = summary.headline, ...points] = [summary.headline, ...summary.points].filter(
+    (line) => !repeatsAlerts(line),
+  )
+  return { headline, points }
+}

@@ -2,7 +2,15 @@
 
 import { screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, alertsFor, failing, fakeServer, renderSignedIn } from '../test/fake'
+import {
+  account,
+  alertsFor,
+  budgetFor,
+  category,
+  failing,
+  fakeServer,
+  renderSignedIn,
+} from '../test/fake'
 import { Alerts } from './Alerts'
 import { AccountHealth } from './overview/AccountHealth'
 
@@ -88,8 +96,69 @@ describe('the Alerts page', () => {
   })
 
   it('says why alerts could not be read', async () => {
-    fakeServer({}, { '/api/actions/list_alerts': failing('Database is down') })
+    fakeServer(
+      { get_budget: () => budgetFor([], []) },
+      { '/api/actions/list_alerts': failing('Database is down') },
+    )
     renderSignedIn(<Alerts />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
+  })
+})
+
+describe('the Alerts page, beyond the accounts', () => {
+  const others = () => screen.getByRole('region', { name: 'Banks and budgets' })
+  const dining = category('Dining out', { budgetCents: 20000 })
+
+  it('lists banks, budgets and transactions to sort after the account alerts', async () => {
+    fakeServer({
+      list_alerts: () => alertsFor([overdrawn]),
+      list_connections: () => [
+        {
+          id: 'x',
+          provider: 'plaid',
+          institutionName: 'Chase',
+          status: 'needs_reauth',
+          lastSyncedAt: null,
+          lastError: null,
+          accountCount: 1,
+        },
+      ],
+      get_budget: () =>
+        budgetFor(
+          [dining],
+          [
+            { categoryId: dining.id, amountCents: 24000 },
+            { categoryId: null, amountCents: 4500 },
+          ],
+        ),
+      get_ai_usage: () => ({ alert: { level: 'limit', message: 'The AI limit is reached.' } }),
+    })
+    renderSignedIn(<Alerts />)
+    await within(others()).findByText('Chase needs you to log in again to keep syncing.')
+    expect(
+      within(others())
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual([
+      '/settings/banks',
+      '/budgets/cat-dining-out',
+      '/transactions?category=uncategorized',
+      '/settings/ai',
+    ])
+    expect(others()).toHaveTextContent('The AI limit is reached.')
+    // The overdrawn account is listed once, in its own card above.
+    expect(screen.getAllByText('Everyday is overdrawn by $42.10.')).toHaveLength(1)
+  })
+
+  it('says when every bank and budget is fine', async () => {
+    fakeServer({ list_alerts: () => [], get_budget: () => budgetFor([dining], []) })
+    renderSignedIn(<Alerts />)
+    expect(await within(others()).findByText(/Every bank is syncing/)).toBeInTheDocument()
+  })
+
+  it('says why the budget could not be read', async () => {
+    fakeServer({ list_alerts: () => [] }, { '/api/actions/get_budget': failing('Budget is down') })
+    renderSignedIn(<Alerts />)
+    expect(await within(others()).findByRole('alert')).toHaveTextContent('Budget is down')
   })
 })

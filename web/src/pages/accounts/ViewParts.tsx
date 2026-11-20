@@ -58,14 +58,21 @@ export function RecentCard({ recent }: { recent: AccountsView['recent'] }) {
   )
 }
 
+/** Money in and out beside spending by category. */
+export function ViewBreakdowns({ view }: { view: AccountsView }) {
+  return (
+    <div className="grid">
+      <Flows flows={view.flows} />
+      <Spending spending={view.spending} period={view.period} />
+    </div>
+  )
+}
+
 /** Money in and out beside spending by category, then the newest transactions. */
 export function ViewParts({ view }: { view: AccountsView }) {
   return (
     <>
-      <div className="grid">
-        <Flows flows={view.flows} />
-        <Spending spending={view.spending} period={view.period} />
-      </div>
+      <ViewBreakdowns view={view} />
       <RecentCard recent={view.recent} />
     </>
   )

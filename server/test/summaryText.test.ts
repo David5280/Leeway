@@ -93,7 +93,7 @@ describe('the points', () => {
       netWorth: { changeCents: 120000 },
     })
     expect(summarize(busy).points).toEqual([
-      '2 things need you today. See Heads up below.',
+      '2 things need you today. See Heads up.',
       '$1,000 is free until payday on Dec 1, after bills.',
       "You've spent $100 more than at this point last month.",
       'Trip is 25% of the way there.',
@@ -174,7 +174,7 @@ describe('an overdrawn account or a card over its limit', () => {
       budget: { projectedBudgetedCents: 230000 },
     })
     expect(summarize(over).points).toEqual([
-      '2 more account alerts are at the top of the dashboard.',
+      '2 more account alerts are in Heads up on the dashboard.',
       "At this pace you'd finish the month $300 over budget.",
     ])
   })
@@ -218,9 +218,9 @@ describe('the account alert point', () => {
 
   it('counts the other alerts after the worst one', () => {
     const one = summarize(checkin({ alerts: [feeAlert, lowAlert] })).points[0]
-    expect(one).toBe(`${feeAlert.summary} 1 more account alert is at the top of the dashboard.`)
+    expect(one).toBe(`${feeAlert.summary} 1 more account alert is in Heads up on the dashboard.`)
     const two = summarize(checkin({ alerts: [feeAlert, lowAlert, lowAlert] })).points[0]
-    expect(two).toContain('2 more account alerts are at the top of the dashboard.')
+    expect(two).toContain('2 more account alerts are in Heads up on the dashboard.')
   })
 })
 

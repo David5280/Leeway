@@ -177,7 +177,8 @@ tspan.money-neutral {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font: var(--weight-strong) var(--text-sm) var(--font-num);
+  /* Words with an amount in them read in the UI font, figures kept tabular. */
+  font: var(--weight-strong) var(--text-sm) var(--font-ui);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

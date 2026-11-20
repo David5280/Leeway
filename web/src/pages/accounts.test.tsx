@@ -85,7 +85,7 @@ describe('Accounts screen', () => {
     expect(within(together).getByText('−$50.00')).toHaveClass('money-problem')
   })
 
-  it('leads with the alerts, red when one is urgent, each opening its account', async () => {
+  it('puts the alerts under the total, red when one is urgent, each opening its account', async () => {
     const short = account({ id: 'a', name: 'Everyday', balanceCents: -4210, subtype: 'checking' })
     server([short], {
       list_alerts: () => accountsViewFor([short]).alerts,
@@ -96,6 +96,26 @@ describe('Accounts screen', () => {
     expect(
       within(alerts).getByRole('link', { name: /Everyday is overdrawn by \$42\.10/ }),
     ).toHaveAttribute('href', '/accounts/a')
+    const together = screen.getByRole('region', { name: 'All accounts together' })
+    expect(together.compareDocumentPosition(alerts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    // Said once: the summary leaves the overdrawn account to the alert.
+    await screen.findByRole('region', { name: 'Summary' })
+    expect(screen.getAllByText(/overdrawn by \$42\.10/)).toHaveLength(1)
+  })
+
+  it('keeps to three alerts and leads to the rest', async () => {
+    const low = ['b', 'c', 'd', 'e', 'f'].map((id) =>
+      account({ id, name: `Low ${id}`, balanceCents: 2000, subtype: 'checking' }),
+    )
+    server(low, { list_alerts: () => accountsViewFor(low).alerts })
+    renderAccounts()
+    const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
+    expect(within(alerts).getAllByRole('link')).toHaveLength(4)
+    expect(alerts).toHaveTextContent('2 more alerts')
+    expect(within(alerts).getByRole('link', { name: 'See all alerts' })).toHaveAttribute(
+      'href',
+      '/alerts',
+    )
   })
 
   it('shows a low balance alert in amber', async () => {

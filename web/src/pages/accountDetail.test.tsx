@@ -207,6 +207,37 @@ describe("an account's own page", () => {
     expect(await screen.findByRole('region', { name: 'Alerts for this account' })).toHaveClass(
       'over-card',
     )
+    // The alert says it once; the summary beside it does not repeat it.
+    expect(screen.getAllByText(/overdrawn by \$142\.10/)).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Summary' })).toHaveTextContent(
+      'Nothing is available in Everyday checking.',
+    )
+  })
+
+  it('reads from the balance and its health down to the transactions', async () => {
+    server([{ ...checking, balanceCents: -14210 }])
+    renderAccount('chk')
+    await screen.findByRole('region', { name: 'Alerts for this account' })
+    await screen.findByRole('region', { name: 'Recent transactions' })
+    const order = screen
+      .getAllByRole('region')
+      .map((region) => region.getAttribute('aria-label'))
+      .filter((name) =>
+        [
+          'Everyday checking balance',
+          'Alerts for this account',
+          'Summary',
+          'Balance over time',
+          'Recent transactions',
+        ].includes(name ?? ''),
+      )
+    expect(order).toEqual([
+      'Everyday checking balance',
+      'Alerts for this account',
+      'Summary',
+      'Balance over time',
+      'Recent transactions',
+    ])
   })
 
   it('draws no chart before there are two days of balances', async () => {

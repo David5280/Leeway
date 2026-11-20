@@ -1,6 +1,7 @@
-// The summary at the top of the dashboard: how the period is going and what
-// needs the owner, in a sentence and a few points. Leeway writes it from the
-// numbers, or Claude does when the owner turns that on in Settings.
+// The dashboard's summary: how the period is going and what needs the owner,
+// in a sentence and a few points. Leeway writes it from the numbers, or Claude
+// does when the owner turns that on in Settings. Account alerts are left out,
+// since Heads up (or the banner standing in for it) lists each one already.
 
 import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
@@ -10,6 +11,7 @@ import { ErrorNote, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { shortDate, timeAgo } from '../lib/format'
 import { settingsPath } from '../pages/settings/paths'
+import { withoutAlertLines } from '../../../server/src/domain/summaryText'
 
 type Summary = Output<'get_summary'>
 
@@ -25,9 +27,11 @@ export function SummaryWidget() {
 function SummaryBody() {
   const { locale } = useApp().settings
   const summary = useAction('get_summary')
+  const alerts = useAction('list_alerts')
   if (summary.isPending) return <Loading label="Reading your numbers" />
   if (summary.isError) return <ErrorNote error={summary.error} />
-  const { headline, points } = summary.data
+  const said = (alerts.data ?? []).flatMap((alert) => [alert.summary, alert.message])
+  const { headline, points } = withoutAlertLines(summary.data, said)
   return (
     <>
       <p className="summary-headline">{headline}</p>

@@ -1,5 +1,6 @@
-// Every account alert in one list, reached from the dashboard banner, with a
-// word on what each kind means and where the warnings are set.
+// Every alert, reached from Heads up on the dashboard: the account alerts
+// first, then banks, budgets and transactions to sort, with a word on what
+// each kind of account alert means and where the warnings are set.
 
 import { Card } from '../components/design/Card'
 import { Link } from 'react-router-dom'
@@ -10,6 +11,10 @@ import { Icon, LoadingOrError } from '../components/ui'
 import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
 import { Money } from '../components/design/Money'
+import { AiSpendAlert } from '../components/AiSpendAlert'
+import { useApp } from '../lib/app'
+import { HeadsUpRows } from '../widgets/Alerts'
+import { headsUpItems } from '../widgets/headsUp'
 
 export function Alerts() {
   return (
@@ -20,6 +25,9 @@ export function Alerts() {
       <h1>Alerts</h1>
       <Card static="list" label="Account alerts" className="tight">
         <AlertList />
+      </Card>
+      <Card static="list" label="Banks and budgets" className="tight">
+        <OtherAlerts />
       </Card>
       <Card static="words" label="About alerts" className="stack-sm">
         <h2>What Leeway watches</h2>
@@ -61,4 +69,34 @@ function AlertList() {
     )
   }
   return <AlertRows alerts={alerts.data} />
+}
+
+/** Banks that stopped syncing, budgets and transactions to sort, and the AI spending alert. */
+function OtherAlerts() {
+  const { money } = useApp()
+  const budget = useAction('get_budget', { offset: 0 })
+  const connections = useAction('list_connections')
+  const aiAlert = useAction('get_ai_usage').data?.alert
+  if (!budget.data) {
+    return (
+      <div style={{ padding: 14 }}>
+        <LoadingOrError error={budget.error} />
+      </div>
+    )
+  }
+  const items = headsUpItems({
+    accountAlerts: [],
+    connections: connections.data ?? [],
+    budget: budget.data,
+    money,
+  })
+  if (items.length === 0 && !aiAlert) {
+    return <p className="empty">Every bank is syncing and every budget is on track.</p>
+  }
+  return (
+    <>
+      <HeadsUpRows items={items} />
+      {aiAlert && <AiSpendAlert alert={aiAlert} linked />}
+    </>
+  )
 }

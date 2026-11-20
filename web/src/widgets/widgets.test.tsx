@@ -83,10 +83,8 @@ describe('LeewayWidget', () => {
     // 25% used by day 17 of 30 is behind the calendar, so the ring reads fine.
     expect(ring).toHaveClass('ring-ok')
     expect(region()).toHaveTextContent('25% of the budget used, 57% of the way through the month.')
-    // Nothing was spent by this point last month, so all $200 is more than usual.
-    expect(
-      screen.getByRole('img', { name: '$200 more than this point last month' }),
-    ).toHaveTextContent('▲ $200 more spent')
+    // The comparison with last month belongs to the Activity hero, not this one.
+    expect(within(region()).queryByRole('img', { name: /last month/ })).not.toBeInTheDocument()
   })
 
   it('warns in the ring when spending runs ahead of the days', () => {
@@ -194,67 +192,56 @@ describe('LeewayWidget', () => {
 describe('GlanceWidget', () => {
   // Each glance tile is a card named by its title.
   const card = (title: string) => screen.getByRole('region', { name: title })
-  const usual = (sentence: string) => screen.getByRole('img', { name: sentence })
 
   function serve(connections: Connection[] = []) {
     return fakeServer({ list_connections: () => connections, get_trends: () => [] })
   }
 
-  it('compares spending with the same point last month', () => {
-    serve()
-    const budget = {
-      ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 20000, categories: [] },
-    }
+  /** Finished periods (offset below zero) and this one, as get_trends returns them. */
+  const trend = (offset: number, spentCents: number) => ({
+    offset,
+    start: '2026-10-01',
+    end: '2026-10-31',
+    days: 31,
+    spentCents,
+    incomeCents: 0,
+    categories: [],
+  })
+
+  it('puts what a whole period usually comes to under what is spent so far', async () => {
+    fakeServer({
+      list_connections: () => [],
+      // The average leaves out this period and a period with nothing in it.
+      get_trends: () => [trend(-3, 0), trend(-2, 70000), trend(-1, 90000), trend(0, 30000)],
+    })
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }])
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(card('Spent')).toHaveTextContent('$300')
-    expect(usual('$100 more than this point last month')).toHaveClass('usual-warn')
+    expect(await within(card('Spent')).findByText(/Usually about/)).toHaveTextContent(
+      'Usually about $800 a month',
+    )
+    // The same-point comparison stays on the Activity hero and in the drill-down.
+    expect(within(card('Spent')).queryByRole('img')).not.toBeInTheDocument()
   })
 
-  it('says when spending is lower than at this point last month', () => {
-    serve()
-    const budget = {
-      ...budgetFor(categories, [{ categoryId: groceries.id, amountCents: 30000 }]),
-      previous: { spentCents: 70000, spentToDateCents: 45000, categories: [] },
-    }
-    renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(usual('$150 less than this point last month')).toHaveClass('usual-good')
-  })
-
-  it('reads as usual when neither period has spending', () => {
+  it('says what the figure is until a period has finished', () => {
     serve()
     renderSignedIn(<GlanceWidget budget={budgetFor(categories, [])} offset={0} />)
-    expect(card('Spent')).toHaveTextContent('$0')
-    expect(usual('About the same as this point last month')).toHaveTextContent('= as usual')
-  })
-
-  it('counts all spending as more when last period had none', () => {
-    serve()
-    const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }])
-    renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
-    expect(usual('$42 more than this point last month')).toBeInTheDocument()
-  })
-
-  it('leaves the usual out of a past period', () => {
-    serve()
-    const budget = withChanges(budgetFor(categories, []), { period: { offset: -1 } })
-    renderSignedIn(<GlanceWidget budget={budget} offset={-1} />)
-    expect(within(card('Spent')).queryByRole('img')).not.toBeInTheDocument()
+    expect(card('Spent')).toHaveTextContent('$0Spent this month')
   })
 
   it.each([
     [{ kind: 'weekly' }, 'week'],
     [{ kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-06' }, 'paycheck'],
-  ])('uses the word for the budget period (%o)', (period, word) => {
-    serve()
-    const budget = {
-      ...budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }]),
-      previous: { spentCents: 0, spentToDateCents: 1000, categories: [] },
-    }
+  ])('uses the word for the budget period (%o)', async (period, word) => {
+    fakeServer({ list_connections: () => [], get_trends: () => [trend(-1, 4200)] })
+    const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 4200 }])
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />, {
       settings: settingsSchema.parse({ timeZone: 'America/Denver', period }),
     })
-    expect(usual(`$32 more than this point last ${word}`)).toBeInTheDocument()
+    expect(await within(card('Spent')).findByText(/Usually about/)).toHaveTextContent(
+      `Usually about $42 a ${word}`,
+    )
     expect(card('Income')).toHaveTextContent(`Money in this ${word}`)
   })
 
@@ -349,7 +336,7 @@ describe('AlertsWidget', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
-  it('lists banks first, then budgets worst first, then what needs a category', async () => {
+  it('keeps to three rows, banks then budgets worst first, and leads to every alert', async () => {
     fakeServer({
       list_connections: () => [
         connection({ id: 'ok', institutionName: 'Ally' }),
@@ -376,17 +363,20 @@ describe('AlertsWidget', () => {
       '/settings/banks',
       '/budgets/cat-dining-out',
       '/budgets/cat-groceries',
-      '/budgets/cat-fun',
-      '/transactions?category=uncategorized',
+      '/alerts',
     ])
     expect(links[0]).toHaveTextContent('Bank')
     expect(links[1]).toHaveTextContent('Dining out is over budget by $40 ($240 of $200).Over')
     expect(links[2]).toHaveTextContent(
       'Groceries has used 83% of its budget, with $100 left.Warning',
     )
-    expect(links[3]).toHaveTextContent('Fun is spending ahead of pace')
-    expect(links[3]).toHaveTextContent('Pace')
-    expect(links[4]).toHaveTextContent('3 transactions ($120) need a category.Info')
+    expect(links[3]).toHaveTextContent('See all alerts')
+    // Fun's pace and the transactions to sort wait on the Alerts page.
+    expect(region()).toHaveTextContent('2 more alerts')
+    expect(region()).not.toHaveTextContent('Fun is spending ahead of pace')
+    // No account is in trouble, so the card keeps its plain colour.
+    expect(region()).not.toHaveClass('over-card')
+    expect(region()).not.toHaveClass('warn-card')
   })
 
   it('names a bank it knows nothing about as "A bank"', async () => {
@@ -441,6 +431,22 @@ describe('AlertsWidget', () => {
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
     expect(links[1]).toHaveTextContent('Low')
+    // An overdrawn account turns the whole card red.
+    expect(region()).toHaveClass('over-card')
+  })
+
+  it('is amber when the only account alert is a warning', async () => {
+    fakeServer({
+      list_connections: () => [],
+      list_alerts: () =>
+        alertsFor([
+          bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+        ]),
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    await screen.findByText(/Bills is down to/)
+    expect(region()).toHaveClass('warn-card')
+    expect(within(region()).queryByRole('link', { name: 'See all alerts' })).toBeNull()
   })
 
   it('still shows budget alerts when the banks cannot be read', async () => {
@@ -493,6 +499,21 @@ describe('AlertsWidget and the AI spending alert', () => {
       region().textContent!.indexOf('AI has spent'),
     )
     expect(warning.closest('.alert-row')!.querySelector('.alert-icon.info')).not.toBeNull()
+  })
+
+  it('counts the alert among the rest when three rows are already full', async () => {
+    serveAlert()
+    const budget = withChanges(
+      budgetFor(categories, [
+        { categoryId: dining.id, amountCents: 24000 },
+        { categoryId: groceries.id, amountCents: 50000 },
+        { categoryId: null, amountCents: 4500 },
+      ]),
+      {},
+    )
+    renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
+    expect(await within(region()).findByText('1 more alert')).toBeInTheDocument()
+    expect(region()).not.toHaveTextContent('AI limit')
   })
 
   it('dismisses the alert through the owner-only action', async () => {
