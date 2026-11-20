@@ -1,8 +1,15 @@
-// Connected banks: status, fixing a login, syncing now, re-dating older transactions, and removing.
+// Connected banks: status, reconnecting or fixing a login, syncing now, and removing.
 
 import { useState } from 'react'
 import { useAction, useActionMutation } from '../../api/hooks'
-import { BankButton } from '../../components/BankButton'
+import { AddBank } from '../../components/bank/AddBank'
+import {
+  bankName,
+  connectionHealth,
+  needsLogin,
+  TRIAL_LIMIT_NOTE,
+} from '../../components/bank/linking'
+import { ReconnectButton } from '../../components/bank/ReconnectButton'
 import { BankKeysMissing, SandboxNote } from '../../components/PlaidHelp'
 import { ErrorNote, Icon } from '../../components/ui'
 import { useApp } from '../../lib/app'
@@ -15,6 +22,7 @@ export function BanksSection() {
   const sync = useActionMutation('sync_banks')
   const remove = useActionMutation('remove_connection')
   const [removing, setRemoving] = useState<string | null>(null)
+  const hasBanks = Boolean(connections.data?.length)
 
   if (!status.bank) {
     return (
@@ -27,25 +35,24 @@ export function BanksSection() {
     <Section id="banks" title="Banks">
       {connections.data?.map((c) => (
         <div key={c.id} className="list-row wrap">
-          <span className="grow">
-            <strong>{c.institutionName ?? 'Bank'}</strong>
+          <span className="grow bank-name">
+            <strong>{bankName(c)}</strong>
             <br />
             <span className="small muted">
-              {c.accountCount} {c.accountCount === 1 ? 'account' : 'accounts'}, synced{' '}
+              {c.accountCount} {c.accountCount === 1 ? 'account' : 'accounts'}
+              {c.unsharedCount > 0 && `, ${c.unsharedCount} no longer shared`}, synced{' '}
               {timeAgo(c.lastSyncedAt)}
             </span>
-          </span>
-          {c.status === 'active' ? (
-            <span className="small good">Connected</span>
-          ) : (
-            <span className="small warn">
-              {c.status === 'needs_reauth'
-                ? 'Needs you to sign in again'
-                : (c.lastError ?? 'Sync failed')}
+            <br />
+            <span className={`small ${c.status === 'active' ? 'good' : 'warn'}`}>
+              {connectionHealth(c)}
             </span>
-          )}
-          {c.status === 'needs_reauth' && (
-            <BankButton connectionId={c.id} label="Fix login" className="btn small" />
+          </span>
+          {/* Update mode keeps the same Plaid login, so this never uses another of its places. */}
+          {needsLogin(c) ? (
+            <ReconnectButton connectionId={c.id} label="Fix login" />
+          ) : (
+            <ReconnectButton connectionId={c.id} chooseAccounts />
           )}
           {removing === c.id ? (
             <>
@@ -68,20 +75,27 @@ export function BanksSection() {
           )}
         </div>
       ))}
+      {hasBanks && <p className="small muted">{TRIAL_LIMIT_NOTE}</p>}
       {status.bank.environment === 'sandbox' && <SandboxNote />}
-      <div className="row wrap">
-        <BankButton label={connections.data?.length ? 'Connect another bank' : 'Connect a bank'} />
-        {Boolean(connections.data?.length) && (
-          <button
-            type="button"
-            className="btn"
-            disabled={sync.isPending}
-            onClick={() => sync.mutate({})}
-          >
-            <Icon name="sync" size={16} /> {sync.isPending ? 'Syncing' : 'Sync now'}
-          </button>
-        )}
-      </div>
+      {/* Wait for the list: adding a bank first shows the ones already connected. */}
+      {connections.data && (
+        <AddBank
+          connections={connections.data}
+          className="btn primary"
+          beside={
+            hasBanks && (
+              <button
+                type="button"
+                className="btn"
+                disabled={sync.isPending}
+                onClick={() => sync.mutate({})}
+              >
+                <Icon name="sync" size={16} /> {sync.isPending ? 'Syncing' : 'Sync now'}
+              </button>
+            )
+          }
+        />
+      )}
       {sync.data && (
         <p className="small muted">
           {sync.data.reduce((n, r) => n + r.added, 0)} new,{' '}

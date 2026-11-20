@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
+import { TRIAL_LIMIT_NOTE } from '../../components/bank/linking'
 import {
   budgetFor,
   category,
@@ -18,7 +19,7 @@ import { Setup } from '../Setup'
 
 afterEach(() => vi.unstubAllGlobals())
 
-const bank = { provider: 'plaid', environment: 'sandbox' }
+const bank = { provider: 'plaid', environment: 'sandbox', chooseAccounts: true }
 const {
   id: _id,
   position: _position,
@@ -134,7 +135,7 @@ describe('setup after the account exists', () => {
 
   it('says nothing of Sandbox once Plaid reaches real banks', async () => {
     serve()
-    const production = { provider: 'plaid', environment: 'production' }
+    const production = { provider: 'plaid', environment: 'production', chooseAccounts: true }
     renderSignedIn(<Setup status={{ ...status, bank: production }} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
@@ -144,14 +145,20 @@ describe('setup after the account exists', () => {
 
   it('lists connected banks and offers another', async () => {
     serve({
-      list_connections: () => [{ id: 'c1', institutionName: 'First Bank', accountCount: 2 }],
+      list_connections: () => [
+        { id: 'c1', institutionName: 'First Bank', accountCount: 2, status: 'active' },
+      ],
     })
     renderSignedIn(<Setup status={{ ...status, bank }} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     expect(await screen.findByText('First Bank')).toBeInTheDocument()
     expect(screen.getByText('2 accounts')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect another bank' })).toBeInTheDocument()
+    expect(screen.getByText(TRIAL_LIMIT_NOTE)).toBeInTheDocument()
+    // Another bank starts from the ones already connected, a tap from Reconnect.
+    await user.click(screen.getByRole('button', { name: 'Connect another bank' }))
+    const panel = screen.getByRole('region', { name: 'Already connected' })
+    expect(within(panel).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument()
   })
 
   it('goes back a step', async () => {

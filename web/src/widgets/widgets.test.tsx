@@ -57,6 +57,7 @@ function connection(fields: Partial<Connection> & Pick<Connection, 'id'>): Conne
     lastSyncedAt: null,
     lastError: null,
     accountCount: 2,
+    unsharedCount: 0,
     ...fields,
   }
 }
@@ -857,6 +858,8 @@ describe('AccountsWidget', () => {
       hidden: false,
       manual: false,
       balanceUpdatedAt: null,
+      unsharedAt: null,
+      mayBeBackAs: null,
       aprPercent: null,
       minimumPaymentCents: null,
       lowBalanceCents: null,
@@ -892,6 +895,31 @@ describe('AccountsWidget', () => {
     expect(screen.getByText('Checking').closest('a')).toHaveAttribute('href', '/accounts?select=a')
   })
 
+  it('dates an account the bank no longer shares instead of showing its old balance', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({
+          id: 'a',
+          name: 'Old card',
+          type: 'credit',
+          balanceCents: 80000,
+          balanceUpdatedAt: '2026-11-03T15:00:00Z',
+          unsharedAt: '2026-11-04T15:00:00Z',
+        }),
+        account({ id: 'b', name: 'Older', balanceCents: 100, unsharedAt: '2026-11-04T15:00:00Z' }),
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const row = (await screen.findByText('Old card')).closest('.list-row')!
+    expect(row).toHaveClass('muted')
+    expect(row).toHaveTextContent('no longer shared')
+    expect(row).toHaveTextContent(/Last updated Nov 3/)
+    expect(row).not.toHaveTextContent('$800.00')
+    expect(row).not.toHaveTextContent('owed')
+    // With no time the balance was read, the day it stopped being shared.
+    expect(screen.getByText('Older').closest('.list-row')).toHaveTextContent(/Last updated Nov 4/)
+  })
+
   it("draws a line of each account's recent balance, when it has one", async () => {
     fakeServer({
       list_accounts: () => [
@@ -911,6 +939,26 @@ describe('AccountsWidget', () => {
     // One day of history makes no line.
     const savings = screen.getByText('New savings').closest('.list-row')!
     expect(savings.querySelector('svg.spark')).toBeNull()
+  })
+
+  it('draws no line for an account the bank no longer shares, whose balance stopped', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: 9000 }),
+        account({ id: 'b', name: 'Old savings', unsharedAt: '2026-11-04T15:00:00Z' }),
+      ],
+      list_recent_balances: () => [
+        { accountId: 'a', balancesCents: [5000, 7000, 9000] },
+        // The server carries the last balance on to today, which would draw flat.
+        { accountId: 'b', balancesCents: [100, 300, 300] },
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const checking = (await screen.findByText('Checking')).closest('.list-row')!
+    await waitFor(() => expect(checking.querySelector('svg.spark')).not.toBeNull())
+    expect(
+      screen.getByText('Old savings').closest('.list-row')!.querySelector('svg.spark'),
+    ).toBeNull()
   })
 
   it('shows an overdrawn cash balance in red, but never a card balance', async () => {

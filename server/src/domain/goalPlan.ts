@@ -5,13 +5,26 @@
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { cadenceOf, PER_YEAR, periodContaining, type PeriodConfig } from '../lib/periods.js'
 
+/**
+ * Where a goal stands. `stale`: it follows an account its bank no longer
+ * shares, so its progress is only known as of then (see goals.ts).
+ */
+export type GoalStatus = 'reached' | 'in_progress' | 'past_due' | 'stale'
+
 /** How a goal stands, from goals.ts: just the parts the plan needs. */
 export interface GoalStanding {
   targetDate: IsoDate | null
   remainingCents: number
   setAside: boolean
-  status: 'reached' | 'in_progress' | 'past_due'
+  status: GoalStatus
 }
+
+/**
+ * Whether a plan applies: a reached goal needs none, and a stale one cannot
+ * have one, since what is left to save is not known any more.
+ */
+const isPlanned = (goal: GoalStanding) =>
+  goal.status === 'in_progress' || goal.status === 'past_due'
 
 /** What was put toward a goal lately, read from its history (see goalHistory.ts). */
 export interface GoalProgressFacts {
@@ -23,18 +36,18 @@ export interface GoalProgressFacts {
 }
 
 export interface GoalPlan {
-  /** Budget periods until the target date, counting the current one; null without a date. */
+  /** Budget periods until the target date, counting the current one; null without a date or a plan. */
   periodsLeft: number | null
-  /** What to set aside each budget period to make the date; null without a date or once reached. */
+  /** What to set aside each budget period to make the date; null without a date or a plan. */
   perPeriodCents: number | null
   savedThisPeriodCents: number
   /** What is still to set aside this period; null when there is no per-period amount. */
   thisPeriodLeftCents: number | null
   /** The recent pace, as an amount per budget period; zero when nothing was put aside lately. */
   recentPerPeriodCents: number
-  /** When the goal is reached if the recent pace holds; null without recent progress or once reached. */
+  /** When the goal is reached if the recent pace holds; null without recent progress or a plan. */
   projectedDate: IsoDate | null
-  /** Whether the projection makes the target date; null without a date or once reached. */
+  /** Whether the projection makes the target date; null without a date or a plan. */
   onTrack: boolean | null
   /** What this goal holds back from safe-to-spend this period (zero unless set aside). */
   heldBackCents: number
@@ -81,7 +94,7 @@ function perPeriodNeeded(
   periodsLeft: number | null,
   savedThisPeriod: number,
 ): number | null {
-  if (goal.status === 'reached' || periodsLeft === null) return null
+  if (!isPlanned(goal) || periodsLeft === null) return null
   if (goal.status === 'past_due') return goal.remainingCents
   const atPeriodStart = Math.max(0, goal.remainingCents + savedThisPeriod)
   return Math.ceil(atPeriodStart / Math.max(1, periodsLeft))
@@ -95,7 +108,7 @@ function projectReach(remaining: number, perDay: number, today: IsoDate): IsoDat
 }
 
 function onTrackOf(goal: GoalStanding, projected: IsoDate | null): boolean | null {
-  if (goal.status === 'reached' || goal.targetDate === null) return null
+  if (!isPlanned(goal) || goal.targetDate === null) return null
   if (goal.status === 'past_due' || projected === null) return false
   return projected <= goal.targetDate
 }
@@ -107,12 +120,12 @@ export function planOf(
   today: IsoDate,
   config: PeriodConfig,
 ): GoalPlan {
-  const reached = goal.status === 'reached'
+  const planned = isPlanned(goal)
   const periodsLeft =
-    goal.targetDate === null || reached ? null : periodsUntil(today, goal.targetDate, config)
+    goal.targetDate === null || !planned ? null : periodsUntil(today, goal.targetDate, config)
   const perPeriodCents = perPeriodNeeded(goal, periodsLeft, facts.savedThisPeriodCents)
   const perDay = facts.recentSavedCents / Math.max(1, facts.recentDays)
-  const projectedDate = reached ? null : projectReach(goal.remainingCents, perDay, today)
+  const projectedDate = planned ? projectReach(goal.remainingCents, perDay, today) : null
   // Only a goal still in reach holds money back: a reached one needs nothing,
   // and a past-due one is the owner's call (move the date or the target).
   const holds = goal.setAside && goal.status === 'in_progress' && perPeriodCents !== null

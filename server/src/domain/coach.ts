@@ -151,7 +151,17 @@ function goalItems({ goals, cashFlow: { today } }: CoachSources, money: Money): 
       message: behindMessage(g, money),
       tool: 'list_goals',
     }))
-  return [...pastDue, ...behind]
+  // Progress frozen when the bank stopped sharing the account: say so once, not "behind".
+  const stale = goals
+    .filter((g) => g.status === 'stale')
+    .map<AttentionItem>((g) => ({
+      priority: 'fyi',
+      topic: 'goal',
+      message: `${g.name} follows ${g.accountName ?? 'an account'}, which its bank no longer shares, so its progress is as of ${g.balanceAsOf}. Ask whether to link it to another account or count it by hand.`,
+      forOwner: `${g.name} follows ${g.accountName ?? 'an account'}, which its bank no longer shares, so its progress is as of ${g.balanceAsOf}. You could link it to another account or count it by hand.`,
+      tool: 'update_goal',
+    }))
+  return [...pastDue, ...behind, ...stale]
 }
 
 function debtItems({ debtGaps }: CoachSources): AttentionItem[] {

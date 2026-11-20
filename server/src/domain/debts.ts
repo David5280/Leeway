@@ -47,13 +47,17 @@ function missingTerms(row: DebtRow): DebtGap['missing'] {
   return missing
 }
 
-/** Counted cards and loans with a balance owed, split into plannable debts and gaps. */
+/**
+ * Counted cards and loans with a balance owed, split into plannable debts and
+ * gaps. One the bank no longer shares has no current balance to plan from.
+ */
 async function listDebts(db: Db): Promise<Pick<DebtPlans, 'debts' | 'needsDetails'>> {
   const { rows } = await db.query<Omit<DebtRow, 'name'>>(
     `SELECT a.id, a.type, a.balance_cents AS "balanceCents",
        a.apr_bps AS "aprBps", a.minimum_payment_cents AS "minimumCents"
      FROM accounts a
-     WHERE a.type IN ('credit', 'loan') AND NOT a.hidden AND a.balance_cents > 0`,
+     WHERE a.type IN ('credit', 'loan') AND NOT a.hidden AND a.unshared_at IS NULL
+       AND a.balance_cents > 0`,
   )
   // Sorted by the name shown, which is worked out here rather than in SQL.
   const names = await accountNames(db)

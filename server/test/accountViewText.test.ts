@@ -113,6 +113,7 @@ function input(fields: Partial<AccountsSummaryInput> = {}): AccountsSummaryInput
   const accounts = [account()]
   return {
     accounts,
+    unshared: [],
     balances: combineBalances(accounts),
     flows: [flow(0, 0), flow(0, 0)],
     spending: [],
@@ -232,5 +233,45 @@ describe('accountsSummary', () => {
 
   it('handles a pick with no periods of history', () => {
     expect(accountsSummary(input({ flows: [] }), money).points).toEqual([])
+  })
+})
+
+describe('accountsSummary with accounts the bank no longer shares', () => {
+  const unshared = (name: string, institutionName: string | null = 'Chase') => ({
+    name,
+    institutionName,
+  })
+  const none = { accounts: [], balances: combineBalances([]) }
+
+  it('says first that one is left out of the figures', () => {
+    const summary = accountsSummary(input({ unshared: [unshared('Old savings')] }), money)
+    expect(summary.points[0]).toBe(
+      'Old savings is no longer shared from Chase and is left out of these figures.',
+    )
+  })
+
+  it('counts several left out, whatever their banks', () => {
+    const summary = accountsSummary(
+      input({ unshared: [unshared('Old savings'), unshared('Old card', null)] }),
+      money,
+    )
+    expect(summary.points[0]).toBe(
+      '2 accounts no longer shared from their banks are left out of these figures.',
+    )
+  })
+
+  it('says there is no balance when only unshared accounts are picked', () => {
+    const one = accountsSummary(input({ ...none, unshared: [unshared('Old', null)] }), money)
+    expect(one.headline).toBe(
+      'Old is no longer shared from its bank, so it has no current balance.',
+    )
+    expect(one.points).toEqual([])
+    const two = accountsSummary(
+      input({ ...none, unshared: [unshared('Old'), unshared('Older')] }),
+      money,
+    )
+    expect(two.headline).toBe(
+      'These accounts are no longer shared from their banks, so they have no current balances.',
+    )
   })
 })

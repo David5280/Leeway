@@ -4,7 +4,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '../../api/client'
-import { failing, fakeServer, renderSignedIn, withBank } from '../../test/fake'
+import { TRIAL_LIMIT_NOTE } from '../../components/bank/linking'
+import { failing, fakeServer, holdRequest, renderSignedIn, withBank } from '../../test/fake'
 import { BanksSection } from './Banks'
 
 // Plaid's window cannot open in jsdom; this stand-in opens at once and hands back a token.
@@ -25,6 +26,7 @@ function connection(fields: Partial<Connection> & Pick<Connection, 'id'>): Conne
     lastSyncedAt: null,
     lastError: null,
     accountCount: 2,
+    unsharedCount: 0,
     ...fields,
   }
 }
@@ -91,7 +93,7 @@ describe('Banks', () => {
 
   it('says nothing of Sandbox once Plaid reaches real banks', async () => {
     serve()
-    const production = { provider: 'plaid', environment: 'production' }
+    const production = { provider: 'plaid', environment: 'production', chooseAccounts: true }
     renderSignedIn(<BanksSection />, { status: { bank: production } })
     await screen.findByText('First Bank')
     expect(screen.queryByText(/Sandbox/)).not.toBeInTheDocument()
@@ -109,6 +111,13 @@ describe('Banks', () => {
     expect(screen.getByRole('button', { name: 'Connect another bank' })).toBeInTheDocument()
   })
 
+  it('counts the accounts a bank no longer shares', async () => {
+    serve([connection({ id: 'conn-1', accountCount: 1, unsharedCount: 1 })])
+    renderSignedIn(<BanksSection />, { status: withBank })
+    await screen.findByText('First Bank')
+    expect(rowOf('First Bank')).toHaveTextContent('1 account, 1 no longer shared, synced never')
+  })
+
   it('asks to sign in again where a login expired, and repairs it', async () => {
     const server = serve()
     renderSignedIn(<BanksSection />, { status: withBank })
@@ -123,12 +132,56 @@ describe('Banks', () => {
     expect(server.actions('create_link_token')).toEqual([{ connectionId: 'conn-2' }])
   })
 
+  it('reconnects a healthy bank in update mode, letting the owner choose its accounts', async () => {
+    const server = serve()
+    renderSignedIn(<BanksSection />, { status: withBank })
+    await screen.findByText('First Bank')
+    await userEvent
+      .setup()
+      .click(within(rowOf('First Bank')).getByRole('button', { name: 'Reconnect' }))
+    await waitFor(() =>
+      expect(server.actions('bank_reconnected')).toEqual([{ connectionId: 'conn-1' }]),
+    )
+    expect(server.actions('create_link_token')).toEqual([
+      { connectionId: 'conn-1', chooseAccounts: true },
+    ])
+  })
+
+  it('says, under the banks, to reconnect rather than remove and re-add', async () => {
+    serve()
+    renderSignedIn(<BanksSection />, { status: withBank })
+    expect(await screen.findByText(TRIAL_LIMIT_NOTE)).toBeVisible()
+    // The note gives no number: the limit differs from one Plaid account to the next.
+    expect(TRIAL_LIMIT_NOTE).not.toMatch(/\d/)
+  })
+
+  it('shows the banks already connected before opening Plaid for another', async () => {
+    const server = serve()
+    renderSignedIn(<BanksSection />, { status: withBank })
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Connect another bank' }))
+    const panel = screen.getByRole('region', { name: 'Already connected' })
+    expect(within(panel).getByText('Credit Union')).toBeVisible()
+    expect(server.actions('create_link_token')).toEqual([])
+  })
+
   it('syncs now and reports what came in', async () => {
     const server = serve()
     renderSignedIn(<BanksSection />, { status: withBank })
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Sync now' }))
     expect(await screen.findByText('3 new, 1 updated.')).toBeInTheDocument()
     expect(server.actions('sync_banks')).toEqual([{}])
+  })
+
+  it('says it is syncing until the banks answer', async () => {
+    serve()
+    const release = holdRequest('/api/actions/sync_banks')
+    renderSignedIn(<BanksSection />, { status: withBank })
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Sync now' }))
+    expect(screen.getByRole('button', { name: 'Syncing' })).toBeDisabled()
+    release()
+    expect(await screen.findByRole('button', { name: 'Sync now' })).toBeEnabled()
   })
 
   it('shows why a sync failed', async () => {
@@ -147,6 +200,7 @@ describe('Banks', () => {
     await waitFor(() => expect(server.actions('list_connections')).toHaveLength(1))
     expect(await screen.findByRole('button', { name: 'Connect a bank' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument()
+    expect(screen.queryByText(TRIAL_LIMIT_NOTE)).not.toBeInTheDocument()
   })
 
   it('removes a bank only after asking, and Keep backs out', async () => {

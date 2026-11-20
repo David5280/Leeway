@@ -1062,6 +1062,36 @@ button.chip {
   color: var(--over);
 }
 
+/* A bank's name in a row of banks keeps room to be read: on a narrow screen,
+   the status and buttons beside it move to the next line instead. */
+.grow.bank-name {
+  min-width: 180px;
+}
+
+/* Removing an account the bank no longer shares asks on a line of its own. */
+.unshared-confirm {
+  flex-basis: 100%;
+}
+
+/* A step of adding a bank (components/bank): set in from the card it opens in. */
+.bank-step {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.bank-step-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The heading takes focus when a step opens, for screen readers; no ring for a mouse. */
+.bank-step-title:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .empty {
   padding: 28px 0;
   text-align: center;

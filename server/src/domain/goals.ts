@@ -11,7 +11,7 @@ import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { accountNames } from './accounts.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
-import { planOf, type GoalPlan, type GoalProgressFacts } from './goalPlan.js'
+import { planOf, type GoalPlan, type GoalProgressFacts, type GoalStatus } from './goalPlan.js'
 
 const GOAL_KINDS = ['savings', 'purchase'] as const
 
@@ -43,6 +43,11 @@ export interface GoalRow extends GoalInput {
   id: string
   accountName: string | null
   accountBalanceCents: number | null
+  /**
+   * For a goal following an account its bank no longer shares: the day it
+   * stopped, which the balance and so the progress are as of. Null otherwise.
+   */
+  balanceAsOf: IsoDate | null
   /** The day the goal was made. */
   createdOn: IsoDate
 }
@@ -55,9 +60,9 @@ export interface GoalProgress extends GoalRow {
   percent: number
   /** Whole months left until the target date, counting the current one; null without a date. */
   monthsLeft: number | null
-  /** What to set aside each month to make the date; null without a date or once reached. */
+  /** What to set aside each month to make the date; null without a date, once reached, or stale. */
   monthlyNeededCents: number | null
-  status: 'reached' | 'in_progress' | 'past_due'
+  status: GoalStatus
 }
 
 export type Goal = GoalProgress & GoalPlan
@@ -75,9 +80,12 @@ function monthsUntil(today: IsoDate, target: IsoDate): number {
   return (to.year - from.year) * 12 + (to.month - from.month) + 1
 }
 
-function goalStatus(reached: boolean, pastDue: boolean): Goal['status'] {
+function goalStatus(row: GoalRow, reached: boolean, today: IsoDate): GoalStatus {
+  // A balance frozen when the bank stopped sharing it says nothing about now,
+  // so the goal is neither reached nor behind; it is shown as of that day.
+  if (row.balanceAsOf !== null) return 'stale'
   if (reached) return 'reached'
-  return pastDue ? 'past_due' : 'in_progress'
+  return row.targetDate !== null && row.targetDate < today ? 'past_due' : 'in_progress'
 }
 
 /** A goal's progress and what it takes each month to reach it on time. */
@@ -85,8 +93,8 @@ export function progressOf(row: GoalRow, today: IsoDate): GoalProgress {
   const current = row.accountId ? Math.max(0, row.accountBalanceCents ?? 0) : row.savedCents
   const remaining = Math.max(0, row.targetCents - current)
   const months = row.targetDate ? monthsUntil(today, row.targetDate) : null
-  const reached = remaining === 0
-  const pastDue = !reached && row.targetDate !== null && row.targetDate < today
+  const status = goalStatus(row, remaining === 0, today)
+  const planned = status === 'in_progress' || status === 'past_due'
   return {
     ...row,
     currentCents: current,
@@ -95,8 +103,8 @@ export function progressOf(row: GoalRow, today: IsoDate): GoalProgress {
     monthsLeft: months === null ? null : Math.max(0, months),
     // Past due, everything left is needed now.
     monthlyNeededCents:
-      reached || months === null ? null : Math.ceil(remaining / Math.max(1, months)),
-    status: goalStatus(reached, pastDue),
+      !planned || months === null ? null : Math.ceil(remaining / Math.max(1, months)),
+    status,
   }
 }
 
@@ -110,7 +118,7 @@ const SELECT = `
   SELECT g.id, g.kind, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
     g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
     g.created_at::date AS "createdOn",
-    a.balance_cents AS "accountBalanceCents"
+    a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
 
 type StoredGoal = Omit<GoalRow, 'accountName'>

@@ -66,6 +66,7 @@ export function goal(name: string, fields: Partial<CheckinGoal> = {}): CheckinGo
     onTrack: null,
     heldBackCents: 0,
     status: 'in_progress',
+    balanceAsOf: null,
     ...fields,
   }
 }

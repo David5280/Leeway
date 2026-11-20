@@ -280,13 +280,14 @@ describe('Settings page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Settings could not be saved')
   })
 
-  it('explains how to add bank keys when the server has none, and lists banks when it has', () => {
+  it('explains how to add bank keys when the server has none, and lists banks when it has', async () => {
     fakeServer(quiet)
     const noKeys = renderSettings('/settings/banks')
     expect(screen.getByRole('region', { name: 'Banks' })).toHaveTextContent('PLAID_CLIENT_ID')
     noKeys.unmount()
     renderSettings('/settings/banks', { status: withBank })
-    expect(screen.getByRole('button', { name: 'Connect a bank' })).toBeInTheDocument()
+    // The button waits for the bank list, since adding a bank first shows the ones connected.
+    expect(await screen.findByRole('button', { name: 'Connect a bank' })).toBeInTheDocument()
   })
 
   it('shows the connector address in the AI assistant group', () => {
