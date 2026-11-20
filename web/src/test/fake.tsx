@@ -188,6 +188,7 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
     manual: false,
     balanceUpdatedAt: null,
     unsharedAt: null,
+    mayBeBackAs: null,
     aprPercent: null,
     minimumPaymentCents: null,
     lowBalanceCents: null,

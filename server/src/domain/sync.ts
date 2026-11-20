@@ -126,11 +126,11 @@ async function applySync(
   changes: BankChanges,
 ): Promise<void> {
   const cardsBefore = await loadOwnAccounts(db)
-  const returning = await reattachAccounts(db, connectionId, accounts)
+  await reattachAccounts(db, connectionId, accounts)
   const accountIds = await upsertAccounts(db, connectionId, accounts)
   await markUnshared(db, connectionId, accounts)
   const arrived = [...changes.added, ...changes.modified]
-  await adoptHistory(db, returning, accountIds, arrived)
+  await adoptHistory(db, connectionId, accountIds, arrived)
   const touched = await upsertTransactions(db, accountIds, arrived)
   await carryOverPendingEdits(db, touched)
   await removeTransactions(db, accountIds, changes.removed)

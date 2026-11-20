@@ -47,7 +47,12 @@ export interface DuplicateBankDetails {
 export function sameAccount(a: PickedAccount, b: PickedAccount): boolean {
   // Without a mask, two accounts both called "Checking" say nothing.
   if (!a.mask || !b.mask || a.mask !== b.mask) return false
-  return normalized(a.name) === normalized(b.name)
+  return sameName(a.name, b.name)
+}
+
+/** The same account name, ignoring case and spacing. */
+export function sameName(a: string, b: string): boolean {
+  return normalized(a) === normalized(b)
 }
 
 const normalized = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase()

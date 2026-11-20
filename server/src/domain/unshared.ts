@@ -10,12 +10,18 @@
 // own server, but their balances stay out of every total and alert until the
 // owner removes them (deleteAccount) or shares them again (a reconnect).
 //
-// Ticked again later, an account may come back under a new account_id: Plaid
-// says "the existing account is removed and a new one is created with a new
-// account_id". It is matched to the account kept here by its type, name and
-// mask, so it comes back as the same account. Its transactions may come back
-// under new ids too, so they are matched to the history already here by day,
-// amount and name instead of being added a second time.
+// Ticked again later, an account may come back under its own account_id, and
+// its transactions under their own ids, so saving them as usual is enough.
+// Or it may come back under a new one: Plaid says "the existing account is
+// removed and a new one is created with a new account_id". It is matched to
+// the account kept here by its type, name and mask (or, without a mask, by
+// being the only one of its type and name), so it comes back as the same
+// account. Its history may then arrive again under new ids, in this sync or
+// in later ones as Plaid fetches it, so for a while (the adoption window)
+// each transaction kept for it can be matched once to an arriving one with
+// the same day, amount and name instead of being added a second time. One
+// that cannot be paired comes in as a new account, and the old one says it
+// may be back (possibleReturns), so the owner can remove the older copy.
 //
 // A card kept this way still counts as the owner's own (categorize.ts), so
 // payments to it stay transfers: its purchases up to then are still here.
@@ -24,7 +30,7 @@
 import type pg from 'pg'
 import type { BankAccount, BankTransaction } from '../bank/provider.js'
 import type { AccountType } from './accounts.js'
-import { sameAccount } from './sameBank.js'
+import { sameAccount, sameName } from './sameBank.js'
 
 /** An account Leeway has for a login, as far as matching one the bank reports goes. */
 export interface KeptAccount {
@@ -36,24 +42,48 @@ export interface KeptAccount {
 }
 
 /**
+ * How long after an account comes back under a new id its kept history can
+ * still be matched to the bank's new ids. Plaid fetches an account's history
+ * in the background after its window closes and announces it by webhook, so
+ * the history can arrive several syncs later; a month leaves room for a slow
+ * bank, and past it an arrival is news, not history.
+ */
+export const ADOPTION_WINDOW_DAYS = 30
+
+/** Two masks that say the accounts differ: both known, and not the same. */
+const masksDiffer = (a: string | null, b: string | null) => a !== null && b !== null && a !== b
+
+/**
  * Pairs accounts the bank reports under ids Leeway has never seen with the
- * missing accounts they are: the same type, name and mask. Each kept account
- * pairs at most once. Returns the kept account's id by the bank's new id.
- * Without a mask nothing pairs, since two accounts both called "Checking"
- * say nothing; such an account comes in as new and the old one stays
- * unshared until the owner removes it.
+ * missing accounts they are, each kept account pairing at most once. Returns
+ * the kept account's id by the bank's new id.
+ *
+ * The same type, name and mask pair first. Without a mask, two accounts both
+ * called "Checking" say nothing in general; but when exactly one account of
+ * that type and name is missing and exactly one arrives, there is nothing to
+ * choose between, so they pair too. Anything less clear-cut comes in as new.
  */
 export function pairReturning(missing: KeptAccount[], arrived: BankAccount[]): Map<string, string> {
   const pairs = new Map<string, string>()
   const free = [...missing]
+  const pair = (account: BankAccount, kept: KeptAccount) => {
+    pairs.set(account.providerAccountId, kept.id)
+    free.splice(free.indexOf(kept), 1)
+  }
+
   for (const account of arrived) {
-    const index = free.findIndex(
-      (kept) =>
-        kept.type === account.type && sameAccount(kept, { name: account.name, mask: account.mask }),
-    )
-    if (index === -1) continue
-    pairs.set(account.providerAccountId, free[index]!.id)
-    free.splice(index, 1)
+    const kept = free.find((one) => one.type === account.type && sameAccount(one, account))
+    if (kept) pair(account, kept)
+  }
+
+  const unpaired = arrived.filter((account) => !pairs.has(account.providerAccountId))
+  for (const account of unpaired) {
+    const alike = (other: { type: AccountType; name: string }) =>
+      other.type === account.type && sameName(other.name, account.name)
+    const candidates = free.filter(alike)
+    if (candidates.length !== 1 || unpaired.filter(alike).length !== 1) continue
+    if (masksDiffer(candidates[0]!.mask, account.mask)) continue
+    pair(account, candidates[0]!)
   }
   return pairs
 }
@@ -61,18 +91,19 @@ export function pairReturning(missing: KeptAccount[], arrived: BankAccount[]): M
 /**
  * Before a sync saves the accounts the bank reports, gives each one that
  * arrived under a new id the id of the account it is, so it is saved over
- * that account rather than beside it. Returns the ids of the accounts coming
- * back: those the bank had stopped sharing, or that just changed id, whose
- * transactions may return under new ids (see adoptHistory).
+ * that account rather than beside it, and opens its adoption window: the
+ * transactions kept for it, all from before it came back, may each be
+ * matched once to the bank's new id for it until the window closes (see
+ * adoptHistory). An account shared again under its own id needs none of
+ * this, since its transactions keep their ids too.
  */
 export async function reattachAccounts(
   db: pg.PoolClient,
   connectionId: string,
   reported: BankAccount[],
-): Promise<string[]> {
-  const { rows } = await db.query<KeptAccount & { unshared: boolean }>(
-    `SELECT id, provider_account_id AS "providerAccountId", name, mask, type,
-       unshared_at IS NOT NULL AS unshared
+): Promise<void> {
+  const { rows } = await db.query<KeptAccount>(
+    `SELECT id, provider_account_id AS "providerAccountId", name, mask, type
      FROM accounts WHERE connection_id = $1 ORDER BY created_at, id`,
     [connectionId],
   )
@@ -82,16 +113,18 @@ export async function reattachAccounts(
   const arrived = reported.filter((account) => !knownIds.has(account.providerAccountId))
 
   const pairs = pairReturning(missing, arrived)
+  if (pairs.size === 0) return
   for (const [providerAccountId, id] of pairs) {
     await db.query('UPDATE accounts SET provider_account_id = $2 WHERE id = $1', [
       id,
       providerAccountId,
     ])
   }
-  const sharedAgain = rows
-    .filter((row) => row.unshared && reportedIds.has(row.providerAccountId))
-    .map((row) => row.id)
-  return [...sharedAgain, ...pairs.values()]
+  await db.query(
+    `UPDATE transactions SET adopt_until = now() + make_interval(days => $2)
+     WHERE account_id = ANY($1::uuid[]) AND provider_transaction_id IS NOT NULL`,
+    [[...pairs.values()], ADOPTION_WINDOW_DAYS],
+  )
 }
 
 /**
@@ -162,38 +195,87 @@ export function matchHistory(
 }
 
 /**
- * Gives the returning accounts' kept transactions the bank's new ids for
- * them, before the sync saves what arrived. The arrivals then update the
- * rows already here, with the owner's categories and notes, instead of
- * adding them again. `accountIds` maps the bank's account ids to Leeway's.
+ * Gives transactions kept for an account that came back under a new id the
+ * bank's new ids for them, before the sync saves what arrived. The arrivals
+ * then update the rows already here, with the owner's categories and notes,
+ * instead of adding them again. Only rows whose adoption window is open are
+ * candidates, and adopting one closes its window, so each is matched at most
+ * once and nothing that arrived after the account came back is ever merged.
+ * `accountIds` maps the bank's account ids to Leeway's.
  */
 export async function adoptHistory(
   db: pg.PoolClient,
-  returning: string[],
+  connectionId: string,
   accountIds: Map<string, string>,
   transactions: BankTransaction[],
 ): Promise<void> {
-  if (returning.length === 0) return
-  const coming = new Set(returning)
+  // A window that has run out stays closed, and the partial index stays small.
+  await db.query(
+    `UPDATE transactions t SET adopt_until = NULL
+     FROM accounts a
+     WHERE a.id = t.account_id AND a.connection_id = $1 AND t.adopt_until <= now()`,
+    [connectionId],
+  )
   const arriving: HistoryLine[] = []
   for (const tx of transactions) {
     const accountId = accountIds.get(tx.providerAccountId)
-    if (accountId && coming.has(accountId)) arriving.push({ ...tx, accountId })
+    if (accountId) arriving.push({ ...tx, accountId })
   }
   if (arriving.length === 0) return
   const { rows: kept } = await db.query<HistoryLine & { id: string }>(
-    `SELECT id, account_id AS "accountId", provider_transaction_id AS "providerTransactionId",
-       date, amount_cents AS "amountCents", name
-     FROM transactions
-     WHERE account_id = ANY($1::uuid[]) AND provider_transaction_id IS NOT NULL`,
-    [returning],
+    `SELECT t.id, t.account_id AS "accountId", t.provider_transaction_id AS "providerTransactionId",
+       t.date, t.amount_cents AS "amountCents", t.name
+     FROM transactions t JOIN accounts a ON a.id = t.account_id
+     WHERE a.connection_id = $1 AND t.adopt_until > now()`,
+    [connectionId],
   )
   const adoptions = matchHistory(kept, arriving)
   if (adoptions.length === 0) return
   await db.query(
-    `UPDATE transactions t SET provider_transaction_id = a.provider_id
+    `UPDATE transactions t SET provider_transaction_id = a.provider_id, adopt_until = NULL
      FROM unnest($1::uuid[], $2::text[]) AS a(id, provider_id)
      WHERE t.id = a.id`,
     [adoptions.map((a) => a.id), adoptions.map((a) => a.providerTransactionId)],
   )
+}
+
+/** An account as listed, as far as telling whether one came back goes. */
+export interface ListedAccount {
+  id: string
+  connectionId: string | null
+  type: AccountType
+  /** The name as the bank sends it. */
+  bankName: string
+  mask: string | null
+  unsharedAt: Date | string | null
+  createdAt: Date | string
+}
+
+/**
+ * For each account no longer shared, a newer account at the same login that
+ * may be it back under a new id although pairReturning could not tell: the
+ * same type and name, masks that do not say otherwise, and added once the old
+ * one stopped being shared. Its history may then be here twice, which the
+ * owner is told, with the old one a tap from removal. Returns the newer
+ * account's id by the old one's.
+ */
+export function possibleReturns(accounts: ListedAccount[]): Map<string, string> {
+  const time = (value: Date | string) => new Date(value).getTime()
+  const returns = new Map<string, string>()
+  for (const old of accounts) {
+    if (old.unsharedAt === null || old.connectionId === null) continue
+    const since = time(old.unsharedAt)
+    const back = accounts.find(
+      (other) =>
+        other.unsharedAt === null &&
+        other.connectionId === old.connectionId &&
+        other.type === old.type &&
+        sameName(other.bankName, old.bankName) &&
+        !masksDiffer(other.mask, old.mask) &&
+        // Saved in the same sync that marked the old one, the times are equal.
+        time(other.createdAt) >= since,
+    )
+    if (back) returns.set(old.id, back.id)
+  }
+  return returns
 }

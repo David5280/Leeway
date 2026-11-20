@@ -13,7 +13,8 @@ import {
   type AccountAlert,
   type FeeCandidate,
 } from './accountAlerts.js'
-import { isShared, listAccounts, type Account } from './accounts.js'
+import { isShared } from './accountSharing.js'
+import { listAccounts, type Account } from './accounts.js'
 import type { Settings } from './settings.js'
 
 /**

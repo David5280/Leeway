@@ -109,20 +109,22 @@ describe('the unshared accounts migration', () => {
     await ctx.db.query('DELETE FROM schema_migrations WHERE name = $1', [BRANCH_NAME])
   })
 
-  const hasColumn = async () =>
+  // Both of its columns: when an account stopped being shared, and the adoption window.
+  const hasColumns = async () =>
     (
       await ctx.db.query(
         `SELECT 1 FROM information_schema.columns
-         WHERE table_name = 'accounts' AND column_name = 'unshared_at'`,
+         WHERE (table_name, column_name) IN (('accounts', 'unshared_at'), ('transactions', 'adopt_until'))`,
       )
-    ).rowCount === 1
+    ).rowCount === 2
 
   it('is picked up by an install that has run every migration before it', async () => {
     await ctx.db.query('ALTER TABLE accounts DROP COLUMN unshared_at')
+    await ctx.db.query('ALTER TABLE transactions DROP COLUMN adopt_until')
     await ctx.db.query('DELETE FROM schema_migrations WHERE name = $1', [FILE])
 
     expect(await migrate(ctx.db)).toEqual([FILE])
-    expect(await hasColumn()).toBe(true)
+    expect(await hasColumns()).toBe(true)
   })
 
   it('runs again cleanly where it already ran under its first name', async () => {
@@ -130,7 +132,7 @@ describe('the unshared accounts migration', () => {
     await ctx.db.query('INSERT INTO schema_migrations (name) VALUES ($1)', [BRANCH_NAME])
 
     expect(await migrate(ctx.db)).toEqual([FILE])
-    expect(await hasColumn()).toBe(true)
+    expect(await hasColumns()).toBe(true)
   })
 })
 
@@ -145,6 +147,7 @@ describe('indexes', () => {
         'accounts_connection_idx',
         'oauth_tokens_expires_idx',
         'transactions_account_date_idx',
+        'transactions_adopt_until_idx',
         'transactions_category_date_idx',
         'transactions_date_idx',
       ]),

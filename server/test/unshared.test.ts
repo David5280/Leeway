@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { BankAccount } from '../src/bank/provider.js'
+import type { BankAccount, BankTransaction } from '../src/bank/provider.js'
 import type { AppContext } from '../src/context.js'
+import type { Db } from '../src/db/pool.js'
 import { deleteAccount, getAccount, listAccounts } from '../src/domain/accounts.js'
 import { getAccountsView } from '../src/domain/accountView.js'
 import { listAlerts } from '../src/domain/alerts.js'
@@ -261,14 +262,31 @@ describe('sharing an account again', () => {
     })
   })
 
-  it('comes in as a new account when no mask tells it apart, leaving the old one unshared', async () => {
+  it('pairs an unmasked account when it is the only one of its type and name', async () => {
     const unmasked = { ...savings, mask: null }
     bank.accounts = [checking, unmasked]
     const { connectionId } = await linkBank(ctx, newLink('public-unmasked'))
+    const savingsId = (await listAccounts(ctx.db)).find((a) => a.bankName === 'Savings')!.id
     bank.accounts = [checking]
     await reconnected(ctx, connectionId)
 
     bank.accounts = [checking, { ...unmasked, providerAccountId: 'acc-savings-new' }]
+    await reconnected(ctx, connectionId)
+
+    expect(await accountRows()).toHaveLength(2)
+    expect(await getAccount(ctx.db, savingsId)).toMatchObject({ unsharedAt: null })
+  })
+
+  it('comes in as a new account when two unmasked ones share a name, flagging the old one', async () => {
+    const first = { ...savings, mask: null }
+    const second = { ...first, providerAccountId: 'acc-savings-2', balanceCents: 1000 }
+    bank.accounts = [checking, first, second]
+    const { connectionId } = await linkBank(ctx, newLink('public-unmasked'))
+    bank.accounts = [checking]
+    await reconnected(ctx, connectionId)
+
+    // Two kept accounts called Savings, one arriving: nothing says which it is.
+    bank.accounts = [checking, { ...first, providerAccountId: 'acc-savings-new' }]
     await reconnected(ctx, connectionId)
 
     // Accounts saved in one sync share a creation time, so they are compared by the bank's id.
@@ -278,8 +296,99 @@ describe('sharing an account again', () => {
     expect(byBankId).toEqual({
       'acc-checking': false,
       'acc-savings': true,
+      'acc-savings-2': true,
       'acc-savings-new': false,
     })
+    const accounts = await listAccounts(ctx.db)
+    const arrived = accounts.find((a) => a.unsharedAt === null && a.bankName === 'Savings')!
+    const flagged = accounts.filter((a) => a.mayBeBackAs !== null)
+    expect(flagged).toHaveLength(2)
+    expect(flagged.every((a) => a.mayBeBackAs === arrived.name)).toBe(true)
+    expect(arrived.mayBeBackAs).toBeNull()
+  })
+})
+
+describe('history after an account comes back', () => {
+  const onNew = { providerAccountId: 'acc-savings-new' }
+  const interestAgain = (fields: Partial<BankTransaction> = {}) =>
+    bankTx({
+      ...onNew,
+      providerTransactionId: 'ptx-interest-new',
+      name: 'Interest',
+      amountCents: -1200,
+      date: '2026-11-01',
+      ...fields,
+    })
+
+  /** Links, un-ticks savings, then ticks it again under a new id with no transactions yet. */
+  async function backUnderNewId(): Promise<{ connectionId: string; savingsId: string }> {
+    const linked = await linkCheckingAndSavings()
+    await untickSavings(linked.connectionId)
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    await reconnected(ctx, linked.connectionId)
+    return linked
+  }
+
+  it('is adopted when it arrives a sync after the account came back', async () => {
+    const { connectionId, savingsId } = await backUnderNewId()
+    // Plaid fetches the history after the window closes and sends it in a later sync.
+    bank.pages = [page({ added: [interestAgain()] })]
+    await syncConnection(ctx, connectionId)
+
+    expect((await transactionsOf(savingsId)).map((t) => t.name)).toEqual(['Interest'])
+  })
+
+  it('adopts each kept transaction once', async () => {
+    const { connectionId, savingsId } = await backUnderNewId()
+    bank.pages = [page({ added: [interestAgain()] })]
+    await syncConnection(ctx, connectionId)
+    // A second equal payment that day is a payment of its own.
+    bank.pages = [page({ added: [interestAgain({ providerTransactionId: 'ptx-interest-2' })] })]
+    await syncConnection(ctx, connectionId)
+
+    expect(await transactionsOf(savingsId)).toHaveLength(2)
+  })
+
+  it('stops adopting once the window has passed', async () => {
+    const { connectionId, savingsId } = await backUnderNewId()
+    await ctx.db.query(`UPDATE transactions SET adopt_until = now() - interval '1 second'`)
+    bank.pages = [page({ added: [interestAgain()] })]
+    await syncConnection(ctx, connectionId)
+
+    expect(await transactionsOf(savingsId)).toHaveLength(2)
+    const { rows } = await ctx.db.query('SELECT 1 FROM transactions WHERE adopt_until IS NOT NULL')
+    expect(rows).toEqual([])
+  })
+
+  it('never adopts transactions that arrived after the account came back', async () => {
+    const { connectionId, savingsId } = await backUnderNewId()
+    const fare = { ...onNew, name: 'Metro fare', amountCents: 275, date: '2026-11-18' }
+    bank.pages = [page({ added: [bankTx({ ...fare, providerTransactionId: 'ptx-fare-1' })] })]
+    await syncConnection(ctx, connectionId)
+    bank.pages = [page({ added: [bankTx({ ...fare, providerTransactionId: 'ptx-fare-2' })] })]
+    await syncConnection(ctx, connectionId)
+
+    expect((await transactionsOf(savingsId)).filter((t) => t.name === 'Metro fare')).toHaveLength(2)
+  })
+
+  it('keeps two equal fares on one day when the account comes back under the same id', async () => {
+    const fare = {
+      providerAccountId: 'acc-savings',
+      name: 'Metro fare',
+      amountCents: 275,
+      date: '2026-11-16',
+    }
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    bank.pages = [page({ added: [bankTx({ ...fare, providerTransactionId: 'ptx-fare-1' })] })]
+    await syncConnection(ctx, connectionId)
+    await untickSavings(connectionId)
+
+    // Ticked again under its own id: the cursor carries on, so only the news comes.
+    bank.accounts = [checking, savings]
+    bank.pages = [page({ added: [bankTx({ ...fare, providerTransactionId: 'ptx-fare-2' })] })]
+    await reconnected(ctx, connectionId)
+
+    expect((await transactionsOf(savingsId)).filter((t) => t.name === 'Metro fare')).toHaveLength(2)
   })
 })
 
@@ -338,6 +447,38 @@ describe('removing an account the bank no longer shares', () => {
     expect((await transactionsOf(checkingId))[0]!.categoryId).toBeNull()
   })
 
+  it('refuses one the bank shares again between the check and the delete', async () => {
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    await untickSavings(connectionId)
+    // A sync landing in between: the account is shared again just before the delete runs.
+    const racing = {
+      query: async (text: string, values?: unknown[]) => {
+        if (text.startsWith('DELETE FROM accounts')) {
+          await ctx.db.query('UPDATE accounts SET unshared_at = NULL WHERE id = $1', [savingsId])
+        }
+        return ctx.db.query(text, values)
+      },
+    } as unknown as Db
+
+    await expect(deleteAccount(racing, savingsId)).rejects.toBeInstanceOf(AppError)
+    expect(await accountRows()).toHaveLength(2)
+  })
+
+  it('says an account already gone was not found', async () => {
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    await untickSavings(connectionId)
+    const racing = {
+      query: async (text: string, values?: unknown[]) => {
+        if (text.startsWith('DELETE FROM accounts')) {
+          await ctx.db.query('DELETE FROM accounts WHERE id = $1', [savingsId])
+        }
+        return ctx.db.query(text, values)
+      },
+    } as unknown as Db
+
+    await expect(deleteAccount(racing, savingsId)).rejects.toMatchObject({ code: 'not_found' })
+  })
+
   it('refuses a bank account still shared, which the next sync would bring back', async () => {
     await linkCheckingAndSavings()
     const [first] = await listAccounts(ctx.db)
@@ -357,15 +498,34 @@ describe('pairReturning', () => {
     expect([...pairs]).toEqual([['new', 'b']])
   })
 
-  it('pairs nothing across types, without a mask, or with another name', () => {
-    const missing = [kept('a', 'Checking', '1111', 'credit'), kept('b', 'Savings', null)]
+  it('pairs nothing across types, with another mask, or with another name', () => {
+    const missing = [kept('a', 'Checking', '1111', 'credit'), kept('b', 'Savings', '2222')]
     expect(
       pairReturning(missing, [
         bankAccount('n1', 'Checking', 'depository', 0, '1111'),
-        bankAccount('n2', 'Savings', 'depository', 0, null),
+        bankAccount('n2', 'Savings', 'depository', 0, '9999'),
         bankAccount('n3', 'Savings plus', 'depository', 0, '2222'),
       ]).size,
     ).toBe(0)
+  })
+
+  it('pairs without a mask only when one account of that type and name is missing and one arrives', () => {
+    const alone = pairReturning(
+      [kept('a', 'Savings', null), kept('b', 'Checking', '1111')],
+      [bankAccount('n1', 'savings', 'depository', 0, '4444')],
+    )
+    expect([...alone]).toEqual([['n1', 'a']])
+
+    const twoMissing = [kept('a', 'Savings', null), kept('b', 'Savings', null)]
+    expect(
+      pairReturning(twoMissing, [bankAccount('n1', 'Savings', 'depository', 0, null)]).size,
+    ).toBe(0)
+
+    const twoArriving = [
+      bankAccount('n1', 'Savings', 'depository', 0, null),
+      bankAccount('n2', 'Savings', 'depository', 0, null),
+    ]
+    expect(pairReturning([kept('a', 'Savings', null)], twoArriving).size).toBe(0)
   })
 
   it('pairs each kept account once', () => {

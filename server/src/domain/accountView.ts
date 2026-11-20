@@ -8,7 +8,8 @@ import { formatCents } from '../lib/money.js'
 import { shiftPeriod, type Period } from '../lib/periods.js'
 import { periodWord } from '../lib/words.js'
 import type { AccountAlert } from './accountAlerts.js'
-import { isShared, listAccounts, type Account } from './accounts.js'
+import { isShared } from './accountSharing.js'
+import { listAccounts, type Account } from './accounts.js'
 import {
   accountsSummary,
   combineBalances,

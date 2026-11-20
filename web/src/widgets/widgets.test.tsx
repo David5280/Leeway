@@ -811,6 +811,7 @@ describe('AccountsWidget', () => {
       manual: false,
       balanceUpdatedAt: null,
       unsharedAt: null,
+      mayBeBackAs: null,
       aprPercent: null,
       minimumPaymentCents: null,
       lowBalanceCents: null,

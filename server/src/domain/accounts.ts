@@ -4,7 +4,9 @@ import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { distinctAccountNames } from './accountName.js'
+import { isCounted, isShared } from './accountSharing.js'
 import { recategorize } from './categorize.js'
+import { possibleReturns } from './unshared.js'
 import {
   ACCOUNT_KINDS,
   choiceThatFits,
@@ -56,6 +58,12 @@ export interface Account {
    * balanceUpdatedAt says when it was last read.
    */
   unsharedAt: string | null
+  /**
+   * For an account no longer shared: the name of a newer account at the same
+   * login that may be this one back under a new id, so its history may now be
+   * here twice (see possibleReturns). Null otherwise.
+   */
+  mayBeBackAs: string | null
   /** Yearly interest rate for a card or loan, such as 24.99. Banks rarely send it. */
   aprPercent: number | null
   /** The required monthly payment for a card or loan. */
@@ -79,21 +87,31 @@ const SELECT = `
     a.connection_id IS NULL AS manual, a.balance_updated_at AS "balanceUpdatedAt",
     a.unshared_at AS "unsharedAt",
     a.apr_bps / 100.0 AS "aprPercent", a.minimum_payment_cents AS "minimumPaymentCents",
-    a.low_balance_cents AS "lowBalanceCents", a.kind AS "kindChoice"
+    a.low_balance_cents AS "lowBalanceCents", a.kind AS "kindChoice", a.created_at AS "createdAt"
   FROM accounts a LEFT JOIN connections c ON c.id = a.connection_id`
 
-/** An account as stored, before its name and kind are worked out. */
-type AccountRow = Omit<Account, 'name' | 'kind'>
+/** An account as stored, before its name, kind and possible return are worked out. */
+type AccountRow = Omit<Account, 'name' | 'kind' | 'mayBeBackAs'> & { createdAt: Date }
 
 /**
  * Every account, hidden ones too, named side by side so no two share a name
- * (see accountName.ts) and with its kind worked out (see accountKinds.ts).
+ * (see accountName.ts), with its kind worked out (see accountKinds.ts) and,
+ * when no longer shared, the account it may be back as (see unshared.ts).
  * Oldest first, so adding an account never renames another.
  */
 async function namedAccounts(db: Db): Promise<Account[]> {
   const { rows } = await db.query<AccountRow>(`${SELECT} ORDER BY a.created_at, a.id`)
   const names = distinctAccountNames(rows)
-  return rows.map((row) => ({ ...row, name: names.get(row.id)!, kind: kindOf(row) }))
+  const returns = possibleReturns(rows)
+  return rows.map(({ createdAt: _created, ...row }) => {
+    const backId = returns.get(row.id)
+    return {
+      ...row,
+      name: names.get(row.id)!,
+      kind: kindOf(row),
+      mayBeBackAs: backId === undefined ? null : names.get(backId)!,
+    }
+  })
 }
 
 /** By kind of account, then by the name shown. Names are worked out here, so SQL cannot sort them. */
@@ -108,17 +126,6 @@ export async function listAccounts(db: Db, includeHidden = true): Promise<Accoun
   const accounts = await namedAccounts(db)
   return accounts.filter((account) => includeHidden || isCounted(account)).sort(inListOrder)
 }
-
-/**
- * Whether the bank still shares the account, so its balance is current.
- * An account added by hand always counts as shared.
- */
-export const isShared = (account: Pick<Account, 'unsharedAt'>): boolean =>
-  account.unsharedAt === null
-
-/** Whether the account's balance counts toward totals: shown, and still shared. */
-export const isCounted = (account: Pick<Account, 'hidden' | 'unsharedAt'>): boolean =>
-  !account.hidden && isShared(account)
 
 export async function getAccount(db: Db, id: string): Promise<Account> {
   const account = (await namedAccounts(db)).find((one) => one.id === id)
@@ -298,6 +305,12 @@ export async function updateAccount(db: Db, id: string, patch: AccountPatch): Pr
   return getAccount(db, id)
 }
 
+const stillShared = () =>
+  new AppError(
+    'invalid_input',
+    'Linked bank accounts go away when you remove their bank connection; you can hide this one instead',
+  )
+
 /**
  * Deletes an account and its transactions: one added by hand, or a bank
  * account the bank no longer shares. One the bank still shares would only
@@ -305,13 +318,17 @@ export async function updateAccount(db: Db, id: string, patch: AccountPatch): Pr
  */
 export async function deleteAccount(db: Db, id: string): Promise<void> {
   const account = await getAccount(db, id)
-  if (!account.manual && isShared(account)) {
-    throw new AppError(
-      'invalid_input',
-      'Linked bank accounts go away when you remove their bank connection; you can hide this one instead',
-    )
+  if (!account.manual && isShared(account)) throw stillShared()
+  // The condition is checked again as the row is deleted: a sync that shares
+  // the account again between the read above and here must not lose it.
+  const { rowCount } = await db.query(
+    'DELETE FROM accounts WHERE id = $1 AND (connection_id IS NULL OR unshared_at IS NOT NULL)',
+    [id],
+  )
+  if (!rowCount) {
+    const { rowCount: exists } = await db.query('SELECT 1 FROM accounts WHERE id = $1', [id])
+    throw exists ? stillShared() : notFound('Account')
   }
-  await db.query('DELETE FROM accounts WHERE id = $1', [id])
   // Payments to a card no longer here count as spending again (categorize.ts).
   if (account.type === 'credit' && !account.manual) await recategorize(db)
 }

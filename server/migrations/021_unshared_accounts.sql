@@ -8,3 +8,11 @@
 -- runner records files by name, so a database that ran it under that name
 -- runs it again here and must find nothing left to do.
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS unshared_at timestamptz;
+
+-- Until when a transaction may still be matched to the bank's new id for it.
+-- Set on an account's history when the account comes back under a new
+-- account_id, since Plaid may send that history again under new ids over the
+-- following syncs; cleared once matched, so each row is matched at most once.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS adopt_until timestamptz;
+CREATE INDEX IF NOT EXISTS transactions_adopt_until_idx ON transactions (account_id)
+  WHERE adopt_until IS NOT NULL;
