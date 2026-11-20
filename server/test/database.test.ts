@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { migrate } from '../src/db/migrate.js'
-import { createPool, inTransaction, withTransaction } from '../src/db/pool.js'
+import { createPool, withTransaction } from '../src/db/pool.js'
 import { getSettings } from '../src/domain/settings.js'
 import { createTestContext, resetData, TEST_DATABASE_URL } from './helpers.js'
 
@@ -46,25 +46,6 @@ describe('connection pool', () => {
     })
 
     await expect(attempt).rejects.toThrow('halfway failure')
-    expect((await getSettings(ctx.db)).currency).toBe('USD')
-  })
-
-  it('opens a transaction on the pool, and joins the one a client already holds', async () => {
-    const onPool = inTransaction(ctx.db, async (db) => {
-      await db.query(`UPDATE settings SET data = '{"currency": "EUR"}'`)
-      throw new Error('halfway failure')
-    })
-    await expect(onPool).rejects.toThrow('halfway failure')
-    expect((await getSettings(ctx.db)).currency).toBe('USD')
-
-    // Inside a caller's transaction, the work is part of it: rolled back with it.
-    const outer = withTransaction(ctx.db, async (client) => {
-      await inTransaction(client, async (db) => {
-        await db.query(`UPDATE settings SET data = '{"currency": "EUR"}'`)
-      })
-      throw new Error('the caller fails after')
-    })
-    await expect(outer).rejects.toThrow('the caller fails after')
     expect((await getSettings(ctx.db)).currency).toBe('USD')
   })
 })

@@ -5,7 +5,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { AiLimitError, type AiAsk } from '../src/domain/ai/gateway.js'
+import { AiGateway, AiLimitError, type AiAsk } from '../src/domain/ai/gateway.js'
 import { listNotifications } from '../src/domain/notifications/inbox.js'
 import { runNotifier } from '../src/domain/notifications/notifier.js'
 import {
@@ -16,7 +16,7 @@ import { getSettings, mergeSettings, saveSettings } from '../src/domain/settings
 import { MINUTE_MS } from '../src/lib/time.js'
 import { saveSubscription } from '../src/push/subscriptions.js'
 import { actionCaller } from './actionCaller.js'
-import { FakeProvider, gatewayFor, tokens } from './fixtures/ai.js'
+import { FakeProvider, NO_OVERRIDES, tokens } from './fixtures/ai.js'
 import { FakePushSender } from './fakePush.js'
 import { subscriptionFor } from './fixtures/push.js'
 import { createTestContext, resetData } from './helpers.js'
@@ -48,6 +48,7 @@ beforeEach(async () => {
   await resetData(ctx.db)
   ctx.setNow(MORNING)
   push.sent.length = 0
+  quietFailures.length = 0
   await saveSettings(
     ctx.db,
     mergeSettings(await getSettings(ctx.db), { timeZone: 'America/Denver' }),
@@ -57,6 +58,9 @@ beforeEach(async () => {
   await call('set_ai_limit', { monthlyCapCents: 10 })
 })
 
+/** The steps the usage layer let fail quietly, as the server log would get them. */
+const quietFailures: string[] = []
+
 /** The usage layer around a fake provider whose every call costs exactly one cent. */
 function centCalls() {
   const provider = new FakeProvider()
@@ -65,7 +69,12 @@ function centCalls() {
     output: null,
     usage: tokens({ inputTokens: 100_000, outputTokens: 0 }),
   }
-  return gatewayFor(ctx, provider).ai
+  return new AiGateway(provider, {
+    db: ctx.db,
+    now: ctx.now,
+    overrides: NO_OVERRIDES,
+    onQuietFailure: (_error, step) => quietFailures.push(step),
+  })
 }
 
 /** Spends a cent as if a call had, by a row of usage. */
@@ -99,21 +108,33 @@ async function keptAlerts(): Promise<string[]> {
   return rows.map((row) => row.level)
 }
 
-/** Runs `work` while every write to the inbox fails, as a dropped connection would. */
-async function withInboxWritesFailing(work: () => Promise<void>): Promise<void> {
+/**
+ * Runs `work` while every INSERT or DELETE on a table fails, as a dropped
+ * connection would. The trigger is per statement, so it fires even when a
+ * DELETE matches no rows.
+ */
+async function withWritesRefused(
+  table: 'notifications' | 'ai_unavailable_models',
+  write: 'INSERT' | 'DELETE',
+  work: () => Promise<void>,
+): Promise<void> {
   await ctx.db.query(`
-    CREATE FUNCTION refuse_inbox() RETURNS trigger LANGUAGE plpgsql AS
-      $$ BEGIN RAISE EXCEPTION 'inbox unavailable'; END $$;
-    CREATE TRIGGER refuse_inbox BEFORE INSERT ON notifications
-      FOR EACH ROW EXECUTE FUNCTION refuse_inbox();`)
+    CREATE FUNCTION refuse_write() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN RAISE EXCEPTION 'database unavailable'; END $$;
+    CREATE TRIGGER refuse_write BEFORE ${write} ON ${table}
+      FOR EACH STATEMENT EXECUTE FUNCTION refuse_write();`)
   try {
     await work()
   } finally {
     await ctx.db.query(`
-      DROP TRIGGER refuse_inbox ON notifications;
-      DROP FUNCTION refuse_inbox();`)
+      DROP TRIGGER refuse_write ON ${table};
+      DROP FUNCTION refuse_write();`)
   }
 }
+
+/** Runs `work` while every write to the inbox fails. */
+const withInboxWritesFailing = (work: () => Promise<void>) =>
+  withWritesRefused('notifications', 'INSERT', work)
 
 /** Runs the notifier past the gap between pushes, as its timer would. */
 async function notifyLater(): Promise<void> {
@@ -220,6 +241,7 @@ describe('the AI limit notification', () => {
       expect(reply.costMicros).toBe(10_000)
       expect(await keptAlerts()).toEqual([])
     })
+    expect(quietFailures).toEqual(['raise the AI spending warning'])
     await ai.run('summary', ASK)
     expect(await keptAlerts()).toEqual(['warning'])
     expect((await aiInbox()).map((item) => item.message)).toEqual([
@@ -236,8 +258,26 @@ describe('the AI limit notification', () => {
       await expect(ai.run('summary', ASK)).rejects.toThrow(AiLimitError)
       expect(await keptAlerts()).toEqual(['warning'])
     })
+    expect(quietFailures).toEqual(['raise the AI spending limit alert'])
     await expect(ai.run('summary', ASK)).rejects.toThrow(AiLimitError)
     expect(await keptAlerts()).toEqual(['limit', 'warning'])
+  })
+
+  it('keeps a paid call when the model cannot be marked available, and still warns', async () => {
+    const ai = centCalls()
+    for (let n = 0; n < 7; n++) await ai.run('summary', ASK)
+    await withWritesRefused('ai_unavailable_models', 'DELETE', async () => {
+      const reply = await ai.run('summary', ASK)
+      expect(reply.costMicros).toBe(10_000)
+    })
+    expect(quietFailures).toEqual(['mark the model available'])
+    expect(await keptAlerts()).toEqual(['warning'])
+  })
+
+  it('reports nothing when every step works', async () => {
+    const ai = centCalls()
+    for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
+    expect(quietFailures).toEqual([])
   })
 
   it("is never found by the notifier's own checks, only told as an alert is raised", async () => {

@@ -57,7 +57,10 @@ const ctx: AppContext = {
   db,
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
-  ...aiServices(config, db, now),
+  // AI calls start only once the app serves, so `app` exists before this can report.
+  ...aiServices(config, db, now, (error, step) =>
+    app.log.warn({ err: error }, `Could not ${step}; the next AI call will try again.`),
+  ),
   mailer: config.mail ? new ResendSender(config.mail) : null,
   push: new WebPushSender({
     keys: () => loadVapidKeys(db, config.encryptionKey),

@@ -4,7 +4,8 @@
 // notification inbox, told once, as it is raised.
 
 import { centsOfMicros } from '../../ai/models.js'
-import { inTransaction, type Db } from '../../db/pool.js'
+import type pg from 'pg'
+import { withTransaction, type Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
@@ -26,12 +27,18 @@ export interface SpendAlertRaise {
  * Raises an alert for the month, unless it was raised already. Only an alert
  * raised just now goes to the inbox, so each is told once, however many
  * calls find the month past the mark. The alert and its inbox item are
- * written together: if the inbox write fails, the alert is not kept either,
- * so the next call raises it again rather than losing the news.
+ * written together, in a transaction of their own: if the inbox write fails,
+ * the alert is not kept either, so the next call raises it again rather than
+ * losing the news. It takes the pool, not a client, so it is never part of a
+ * caller's transaction that its failure would abort.
  */
-export async function raiseSpendAlert(db: Db, alert: SpendAlertRaise, at: Date): Promise<void> {
+export async function raiseSpendAlert(
+  pool: pg.Pool,
+  alert: SpendAlertRaise,
+  at: Date,
+): Promise<void> {
   const { month, level, spentMicros, settings } = alert
-  await inTransaction(db, async (tx) => {
+  await withTransaction(pool, async (tx) => {
     const { rowCount } = await tx.query(
       `INSERT INTO ai_spend_alerts (month, level, raised_at) VALUES ($1, $2, $3)
        ON CONFLICT (month, level) DO NOTHING`,

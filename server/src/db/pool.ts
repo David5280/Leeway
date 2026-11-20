@@ -47,14 +47,6 @@ export async function withTransaction<T>(
   }
 }
 
-/**
- * Runs `work` in a transaction: a new one when `db` is the pool, or the one a
- * caller already holds when `db` is its checked-out client.
- */
-export async function inTransaction<T>(db: Db, work: (db: Db) => Promise<T>): Promise<T> {
-  return db instanceof pg.Pool ? withTransaction(db, work) : work(db)
-}
-
 /** Anything that can be asked a question: the pool, or a stand-in in tests. */
 interface Queryable {
   query(sql: string): Promise<unknown>
