@@ -10,18 +10,14 @@
 //
 // A charge still pending when the account left is different: it may have
 // posted since on another day, so it would match nothing, and the bank never
-// removes its old id. It is set aside in held_charges when the account comes
-// back, out of every total and list, and what the owner set on it carries
-// over to the one charge it can only have become, in whichever sync of the
-// window that charge arrives.
+// removes its old id. It is set aside for the same window (heldCharges.ts).
 //
 // Either way a large-charge notification follows the charge to its new id
 // (the subject it is kept under), so the owner is not told about it twice.
 
 import type pg from 'pg'
 import type { BankTransaction } from '../bank/provider.js'
-import { addDays, type IsoDate } from '../lib/dates.js'
-import { merchantKey, textKey } from './merchantKey.js'
+import { dropExpiredHolds, holdPendingCharges, settleHeldCharges } from './heldCharges.js'
 import { moveSubjects } from './notifications/inbox.js'
 import { CHARGE_SUBJECT } from './notifications/sources.js'
 
@@ -33,9 +29,6 @@ import { CHARGE_SUBJECT } from './notifications/sources.js'
  * bank, and past it an arrival is news, not history.
  */
 export const ADOPTION_WINDOW_DAYS = 30
-
-/** How many days after a pending charge its posted charge may be dated and still be it. */
-export const POSTING_DAYS = 7
 
 /** A transaction as matched against history: on which account, when, how much and named what. */
 export interface HistoryLine {
@@ -57,28 +50,6 @@ export interface SubjectMove {
   id: string
   subject: string
 }
-
-/** A charge as paired with a pending one set aside: where, when, how much and named what. */
-interface Charge {
-  id: string
-  accountId: string
-  date: IsoDate
-  amountCents: number
-  name: string
-  merchantName: string | null
-}
-
-/** A pending charge set aside when its account came back, with what the owner set on it. */
-export interface HeldCharge extends Charge {
-  /** The category, only when the owner picked it by hand. */
-  categoryId: string | null
-  note: string | null
-  excluded: boolean
-  subject: string
-}
-
-/** A transaction this sync added, as a pending charge's successor. */
-export type ArrivedCharge = Charge
 
 const historyKey = (line: Omit<HistoryLine, 'providerTransactionId'>) =>
   [line.accountId, line.date, line.amountCents, line.name].join('\u0000')
@@ -129,20 +100,7 @@ export function matchHistory(
  * same time, since Plaid sends the account's current state again.
  */
 export async function openAdoptionWindow(db: pg.PoolClient, accountIds: string[]): Promise<void> {
-  await db.query(
-    `WITH gone AS (
-       DELETE FROM transactions t WHERE t.account_id = ANY($1::uuid[]) AND t.pending
-       RETURNING t.account_id, t.date, t.amount_cents, t.name, t.merchant_name,
-         CASE WHEN t.category_source = 'manual' THEN t.category_id END AS category_id,
-         t.note, t.excluded, ${CHARGE_SUBJECT} AS subject
-     )
-     INSERT INTO held_charges (account_id, date, amount_cents, name, merchant_name,
-       category_id, note, excluded, subject, held_until)
-     SELECT account_id, date, amount_cents, name, merchant_name, category_id, note, excluded,
-       subject, now() + make_interval(days => $2)
-     FROM gone`,
-    [accountIds, ADOPTION_WINDOW_DAYS],
-  )
+  await holdPendingCharges(db, accountIds, ADOPTION_WINDOW_DAYS)
   await db.query(
     `UPDATE transactions SET adopt_until = now() + make_interval(days => $2)
      WHERE account_id = ANY($1::uuid[]) AND provider_transaction_id IS NOT NULL`,
@@ -159,11 +117,7 @@ async function closeExpiredWindows(db: pg.PoolClient, connectionId: string): Pro
      WHERE a.id = t.account_id AND a.connection_id = $1 AND t.adopt_until <= now()`,
     [connectionId],
   )
-  await db.query(
-    `DELETE FROM held_charges h USING accounts a
-     WHERE a.id = h.account_id AND a.connection_id = $1 AND h.held_until <= now()`,
-    [connectionId],
-  )
+  await dropExpiredHolds(db, connectionId)
 }
 
 /**
@@ -217,112 +171,18 @@ export async function adoptHistory(
 }
 
 /**
- * Whether two charges read as the same merchant: the same merchant name when
- * the bank gave both one, else the same first word ("SHELL OIL 5741" and
- * "Shell"), since a charge's description often changes as it posts.
- */
-export function sameMerchant(a: Charge, b: Charge): boolean {
-  if (a.merchantName && b.merchantName) return merchantKey(a) === merchantKey(b)
-  const first = (name: string) => textKey(name).split(' ')[0]
-  return first(a.name) !== '' && first(a.name) === first(b.name)
-}
-
-/**
- * Pairs each pending charge set aside with the one charge this sync added
- * it can be: the same account, amount and merchant, dated that day or up to
- * POSTING_DAYS later. When two charges could be it, or it could be one that
- * another pending charge could be too, nothing pairs, since guessing could
- * put the owner's note on the wrong charge. Returns the arrived charge's id
- * by the held charge's.
- */
-export function pairHeldCharges(held: HeldCharge[], arrived: ArrivedCharge[]): Map<string, string> {
-  const fits = (pending: HeldCharge, charge: ArrivedCharge) =>
-    charge.accountId === pending.accountId &&
-    charge.amountCents === pending.amountCents &&
-    charge.date >= pending.date &&
-    charge.date <= addDays(pending.date, POSTING_DAYS) &&
-    sameMerchant(pending, charge)
-  const choices = held.map((pending) => arrived.filter((charge) => fits(pending, charge)))
-  const claims = new Map<string, number>()
-  for (const charge of choices.flat()) claims.set(charge.id, (claims.get(charge.id) ?? 0) + 1)
-  const pairs = new Map<string, string>()
-  choices.forEach((fitting, index) => {
-    if (fitting.length === 1 && claims.get(fitting[0]!.id) === 1) {
-      pairs.set(held[index]!.id, fitting[0]!.id)
-    }
-  })
-  return pairs
-}
-
-const CHARGE_COLUMNS = `id, account_id AS "accountId", date, amount_cents AS "amountCents", name,
-  merchant_name AS "merchantName"`
-
-/**
- * After the sync saves what arrived: carries what the owner set on each
- * pending charge still held over to the charge it became, when there is only
- * one it can be, and moves the large-charge notifications of those charges
- * and of the rows adopted to the subjects they have now. A held charge goes
- * once paired.
+ * After the sync has saved and removed what the bank sent: settles the
+ * pending charges held for the connection's accounts, and moves the
+ * large-charge notifications of the rows adopted, and of the charges that
+ * held ones became, to the subjects they have now.
  */
 export async function settleReturns(
   db: pg.PoolClient,
+  connectionId: string,
   adopted: SubjectMove[],
-  touched: string[],
 ): Promise<void> {
-  const carried = await pairArrivals(db, touched)
-  await carryEdits(db, carried)
-  await followCharges(db, [...adopted, ...carried.map(({ to, subject }) => ({ id: to, subject }))])
-}
-
-/** The charges held for accounts that something arrived on, each paired with its successor. */
-async function pairArrivals(db: pg.PoolClient, touched: string[]) {
-  // Only charges this sync added can be the one a pending charge became:
-  // history kept here, adopted or not, is older. now() is when the sync's
-  // transaction began, which is every added row's created_at.
-  const { rows: arrived } = await db.query<ArrivedCharge>(
-    `SELECT ${CHARGE_COLUMNS} FROM transactions t
-     WHERE t.id = ANY($1::uuid[]) AND t.created_at = now()
-       AND EXISTS (SELECT 1 FROM held_charges h WHERE h.account_id = t.account_id)`,
-    [touched],
-  )
-  if (arrived.length === 0) return []
-  const { rows: held } = await db.query<HeldCharge>(
-    `SELECT ${CHARGE_COLUMNS}, category_id AS "categoryId", note, excluded, subject
-     FROM held_charges WHERE account_id = ANY($1::uuid[]) AND held_until > now()`,
-    [[...new Set(arrived.map((charge) => charge.accountId))]],
-  )
-  const pairs = pairHeldCharges(held, arrived)
-  return held.flatMap((charge) => {
-    const to = pairs.get(charge.id)
-    return to ? [{ ...charge, to }] : []
-  })
-}
-
-/**
- * What the owner set on each pending charge, onto the charge it became, as
- * when one posts (sync.ts), and the held charges let go.
- */
-async function carryEdits(db: pg.PoolClient, carried: (HeldCharge & { to: string })[]) {
-  if (carried.length === 0) return
-  await db.query(
-    `UPDATE transactions t SET
-       category_id = coalesce(c.category_id, t.category_id),
-       category_source = CASE WHEN c.category_id IS NULL THEN t.category_source ELSE 'manual' END,
-       note = coalesce(t.note, c.note),
-       excluded = t.excluded OR c.excluded
-     FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::boolean[])
-       AS c(id, category_id, note, excluded)
-     WHERE t.id = c.id`,
-    [
-      carried.map((row) => row.to),
-      carried.map((row) => row.categoryId),
-      carried.map((row) => row.note),
-      carried.map((row) => row.excluded),
-    ],
-  )
-  await db.query('DELETE FROM held_charges WHERE id = ANY($1::uuid[])', [
-    carried.map((row) => row.id),
-  ])
+  const carried = await settleHeldCharges(db, connectionId)
+  await followCharges(db, [...adopted, ...carried])
 }
 
 /** Moves each row's large-charge notification from the subject it had to the one it has now. */

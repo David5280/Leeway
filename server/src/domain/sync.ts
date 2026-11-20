@@ -134,8 +134,8 @@ async function applySync(
   const adopted = await adoptHistory(db, connectionId, accountIds, arrived)
   const touched = await upsertTransactions(db, accountIds, arrived)
   await carryOverPendingEdits(db, touched)
-  await settleReturns(db, adopted, touched)
   await removeTransactions(db, accountIds, changes.removed)
+  await settleReturns(db, connectionId, adopted)
   // A newly tracked card turns earlier payments to it into transfers, so
   // when the cards change every transaction is looked at again.
   const cardsChanged = !sameOwnAccounts(cardsBefore, await loadOwnAccounts(db))

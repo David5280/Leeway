@@ -21,9 +21,9 @@ CREATE INDEX IF NOT EXISTS transactions_adopt_until_idx ON transactions (account
 -- account_id. Plaid sends the account's charges again under new ids, so the
 -- pending row goes at once, but what the owner set on it, and the subject of
 -- its large-charge notification, wait here for the one charge it can only
--- have become, which may arrive a few syncs later (domain/returnedHistory.ts).
--- Nothing that shows money reads this table. A row goes once paired, or once
--- held_until passes.
+-- have become, which may arrive a few syncs later (domain/heldCharges.ts).
+-- Nothing that shows money reads this table. A row goes once paired, once
+-- its charge cannot be told for sure, or once held_until passes.
 CREATE TABLE IF NOT EXISTS held_charges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id uuid NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS held_charges (
   excluded boolean NOT NULL,
   -- The large-charge notification's subject (notifications.subject).
   subject text NOT NULL,
+  -- When the account came back: only charges in since then can be its successor.
+  held_at timestamptz NOT NULL,
   held_until timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS held_charges_account_idx ON held_charges (account_id);

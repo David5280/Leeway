@@ -14,14 +14,9 @@ import { getSettings } from '../src/domain/settings.js'
 import { syncConnection } from '../src/domain/sync.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { listTransactions, setCategory, type Transaction } from '../src/domain/transactions.js'
-import {
-  matchHistory,
-  pairHeldCharges,
-  sameMerchant,
-  type ArrivedCharge,
-  type HeldCharge,
-  type HistoryLine,
-} from '../src/domain/returnedHistory.js'
+import { pairHeldCharges, type CurrentCharge, type HeldCharge } from '../src/domain/heldCharges.js'
+import { sameMerchant } from '../src/domain/merchantKey.js'
+import { matchHistory, type HistoryLine } from '../src/domain/returnedHistory.js'
 import { pairReturning, type KeptAccount } from '../src/domain/unshared.js'
 import { AppError } from '../src/errors.js'
 import { account, bankTx, FakeBank, newLink, page } from './fakeBank.js'
@@ -523,6 +518,85 @@ describe('history after an account comes back', () => {
     expect(await heldCharges()).toEqual([{ name: 'Shell' }])
   })
 
+  const pendingOnNew = (id: string, date: string) =>
+    bankTx({ ...shell, ...onNew, providerTransactionId: id, date, pending: true })
+  const noteAndHide = async (id: string) => {
+    await ctx.db.query(
+      `UPDATE transactions SET note = 'Road trip', excluded = true WHERE id = $1`,
+      [id],
+    )
+  }
+  const edits = async (charges: () => Promise<Transaction[]>) =>
+    (await charges()).map((t) => [t.date, t.note, t.excluded]).sort()
+
+  it('remembers a doubt after one of the charges behind it posts', async () => {
+    const { connectionId, charges } = await pendingThenBack(
+      [pendingOnNew('n-15', '2026-11-15'), pendingOnNew('n-16', '2026-11-16')],
+      noteAndHide,
+    )
+    // Only the 11-16 charge moves, so it alone is new in this sync.
+    bank.pages = [
+      page({
+        added: [{ ...posted('n-16-posted', '2026-11-17'), pendingProviderTransactionId: 'n-16' }],
+        removed: ['n-16'],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+
+    expect(await edits(charges)).toEqual([
+      ['2026-11-15', null, false],
+      ['2026-11-17', null, false],
+    ])
+    expect(await heldCharges()).toEqual([])
+  })
+
+  it('stays unpaired when one of the charges behind a doubt is reversed', async () => {
+    const { connectionId, charges } = await pendingThenBack(
+      [pendingOnNew('n-15', '2026-11-15'), pendingOnNew('n-16', '2026-11-16')],
+      noteAndHide,
+    )
+    bank.pages = [page({ removed: ['n-15'] })]
+    await syncConnection(ctx, connectionId)
+    await arriveLater(connectionId, 0, [
+      { ...posted('n-16-posted', '2026-11-17'), pendingProviderTransactionId: 'n-16' },
+    ])
+
+    expect(await edits(charges)).toEqual([
+      ['2026-11-16', null, false],
+      ['2026-11-17', null, false],
+    ])
+  })
+
+  it('counts a pending charge and the posted one replacing it once', async () => {
+    const { connectionId, charges } = await pendingThenBack([], noteAndHide)
+    // The bank sends both before it removes the pending one.
+    await arriveLater(connectionId, 0, [
+      pendingOnNew('n-p', '2026-11-15'),
+      { ...posted('n-posted', '2026-11-17'), pendingProviderTransactionId: 'n-p' },
+    ])
+
+    expect(await edits(charges)).toEqual([
+      ['2026-11-15', null, false],
+      ['2026-11-17', 'Road trip', true],
+    ])
+  })
+
+  it('carries the edits to the pending charge it became, and on when that posts', async () => {
+    const { connectionId, charges } = await pendingThenBack(
+      [pendingOnNew('n-p', '2026-11-15')],
+      noteAndHide,
+    )
+    bank.pages = [
+      page({
+        added: [{ ...posted('n-posted', '2026-11-17'), pendingProviderTransactionId: 'n-p' }],
+        removed: ['n-p'],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+
+    expect(await edits(charges)).toEqual([['2026-11-17', 'Road trip', true]])
+  })
+
   it('carries nothing over when more than one charge could be the one it became', async () => {
     const { charges } = await pendingThenBack(
       [posted('n-1', '2026-11-16'), posted('n-2', '2026-11-18')],
@@ -834,6 +908,7 @@ describe('matchHistory', () => {
 })
 
 describe('pairHeldCharges', () => {
+  const heldAt = new Date('2026-11-17T18:00:00Z')
   const pending = (fields: Partial<HeldCharge> = {}): HeldCharge => ({
     id: 'held-1',
     accountId: 'acct',
@@ -845,65 +920,81 @@ describe('pairHeldCharges', () => {
     note: 'Fuel',
     excluded: false,
     subject: 'p-1',
+    heldAt,
     ...fields,
   })
-  const charge = (id: string, date: string, fields: Partial<ArrivedCharge> = {}) => ({
+  const charge = (id: string, date: string, fields: Partial<CurrentCharge> = {}) => ({
     id,
     accountId: 'acct',
     date,
     amountCents: 8000,
     name: 'Shell',
     merchantName: null,
+    createdAt: heldAt,
     ...fields,
   })
 
-  it('pairs a pending charge with the one charge dated that day to a week later', () => {
-    const arrived = [
+  it('pairs a held charge with the one charge in since its hold, dated that day to a week later', () => {
+    const current = [
       charge('before', '2026-11-09'),
       charge('late', '2026-11-18'),
       charge('other-amount', '2026-11-12', { amountCents: 8001 }),
       charge('other-account', '2026-11-12', { accountId: 'elsewhere' }),
       charge('other-merchant', '2026-11-12', { name: 'Safeway' }),
+      charge('kept-history', '2026-11-12', { createdAt: new Date('2026-11-01T00:00:00Z') }),
       charge('it', '2026-11-17'),
     ]
-    expect([...pairHeldCharges([pending()], arrived)]).toEqual([['held-1', 'it']])
+    expect(pairHeldCharges([pending()], current)).toEqual({
+      pairs: new Map([['held-1', 'it']]),
+      doubtful: [],
+    })
   })
 
-  it('pairs nothing when two charges could be it', () => {
-    const arrived = [charge('a', '2026-11-10'), charge('b', '2026-11-11')]
-    expect(pairHeldCharges([pending()], arrived).size).toBe(0)
+  it('finds a held charge doubtful when two charges could be it', () => {
+    const current = [charge('a', '2026-11-10'), charge('b', '2026-11-11')]
+    expect(pairHeldCharges([pending()], current)).toEqual({
+      pairs: new Map(),
+      doubtful: ['held-1'],
+    })
   })
 
-  it('pairs nothing when two pending charges could be the same one', () => {
+  it('finds both doubtful when two held charges could be the same one', () => {
     const held = [pending(), pending({ id: 'held-2', date: '2026-11-11', subject: 'p-2' })]
-    expect(pairHeldCharges(held, [charge('a', '2026-11-12')]).size).toBe(0)
+    expect(pairHeldCharges(held, [charge('a', '2026-11-12')])).toEqual({
+      pairs: new Map(),
+      doubtful: ['held-1', 'held-2'],
+    })
+  })
+
+  it('leaves a held charge waiting while nothing could be it', () => {
+    expect(pairHeldCharges([pending()], [])).toEqual({ pairs: new Map(), doubtful: [] })
   })
 })
 
 describe('sameMerchant', () => {
-  const named = (name: string, merchantName: string | null = null) => ({
-    id: name,
-    accountId: 'acct',
-    date: '2026-11-10',
-    amountCents: 8000,
-    name,
-    merchantName,
-  })
+  const named = (name: string, merchantName: string | null = null) => ({ name, merchantName })
 
-  it('compares merchant names when the bank gave both one', () => {
+  it('matches on the first word of the merchant names', () => {
     expect(
-      sameMerchant(named('SQ *BLUE BOTTLE', 'Blue Bottle'), named('Blue', 'Blue Bottle')),
+      sameMerchant(named('BEST BUY 00012', 'Best Buy'), named('Best Buy', 'Best Buy Co')),
     ).toBe(true)
-    expect(sameMerchant(named('Shell', 'Shell'), named('Shell', 'Shell Oil'))).toBe(false)
   })
 
-  it('compares the first word of the description otherwise', () => {
-    expect(sameMerchant(named('SHELL OIL 5741'), named('Shell', 'Shell'))).toBe(true)
+  it('matches on the description when the bank gave no merchant name', () => {
+    expect(sameMerchant(named('SHELL OIL 5741'), named('Shell'))).toBe(true)
+    expect(sameMerchant(named('SHELL OIL 5741'), named('Shell Oil', 'Shell'))).toBe(true)
     expect(sameMerchant(named('Shell'), named('Safeway'))).toBe(false)
   })
 
-  it('never matches a description with no words', () => {
+  it('skips processor and bank words before the merchant', () => {
+    expect(sameMerchant(named('POS PURCHASE SHELL'), named('Shell'))).toBe(true)
+    expect(sameMerchant(named('PAYPAL *NETFLIX'), named('Netflix.com'))).toBe(true)
+    expect(sameMerchant(named('SQ *BLUE BOTTLE'), named('SQ *CORNER BAKERY'))).toBe(false)
+  })
+
+  it('never matches text with no merchant word in it', () => {
     expect(sameMerchant(named('#1234'), named('#5678'))).toBe(false)
+    expect(sameMerchant(named('POS DEBIT'), named('POS DEBIT'))).toBe(false)
   })
 })
 
