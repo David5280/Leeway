@@ -5,6 +5,7 @@ import { NavLink } from 'react-router-dom'
 import { useUpdateSettings } from '../api/settings'
 import { useApp, usePrefersDark } from '../lib/app'
 import { THEMES, themeVariables, type ThemeId } from '../lib/theme'
+import { Bell } from './Bell'
 import { Icon, Logo, type IconName } from './ui'
 
 const LINKS: { to: string; label: string; short: string; icon: IconName }[] = [
@@ -65,6 +66,7 @@ export function Shell({ children, actions }: { children: ReactNode; actions?: Re
             ))}
           </nav>
           <div className="row">
+            <Bell />
             <ThemeDots />
             {actions}
           </div>

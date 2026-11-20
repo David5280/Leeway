@@ -73,7 +73,13 @@ export async function linkBank(ctx: AppContext, publicToken: string): Promise<Sy
       item.institutionName,
     ],
   )
-  return syncConnection(ctx, rows[0]!.id)
+  return synced(ctx, await syncConnection(ctx, rows[0]!.id))
+}
+
+/** A sync's result, after telling whoever listens that bank data changed. */
+function synced(ctx: AppContext, result: SyncResult): SyncResult {
+  ctx.afterBankUpdate?.()
+  return result
 }
 
 /** After the owner repairs a login in the bank's window, mark it healthy and catch up. */
@@ -81,7 +87,7 @@ export async function reconnected(ctx: AppContext, connectionId: string): Promis
   await ctx.db.query(`UPDATE connections SET status = 'active', last_error = NULL WHERE id = $1`, [
     connectionId,
   ])
-  return syncConnection(ctx, connectionId)
+  return synced(ctx, await syncConnection(ctx, connectionId))
 }
 
 /** Unlinks a bank and deletes its accounts and transactions here. */
@@ -117,8 +123,9 @@ export async function handleBankWebhook(
        WHERE id = $1`,
       [connection.id],
     )
+    ctx.afterBankUpdate?.()
     return
   }
   if (event === 'repaired') await reconnected(ctx, connection.id)
-  else await syncConnection(ctx, connection.id)
+  else synced(ctx, await syncConnection(ctx, connection.id))
 }

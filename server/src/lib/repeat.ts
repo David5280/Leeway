@@ -27,3 +27,41 @@ export function repeatEvery(
   if (options.runNow) tick()
   return () => clearInterval(timer)
 }
+
+/**
+ * A trigger for `task` that may be pulled many times in a row, like after
+ * each bank's sync: the task runs once, `delayMs` after the first pull, for
+ * every pull until then. A pull while it runs brings one more run after it,
+ * so nothing that changed is missed and two runs never overlap. A failure
+ * goes to `onError`. The timer does not keep the process alive.
+ */
+export function coalesced(
+  task: () => Promise<unknown>,
+  onError: (error: unknown) => void,
+  delayMs: number,
+): () => void {
+  let timer: NodeJS.Timeout | null = null
+  let running = false
+  let again = false
+  const schedule = () => {
+    timer ??= setTimeout(run, delayMs)
+    timer.unref()
+  }
+  const run = () => {
+    timer = null
+    running = true
+    task()
+      .catch(onError)
+      .finally(() => {
+        running = false
+        if (again) {
+          again = false
+          schedule()
+        }
+      })
+  }
+  return () => {
+    if (running) again = true
+    else schedule()
+  }
+}

@@ -23,6 +23,7 @@
 // uncounted. A model the provider says it doesn't have is noted, so Settings
 // can tell the owner to choose another.
 
+import type pg from 'pg'
 import { z } from 'zod'
 import type { AiJob } from '../../ai/jobs.js'
 import { MICROS_PER_CENT, centsOfMicros, costMicros, worstCostMicros } from '../../ai/models.js'
@@ -33,7 +34,6 @@ import {
   type AiReply,
   type AiRequest,
 } from '../../ai/provider.js'
-import type { Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
@@ -113,10 +113,16 @@ export function limitMessage(
 }
 
 export interface GatewayDeps {
-  db: Db
+  db: pg.Pool
   now: () => Date
   /** Models fixed by server variables, as Config.modelOverrides. */
   overrides: Record<AiJob, string | null>
+  /**
+   * Told of a step left to fail quietly, like a spending alert that could not
+   * be written, so a lasting fault still shows in the server log. `step` says
+   * what was being done, as "raise the AI spending warning".
+   */
+  onQuietFailure?: (error: unknown, step: string) => void
 }
 
 export class AiGateway {
@@ -172,8 +178,9 @@ export class AiGateway {
         this.reservedMicros -= worst
       }
     })
-    await markAvailable(this.deps.db, request.model)
-    await this.warnIfNear(month, settings)
+    // The call is paid for by now, so nothing after this may turn it into an error.
+    await this.quietly('mark the model available', () => markAvailable(this.deps.db, request.model))
+    await this.quietly('raise the AI spending warning', () => this.warnIfNear(month, settings))
     return { ...reply, model: request.model, costMicros: cost }
   }
 
@@ -252,7 +259,12 @@ export class AiGateway {
       // The month-long alert is for a month that is used up. One dear call
       // turned away with room left says so in its own message only.
       if (spent + this.reservedMicros >= cap) {
-        await raiseSpendAlert(this.deps.db, month.start, 'limit', this.deps.now())
+        // Quietly, so the caller still hears AiLimitError if the alert can't be written.
+        const spentMicros = spent + this.reservedMicros
+        const alert = { month, level: 'limit', spentMicros, settings } as const
+        await this.quietly('raise the AI spending limit alert', () =>
+          raiseSpendAlert(this.deps.db, alert, this.deps.now()),
+        )
       }
       throw new AiLimitError(
         limitMessage(settings, spent + this.reservedMicros, worst, month.resetsOn),
@@ -267,7 +279,25 @@ export class AiGateway {
     const spent = (await monthSpend(this.deps.db, month)).totalMicros
     const cap = settings.ai.monthlyCapCents * MICROS_PER_CENT
     if (spent * 100 >= cap * WARN_AT_PERCENT) {
-      await raiseSpendAlert(this.deps.db, month.start, 'warning', this.deps.now())
+      const alert = { month, level: 'warning', spentMicros: spent, settings } as const
+      await raiseSpendAlert(this.deps.db, alert, this.deps.now())
+    }
+  }
+
+  /**
+   * Runs a side step that must not fail the call, and reports it if it does.
+   * Each such step is retried by the next call: a failed alert keeps nothing
+   * (raiseSpendAlert), so the next call past the mark raises it again.
+   */
+  private async quietly(step: string, work: () => Promise<unknown>): Promise<void> {
+    try {
+      await work()
+    } catch (error) {
+      try {
+        this.deps.onQuietFailure?.(error, step)
+      } catch {
+        // A failing reporter must not fail the call either.
+      }
     }
   }
 

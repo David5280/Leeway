@@ -7,6 +7,7 @@ import type { BankProvider } from './bank/provider.js'
 import type { AiGateway } from './domain/ai/gateway.js'
 import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
+import type { PushSender } from './push/sender.js'
 
 /**
  * Everything an action needs to do its work. The web app and the MCP endpoint
@@ -29,6 +30,13 @@ export interface AppContext {
   paystubs: PaystubReader | null
   /** Null until RESEND_API_KEY and MAIL_FROM are set; the weekly email is then unavailable. */
   mailer: EmailSender | null
+  /** Sends Web Push to the owner's devices. Always there: push needs no configuration. */
+  push: PushSender
+  /**
+   * Called when a bank's data changed (a sync, a new link, a webhook), so the
+   * inbox and pushes catch up soon after. Unset where nothing listens, as in tests.
+   */
+  afterBankUpdate?: () => void
   now: () => Date
   /**
    * True when an AI agent called, through the MCP endpoint. An agent never

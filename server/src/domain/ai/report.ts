@@ -2,13 +2,11 @@
 // from, and this month's spending against the limit, with any alert.
 
 import { AI_JOBS, JOB_INFO, type AiJob } from '../../ai/jobs.js'
-import { centsOfMicros, MODEL_CHOICES, isPriced, retiresOn } from '../../ai/models.js'
+import { MODEL_CHOICES, isPriced, retiresOn } from '../../ai/models.js'
 import type { AppContext } from '../../context.js'
 import type { IsoDate } from '../../lib/dates.js'
-import { formatCents } from '../../lib/money.js'
-import { shortDate } from '../../lib/words.js'
 import type { Settings } from '../settings.js'
-import { activeSpendAlert, type SpendAlertLevel } from './alerts.js'
+import { activeSpendAlert, spendAlertMessage, type SpendAlertLevel } from './alerts.js'
 import { aiMonth } from './month.js'
 import { resolveModel, type ModelSource } from './settings.js'
 import { unavailableModels } from './unavailable.js'
@@ -51,22 +49,6 @@ export interface AiUsageReport {
   /** The first day of this month on the owner's clock, and the day the limit resets. */
   month: { start: IsoDate; resetsOn: IsoDate }
   alert: SpendAlert | null
-}
-
-/** An alert in the owner's language. */
-export function spendAlertMessage(
-  level: SpendAlertLevel,
-  spentMicros: number,
-  settings: Pick<Settings, 'locale' | 'ai'>,
-  resetsOn: IsoDate,
-): string {
-  const usd = (cents: number) => formatCents(cents, 'USD', settings.locale)
-  const cap = usd(settings.ai.monthlyCapCents)
-  const resets = shortDate(resetsOn, settings.locale)
-  if (level === 'limit') {
-    return `This month's AI limit of ${cap} is reached, so Leeway writes the summary itself and can't read paystubs until ${resets}. You can raise the limit in Settings, then AI models.`
-  }
-  return `AI has spent ${usd(centsOfMicros(spentMicros))} of this month's ${cap} limit. It resets on ${resets}.`
 }
 
 export async function aiUsageReport(ctx: AppContext, settings: Settings): Promise<AiUsageReport> {

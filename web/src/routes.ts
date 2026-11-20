@@ -10,6 +10,8 @@ export const SCREEN_ROUTES = {
   overview: '/',
   accounts: '/accounts',
   alerts: '/alerts',
+  /** Notifications: the alerts as they happened, read and unread. */
+  inbox: '/inbox',
   transactions: '/transactions',
   importTransactions: '/transactions/import',
   budgets: '/budgets',
