@@ -22,11 +22,18 @@ export async function patchSettings(page: Page, change: Change): Promise<void> {
   // Saving any setting answers with them all, so that answer is changed too.
   for (const action of ['get_settings', 'update_settings']) {
     await page.route(`**/api/actions/${action}`, async (route) => {
-      const response = await route.fetch()
-      if (!response.ok()) return route.fulfill({ response })
-      const { result } = (await response.json()) as { result: Settings }
-      const changed = list.reduce((settings, one) => one(settings), result)
-      await route.fulfill({ response, json: { result: changed } })
+      try {
+        const response = await route.fetch()
+        if (!response.ok()) return await route.fulfill({ response })
+        const { result } = (await response.json()) as { result: Settings }
+        const changed = list.reduce((settings, one) => one(settings), result)
+        await route.fulfill({ response, json: { result: changed } })
+      } catch (error) {
+        // A read still on its way as the test ends has no page left to answer:
+        // its response is disposed with the page.
+        if (page.isClosed() || /disposed|closed/i.test(String(error))) return
+        throw error
+      }
     })
   }
 }
