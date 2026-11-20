@@ -3,8 +3,12 @@
 // Heads up card and the Alerts page, so both say the same thing once.
 
 import type { AccountAlert, Budget, Connection } from '../api/client'
-import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
-import { accountDetailPath } from '../lib/accounts'
+import {
+  ALERT_LABELS as ACCOUNT_ALERT_LABELS,
+  alertKey,
+  alertPath,
+  alertTone,
+} from '../components/AccountAlerts'
 import { settingsPath } from '../pages/settings/paths'
 
 export interface HeadsUpItem {
@@ -45,12 +49,12 @@ export function headsUpItems({
   money: (cents: number) => string
 }): HeadsUpItem[] {
   const items: HeadsUpItem[] = accountAlerts.map((alert) => ({
-    key: `${alert.kind}-${alert.accountId}`,
+    key: alertKey(alert),
     source: 'account',
-    tone: alert.severity === 'urgent' ? 'over' : 'warn',
+    tone: alertTone(alert),
     text: alert.message,
     level: ACCOUNT_ALERT_LABELS[alert.kind],
-    to: accountDetailPath(alert.accountId),
+    to: alertPath(alert),
     alert,
   }))
   for (const connection of connections) {
@@ -93,7 +97,7 @@ export function headsUpItems({
 export function headsUpTint(items: HeadsUpItem[]): '' | 'over-card' | 'warn-card' {
   const accounts = items.filter((item) => item.source === 'account')
   if (accounts.some((item) => item.tone === 'over')) return 'over-card'
-  return accounts.length > 0 ? 'warn-card' : ''
+  return accounts.some((item) => item.tone === 'warn') ? 'warn-card' : ''
 }
 
 /** "1 transaction ($45) needs a category." or "3 transactions ($90) need a category." */

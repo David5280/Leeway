@@ -1,5 +1,6 @@
 // Account alerts from stored data: loads balances and recent charges, then
-// lets accountAlerts.ts decide what is worth flagging.
+// lets accountAlerts.ts decide what is worth flagging, and adds the bills
+// whose latest charge cost more or less than usual (billChanges.ts).
 
 import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
@@ -15,6 +16,7 @@ import {
 } from './accountAlerts.js'
 import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
+import { billChangeAlerts, listBillChanges } from './billChangeSource.js'
 import type { Settings } from './settings.js'
 
 /**
@@ -38,16 +40,27 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
 /**
  * The alerts for these accounts, or for every account when none are given.
  * Hidden accounts are included: they stay out of budget totals, but an
- * overdraft on one still costs real money.
+ * overdraft on one still costs real money. A bill's change counts for the
+ * account its charge came out of, hidden ones aside, as bills never read them.
+ * Without `bills`, only the accounts' own alerts are read.
  */
 export async function listAlerts(
   db: Db,
-  settings: Pick<Settings, 'currency' | 'locale'>,
+  settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
   accountIds: string[] = [],
+  { bills = true }: { bills?: boolean } = {},
 ): Promise<AccountAlert[]> {
-  const [accounts, charges] = await Promise.all([listAccounts(db), recentCharges(db, today)])
-  return alertsFor(selectAccounts(accounts, accountIds), charges, settings)
+  const [accounts, charges, changes] = await Promise.all([
+    listAccounts(db),
+    recentCharges(db, today),
+    bills ? listBillChanges(db, settings.timeZone, today) : [],
+  ])
+  const picked = selectAccounts(accounts, accountIds)
+  const names = new Map(picked.filter(isShared).map((account) => [account.id, account.name]))
+  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
+  // Bill changes are the last kind (ALERT_KINDS), so they go after the rest.
+  return [...alertsFor(picked, charges, settings), ...billChangeAlerts(changes, names, { money })]
 }
 
 /**
@@ -81,7 +94,7 @@ export function selectAccounts<T extends { id: string }>(accounts: T[], ids: str
 /** Loads the alerts and words their counts for the server log. */
 export async function alertLogLine(
   db: Db,
-  settings: Pick<Settings, 'currency' | 'locale'>,
+  settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
 ): Promise<string> {
   return alertCountsLine(countAlerts(await listAlerts(db, settings, today)))

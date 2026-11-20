@@ -16,6 +16,7 @@ import {
   dismissRecurringAction,
   findRecurringAction,
   listBillsAction,
+  trackRecurringAction,
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
@@ -192,6 +193,7 @@ export const actionList = [
   updateBillAction,
   deleteBillAction,
   findRecurringAction,
+  trackRecurringAction,
   dismissRecurringAction,
   listGoalsAction,
   createGoalAction,

@@ -13,6 +13,8 @@ import {
   transaction,
 } from '../test/fake'
 import { homeAlertHandlers, homeList } from '../test/homeAlerts'
+import { billChangeAlert } from '../../../server/src/domain/billChanges'
+import { formatCents } from '../../../server/src/lib/money'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
 import { CategoriesWidget, categoryStatus, rowNote } from './Categories'
@@ -365,6 +367,26 @@ describe('GlanceWidget', () => {
   })
 })
 
+/** A bill that usually costs $80 charged this much, as the server words it. */
+function billChange(amountCents: number, name: string) {
+  return billChangeAlert(
+    {
+      kind: 'changed',
+      bill: {
+        id: name.toLowerCase(),
+        name,
+        amountCents: 8000,
+        cadence: 'month',
+        trackedOn: '2026-09-01',
+        charges: [],
+      },
+      charge: { accountId: 'everyday', date: '2026-11-16', amountCents },
+    },
+    'Everyday',
+    { money: formatCents },
+  )
+}
+
 describe('AlertsWidget', () => {
   const region = () => screen.getByRole('region', { name: 'Heads up' })
 
@@ -480,6 +502,43 @@ describe('AlertsWidget', () => {
     expect(links[1]).toHaveTextContent('Low')
     // An overdrawn account turns the whole card red.
     expect(region()).toHaveClass('over-card')
+  })
+
+  it("shows a bill's change, higher in the problem tone and lower never red, hidden by its bill", async () => {
+    const server = fakeServer({
+      list_connections: () => [],
+      ...homeAlertHandlers([billChange(9500, 'Comcast'), billChange(6500, 'Phone')]).handlers,
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    const higher = (await screen.findByText('Comcast was $95, usually $80.')).closest('a')!
+    const lower = screen.getByText('Phone was $65, usually $80.').closest('a')!
+    // Each opens Bills, where its bill can be changed.
+    expect(higher).toHaveAttribute('href', '/plan/bills')
+    expect(higher.querySelector('.alert-icon')).toHaveClass('over')
+    expect(lower.querySelector('.alert-icon')).toHaveClass('info')
+    expect(lower.querySelector('.alert-icon')).not.toHaveClass('over')
+    expect(region()).toHaveClass('over-card')
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Hide from home: Phone was $65, usually $80.' }),
+    )
+    await waitFor(() =>
+      expect(server.actions('hide_home_alert')).toEqual([
+        { kind: 'bill_change', accountId: 'everyday', billId: 'phone' },
+      ]),
+    )
+    expect(screen.getByText('Comcast was $95, usually $80.')).toBeInTheDocument()
+  })
+
+  it('is not red when the only alert is a bill costing less', async () => {
+    fakeServer({
+      list_connections: () => [],
+      list_home_alerts: () => homeList([billChange(6500, 'Phone')]),
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor(categories, [])} offset={0} />)
+    await screen.findByText('Phone was $65, usually $80.')
+    expect(region()).not.toHaveClass('over-card')
+    expect(region()).not.toHaveClass('warn-card')
   })
 
   it('is amber when the only account alert is a warning', async () => {

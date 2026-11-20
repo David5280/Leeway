@@ -218,22 +218,90 @@ describe('Recurring charges found in history', () => {
     await waitFor(() => expect(screen.queryByText('Found in your history')).not.toBeInTheDocument())
   })
 
-  it('opens a suggestion as a new bill, filled in', async () => {
-    const server = serve([], { find_recurring: () => [power] })
+  /** A server where tracking makes the bill and takes the charge off the suggestions. */
+  function trackingServer() {
+    let found = [power]
+    let bills: Bill[] = []
+    const server = serve([], {
+      list_bills: () => ({ bills, monthlyCents: 0, subscriptionsMonthlyCents: 0 }),
+      find_recurring: () => found,
+      track_recurring: () => {
+        const tracked = bill({ name: 'CITY POWER', amountCents: 9000, anchorDate: '2026-12-02' })
+        bills = [tracked]
+        found = []
+        return tracked
+      },
+      delete_bill: (input) => {
+        bills = []
+        found = [power]
+        return { deleted: input.id }
+      },
+    })
+    return server
+  }
+
+  it('tracks a suggestion as a bill in one tap, and says so in a toast', async () => {
+    const server = trackingServer()
     renderPlan('/plan/bills')
     const user = userEvent.setup()
     await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
-    const form = within(screen.getByRole('form', { name: 'New bill' }))
-    expect(form.getByLabelText('Name')).toHaveValue('CITY POWER')
-    expect(form.getByRole('textbox', { name: 'Amount' })).toHaveValue('90')
-    expect(form.getByLabelText('Next due')).toHaveValue('2026-12-02')
-    await user.click(form.getByRole('button', { name: 'Add bill' }))
-    await waitFor(() => expect(server.actions('create_bill')).toHaveLength(1))
-    expect(server.actions('create_bill')[0]).toMatchObject({
-      kind: 'bill',
-      matchPattern: 'city power',
-      categoryId: streaming.id,
-    })
+    expect(await screen.findByRole('status')).toHaveTextContent('CITY POWER added to Bills')
+    expect(server.actions('track_recurring')).toEqual([{ key: 'city power' }])
+    // No form to fill in: the bill is listed already, and can be opened to change it.
+    expect(screen.queryByRole('form', { name: 'New bill' })).not.toBeInTheDocument()
+    expect(within(await billsCard()).getByRole('button', { name: /CITY POWER/ })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Found in your history' })).toBeNull(),
+    )
+  })
+
+  it('undoes the tracking from the toast', async () => {
+    const server = trackingServer()
+    renderPlan('/plan/bills')
+    const user = userEvent.setup()
+    await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
+    await user.click(
+      within(await screen.findByRole('status')).getByRole('button', { name: 'Undo' }),
+    )
+    await waitFor(() => expect(server.actions('delete_bill')).toEqual([{ id: 'bill-city power' }]))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    // The charge is suggested again, and the bill is gone.
+    expect(within(await suggestions()).getByText('CITY POWER')).toBeVisible()
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'Bills and subscriptions' })).queryByRole(
+          'button',
+          { name: /CITY POWER/ },
+        ),
+      ).toBeNull(),
+    )
+  })
+
+  it('closes the toast, keeping the bill', async () => {
+    const server = trackingServer()
+    renderPlan('/plan/bills')
+    const user = userEvent.setup()
+    await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
+    // It also goes by itself after TOAST_MS (Toast.test.tsx).
+    await user.click(
+      within(await screen.findByRole('status')).getByRole('button', { name: 'Close' }),
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(server.actions('delete_bill')).toEqual([])
+  })
+
+  it('shows why a charge could not be tracked', async () => {
+    serve(
+      [],
+      { find_recurring: () => [spotify] },
+      { '/api/actions/track_recurring': failing('Could not track it') },
+    )
+    renderPlan('/plan/bills')
+    await userEvent
+      .setup()
+      .click(within(await suggestions()).getByRole('button', { name: 'Track' }))
+    expect(await screen.findByText('Could not track it')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('stops suggesting a charge that is not a bill', async () => {

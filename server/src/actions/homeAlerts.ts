@@ -28,15 +28,18 @@ export const hideHomeAlertAction = defineAction({
   name: 'hide_home_alert',
   title: 'Hide an alert from home',
   description:
-    'Hide an account alert from the home screen: a condition for a day while it holds, a fee for good. The inbox is left as it was.',
-  input: z.object({ kind: z.enum(ALERT_KINDS), accountId: z.uuid() }).strict(),
+    "Hide an account alert from the home screen: a condition for a day while it holds, a fee for good. The inbox is left as it was. A bill's change (give its billId) is accepted instead: the charge's amount becomes the bill's usual one, which clears it.",
+  input: z
+    .object({ kind: z.enum(ALERT_KINDS), accountId: z.uuid(), billId: z.uuid().optional() })
+    .strict(),
   scope: 'write',
   surface: 'app',
   run: async (ctx, target) => {
-    // Only the account alerts are read, so a problem with a budget or a bill
-    // never stands in the way of a hide.
+    // Only the account alerts are read, bills only for a bill's change, so a
+    // problem with a budget or a bill never stands in the way of another hide.
     const now = ctx.now()
-    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, now), target, now)
+    const bills = target.kind === 'bill_change'
+    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, now, { bills }), target, now)
     return { hidden: true }
   },
 })

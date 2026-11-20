@@ -22,6 +22,10 @@ export const KIND_TEXT: Record<NotificationKind, { label: string; hint: string }
   },
   over_budget: { label: 'Budgets', hint: 'A category reaching the share of its budget below' },
   bill_due: { label: 'Bills due', hint: 'A bill not on autopay, coming due, until it is paid' },
+  bill_change: {
+    label: 'Bill amount changes',
+    hint: 'A bill that cost well more or less than usual',
+  },
   large_transaction: {
     label: 'Large charges',
     hint: 'A single charge of at least the amount below',

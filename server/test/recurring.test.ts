@@ -58,6 +58,7 @@ describe('detectRecurring', () => {
         lastDate: '2026-11-03',
         nextDate: '2026-12-03',
         categoryId: 'fun',
+        accountId: null,
         suggestedKind: 'subscription',
       },
     ])

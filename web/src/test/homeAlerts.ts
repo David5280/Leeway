@@ -8,7 +8,7 @@ import type { Handlers } from './fake'
 export const homeList = (alerts: AccountAlert[], hidden = 0) => ({ alerts, hidden })
 
 /** An alert, or a request naming one, as the fake server reads it. */
-type Target = { kind?: unknown; accountId?: unknown }
+type Target = { kind?: unknown; accountId?: unknown; billId?: unknown; bill?: { id: string } }
 
 /**
  * The home alert actions over these alerts. `hide` takes one off the home
@@ -17,8 +17,9 @@ type Target = { kind?: unknown; accountId?: unknown }
  */
 export function homeAlertHandlers(alerts: AccountAlert[]) {
   const hidden = new Set<string>()
-  /** One alert per kind and account, as the server keys a hide. */
-  const keyOf = ({ kind, accountId }: Target) => `${String(kind)}:${String(accountId)}`
+  /** One alert per kind and account, and per bill for a bill's change, as the server keys a hide. */
+  const keyOf = ({ kind, accountId, billId, bill }: Target) =>
+    `${String(kind)}:${String(accountId)}:${String(billId ?? bill?.id ?? '')}`
   const hide = (target: Target) => hidden.add(keyOf(target))
   const handlers: Handlers = {
     list_home_alerts: () => {

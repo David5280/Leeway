@@ -200,15 +200,21 @@ export async function markRead(db: Db, ids: string[] | undefined, now: Date): Pr
 /**
  * Takes a notification out of the inbox. It stays stored, so the same news
  * does not return; a condition still going on a day later does (see
- * resurfaceDismissed). Dismissing again starts that day over.
+ * resurfaceDismissed). Dismissing again starts that day over. Gives back
+ * what it was about.
  */
-export async function dismissNotification(db: Db, id: string, now: Date): Promise<void> {
-  const { rowCount } = await db.query(
+export async function dismissNotification(
+  db: Db,
+  id: string,
+  now: Date,
+): Promise<{ kind: NotificationKind; subject: string }> {
+  const { rows } = await db.query<{ kind: NotificationKind; subject: string }>(
     `UPDATE notifications SET dismissed_at = $2, read_at = coalesce(read_at, $2)
-     WHERE id = $1`,
+     WHERE id = $1 RETURNING kind, subject`,
     [id, now],
   )
-  if (rowCount === 0) throw notFound('Notification')
+  if (!rows[0]) throw notFound('Notification')
+  return rows[0]
 }
 
 /**

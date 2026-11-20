@@ -25,25 +25,37 @@ export interface Candidate {
   link: string
 }
 
-const ALERT_WORDS: Record<AccountAlert['kind'], { title: string; push: (name: string) => string }> =
-  {
-    overdrawn: { title: 'Overdrawn', push: (name) => `${name} is below zero.` },
-    over_limit: { title: 'Over credit limit', push: (name) => `${name} is past its limit.` },
-    overdraft_fee: { title: 'Overdraft fee', push: (name) => `${name} was charged a fee.` },
-    low_balance: {
-      title: 'Low balance',
-      push: (name) => `${name} is below your warning amount.`,
-    },
-  }
+type PushAlert = Pick<AccountAlert, 'accountName' | 'amountCents' | 'bill'>
+
+const ALERT_WORDS: Record<
+  AccountAlert['kind'],
+  { title: string; push: (alert: PushAlert) => string }
+> = {
+  overdrawn: { title: 'Overdrawn', push: (a) => `${a.accountName} is below zero.` },
+  over_limit: { title: 'Over credit limit', push: (a) => `${a.accountName} is past its limit.` },
+  overdraft_fee: { title: 'Overdraft fee', push: (a) => `${a.accountName} was charged a fee.` },
+  low_balance: {
+    title: 'Low balance',
+    push: (a) => `${a.accountName} is below your warning amount.`,
+  },
+  // Named by the bill alone, so no account shows on a locked screen.
+  bill_change: {
+    title: 'Bill changed',
+    push: (a) =>
+      `${a.bill?.name ?? 'A bill'} cost ${a.amountCents > (a.bill?.usualCents ?? 0) ? 'more' : 'less'} than usual.`,
+  },
+}
 
 /**
  * What an account alert is about, as its notification and its hide on the
- * home screen both key it. A fee is news once per latest fee date; the others
- * are conditions, kept once per account while they last.
+ * home screen both key it. A fee is news once per latest fee date, and a
+ * bill's change once per bill and charge date; the others are conditions,
+ * kept once per account while they last.
  */
 export function accountAlertSubject(
-  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date'>,
+  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date' | 'bill'>,
 ): string {
+  if (alert.kind === 'bill_change') return `${alert.bill?.id}:${alert.date}`
   return alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId
 }
 
@@ -54,8 +66,8 @@ export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
     subject: accountAlertSubject(alert),
     title: ALERT_WORDS[alert.kind].title,
     message: alert.message,
-    pushBody: ALERT_WORDS[alert.kind].push(alert.accountName),
-    link: '/alerts',
+    pushBody: ALERT_WORDS[alert.kind].push(alert),
+    link: alert.kind === 'bill_change' ? '/plan/bills' : '/alerts',
   }))
 }
 

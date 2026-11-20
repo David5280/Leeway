@@ -1,5 +1,6 @@
 // Account alerts as rows: an overdrawn account, a card over its limit, a fee
-// or a low balance, each opening its account. Shared by the dashboard banner,
+// or a low balance, each opening its account, and a bill that cost more or
+// less than usual, opening Bills. Shared by the dashboard banner,
 // the Alerts page, the Accounts screen and each account's page. On the home
 // screen each row also has a button that hides it there.
 
@@ -18,7 +19,31 @@ export const ALERT_LABELS: Record<AccountAlert['kind'], string> = {
   over_limit: 'Over limit',
   overdraft_fee: 'Fee',
   low_balance: 'Low',
+  bill_change: 'Bill',
 }
+
+/** How an alert reads: urgent ones and a bill costing more in the problem tone, never red for less. */
+export function alertTone(alert: AccountAlert): 'over' | 'warn' | 'info' {
+  if (alert.severity === 'urgent') return 'over'
+  if (alert.bill) return alert.amountCents > alert.bill.usualCents ? 'over' : 'info'
+  return alert.severity === 'info' ? 'info' : 'warn'
+}
+
+/** The card's tint for these alerts: red for any in the problem tone, amber for a warning, else none. */
+export function alertsTint(alerts: AccountAlert[]): '' | 'over-card' | 'warn-card' {
+  const tones = alerts.map(alertTone)
+  if (tones.includes('over')) return 'over-card'
+  return tones.includes('warn') ? 'warn-card' : ''
+}
+
+/** Where an alert is dealt with: its bill's list, or its account. */
+export function alertPath(alert: AccountAlert): string {
+  return alert.bill ? '/plan/bills' : accountDetailPath(alert.accountId)
+}
+
+/** One key per alert: a kind and account, and the bill for a bill's change. */
+export const alertKey = (alert: AccountAlert) =>
+  `${alert.kind}-${alert.accountId}${alert.bill ? `-${alert.bill.id}` : ''}`
 
 /**
  * A home screen row with a button beside it that hides the alert there: a
@@ -73,7 +98,7 @@ function HideFromHome({ alert, regionStays }: { alert: AccountAlert; regionStays
       aria-label={`Hide from home: ${alert.message}`}
       onClick={(event) => {
         const next = focusAfterHide(event.currentTarget, regionStays)
-        hide.mutate({ kind: alert.kind, accountId: alert.accountId })
+        hide.mutate({ kind: alert.kind, accountId: alert.accountId, billId: alert.bill?.id })
         next?.focus()
       }}
     >
@@ -82,13 +107,13 @@ function HideFromHome({ alert, regionStays }: { alert: AccountAlert; regionStays
   )
 }
 
-/** One alert, opening its account. Urgent ones are red, the rest amber. */
+/** One alert, opening where it is dealt with, in its tone (alertTone). */
 export function AlertRow({ alert }: { alert: AccountAlert }) {
-  const urgent = alert.severity === 'urgent'
+  const tone = alertTone(alert)
   return (
-    <Link to={accountDetailPath(alert.accountId)} className="alert-row clickrow">
-      <span className={urgent ? 'alert-icon over' : 'alert-icon'}>
-        <Icon name="warn" size={16} />
+    <Link to={alertPath(alert)} className="alert-row clickrow">
+      <span className={`alert-icon ${tone === 'warn' ? '' : tone}`}>
+        <Icon name={tone === 'info' ? 'info' : 'warn'} size={16} />
       </span>
       <span className="grow">{alert.message}</span>
       <span className="small muted strong hide-sm eyebrow">{ALERT_LABELS[alert.kind]}</span>
@@ -110,11 +135,7 @@ export function AlertRows({
   return (
     <>
       {alerts.map((alert) => (
-        <HideableRow
-          key={`${alert.kind}-${alert.accountId}`}
-          alert={hideable ? alert : undefined}
-          regionStays={false}
-        >
+        <HideableRow key={alertKey(alert)} alert={hideable ? alert : undefined} regionStays={false}>
           <AlertRow alert={alert} />
         </HideableRow>
       ))}
@@ -128,10 +149,9 @@ export function AlertRows({
  */
 export function AlertsCard({ alerts, label }: { alerts: AccountAlert[]; label: string }) {
   if (alerts.length === 0) return null
-  const urgent = alerts.some((alert) => alert.severity === 'urgent')
   const more = alerts.length - ALERT_ROWS
   return (
-    <Card static="list" label={label} className={`tight ${urgent ? 'over-card' : 'warn-card'}`}>
+    <Card static="list" label={label} className={`tight ${alertsTint(alerts)}`}>
       <AlertRows alerts={alerts.slice(0, ALERT_ROWS)} />
       {more > 0 && (
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>

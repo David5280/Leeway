@@ -2,7 +2,10 @@
 // with the data and sends any push owed. Every step can run again safely.
 
 import type { AppContext } from '../../context.js'
+import { todayIn } from '../../lib/dates.js'
 import { SECOND_MS } from '../../lib/time.js'
+import { settleBillChanges } from '../billChangeSource.js'
+import { getSettings } from '../settings.js'
 import { deliverPushes, type DeliveryResult } from './delivery.js'
 import { currentAlerts, trackHomeHides } from './homeAlerts.js'
 import { pruneInbox, recordCandidates, resolveCleared, resurfaceDismissed } from './inbox.js'
@@ -18,7 +21,8 @@ export const NOTIFIER_MINUTES = 5
 export const NOTIFY_AFTER_SYNC_MS = 5 * SECOND_MS
 
 /**
- * Adds new notifications, clears conditions that ended, brings back ones
+ * Takes the new amount as usual for bills charged it twice in a row, adds new
+ * notifications, clears conditions that ended, brings back ones
  * dismissed a day ago that still hold, and prunes old ones. Hides from the
  * home screen are kept current too, from every alert, whichever kinds are on.
  * Opening the inbox runs this too, so it is current without waiting for the timer.
@@ -26,6 +30,9 @@ export const NOTIFY_AFTER_SYNC_MS = 5 * SECOND_MS
 export async function refreshInbox(ctx: AppContext): Promise<NotificationSettings> {
   const choices = await getNotificationSettings(ctx.db)
   const now = ctx.now()
+  // A bill charged its new amount twice in a row takes it as usual first, so its alert clears.
+  const { timeZone } = await getSettings(ctx.db)
+  await settleBillChanges(ctx.db, timeZone, todayIn(timeZone, now))
   const candidates = await gatherCandidates(ctx, choices)
   await recordCandidates(ctx.db, candidates, now)
   const on = kindsOn(choices)

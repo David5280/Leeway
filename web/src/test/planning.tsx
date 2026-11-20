@@ -21,7 +21,7 @@ export const TODAY = '2026-11-17'
 export function bill(
   fields: Partial<Bill> & { name: string; amountCents: number; anchorDate: string },
 ): Bill {
-  const { id, lastPaidDate, lastPaidCents, reads, ...input } = fields
+  const { id, lastPaidDate, lastPaidCents, reads, accountId, ...input } = fields
   return scheduleOf(
     {
       // Test category ids are not UUIDs, so the category is checked apart from the schema.
@@ -29,6 +29,7 @@ export function bill(
       categoryId: input.categoryId ?? null,
       id: id ?? `bill-${fields.name.toLowerCase()}`,
       reads: reads ?? 'bank_text',
+      accountId: accountId ?? null,
       lastPaidDate: lastPaidDate ?? null,
       lastPaidCents: lastPaidCents ?? null,
     },
@@ -47,6 +48,7 @@ export function series(fields: Partial<RecurringSeries> & { name: string }): Rec
     lastDate: '2026-10-20',
     nextDate: '2026-11-20',
     categoryId: null,
+    accountId: null,
     suggestedKind: 'subscription',
     ...fields,
   }

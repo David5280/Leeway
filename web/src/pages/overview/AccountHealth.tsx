@@ -7,7 +7,7 @@
 
 import { Link } from 'react-router-dom'
 import { useHomeAlerts } from '../../api/homeAlerts'
-import { AlertRows } from '../../components/AccountAlerts'
+import { AlertRows, alertsTint } from '../../components/AccountAlerts'
 import { Card } from '../../components/design/Card'
 import { ALERT_ROWS, moreAlerts } from '../../lib/alertRows'
 
@@ -16,14 +16,9 @@ export function AccountHealth() {
   const alerts = useHomeAlerts()
   const list = alerts.data?.alerts ?? []
   if (list.length === 0) return null
-  const urgent = list.some((alert) => alert.severity === 'urgent')
   const more = list.length - ALERT_ROWS
   return (
-    <Card
-      static="list"
-      label="Account alerts"
-      className={`tight ${urgent ? 'over-card' : 'warn-card'}`}
-    >
+    <Card static="list" label="Account alerts" className={`tight ${alertsTint(list)}`}>
       <AlertRows alerts={list.slice(0, ALERT_ROWS)} hideable />
       <div className="row-between" style={{ padding: '4px 14px 8px' }}>
         <span className="small muted">
