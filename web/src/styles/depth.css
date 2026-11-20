@@ -97,6 +97,12 @@ body {
   min-width: 0;
 }
 
+/* A figure at the end of the row, like a group's total: never cut or wrapped. */
+.section-aside {
+  flex: none;
+  white-space: nowrap;
+}
+
 .section-icon {
   display: inline-grid;
   place-items: center;

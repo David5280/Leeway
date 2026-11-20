@@ -7,6 +7,7 @@ import {
   combine,
   goalsOn,
   groupAccounts,
+  groupTotal,
   kindIcon,
   utilization,
   utilizationStatus,
@@ -189,5 +190,57 @@ describe('goalsOn and combine', () => {
         { type: 'depository', balanceCents: -2000 },
       ]),
     ).toEqual({ ownedCents: 5000, owedCents: 2000, netCents: 3000 })
+  })
+})
+
+describe('groupTotal', () => {
+  it('sums a cash group', () => {
+    const spare = account({ id: 'chk2', name: 'Spare', subtype: 'checking', balanceCents: 5000 })
+    expect(groupTotal('checking', [checking, spare])).toEqual({
+      cents: 128456,
+      owed: false,
+      problem: false,
+    })
+  })
+
+  it('reads cards and loans as an amount owed, never red', () => {
+    const second = { ...card, id: 'cc2', balanceCents: 470706 }
+    expect(groupTotal('credit_card', [card, second])).toEqual({
+      cents: 507706,
+      owed: true,
+      problem: false,
+    })
+    expect(groupTotal('loan', [loan])).toMatchObject({ owed: true, problem: false })
+  })
+
+  it('shows investments and retirement as their balance', () => {
+    expect(groupTotal('investment', [brokerage])).toEqual({
+      cents: brokerage.balanceCents,
+      owed: false,
+      problem: false,
+    })
+  })
+
+  it('marks only a cash group below zero, from an overdraft, as a problem', () => {
+    const overdrawnChecking = { ...checking, balanceCents: -20000 }
+    const small = { ...checking, id: 'chk2', balanceCents: 5000 }
+    expect(groupTotal('checking', [overdrawnChecking, small])).toEqual({
+      cents: -15000,
+      owed: false,
+      problem: true,
+    })
+    // An overdraft the other account covers is not a problem.
+    expect(groupTotal('checking', [overdrawnChecking, checking])?.problem).toBe(false)
+    expect(groupTotal('savings', [{ ...savings, balanceCents: -1 }])?.problem).toBe(true)
+  })
+
+  it('counts what the cards count: hidden, unshared and unknown balances are left out', () => {
+    const hidden = { ...checking, id: 'hid', hidden: true, balanceCents: 900000 }
+    const unshared = { ...checking, id: 'gone', unsharedAt: '2026-11-01T00:00:00Z' }
+    const unknown = { ...checking, id: 'unk', balanceCents: null }
+    expect(groupTotal('checking', [checking, hidden, unshared, unknown])?.cents).toBe(
+      checking.balanceCents,
+    )
+    expect(groupTotal('checking', [hidden, unknown])).toBeNull()
   })
 })
