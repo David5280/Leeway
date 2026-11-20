@@ -127,14 +127,14 @@ async function applySync(
   changes: BankChanges,
 ): Promise<void> {
   const cardsBefore = await loadOwnAccounts(db)
-  const held = await reattachAccounts(db, connectionId, accounts)
+  await reattachAccounts(db, connectionId, accounts)
   const accountIds = await upsertAccounts(db, connectionId, accounts)
   await markUnshared(db, connectionId, accounts)
   const arrived = [...changes.added, ...changes.modified]
   const adopted = await adoptHistory(db, connectionId, accountIds, arrived)
   const touched = await upsertTransactions(db, accountIds, arrived)
   await carryOverPendingEdits(db, touched)
-  await settleReturns(db, held, adopted, touched)
+  await settleReturns(db, adopted, touched)
   await removeTransactions(db, accountIds, changes.removed)
   // A newly tracked card turns earlier payments to it into transfers, so
   // when the cards change every transaction is looked at again.

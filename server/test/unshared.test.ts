@@ -5,6 +5,7 @@ import type { Db } from '../src/db/pool.js'
 import { deleteAccount, getAccount, listAccounts } from '../src/domain/accounts.js'
 import { getAccountsView } from '../src/domain/accountView.js'
 import { listAlerts } from '../src/domain/alerts.js'
+import { budgetSummary } from '../src/domain/budgetReport.js'
 import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
 import { linkBank, listConnections, reconnected } from '../src/domain/connections.js'
 import { debtPlans } from '../src/domain/debts.js'
@@ -15,8 +16,10 @@ import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { listTransactions, setCategory, type Transaction } from '../src/domain/transactions.js'
 import {
   matchHistory,
-  pairHeldPending,
-  type HeldPending,
+  pairHeldCharges,
+  sameMerchant,
+  type ArrivedCharge,
+  type HeldCharge,
   type HistoryLine,
 } from '../src/domain/returnedHistory.js'
 import { pairReturning, type KeptAccount } from '../src/domain/unshared.js'
@@ -410,7 +413,11 @@ describe('history after an account comes back', () => {
     arriving: BankTransaction[],
     edit: (pendingId: string) => Promise<void> = async () => {},
     earlier: BankTransaction[] = [],
-  ): Promise<{ savingsId: string; charges: () => Promise<Transaction[]> }> {
+  ): Promise<{
+    connectionId: string
+    savingsId: string
+    charges: () => Promise<Transaction[]>
+  }> {
     const { connectionId, savingsId } = await linkCheckingAndSavings()
     bank.pages = [
       page({
@@ -427,7 +434,7 @@ describe('history after an account comes back', () => {
     bank.pages = [page({ added: arriving })]
     await reconnected(ctx, connectionId)
     const charges = async () => (await transactionsOf(savingsId)).filter((t) => t.name === 'Shell')
-    return { savingsId, charges }
+    return { connectionId, savingsId, charges }
   }
 
   const posted = (id: string, date: string) =>
@@ -453,6 +460,67 @@ describe('history after an account comes back', () => {
         note: 'Road trip',
       }),
     ])
+  })
+
+  /** Syncs `quiet` times with nothing new, then once more with `arriving`. */
+  async function arriveLater(connectionId: string, quiet: number, arriving: BankTransaction[]) {
+    for (let sync = 0; sync < quiet; sync++) {
+      bank.pages = [page({})]
+      await syncConnection(ctx, connectionId)
+    }
+    bank.pages = [page({ added: arriving })]
+    await syncConnection(ctx, connectionId)
+  }
+
+  const heldCharges = async () =>
+    (await ctx.db.query<{ name: string }>('SELECT name FROM held_charges')).rows
+
+  it.each([1, 2])(
+    'carries the edits over when the charge it became arrives %i syncs after the return',
+    async (later) => {
+      const { connectionId, charges } = await pendingThenBack([], async (id) => {
+        await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+      })
+      await arriveLater(connectionId, later - 1, [posted('n-posted', '2026-11-17')])
+
+      expect((await charges()).map((t) => [t.date, t.note])).toEqual([['2026-11-17', 'Road trip']])
+      expect(await heldCharges()).toEqual([])
+    },
+  )
+
+  it('keeps a charge set aside out of every total and list while it waits', async () => {
+    const settings = await getSettings(ctx.db)
+    const spent = async () => (await budgetSummary(ctx.db, settings, ctx.now())).totals.spentCents
+    let spentWhilePending = 0
+    const { charges } = await pendingThenBack([], async () => {
+      spentWhilePending = await spent()
+    })
+
+    expect(await heldCharges()).toEqual([{ name: 'Shell' }])
+    expect(await spent()).toBe(spentWhilePending - 8000)
+    expect(await charges()).toEqual([])
+  })
+
+  it('lets a charge set aside go once its window runs out', async () => {
+    const { connectionId, charges } = await pendingThenBack([], async (id) => {
+      await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+    })
+    await ctx.db.query(`UPDATE held_charges SET held_until = now() - interval '1 minute'`)
+    await arriveLater(connectionId, 0, [posted('n-posted', '2026-11-17')])
+
+    expect((await charges()).map((t) => t.note)).toEqual([null])
+    expect(await heldCharges()).toEqual([])
+  })
+
+  it('carries nothing over to an equal charge at another merchant', async () => {
+    const groceries = bankTx({ ...onNew, name: 'Safeway', amountCents: 8000, date: '2026-11-16' })
+    const { savingsId } = await pendingThenBack([groceries], async (id) => {
+      await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+    })
+
+    const fuelAndFood = (await transactionsOf(savingsId)).filter((t) => t.amountCents === 8000)
+    expect(fuelAndFood.map((t) => [t.name, t.note])).toEqual([['Safeway', null]])
+    expect(await heldCharges()).toEqual([{ name: 'Shell' }])
   })
 
   it('carries nothing over when more than one charge could be the one it became', async () => {
@@ -765,22 +833,27 @@ describe('matchHistory', () => {
   })
 })
 
-describe('pairHeldPending', () => {
-  const pending = (fields: Partial<HeldPending> = {}): HeldPending => ({
+describe('pairHeldCharges', () => {
+  const pending = (fields: Partial<HeldCharge> = {}): HeldCharge => ({
+    id: 'held-1',
     accountId: 'acct',
     date: '2026-11-10',
     amountCents: 8000,
-    manualCategoryId: null,
-    note: 'Dinner',
+    name: 'SHELL OIL 5741',
+    merchantName: null,
+    categoryId: null,
+    note: 'Fuel',
     excluded: false,
     subject: 'p-1',
     ...fields,
   })
-  const charge = (id: string, date: string, fields: object = {}) => ({
+  const charge = (id: string, date: string, fields: Partial<ArrivedCharge> = {}) => ({
     id,
     accountId: 'acct',
     date,
     amountCents: 8000,
+    name: 'Shell',
+    merchantName: null,
     ...fields,
   })
 
@@ -790,19 +863,47 @@ describe('pairHeldPending', () => {
       charge('late', '2026-11-18'),
       charge('other-amount', '2026-11-12', { amountCents: 8001 }),
       charge('other-account', '2026-11-12', { accountId: 'elsewhere' }),
+      charge('other-merchant', '2026-11-12', { name: 'Safeway' }),
       charge('it', '2026-11-17'),
     ]
-    expect([...pairHeldPending([pending()], arrived)]).toEqual([[0, 'it']])
+    expect([...pairHeldCharges([pending()], arrived)]).toEqual([['held-1', 'it']])
   })
 
   it('pairs nothing when two charges could be it', () => {
     const arrived = [charge('a', '2026-11-10'), charge('b', '2026-11-11')]
-    expect(pairHeldPending([pending()], arrived).size).toBe(0)
+    expect(pairHeldCharges([pending()], arrived).size).toBe(0)
   })
 
   it('pairs nothing when two pending charges could be the same one', () => {
-    const held = [pending(), pending({ date: '2026-11-11', subject: 'p-2' })]
-    expect(pairHeldPending(held, [charge('a', '2026-11-12')]).size).toBe(0)
+    const held = [pending(), pending({ id: 'held-2', date: '2026-11-11', subject: 'p-2' })]
+    expect(pairHeldCharges(held, [charge('a', '2026-11-12')]).size).toBe(0)
+  })
+})
+
+describe('sameMerchant', () => {
+  const named = (name: string, merchantName: string | null = null) => ({
+    id: name,
+    accountId: 'acct',
+    date: '2026-11-10',
+    amountCents: 8000,
+    name,
+    merchantName,
+  })
+
+  it('compares merchant names when the bank gave both one', () => {
+    expect(
+      sameMerchant(named('SQ *BLUE BOTTLE', 'Blue Bottle'), named('Blue', 'Blue Bottle')),
+    ).toBe(true)
+    expect(sameMerchant(named('Shell', 'Shell'), named('Shell', 'Shell Oil'))).toBe(false)
+  })
+
+  it('compares the first word of the description otherwise', () => {
+    expect(sameMerchant(named('SHELL OIL 5741'), named('Shell', 'Shell'))).toBe(true)
+    expect(sameMerchant(named('Shell'), named('Safeway'))).toBe(false)
+  })
+
+  it('never matches a description with no words', () => {
+    expect(sameMerchant(named('#1234'), named('#5678'))).toBe(false)
   })
 })
 
@@ -849,6 +950,26 @@ describe('a large charge after an account comes back', () => {
 
     expect(await largeCharges()).toEqual([{ subject: 'n-tv', push_state: 'sent' }])
   })
+
+  it.each([1, 2])(
+    'is not news again when it was pending and posts %i syncs after the return',
+    async (later) => {
+      const connectionId = await notifiedThenUnticked(true)
+      bank.accounts = [checking, { ...savings, ...onNew }]
+      bank.pages = [page({})]
+      await reconnected(ctx, connectionId)
+      await refreshInbox(ctx)
+      for (let sync = 1; sync <= later; sync++) {
+        const arriving =
+          sync === later ? [bankTx({ ...tv, ...onNew, providerTransactionId: 'n-tv' })] : []
+        bank.pages = [page({ added: arriving })]
+        await syncConnection(ctx, connectionId)
+        await refreshInbox(ctx)
+      }
+
+      expect(await largeCharges()).toEqual([{ subject: 'n-tv', push_state: 'sent' }])
+    },
+  )
 
   it('is not news again when it was pending and comes back posted under a new id', async () => {
     const connectionId = await notifiedThenUnticked(true)

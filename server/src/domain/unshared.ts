@@ -29,7 +29,7 @@
 import type pg from 'pg'
 import type { BankAccount } from '../bank/provider.js'
 import type { AccountType } from './accounts.js'
-import { openAdoptionWindow, type HeldPending } from './returnedHistory.js'
+import { openAdoptionWindow } from './returnedHistory.js'
 import { sameAccount, sameName } from './sameBank.js'
 
 /** An account Leeway has for a login, as far as matching one the bank reports goes. */
@@ -83,15 +83,14 @@ export function pairReturning(missing: KeptAccount[], arrived: BankAccount[]): M
  * Before a sync saves the accounts the bank reports, gives each one that
  * arrived under a new id the id of the account it is, so it is saved over
  * that account rather than beside it, and opens its adoption window (see
- * returnedHistory.ts). Returns the pending charges set aside as it does, for
- * settleReturns. An account shared again under its own id needs none of
- * this, since its transactions keep their ids too.
+ * returnedHistory.ts). An account shared again under its own id needs none
+ * of this, since its transactions keep their ids too.
  */
 export async function reattachAccounts(
   db: pg.PoolClient,
   connectionId: string,
   reported: BankAccount[],
-): Promise<HeldPending[]> {
+): Promise<void> {
   const { rows } = await db.query<KeptAccount>(
     `SELECT id, provider_account_id AS "providerAccountId", name, mask, type
      FROM accounts WHERE connection_id = $1 ORDER BY created_at, id`,
@@ -103,14 +102,14 @@ export async function reattachAccounts(
   const arrived = reported.filter((account) => !knownIds.has(account.providerAccountId))
 
   const pairs = pairReturning(missing, arrived)
-  if (pairs.size === 0) return []
+  if (pairs.size === 0) return
   for (const [providerAccountId, id] of pairs) {
     await db.query('UPDATE accounts SET provider_account_id = $2 WHERE id = $1', [
       id,
       providerAccountId,
     ])
   }
-  return openAdoptionWindow(db, [...pairs.values()])
+  await openAdoptionWindow(db, [...pairs.values()])
 }
 
 /**

@@ -16,3 +16,27 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS unshared_at timestamptz;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS adopt_until timestamptz;
 CREATE INDEX IF NOT EXISTS transactions_adopt_until_idx ON transactions (account_id)
   WHERE adopt_until IS NOT NULL;
+
+-- A pending charge set aside when its account came back under a new
+-- account_id. Plaid sends the account's charges again under new ids, so the
+-- pending row goes at once, but what the owner set on it, and the subject of
+-- its large-charge notification, wait here for the one charge it can only
+-- have become, which may arrive a few syncs later (domain/returnedHistory.ts).
+-- Nothing that shows money reads this table. A row goes once paired, or once
+-- held_until passes.
+CREATE TABLE IF NOT EXISTS held_charges (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id uuid NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+  date date NOT NULL,
+  amount_cents bigint NOT NULL,
+  name text NOT NULL,
+  merchant_name text,
+  -- Only a category the owner picked by hand.
+  category_id uuid REFERENCES categories (id) ON DELETE SET NULL,
+  note text,
+  excluded boolean NOT NULL,
+  -- The large-charge notification's subject (notifications.subject).
+  subject text NOT NULL,
+  held_until timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS held_charges_account_idx ON held_charges (account_id);
