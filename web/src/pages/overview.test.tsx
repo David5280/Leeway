@@ -235,6 +235,54 @@ describe('account alerts on the Overview', () => {
     expect(screen.queryByText(/in Heads up on the dashboard/)).not.toBeInTheDocument()
   })
 
+  it('moves Heads up under the hero while an account is overdrawn, saving nothing', async () => {
+    const server = serve(settings, {
+      list_alerts: () => alerts,
+      list_home_alerts: () => homeList(alerts),
+    })
+    renderOverview()
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    // Ahead of net worth, so it shows above the fold on a phone too.
+    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', ...DEFAULT_PAGE_ORDER.slice(1)])
+    expect(server.actions('update_settings')).toEqual([])
+    // Editing shows the saved order, so moves act on what is saved.
+    await startEditing()
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('leaves Heads up where the layout puts it when nothing is urgent', async () => {
+    const low = alerts.filter((alert) => alert.severity !== 'urgent')
+    expect(low).toHaveLength(1)
+    serve(settings, { list_alerts: () => low, list_home_alerts: () => homeList(low) })
+    renderOverview()
+    await screen.findByText(low[0]!.message)
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('moves Heads up under the hero from the bottom of a layout the owner arranged', async () => {
+    const arranged = layout([
+      { type: 'leeway', size: 'wide' },
+      { type: 'pace', size: 'full' },
+      { type: 'alerts', size: 'half' },
+    ])
+    serve(arranged, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
+    renderOverview(arranged)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', 'Spending pace'])
+    // At full width, never in a side column beside the hero.
+    expect(screen.getByRole('region', { name: 'Heads up' }).closest('.band')).toBeNull()
+  })
+
   it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {
     const hidden = layout([{ type: 'leeway' }, { type: 'alerts', visible: false }])
     serve(hidden, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })

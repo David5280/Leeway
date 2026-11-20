@@ -26,6 +26,12 @@ const BUDGET_LABELS: Record<Budget['alerts'][number]['level'], string> = {
   warning: 'Warning',
 }
 
+/** What Heads up reads from the budget: its alerts and the transactions left to sort. */
+export interface HeadsUpBudget {
+  alerts: Budget['alerts']
+  totals: Pick<Budget['totals'], 'uncategorizedCount' | 'uncategorizedCents'>
+}
+
 /** Every heads-up item in the order the owner should read them. */
 export function headsUpItems({
   accountAlerts,
@@ -35,7 +41,7 @@ export function headsUpItems({
 }: {
   accountAlerts: AccountAlert[]
   connections: Pick<Connection, 'id' | 'status' | 'institutionName'>[]
-  budget: Pick<Budget, 'alerts' | 'totals'>
+  budget: HeadsUpBudget
   money: (cents: number) => string
 }): HeadsUpItem[] {
   const items: HeadsUpItem[] = accountAlerts.map((alert) => ({

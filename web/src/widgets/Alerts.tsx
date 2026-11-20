@@ -5,6 +5,7 @@
 // hidden from home here.
 
 import { Link } from 'react-router-dom'
+import type { Budget } from '../api/client'
 import { useHomeAlerts } from '../api/homeAlerts'
 import { useAction } from '../api/hooks'
 import { HideableRow } from '../components/AccountAlerts'
@@ -13,21 +14,40 @@ import { Card } from '../components/design/Card'
 import { Icon } from '../components/ui'
 import { useApp } from '../lib/app'
 import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
-import { headsUpItems, headsUpTint, type HeadsUpItem } from './headsUp'
+import { headsUpItems, headsUpTint, type HeadsUpBudget, type HeadsUpItem } from './headsUp'
 import type { WidgetProps } from './types'
 
-export function AlertsWidget({ budget }: WidgetProps) {
+/** What Heads up lists for this budget, worst first (headsUpItems), as the server last said. */
+function useHeadsUpItems(budget: HeadsUpBudget): HeadsUpItem[] {
   const { money } = useApp()
   const connections = useAction('list_connections')
   // The home list: every account alert less those the owner hid from home.
   const accountAlerts = useHomeAlerts()
-  const aiAlert = useAction('get_ai_usage').data?.alert
-  const items = headsUpItems({
+  return headsUpItems({
     accountAlerts: accountAlerts.data?.alerts ?? [],
     connections: connections.data ?? [],
     budget,
     money,
   })
+}
+
+const NO_BUDGET: HeadsUpBudget = {
+  alerts: [],
+  totals: { uncategorizedCount: 0, uncategorizedCents: 0 },
+}
+
+/**
+ * Whether Heads up holds something urgent: an item in the problem tone, like
+ * an overdrawn account or a budget gone over. The Overview then moves it up
+ * under the hero (urgentFirst).
+ */
+export function useUrgentHeadsUp(budget: Budget | undefined): boolean {
+  return useHeadsUpItems(budget ?? NO_BUDGET).some((item) => item.tone === 'over')
+}
+
+export function AlertsWidget({ budget }: WidgetProps) {
+  const aiAlert = useAction('get_ai_usage').data?.alert
+  const items = useHeadsUpItems(budget)
   const total = items.length + (aiAlert ? 1 : 0)
   // Nothing to say is said by saying nothing: no card until something needs the owner.
   if (total === 0) return null

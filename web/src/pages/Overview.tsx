@@ -7,12 +7,14 @@ import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
+import { useUrgentHeadsUp } from '../widgets/Alerts'
 import { Board } from '../widgets/Board'
 import { AccountHealth } from './overview/AccountHealth'
 import {
   addableTypes,
   DEFAULT_LAYOUT,
   drawable,
+  urgentFirst,
   WIDGET_LIBRARY,
   type Widget,
 } from '../widgets/library'
@@ -31,6 +33,10 @@ export function Overview() {
   const addable = addableTypes(all)
   // Heads up lists the account alerts; the banner stands in only when it is hidden.
   const headsUpShown = widgets.some((widget) => widget.type === 'alerts' && widget.visible)
+  // Something urgent moves Heads up under the hero, but never while editing the saved order.
+  const urgent = useUrgentHeadsUp(budget.data)
+  const visible = widgets.filter((widget) => widget.visible || editing)
+  const shown = urgent && !editing ? urgentFirst(visible) : visible
 
   return (
     <Shell
@@ -105,7 +111,7 @@ export function Overview() {
         <>
           <Board
             all={all}
-            shown={widgets.filter((widget) => widget.visible || editing)}
+            shown={shown}
             editing={editing}
             budget={budget.data}
             offset={offset}

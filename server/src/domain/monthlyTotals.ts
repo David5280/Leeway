@@ -6,8 +6,10 @@
 // only part of the month, so it is never judged or averaged as a whole one.
 //
 // A transaction with no category yet (unfiled) counts this way:
-// - two unfiled legs that pair as one move between the owner's own accounts
-//   (same amount, opposite sign, two accounts, within days) count as neither;
+// - two legs that pair as one move between the owner's own accounts (same
+//   amount, opposite sign, two accounts, within days) count as neither, when
+//   one is unfiled and the other unfiled or filed as a transfer (see
+//   unfiledLeg for which lines may pair);
 // - any other unfiled purchase counts as money out, so an unfiled deposit
 //   never lowers spending or makes it negative (the budget still nets them,
 //   as sumTotals does);
@@ -21,7 +23,7 @@ import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
 import {
   categoryTotalsByRange,
-  COUNTED_IN_RANGES_SQL,
+  IN_RANGES_SQL,
   currentPeriod,
   rangeParams,
   sumTotals,
@@ -107,35 +109,44 @@ interface Flows {
   inCents: number
 }
 
+/** An unfiled transaction, or a filed transfer leg read only so its other side can pair. */
+type FlowLeg = PairCandidate & { filedTransfer: boolean }
+
 /**
  * The unfiled transactions of each range, split by sign, in the ranges'
- * order, less the legs that pair as moves between own accounts. Legs up to a
- * pairing window either side are read too, so a move whose other side posted
- * in the next or last month still pairs.
+ * order, less the legs that pair as moves between own accounts. Legs filed
+ * as transfers are read too, never counted, so an unfiled leg whose other
+ * side is filed still pairs. Legs up to two pairing windows either side are
+ * read, so a leg just past the edge pairs the same way whatever the months
+ * asked for: its own partner may lie a window further out.
  */
 async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
 ): Promise<Flows[]> {
+  const margin = 2 * PAIR_WINDOW_DAYS
   const span = {
-    start: addDays(ranges[0]!.start, -PAIR_WINDOW_DAYS),
-    end: addDays(ranges[ranges.length - 1]!.end, PAIR_WINDOW_DAYS),
+    start: addDays(ranges[0]!.start, -margin),
+    end: addDays(ranges[ranges.length - 1]!.end, margin),
   }
-  const { rows } = await db.query<PairCandidate>(
+  const { rows } = await db.query<FlowLeg>(
     `SELECT t.id, t.account_id AS "accountId", t.date, t.name, t.merchant_name AS "merchantName",
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
-       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
-     ${COUNTED_IN_RANGES_SQL}
-       AND t.category_id IS NULL`,
+       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
+       t.category_id IS NOT NULL AS "filedTransfer"
+     ${IN_RANGES_SQL}
+       AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
-  const paired = pairTransfers(rows, unfiledLeg)
+  const filedIds = new Set(rows.filter((row) => row.filedTransfer).map((row) => row.id))
+  // The owner filed a transfer leg as one, so it may pair whatever its line says.
+  const paired = pairTransfers(rows, (hint, tx) => filedIds.has(tx.id) || unfiledLeg(hint, tx))
   const flows = ranges.map((): Flows => ({ outCents: 0, inCents: 0 }))
   for (const tx of rows) {
     const i = ranges.findIndex((range) => tx.date >= range.start && tx.date < range.end)
-    // Outside every month (read only to pair), or one side of an own move.
-    if (i < 0 || paired.has(tx.id)) continue
+    // Outside every month (read only to pair), filed as a transfer, or one side of an own move.
+    if (i < 0 || tx.filedTransfer || paired.has(tx.id)) continue
     if (tx.amountCents > 0) flows[i]!.outCents += tx.amountCents
     else flows[i]!.inCents -= tx.amountCents
   }

@@ -16,7 +16,7 @@
 // share of a usual finished month's, never more than a whole month, and none
 // before there is a finished month of pay to go by.
 
-import { addDays, type IsoDate } from '../../lib/dates.js'
+import { addDays, addMonths, dateParts, type IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import type { MonthTotals } from '../monthlyTotals.js'
 import {
@@ -100,6 +100,34 @@ export function payrollStreams(
   return streams
 }
 
+/** Months between paychecks for the cadences that pay on calendar days. */
+const MONTHS_APART: Partial<Record<Cadence, number>> = { month: 1, quarter: 3, year: 12 }
+
+/**
+ * Half a month before a semimonthly payday, as a 1st and 16th payroll pays:
+ * the 16th steps back to the 1st, and the 1st to the 16th of the month
+ * before (clamped, so a 15th steps back to the end of the month before).
+ */
+function halfMonthBack(date: IsoDate): IsoDate {
+  const { day } = dateParts(date)
+  return day > 15 ? addDays(date, -15) : addMonths(date, -1, day + 15)
+}
+
+/**
+ * The payday `count` paychecks before `date`: by calendar months for a
+ * monthly cadence, by half months for a semimonthly one, and by days for a
+ * weekly or biweekly one, so a plan joined on Feb 1 is found on Feb 1 from a
+ * Mar 1 stub, not on Jan 30.
+ */
+export function paychecksBack(date: IsoDate, cadence: Cadence, count: number): IsoDate {
+  const months = MONTHS_APART[cadence]
+  if (months) return addMonths(date, -count * months)
+  if (cadence === 'semimonth') {
+    return addMonths(count % 2 ? halfMonthBack(date) : date, -Math.floor(count / 2))
+  }
+  return addDays(date, -Math.round((count * DAYS_PER_YEAR) / PER_YEAR[cadence]))
+}
+
 /**
  * When a plan a paystub shows is known to have run from. Its year-to-date
  * total is what every paycheck this year put in, so dividing it by one
@@ -107,17 +135,22 @@ export function payrollStreams(
  * that many paychecks back (by the stub's cadence) is when it began: a plan
  * joined in July counts from July, not from January. It never reaches back
  * past the first of the stub's year, which the total starts from, and with no
- * year-to-date total to go by it counts from there, as the total would.
+ * year-to-date total to go by it counts from there, as the total would. A
+ * total under one paycheck's share says nothing sure either, so it goes there
+ * too.
+ *
+ * A raise during the year makes the start late, and that is inherent here:
+ * the earlier, smaller paychecks put in less than this one, so the total
+ * divides into fewer paychecks than were really paid.
  */
 export function planStart(paystub: DatedPaystub): IsoDate {
   const date = paystubDate(paystub)
   const yearStart = `${date.slice(0, 4)}-01-01`
   const perPaycheck = planPerPaycheckCents(paystub)
-  const yearToDate = planYearToDateCents(paystub)
-  if (paystub.payCadence === null || perPaycheck <= 0 || !yearToDate) return yearStart
+  const yearToDate = planYearToDateCents(paystub) ?? 0
+  if (paystub.payCadence === null || perPaycheck <= 0 || yearToDate < perPaycheck) return yearStart
   const paychecks = Math.ceil(yearToDate / perPaycheck)
-  const daysApart = DAYS_PER_YEAR / PER_YEAR[paystub.payCadence]
-  const first = addDays(date, -Math.round((paychecks - 1) * daysApart))
+  const first = paychecksBack(date, paystub.payCadence, paychecks - 1)
   return first > yearStart ? first : yearStart
 }
 

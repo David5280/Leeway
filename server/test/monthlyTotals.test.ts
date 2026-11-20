@@ -152,6 +152,64 @@ describe('get_monthly_totals', () => {
     ])
   })
 
+  it('never pairs pay with an equal purchase on a card, coded or not', async () => {
+    const card = (await insertBankAccount(ctx.db, { name: 'Visa', type: 'credit' })).accountId
+    // $2,000 pay with no code, and a $2,000 sofa on the card two days later.
+    await spend('2026-11-03', 'ACME CORP DIR DEP', -200000)
+    await insertBankTransaction(ctx.db, card, {
+      date: '2026-11-05',
+      name: 'Furniture Barn',
+      amountCents: 200000,
+    })
+    // A plain $50 deposit and a $50 dinner on the card: a card purchase is never a move.
+    await spend('2026-11-08', 'Deposit', -5000)
+    await insertBankTransaction(ctx.db, card, {
+      date: '2026-11-09',
+      name: 'Dinner at Luca',
+      amountCents: 5000,
+    })
+    const november = (await call('get_monthly_totals', { months: 2 })).months[1]!
+    expect([november.spentCents, november.unfiledInCents]).toEqual([205000, 205000])
+  })
+
+  it('pairs an unfiled leg with its other side filed as a transfer, counting neither', async () => {
+    const moves = await call('create_category', { name: 'Moves', kind: 'transfer' })
+    await call('create_rule', { pattern: 'to savings', field: 'description', categoryId: moves.id })
+    const savings = (await insertBankAccount(ctx.db, { name: 'Savings' })).accountId
+    // $700 filed as a move by the rule, and its arrival in savings left unfiled.
+    await spend('2026-11-10', 'To savings', 70000)
+    await insertBankTransaction(ctx.db, savings, {
+      date: '2026-11-11',
+      name: 'Deposit',
+      amountCents: -70000,
+    })
+    await call('reorder_rules', { ids: (await call('list_rules')).map((r) => r.id) })
+    const november = (await call('get_monthly_totals', { months: 2 })).months[1]!
+    expect([november.spentCents, november.incomeCents, november.unfiledInCents]).toEqual([0, 0, 0])
+  })
+
+  it('pairs a leg near the first month the same way however many months are asked for', async () => {
+    const savings = (await insertBankAccount(ctx.db, { name: 'Savings' })).accountId
+    // $250 out of checking on Aug 28: the Aug 24 arrival is closer than Sep 2's, so it pairs.
+    await insertBankTransaction(ctx.db, savings, {
+      date: '2026-08-24',
+      name: 'Deposit',
+      amountCents: -25000,
+    })
+    await spend('2026-08-28', 'Withdrawal', 25000)
+    await insertBankTransaction(ctx.db, savings, {
+      date: '2026-09-02',
+      name: 'Deposit',
+      amountCents: -25000,
+    })
+    for (const months of [3, 4]) {
+      const totals = (await call('get_monthly_totals', { months })).months
+      const september = totals.find((month) => month.start === '2026-09-01')!
+      // Sep 2's $250 is left over, so it is money in either way.
+      expect([september.spentCents, september.unfiledInCents]).toEqual([0, 25000])
+    }
+  })
+
   it("counts a transfer between the owner's own accounts as neither in nor out", async () => {
     const moves = await call('create_category', { name: 'Moves', kind: 'transfer' })
     await call('create_rule', { pattern: 'savings', field: 'description', categoryId: moves.id })

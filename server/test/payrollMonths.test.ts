@@ -11,6 +11,7 @@ import {
   payrollStreams,
   paystubDate,
   paystubPlan,
+  paychecksBack,
   pensionStart,
   planStart,
   runningPayShare,
@@ -104,6 +105,38 @@ describe('a workplace plan on a paystub', () => {
     expect(planStart({ ...withYearToDate('2026-10-31', 160_000), payCadence: null })).toBe(
       '2026-01-01',
     )
+  })
+
+  it('counts a total under one paycheck as no total, from the start of the year', () => {
+    // $100 so far against $200 a paycheck says nothing sure about when it began.
+    expect(planStart(withYearToDate('2026-10-31', 10_000))).toBe('2026-01-01')
+    // Exactly one paycheck's share began on this paycheck.
+    expect(planStart(withYearToDate('2026-10-31', 20_000))).toBe('2026-10-31')
+  })
+
+  it('counts back monthly pay by calendar months', () => {
+    const monthly = (payDate: string, plan457: number) => ({
+      ...withYearToDate(payDate, plan457),
+      payCadence: 'month' as const,
+    })
+    // Joined Feb 1: two paychecks by the Mar 1 stub, so Feb 1, not Jan 30.
+    expect(planStart(monthly('2026-03-01', 40_000))).toBe('2026-02-01')
+    // Joined Feb 28, paid on the last day: Mar 31 less a month is Feb 28.
+    expect(planStart(monthly('2026-03-31', 40_000))).toBe('2026-02-28')
+  })
+
+  it('counts paydays back by half months, months, quarters, years or days', () => {
+    // A 1st and 16th payroll: the 1st steps back to the 16th, the 16th to the 1st.
+    expect(paychecksBack('2026-03-01', 'semimonth', 1)).toBe('2026-02-16')
+    expect(paychecksBack('2026-03-16', 'semimonth', 1)).toBe('2026-03-01')
+    expect(paychecksBack('2026-03-01', 'semimonth', 2)).toBe('2026-02-01')
+    expect(paychecksBack('2026-03-01', 'semimonth', 3)).toBe('2026-01-16')
+    // A 15th steps back to the end of the month before.
+    expect(paychecksBack('2026-03-15', 'semimonth', 1)).toBe('2026-02-28')
+    expect(paychecksBack('2026-12-15', 'quarter', 1)).toBe('2026-09-15')
+    expect(paychecksBack('2026-12-15', 'year', 1)).toBe('2025-12-15')
+    expect(paychecksBack('2026-03-13', 'biweek', 2)).toBe('2026-02-13')
+    expect(paychecksBack('2026-03-13', 'week', 1)).toBe('2026-03-06')
   })
 
   it('counts while the paystub is recent, and says when an old one leaves a plan out', () => {

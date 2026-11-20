@@ -69,6 +69,25 @@ describe('transferHint', () => {
     expect(transferHint({ ...base, providerCategoryDetailed: 'INCOME_WAGES' })).toBe('other')
   })
 
+  it('reads pay or money paid back in a line with no code as something else', () => {
+    for (const name of [
+      'ACME CORP DIR DEP',
+      'ACME PAYROLL',
+      'DIRECT DEPOSIT ACME',
+      'Salary November',
+      'Etsy payout',
+      'Store refund',
+      'Expense reimbursement',
+      'Payroll transfer',
+    ]) {
+      expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('other')
+    }
+    // Whole words only, and a plain deposit or withdrawal still says nothing.
+    for (const name of ['Deposit', 'Withdrawal', 'Paycheckers Diner', 'DIRECTORY DEPOT']) {
+      expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('none')
+    }
+  })
+
   it('reads the words of a line with no code', () => {
     const base = tx('a', { accountId: 'x', amountCents: 100 })
     expect(transferHint({ ...base, name: 'ONLINE TRANSFER TO SAV ...1234' })).toBe('transfer')
@@ -160,6 +179,24 @@ describe('pairTransfers', () => {
       providerCategoryDetailed: 'INCOME_WAGES',
     })
     expect(pairsOf([silent[0]!, pay], unfiledLeg)).toEqual([])
+    // A silent line on a card is a purchase, never one side of a move.
+    const dinner = tx('out', {
+      accountId: 'card',
+      amountCents: 5000,
+      accountType: 'credit',
+      name: 'DINNER AT LUCA',
+    })
+    const deposit = tx('in', { accountId: 'checking', amountCents: -5000, name: 'DEPOSIT' })
+    expect(pairsOf([dinner, deposit], unfiledLeg)).toEqual([])
+    // A card's side of a payment says so, and pairs with a silent withdrawal.
+    const payment = tx('in', {
+      accountId: 'card',
+      amountCents: -5000,
+      accountType: 'credit',
+      name: 'PAYMENT THANK YOU',
+    })
+    const withdrawal = tx('out', { accountId: 'checking', amountCents: 5000, name: 'WITHDRAWAL' })
+    expect(pairsOf([withdrawal, payment], unfiledLeg)).toEqual(['out:in'])
   })
 
   it('does not pair a paycheck or a purchase with a transfer of the same amount', () => {
