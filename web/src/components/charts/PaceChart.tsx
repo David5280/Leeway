@@ -72,7 +72,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
   const spent =
     state.projecting && today ? spentLabel(today, money(state.spentCents), left) : undefined
   const steady = { from: { x: x(0), y: y(0) }, to: { x: x(pace.days - 1), y: y(pace.budgetCents) } }
-  const steadyText = steadyTextFor(pace, steady, bottom, today, spent?.box)
+  const steadyText = steadyTextFor(pace, steady, { left, bottom }, today, spent?.box)
 
   return (
     <ChartFrame
@@ -231,7 +231,7 @@ function TodayMarker({ x, top, bottom }: { x: number; top: number; bottom: numbe
 function steadyTextFor(
   pace: Pace,
   steady: { from: Point; to: Point },
-  bottom: number,
+  plot: { left: number; bottom: number },
   today: Point | undefined,
   spent: Box | undefined,
 ): SteadyLabelSpot | undefined {
@@ -241,7 +241,7 @@ function steadyTextFor(
   return steadyLabel({
     label: STEADY_LABEL,
     ...steady,
-    bottom,
+    ...plot,
     labelBelow: pace.projectedCents > pace.budgetCents,
     avoid,
   })

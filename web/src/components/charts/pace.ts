@@ -146,52 +146,40 @@ export function boxCorners(box: Box): Point[] {
 }
 
 /**
- * Whether two convex shapes (corners in drawing order) overlap. They are
- * apart exactly when some edge's normal has their shadows on it not meeting
- * (the separating axis test); shapes that only touch count as apart.
+ * How deeply two convex shapes (corners in drawing order) overlap: the least
+ * push along any edge's normal that would part them, and 0 when they are
+ * apart. They are apart exactly when some normal has their shadows on it not
+ * meeting (the separating axis test); shapes that only touch count as apart.
  */
-export function shapesMeet(a: Point[], b: Point[]): boolean {
+export function overlapDepth(a: Point[], b: Point[]): number {
   const normals = [a, b].flatMap((shape) =>
     shape.map((corner, i) => {
       const next = shape[(i + 1) % shape.length]!
       return { x: corner.y - next.y, y: next.x - corner.x }
     }),
   )
-  return normals.every((axis) => {
-    const shadow = (shape: Point[]) => shape.map((corner) => corner.x * axis.x + corner.y * axis.y)
+  let least = Infinity
+  for (const axis of normals) {
+    // In pixels, so depths along different normals compare (a repeated corner has none).
+    const length = Math.hypot(axis.x, axis.y) || 1
+    const shadow = (shape: Point[]) =>
+      shape.map((corner) => (corner.x * axis.x + corner.y * axis.y) / length)
     const [onA, onB] = [shadow(a), shadow(b)]
-    return Math.min(...onA) < Math.max(...onB) && Math.min(...onB) < Math.max(...onA)
-  })
+    const overlap =
+      Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB))
+    if (overlap <= 0) return 0
+    least = Math.min(least, overlap)
+  }
+  return least
+}
+
+/** Whether two convex shapes (corners in drawing order) overlap; touching is apart. */
+export function shapesMeet(a: Point[], b: Point[]): boolean {
+  return overlapDepth(a, b) > 0
 }
 
 /** How far along the steady slope its label sits: two thirds, where spending has usually not reached yet. */
 export const STEADY_LABEL_SHARE = 0.66
-
-/**
- * Where the steady pace's label is centred, as an x, once it would sit on
- * today's amount (spending running close to the steady pace): slid up the
- * slope past today, centred in the room left before the end, or, when that
- * room is too short for the label, back before today, kept inside the plot.
- */
-export function steadyLabelX({
-  from,
-  to,
-  span,
-  today,
-  spent,
-}: {
-  from: Point
-  to: Point
-  /** How wide the turned label is along the x axis. */
-  span: number
-  today: Point
-  spent: Box
-}): number {
-  const pastToday = today.x + (spent.right - spent.left) + 8
-  if (to.x - pastToday >= span) return (pastToday + to.x) / 2
-  const beforeToday = spent.left - 8
-  return Math.max(from.x + span / 2, (from.x + beforeToday) / 2)
-}
 
 /** Where the steady pace's label sits: turned along the slope, and whether it moved. */
 export interface SteadyLabelSpot {
@@ -213,6 +201,7 @@ export function steadyLabel({
   label,
   from,
   to,
+  left,
   bottom,
   labelBelow,
   avoid,
@@ -221,6 +210,8 @@ export function steadyLabel({
   label: string
   from: Point
   to: Point
+  /** The plot's left edge, which a moved label keeps inside. */
+  left: number
   bottom: number
   labelBelow: boolean
   /** Today's dot and the box of its amount, when there is one to keep clear of. */
@@ -229,26 +220,73 @@ export function steadyLabel({
   const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
   const width = textWidth(label, AXIS_FONT)
   /** The label's turning point a share of the way along the slope, and its baseline's offset from there. */
-  const place = (share: number, moved = false): SteadyLabelSpot => {
+  const place = (share: number, moved = false, side = labelBelow): SteadyLabelSpot => {
     const at = { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share }
-    const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
+    const below = side && at.y + AXIS_FONT + 4 <= bottom
     return { at, offset: below ? AXIS_FONT + 4 : -6, angle, moved }
   }
   const usual = place(STEADY_LABEL_SHARE)
-  const meets =
-    avoid &&
-    shapesMeet(
-      turnedCorners(usual.at, width, AXIS_FONT, angle, usual.offset),
-      boxCorners(avoid.spent),
-    )
+  const corners = (spot: SteadyLabelSpot) =>
+    turnedCorners(spot.at, width, AXIS_FONT, angle, spot.offset)
   // Only a label that would sit on today's amount moves; every other chart draws as before.
-  if (!meets) return usual
-  const slidX = steadyLabelX({
-    from,
-    to,
-    span: Math.abs(width * Math.cos((angle * Math.PI) / 180)),
-    today: avoid.today,
-    spent: avoid.spent,
+  if (!avoid || !shapesMeet(corners(usual), boxCorners(avoid.spent))) return usual
+  return movedSteadyLabel({
+    spotAt: (x, across) =>
+      place((x - from.x) / (to.x - from.x), true, across ? !labelBelow : labelBelow),
+    corners,
+    end: to.x,
+    left,
+    ...avoid,
   })
-  return place((slidX - from.x) / (to.x - from.x), true)
+}
+
+/**
+ * Where a steady pace label that would sit on today's amount goes instead:
+ * slid up the slope past today and its amount when the room left before the
+ * end holds the whole turned label, else back before the amount, never past
+ * the plot's left edge; on its usual side of the slope first, then across it.
+ * The first of these clear of the amount wins; when none is, the one
+ * overlapping it least.
+ */
+function movedSteadyLabel({
+  spotAt,
+  corners,
+  end,
+  left,
+  today,
+  spent,
+}: {
+  /** The label with its turning point on the slope at this x, across the slope from its usual side or not. */
+  spotAt: (x: number, across: boolean) => SteadyLabelSpot
+  corners: (spot: SteadyLabelSpot) => Point[]
+  end: number
+  left: number
+  today: Point
+  spent: Box
+}): SteadyLabelSpot {
+  /** The leftmost and rightmost x of the turned label, which reaches past its turning point. */
+  const reach = (spot: SteadyLabelSpot) => {
+    const xs = corners(spot).map((corner) => corner.x)
+    return { low: Math.min(...xs), high: Math.max(...xs) }
+  }
+  const pastToday = today.x + (spent.right - spent.left) + 8
+  /** The places on one side of the slope: past the amount if the label fits there, then before it. */
+  const sideSpots = (across: boolean): SteadyLabelSpot[] => {
+    /** The label with its whole turned shape centred between two x's. */
+    const centred = (low: number, high: number) => {
+      const middle = (low + high) / 2
+      const first = reach(spotAt(middle, across))
+      return spotAt(middle + middle - (first.low + first.high) / 2, across)
+    }
+    const { low, high } = reach(spotAt(today.x, across))
+    const past = end - pastToday >= high - low ? [centred(pastToday, end)] : []
+    const before = centred(left, spent.left - 8)
+    // Too long for the room before the amount, it is pushed back inside the plot.
+    const over = left - reach(before).low
+    return [...past, over > 0 ? spotAt(before.at.x + over, across) : before]
+  }
+  const spots = [...sideSpots(false), ...sideSpots(true)]
+  const amount = boxCorners(spent)
+  const depths = spots.map((spot) => overlapDepth(corners(spot), amount))
+  return spots[depths.indexOf(Math.min(...depths))]!
 }

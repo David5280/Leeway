@@ -1,13 +1,15 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { textWidth } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { money as format } from '../../lib/money'
 import { fakeServer, renderSignedIn } from '../../test/fake'
 import { range } from '../../../../server/src/domain/profile/rangeWords'
 import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
 import { LineChart } from './LineChart'
-import type { Pace } from './pace'
+import { boxCorners, shapesMeet, turnedCorners, type Pace } from './pace'
 import { PaceChart } from './PaceChart'
+import { AXIS_FONT } from './parts'
 import { barTone, labelledBars, PeriodBars } from './PeriodBars'
 
 afterEach(() => {
@@ -16,14 +18,19 @@ afterEach(() => {
 })
 
 /** A ResizeObserver that reports a phone-width card as soon as it starts watching. */
-class PhoneObserver {
-  constructor(private readonly callback: ResizeObserverCallback) {}
-  observe() {
-    const entry = { contentRect: { width: 358 } } as ResizeObserverEntry
-    this.callback([entry], this as unknown as ResizeObserver)
+/** A ResizeObserver that reports a chart `width` wide, as on a phone. */
+function observerOf(width: number) {
+  return class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe() {
+      const entry = { contentRect: { width } } as ResizeObserverEntry
+      this.callback([entry], this as unknown as ResizeObserver)
+    }
+    disconnect() {}
   }
-  disconnect() {}
 }
+
+const PhoneObserver = observerOf(358)
 
 function svgHeights() {
   return [...document.querySelectorAll('svg.chart-svg')].map((svg) => svg.getAttribute('height'))
@@ -269,20 +276,41 @@ describe('PaceChart', () => {
     })
 
     it('slides up the slope past today when spending runs close to it', () => {
-      vi.stubGlobal('ResizeObserver', PhoneObserver)
+      vi.stubGlobal('ResizeObserver', observerOf(400))
       fakeServer({})
-      // Day 16 of 30 on a phone: today's amount sits where the label would.
-      const { label, today } = spots(onPace(16))
+      // Day 17 of 30 on a wider phone: today's amount sits where the label would.
+      const { label, today } = spots(onPace(17))
       expect(label).toBeGreaterThan(today)
-      expect(label).not.toBe(spots(onPace(16), false).label)
+      expect(label).not.toBe(spots(onPace(17), false).label)
     })
 
     it('goes back before today when the room past it is too short', () => {
       vi.stubGlobal('ResizeObserver', PhoneObserver)
       fakeServer({})
-      // Day 17 of 30 on a phone leaves too little slope after today.
+      // Day 17 of 30 on a phone leaves too little slope after today for the whole turned label.
       const { label, today } = spots(onPace(17))
       expect(label).toBeLessThan(today)
+    })
+
+    it('keeps a moved label off the amount and inside the plot on the narrowest phones', () => {
+      fakeServer({})
+      const placed: string[] = []
+      // Every width from 300px to 320px, each day of a fortnight, at a few paces near steady.
+      const cases = [300, 305, 310, 315, 320].flatMap((width) =>
+        Array.from({ length: 14 }, (_, i) =>
+          [0.8, 0.9, 1, 1.1].map((rate) => ({ width, day: i + 1, rate })),
+        ).flat(),
+      )
+      for (const { width, day, rate } of cases) {
+        vi.stubGlobal('ResizeObserver', observerOf(width))
+        const { container, unmount } = renderSignedIn(
+          <PaceChart pace={fortnight(day, rate)} isCurrent />,
+        )
+        const clash = movedLabelClash(container)
+        if (clash) placed.push(`${width}px, day ${day}, ${rate} of pace: ${clash}`)
+        unmount()
+      }
+      expect(placed).toEqual([])
     })
 
     it('draws a moved label over the spending line, ringed so it stays legible', () => {
@@ -488,3 +516,54 @@ describe('PeriodBars colors and labels', () => {
     )
   })
 })
+
+/** Two weeks of spending at `rate` times the steady pace, through day `day`. */
+function fortnight(day: number, rate: number): Pace {
+  const budgetCents = 80_000
+  const cumulative = Array.from({ length: day }, (_, i) => ({
+    date: addDays('2026-11-01', i),
+    cents: Math.round((budgetCents / 14) * rate * (i + 1)),
+  }))
+  return {
+    start: '2026-11-01',
+    end: '2026-11-14',
+    days: 14,
+    categoryIds: [],
+    budgetCents,
+    cumulative,
+    projectedCents: Math.round(budgetCents * rate),
+  }
+}
+
+/**
+ * What is wrong with a moved steady pace label in a drawn chart, if anything:
+ * its turned shape on today's amount, or reaching past the plot's left edge.
+ */
+function movedLabelClash(container: HTMLElement): string | null {
+  const label = container.querySelector('text.chart-axis.halo')
+  if (!label) return null
+  const [, angle, x, y] = /rotate\(([-\d.e]+) ([-\d.e]+) ([-\d.e]+)\)/
+    .exec(label.getAttribute('transform')!)!
+    .map(Number)
+  const corners = turnedCorners(
+    { x: x!, y: y! },
+    textWidth('Steady pace', AXIS_FONT),
+    AXIS_FONT,
+    angle!,
+    Number(label.getAttribute('y')) - y!,
+  )
+  // Today's amount is drawn anchored at its right end, 13px type.
+  const amount = container.querySelector('text.chart-value.halo')!
+  const right = Number(amount.getAttribute('x'))
+  const baseline = Number(amount.getAttribute('y'))
+  const box = {
+    left: right - textWidth(amount.textContent!, 13),
+    right,
+    top: baseline - 13,
+    bottom: baseline + 4,
+  }
+  if (shapesMeet(corners, boxCorners(box))) return 'on the amount'
+  const left = Number(container.querySelector('clipPath rect')!.getAttribute('x'))
+  if (Math.min(...corners.map((corner) => corner.x)) < left - 0.01) return 'past the left edge'
+  return null
+}

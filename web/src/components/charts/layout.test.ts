@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { textWidth } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { lineFrame } from './LineChart'
 import { labelSide, lineYsAcross, timeLabels, timeTickLabel } from './lineParts'
@@ -11,11 +12,15 @@ import {
   paceState,
   spentLabel,
   steadyAt,
-  steadyLabelX,
+  steadyLabel,
   shapesMeet,
+  overlapDepth,
   turnedCorners,
+  type Box,
   type Pace,
+  type Point,
 } from './pace'
+import { AXIS_FONT } from './parts'
 import { barAxis, barLayout, barPath, barPrecision } from './PeriodBars'
 
 const usd = { currency: 'USD', locale: 'en-US' }
@@ -318,26 +323,65 @@ describe('the steady pace label beside today', () => {
     expect(shapesMeet(slanted, boxCorners({ left: -2, right: 2, top: -2, bottom: 2 }))).toBe(true)
   })
 
-  const slope = { from: { x: 40, y: 200 }, to: { x: 340, y: 20 } }
-  const spentAt = (x: number) => ({ left: x - 40, right: x - 8, top: 70, bottom: 92 })
-
-  it('centres it in the room past today and the amount when that room fits it', () => {
-    // Past 200 + 32 + 8 = 240, up to 340: centred at 290.
-    expect(
-      steadyLabelX({ ...slope, span: 70, today: { x: 200, y: 100 }, spent: spentAt(200) }),
-    ).toBe(290)
+  const slope = { from: { x: 40, y: 200 }, to: { x: 340, y: 20 }, left: 40, bottom: 200 }
+  const steady = (today: Point, spent: Box) =>
+    steadyLabel({ label: 'Steady pace', ...slope, labelBelow: false, avoid: { today, spent } })
+  /** The turned label's corners, and their leftmost and rightmost x. */
+  const shape = (spot: ReturnType<typeof steady>) => {
+    const corners = turnedCorners(
+      spot.at,
+      textWidth('Steady pace', AXIS_FONT),
+      AXIS_FONT,
+      spot.angle,
+      spot.offset,
+    )
+    const xs = corners.map((corner) => corner.x)
+    return { corners, low: Math.min(...xs), high: Math.max(...xs) }
+  }
+  /** Today's amount, 32 wide, up and to the left of a dot at x and y. */
+  const spentAt = (x: number, y: number) => ({
+    left: x - 40,
+    right: x - 8,
+    top: y - 30,
+    bottom: y - 8,
   })
 
-  it('puts it before today when the room past is too short, never past the left edge', () => {
-    // Past 280 + 32 + 8 = 320 leaves 20, too short; before the amount ends at 240 - 8.
-    expect(
-      steadyLabelX({ ...slope, span: 70, today: { x: 280, y: 100 }, spent: spentAt(280) }),
-    ).toBe(136)
-    expect(
-      steadyLabelX({ ...slope, span: 70, today: { x: 300, y: 50 }, spent: spentAt(300) }),
-    ).toBe(146)
-    expect(steadyLabelX({ ...slope, span: 70, today: { x: 300, y: 50 }, spent: spentAt(60) })).toBe(
-      75,
-    )
+  it('leaves it two thirds along when the amount is clear of it', () => {
+    const spot = steady({ x: 60, y: 190 }, spentAt(60, 190))
+    expect(spot.moved).toBe(false)
+    expect(spot.at.x).toBeCloseTo(40 + 300 * 0.66)
+  })
+
+  it('centres its whole turned shape in the room past today and the amount', () => {
+    // An amount 32 wide on the label's usual place: past 200 + 32 + 8 = 240, up to 340.
+    const amount = { left: 200, right: 232, top: 60, bottom: 100 }
+    const spot = steady({ x: 200, y: 100 }, amount)
+    const { corners, low, high } = shape(spot)
+    expect(spot.moved).toBe(true)
+    expect(low).toBeGreaterThanOrEqual(240)
+    expect(high).toBeLessThanOrEqual(340)
+    expect(low - 240).toBeCloseTo(340 - high)
+    expect(shapesMeet(corners, boxCorners(amount))).toBe(false)
+  })
+
+  it('goes back before the amount when the room past it is too short', () => {
+    const spot = steady({ x: 280, y: 56 }, spentAt(280, 56))
+    const { corners, low, high } = shape(spot)
+    expect(spot.moved).toBe(true)
+    expect(high).toBeLessThan(280)
+    expect(low).toBeGreaterThanOrEqual(40)
+    expect(shapesMeet(corners, boxCorners(spentAt(280, 56)))).toBe(false)
+  })
+
+  it('never reaches past the left edge, even with little room before the amount', () => {
+    // A wide amount starting 40px in leaves too little room before it.
+    const spot = steady({ x: 300, y: 44 }, { left: 80, right: 292, top: 14, bottom: 100 })
+    expect(shape(spot).low).toBeCloseTo(40)
+  })
+
+  it('measures how deeply shapes overlap, and none when they only touch', () => {
+    const box = boxCorners({ left: 0, right: 10, top: 0, bottom: 10 })
+    expect(overlapDepth(box, boxCorners({ left: 7, right: 20, top: 2, bottom: 8 }))).toBeCloseTo(3)
+    expect(overlapDepth(box, boxCorners({ left: 10, right: 20, top: 0, bottom: 10 }))).toBe(0)
   })
 })
