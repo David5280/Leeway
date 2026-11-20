@@ -73,6 +73,21 @@ describe('Goals', () => {
     expect(houseCard.queryByRole('img')).not.toBeInTheDocument()
   })
 
+  it('shows a goal on an account no longer shared as of that day, with no timeline', async () => {
+    const frozen = goal({ ...house, targetDate: '2027-11-30', balanceAsOf: '2026-11-10' })
+    serve([frozen])
+    renderPlan('/plan/goals')
+    const houseCard = within(await screen.findByRole('region', { name: 'House' }))
+    expect(
+      houseCard.getByText(
+        sentence(
+          '$2,400 saved as of Nov 10, 2026, when the bank stopped sharing High yield savings. Link the goal to another account or count it by hand.',
+        ),
+      ),
+    ).toBeInTheDocument()
+    expect(houseCard.queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('suggests a first goal when there are none', async () => {
     serve([])
     renderPlan('/plan/goals')

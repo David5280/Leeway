@@ -10,6 +10,7 @@ import {
   renderSignedIn,
   sentence,
   settingsWith,
+  withBank,
 } from '../../test/fake'
 import { AccountSection } from './Accounts'
 
@@ -73,7 +74,7 @@ describe('Accounts', () => {
       unsharedAt: '2026-11-04T15:00:00Z',
     })
     serve({ list_accounts: () => [checking, old] })
-    renderSignedIn(<AccountSection />)
+    renderSignedIn(<AccountSection />, { status: withBank })
     const apart = await screen.findByRole('region', { name: 'No longer shared' })
     const row = within(apart).getByRole('group', { name: 'Old savings' })
     expect(row).toHaveTextContent('No longer shared from Chase')

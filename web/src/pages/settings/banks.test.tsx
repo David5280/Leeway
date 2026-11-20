@@ -93,7 +93,7 @@ describe('Banks', () => {
 
   it('says nothing of Sandbox once Plaid reaches real banks', async () => {
     serve()
-    const production = { provider: 'plaid', environment: 'production' }
+    const production = { provider: 'plaid', environment: 'production', chooseAccounts: true }
     renderSignedIn(<BanksSection />, { status: { bank: production } })
     await screen.findByText('First Bank')
     expect(screen.queryByText(/Sandbox/)).not.toBeInTheDocument()

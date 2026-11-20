@@ -231,6 +231,22 @@ describe('before Plaid opens, with banks connected', () => {
     expect(plaid.open).not.toHaveBeenCalled()
   })
 
+  it('offers to add accounts by reconnecting only where Plaid lets the owner choose them', async () => {
+    fakeServer({})
+    const opened = async (chooseAccounts: boolean) => {
+      const bank = { provider: 'plaid', environment: 'production', chooseAccounts }
+      const view = renderSignedIn(<AddBank connections={[chase]} />, { status: { bank } })
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Connect another bank' }))
+      const text = screen.getByRole('region', { name: 'Already connected' }).textContent
+      view.unmount()
+      return text
+    }
+    expect(await opened(true)).toContain(
+      'Reconnect it to sign in again or add accounts, and keep its history.',
+    )
+    expect(await opened(false)).toContain('Reconnect it to sign in again and keep its history.')
+  })
+
   it('reconnects a bank there in update mode, sharing more accounts, with no new link', async () => {
     const server = fakeServer({
       create_link_token: () => ({ linkToken: 'update-token' }),
@@ -516,7 +532,7 @@ describe('after Plaid, a bank that is already connected', () => {
 })
 
 describe('a duplicate that shows only once Plaid has counted it', () => {
-  it('says the new login was added, and that one can be removed if they are the same', async () => {
+  it('says the new login was added, and to remove the older one if they are the same', async () => {
     fakeServer({
       create_link_token: () => ({ linkToken: 'link-token-1' }),
       link_bank: () => linked('Chase', 'conn-chase'),
@@ -525,7 +541,7 @@ describe('a duplicate that shows only once Plaid has counted it', () => {
     await openWindowPastPanel(userEvent.setup())
     plaidSucceeds('public-unnamed')
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Added. You now have two Chase logins. If they are the same login, you can remove one.',
+      "Added. You now have two Chase logins. If they are the same login, remove the older one, since at some banks a new login cuts off the old one. On Plaid's Trial plan, removing it does not free up a place.",
     )
   })
 

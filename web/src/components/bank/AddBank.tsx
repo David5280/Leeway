@@ -167,7 +167,8 @@ export function AddBank({
 /**
  * When the window did not say which bank it was, a duplicate shows only after
  * Plaid has counted the new login. The server keeps it (removing it would not
- * give its place back), and the owner hears so, to remove one if they wish.
+ * give its place back), and the owner hears so, to remove the older one if
+ * they wish: at some banks signing in again cuts off the earlier login.
  */
 function flaggedNote(result: {
   possibleDuplicateOf: string | null
@@ -177,5 +178,8 @@ function flaggedNote(result: {
   const logins = result.institutionName
     ? `two ${result.institutionName} logins`
     : 'two logins at the same bank'
-  return `Added. You now have ${logins}. If they are the same login, you can remove one.`
+  return (
+    `Added. You now have ${logins}. If they are the same login, remove the older one, since at some banks a new login cuts off the old one. ` +
+    "On Plaid's Trial plan, removing it does not free up a place."
+  )
 }

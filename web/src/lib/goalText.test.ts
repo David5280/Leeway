@@ -11,6 +11,28 @@ const bike = { ...trip, name: 'Bike', kind: 'purchase' as const }
 const quick = { savedThisPeriodCents: 6000, recentSavedCents: 60000, recentDays: 90 }
 /** $90 over the last 90 days: far too slow. */
 const slow = { savedThisPeriodCents: 0, recentSavedCents: 9000, recentDays: 90 }
+/** Following a savings account its bank stopped sharing on November 10th. */
+const frozen = {
+  ...trip,
+  accountId: 'acct-savings',
+  accountName: 'Chase Savings',
+  accountBalanceCents: 30000,
+  balanceAsOf: '2026-11-10',
+}
+
+describe('a goal on an account no longer shared', () => {
+  it('gives progress as of that day, with no plan, pace or verdict', () => {
+    expect(planText(goal(frozen, quick), money, 'month', 'en-US')).toBe(
+      '$300 saved as of Nov 10, 2026, when the bank stopped sharing Chase Savings. Link the goal to another account or count it by hand.',
+    )
+    expect(paceText(goal(frozen, quick), 'en-US')).toBeNull()
+    expect(thisPeriodText(goal(frozen, quick), money, 'month')).toBeNull()
+    expect(shortPlan(goal(frozen, quick), money, 'month')).toEqual({
+      text: 'Account no longer shared',
+      tone: 'warn',
+    })
+  })
+})
 
 describe('planText', () => {
   it('gives what to set aside each period to make the date', () => {

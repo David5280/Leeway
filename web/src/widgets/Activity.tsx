@@ -66,7 +66,8 @@ export function AccountsWidget() {
               {!isShared(account) && ' · no longer shared'}
             </span>
           </span>
-          <Sparkline values={lines.get(account.id) ?? []} />
+          {/* An unshared balance stopped changing, so its line would only run flat to today. */}
+          <Sparkline values={isShared(account) ? (lines.get(account.id) ?? []) : []} />
           <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
             <AccountBalance account={account} />
           </span>

@@ -19,7 +19,7 @@ import { Setup } from '../Setup'
 
 afterEach(() => vi.unstubAllGlobals())
 
-const bank = { provider: 'plaid', environment: 'sandbox' }
+const bank = { provider: 'plaid', environment: 'sandbox', chooseAccounts: true }
 const {
   id: _id,
   position: _position,
@@ -135,7 +135,7 @@ describe('setup after the account exists', () => {
 
   it('says nothing of Sandbox once Plaid reaches real banks', async () => {
     serve()
-    const production = { provider: 'plaid', environment: 'production' }
+    const production = { provider: 'plaid', environment: 'production', chooseAccounts: true }
     renderSignedIn(<Setup status={{ ...status, bank: production }} signedIn />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))

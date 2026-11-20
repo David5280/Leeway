@@ -8,6 +8,7 @@ import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import Fastify, { type FastifyInstance } from 'fastify'
+import { canChooseAccounts } from '../bank/plaid.js'
 import type { AppContext } from '../context.js'
 import { getOwner } from '../domain/owner.js'
 import { generateSetupCode, type SetupCodeSource } from '../lib/setupCode.js'
@@ -89,7 +90,9 @@ export async function buildApp(
 
   /**
    * What the web app needs before sign-in: is there an owner, is the bank
-   * configured, and where things are, so setup can say where to look. Where
+   * configured (and can a reconnect choose its accounts again, which Plaid
+   * allows only in the US and Canada), and where things are, so setup can
+   * say where to look. Where
    * the setup code came from is shown only until the owner exists; the code
    * itself never is.
    */
@@ -99,7 +102,13 @@ export async function buildApp(
       version: VERSION,
       hasOwner: owner !== null,
       onboarded: owner?.onboarded ?? false,
-      bank: ctx.config.plaid ? { provider: 'plaid', environment: ctx.config.plaid.env } : null,
+      bank: ctx.config.plaid
+        ? {
+            provider: 'plaid',
+            environment: ctx.config.plaid.env,
+            chooseAccounts: canChooseAccounts(ctx.config.plaid.countryCodes),
+          }
+        : null,
       publicUrl: ctx.config.publicUrl,
       platform: ctx.config.platform,
       setupCodeFrom: owner ? null : setupCodeFrom,

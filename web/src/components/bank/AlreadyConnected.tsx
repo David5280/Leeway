@@ -3,6 +3,7 @@
 // The screens it opens on say why just above it (TRIAL_LIMIT_NOTE).
 
 import type { Connection } from '../../api/client'
+import { useApp } from '../../lib/app'
 import { bankName, connectionHealth, needsLogin } from './linking'
 import { ReconnectButton } from './ReconnectButton'
 import { StepPanel } from './StepPanel'
@@ -21,10 +22,13 @@ export function AlreadyConnected({
   onReconnected: () => void
   onCancel: () => void
 }) {
+  // Outside the US and Canada, Plaid's update mode cannot add accounts to a login.
+  const addsAccounts = useApp().status.bank?.chooseAccounts === true
   return (
     <StepPanel title="Already connected">
       <p className="small muted">
-        Is it one of these? Reconnect it to sign in again or add accounts, and keep its history.
+        Is it one of these? Reconnect it to sign in again
+        {addsAccounts ? ' or add accounts, and' : ' and'} keep its history.
       </p>
       <div>
         {connections.map((connection) => (

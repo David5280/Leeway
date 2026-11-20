@@ -58,14 +58,18 @@ const PLAID_SCRIPT = `window.Plaid = {
   },
 }`
 
-/** Bank sync turned on, two banks connected, and Plaid's window stood in for. */
-export async function standInForPlaid(page: Page): Promise<void> {
+/** Bank sync turned on, in a country where a reconnect can choose accounts. */
+async function turnOnBankSync(page: Page): Promise<void> {
   await page.route('**/api/status', async (route) => {
     const status = await (await route.fetch()).json()
-    await route.fulfill({
-      json: { ...status, bank: { provider: 'plaid', environment: 'production' } },
-    })
+    const bank = { provider: 'plaid', environment: 'production', chooseAccounts: true }
+    await route.fulfill({ json: { ...status, bank } })
   })
+}
+
+/** Bank sync turned on, two banks connected, and Plaid's window stood in for. */
+export async function standInForPlaid(page: Page): Promise<void> {
+  await turnOnBankSync(page)
   await page.route('**/api/actions/list_connections', (route) =>
     route.fulfill({
       json: { result: BANKS.map(({ institutionId: _id, ...connection }) => connection) },
@@ -142,6 +146,7 @@ const UNSHARED = {
   manual: false,
   balanceUpdatedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
   unsharedAt: new Date(Date.now() - 13 * 86_400_000).toISOString(),
+  mayBeBackAs: null,
   aprPercent: null,
   minimumPaymentCents: null,
   lowBalanceCents: null,
@@ -155,6 +160,8 @@ const UNSHARED = {
  * from the balances, with a word in the summary.
  */
 export async function standInForUnsharedAccount(page: Page): Promise<void> {
+  // With bank sync on, so the account offers Share it again beside Remove.
+  await turnOnBankSync(page)
   await page.route('**/api/actions/list_accounts', async (route) => {
     const { result } = await (await route.fetch()).json()
     await route.fulfill({ json: { result: [...result, UNSHARED] } })

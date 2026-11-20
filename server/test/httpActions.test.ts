@@ -167,9 +167,29 @@ describe('status', () => {
       const status = (await app.inject({ url: '/api/status' })).json()
       expect(status).toMatchObject({
         version: VERSION,
-        bank: { provider: 'plaid', environment: 'sandbox' },
+        bank: { provider: 'plaid', environment: 'sandbox', chooseAccounts: true },
       })
       expect(JSON.stringify(status)).not.toContain('secret')
+    } finally {
+      ctx.config.plaid = null
+    }
+  })
+
+  it('says when Plaid cannot let the owner choose accounts again, as in the UK', async () => {
+    ctx.config.plaid = {
+      clientId: 'id',
+      secret: 'secret',
+      env: 'production',
+      countryCodes: ['US', 'GB'],
+      redirectUri: null,
+    }
+    try {
+      const status = (await app.inject({ url: '/api/status' })).json()
+      expect(status.bank).toEqual({
+        provider: 'plaid',
+        environment: 'production',
+        chooseAccounts: false,
+      })
     } finally {
       ctx.config.plaid = null
     }

@@ -5,8 +5,12 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { account, failing, fakeServer, renderSignedIn } from '../../test/fake'
+import { account, failing, fakeServer, renderSignedIn, withBank } from '../../test/fake'
 import { plaid, plaidSucceeds, resetPlaid } from '../../test/plaid'
+import {
+  isCounted as serverIsCounted,
+  isShared as serverIsShared,
+} from '../../../../server/src/domain/accountSharing'
 import { isCounted, isShared, unsharedLabel } from '../../lib/accounts'
 import { UnsharedAccount } from './UnsharedAccount'
 
@@ -27,9 +31,29 @@ const savings = account({
 })
 
 describe('UnsharedAccount', () => {
+  it('offers no Share it again where Plaid cannot let the owner tick it again', () => {
+    fakeServer({})
+    const noChoosing = {
+      bank: { provider: 'plaid', environment: 'production', chooseAccounts: false },
+    }
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: noChoosing })
+    expect(screen.queryByRole('button', { name: 'Share it again' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove this account and its history' }),
+    ).toBeInTheDocument()
+  })
+
+  it('says it may be back as a newer account, its history then here twice', () => {
+    fakeServer({})
+    renderSignedIn(<UnsharedAccount account={{ ...savings, mayBeBackAs: 'Chase Savings (2)' }} />)
+    expect(screen.getByRole('group', { name: 'Chase Savings' })).toHaveTextContent(
+      'It may be back as Chase Savings (2), so its transactions may now be here twice. If it is, remove this one.',
+    )
+  })
+
   it('says the bank no longer shares it, when it was last read and what it held', () => {
     fakeServer({})
-    renderSignedIn(<UnsharedAccount account={savings} />)
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: withBank })
     const row = screen.getByRole('group', { name: 'Chase Savings' })
     expect(within(row).getByText('No longer shared from Chase')).toBeInTheDocument()
     expect(row).toHaveTextContent(/Last updated Nov 3(, 2026)?, holding \$9,000\.00/)
@@ -70,7 +94,7 @@ describe('UnsharedAccount', () => {
         error: null,
       }),
     })
-    renderSignedIn(<UnsharedAccount account={savings} />)
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: withBank })
     await userEvent.setup().click(screen.getByRole('button', { name: 'Share it again' }))
 
     await waitFor(() => expect(plaid.open).toHaveBeenCalled())
@@ -87,7 +111,7 @@ describe('UnsharedAccount', () => {
   it('asks before removing it with its history, and keeps it on Keep it', async () => {
     const server = fakeServer({ delete_account: () => ({ deleted: true }) })
     const user = userEvent.setup()
-    renderSignedIn(<UnsharedAccount account={savings} />)
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: withBank })
 
     await user.click(screen.getByRole('button', { name: 'Remove this account and its history' }))
     expect(
@@ -105,7 +129,7 @@ describe('UnsharedAccount', () => {
   it('removes it on Remove for good', async () => {
     const server = fakeServer({ delete_account: () => ({ deleted: true }) })
     const user = userEvent.setup()
-    renderSignedIn(<UnsharedAccount account={savings} />)
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: withBank })
     await user.click(screen.getByRole('button', { name: 'Remove this account and its history' }))
     await user.click(screen.getByRole('button', { name: 'Remove for good' }))
     await waitFor(() => expect(server.actions('delete_account')).toEqual([{ id: 'acct-savings' }]))
@@ -114,7 +138,7 @@ describe('UnsharedAccount', () => {
   it('shows why a removal failed', async () => {
     fakeServer({}, { '/api/actions/delete_account': failing('Account not found', 404) })
     const user = userEvent.setup()
-    renderSignedIn(<UnsharedAccount account={savings} />)
+    renderSignedIn(<UnsharedAccount account={savings} />, { status: withBank })
     await user.click(screen.getByRole('button', { name: 'Remove this account and its history' }))
     await user.click(screen.getByRole('button', { name: 'Remove for good' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Account not found')
@@ -122,6 +146,11 @@ describe('UnsharedAccount', () => {
 })
 
 describe('shared and counted accounts', () => {
+  it("is the server's own rule, so a screen never adds up an account the server leaves out", () => {
+    expect(isShared).toBe(serverIsShared)
+    expect(isCounted).toBe(serverIsCounted)
+  })
+
   it('counts an account only while shown and shared', () => {
     expect(isShared(savings)).toBe(false)
     expect(isCounted(savings)).toBe(false)

@@ -37,6 +37,14 @@ const REAUTH_CODES = new Set([
  */
 const ACCOUNT_SELECT_COUNTRIES = new Set(['US', 'CA'])
 
+/**
+ * Whether reconnecting can let the owner choose which accounts are shared:
+ * only when every country the window is opened for allows it.
+ */
+export function canChooseAccounts(countryCodes: string[]): boolean {
+  return countryCodes.every((code) => ACCOUNT_SELECT_COUNTRIES.has(code))
+}
+
 interface PlaidAccount {
   account_id: string
   name: string
@@ -129,10 +137,10 @@ export class PlaidProvider implements BankProvider {
    * new Item. Plaid asks for no products here.
    */
   private updateMode(accessToken: string, chooseAccounts: boolean) {
-    const canChoose = this.config.countryCodes.every((code) => ACCOUNT_SELECT_COUNTRIES.has(code))
+    const choose = chooseAccounts && canChooseAccounts(this.config.countryCodes)
     return {
       access_token: accessToken,
-      ...(chooseAccounts && canChoose ? { update: { account_selection_enabled: true } } : {}),
+      ...(choose ? { update: { account_selection_enabled: true } } : {}),
     }
   }
 

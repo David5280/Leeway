@@ -22,6 +22,12 @@ export function planText(goal: Goal, money: Money, word: string, locale: string)
       ? `Ready to buy. You have saved the full ${money(goal.targetCents)}.`
       : 'Reached. Nice work.'
   }
+  if (goal.status === 'stale') {
+    // The balance froze when the bank stopped sharing it, so only then is known.
+    const asOf = longDate(goal.balanceAsOf!, locale)
+    const account = goal.accountName ?? 'its account'
+    return `${money(goal.currentCents)} saved as of ${asOf}, when the bank stopped sharing ${account}. Link the goal to another account or count it by hand.`
+  }
   const left = `${money(goal.remainingCents)} to go`
   if (goal.status === 'past_due') return `${left}. The date has passed.`
   if (goal.perPeriodCents === null || !goal.targetDate) return `${left}.`
@@ -32,10 +38,10 @@ export function planText(goal: Goal, money: Money, word: string, locale: string)
 
 /**
  * Whether recent progress makes the date, from the server's projection.
- * Null when there is nothing worth saying (reached, or no date and no pace).
+ * Null when there is nothing worth saying (reached, stale, or no date and no pace).
  */
 export function paceText(goal: Goal, locale: string): ToneText | null {
-  if (goal.status === 'reached') return null
+  if (goal.status === 'reached' || goal.status === 'stale') return null
   const projected = goal.projectedDate && longDate(goal.projectedDate, locale)
   if (goal.onTrack === true) {
     return { text: `On track: at your recent pace, ready by ${projected}.`, tone: 'good' }
@@ -63,6 +69,7 @@ export function shortPlan(goal: Goal, money: Money, word: string): ToneText {
     return { text: goal.kind === 'purchase' ? 'Ready to buy' : 'Reached', tone: 'good' }
   }
   if (goal.status === 'past_due') return { text: 'Date passed', tone: 'over' }
+  if (goal.status === 'stale') return { text: 'Account no longer shared', tone: 'warn' }
   const amount = goal.perPeriodCents === null ? '' : `${money(goal.perPeriodCents)} each ${word}`
   if (goal.onTrack === null)
     return { text: amount || `${money(goal.remainingCents)} to go`, tone: '' }

@@ -135,7 +135,9 @@ export function weeklyEmailHandlers(initial: Partial<WeeklyEmailView> = {}): Han
 }
 
 /** A server status with Plaid keys set, so bank features show. */
-export const withBank: Partial<Status> = { bank: { provider: 'plaid', environment: 'sandbox' } }
+export const withBank: Partial<Status> = {
+  bank: { provider: 'plaid', environment: 'sandbox', chooseAccounts: true },
+}
 
 export const status: Status = {
   version: '0.1.0',

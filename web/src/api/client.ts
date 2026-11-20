@@ -135,7 +135,12 @@ export interface Status {
   version: string
   hasOwner: boolean
   onboarded: boolean
-  bank: { provider: string; environment: string } | null
+  bank: {
+    provider: string
+    environment: string
+    /** Whether reconnecting can let the owner choose which accounts are shared again. */
+    chooseAccounts: boolean
+  } | null
   publicUrl: string | null
   /** What Leeway runs on, so setup can say where its settings and log are. */
   platform: 'railway' | 'docker' | 'other'

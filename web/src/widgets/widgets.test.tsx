@@ -893,6 +893,26 @@ describe('AccountsWidget', () => {
     expect(savings.querySelector('svg.spark')).toBeNull()
   })
 
+  it('draws no line for an account the bank no longer shares, whose balance stopped', async () => {
+    fakeServer({
+      list_accounts: () => [
+        account({ id: 'a', name: 'Checking', balanceCents: 9000 }),
+        account({ id: 'b', name: 'Old savings', unsharedAt: '2026-11-04T15:00:00Z' }),
+      ],
+      list_recent_balances: () => [
+        { accountId: 'a', balancesCents: [5000, 7000, 9000] },
+        // The server carries the last balance on to today, which would draw flat.
+        { accountId: 'b', balancesCents: [100, 300, 300] },
+      ],
+    })
+    renderSignedIn(<AccountsWidget />)
+    const checking = (await screen.findByText('Checking')).closest('.list-row')!
+    await waitFor(() => expect(checking.querySelector('svg.spark')).not.toBeNull())
+    expect(
+      screen.getByText('Old savings').closest('.list-row')!.querySelector('svg.spark'),
+    ).toBeNull()
+  })
+
   it('shows an overdrawn cash balance in red, but never a card balance', async () => {
     fakeServer({
       list_accounts: () => [
