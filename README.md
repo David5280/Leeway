@@ -365,8 +365,9 @@ A problem you dismiss that is still there a day later, like an account still
 overdrawn, a bill still unpaid or a bank still waiting for you to sign in,
 comes back unread, with no second push. Everything else stays dismissed: a fee
 or a large charge is news, and a budget gone over can't be undone until the
-next period. Dismissing an account alert takes it off the home screen too,
-while that kind of notification is on.
+next period. Dismissing an account alert takes it off the home screen too; a
+problem like an overdrawn account stays off only while its kind of
+notification is on.
 Each account alert on the home screen also has a close button, which hides it
 from home only and leaves the inbox as it was. A hidden fee stays hidden, and
 any other alert comes back after a day if it is still there. An alert that

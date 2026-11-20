@@ -7,7 +7,7 @@ import { addDays, todayIn, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
-import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
+import type { AlertFormat } from '../accountAlerts.js'
 import { listAccounts } from '../accounts.js'
 import { listAlerts } from '../alerts.js'
 import { listBills } from '../bills.js'
@@ -61,14 +61,6 @@ export async function recentLargeCharges(
   return rows
 }
 
-/** The account alerts of the kinds turned on, as notifications. */
-export function accountAlertCandidates(
-  alerts: AccountAlert[],
-  on: NotificationSettings['kinds'],
-): Candidate[] {
-  return accountCandidates(alerts.filter((alert) => on[alert.kind]))
-}
-
 function formatFor(settings: Settings): AlertFormat {
   return {
     money: (cents) => formatCents(cents, settings.currency, settings.locale),
@@ -91,7 +83,7 @@ export async function gatherCandidates(
 
   if (on.overdrawn || on.over_limit || on.overdraft_fee || on.low_balance) {
     const alerts = await listAlerts(db, settings, today)
-    found.push(accountAlertCandidates(alerts, on))
+    found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }
   if (on.over_budget) {
     const budget = await budgetSummary(db, settings, now)

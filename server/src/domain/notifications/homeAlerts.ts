@@ -9,8 +9,8 @@
 // - an alert that clears and comes back over an hour later (REARM_AFTER_MS)
 //   is a new run of it and shows afresh, while one that flickers back sooner
 //   stays away, as the inbox treats it;
-// - a dismissal counts only while its kind is turned on, as the inbox shows
-//   only those kinds and keeps only them current.
+// - a condition's dismissal counts only while its kind is turned on, as the
+//   inbox keeps only those kinds current. A fee's dismissal is for good.
 //
 // The home list only reads. The notifier keeps hides current: it notes when
 // each hidden alert is gone and drops the hides that no longer count.
@@ -42,25 +42,26 @@ export async function currentAlerts(db: Db, now: Date): Promise<AccountAlert[]> 
 }
 
 /**
- * A condition's hide that no longer counts: over a day old, or its alert came
- * back as a new run since (its notification is newer). A fee's hide is never
- * spent this way. Its subject is that one fee, so a newer notification for it
- * (fee notifications turned on later, say) is the same fee, which the owner
- * already put away for good; a newer fee has a subject of its own. The SQL
- * reads alert_hides as h; $1 is the cutoff a day back, $2 the kinds whose
- * hides last a day.
+ * A hide that has run its day: a condition's, over a day old. A fee's hide
+ * never runs out. The SQL reads alert_hides as h; $1 is the cutoff a day
+ * back, $2 the kinds whose hides last a day.
+ *
+ * A hide also ends with its run of the alert, which the notifier sees for
+ * itself (cleared_at): gone for over an hour, the hide no longer counts and
+ * is dropped. That is the only sign of a new run a hide goes by. The inbox
+ * can record a notification after the hide for the very same run, as when
+ * that kind is turned on later or the inbox had not caught up when the owner
+ * hid it, and the owner's hide must outlast that.
  */
-const SPENT_HIDE = `(h.kind = ANY($2) AND (h.hidden_at < $1
-  OR EXISTS (SELECT 1 FROM notifications n
-    WHERE n.kind = h.kind AND n.subject = h.subject AND n.created_at > h.hidden_at)))`
+const SPENT_HIDE = `(h.kind = ANY($2) AND h.hidden_at < $1)`
 
 /**
  * The keys, among `current` ($3), of alerts put away from home: hidden there
  * and still counting, with the alert not gone for over an hour since ($4), or
- * dismissed in the inbox, of a kind turned on ($5), and still within its rule.
- * A dismissed condition counts for a day while its notification still stands
- * for this run of it; a dismissed fee counts for good. A kind turned off is
- * not kept current, so its dismissal would never see the alert clear.
+ * dismissed in the inbox and still within its rule. A dismissed fee counts for
+ * good. A dismissed condition counts for a day while its notification still
+ * stands for this run of it, and only while its kind is on ($5): a kind turned
+ * off is not kept current, so its dismissal would never see the alert clear.
  */
 async function putAwayKeys(
   db: Db,
@@ -74,9 +75,9 @@ async function putAwayKeys(
        AND (h.cleared_at IS NULL OR h.cleared_at > $4)
      UNION
      SELECT kind || ':' || subject FROM notifications
-     WHERE dismissed_at IS NOT NULL AND kind || ':' || subject = ANY($3) AND kind = ANY($5)
-       AND (kind <> ALL($2)
-         OR (dismissed_at >= $1 AND (resolved_at IS NULL OR resolved_at > $4)))`,
+     WHERE dismissed_at IS NOT NULL AND kind || ':' || subject = ANY($3)
+       AND (kind <> ALL($2) OR (kind = ANY($5) AND dismissed_at >= $1
+         AND (resolved_at IS NULL OR resolved_at > $4)))`,
     [
       new Date(now.getTime() - RESURFACE_AFTER_MS),
       RESURFACE_KINDS,
@@ -109,8 +110,7 @@ export async function listHomeAlerts(
  * Hides one of the current alerts from the home screen, leaving the inbox as
  * it was. Hiding it again starts it over, as a fresh hide the notifier has
  * not yet seen gone. An alert that is not current (it cleared a moment ago)
- * is not found. Its notification should be recorded first, so this run's
- * notification is never newer than its hide.
+ * is not found.
  */
 export async function hideHomeAlert(
   db: Db,

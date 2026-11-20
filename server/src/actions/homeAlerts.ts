@@ -6,7 +6,6 @@
 import { z } from 'zod'
 import { ALERT_KINDS } from '../domain/accountAlerts.js'
 import { currentAlerts, hideHomeAlert, listHomeAlerts } from '../domain/notifications/homeAlerts.js'
-import { recordAccountAlerts } from '../domain/notifications/notifier.js'
 import { getNotificationSettings, kindsOn } from '../domain/notifications/settings.js'
 import { defineAction } from './action.js'
 
@@ -34,15 +33,10 @@ export const hideHomeAlertAction = defineAction({
   scope: 'write',
   surface: 'app',
   run: async (ctx, target) => {
+    // Only the account alerts are read, so a problem with a budget or a bill
+    // never stands in the way of a hide.
     const now = ctx.now()
-    const alerts = await currentAlerts(ctx.db, now)
-    // This run of the alert goes on record first, so its notification is
-    // never newer than its hide. Should even that fail, the owner still gets
-    // the hide they asked for.
-    await recordAccountAlerts(ctx, alerts, now).catch((error: unknown) =>
-      ctx.onQuietFailure?.(error, 'record the account alerts before hiding one'),
-    )
-    await hideHomeAlert(ctx.db, alerts, target, now)
+    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, now), target, now)
     return { hidden: true }
   },
 })
