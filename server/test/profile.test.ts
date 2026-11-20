@@ -330,7 +330,7 @@ describe('summarize_savings', () => {
     const view = await call('summarize_savings')
     expect(view.savingsRate?.percent).toBe(8)
     expect(view.insights.map((i) => i.text)).toEqual([
-      'About 8% of your take-home pay goes to savings through your bank: $411 a month of $5,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+      'About 8% of your take-home pay goes to savings through your bank: $411 a month of $5,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
     ])
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({

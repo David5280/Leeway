@@ -12,7 +12,7 @@ import { FORMULA_NOTE, pensionMonthlyTotals } from '../src/domain/retirement/pen
 import { PROJECTION_NOTE } from '../src/domain/retirement/plan.js'
 import {
   bankSeenRate,
-  PENSION_COUNTED,
+  payrollNote,
   RATE_GUARD_FOR_AI,
   savingsRate,
 } from '../src/domain/savings/rate.js'
@@ -446,7 +446,12 @@ describe('a savings rate that counts a pension', () => {
   // $500 a month moved at the bank and $423 taken from pay for the pension.
   const rate = savingsRate(500_000, [
     { label: 'Transfers to savings', monthlyCents: 50_000, beforePaycheck: false },
-    { label: 'Pension contributions', monthlyCents: 42_300, beforePaycheck: true },
+    {
+      label: 'Pension contributions',
+      monthlyCents: 42_300,
+      beforePaycheck: true,
+      payroll: 'pension',
+    },
   ])!
   const profile = emptyProfile({
     savings: savingsReport([kindReport('savings', 600_000)]),
@@ -470,13 +475,13 @@ describe('a savings rate that counts a pension', () => {
   it('reads the same in the savings lens, the insight and the digest', () => {
     const [savings] = savingsView(profile, format).lenses
     expect(savings!.meters[1]!.detail).toBe(
-      `of pay: $923 a month of $5,423. ${PENSION_COUNTED} Above your 15% target, counting bank transfers and your pension.`,
+      `of pay: $923 a month of $5,423. ${payrollNote({ pension: true, plan: false })} Above your 15% target, counting bank transfers and your pension.`,
     )
     expect(savingsView(profile, format).insights[0]!.text).toBe(
-      `About 17% of your pay goes to savings: $923 a month of $5,423. ${PENSION_COUNTED}`,
+      `About 17% of your pay goes to savings: $923 a month of $5,423. ${payrollNote({ pension: true, plan: false })}`,
     )
     expect(profileDigest(profile, dollars)).toContain(
-      `Savings rate from bank transfers and the pension contributions the owner entered: about 17% of pay ($923 of $5,423 a month: transfers to savings $500, pension contributions $423). ${RATE_GUARD_FOR_AI}`,
+      `Savings rate from bank transfers and the payroll contributions Leeway knows: about 17% of pay ($923 of $5,423 a month: transfers to savings $500, pension contributions $423). ${RATE_GUARD_FOR_AI}`,
     )
   })
 

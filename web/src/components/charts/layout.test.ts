@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from '../../lib/dates'
-import { lineFrame, timeTickLabel } from './LineChart'
+import { lineFrame } from './LineChart'
+import { labelSide, lineYsAcross, timeLabels, timeTickLabel } from './lineParts'
 import {
   edgeAnchor,
   paceAxis,
@@ -211,5 +212,67 @@ describe('lineFrame', () => {
       top: 14,
       bottom: 220,
     })
+  })
+})
+
+describe('timeLabels', () => {
+  // A plot from 40 to 340 pixels, one pixel a day from Nov 20, 2025.
+  const x = (date: string) =>
+    40 + (Date.parse(`${date}T00:00:00Z`) - Date.parse('2025-11-20T00:00:00Z')) / 86_400_000
+
+  it('names the first and last months at the two ends, so the start always shows', () => {
+    const labels = timeLabels('2025-11-20', '2026-09-16', x, 40, 340, 'en-US')
+    expect(labels[0]).toEqual({ x: 40, text: 'Nov 2025', anchor: 'start' })
+    expect(labels.at(-1)).toEqual({ x: 340, text: 'Sep 2026', anchor: 'end' })
+    // Months between come only where they clear both ends.
+    for (const label of labels.slice(1, -1)) {
+      expect(label.anchor).toBe('middle')
+      expect(label.x).toBeGreaterThan(40 + 60)
+      expect(label.x).toBeLessThan(340 - 60)
+    }
+  })
+
+  it('drops months between that would crowd the ends, and names one month once', () => {
+    expect(timeLabels('2025-11-20', '2026-02-20', x, 40, 132, 'en-US').map((l) => l.text)).toEqual([
+      'Nov 2025',
+      'Feb 2026',
+    ])
+    expect(timeLabels('2025-11-01', '2026-01-10', () => 40, 40, 340, 'en-US')[0]!.text).toBe(
+      'Nov 2025',
+    )
+  })
+
+  it('spaces days evenly over a short span', () => {
+    const labels = timeLabels('2025-11-20', '2025-11-28', x, 40, 340, 'en-US')
+    expect(labels[0]).toEqual({ x: 40, text: 'Nov 20', anchor: 'middle' })
+    expect(labels.every((label) => label.anchor === 'middle')).toBe(true)
+  })
+})
+
+describe('lineYsAcross', () => {
+  it('reads the line between its points, and nothing past its end', () => {
+    const line = [
+      { x: 0, y: 100 },
+      { x: 8, y: 60 },
+    ]
+    expect(lineYsAcross(line, 0, 12)).toEqual([100, 80, 60])
+    expect(lineYsAcross([{ x: 4, y: 50 }], 0, 4)).toEqual([50, 50])
+  })
+})
+
+describe('labelSide', () => {
+  it('writes above the level unless the line runs through the words there', () => {
+    expect(labelSide([200, 210], 150, 0, 300)).toBe('above')
+    // The line just above the level, as where net worth started once it grew.
+    expect(labelSide([140, 145], 150, 0, 300)).toBe('below')
+  })
+
+  it('keeps the words inside the plot, and picks the side the line crosses less', () => {
+    expect(labelSide([140], 10, 0, 300)).toBe('below')
+    expect(labelSide([295], 290, 0, 300)).toBe('above')
+    expect(labelSide([140, 145, 155], 150, 0, 300)).toBe('below')
+    expect(labelSide([140, 155, 160], 150, 0, 300)).toBe('above')
+    expect(labelSide([140, 155], 290, 0, 300)).toBe('above')
+    expect(labelSide([140, 155], 5, 0, 300)).toBe('below')
   })
 })

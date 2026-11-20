@@ -8,28 +8,27 @@ import { startReference, worthChange } from '../worth'
 
 type Merchants = Output<'top_merchants'>
 
-/** Cash on hand, less the bills due before payday, spread over the days until it. */
+/** Checking, less the bills due before payday: what is left at payday. */
 export function cashFlowDrill(flow: CashFlow, date: (iso: string) => string): DrillDown {
   const short = flow.leftAfterBillsCents < 0
-  const days = Math.max(1, flow.daysUntilPayday)
   return {
     title: 'Until payday',
     subtitle: `Payday ${date(flow.nextPayday)}`,
     figure: short
       ? { cents: -flow.leftAfterBillsCents, tone: 'problem' }
-      : { cents: flow.perDayCents },
+      : { cents: flow.leftAfterBillsCents },
     math: {
       terms: [
-        { label: 'In checking and savings', value: { cents: flow.cashCents } },
+        { label: 'In checking', value: { cents: flow.cashCents } },
         { label: 'bills due before payday', value: { cents: flow.billsDueCents }, op: 'minus' },
       ],
       result: {
-        label: short ? 'Short of the bills by' : 'Left until payday',
+        label: short ? 'Short of the bills by' : 'Left at payday',
         value: { cents: Math.abs(flow.leftAfterBillsCents), tone: short ? 'problem' : undefined },
       },
       note: short
-        ? 'The bills due before payday come to more than the cash on hand.'
-        : `Spread over ${days} ${days === 1 ? 'day' : 'days'}, counting today.`,
+        ? 'The bills due before payday come to more than checking holds.'
+        : 'Day-to-day spending until payday comes out of this too. Savings is not counted.',
     },
     items:
       flow.billsDue.length > 0

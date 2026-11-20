@@ -61,29 +61,31 @@ describe('Until payday', () => {
     planServer({ ...quietBills, get_cash_flow: () => flow })
     renderPlan('/plan')
     const card = await screen.findByRole('region', { name: 'Until payday' })
-    await within(card).findByText(/in checking and savings/)
+    await within(card).findByText(/in checking/)
     return card
   }
 
-  it('shows what is left a day, the cash, the bills and when payday is', async () => {
+  it('leads with what is left at payday, then checking, the bills and when payday is', async () => {
     const card = await show(cashFlow())
-    expect(card).toHaveTextContent('$144 a day for the next 10 days.')
-    expect(card).toHaveTextContent('$1,500 in checking and savings, minus $60 in bills.')
+    expect(card).toHaveTextContent('$1,440 left at payday, after bills.')
+    expect(card).toHaveTextContent('$1,500 in checking, minus $60 in bills.')
     expect(card).toHaveTextContent('Next payday Fri, Nov 27.')
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
   })
 
-  it('draws the cash dropping with each bill to payday, against $0, and names the bills', async () => {
+  it('draws checking dropping with each bill to payday, close up, and names the bills', async () => {
     const card = await show(cashFlow())
     expect(
       within(card).getByRole('heading', { name: 'Will the cash last until payday?' }),
     ).toBeVisible()
     expect(
-      within(card).getByRole('img', { name: 'Cash until payday' }),
+      within(card).getByRole('img', { name: 'Checking until payday' }),
     ).toHaveAccessibleDescription(
-      'Cash from $1,500 today to $1,440 on payday, Fri, Nov 27, at its lowest $1,440 on Nov 20.',
+      'Checking from $1,500 today to $1,440 on payday, Fri, Nov 27, at its lowest $1,440 on Nov 20.',
     )
-    expect(card).toHaveTextContent('Stay above: $0')
+    // Far above $0, the scale is a close-up so the $60 step shows, with no $0 to stay above.
+    expect(card).not.toHaveTextContent('Stay above')
+    expect(card).toHaveTextContent('$1,500')
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       left: 0,
       width: 640,
@@ -125,6 +127,52 @@ describe('Until payday', () => {
     )
     expect(card).toHaveTextContent('$80 short of the bills due before payday.')
     expect(within(card).getByText('No payment found')).toBeInTheDocument()
+    expect(card).toHaveTextContent('Stay above: $0')
+    expect(card).toHaveTextContent('Checking goes below $0 on Nov 17, when Water comes out.')
+    expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
+  })
+
+  it('draws $0 to stay above once the line comes near it', async () => {
+    const card = await show(
+      cashFlow({ cashCents: 10_000, billsDueCents: 6000, leftAfterBillsCents: 4000 }),
+    )
+    expect(card).toHaveTextContent('Stay above: $0')
+    expect(card).not.toHaveTextContent('goes below')
+    expect(card.querySelector('.chart-line.problem')).not.toBeInTheDocument()
+  })
+
+  it('says when checking is already below $0', async () => {
+    const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
+    const card = await show(
+      cashFlow({
+        cashCents: -500,
+        billsDue: [
+          { ...rent, overdue: false },
+          { ...rent, billId: 'p', name: 'Power', overdue: false },
+        ],
+        billsDueCents: 18_000,
+        leftAfterBillsCents: -18_500,
+      }),
+    )
+    expect(card).toHaveTextContent('Checking is already below $0.')
+  })
+
+  it('names the bills that take checking below $0 together', async () => {
+    const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
+    const later = await show(
+      cashFlow({
+        cashCents: 10_000,
+        billsDue: [
+          { ...rent, overdue: false },
+          { ...rent, billId: 'p', name: 'Power', overdue: false },
+        ],
+        billsDueCents: 18_000,
+        leftAfterBillsCents: -8_000,
+      }),
+    )
+    expect(later).toHaveTextContent(
+      'Checking goes below $0 on Nov 20, when Rent and Power come out.',
+    )
   })
 
   it('says where the payday came from', async () => {
@@ -136,7 +184,6 @@ describe('Until payday', () => {
         daysUntilPayday: 1,
       }),
     )
-    expect(card).toHaveTextContent('a day for the next 1 day.')
     expect(card).toHaveTextContent(
       'Next payday looks like Fri, Nov 20, about $2,500, going by your past deposits.',
     )

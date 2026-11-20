@@ -168,21 +168,13 @@ export function automaticKind({ type, subtype, bankName }: ClassifiableAccount):
   }
 }
 
-// Savings subtypes whose money is locked up until a date, so it is no cash to spend.
-const LOCKED_SUBTYPES = new Set(['cd'])
-
 /**
- * Whether an account's money is cash the owner can spend before payday: a
- * checking or savings account, by its kind, that is not locked up like a CD.
- * A bank HSA, IRA or anything else the owner calls retirement or investing
- * is not.
+ * Whether an account pays the bills: a checking account, by its kind. Cash
+ * until payday counts only these, since savings is money set aside, not
+ * money the bills come out of.
  */
-export function isSpendableCash(
-  account: ClassifiableAccount & { kindChoice: AccountKind | null },
-): boolean {
-  const kind = kindOf(account)
-  if (kind === 'checking') return true
-  return kind === 'savings' && !LOCKED_SUBTYPES.has(account.subtype?.trim().toLowerCase() ?? '')
+export function paysBills(account: ClassifiableAccount & { kindChoice: AccountKind | null }) {
+  return kindOf(account) === 'checking'
 }
 
 /** Card and loan accounts are owed; their balance counts against net worth. */

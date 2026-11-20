@@ -44,7 +44,7 @@ export const getMonthlyTotalsAction = defineAction({
 export const getSavingsRatesAction = defineAction({
   name: 'get_savings_rates',
   title: 'Savings rate by month',
-  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus pension contributions the owner entered, as a whole percent of that month's pay. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
+  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) the newest saved paystub shows), as a whole percent of that month's pay. note says, in words for the owner, what was counted and what was not. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
   input: z.object({ months: z.number().int().min(2).max(12).default(6) }),
   scope: 'read',
   surface: 'all',

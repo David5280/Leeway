@@ -89,7 +89,7 @@ function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string
   if (!rate) return null
   const parts = rate.sources.map((s) => `${s.label.toLowerCase()} ${money(s.monthlyCents)}`)
   const seen = countsPayroll(rate)
-    ? 'from bank transfers and the pension contributions the owner entered'
+    ? 'from bank transfers and the payroll contributions Leeway knows'
     : 'seen at the bank'
   return `Savings rate ${seen}: about ${rate.percent}% of ${payNoun(rate)} (${money(rate.savedMonthlyCents)} of ${money(rate.payMonthlyCents)} a month: ${parts.join(', ')}). ${RATE_GUARD_FOR_AI}`
 }

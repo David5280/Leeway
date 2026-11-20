@@ -122,6 +122,19 @@ export function pensionPatchFrom(paystub: Paystub): PensionPlanPatch {
 }
 
 /**
+ * What a saved paystub shows going into a 401(k), 457 or 403(b) each month,
+ * for the savings rate: null when it shows none, does not say how often pay
+ * comes, or comes to more than Leeway takes as a contribution.
+ */
+export function planMonthlyCents(paystub: Paystub | null): number | null {
+  if (!paystub || paystub.payCadence === null) return null
+  const perPaycheck = PLAN_FIELDS.reduce((sum, field) => sum + (paystub.current[field] ?? 0), 0)
+  if (perPaycheck <= 0) return null
+  const monthly = convertCadence(perPaycheck, paystub.payCadence, 'month')
+  return monthly > MAX_MONTHLY_CENTS ? null : monthly
+}
+
+/**
  * The monthly retirement contribution this paystub shows: its 401(k), 457 and
  * 403(b) figures added up and turned into a month of pay. An error when the
  * paystub shows none of them, or does not say how often pay comes.

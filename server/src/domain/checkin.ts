@@ -12,6 +12,7 @@ import { attentionItems, type AttentionItem } from './coach.js'
 import { listConnections } from './connections.js'
 import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
+import { latestPaystub, planMonthlyCents } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
 import { monthlyAverages, paySchedule } from './profile/income.js'
@@ -43,6 +44,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     { savings, pensions },
     monthly,
     pay,
+    paystub,
   ] = await Promise.all([
     budgetReport(db, settings, now),
     getCashFlow(db, settings, today),
@@ -60,6 +62,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     })),
     monthlyAverages(db, settings, today),
     paySchedule(db, settings, today),
+    latestPaystub(db),
   ])
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
@@ -144,6 +147,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
         cashCents: savings.cashCents,
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
+        planMonthlyCents: planMonthlyCents(paystub),
         monthly,
         billsMonthlyCents,
         settings,
@@ -199,7 +203,10 @@ function savingsGlance(
      * unknown, never a guess of zero.
      */
     bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
-    /** The rate with the pension contributions the owner entered; null when none are known. */
+    /**
+     * The rate with the payroll deductions Leeway knows (a pension the owner
+     * entered, a workplace plan a saved paystub shows); null when none are known.
+     */
     pensionIncludedSavingsRatePercent:
       savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
     pension: pensionGlance(pension),

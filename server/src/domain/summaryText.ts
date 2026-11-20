@@ -198,7 +198,7 @@ export function summaryFacts(
     },
     untilPayday: {
       payday: date(cashFlow.nextPayday),
-      cashInCheckingAndSavings: money(cashFlow.cashCents),
+      cashInChecking: money(cashFlow.cashCents),
       billsDueBeforePayday: money(cashFlow.billsDueCents),
       leftAfterBills: money(cashFlow.leftAfterBillsCents),
     },

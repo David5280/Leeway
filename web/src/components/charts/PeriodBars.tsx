@@ -1,7 +1,10 @@
 // Bars per budget period, each labeled with its amount, against the budget.
+// Bars are plain, green for money in, and red only where spending went over
+// its budget. A period with nothing in it keeps a stub on the baseline, so the
+// gap reads as $0 rather than a missing period.
 
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, niceTicks, textWidth, type Ticks } from '../../lib/chartScale'
+import { axisFormat, niceTicks, textWidth, type Ticks } from '../../lib/chartScale'
 import { formatMoney, type MoneyOptions, type Precision } from '../../lib/money'
 import { Money } from '../design/Money'
 import { useWidth } from '../../lib/useWidth'
@@ -65,20 +68,52 @@ export function barPrecision(
   return fits('compact') ? 'compact' : null
 }
 
+/** A bar's fill: green for money in, red for spending over its budget, plain otherwise. */
+export function barTone(
+  cents: number,
+  budget: number | null,
+  moneyIn: boolean,
+  overIsProblem: boolean,
+): string {
+  if (moneyIn) return 'var(--tone-in)'
+  return overIsProblem && budget !== null && cents > budget
+    ? 'var(--tone-problem)'
+    : 'var(--tone-muted)'
+}
+
+/**
+ * Which bars get a date under them: every one when they fit, else every n-th
+ * counted back from the newest, so the gaps are even and the running period
+ * is always named.
+ */
+export function labelledBars(count: number, slot: number, labelRoom: number): Set<number> {
+  const step = Math.max(1, Math.ceil(labelRoom / Math.max(1, slot)))
+  const chosen = new Set<number>()
+  for (let index = count - 1; index >= 0; index -= step) chosen.add(index)
+  return chosen
+}
+
+/** A period with nothing in it: a short stub on the baseline, so its slot is not mistaken for a gap. */
+const STUB_HEIGHT = 2
+
 export function PeriodBars({
   bars,
   budgetCents,
-  color,
   label,
   levelName = 'Budget',
+  moneyIn = false,
+  overIsProblem = false,
 }: {
   bars: PeriodBar[]
   /** The dashed level each bar reads against; null leaves it out. */
   budgetCents: number | null
-  color: string
   label: string
   /** What the level is, written at its end: the budget, or the usual period without one. */
   levelName?: string
+  /** Money coming in, drawn green. */
+  moneyIn?: boolean
+  /** Whether going over the level is a problem, as spending over a budget is: those bars are red. */
+  overIsProblem?: boolean
 }) {
   const { settings, money } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(540)
@@ -102,9 +137,8 @@ export function PeriodBars({
   const precision = barPrecision(values, slot, settings)
   // Each date label needs its own width and a gap, so neighbors never touch.
   const labelRoom = Math.max(0, ...bars.map((bar) => textWidth(bar.label))) + 12
-  const dateLabels = new Set(
-    axisIndices(bars.length, Math.floor((right - left) / labelRoom), labelRoom / slot),
-  )
+  const dateLabels = labelledBars(bars.length, slot, labelRoom)
+  const over = (cents: number) => overIsProblem && budget !== null && cents > budget
   const budgetText = budget !== null ? `. ${levelName} ${money(budget)}.` : ''
   const empty = values.every((v) => v === 0)
 
@@ -114,7 +148,7 @@ export function PeriodBars({
       width={width}
       height={height}
       name={label}
-      description={`${bars.map((b) => `${b.label} ${money(b.cents)}`).join(', ')}${budgetText}`}
+      description={`${bars.map((b) => `${b.label} ${money(b.cents)}${over(b.cents) ? ' (over budget)' : ''}`).join(', ')}${budgetText}`}
       readout={
         hovered && (
           <Readout
@@ -133,19 +167,24 @@ export function PeriodBars({
     >
       {/* With nothing to measure the scale means nothing, and its labels would crowd the note. */}
       {!empty && <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />}
-      {bars.map((bar, i) => (
-        <path
-          key={bar.label}
-          d={barPath(center(i) - barWidth / 2, y(values[i]!), barWidth, bottom)}
-          fill={color}
-          // The running period is drawn lighter and outlined: it is still filling up.
-          fillOpacity={bar.current ? 0.45 : 1}
-          stroke={bar.current ? color : 'none'}
-          strokeWidth="1.5"
-          opacity={hovered && hovered !== bar ? 0.55 : 1}
-          aria-hidden="true"
-        />
-      ))}
+      {bars.map((bar, i) => {
+        const fill = barTone(values[i]!, budget, moneyIn, overIsProblem)
+        // An empty period still gets a stub, so it reads as $0 and not as a gap.
+        const top = values[i]! > 0 ? y(values[i]!) : bottom - STUB_HEIGHT
+        return (
+          <path
+            key={bar.label}
+            d={barPath(center(i) - barWidth / 2, top, barWidth, bottom)}
+            fill={fill}
+            // The running period is drawn lighter and outlined: it is still filling up.
+            fillOpacity={bar.current ? 0.45 : 1}
+            stroke={bar.current ? fill : 'none'}
+            strokeWidth="1.5"
+            opacity={hovered && hovered !== bar ? 0.55 : 1}
+            aria-hidden="true"
+          />
+        )
+      })}
       {budget !== null && (
         <>
           <line x1={left} x2={right} y1={y(budget)} y2={y(budget)} className="chart-line budget" />

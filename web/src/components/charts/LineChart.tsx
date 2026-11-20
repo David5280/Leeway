@@ -3,33 +3,19 @@
 
 import { useId, type ReactNode } from 'react'
 import { useApp } from '../../lib/app'
-import {
-  axisFormat,
-  niceTicks,
-  svgNumber,
-  textWidth,
-  type TimeTick,
-  timeTicks,
-} from '../../lib/chartScale'
+import { axisFormat, niceTicks, textWidth } from '../../lib/chartScale'
 import { toDayNumber } from '../../lib/dates'
-import { monthYear, shortDate } from '../../lib/format'
+import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import { Money } from '../design/Money'
+import { EndPoint, type LineReference, ReferenceLine, ShadedLine, TimeAxis } from './lineParts'
 import { ChartFrame, Guide, PointerLayer, Readout, usePointer, ValueAxis } from './parts'
+
+export type { LineReference } from './lineParts'
 
 export interface LinePoint {
   date: string
   cents: number
-}
-
-/** A time axis label: "Mar 4" for days, "Mar" for months, "Jan 2026" where the year shows. */
-export function timeTickLabel(tick: TimeTick, locale: string): string {
-  if (!tick.monthly) return shortDate(tick.date, locale)
-  if (tick.showYear) return monthYear(tick.date, locale)
-  return new Date(`${tick.date}T00:00:00Z`).toLocaleDateString(locale, {
-    month: 'short',
-    timeZone: 'UTC',
-  })
 }
 
 /**
@@ -47,18 +33,6 @@ export function lineFrame(compact: boolean, width: number, tickLabels: string[],
     top: 14,
     bottom: height - 30,
   }
-}
-
-/** A level the line should stay on one side of, such as a card's score-friendly balance. */
-export interface LineReference {
-  cents: number
-  /** Where the line should be, in words, drawn on the line: "Under 30% of the limit". */
-  label: string
-  /**
-   * Which end its words sit at: the start by default, or the end for a level
-   * the line starts on, like where net worth started, so the two never cross.
-   */
-  at?: 'start' | 'end'
 }
 
 /**
@@ -133,13 +107,21 @@ export function LineChart({
         <>
           <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />
           <TimeAxis
-            points={points}
+            dates={points.map((p) => p.date)}
             x={x}
+            left={left}
+            right={right}
             y={height - 8}
-            width={right - left}
-            locale={settings.locale}
           />
-          <ReferenceLine reference={reference} y={y} left={left} right={right} />
+          <ReferenceLine
+            reference={reference}
+            y={y}
+            left={left}
+            right={right}
+            top={top}
+            bottom={bottom}
+            line={placed}
+          />
         </>
       )}
       <ShadedLine points={placed} baseline={baseline} fill={`url(#${gradientId})`} />
@@ -183,106 +165,4 @@ function readoutLines(
 function axisValues(points: LinePoint[], reference: LineReference | undefined): number[] {
   const values = points.map((p) => p.cents)
   return reference ? [...values, reference.cents] : values
-}
-
-/** The reference level as a dashed line, its words and amount just above it at the left. */
-function ReferenceLine({
-  reference,
-  y,
-  left,
-  right,
-}: {
-  reference: LineReference | undefined
-  y: (cents: number) => number
-  left: number
-  right: number
-}) {
-  if (!reference) return null
-  const at = y(reference.cents)
-  return (
-    <g aria-hidden="true">
-      <line x1={left} x2={right} y1={at} y2={at} className="chart-line budget" />
-      <text
-        x={reference.at === 'end' ? right - 4 : left + 4}
-        y={at - 6}
-        textAnchor={reference.at === 'end' ? 'end' : 'start'}
-        className="chart-axis strong-label"
-      >
-        {reference.label}: <Money as="tspan" cents={reference.cents} />
-      </text>
-    </g>
-  )
-}
-
-/** Date labels along the bottom, about one per 80 pixels. */
-function TimeAxis({
-  points,
-  x,
-  y,
-  width,
-  locale,
-}: {
-  points: LinePoint[]
-  x: (date: string) => number
-  y: number
-  width: number
-  locale: string
-}) {
-  if (points.length < 2) return null
-  const ticks = timeTicks(points[0]!.date, points.at(-1)!.date, Math.floor(width / 80))
-  return (
-    <g aria-hidden="true">
-      {ticks.map((tick) => (
-        <text key={tick.date} x={x(tick.date)} y={y} textAnchor="middle" className="chart-axis">
-          {timeTickLabel(tick, locale)}
-        </text>
-      ))}
-    </g>
-  )
-}
-
-/** The line with a soft fill down to the baseline. */
-function ShadedLine({
-  points,
-  baseline,
-  fill,
-}: {
-  points: { x: number; y: number }[]
-  baseline: number
-  fill: string
-}) {
-  if (points.length < 2) return null
-  const line = points.map((p) => `${svgNumber(p.x)},${svgNumber(p.y)}`).join(' L')
-  return (
-    <>
-      <path
-        d={`M${points[0]!.x},${baseline} L${line} L${points.at(-1)!.x},${baseline} Z`}
-        fill={fill}
-      />
-      <path d={`M${line}`} className="chart-line actual" />
-    </>
-  )
-}
-
-/** The latest point, with its value in the right-hand gutter when there is one. */
-function EndPoint({
-  at,
-  cents,
-  labelX,
-}: {
-  at: { x: number; y: number }
-  /** The amount written beside the point, or null for none. */
-  cents: number | null
-  labelX: number
-}) {
-  return (
-    <>
-      <circle cx={at.x} cy={at.y} r="4" className="chart-dot" />
-      {cents !== null && (
-        <text x={labelX} y={at.y + 4} className="chart-value ink" aria-hidden="true">
-          <Money as="tspan" cents={cents} />
-        </text>
-      )}
-    </>
-  )
 }

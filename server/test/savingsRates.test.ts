@@ -3,9 +3,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import type { MonthTotals } from '../src/domain/monthlyTotals.js'
-import { PENSION_COUNTED, SEEN_AT_BANK } from '../src/domain/savings/rate.js'
+import { planMonthlyCents } from '../src/domain/paystubs/paystubs.js'
+import { countingWords, payrollNote, savingsRate } from '../src/domain/savings/rate.js'
 import { monthRates } from '../src/domain/savingsRates.js'
 import { actionCaller } from './actionCaller.js'
+import { confirmedPaystub } from './fixtures/paystub.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -28,6 +30,9 @@ const transfer = (date: string, amountCents: number) => ({
   providerCategoryDetailed: 'TRANSFER_OUT_SAVINGS',
 })
 
+/** No payroll deduction known. */
+const NONE = { pensionCents: null, planCents: null }
+
 describe('monthRates', () => {
   const october = month('2026-10-01', '2026-10-31', 400000)
 
@@ -35,7 +40,7 @@ describe('monthRates', () => {
     const rates = monthRates(
       [october, month('2026-11-01', '2026-11-30', 200000, true)],
       [transfer('2026-10-02', 60000), transfer('2026-10-20', 20000), transfer('2026-11-03', 10000)],
-      null,
+      NONE,
     )
     expect(rates).toEqual([
       { start: '2026-10-01', current: false, percent: 20, savedCents: 80000, payCents: 400000 },
@@ -44,29 +49,80 @@ describe('monthRates', () => {
   })
 
   it('has no rate without pay or anything saved, never a rate of zero', () => {
-    expect(monthRates([], [], null)).toEqual([])
-    const [nothingSaved] = monthRates([october], [], null)
+    expect(monthRates([], [], NONE)).toEqual([])
+    const [nothingSaved] = monthRates([october], [], NONE)
     expect(nothingSaved).toMatchObject({ percent: null, savedCents: 0, payCents: 400000 })
     // Money taken back out of savings is not negative saving.
-    const [tookBack] = monthRates([october], [transfer('2026-10-05', -90000)], null)
+    const [tookBack] = monthRates([october], [transfer('2026-10-05', -90000)], NONE)
     expect(tookBack).toMatchObject({ percent: null, savedCents: 0 })
     // Refunds outweighing pay leave no pay to share out.
-    const [noPay] = monthRates([month('2026-10-01', '2026-10-31', -500)], [], 30000)
+    const [noPay] = monthRates([month('2026-10-01', '2026-10-31', -500)], [], {
+      pensionCents: 30000,
+      planCents: null,
+    })
     expect(noPay).toMatchObject({ percent: null, payCents: 0 })
   })
 
   it('counts a pension the owner entered, adding it to the pay it came from', () => {
-    const [rate] = monthRates([october], [], 44000)
+    const [rate] = monthRates([october], [], { pensionCents: 44000, planCents: null })
     expect(rate).toMatchObject({ percent: 10, savedCents: 44000, payCents: 444000 })
+  })
+
+  it('counts a workplace plan a paystub shows beside the pension, both from pay', () => {
+    const [plan] = monthRates([october], [], { pensionCents: null, planCents: 44000 })
+    expect(plan).toMatchObject({ percent: 10, savedCents: 44000, payCents: 444000 })
+    const [both] = monthRates([october], [transfer('2026-10-02', 12000)], {
+      pensionCents: 44000,
+      planCents: 44000,
+    })
+    // $120 + $440 + $440 saved, of $4,000 take-home plus the $880 taken before it.
+    expect(both).toMatchObject({ percent: 20, savedCents: 100000, payCents: 488000 })
   })
 
   it('keeps huge amounts whole', () => {
     const [rate] = monthRates(
       [month('2026-10-01', '2026-10-31', 9e14)],
       [transfer('2026-10-02', 3e14)],
-      null,
+      NONE,
     )
     expect(rate).toMatchObject({ percent: 33, savedCents: 3e14 })
+  })
+})
+
+describe('what a rate says it counted', () => {
+  it('names only what is not counted, and how to add it', () => {
+    expect(payrollNote({ pension: false, plan: false })).toBe(
+      'Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
+    )
+    expect(payrollNote({ pension: true, plan: false })).toMatch(/pension contributions.*401\(k\)/)
+    expect(payrollNote({ pension: false, plan: true })).toMatch(/401\(k\).*A pension counts/)
+    expect(payrollNote({ pension: true, plan: true })).not.toMatch(/once/)
+  })
+
+  it('says what a comparison with a target counts', () => {
+    const bank = { label: 'Transfers', monthlyCents: 10_000, beforePaycheck: false }
+    const pension = { ...bank, beforePaycheck: true, payroll: 'pension' as const }
+    const plan = { ...bank, beforePaycheck: true, payroll: 'plan' as const }
+    expect(countingWords(savingsRate(100_000, [bank])!)).toBe('counting only bank transfers')
+    expect(countingWords(savingsRate(100_000, [bank, plan])!)).toBe(
+      'counting bank transfers and your workplace plan',
+    )
+    expect(countingWords(savingsRate(100_000, [pension, plan])!)).toBe(
+      'counting bank transfers and your pension and your workplace plan',
+    )
+  })
+
+  it('reads a month of 401(k), 457 and 403(b) from a paystub, or nothing it cannot stand behind', () => {
+    // $200 a paycheck, twice a month.
+    expect(planMonthlyCents(confirmedPaystub())).toBe(40_000)
+    expect(planMonthlyCents(null)).toBeNull()
+    expect(planMonthlyCents(confirmedPaystub({ payCadence: null }))).toBeNull()
+    const none = confirmedPaystub()
+    none.current = { ...none.current, plan457: null }
+    expect(planMonthlyCents(none)).toBeNull()
+    const huge = confirmedPaystub({ payCadence: 'week' })
+    huge.current = { ...huge.current, plan401k: 5_000_000 }
+    expect(planMonthlyCents(huge)).toBeNull()
   })
 })
 
@@ -109,7 +165,7 @@ describe('get_savings_rates', () => {
         { start: '2026-11-01', current: true, percent: null, savedCents: 0, payCents: 0 },
       ],
       targetPercent: null,
-      note: SEEN_AT_BANK,
+      note: payrollNote({ pension: false, plan: false }),
     })
 
     await call('update_settings', { savingsPlan: { savingsRateTargetPercent: 15 } })
@@ -124,6 +180,17 @@ describe('get_savings_rates', () => {
       grossPayCents: 400000,
       payCadence: 'month',
     })
-    expect((await call('get_savings_rates', {})).note).toBe(PENSION_COUNTED)
+    expect((await call('get_savings_rates', {})).note).toBe(
+      payrollNote({ pension: true, plan: false }),
+    )
+  })
+
+  it('counts the workplace plan the newest saved paystub shows', async () => {
+    const paystub = confirmedPaystub()
+    paystub.current = { ...paystub.current, pension: null }
+    await call('save_paystub', { paystub })
+    expect((await call('get_savings_rates', {})).note).toBe(
+      payrollNote({ pension: false, plan: true }),
+    )
   })
 })

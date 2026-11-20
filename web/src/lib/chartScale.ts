@@ -22,11 +22,12 @@ export interface Ticks {
 
 /**
  * Round tick values covering low..high with at most `maxTicks` gridlines.
- * Zero is always included when the range crosses it, since it anchors the eye.
+ * Zero is always included, since it anchors the eye, unless `fromZero` is
+ * false, for a close-up where the change matters more than the size.
  */
-export function niceTicks(low: number, high: number, maxTicks = 5): Ticks {
-  const lo = Math.min(low, high, 0)
-  let hi = Math.max(low, high, 0)
+export function niceTicks(low: number, high: number, maxTicks = 5, fromZero = true): Ticks {
+  const lo = fromZero ? Math.min(low, high, 0) : Math.min(low, high)
+  let hi = fromZero ? Math.max(low, high, 0) : Math.max(low, high)
   if (hi === lo) hi = lo + 10_000
   // Fewer intervals than ticks: n gridlines bound n - 1 steps.
   const intervals = Math.max(1, maxTicks - 1)
@@ -53,8 +54,12 @@ const COMPACT_FROM_CENTS = 1_000_000
  */
 export function axisFormat(values: number[], options: MoneyOptions): (cents: number) => string {
   const largest = Math.max(0, ...values.map(Math.abs))
-  if (largest < COMPACT_FROM_CENTS) return (cents) => money(cents, options)
-  return (cents) => compactMoney(cents, options)
+  const whole = (cents: number) => money(cents, options)
+  if (largest < COMPACT_FROM_CENTS) return whole
+  const compact = (cents: number) => compactMoney(cents, options)
+  // Shortened labels that repeat ("$39K" on two lines) say nothing; a close-up keeps whole units.
+  const labels = values.map(compact)
+  return new Set(labels).size < labels.length ? whole : compact
 }
 
 /** A rough width of a label in pixels, for layout before the browser has drawn it. */

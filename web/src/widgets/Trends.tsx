@@ -19,7 +19,7 @@ export function TrendsWidget() {
       {trends.data && (
         <PeriodBars
           label="Spending by period"
-          color="var(--accent)"
+          overIsProblem
           budgetCents={budget.data?.totals.budgetedCents || null}
           bars={trends.data.map((p) => ({
             label: periodBarLabel(p.start, settings.period.kind, settings.locale),

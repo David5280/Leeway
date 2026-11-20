@@ -8,7 +8,7 @@ import { ageTicks, BandChart, bandPath, type BandPoint } from './BandChart'
 import { LineChart } from './LineChart'
 import type { Pace } from './pace'
 import { PaceChart } from './PaceChart'
-import { PeriodBars } from './PeriodBars'
+import { barTone, labelledBars, PeriodBars } from './PeriodBars'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -35,7 +35,7 @@ describe('on a phone', () => {
     fakeServer({})
     renderSignedIn(
       <>
-        <PeriodBars bars={bars} budgetCents={80_000} color="teal" label="Groceries" />
+        <PeriodBars bars={bars} budgetCents={80_000} label="Groceries" />
         <PaceChart pace={pace()} isCurrent />
         <LineChart points={history} label="Net worth" description="Rising." />
         <BandChart points={band} label="Savings by age" description="Growing." />
@@ -49,7 +49,7 @@ describe('on a phone', () => {
 describe('the pointer', () => {
   it('finds the right point when CSS has stretched the drawing', () => {
     fakeServer({})
-    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} color="teal" label="Groceries" />)
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} label="Groceries" />)
     // Drawn 540 wide but shown 1080 wide, from x = 100: every screen pixel is half a drawn one.
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       left: 100,
@@ -80,7 +80,7 @@ const bars = [
 describe('PeriodBars', () => {
   it('is one image with a name and a description of every bar', () => {
     fakeServer({})
-    renderSignedIn(<PeriodBars bars={bars} budgetCents={80_000} color="teal" label="Groceries" />)
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={80_000} label="Groceries" />)
     expect(screen.getByRole('img', { name: 'Groceries' })).toHaveAccessibleDescription(
       'Sep $500, Oct $620, Nov $340. Budget $800.',
     )
@@ -88,9 +88,7 @@ describe('PeriodBars', () => {
 
   it('names the level the usual period when there is no budget', () => {
     fakeServer({})
-    renderSignedIn(
-      <PeriodBars bars={bars} budgetCents={56_000} levelName="Usual" color="teal" label="Coffee" />,
-    )
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={56_000} levelName="Usual" label="Coffee" />)
     expect(screen.getByText('Usual')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Coffee' })).toHaveAccessibleDescription(
       'Sep $500, Oct $620, Nov $340. Usual $560.',
@@ -99,7 +97,7 @@ describe('PeriodBars', () => {
 
   it('reads out the bar under the pointer, marking the running period as so far', () => {
     fakeServer({})
-    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} color="teal" label="Groceries" />)
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} label="Groceries" />)
     point('last')
     expect(readout()).toHaveTextContent('Nov$340 so far')
     point('first')
@@ -117,7 +115,6 @@ describe('PeriodBars', () => {
           { label: 'Nov', cents: -1_500, current: true },
         ]}
         budgetCents={0}
-        color="teal"
         label="Groceries"
       />,
     )
@@ -134,7 +131,6 @@ describe('PeriodBars', () => {
           { label: 'Nov', cents: 0, current: true },
         ]}
         budgetCents={200_000}
-        color="teal"
         label="Groceries"
       />,
     )
@@ -229,12 +225,13 @@ const history = [
 ]
 
 describe('LineChart', () => {
-  it('labels months along the bottom and the latest value at the end', () => {
+  it('labels the first and last months along the bottom and the latest value at the end', () => {
     fakeServer({})
     renderSignedIn(<LineChart points={history} label="Net worth" description="Rising." />)
     const chart = screen.getByRole('img', { name: 'Net worth' })
     expect(chart).toHaveAccessibleDescription('Rising.')
-    expect(chart).toHaveTextContent('Jul 2026')
+    expect(chart).toHaveTextContent('Jun 2026')
+    expect(chart).toHaveTextContent('Nov 2026')
     expect(chart).toHaveTextContent('$7,000')
   })
 
@@ -354,5 +351,45 @@ describe('BandChart', () => {
       <BandChart points={band.slice(0, 1)} label="Savings by age" description="Now." />,
     )
     expect(screen.getByRole('img', { name: 'Savings by age' })).toHaveTextContent('40')
+  })
+})
+
+describe('PeriodBars colors and labels', () => {
+  it('is plain under budget, red only over it, and green for money in', () => {
+    expect(barTone(50_000, 60_000, false, true)).toBe('var(--tone-muted)')
+    expect(barTone(70_000, 60_000, false, true)).toBe('var(--tone-problem)')
+    // Over the usual period, with no budget to go over, is not a problem.
+    expect(barTone(70_000, 60_000, false, false)).toBe('var(--tone-muted)')
+    expect(barTone(70_000, null, false, true)).toBe('var(--tone-muted)')
+    expect(barTone(70_000, 60_000, true, true)).toBe('var(--tone-in)')
+  })
+
+  it('labels every bar that fits, else every n-th back from the newest', () => {
+    expect([...labelledBars(6, 60, 40)].sort()).toEqual([0, 1, 2, 3, 4, 5])
+    expect([...labelledBars(6, 34, 47)].sort()).toEqual([1, 3, 5])
+    expect([...labelledBars(6, 0, 47)].sort()).toEqual([5])
+  })
+
+  it('keeps a stub for an empty period, and draws the bar over budget red', () => {
+    fakeServer({})
+    renderSignedIn(
+      <PeriodBars
+        bars={[
+          { label: 'Oct', cents: 0, current: false },
+          { label: 'Nov', cents: 90_000, current: false },
+        ]}
+        budgetCents={80_000}
+        label="Dining"
+        overIsProblem
+      />,
+    )
+    const fills = [...document.querySelectorAll('svg.chart-svg path[fill]')].map((path) =>
+      path.getAttribute('fill'),
+    )
+    expect(fills).toEqual(['var(--tone-muted)', 'var(--tone-problem)'])
+    expect(document.querySelector('svg.chart-svg path')!.getAttribute('d')).not.toBe('')
+    expect(screen.getByRole('img', { name: 'Dining' })).toHaveAccessibleDescription(
+      'Oct $0, Nov $900 (over budget). Budget $800.',
+    )
   })
 })

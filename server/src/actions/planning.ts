@@ -45,7 +45,7 @@ export const getCashFlowAction = defineAction({
   name: 'get_cash_flow',
   title: 'Get cash until payday',
   description:
-    'Cash on hand in counted checking and savings (available balance where known), every unpaid bill due before the next payday (including an overdue one), what is left after them and per day until payday, in cents. paydaySource says where the payday came from: the paycheck budget period (exact), a regular deposit found in history (detected_income, with expectedPayCents), or the end of the budget period as a stand-in. Spending from the budget is not subtracted; see get_budget for that.',
+    'Cash in counted checking accounts (available balance where known; savings is left out, as money set aside), every unpaid bill due before the next payday (including an overdue one), what is left after them and per day until payday, in cents. paydaySource says where the payday came from: the paycheck budget period (exact), a regular deposit found in history (detected_income, with expectedPayCents), or the end of the budget period as a stand-in. Spending from the budget is not subtracted; see get_budget for that.',
   input: z.object({}),
   scope: 'read',
   surface: 'all',

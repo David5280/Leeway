@@ -502,7 +502,7 @@ describe('Category page', () => {
       ).toBeInTheDocument()
       const chart = within(history).getByRole('img', { name: 'Groceries by period' })
       expect(chart).toHaveAccessibleDescription(
-        'Jun $500, Jul $620, Aug $580, Sep $550, Oct $600, Nov $240. Budget $600.',
+        'Jun $500, Jul $620 (over budget), Aug $580, Sep $550, Oct $600, Nov $240. Budget $600.',
       )
       expect(server.actions('get_trends')).toEqual([{ periods: 6 }])
     })

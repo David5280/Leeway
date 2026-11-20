@@ -483,6 +483,7 @@
 /* The key under money in and out: a word beside each bar's color, so color is never alone. */
 .flow-key {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -495,6 +496,11 @@
 .flow-swatch.in {
   background: var(--tone-in);
 }
-.flow-swatch.out {
+.flow-swatch.out,
+.flow-swatch.over {
   margin-left: 10px;
+}
+/* A finished month where more went out than came in; the running month never turns red. */
+.flow-swatch.over {
+  background: var(--tone-problem);
 }

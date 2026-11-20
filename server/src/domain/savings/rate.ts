@@ -2,19 +2,39 @@
 // Leeway can see. Pure. Sources are listed one by one so the owner (and an
 // assistant) can see exactly what was counted and what was not.
 //
-// Payroll deductions (a pension, a 401(k)) leave pay before it reaches the
-// bank, so a rate built from bank transfers alone can read low. A pension's
-// contributions count once the owner enters them (retirement/pensions.ts);
-// nothing else taken from pay ever does. Every place that shows the rate says
-// which, with countedNote. There is no target until the owner sets one, and no
-// progress bar toward it, so a partial rate never reads as falling short.
+// Payroll deductions leave pay before it reaches the bank, so a rate built
+// from bank transfers alone can read low. Two count once Leeway knows them: a
+// pension's contributions the owner entered (retirement/pensions.ts), and the
+// 401(k), 457 or 403(b) a saved paystub shows (paystubs/paystubs.ts). Every
+// place that shows the rate says which, with countedNote. There is no target
+// until the owner sets one, and no progress bar toward it, so a partial rate
+// never reads as falling short.
 
-/** Said to the owner beside a savings rate built from bank transfers alone. */
-export const SEEN_AT_BANK = 'Payroll deductions, such as a pension or a 401(k), are not counted.'
+/** The payroll deductions Leeway can count, once the owner gives them. */
+export type PayrollKind = 'pension' | 'plan'
 
-/** Said to the owner beside a savings rate that counts the pension contributions they entered. */
-export const PENSION_COUNTED =
-  'Pension contributions you entered are counted; other payroll deductions, such as a 401(k), are not.'
+/** Which payroll deductions a rate counts. */
+export interface PayrollCounted {
+  pension: boolean
+  plan: boolean
+}
+
+/**
+ * Said to the owner beside a savings rate: what it counts, naming only what
+ * it leaves out and how to add it.
+ */
+export function payrollNote({ pension, plan }: PayrollCounted): string {
+  if (pension && plan) {
+    return 'Counts your pension and workplace plan contributions from pay, as well as transfers your bank shows.'
+  }
+  if (pension) {
+    return 'Counts your pension contributions as well as transfers your bank shows. A 401(k) or similar plan counts once a saved paystub shows it.'
+  }
+  if (plan) {
+    return 'Counts the 401(k), 457 or 403(b) contributions your paystub shows, as well as transfers your bank shows. A pension counts once you enter it.'
+  }
+  return 'Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.'
+}
 
 /**
  * Said to an assistant wherever it reads the rate, so the guard travels with
@@ -23,7 +43,7 @@ export const PENSION_COUNTED =
  * right, whatever goes into a 401(k), IRA or brokerage account.
  */
 export const RATE_GUARD_FOR_AI =
-  'Payroll deductions are counted only where the owner entered them, as for a pension, so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
+  'Payroll deductions are counted only where Leeway knows them (a pension the owner entered, or a 401(k), 457 or 403(b) a saved paystub shows), so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {
@@ -35,6 +55,8 @@ export interface SavingSource {
    * it is added back to take-home pay to get the pay it came out of.
    */
   beforePaycheck: boolean
+  /** Which payroll deduction it is, for a source taken before the paycheck. */
+  payroll?: PayrollKind
 }
 
 export interface SavingsRate {
@@ -44,6 +66,31 @@ export interface SavingsRate {
   /** Take-home pay plus anything saved before the paycheck. */
   payMonthlyCents: number
   sources: SavingSource[]
+}
+
+/** The payroll deductions Leeway knows, as sources taken before the paycheck. */
+export function payrollSources(
+  pensionMonthlyCents: number | null,
+  planMonthlyCents: number | null,
+): SavingSource[] {
+  const sources: SavingSource[] = []
+  if (pensionMonthlyCents) {
+    sources.push({
+      label: 'Pension contributions',
+      monthlyCents: pensionMonthlyCents,
+      beforePaycheck: true,
+      payroll: 'pension',
+    })
+  }
+  if (planMonthlyCents) {
+    sources.push({
+      label: 'Workplace plan contributions',
+      monthlyCents: planMonthlyCents,
+      beforePaycheck: true,
+      payroll: 'plan',
+    })
+  }
+  return sources
 }
 
 /**
@@ -87,9 +134,24 @@ export function payNoun(rate: SavingsRate): string {
   return countsPayroll(rate) ? 'pay' : 'take-home pay'
 }
 
+/** Which payroll deductions a rate counts. */
+export function payrollCounted(rate: SavingsRate): PayrollCounted {
+  const kinds = new Set(rate.sources.map((source) => source.payroll))
+  return { pension: kinds.has('pension'), plan: kinds.has('plan') }
+}
+
 /** What the owner is told was counted in a rate, said beside it everywhere. */
 export function countedNote(rate: SavingsRate): string {
-  return countsPayroll(rate) ? PENSION_COUNTED : SEEN_AT_BANK
+  return payrollNote(payrollCounted(rate))
+}
+
+/** What a comparison with a target counts, in a few words: "counting bank transfers and your pension". */
+export function countingWords(rate: SavingsRate): string {
+  const { pension, plan } = payrollCounted(rate)
+  const payroll = [pension && 'your pension', plan && 'your workplace plan'].filter(Boolean)
+  return payroll.length
+    ? `counting bank transfers and ${payroll.join(' and ')}`
+    : 'counting only bank transfers'
 }
 
 /**

@@ -24,11 +24,11 @@ async function openMath(card: HTMLElement, title: string) {
 }
 
 describe('Until payday widget', () => {
-  it('asks whether the cash lasts, shows the per-day amount, and opens its math', async () => {
+  it('asks whether the cash lasts, shows what is left at payday, and opens its math', async () => {
     fakeServer({ get_cash_flow: () => cashFlow() })
     renderSignedIn(<CashFlowWidget />)
-    expect(await screen.findByText(/a day for the next/)).toHaveTextContent(
-      '$144 a day for the next 10 days.',
+    expect(await screen.findByText(/left at payday/)).toHaveTextContent(
+      '$1,440 left at payday, after bills.',
     )
     const widget = screen.getByRole('region', { name: 'Until payday' })
     expect(
@@ -37,7 +37,7 @@ describe('Until payday widget', () => {
     expect(within(widget).queryByText('Phone')).not.toBeInTheDocument()
     expect(within(widget).queryByRole('link')).not.toBeInTheDocument()
     expect(await openMath(widget, 'Until payday')).toHaveTextContent(
-      'Left until payday $1,440 = In checking and savings $1,500 minus bills due before payday $60',
+      'Left at payday $1,440 = In checking $1,500 minus bills due before payday $60',
     )
   })
 

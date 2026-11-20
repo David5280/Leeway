@@ -1,10 +1,11 @@
 // The savings rate month by month, counted exactly as the profile's rate is
 // (savings/rate.ts): money the bank labeled as moved to savings or
-// investments, plus the pension contributions the owner entered, out of each
+// investments, plus the payroll deductions Leeway knows (a pension the owner
+// entered, a 401(k), 457 or 403(b) a saved paystub shows), out of each
 // month's pay. A month with no pay seen, or nothing saved that Leeway can
-// see, has no rate rather than a rate of zero, since payroll deductions such
-// as a 401(k) never reach the bank. There is no target until the owner sets
-// one, so no month ever reads as falling short of one they did not choose.
+// see, has no rate rather than a rate of zero, since a payroll deduction it
+// does not know never reaches the bank. There is no target until the owner
+// sets one, so no month ever reads as falling short of one they did not choose.
 
 import type { Db } from '../db/pool.js'
 import { listAccounts } from './accounts.js'
@@ -13,8 +14,9 @@ import { monthlyTotals, type MonthTotals } from './monthlyTotals.js'
 import { paySchedule } from './profile/income.js'
 import { pensionMonthlyTotals } from './retirement/pensions.js'
 import { pensionsOf } from './retirement/pensionStore.js'
+import { latestPaystub, planMonthlyCents } from './paystubs/paystubs.js'
 import { savingsTransferDestination, type TransferCandidate } from './savings/contributions.js'
-import { PENSION_COUNTED, savingsRate, SEEN_AT_BANK, type SavingSource } from './savings/rate.js'
+import { payrollNote, payrollSources, savingsRate, type SavingSource } from './savings/rate.js'
 import { splitAccounts } from './savings/report.js'
 import { transferCandidates } from './savings/store.js'
 import type { Settings } from './settings.js'
@@ -35,7 +37,7 @@ export interface SavingsRates {
   months: MonthRate[]
   /** The rate the owner chose to aim for, or null when they set none. */
   targetPercent: number | null
-  /** What was counted, said beside the chart: payroll deductions are not, except a pension entered. */
+  /** What was counted, said beside the chart, naming only what was not and how to add it. */
   note: string
 }
 
@@ -51,11 +53,17 @@ function savedByMonth(months: MonthTotals[], transfers: TransferCandidate[]): nu
   })
 }
 
-/** Each month's rate from its pay, what moved to savings, and the pension's monthly contribution. */
+/** The payroll deductions Leeway knows a month: a pension's and a workplace plan's. */
+export interface MonthlyPayroll {
+  pensionCents: number | null
+  planCents: number | null
+}
+
+/** Each month's rate from its pay, what moved to savings, and the payroll deductions known. */
 export function monthRates(
   months: MonthTotals[],
   transfers: TransferCandidate[],
-  pensionMonthlyCents: number | null,
+  payroll: MonthlyPayroll,
 ): MonthRate[] {
   const saved = savedByMonth(months, transfers)
   return months.map((month, i) => {
@@ -65,14 +73,8 @@ export function monthRates(
         monthlyCents: saved[i]!,
         beforePaycheck: false,
       },
+      ...payrollSources(payroll.pensionCents, payroll.planCents),
     ]
-    if (pensionMonthlyCents) {
-      sources.push({
-        label: 'Pension contributions',
-        monthlyCents: pensionMonthlyCents,
-        beforePaycheck: true,
-      })
-    }
     const rate = savingsRate(month.incomeCents, sources)
     return {
       start: month.start,
@@ -103,11 +105,16 @@ export async function savingsRates(
   )
   const pensions = await pensionsOf(db, accounts)
   const pay = await paySchedule(db, settings, today)
-  const pension = pensionMonthlyTotals(pensions, pay.cadence).memberCents
-  const rates = monthRates(months, transfers, pension)
+  const payroll = {
+    pensionCents: pensionMonthlyTotals(pensions, pay.cadence).memberCents,
+    planCents: planMonthlyCents(await latestPaystub(db)),
+  }
   return {
-    months: rates,
+    months: monthRates(months, transfers, payroll),
     targetPercent: settings.savingsPlan.savingsRateTargetPercent,
-    note: pension ? PENSION_COUNTED : SEEN_AT_BANK,
+    note: payrollNote({
+      pension: Boolean(payroll.pensionCents),
+      plan: Boolean(payroll.planCents),
+    }),
   }
 }

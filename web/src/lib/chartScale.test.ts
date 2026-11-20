@@ -43,6 +43,12 @@ describe('niceTicks', () => {
   it('still draws an axis when every value is zero', () => {
     expect(niceTicks(0, 0).values).toEqual([0, 2_500, 5_000, 7_500, 10_000])
   })
+
+  it('leaves zero out of a close-up', () => {
+    expect(niceTicks(3_877_000, 3_900_000, 4, false).values).toEqual([
+      3_870_000, 3_880_000, 3_890_000, 3_900_000,
+    ])
+  })
 })
 
 describe('svgNumber', () => {
@@ -67,6 +73,12 @@ describe('axisFormat', () => {
 
   it('looks at the size of negative ticks too', () => {
     expect(axisFormat([-2_000_000, 0], usd)(-2_000_000)).toBe('−$20K')
+  })
+
+  it('keeps whole units for a close-up, where shortened labels would repeat', () => {
+    expect(axisFormat([3_880_000, 3_890_000], usd)(3_890_000)).toBe('$38.9K')
+    const format = axisFormat([3_880_000, 3_881_000, 3_882_000], usd)
+    expect(format(3_881_000)).toBe('$38,810')
   })
 })
 

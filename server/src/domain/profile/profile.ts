@@ -29,11 +29,17 @@ import { ACCOUNT_KINDS, KIND_INFO, type AccountKind, type SavingsKind } from '..
 import { listAccounts, type Account } from '../accounts.js'
 import { listBills } from '../bills.js'
 import { listGoals, type Goal } from '../goals.js'
+import { latestPaystub, planMonthlyCents } from '../paystubs/paystubs.js'
 import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
 import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
-import { savingsRate, type SavingSource, type SavingsRate } from '../savings/rate.js'
+import {
+  payrollSources,
+  savingsRate,
+  type SavingSource,
+  type SavingsRate,
+} from '../savings/rate.js'
 import type { BankContributions } from '../savings/contributions.js'
 import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import { periodConfig, type Settings } from '../settings.js'
@@ -130,13 +136,14 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
 
 /**
  * The streams of saving Leeway can see, for the savings rate: transfers the
- * bank shows, and the pension contributions the owner entered, which leave
- * pay before the bank sees it. An employer's share is not the owner's pay,
- * so it is left out.
+ * bank shows, the pension contributions the owner entered, and the 401(k),
+ * 457 or 403(b) a saved paystub shows. The last two leave pay before the bank
+ * sees it. An employer's share is not the owner's pay, so it is left out.
  */
 export function savingSources(
   contributions: BankContributions | null,
   pensionMonthlyCents: number | null,
+  planMonthlyCents: number | null = null,
 ): SavingSource[] {
   const monthly = contributions?.monthlyCents
   const bank: SavingSource[] = monthly
@@ -149,10 +156,7 @@ export function savingSources(
         },
       ]
     : []
-  const pension: SavingSource[] = pensionMonthlyCents
-    ? [{ label: 'Pension contributions', monthlyCents: pensionMonthlyCents, beforePaycheck: true }]
-    : []
-  return [...bank, ...pension]
+  return [...bank, ...payrollSources(pensionMonthlyCents, planMonthlyCents)]
 }
 
 /** What the emergency fund and the savings rate are worked out from. */
@@ -162,6 +166,8 @@ export interface SavingsMeasuresInput {
   contributions: BankContributions | null
   /** Pension contributions a month the owner entered, or null for none known. */
   pensionMonthlyCents: number | null
+  /** The 401(k), 457 or 403(b) a month the newest saved paystub shows, or null. */
+  planMonthlyCents?: number | null
   monthly: MonthlyAverages
   /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
   billsMonthlyCents: number
@@ -183,6 +189,7 @@ export function savingsMeasures({
   cashCents,
   contributions,
   pensionMonthlyCents,
+  planMonthlyCents = null,
   monthly,
   billsMonthlyCents,
   settings,
@@ -204,7 +211,7 @@ export function savingsMeasures({
           }),
     savingsRate: savingsRate(
       monthly.incomeCents,
-      savingSources(contributions, pensionMonthlyCents),
+      savingSources(contributions, pensionMonthlyCents, planMonthlyCents),
     ),
   }
 }
@@ -228,6 +235,7 @@ export async function getFinancialProfile(
   const bills = await listBills(db, today)
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
   const pensions = await pensionsOf(db, accounts)
+  const paystub = await latestPaystub(db)
 
   const billsMonthlyCents = bills.reduce((sum, bill) => sum + bill.monthlyCents, 0)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
@@ -235,6 +243,7 @@ export async function getFinancialProfile(
     cashCents: cashSaved(savings),
     contributions: savings.contributions,
     pensionMonthlyCents: pensionPay.memberCents,
+    planMonthlyCents: planMonthlyCents(paystub),
     monthly,
     billsMonthlyCents,
     settings,

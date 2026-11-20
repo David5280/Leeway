@@ -10,7 +10,7 @@ import { SectionHead } from '../components/design/SectionHead'
 import { LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { flowsDrill } from '../lib/drills/flows'
-import { flowsFrom, flowsHeadline } from '../lib/flows'
+import { flowsFrom, flowsHeadline, overspent } from '../lib/flows'
 import { monthYear } from '../lib/format'
 
 /** Months the Overview's chart shows: enough to see a pattern, few enough to read on a phone. */
@@ -59,6 +59,11 @@ export function FlowsWidget() {
       <p className="flow-key small muted" aria-hidden="true">
         <span className="flow-swatch in" /> In
         <span className="flow-swatch out" /> Out
+        {flows.months.some(overspent) && (
+          <>
+            <span className="flow-swatch over" /> More out than in
+          </>
+        )}
       </p>
     </Card>
   )

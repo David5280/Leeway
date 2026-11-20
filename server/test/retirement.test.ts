@@ -334,7 +334,14 @@ describe('a pension in the savings rate and the check-in', () => {
       percent: 8,
       savedMonthlyCents: 42_300,
       payMonthlyCents: 542_300,
-      sources: [{ label: 'Pension contributions', monthlyCents: 42_300, beforePaycheck: true }],
+      sources: [
+        {
+          label: 'Pension contributions',
+          monthlyCents: 42_300,
+          beforePaycheck: true,
+          payroll: 'pension',
+        },
+      ],
     })
   })
 

@@ -14,14 +14,16 @@ const date = (iso: string) => `on ${iso}`
 const duration = (months: number | null) => (months === null ? 'Never' : `${months} months`)
 
 describe('cashFlowDrill', () => {
-  it('takes the bills due before payday from the cash, spread over the days left', () => {
+  it('takes the bills due before payday from checking, leaving what is left at payday', () => {
     const drill = cashFlowDrill(cashFlow(), date)
     expect(said(drill)).toBe(
-      'Left until payday $1,440 = In checking and savings $1,500 minus bills due before payday $60',
+      'Left at payday $1,440 = In checking $1,500 minus bills due before payday $60',
     )
     expect(drill.subtitle).toBe('Payday on 2026-11-27')
-    expect(drill.figure).toEqual({ cents: 14400 })
-    expect(drill.math.note).toBe('Spread over 10 days, counting today.')
+    expect(drill.figure).toEqual({ cents: 144000 })
+    expect(drill.math.note).toBe(
+      'Day-to-day spending until payday comes out of this too. Savings is not counted.',
+    )
     expect(drill.items!.rows).toEqual([
       {
         key: 'bill-phone-2026-11-20',
@@ -50,13 +52,12 @@ describe('cashFlowDrill', () => {
       value: { cents: 4000, tone: 'problem' },
     })
     expect(drill.figure).toEqual({ cents: 4000, tone: 'problem' })
-    expect(drill.math.note).toBe('The bills due before payday come to more than the cash on hand.')
+    expect(drill.math.note).toBe('The bills due before payday come to more than checking holds.')
     expect(drill.items!.rows[0]!.detail).toBe('No payment found yet')
   })
 
-  it('counts payday today as one day, and lists no bills when none are due', () => {
+  it('lists no bills when none are due', () => {
     const drill = cashFlowDrill(cashFlow({ daysUntilPayday: 0, billsDue: [] }), date)
-    expect(drill.math.note).toBe('Spread over 1 day, counting today.')
     expect(drill.items).toBeUndefined()
   })
 })

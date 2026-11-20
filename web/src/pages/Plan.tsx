@@ -2,7 +2,7 @@
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Shell } from '../components/Shell'
-import { Segmented } from '../components/ui'
+import { TabRow } from '../components/TabRow'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
@@ -33,15 +33,13 @@ export function Plan() {
   const Content = SECTIONS[current].component
   return (
     <Shell>
-      <div className="row-between wrap">
-        <h1>Plan</h1>
-        <Segmented
-          label="Plan section"
-          value={current}
-          options={OPTIONS}
-          onChange={(next) => navigate(`/plan/${next}`)}
-        />
-      </div>
+      <h1>Plan</h1>
+      <TabRow
+        label="Plan section"
+        value={current}
+        options={OPTIONS}
+        onChange={(next) => navigate(`/plan/${next}`)}
+      />
       <CashFlowCard />
       <Content />
     </Shell>

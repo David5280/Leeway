@@ -89,7 +89,9 @@ export function History({
           // Without a budget, each period reads against the usual one.
           budgetCents={budget ?? average}
           levelName={budget ? 'Budget' : 'Usual'}
-          color={category.color}
+          moneyIn={category.kind === 'income'}
+          // Only a budget is a limit: a period over the usual one is not a problem.
+          overIsProblem={category.kind === 'expense' && budget !== null}
         />
       )}
     </Card>

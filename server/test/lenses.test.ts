@@ -130,7 +130,7 @@ describe('savingsInsights', () => {
       [
         'overall',
         'savings_rate',
-        'About 8% of your take-home pay goes to savings through your bank: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'About 8% of your take-home pay goes to savings through your bank: $500 a month of $6,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
       ],
       [
         'overall',
@@ -220,7 +220,7 @@ describe('the savings lens', () => {
       question: 'How much of my pay goes to savings?',
       headline: '8%',
       detail:
-        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'of take-home pay: $500 a month of $6,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
       tone: 'neutral',
       // No bar and no target by default: payroll saving never reaches the bank.
       progress: null,
@@ -281,13 +281,13 @@ describe('the savings lens', () => {
     })
     expect(saving(20)).toMatchObject({
       detail:
-        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted. Your target is 20%, counting only bank transfers.',
+        'of take-home pay: $500 a month of $6,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement. Your target is 20%, counting only bank transfers.',
       tone: 'neutral',
       progress: null,
     })
     expect(saving(null)).toMatchObject({
       detail:
-        'of take-home pay: $500 a month of $6,000. Payroll deductions, such as a pension or a 401(k), are not counted.',
+        'of take-home pay: $500 a month of $6,000. Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.',
       progress: null,
     })
   })

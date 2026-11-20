@@ -32,11 +32,25 @@ describe('FlowsWidget', () => {
     expect(within(sheet).getByText('Nov 2026, so far')).toBeInTheDocument()
   })
 
+  it('keys red only once a finished month spent more than came in', async () => {
+    fakeServer({
+      // The running month is over so far, but it is still filling up.
+      get_monthly_totals: () => [
+        month('2026-10-01', 300000, 100000),
+        month('2026-11-01', 0, 40000, true),
+      ],
+    })
+    renderSignedIn(<FlowsWidget />)
+    await screen.findByText('kept a month, on average')
+    expect(region()).not.toHaveTextContent('More out than in')
+  })
+
   it('says in red when more goes out than comes in', async () => {
     fakeServer({ get_monthly_totals: () => [month('2026-10-01', 100000, 130000)] })
     renderSignedIn(<FlowsWidget />)
     await screen.findByText('more out than in, a month')
     expect(screen.getByText('$300', { selector: '.mid-number' })).toHaveClass('money-problem')
+    expect(region().querySelector('.flow-key')).toHaveTextContent('In Out More out than in')
   })
 
   it('waits for the first month to finish before it answers', async () => {

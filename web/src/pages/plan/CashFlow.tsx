@@ -1,6 +1,8 @@
-// Cash until payday: what is on hand, the bills due first, and what that leaves
-// per day. On Plan, a line shows the cash dropping with each bill to payday,
-// against the $0 it should stay above.
+// Cash until payday: what checking holds, the bills due first, and what that
+// leaves at payday. Savings is left out, as money set aside rather than what
+// the bills come out of. On Plan, a line shows checking stepping down with
+// each bill to payday; if it would go below $0, that part is red and the card
+// says when.
 
 import { Card } from '../../components/design/Card'
 import type { CashFlow } from '../../api/client'
@@ -9,8 +11,8 @@ import { LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
-import { LineChart } from '../../components/charts/LineChart'
-import { cashPath, lowestPoint } from '../../lib/cashPath'
+import { CashLine } from '../../components/charts/CashLine'
+import { cashPath, firstBelowZero, lowestPoint, type CashPoint } from '../../lib/cashPath'
 
 /** One line on where the payday came from, so the number can be trusted the right amount. */
 function paydayText(flow: CashFlow, money: (cents: number) => string, locale: string): string {
@@ -25,9 +27,8 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
   }
 }
 
-/** The headline: per-day room, or how far short the bills leave you. */
+/** The headline: what is left at payday once the bills are paid, or how far short they leave you. */
 function Headline({ flow }: { flow: CashFlow }) {
-  const days = Math.max(1, flow.daysUntilPayday)
   if (flow.leftAfterBillsCents < 0) {
     return (
       <p style={{ fontSize: 17 }}>
@@ -38,30 +39,43 @@ function Headline({ flow }: { flow: CashFlow }) {
   }
   return (
     <p style={{ fontSize: 17 }}>
-      <Money cents={flow.perDayCents} className="mid-number" /> a day for the next {days}{' '}
-      {days === 1 ? 'day' : 'days'}.
+      <Money cents={flow.leftAfterBillsCents} className="mid-number" /> left at payday, after bills.
     </p>
   )
 }
 
-/** "Will the cash last until payday?": the cash after each bill, day by day. */
+/** "Will the cash last until payday?": checking after each bill, day by day. */
 function CashPathChart({ flow }: { flow: CashFlow }) {
   const { money, settings } = useApp()
   const points = cashPath(flow)
   // With no bill before payday the line is flat, so the sentence above says it all.
   if (points.every((point) => point.bills.length === 0)) return null
   const low = lowestPoint(points)
+  const below = firstBelowZero(points)
   return (
-    <LineChart
-      points={points}
-      label="Cash until payday"
-      reference={{ cents: 0, label: 'Stay above' }}
-      details={(index) => {
-        const bills = points[index]!.bills
-        return bills.length ? [`${bills.join(', ')} due`] : []
-      }}
-      description={`Cash from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
-    />
+    <>
+      <CashLine
+        points={points}
+        label="Checking until payday"
+        description={`Checking from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
+      />
+      {below && <BelowZero point={below} locale={settings.locale} />}
+    </>
+  )
+}
+
+/** The day checking first goes below $0, in plain words: when, and which bills take it there. */
+function BelowZero({ point, locale }: { point: CashPoint; locale: string }) {
+  const zero = <Money cents={0} />
+  if (point.bills.length === 0) {
+    return <p className="small over">Checking is already below {zero}.</p>
+  }
+  const verb = point.bills.length === 1 ? 'comes' : 'come'
+  return (
+    <p className="small over">
+      Checking goes below {zero} on {shortDate(point.date, locale)}, when{' '}
+      {point.bills.join(' and ')} {verb} out.
+    </p>
   )
 }
 
@@ -77,8 +91,8 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
     <div className="stack-sm">
       <Headline flow={flow} />
       <span className="small muted">
-        <Money cents={flow.cashCents} /> in checking and savings, minus{' '}
-        <Money cents={flow.billsDueCents} /> in bills. {paydayText(flow, money, settings.locale)}
+        <Money cents={flow.cashCents} /> in checking, minus <Money cents={flow.billsDueCents} /> in
+        bills. {paydayText(flow, money, settings.locale)}
       </span>
       {!compact && <CashPathChart flow={flow} />}
       {!compact &&

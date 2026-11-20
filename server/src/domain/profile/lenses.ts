@@ -5,7 +5,7 @@
 
 import { shortDate } from '../../lib/words.js'
 import type { EmergencyFund } from '../savings/emergency.js'
-import { countedNote, countsPayroll, payNoun } from '../savings/rate.js'
+import { countedNote, countingWords, payNoun } from '../savings/rate.js'
 import type { SavingsKindReport } from '../savings/report.js'
 import { monthYear, type Insight, type InsightFormat, type InsightTopic } from './insights.js'
 import {
@@ -94,9 +94,7 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
   const of = `of ${payNoun(rate)}: ${money(rate.savedMonthlyCents)} a month of ${money(rate.payMonthlyCents)}. ${countedNote(rate)}`
   // Below target is said plainly, never as a warning: the bank cannot see everything
   // saved, and either way the comparison says what it counts.
-  const counting = countsPayroll(rate)
-    ? 'counting bank transfers and your pension'
-    : 'counting only bank transfers'
+  const counting = countingWords(rate)
   let against = ''
   if (target !== null) {
     against =

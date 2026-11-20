@@ -1,7 +1,7 @@
-// The cash on hand from today to payday, drawn as it drops with each bill:
-// "Will the cash last until payday?" Pure. Day-to-day spending is left out,
-// since the line shows what the bills leave, and the card says what that
-// comes to a day. A bill already overdue counts as due today.
+// The cash in checking from today to payday, drawn as it drops with each
+// bill: "Will the cash last until payday?" Pure. Day-to-day spending is left
+// out, since the line shows what the bills leave. A bill already overdue
+// counts as due today.
 
 import type { CashFlow } from '../api/client'
 import { addDays } from './dates'
@@ -43,4 +43,9 @@ export function cashPath(flow: CashFlow): CashPoint[] {
 /** The lowest the cash gets before payday, and the first day it gets there. */
 export function lowestPoint(points: CashPoint[]): CashPoint {
   return points.reduce((low, point) => (point.cents < low.cents ? point : low), points[0]!)
+}
+
+/** The first day the cash goes below $0 before payday, or null when it never does. */
+export function firstBelowZero(points: CashPoint[]): CashPoint | null {
+  return points.find((point) => point.cents < 0) ?? null
 }

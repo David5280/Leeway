@@ -10,7 +10,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const NOTE = 'Payroll deductions, such as a pension or a 401(k), are not counted.'
+const NOTE =
+  'Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.'
 const rate = (start: string, percent: number | null, current = false) => ({
   start,
   current,
