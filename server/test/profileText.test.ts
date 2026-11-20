@@ -107,11 +107,15 @@ describe('savingsRate', () => {
 
 describe('typical spending window', () => {
   it('runs from the current job, kept between eight weeks and three months', () => {
+    // Eight weeks and about three months, pinned as days: a changed constant fails here.
+    expect([SPENDING_MIN_DAYS, SPENDING_MAX_DAYS]).toEqual([56, 91])
     // A job that started a week ago still looks back eight weeks.
     expect(spendingWindow(TODAY, '2026-11-12', '2025-01-01')).toEqual({
-      start: addDays(TODAY, -SPENDING_MIN_DAYS),
-      days: SPENDING_MIN_DAYS,
+      start: addDays(TODAY, -56),
+      days: 56,
     })
+    // So does one that started 40 days ago.
+    expect(spendingWindow(TODAY, addDays(TODAY, -40), '2025-01-01')!.days).toBe(56)
     // One that started 70 days ago looks back to its first paycheck.
     expect(spendingWindow(TODAY, addDays(TODAY, -70), '2025-01-01')).toEqual({
       start: addDays(TODAY, -70),

@@ -14,8 +14,9 @@
 //   never lowers spending or makes it negative (the budget still nets them,
 //   as sumTotals does);
 // - any other unfiled deposit counts as money in, but in unfiledInCents, not
-//   incomeCents: pay is filed income only, so the savings rate agrees with
-//   the check-in, the profile and the agent. An unfiled refund lands here
+//   incomeCents, which is money filed as income. Neither is pay: the savings
+//   rate, the check-in, the profile and the agent read pay from paychecks
+//   alone (pay/current.ts). An unfiled refund lands here
 //   too, as money in, rather than lowering money out: matching it to a past
 //   purchase would be a guess, and counting it here counts it once.
 
