@@ -379,9 +379,10 @@ describe('a pension in the savings rate and the check-in', () => {
     await paid()
     await call('create_pension', { ...PERA, payCadence: 'month' })
     await call('save_paystub', { paystub: paystub('2026-04-15') })
-    const stale = payrollNote({ pension: true, plan: false, stalePlan: true })
+    const stale = payrollNote({ pension: true, plan: false, stalePlan: '457' })
+    // The paystub pays into a 457, so the note names a 457.
     expect(stale).toContain(
-      "Your newest paystub is over six months old, so your 401(k) isn't counted.",
+      "Your newest paystub is over six months old, so your 457 isn't counted.",
     )
     expect(countedNote((await profile()).savingsRate!)).toBe(stale)
     expect((await call('get_checkin')).savings).toMatchObject({

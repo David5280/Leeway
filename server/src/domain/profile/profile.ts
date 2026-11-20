@@ -172,8 +172,8 @@ export interface SavingsMeasuresInput {
   pensionMonthlyCents: number | null
   /** The 401(k), 457 or 403(b) a month the newest saved paystub shows, or null. */
   planMonthlyCents?: number | null
-  /** Whether the newest paystub shows a plan but is too old to count it. */
-  stalePlan?: boolean
+  /** The plan the newest paystub shows but is too old to count, by name, or null. */
+  stalePlan?: string | null
   monthly: MonthlyAverages
   /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
   billsMonthlyCents: number
@@ -196,7 +196,7 @@ export function savingsMeasures({
   contributions,
   pensionMonthlyCents,
   planMonthlyCents = null,
-  stalePlan = false,
+  stalePlan = null,
   monthly,
   billsMonthlyCents,
   settings,

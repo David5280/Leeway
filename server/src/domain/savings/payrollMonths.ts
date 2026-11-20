@@ -3,8 +3,8 @@
 //
 // A deduction counts only from when it is known to exist: a pension from when
 // the owner's service began (their years of service, back from when they last
-// checked them), a 401(k), 457 or 403(b) from the start of the year of the
-// paystub that shows it (its year-to-date figures show it ran all year). A
+// checked them), a 401(k), 457 or 403(b) from the first paycheck its
+// year-to-date total takes (planStart), within the paystub's year. A
 // pension with no years of service entered counts in every month, since the
 // owner said they pay in and nothing says since when. A paystub
 // older than PAYSTUB_FRESH_DAYS no longer says what pay takes now (a raise, a
@@ -17,9 +17,15 @@
 // before there is a finished month of pay to go by.
 
 import { addDays, type IsoDate } from '../../lib/dates.js'
-import type { Cadence } from '../../lib/periods.js'
+import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import type { MonthTotals } from '../monthlyTotals.js'
-import { planMonthlyCents, type Paystub } from '../paystubs/paystubs.js'
+import {
+  planMonthlyCents,
+  planName,
+  planPerPaycheckCents,
+  planYearToDateCents,
+  type Paystub,
+} from '../paystubs/paystubs.js'
 import { pensionPayIn, type Pension, type PensionPlan } from '../retirement/pensions.js'
 import type { PayrollKind } from './rate.js'
 
@@ -44,17 +50,19 @@ export function freshPaystub<P extends DatedPaystub>(paystub: P | null, today: I
 
 /**
  * What the newest paystub shows going into a 401(k), 457 or 403(b) a month,
- * counted only while it is recent, and whether an old one shows some that is
- * left out, so the owner can be told to save a newer one.
+ * counted only while it is recent, and the name of a plan an old one shows
+ * that is left out (null when none is), so the owner can be told to save a
+ * newer one.
  */
 export function paystubPlan(
   paystub: DatedPaystub | null,
   today: IsoDate,
-): { monthlyCents: number | null; stale: boolean } {
+): { monthlyCents: number | null; stale: string | null } {
   const fresh = freshPaystub(paystub, today)
+  const left = fresh === null && paystub !== null && planMonthlyCents(paystub) !== null
   return {
     monthlyCents: planMonthlyCents(fresh),
-    stale: fresh === null && planMonthlyCents(paystub) !== null,
+    stale: left ? planName(paystub) : null,
   }
 }
 
@@ -93,12 +101,24 @@ export function payrollStreams(
 }
 
 /**
- * When a plan a paystub shows is known to have run from: the first of that
- * paystub's year. Its year-to-date figures cover every paycheck since then, so
- * contributions were coming out all year, not only from the stub's own month.
+ * When a plan a paystub shows is known to have run from. Its year-to-date
+ * total is what every paycheck this year put in, so dividing it by one
+ * paycheck's share counts the paychecks it took, this one among them, and
+ * that many paychecks back (by the stub's cadence) is when it began: a plan
+ * joined in July counts from July, not from January. It never reaches back
+ * past the first of the stub's year, which the total starts from, and with no
+ * year-to-date total to go by it counts from there, as the total would.
  */
 export function planStart(paystub: DatedPaystub): IsoDate {
-  return `${paystubDate(paystub).slice(0, 4)}-01-01`
+  const date = paystubDate(paystub)
+  const yearStart = `${date.slice(0, 4)}-01-01`
+  const perPaycheck = planPerPaycheckCents(paystub)
+  const yearToDate = planYearToDateCents(paystub)
+  if (paystub.payCadence === null || perPaycheck <= 0 || !yearToDate) return yearStart
+  const paychecks = Math.ceil(yearToDate / perPaycheck)
+  const daysApart = DAYS_PER_YEAR / PER_YEAR[paystub.payCadence]
+  const first = addDays(date, -Math.round((paychecks - 1) * daysApart))
+  return first > yearStart ? first : yearStart
 }
 
 /** Which payroll deductions are counted anywhere, for the note beside the rate. */

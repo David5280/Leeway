@@ -96,7 +96,36 @@ export interface PaystubSaved {
 }
 
 /** The employee's own workplace plan contributions, which go into retirement savings. */
-const PLAN_FIELDS = ['plan401k', 'plan457', 'plan403b'] as const satisfies CurrentField[]
+export const PLAN_FIELDS = ['plan401k', 'plan457', 'plan403b'] as const satisfies CurrentField[]
+
+/** What one paycheck on this paystub put into a 401(k), 457 or 403(b), in all. */
+export function planPerPaycheckCents(paystub: Paystub): number {
+  return PLAN_FIELDS.reduce((sum, field) => sum + (paystub.current[field] ?? 0), 0)
+}
+
+/** The plan words for the one plan a paycheck pays into, as the owner knows it. */
+const PLAN_NAMES: Record<(typeof PLAN_FIELDS)[number], string> = {
+  plan401k: '401(k)',
+  plan457: '457',
+  plan403b: '403(b)',
+}
+
+/**
+ * The plan this paystub pays into, named as it is ("401(k)", "457" or
+ * "403(b)"), or "workplace plan" when it pays into more than one or none.
+ */
+export function planName(paystub: Paystub): string {
+  const paid = PLAN_FIELDS.filter((field) => (paystub.current[field] ?? 0) > 0)
+  return paid.length === 1 ? PLAN_NAMES[paid[0]!] : 'workplace plan'
+}
+
+/** What the paystub shows put into those plans so far this year, or null when it shows no such total. */
+export function planYearToDateCents(paystub: Paystub): number | null {
+  const shown = PLAN_FIELDS.map((field) => paystub.yearToDate[field]).filter(
+    (cents) => cents !== null,
+  )
+  return shown.length === 0 ? null : shown.reduce((sum, cents) => sum + cents, 0)
+}
 
 /** A share of gross pay in percent, to two places, as the pension form takes it. */
 function percentOfPay(cents: number, grossCents: number): number {
@@ -128,7 +157,7 @@ export function pensionPatchFrom(paystub: Paystub): PensionPlanPatch {
  */
 export function planMonthlyCents(paystub: Paystub | null): number | null {
   if (!paystub || paystub.payCadence === null) return null
-  const perPaycheck = PLAN_FIELDS.reduce((sum, field) => sum + (paystub.current[field] ?? 0), 0)
+  const perPaycheck = planPerPaycheckCents(paystub)
   if (perPaycheck <= 0) return null
   const monthly = convertCadence(perPaycheck, paystub.payCadence, 'month')
   return monthly > MAX_MONTHLY_CENTS ? null : monthly

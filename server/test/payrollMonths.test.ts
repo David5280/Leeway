@@ -16,6 +16,7 @@ import {
   runningPayShare,
   streamKinds,
 } from '../src/domain/savings/payrollMonths.js'
+import { planName } from '../src/domain/paystubs/paystubs.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
 
 const TODAY = '2026-11-17'
@@ -66,16 +67,69 @@ describe('a workplace plan on a paystub', () => {
     expect(planStart(saved(null, '2026-02-02T23:00:00.000Z'))).toBe('2026-01-01')
   })
 
+  /** A paystub paid on a day, showing what this year's paychecks put into its 457 so far. */
+  const withYearToDate = (payDate: string, plan457: number | null) => {
+    const stub = saved(payDate)
+    return { ...stub, yearToDate: { ...stub.yearToDate, plan457 } }
+  }
+
+  it('counts back the paychecks its year-to-date total took, so a July start counts from July', () => {
+    // $200 a paycheck, twice a month: $1,600 so far is eight paychecks, July 15 to October 31.
+    const october = withYearToDate('2026-10-31', 160_000)
+    expect(planStart(october)).toBe('2026-07-16')
+    const [plan] = payrollStreams([], 'month', october, TODAY)
+    expect(plan!.since).toBe('2026-07-16')
+    expect(
+      monthPayroll([plan!], month('2026-06-01', '2026-06-30', 400_000), 1).planCents,
+    ).toBeNull()
+    expect(monthPayroll([plan!], month('2026-07-01', '2026-07-31', 400_000), 1).planCents).toBe(
+      40000,
+    )
+  })
+
+  it('never reaches back past the start of the year, and goes there with no total to go by', () => {
+    // More than a year of paychecks in the total (a catch-up, say) still starts in January.
+    expect(planStart(withYearToDate('2026-10-31', 2_000_000))).toBe('2026-01-01')
+    expect(planStart(withYearToDate('2026-10-31', null))).toBe('2026-01-01')
+    expect(planStart(withYearToDate('2026-10-31', 0))).toBe('2026-01-01')
+    // Nor can one with nothing going into a plan on this paycheck.
+    const stopped = withYearToDate('2026-10-31', 160_000)
+    expect(planStart({ ...stopped, current: { ...stopped.current, plan457: null } })).toBe(
+      '2026-01-01',
+    )
+    // A paystub that does not say how often pay comes cannot be counted back.
+    expect(planStart({ ...withYearToDate('2026-10-31', 160_000), payCadence: null })).toBe(
+      '2026-01-01',
+    )
+  })
+
   it('counts while the paystub is recent, and says when an old one leaves a plan out', () => {
-    expect(paystubPlan(saved('2026-11-13'), TODAY)).toEqual({ monthlyCents: 40000, stale: false })
-    expect(paystubPlan(saved('2026-03-13'), TODAY)).toEqual({ monthlyCents: null, stale: true })
+    expect(paystubPlan(saved('2026-11-13'), TODAY)).toEqual({ monthlyCents: 40000, stale: null })
+    // Named as the paystub names it: this one pays into a 457.
+    expect(paystubPlan(saved('2026-03-13'), TODAY)).toEqual({ monthlyCents: null, stale: '457' })
     // An old paystub with no plan on it leaves nothing out.
     const noPlan = {
       ...saved('2026-03-13'),
       current: { ...saved('2026-03-13').current, plan457: null },
     }
-    expect(paystubPlan(noPlan, TODAY)).toEqual({ monthlyCents: null, stale: false })
-    expect(paystubPlan(null, TODAY)).toEqual({ monthlyCents: null, stale: false })
+    expect(paystubPlan(noPlan, TODAY)).toEqual({ monthlyCents: null, stale: null })
+    expect(paystubPlan(null, TODAY)).toEqual({ monthlyCents: null, stale: null })
+  })
+})
+
+describe('the name of a paystub’s plan', () => {
+  /** A paystub paying these into each plan this paycheck. */
+  const paying = (plan401k: number | null, plan457: number | null, plan403b: number | null) => {
+    const stub = confirmedPaystub()
+    return { ...stub, current: { ...stub.current, plan401k, plan457, plan403b } }
+  }
+
+  it('names the one plan pay goes into, and says workplace plan for several or none', () => {
+    expect(planName(paying(10_000, null, null))).toBe('401(k)')
+    expect(planName(paying(null, 10_000, null))).toBe('457')
+    expect(planName(paying(null, 0, 10_000))).toBe('403(b)')
+    expect(planName(paying(10_000, 5_000, null))).toBe('workplace plan')
+    expect(planName(paying(null, null, null))).toBe('workplace plan')
   })
 })
 
