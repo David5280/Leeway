@@ -24,6 +24,8 @@ describe('sameMerchant', () => {
         named('VISA PURCHASE SAFEWAY', 'Safeway'),
       ),
     ).toBe(false)
+    // The text alone would match, so only the merchant names keep these apart.
+    expect(sameMerchant(named('SHELL 0123', 'Shell'), named('SHELL 0456', 'Safeway'))).toBe(false)
   })
 
   it('matches on the text when a merchant name is missing', () => {
@@ -37,11 +39,22 @@ describe('sameMerchant', () => {
     expect(sameMerchant(named('PAYPAL *NETFLIX'), named('Netflix.com'))).toBe(true)
     expect(sameMerchant(named('SQ *BLUE BOTTLE'), named('SQ *CORNER BAKERY'))).toBe(false)
     expect(sameMerchant(named('POS WITHDRAWAL SHELL'), named('POS WITHDRAWAL SAFEWAY'))).toBe(false)
+    expect(sameMerchant(named('DEBIT PURCHASE SHELL'), named('DEBIT PURCHASE SAFEWAY'))).toBe(false)
+    expect(sameMerchant(named('DEBIT PURCHASE -VISA SHELL'), named('Shell'))).toBe(true)
+    expect(sameMerchant(named('ACH DEPOSIT ACME CORP PAYROLL'), named('ACME CORP'))).toBe(true)
   })
 
   it('never matches text with no readable name in it', () => {
     expect(sameMerchant(named('#1234'), named('#5678'))).toBe(false)
     expect(sameMerchant(named('#1234', '#1234'), named('#5678', '#5678'))).toBe(false)
     expect(sameMerchant(named('THE'), named('The'))).toBe(false)
+  })
+
+  it('never matches names that only say money moved', () => {
+    expect(
+      sameMerchant(named('ONLINE TRANSFER TO CHK 1234'), named('ONLINE TRANSFER TO SAV 5678')),
+    ).toBe(false)
+    expect(sameMerchant(named('PAYMENT THANK YOU'), named('AUTOPAY PAYMENT THANK YOU'))).toBe(false)
+    expect(sameMerchant(named('TRANSFER'), named('TRANSFER'))).toBe(false)
   })
 })

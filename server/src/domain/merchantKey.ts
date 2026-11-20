@@ -2,7 +2,12 @@
 // charges group together, a bill's pattern finds the payments and a pending
 // charge finds the one it became. Pure.
 
-import { cleanMerchantName, GENERIC_NAME, SMALL_WORDS, tidyMerchantName } from './merchantName.js'
+import {
+  cleanMerchantName,
+  namesNoMerchant,
+  SMALL_WORDS,
+  tidyMerchantName,
+} from './merchantName.js'
 
 /** What a charge is called: the bank's raw text, and the merchant's name when it gave one. */
 interface MerchantText {
@@ -31,10 +36,11 @@ export function textKey(text: string): string {
 
 /**
  * The first word of a readable name (merchantName.ts), with a leading small
- * word like "the" skipped; '' when the name says nothing ("Bank transaction").
+ * word like "the" skipped; '' when the name names no merchant ("Bank
+ * transaction", "Card payment", "Transfer to Savings").
  */
 function firstWord(name: string): string {
-  if (name === GENERIC_NAME) return ''
+  if (namesNoMerchant(name)) return ''
   return (
     textKey(name)
       .split(' ')
@@ -47,10 +53,20 @@ const givenWord = (tx: MerchantText) =>
   tx.merchantName ? firstWord(tidyMerchantName(tx.merchantName)) : ''
 
 /**
- * The first word of the raw text, cleaned as for display, so processor codes
- * and card wording are gone first: "POS PURCHASE SHELL" gives "shell".
+ * Card wording some banks put before the merchant, as in "DEBIT PURCHASE
+ * -VISA SHELL", taken off for matching only. The display cleaner leaves it,
+ * since there it would rename real merchants ("PURCHASE COLLEGE BURSAR") and
+ * change the names that rules and bills already match on. It comes off the
+ * cleaned name, after the cleaner has read ACH lines for their company.
  */
-const textWord = (tx: MerchantText) => firstWord(cleanMerchantName(tx.name))
+const CARD_WORDING = /^(?:(?:visa|debit|purchase|ach)\s+-?)+/i
+
+/**
+ * The first word of the raw text, cleaned as for display and without card
+ * wording, so processor codes are gone too: "SQ *BLUE BOTTLE" gives "blue".
+ */
+const textWord = (tx: MerchantText) =>
+  firstWord(cleanMerchantName(tx.name).replace(CARD_WORDING, ''))
 
 /**
  * Whether two charges read as the same merchant, by the first word of the
