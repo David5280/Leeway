@@ -238,6 +238,7 @@ describe('profileDigest', () => {
           projectedDate: null,
           onTrack: true,
           status: 'in_progress',
+          balanceAsOf: null,
         },
       ],
       userContext: ['I am saving for a sailboat.'],
@@ -308,6 +309,7 @@ describe('profileDigest', () => {
           projectedDate: null,
           onTrack: null,
           status: 'in_progress',
+          balanceAsOf: null,
         },
         {
           id: 'h',
@@ -322,6 +324,7 @@ describe('profileDigest', () => {
           projectedDate: '2027-09-01',
           onTrack: false,
           status: 'in_progress',
+          balanceAsOf: null,
         },
       ],
     })
@@ -393,9 +396,10 @@ describe('profileDigest', () => {
       expect(digest.length).toBeLessThan(2000)
     })
 
-    it('puts open goals before reached ones, and dated before undated', () => {
+    it('puts open goals before stale and reached ones, and dated before undated', () => {
       const order = nearestGoals([
         profileGoal({ id: 'reached', targetDate: '2026-12-01', status: 'reached' }),
+        profileGoal({ id: 'stale', targetDate: '2026-11-01', status: 'stale' }),
         profileGoal({ id: 'undated' }),
         profileGoal({ id: 'later', targetDate: '2027-06-01' }),
         profileGoal({ id: 'past', targetDate: '2026-10-01', status: 'past_due' }),
@@ -406,8 +410,23 @@ describe('profileDigest', () => {
         'later',
         'undated',
         'also undated',
+        'stale',
         'reached',
       ])
+    })
+
+    it('words a goal on an account no longer shared as of that day, with nothing to go', () => {
+      const stale = profileGoal({
+        name: 'House',
+        percent: 80,
+        remainingCents: 50_000,
+        targetDate: '2027-03-01',
+        status: 'stale',
+        balanceAsOf: '2026-11-10',
+      })
+      expect(goalsLine([stale])).toBe(
+        'Goals: House 80% as of Nov 10, its account is no longer shared.',
+      )
     })
   })
 })

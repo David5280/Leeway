@@ -97,30 +97,45 @@ function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string
 /** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
 export const DIGEST_GOALS = 5
 
+/** Open goals first, then stale ones (progress only known as of an earlier day), then reached. */
+const STANDING_ORDER: Record<ProfileGoal['status'], number> = {
+  in_progress: 0,
+  past_due: 0,
+  stale: 1,
+  reached: 2,
+}
+
 /**
- * Goals in the order they matter soonest: open ones before reached ones,
- * then by target date, with undated goals after dated ones. Stable, so ties
- * keep the order the goals came in.
+ * Goals in the order they matter soonest: open ones, then stale, then
+ * reached, each by target date with undated goals after dated ones. Stable,
+ * so ties keep the order the goals came in.
  */
 export function nearestGoals(goals: ProfileGoal[]): ProfileGoal[] {
-  const reached = (goal: ProfileGoal) => (goal.status === 'reached' ? 1 : 0)
+  const standing = (goal: ProfileGoal) => STANDING_ORDER[goal.status]
   const byDate = (a: IsoDate | null, b: IsoDate | null) => {
     if (a === b) return 0
     if (a === null || b === null) return a === null ? 1 : -1
     return a < b ? -1 : 1
   }
-  return [...goals].sort((a, b) => reached(a) - reached(b) || byDate(a.targetDate, b.targetDate))
+  return [...goals].sort((a, b) => standing(a) - standing(b) || byDate(a.targetDate, b.targetDate))
+}
+
+/** One goal in a few words. A stale balance is frozen, so it gets no amount to go or pace. */
+function goalWords(goal: ProfileGoal, money: Money, locale: string): string {
+  if (goal.status === 'stale') {
+    const asOf = shortDate(goal.balanceAsOf!, locale)
+    return `${goal.name} ${goal.percent}% as of ${asOf}, its account is no longer shared`
+  }
+  const by = goal.targetDate ? ` by ${shortDate(goal.targetDate, locale)}` : ''
+  const pace = paceWords(goal.onTrack)
+  return `${goal.name} ${goal.percent}% (${money(goal.remainingCents)} to go${by}${pace})`
 }
 
 function goalsLine({ goals, locale }: FinancialProfile, money: Money): string | null {
   if (goals.length === 0) return null
   const parts = nearestGoals(goals)
     .slice(0, DIGEST_GOALS)
-    .map((goal) => {
-      const by = goal.targetDate ? ` by ${shortDate(goal.targetDate, locale)}` : ''
-      const pace = paceWords(goal.onTrack)
-      return `${goal.name} ${goal.percent}% (${money(goal.remainingCents)} to go${by}${pace})`
-    })
+    .map((goal) => goalWords(goal, money, locale))
   const more = goals.length - parts.length
   const rest = more > 0 ? `; and ${more} more` : ''
   return `Goals: ${parts.join('; ')}${rest}.`
