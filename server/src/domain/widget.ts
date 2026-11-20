@@ -36,8 +36,10 @@ export type WidgetHeadline =
     }
   | {
       kind: 'until_payday'
-      /** Safe to spend until payday (see cashFlow.ts); negative by the shortfall when bills do not fit. */
+      /** Safe to spend until payday (see cashFlow.ts), never below zero, as the Overview shows it. */
       cents: number
+      /** How far the bills due by payday outrun the cash; 0 when they fit. */
+      shortfallCents: number
       perDayCents: number
       payday: IsoDate
     }
@@ -105,20 +107,22 @@ export function widgetSummary(sources: WidgetSources): WidgetSummary {
   }
 }
 
+/** The headline, read from what can be spent now (spendable.ts): the hero's figure and its money a day. */
 function headlineOf(budget: WithRoom<BudgetSummary>, cashFlow: CashFlow): WidgetHeadline {
-  if (budget.spendable?.limitedBy === 'budget') {
-    const { leewayCents, safePerDayCents } = budget.totals
+  const room = budget.spendable
+  if (room?.limitedBy === 'budget') {
     return {
       kind: 'leeway',
-      cents: leewayCents,
-      perDayCents: leewayCents > 0 ? safePerDayCents : null,
+      cents: room.leadCents,
+      perDayCents: room.leadCents > 0 ? room.perDayCents : null,
       daysLeft: budget.period.daysLeft + 1,
     }
   }
   return {
     kind: 'until_payday',
-    cents: cashFlow.shortfallCents > 0 ? -cashFlow.shortfallCents : cashFlow.safeCents,
-    perDayCents: cashFlow.perDayCents,
+    cents: cashFlow.safeCents,
+    shortfallCents: cashFlow.shortfallCents,
+    perDayCents: room?.perDayCents ?? cashFlow.perDayCents,
     payday: cashFlow.nextPayday,
   }
 }

@@ -115,6 +115,8 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
     safeCents: 144000,
     shortfallCents: 0,
     perDayCents: 14400,
+    // The Plan screen reads the cash alone; the budget's lead is the Overview's.
+    spendable: null,
     ...fields,
   }
 }

@@ -283,8 +283,9 @@ describe('can_i_afford', () => {
     await paidBiweekly(150000)
     expect(await call('can_i_afford', { amountCents: 10000 })).toEqual({
       verdict: 'yes',
-      reasons: ['It fits: $140 a day would be left until payday on 2026-11-27.'],
+      reasons: ['It fits: you would still have about $140 a day to spend.'],
       amountCents: 10000,
+      cashKnown: true,
       leftAfterBillsCents: 140000,
       goalsSetAsideCents: 0,
       perDayBeforeCents: 15000,
@@ -298,9 +299,7 @@ describe('can_i_afford', () => {
     await paidBiweekly(150000)
     const result = await call('can_i_afford', { amountCents: 100000 })
     expect(result).toMatchObject({ verdict: 'tight', perDayAfterCents: 5000 })
-    expect(result.reasons).toEqual([
-      'Spending money until payday would drop from $150 to $50 a day.',
-    ])
+    expect(result.reasons).toEqual(['What you can spend a day would drop from $150 to $50.'])
   })
 
   it('says no when the bills before payday would not be covered', async () => {
@@ -337,7 +336,10 @@ describe('can_i_afford', () => {
     await spend(accountId, 'Steakhouse', 50000, dining.id)
     const overall = await call('can_i_afford', { amountCents: 5000, categoryId: groceries.id })
     expect(overall).toMatchObject({ verdict: 'tight', categoryLeftCents: 45000 })
-    expect(overall.reasons).toEqual(['Budgets overall would go $30 over this period.'])
+    expect(overall.reasons).toEqual([
+      'Budgets overall would go $30 over this period.',
+      'What you can spend a day would drop from $1.42 to $0.',
+    ])
 
     // Without a category, only the cash and the overall room are weighed, unchanged by it.
     const loose = await call('can_i_afford', { amountCents: 5000 })
@@ -359,13 +361,17 @@ describe('can_i_afford', () => {
       setAside: true,
     })
     const result = await call('can_i_afford', { amountCents: 140000 })
+    // Nothing is budgeted, so a day's money is the cash's, as the hero says it.
     expect(result).toMatchObject({
       verdict: 'tight',
       goalsSetAsideCents: 16667,
-      perDayBeforeCents: 13333,
-      perDayAfterCents: 0,
+      perDayBeforeCents: 15000,
+      perDayAfterCents: 1000,
     })
-    expect(result.reasons).toEqual(['It would dip into the $166.67 set aside for Bike.'])
+    expect(result.reasons).toEqual([
+      'It would dip into the $166.67 set aside for Bike.',
+      'What you can spend a day would drop from $150 to $10.',
+    ])
   })
 
   it('says when a purchase fits the budgets only by using money set aside', async () => {
@@ -380,13 +386,16 @@ describe('can_i_afford', () => {
     // $100 held this month, of the $500 Fun budget.
     const one = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
     expect(one).toMatchObject({ verdict: 'tight', categoryLeftCents: 5000, budgetLeftCents: -5000 })
-    expect(one.reasons).toEqual(['It fits the budgets only by using the $100 set aside for Bike.'])
+    expect(one.reasons).toEqual([
+      'It fits the budgets only by using the $100 set aside for Bike.',
+      'What you can spend a day would drop from $28.57 to $0.',
+    ])
 
     await call('create_goal', { ...goal, name: 'Trip' })
     const two = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
-    expect(two.reasons).toEqual([
+    expect(two.reasons[0]).toBe(
       'It fits the budgets only by using the $200 set aside for your goals.',
-    ])
+    )
   })
 })
 

@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Checkin } from '../src/domain/checkin.js'
 import { formatCents } from '../src/lib/money.js'
-import {
-  MAX_POINTS,
-  plainSummary,
-  summaryFacts,
-  type SummaryText,
-} from '../src/domain/summaryText.js'
+import { summaryFacts } from '../src/domain/summaryFacts.js'
+import { MAX_POINTS, plainSummary, type SummaryText } from '../src/domain/summaryText.js'
 import { accountAlert, checkin, goal, type CheckinGoal as Goal } from './fixtures/checkin.js'
 
 const money = (cents: number) => formatCents(cents)
@@ -126,7 +122,7 @@ describe('the points', () => {
     })
   })
 
-  it('keeps the budget headline while it leads, and says an overdraft as a point', () => {
+  it('keeps the budget headline while it leads, leaving an overdraft to its own alert', () => {
     const cashFlow = {
       cashKnown: true,
       cashCents: 500000,
@@ -145,13 +141,15 @@ describe('the points', () => {
         perDayCents: 8571,
         payday: '2026-12-01',
         paydayEstimate: false,
-        note: 'An overdrawn account needs $50 to get back to zero.',
-        problem: true,
+        // The overdrawn account's alert says what it needs; the budget's figure carries no note.
+        note: null,
+        problem: false,
       },
     })
+    // No cash point either: checking covers the budget, so the cash is no second figure.
     expect(summarize(overdrawn)).toEqual({
       headline: "You're on track: $1,200 left, about $85.71 a day for 15 days.",
-      points: ['An overdrawn account needs $50 to get back to zero.'],
+      points: [],
     })
   })
 
@@ -320,6 +318,7 @@ describe('summaryFacts', () => {
           leadCents: 17800,
           limitedBy: 'cash',
           perDayCents: 1271,
+          cashKnown: true,
           payday: '2026-12-01',
           paydaySource: 'detected_income',
           paydayEstimate: false,
@@ -341,17 +340,24 @@ describe('summaryFacts', () => {
       today: 'Nov 17',
       period: { kind: 'month', ends: 'Nov 30', left: '$1,200', budgetRoomAfterGoals: '$1,200' },
       // The one figure for what can be spent, with the line that says why it is less than the budget.
-      safeToSpend: {
-        untilPayday: '$178',
+      spendNow: {
+        amount: '$178',
         perDay: '$12.71',
+        limitedBy: 'cash',
+        meaning: 'safe to spend from checking before payday on Dec 1, after bills',
+        checkingBalanceKnown: true,
+        note: 'Your budget has $1,200 left, but you have $178 you can safely spend before payday on Dec 1.',
+      },
+      // The cash behind it, as detail.
+      cashInChecking: {
+        safeToSpendBeforePayday: '$178',
         payday: 'Dec 1',
         paydayIsAnEstimate: false,
         noPaydayFoundSoPeriodEndUsed: false,
         cashInChecking: '$300',
-        billsDueBeforePayday: '$122',
+        billsDueByPayday: '$122',
         overdraftToBringBackToZero: '$0',
         shortfall: null,
-        note: 'Your budget has $1,200 left, but you have $178 you can safely spend before payday on Dec 1.',
       },
       typicalMonthlyPay: { amount: '$4,200', estimatedFromOnePaycheck: true },
       headsUp: [{ priority: 'soon', message: 'Rent is due' }],
@@ -360,8 +366,46 @@ describe('summaryFacts', () => {
       netWorthChangeLast30Days: '$0',
     })
     expect(JSON.stringify(facts)).not.toContain('list_bills')
-    // Without a checking balance the cash is unknown, so there is no figure to quote.
-    expect(summaryFacts(checkin(), monthly, money).safeToSpend).toBeNull()
+    // Without a checking balance or a budget there is no figure to quote.
+    expect(summaryFacts(checkin(), monthly, money)).toMatchObject({
+      spendNow: null,
+      cashInChecking: null,
+    })
+  })
+
+  it('gives an AI the budget as the figure to quote while the budget leads, the cash as detail', () => {
+    const facts = summaryFacts(
+      checkin({
+        budget: { leewayCents: 50000, safePerDayCents: 3571 },
+        cashFlow: { cashKnown: true, cashCents: 200000, safeCents: 200000, perDayCents: 14285 },
+        spendable: {
+          safeCents: 200000,
+          shortfallCents: 0,
+          overdraftCents: 0,
+          budgetLeftCents: 50000,
+          leadCents: 50000,
+          limitedBy: 'budget',
+          perDayCents: 3571,
+          cashKnown: true,
+          payday: '2026-12-01',
+          paydaySource: 'period_end',
+          paydayEstimate: false,
+          note: null,
+          problem: false,
+        },
+      }),
+      monthly,
+      money,
+    )
+    expect(facts.spendNow).toEqual({
+      amount: '$500',
+      perDay: '$35.71',
+      limitedBy: 'budget',
+      meaning: 'left in the budgets after goals, which checking covers',
+      checkingBalanceKnown: true,
+      note: null,
+    })
+    expect(facts.cashInChecking?.safeToSpendBeforePayday).toBe('$2,000')
   })
 
   it('gives an AI savings at a glance, with unknowns left null rather than zero', () => {

@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest'
 import type { BudgetSummary } from '../src/domain/budget.js'
 import { checkingCash, safeToSpend, type BillDue } from '../src/domain/cashFlow.js'
 import type { Payday } from '../src/domain/pay/payday.js'
-import { spendable, untilWords } from '../src/domain/spendable.js'
+import { withRoom } from '../src/domain/budgetRoom.js'
+import { settingsSchema } from '../src/domain/settings.js'
+import { dailyRoom, spendable, untilWords } from '../src/domain/spendable.js'
 import { formatCents } from '../src/lib/money.js'
 
 const TODAY = '2026-11-17'
@@ -162,12 +164,13 @@ describe('spendable', () => {
       problem: true,
       note: 'Your budget has $1,404 left, but you have $128 you can safely spend before payday on Nov 30. That is after $50 to bring an overdraft back to zero.',
     })
-    // The budget leads, but an overdraft is still red, so the note says why.
+    // The budget leads and checking covers it: the overdrawn account's own
+    // alert says what it needs, so the budget's figure carries no red line.
     expect(room(10_000, overdrawn)).toMatchObject({
       leadCents: 10_000,
       limitedBy: 'budget',
-      problem: true,
-      note: 'An overdrawn account needs $50 to get back to zero.',
+      problem: false,
+      note: null,
     })
     const short = safeToSpend([everyday], [bill('Rent', '2026-11-20', 30_000)], payday(), TODAY)
     expect(room(140_400, short)).toMatchObject({
@@ -208,5 +211,27 @@ describe('spendable', () => {
       note: null,
       problem: false,
     })
+  })
+
+  it('reads a day as the lesser of the budget and the cash, or whichever is known', () => {
+    expect(dailyRoom({ cents: 13_000, days: 13 }, { cents: 5_500, days: 11 })).toBe(500)
+    expect(dailyRoom(null, { cents: 5_500, days: 11 })).toBe(500)
+    expect(dailyRoom({ cents: 13_000, days: 13 }, null)).toBe(1_000)
+    // Never below zero, and nothing to go by is nothing a day.
+    expect(dailyRoom({ cents: -2_000, days: 4 }, null)).toBe(0)
+    expect(dailyRoom(null, null)).toBe(0)
+  })
+})
+
+describe('withRoom', () => {
+  it('says the budget is left after goals, in whole dollars as the hero shows it', () => {
+    const summary = {
+      period: { offset: 0, daysLeft: 12 },
+      totals: { budgetedCents: 300_000, setAsideCents: 20_000, leewayCents: 140_420 },
+    } as BudgetSummary
+    const flow = safeToSpend([everyday], [], payday(), TODAY)
+    expect(withRoom(summary, flow, settingsSchema.parse({})).spendable!.note).toBe(
+      'Your budget has $1,404 left after goals, but you have $178 you can safely spend before payday on Nov 30.',
+    )
   })
 })

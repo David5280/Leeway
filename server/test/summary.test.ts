@@ -4,7 +4,8 @@ import { findAction } from '../src/actions/index.js'
 import { AiProviderError } from '../src/ai/provider.js'
 import { AiLimitError } from '../src/domain/ai/gateway.js'
 import { RETRY_AFTER_MINUTES, REUSE_HOURS } from '../src/domain/summary.js'
-import type { SummaryFacts, SummaryText } from '../src/domain/summaryText.js'
+import type { SummaryFacts } from '../src/domain/summaryFacts.js'
+import type { SummaryText } from '../src/domain/summaryText.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,

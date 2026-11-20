@@ -210,23 +210,37 @@ describe('what the widget says', () => {
     })
   })
 
-  it('leads with cash until payday before any budget is set, "short" in red when bills do not fit', () => {
-    const until = (cents: number) =>
+  it('leads with cash until payday before any budget is set, $0 in red when bills do not fit', () => {
+    const until = (cents: number, shortfallCents: number) =>
       widgetSummary({
-        headline: { kind: 'until_payday', cents, perDayCents: 2_000, payday: '2026-11-28' },
+        headline: {
+          kind: 'until_payday',
+          cents,
+          shortfallCents,
+          perDayCents: 2_000,
+          payday: '2026-11-28',
+        },
       })
-    expect(headlineOf(until(22_000))).toEqual({
+    expect(headlineOf(until(22_000, 0))).toEqual({
       label: 'Until payday',
       value: '$220',
       tone: 'ink',
       note: 'About $20 a day until Nov 28',
     })
-    expect(headlineOf(until(-4_000))).toEqual({
+    // $0, as the Overview shows it, with the shortfall on its own line.
+    expect(headlineOf(until(0, 4_000))).toEqual({
       label: 'Until payday',
-      value: '$40 short',
+      value: '$0',
       tone: 'over',
-      note: 'Bills due before Nov 28 are more than your cash',
+      note: '$40 short of bills due by Nov 28',
     })
+  })
+
+  it('reads an older server that sent a shortfall as a negative figure', () => {
+    const older = widgetSummary({
+      headline: { kind: 'until_payday', cents: -4_000, perDayCents: 0, payday: '2026-11-28' },
+    } as never)
+    expect(headlineOf(older)).toMatchObject({ value: '$0', tone: 'over' })
   })
 
   it('lists budget left, net worth and the next bill', () => {

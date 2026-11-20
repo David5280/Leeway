@@ -27,7 +27,7 @@ import {
   settingsSchema,
 } from '../../../server/src/domain/settings'
 import { weeklyEmailPatchSchema } from '../../../server/src/domain/weeklyEmail/store'
-import { formatCents } from '../../../server/src/lib/money'
+import { formatCents, formatWholeCents } from '../../../server/src/lib/money'
 import { periodContaining } from '../../../server/src/lib/periods'
 import type { Account, AccountAlert, AccountsView, Budget, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
@@ -331,7 +331,8 @@ export function heldToCash(budget: Budget, availableCents: number, bills: number
     payday,
     '2026-11-17',
   )
-  const room = spendable(budget, flow, (cents) => formatCents(cents), 'en-US')
+  // Whole dollars, as the server's budgetRoom.ts words the note.
+  const room = spendable(budget, flow, (cents) => formatWholeCents(cents), 'en-US')
   return { ...withSafePerDay(budget, room), spendable: room }
 }
 

@@ -1,7 +1,7 @@
 // Actions for the bigger picture: net worth, debt payoff and cash until payday.
 
 import { z } from 'zod'
-import { getCashFlow } from '../domain/cashFlow.js'
+import { budgetSummaryWithRoom } from '../domain/budgetRoom.js'
 import { debtPlans } from '../domain/debts.js'
 import { getNetWorth } from '../domain/netWorth.js'
 import { recentBalances } from '../domain/recentBalances.js'
@@ -45,12 +45,13 @@ export const getCashFlowAction = defineAction({
   name: 'get_cash_flow',
   title: 'Get cash until payday',
   description:
-    "Safe to spend until payday, the one figure every screen and summary uses: cash in counted checking accounts (available balance where known, else balance; savings, investments and retirement are left out), less every unpaid bill due by the next payday (one due on payday itself included, and an overdue one), less what an overdrawn account needs to get back to zero (overdraftCents). safeCents is never below zero; shortfallCents says how far the bills and overdrafts outrun the cash. perDayCents is safeCents per day until payday, counting today. paydaySource says where the payday came from: the paycheck budget period (exact), the current employer's paychecks (detected_income, with expectedPayCents; paydayEstimate is true while one paycheck is all there is), or the end of the budget period when no employer is paying yet. Spending from the budget is not subtracted; get_budget's spendable holds the budget to this figure. Amounts are in cents.",
+    "Safe to spend until payday, the one figure every screen and summary uses: cash in counted checking accounts (available balance where known, else balance; savings, investments and retirement are left out), less every unpaid bill due by the next payday (one due on payday itself included, and an overdue one), less what an overdrawn account needs to get back to zero (overdraftCents). safeCents is never below zero; shortfallCents says how far the bills and overdrafts outrun the cash. perDayCents is safeCents per day until payday, counting today. paydaySource says where the payday came from: the paycheck budget period (exact), the soonest paycheck from an employer paying now (detected_income, with expectedPayCents; paydayEstimate is true while an employer has paid only once), or the end of the budget period when no employer is paying yet. Spending from the budget is not subtracted. spendable is get_budget's: the budget's room held to this figure, leadCents and perDayCents being what the owner's dashboard leads with and what to quote. Amounts are in cents.",
   input: z.object({}),
   scope: 'read',
   surface: 'all',
   run: async (ctx) => {
-    const { settings, today: date } = await settingsAndToday(ctx)
-    return getCashFlow(ctx.db, settings, date)
+    const { settings } = await settingsAndToday(ctx)
+    const { budget, cashFlow } = await budgetSummaryWithRoom(ctx.db, settings, ctx.now())
+    return { ...cashFlow, spendable: budget.spendable }
   },
 })

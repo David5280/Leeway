@@ -282,8 +282,8 @@ function paletteFor(appearance) {
 function headlineOf(summary) {
   const { headline, locale } = summary
   const amount = money(Math.abs(headline.cents), summary)
-  const short = headline.cents < 0
   if (headline.kind === 'leeway') {
+    const short = headline.cents < 0
     const perDay = headline.perDayCents
     return {
       label: 'Safe to spend',
@@ -296,13 +296,17 @@ function headlineOf(summary) {
     }
   }
   const payday = shortDate(headline.payday, locale)
+  // The figure is never below zero, as on the Overview; how far bills outrun
+  // the cash is its own line. An older server sent the shortfall as a negative figure.
+  const shortfall = headline.shortfallCents ?? Math.max(0, -headline.cents)
   return {
     label: 'Until payday',
-    value: short ? `${amount} short` : amount,
-    tone: short ? 'over' : 'ink',
-    note: short
-      ? `Bills due before ${payday} are more than your cash`
-      : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
+    value: money(Math.max(0, headline.cents), summary),
+    tone: shortfall > 0 ? 'over' : 'ink',
+    note:
+      shortfall > 0
+        ? `${money(shortfall, summary)} short of bills due by ${payday}`
+        : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
   }
 }
 

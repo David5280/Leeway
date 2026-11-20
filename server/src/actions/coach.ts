@@ -2,8 +2,8 @@
 
 import { z } from 'zod'
 import { affordability } from '../domain/afford.js'
-import { budgetSummary, recentSurplus } from '../domain/budgetReport.js'
-import { getCashFlow } from '../domain/cashFlow.js'
+import { recentSurplus } from '../domain/budgetReport.js'
+import { budgetSummaryWithRoom } from '../domain/budgetRoom.js'
 import { getCheckin } from '../domain/checkin.js'
 import { listGoals } from '../domain/goals.js'
 import { planPurchase } from '../domain/purchasePlan.js'
@@ -22,22 +22,24 @@ const purchaseInput = z.object({
 async function checkToday(
   ctx: AppContext,
   settings: Settings,
-  today: string,
   { amountCents, categoryId }: z.output<typeof purchaseInput>,
 ) {
-  const [cashFlow, budget] = await Promise.all([
-    getCashFlow(ctx.db, settings, today),
-    budgetSummary(ctx.db, settings, ctx.now()),
-  ])
+  // The budget with what can be spent now beside it, as the Overview's hero reads it.
+  const { budget, cashFlow } = await budgetSummaryWithRoom(ctx.db, settings, ctx.now())
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
-  return affordability(amountCents, cashFlow, budget, categoryId, money)
+  return affordability(
+    amountCents,
+    { cashFlow, budget, room: budget.spendable! },
+    categoryId,
+    money,
+  )
 }
 
 export const getCheckinAction = defineAction({
   name: 'get_checkin',
   title: 'Money check-in',
   description:
-    'Everything a coach needs in one call: the attention list (priority now, soon or fyi, each with a plain message and the tool that shows more), this budget period, safe to spend until payday (cashFlow.safeCents: available cash in checking less bills before payday and any overdraft, never below zero, with shortfallCents), spendable (the budget room held to that cash, with the one note the owner sees when they differ: quote leadCents, not the budget room), pay (a typical month from the paychecks from the current employer, estimate true while there is only one), bills, goals, debts (avalanche plan with no extra payment), the net worth change over 30 days and a savings glance (total saved and invested, its change this month, emergency fund months, bankSeenSavingsRatePercent, payrollIncludedSavingsRatePercent and pension, or null with neither savings accounts nor a pension). bankSeenSavingsRatePercent counts only money moved through the bank, never payroll deductions such as a pension or a 401(k), so never say it is too little. payrollIncludedSavingsRatePercent adds the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) a paystub from the last six months shows), and is null without any. savingsRateNote says what the rate counts in the words the owner sees beside it, including when an old paystub leaves a 401(k) out. pension (null without one) gives how many are recorded and, where known, what the owner and the employer pay in a month. A pension is retirement saving: never call someone with one under-saving for retirement for putting little or nothing in a 401(k), IRA or brokerage account. Start any check-in or open question about money here. Amounts are in cents.',
+    'Everything a coach needs in one call: the attention list (priority now, soon or fyi, each with a plain message and the tool that shows more), this budget period, safe to spend until payday (cashFlow.safeCents: available cash in checking less bills before payday and any overdraft, never below zero, with shortfallCents), spendable (the budget room held to that cash, with the one note the owner sees when they differ: quote leadCents and perDayCents, the figures the dashboard leads with, never the budget room or cashFlow.safeCents on their own), pay (a typical month from the paychecks of every employer paying now, estimate true while any has paid only once), bills, goals, debts (avalanche plan with no extra payment), the net worth change over 30 days and a savings glance (total saved and invested, its change this month, emergency fund months, bankSeenSavingsRatePercent, payrollIncludedSavingsRatePercent and pension, or null with neither savings accounts nor a pension). bankSeenSavingsRatePercent counts only money moved through the bank, never payroll deductions such as a pension or a 401(k), so never say it is too little. payrollIncludedSavingsRatePercent adds the payroll deductions Leeway knows (pension contributions the owner entered, and the 401(k), 457 or 403(b) a paystub from the last six months shows), and is null without any. savingsRateNote says what the rate counts in the words the owner sees beside it, including when an old paystub leaves a 401(k) out. pension (null without one) gives how many are recorded and, where known, what the owner and the employer pay in a month. A pension is retirement saving: never call someone with one under-saving for retirement for putting little or nothing in a 401(k), IRA or brokerage account. Start any check-in or open question about money here. Amounts are in cents.',
   input: z.object({}),
   scope: 'read',
   surface: 'all',
@@ -51,13 +53,13 @@ export const canIAffordAction = defineAction({
   name: 'can_i_afford',
   title: 'Can I afford this?',
   description:
-    'Checks a purchase made today against what is safe to spend until payday (cash in checking after the bills due before it and any overdraft), the budget, and what goals set aside from the budget hold back. verdict is "yes", "tight" (fits, but pushes a budget over, dips into money held for goals, or halves the money left per day) or "no" (the bills before payday would not be covered). Give categoryId to check that category\'s budget too. reasons explain the verdict in plain words. For "when could I afford it?", use when_can_i_afford. Nothing is bought or recorded.',
+    'Checks a purchase made today against what is safe to spend until payday (cash in checking after the bills due by then and any overdraft), the budget, and what goals set aside from the budget hold back. verdict is "yes", "tight" (fits, but pushes a budget over, dips into money held for goals, or more than halves what can be spent a day) or "no" (the bills due by payday would not be covered). perDayBeforeCents is get_budget\'s spendable.perDayCents, the figure the owner sees, and perDayAfterCents the same once this is bought. With no checking balance (cashKnown false) only the budget is weighed, leftAfterBillsCents is null and the reasons say so. Give categoryId to check that category\'s budget too. reasons explain the verdict in plain words. For "when could I afford it?", use when_can_i_afford. Nothing is bought or recorded.',
   input: purchaseInput,
   scope: 'read',
   surface: 'all',
   run: async (ctx, input) => {
-    const { settings, today } = await settingsAndToday(ctx)
-    return checkToday(ctx, settings, today, input)
+    const { settings } = await settingsAndToday(ctx)
+    return checkToday(ctx, settings, input)
   },
 })
 
@@ -76,7 +78,7 @@ export const whenCanIAffordAction = defineAction({
     const { settings, today } = await settingsAndToday(ctx)
     const config = periodConfig(settings)
     const [check, surplus, goals] = await Promise.all([
-      checkToday(ctx, settings, today, input),
+      checkToday(ctx, settings, input),
       recentSurplus(ctx.db, settings, ctx.now()),
       listGoals(ctx.db, { today, period: config }),
     ])

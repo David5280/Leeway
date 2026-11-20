@@ -17,6 +17,7 @@ const SETTINGS = settingsSchema.parse({})
 function cash(fields: Partial<CashFlow> = {}): CashFlow {
   return {
     nextPayday: '2026-11-28',
+    daysUntilPayday: 11,
     cashKnown: true,
     paydaySource: 'detected_income',
     paydayEstimate: false,
@@ -68,14 +69,31 @@ describe('widgetSummary', () => {
   it('leads with safe to spend a day while something is left, counting today', () => {
     const summary = widgetSummary(
       sources({
-        budget: budget({ budgetedCents: 90_000, leewayCents: 40_000, safePerDayCents: 3_000 }, 12),
+        budget: budget({ budgetedCents: 90_000, leewayCents: 40_000, safePerDayCents: 3_076 }, 12),
       }),
     )
+    // $400 over the 13 days left, counting today, as the Overview's hero reads it.
     expect(summary.headline).toEqual({
       kind: 'leeway',
       cents: 40_000,
-      perDayCents: 3_000,
+      perDayCents: 3_076,
       daysLeft: 13,
+    })
+  })
+
+  it("gives the hero's money a day when payday comes before the period ends", () => {
+    // $300 safe over 2 days is $150 a day, but the $1,000 budget over 13 days allows $76.
+    const cashFlow = cash({ safeCents: 30_000, daysUntilPayday: 2, perDayCents: 15_000 })
+    const summary = widgetSummary(
+      sources({
+        budget: budget({ budgetedCents: 300_000, leewayCents: 100_000 }, 12, cashFlow),
+        cashFlow,
+      }),
+    )
+    expect(summary.headline).toMatchObject({
+      kind: 'until_payday',
+      cents: 30_000,
+      perDayCents: 7_692,
     })
   })
 
@@ -103,15 +121,22 @@ describe('widgetSummary', () => {
     expect(summary.headline).toEqual({
       kind: 'until_payday',
       cents: 17_800,
+      shortfallCents: 0,
       perDayCents: 1_618,
       payday: '2026-11-28',
     })
   })
 
-  it('shows a shortfall as a negative amount, and falls back to cash with no budgets', () => {
+  it('shows $0 in a shortfall, as the hero does, with the shortfall apart', () => {
     const cashFlow = cash({ safeCents: 0, shortfallCents: 1_200, perDayCents: 0 })
     expect(widgetSummary(sources({ budget: budget({}, 12, cashFlow), cashFlow })).headline).toEqual(
-      { kind: 'until_payday', cents: -1_200, perDayCents: 0, payday: '2026-11-28' },
+      {
+        kind: 'until_payday',
+        cents: 0,
+        shortfallCents: 1_200,
+        perDayCents: 0,
+        payday: '2026-11-28',
+      },
     )
     expect(widgetSummary(sources()).headline.kind).toBe('until_payday')
     expect(widgetSummary(sources()).budgetLeftCents).toBeNull()

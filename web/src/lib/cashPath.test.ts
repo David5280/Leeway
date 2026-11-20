@@ -27,6 +27,7 @@ const flow = (cashCents: number, billsDue: CashFlow['billsDue']): CashFlow => ({
   safeCents: cashCents,
   shortfallCents: 0,
   perDayCents: 0,
+  spendable: null,
 })
 
 describe('cashPath', () => {

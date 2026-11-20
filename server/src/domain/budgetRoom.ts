@@ -3,7 +3,7 @@
 // Budgets, the widget, the check-in and the get_budget action.
 
 import type { Db } from '../db/pool.js'
-import { formatCents } from '../lib/money.js'
+import { formatWholeCents } from '../lib/money.js'
 import type { BudgetSummary } from './budget.js'
 import { budgetReport, budgetSummary, currentPeriod, type BudgetReport } from './budgetReport.js'
 import { getCashFlow, type CashFlow } from './cashFlow.js'
@@ -20,7 +20,8 @@ export function withRoom<B extends BudgetSummary>(
   settings: Settings,
 ): WithRoom<B> {
   if (cashFlow === null || budget.period.offset !== 0) return { ...budget, spendable: null }
-  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
+  // Whole dollars, as the Overview's hero and the summary say the same figure.
+  const money = (cents: number) => formatWholeCents(cents, settings.currency, settings.locale)
   const room = spendable(budget, cashFlow, money, settings.locale)
   return { ...withSafePerDay(budget, room), spendable: room }
 }
