@@ -338,6 +338,20 @@ describe('large charges', () => {
     expect(after).toEqual([{ subject: other, push_state: 'sent' }])
   })
 
+  it('leaves every notification as it was when no charge changed its id', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await charge(accountId)
+    await refreshInbox(ctx)
+    const kept = async () =>
+      (await ctx.db.query(`SELECT subject, push_state FROM notifications ORDER BY subject`)).rows
+    const before = await kept()
+    await moveSubjects(ctx.db, 'large_transaction', [])
+    await moveSubjects(ctx.db, 'large_transaction', [
+      { from: before[0]!.subject, to: before[0]!.subject },
+    ])
+    expect(await kept()).toEqual(before)
+  })
+
   it('leaves out old history, hidden accounts, hidden or imported charges, and transfers', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
     const { accountId: hidden } = await insertBankAccount(ctx.db, { hidden: true })
