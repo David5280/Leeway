@@ -122,7 +122,8 @@ export function Segmented<T extends string>({
   label,
 }: {
   value: T
-  options: readonly { value: T; label: string }[]
+  /** An option marked disabled shows but cannot be picked, like a range with nothing more to show. */
+  options: readonly { value: T; label: string; disabled?: boolean }[]
   onChange: (value: T) => void
   label: string
 }) {
@@ -136,6 +137,7 @@ export function Segmented<T extends string>({
           key={option.value}
           type="button"
           aria-pressed={option.value === value}
+          disabled={option.disabled}
           onClick={() => onChange(option.value)}
         >
           {option.label}

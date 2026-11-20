@@ -199,12 +199,21 @@ describe('Net worth widget', () => {
         liabilitiesCents: 0,
         netWorthCents: 300000,
         history: [worthPoint('2025-12-01', 500000), worthPoint('2026-11-17', 300000)],
+        historyStart: '2024-01-01',
+        estimatedBefore: '2026-11-17',
       }),
     })
     renderSignedIn(<NetWorthWidget />)
     const line = await screen.findByText(/^Down/)
     expect(line).toHaveTextContent('Down $2,000 since Dec 2025')
     expect(within(line).getByText('$2,000')).toHaveClass('money-problem')
+    // The part rebuilt from transactions says so, in a muted line and in the chart's words.
+    expect(screen.getByText('Before Nov 17, 2026, estimated from transactions.')).toHaveClass(
+      'muted',
+    )
+    expect(
+      screen.getByRole('img', { name: 'Net worth over the last year' }),
+    ).toHaveAccessibleDescription(/estimated from transactions\.$/)
   })
 
   it('shows why net worth could not be read', async () => {

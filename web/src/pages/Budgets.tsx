@@ -57,17 +57,18 @@ export function Budgets() {
         </div>
       </div>
 
-      <div className="grid">
+      <div className="grid summary-row">
         <Card static="pending" className="span-4 stack-sm" label="Budgeted">
           <span className="eyebrow">Budgeted</span>
           <Money cents={b.totals.budgetedCents} className="mid-number" />
         </Card>
-        <Card static="pending" className="span-4 row-between" label="Spent">
-          <div className="stack-sm">
-            <span className="eyebrow">Spent in budgets</span>
+        <Card static="pending" className="span-4 stack-sm" label="Spent">
+          <span className="eyebrow">Spent in budgets</span>
+          {/* The ring sits beside the figure at its height, so this card is no taller than the others. */}
+          <div className="figure-ring">
             <Money cents={b.totals.budgetedSpentCents} className="mid-number" />
+            <BudgetsUsed totals={b.totals} />
           </div>
-          <BudgetsUsed totals={b.totals} />
         </Card>
         <Card static="pending" className="span-4 stack-sm" label="Left">
           <span className="eyebrow">Left</span>
@@ -152,12 +153,16 @@ export function Budgets() {
 }
 
 /** How much of everything budgeted is spent, as a ring; nothing until a budget is set. */
+/** A ring's size beside a mid-size figure: under its line (30px type, about 43px tall). */
+const FIGURE_HEIGHT = 40
+
 function BudgetsUsed({ totals }: { totals: Budget['totals'] }) {
   if (totals.budgetedCents <= 0) return null
   const percent = (totals.budgetedSpentCents / totals.budgetedCents) * 100
   return (
     <ProgressRing
       label="Budgets used"
+      size={FIGURE_HEIGHT}
       percent={percent}
       status={totals.budgetedSpentCents > totals.budgetedCents ? 'over' : 'ok'}
     />

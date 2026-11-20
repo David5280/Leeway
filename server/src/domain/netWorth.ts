@@ -5,7 +5,14 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
-import { LIABILITY_TYPES, type AccountType } from './accounts.js'
+import { LIABILITY_TYPES } from './accounts.js'
+import {
+  historyStart,
+  rebuildable,
+  rebuildBalances,
+  type PostedMovement,
+  type RebuildAccount,
+} from './netWorthRebuild.js'
 
 export interface BalanceSnapshot {
   accountId: string
@@ -29,6 +36,10 @@ export interface NetWorth {
   netWorthCents: number
   /** One point per day a balance changed, oldest first. */
   history: NetWorthPoint[]
+  /** The first day history can reach, or null before any balance is known. */
+  historyStart: IsoDate | null
+  /** Points before this day are estimated (see netWorthRebuild.ts); null when none are. */
+  estimatedBefore: IsoDate | null
 }
 
 /** What is owned and what is owed, each never below zero. */
@@ -81,15 +92,21 @@ export function netWorthSeries(
  * Current net worth from counted accounts, and its history over the last
  * `days`. Hidden accounts and ones the bank no longer shares are left out:
  * nothing keeps the balance of an unshared one current (unshared.ts).
+ *
+ * With `estimate`, history reaches back before balances were first recorded
+ * (netWorthRebuild.ts), for a chart over a range. Without it, history is
+ * recorded balances only, for a change stated as a plain fact (the check-in,
+ * the home screen widget).
  */
-export async function getNetWorth(db: Db, today: IsoDate, days: number): Promise<NetWorth> {
-  const { rows: accounts } = await db.query<{
-    id: string
-    type: AccountType
-    balanceCents: number | null
-  }>(
-    `SELECT id, type, balance_cents AS "balanceCents" FROM accounts
-     WHERE NOT hidden AND unshared_at IS NULL`,
+export async function getNetWorth(
+  db: Db,
+  today: IsoDate,
+  days: number,
+  { estimate = false }: { estimate?: boolean } = {},
+): Promise<NetWorth> {
+  const { rows: accounts } = await db.query<RebuildAccount & { balanceCents: number | null }>(
+    `SELECT id, type, balance_cents AS "balanceCents", connection_id IS NOT NULL AS banked
+     FROM accounts WHERE NOT hidden AND unshared_at IS NULL`,
   )
   const liabilities = new Set(
     accounts.filter((a) => LIABILITY_TYPES.includes(a.type)).map((a) => a.id),
@@ -101,16 +118,45 @@ export async function getNetWorth(db: Db, today: IsoDate, days: number): Promise
   }
   const { assetsCents, liabilitiesCents } = totals
 
-  const { rows: snapshots } = await db.query<BalanceSnapshot>(
+  const { rows: real } = await db.query<BalanceSnapshot>(
     `SELECT h.account_id AS "accountId", h.day, h.balance_cents AS "balanceCents"
      FROM balance_history h JOIN accounts a ON a.id = h.account_id
      WHERE NOT a.hidden AND a.unshared_at IS NULL AND h.day <= $1`,
     [today],
   )
+  const movements = estimate ? await postedMovements(db, accounts, today) : []
+  const start = historyStart(real, movements)
+  const from = addDays(today, -days)
+  const rebuilt = estimate
+    ? rebuildBalances(accounts, real, movements, start !== null && start > from ? start : from)
+    : { snapshots: [], estimatedBefore: null }
+  const history = netWorthSeries([...real, ...rebuilt.snapshots], liabilities, from, today)
   return {
     assetsCents,
     liabilitiesCents,
     netWorthCents: assetsCents - liabilitiesCents,
-    history: netWorthSeries(snapshots, liabilities, addDays(today, -days), today),
+    history,
+    historyStart: start,
+    // Only when the history shown reaches into the estimate.
+    estimatedBefore:
+      rebuilt.estimatedBefore !== null && (history[0]?.date ?? today) < rebuilt.estimatedBefore
+        ? rebuilt.estimatedBefore
+        : null,
   }
+}
+
+/** Posted transactions on the accounts whose past balances they can rebuild, up to today. */
+async function postedMovements(
+  db: Db,
+  accounts: RebuildAccount[],
+  today: IsoDate,
+): Promise<PostedMovement[]> {
+  const ids = accounts.filter(rebuildable).map((account) => account.id)
+  // As totals read them: none left out (a duplicate, say), and none still pending.
+  const { rows } = await db.query<PostedMovement>(
+    `SELECT account_id AS "accountId", date, amount_cents AS "amountCents" FROM transactions
+     WHERE account_id = ANY($1::uuid[]) AND NOT pending AND NOT excluded AND date <= $2`,
+    [ids, today],
+  )
+  return rows
 }

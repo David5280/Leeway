@@ -36,6 +36,19 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Pixel 7'], storageState: 'e2e/.auth/owner.json' },
     },
+    // Layout that has differed between engines, checked in Safari's too. Only
+    // these specs run here, so the suite takes about as long as before. A
+    // machine without WebKit installed can leave it out with E2E_WEBKIT=0.
+    ...(process.env.E2E_WEBKIT === '0'
+      ? []
+      : [
+          {
+            name: 'webkit',
+            testMatch: /switch-layout\.spec\.ts/,
+            dependencies: ['setup'],
+            use: { ...devices['Desktop Safari'], storageState: 'e2e/.auth/owner.json' },
+          },
+        ]),
   ],
   webServer: {
     command: 'node e2e/start-server.mjs',

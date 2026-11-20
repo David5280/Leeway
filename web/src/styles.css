@@ -239,6 +239,20 @@ h2 {
   grid-column: span 12;
 }
 
+/* A row of summary cards (Budgeted, Spent, Left): each card as tall as the
+   tallest, so the row lines up with no dead space under a short one. */
+.grid.summary-row {
+  align-items: stretch;
+}
+
+/* A figure with its ring beside it, the ring no taller than the figure. */
+.figure-ring {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .span-4 {
   grid-column: span 4;
 }
@@ -792,6 +806,12 @@ button.chip {
   cursor: pointer;
 }
 
+/* An option with nothing more to show (a range longer than the history). */
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 @media (pointer: coarse) {
   .seg button {
     min-height: 44px;
@@ -828,19 +848,30 @@ button.chip {
 }
 
 .switch {
-  /* The button is the pressable box; the track and knob are drawn inside it, so
-     on a touch screen the box grows to --tap (design.css) and the look stays. */
+  /* The button is the pressable box, 44px tall everywhere (Apple's smallest
+     comfortable tap); the 28px track and the knob are drawn centred inside
+     it. Every box property a browser may give a button is set here, so
+     WebKit and Chromium draw it the same. */
   position: relative;
+  box-sizing: border-box;
   width: 48px;
-  height: 28px;
+  height: var(--tap, 44px);
+  min-height: var(--tap, 44px);
   flex: none;
+  align-self: center;
+  margin: 0;
   padding: 0;
   border: none;
-  border-radius: 99px;
+  border-radius: 0;
   background: none;
+  line-height: 0;
+  vertical-align: middle;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
 }
 
+/* The track, 28px tall, centred in the box. */
 .switch::before {
   content: '';
   position: absolute;
@@ -854,20 +885,15 @@ button.chip {
   background: var(--surface-2);
 }
 
-/* The switch draws 28px tall but takes taps across 44px, Apple's smallest comfortable tap. */
-.switch::before {
-  content: '';
-  position: absolute;
-  inset: -9px -2px;
-}
-
+/* The knob: 4px in from the track's edge on every side, off or on. */
 .switch::after {
   content: '';
   position: absolute;
-  left: 4px;
   top: calc(50% - 10px);
+  left: 4px;
   width: 20px;
   height: 20px;
+  box-sizing: border-box;
   border-radius: 99px;
   background: var(--muted);
   transition: transform 0.15s;

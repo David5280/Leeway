@@ -15,8 +15,9 @@ import { WorthChangeLine } from '../../components/WorthChange'
 import { LoadingOrError, Segmented } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { netWorthDrill } from '../../lib/drills/plan'
-import { shortDate } from '../../lib/format'
-import { startReference, worthChange } from '../../lib/worth'
+import { longDate, shortDate } from '../../lib/format'
+import { isoDaysAgo } from '../../lib/dates'
+import { historyNote, rangesWithMore, startReference, worthChange } from '../../lib/worth'
 import { settingsPath } from '../settings/paths'
 import { SavingsRateCard } from './SavingsRate'
 
@@ -26,18 +27,40 @@ const RANGES = [
   { value: '1825', label: '5 years' },
 ] as const
 
+type Range = (typeof RANGES)[number]['value']
+
 export function NetWorthSection() {
   const { money, settings } = useApp()
-  const [range, setRange] = useState<(typeof RANGES)[number]['value']>('365')
+  const [picked, setRange] = useState<Range>('365')
+  const startOf = (days: number) => isoDaysAgo(days, settings.timeZone)
+  // History reaches the same day whatever range asks, so the last answer says which ranges show more.
+  const [historyStart, setHistoryStart] = useState<string | null>(null)
+  const more = rangesWithMore(
+    RANGES.map((one) => Number(one.value)),
+    historyStart,
+    startOf,
+  )
+  const options = RANGES.map((one, i) => ({ ...one, disabled: historyStart !== null && !more[i] }))
+  // A range with nothing more to show falls back to the longest one before it that has.
+  const pickedAt = RANGES.findIndex((one) => one.value === picked)
+  const range = options.slice(0, pickedAt + 1).findLast((one) => !one.disabled)!.value
   const worth = useAction(
     'get_net_worth',
     { days: Number(range) },
     { placeholderData: keepPreviousData },
   )
+  // Kept from the answer as it renders, as React allows for a value from an earlier render.
+  if (worth.data && worth.data.historyStart !== historyStart) {
+    setHistoryStart(worth.data.historyStart)
+  }
   if (!worth.data) return <LoadingOrError error={worth.error} />
   const { assetsCents, liabilitiesCents, netWorthCents, history } = worth.data
   const points = history.map((p) => ({ date: p.date, cents: p.netWorthCents }))
   const change = worthChange(worth.data)
+  // With the year: history can start a year or more back.
+  const note = historyNote(worth.data, startOf(Number(range)), (iso) =>
+    longDate(iso, settings.locale),
+  )
 
   return (
     <>
@@ -57,7 +80,7 @@ export function NetWorthSection() {
       <Card static="chart" label="Net worth over time" className="stack">
         <h2>Is your net worth growing?</h2>
         {change && <WorthChangeLine change={change} />}
-        <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />
+        <Segmented label="Range" value={range} options={options} onChange={setRange} />
         {change ? (
           <LineChart
             points={points}
@@ -71,11 +94,12 @@ export function NetWorthSection() {
                 <Money cents={history[index]!.liabilitiesCents} /> owed
               </>,
             ]}
-            description={`Net worth from ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(netWorthCents)} today.`}
+            description={`Net worth from ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(netWorthCents)} today.${note ? ` ${note}` : ''}`}
           />
         ) : (
           <p className="empty">History builds as balances change. Check back after a few syncs.</p>
         )}
+        {change && note && <p className="small muted">{note}</p>}
         <p className="small muted">
           Add a house, car or other account by hand in{' '}
           <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.

@@ -11,11 +11,12 @@ import { SectionHead } from '../components/design/SectionHead'
 import { LoadingOrError, Progress, type IconName } from '../components/ui'
 import { useApp } from '../lib/app'
 import { cashFlowDrill, debtsDrill, netWorthDrill } from '../lib/drills/plan'
-import { dayLabel, monthYear, periodWord, shortDate } from '../lib/format'
+import { dayLabel, longDate, monthYear, periodWord, shortDate } from '../lib/format'
+import { isoDaysAgo } from '../lib/dates'
 import { shortPlan } from '../lib/goalText'
 import { CashFacts } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
-import { worthChange } from '../lib/worth'
+import { historyNote, worthChange } from '../lib/worth'
 import { WorthChangeLine } from '../components/WorthChange'
 
 /** A widget before it has a figure to explain: its head, and loading or the error. */
@@ -163,6 +164,9 @@ export function NetWorthWidget() {
   }
   const points = worth.data.history.map((p) => ({ date: p.date, cents: p.netWorthCents }))
   const change = worthChange(worth.data)
+  const note = historyNote(worth.data, isoDaysAgo(365, settings.timeZone), (iso) =>
+    longDate(iso, settings.locale),
+  )
   return (
     <Card drill={netWorthDrill(worth.data)} label="Net worth" className="stack-sm">
       <SectionHead icon="growth" title={title} />
@@ -178,8 +182,9 @@ export function NetWorthWidget() {
             compact
             points={points}
             label="Net worth over the last year"
-            description={`From ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(worth.data.netWorthCents)} today.`}
+            description={`From ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(worth.data.netWorthCents)} today.${note ? ` ${note}` : ''}`}
           />
+          {note && <p className="small muted">{note}</p>}
         </>
       )}
     </Card>
