@@ -12,6 +12,7 @@ import {
   renderSignedIn,
   transaction,
 } from '../test/fake'
+import { homeAlertHandlers } from '../test/homeAlerts'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
 import { CategoriesWidget, categoryStatus, rowNote } from './Categories'
@@ -387,7 +388,7 @@ describe('AlertsWidget', () => {
   it('puts account alerts before everything else, each opening its account', async () => {
     fakeServer({
       list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
-      list_alerts: () =>
+      list_home_alerts: () =>
         alertsFor([
           bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
           bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
@@ -404,6 +405,36 @@ describe('AlertsWidget', () => {
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
     expect(links[1]).toHaveTextContent('Low')
+  })
+
+  it('hides an account alert from home at once, leaving the rest and the other rows', async () => {
+    const { handlers } = homeAlertHandlers(
+      alertsFor([
+        bankAccount({ id: 'low', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
+        bankAccount({ id: 'short', name: 'Everyday', balanceCents: -4210 }),
+      ]),
+    )
+    const server = fakeServer({
+      ...handlers,
+      list_connections: () => [connection({ id: 'expired', status: 'needs_reauth' })],
+    })
+    const budget = budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }])
+    renderSignedIn(<AlertsWidget budget={budget} offset={0} />)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    // One button per account alert; banks and budgets are not hidden from here.
+    const buttons = within(region()).getAllByRole('button', { name: 'Hide from home' })
+    expect(buttons).toHaveLength(2)
+
+    await userEvent.click(buttons[0]!)
+    await waitFor(() =>
+      expect(screen.queryByText('Everyday is overdrawn by $42.10.')).not.toBeInTheDocument(),
+    )
+    expect(server.actions('hide_home_alert')).toEqual([{ kind: 'overdrawn', accountId: 'short' }])
+    expect(
+      within(region())
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/accounts?select=low', '/settings/banks', '/budgets/cat-dining-out'])
   })
 
   it('still shows budget alerts when the banks cannot be read', async () => {

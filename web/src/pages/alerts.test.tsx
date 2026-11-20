@@ -1,8 +1,12 @@
-// The account health banner on the dashboard, and the Alerts page it leads to.
+// The account health banner on the dashboard, with a way to hide each alert
+// from it, and the Alerts page it leads to, which keeps every alert.
 
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, alertsFor, failing, fakeServer, renderSignedIn } from '../test/fake'
+import { account, alertsFor, failing, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
+import { homeAlertHandlers } from '../test/homeAlerts'
 import { Alerts } from './Alerts'
 import { AccountHealth } from './overview/AccountHealth'
 
@@ -16,14 +20,14 @@ describe('the account health banner', () => {
   const banner = () => screen.getByRole('region', { name: 'Account alerts' })
 
   it('shows nothing when every account is fine', async () => {
-    const server = fakeServer({ list_alerts: () => [] })
+    const server = fakeServer({ list_home_alerts: () => [] })
     const { container } = renderSignedIn(<AccountHealth />)
-    await waitFor(() => expect(server.actions('list_alerts')).toHaveLength(1))
+    await waitFor(() => expect(server.actions('list_home_alerts')).toHaveLength(1))
     expect(container).toBeEmptyDOMElement()
   })
 
   it('puts an overdrawn account first, in red, linking to its page and to every alert', async () => {
-    fakeServer({ list_alerts: () => alertsFor([low('b'), overdrawn]) })
+    fakeServer({ list_home_alerts: () => alertsFor([low('b'), overdrawn]) })
     renderSignedIn(<AccountHealth />)
     const link = await screen.findByRole('link', { name: /Everyday is overdrawn by \$42\.10/ })
     expect(link).toHaveAttribute('href', '/accounts?select=a')
@@ -37,14 +41,14 @@ describe('the account health banner', () => {
   })
 
   it('is amber when nothing is urgent', async () => {
-    fakeServer({ list_alerts: () => alertsFor([low('b')]) })
+    fakeServer({ list_home_alerts: () => alertsFor([low('b')]) })
     renderSignedIn(<AccountHealth />)
     await screen.findByText(/Low b is down to \$20,/)
     expect(banner()).toHaveClass('warn-card')
   })
 
   it('keeps to three rows and counts the rest', async () => {
-    fakeServer({ list_alerts: () => alertsFor(['b', 'c', 'd', 'e', 'f'].map(low)) })
+    fakeServer({ list_home_alerts: () => alertsFor(['b', 'c', 'd', 'e', 'f'].map(low)) })
     renderSignedIn(<AccountHealth />)
     await screen.findByText(/Low b/)
     expect(within(banner()).getAllByRole('link')).toHaveLength(4)
@@ -52,10 +56,65 @@ describe('the account health banner', () => {
   })
 
   it('counts a single alert left over', async () => {
-    fakeServer({ list_alerts: () => alertsFor(['b', 'c', 'd', 'e'].map(low)) })
+    fakeServer({ list_home_alerts: () => alertsFor(['b', 'c', 'd', 'e'].map(low)) })
     renderSignedIn(<AccountHealth />)
     await screen.findByText(/Low b/)
     expect(banner()).toHaveTextContent('1 more alert')
+  })
+})
+
+describe('hiding an alert from the banner', () => {
+  const banner = () => screen.getByRole('region', { name: 'Account alerts' })
+  const hideButtons = () => within(banner()).getAllByRole('button', { name: 'Hide from home' })
+
+  /** The banner on the home screen, with anywhere else it might lead to. */
+  function renderBanner(alerts = alertsFor([overdrawn, low('b')])) {
+    const { handlers } = homeAlertHandlers(alerts)
+    const server = fakeServer(handlers)
+    renderSignedIn(
+      <Routes>
+        <Route path="/" element={<AccountHealth />} />
+        <Route path="*" element={<p>Somewhere else</p>} />
+      </Routes>,
+    )
+    return server
+  }
+
+  it('gives each row its own button, which hides that alert at once and stays home', async () => {
+    const server = renderBanner()
+    await screen.findByText(/Everyday is overdrawn/)
+    expect(hideButtons()).toHaveLength(2)
+    const release = holdRequest('/api/actions/hide_home_alert')
+    await userEvent.click(hideButtons()[0]!)
+    // Gone before the server answers, without opening the account.
+    await waitFor(() => expect(screen.queryByText(/Everyday is overdrawn/)).not.toBeInTheDocument())
+    expect(screen.queryByText('Somewhere else')).not.toBeInTheDocument()
+    expect(banner()).toHaveTextContent(/Low b is down to/)
+    release()
+    await waitFor(() => expect(server.actions('list_home_alerts')).toHaveLength(2))
+    expect(server.actions('hide_home_alert')).toEqual([{ kind: 'overdrawn', accountId: 'a' }])
+    expect(screen.queryByText(/Everyday is overdrawn/)).not.toBeInTheDocument()
+  })
+
+  it('goes altogether once its last alert is hidden', async () => {
+    renderBanner(alertsFor([overdrawn]))
+    await screen.findByText(/Everyday is overdrawn/)
+    await userEvent.click(hideButtons()[0]!)
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('puts the alert back when the server refuses', async () => {
+    const { handlers } = homeAlertHandlers(alertsFor([overdrawn]))
+    const server = fakeServer(handlers, {
+      '/api/actions/hide_home_alert': failing('Alert not found', 404),
+    })
+    renderSignedIn(<AccountHealth />)
+    await screen.findByText(/Everyday is overdrawn/)
+    await userEvent.click(hideButtons()[0]!)
+    await waitFor(() => expect(server.actions('list_home_alerts')).toHaveLength(2))
+    expect(await screen.findByText(/Everyday is overdrawn/)).toBeInTheDocument()
   })
 })
 
@@ -66,6 +125,8 @@ describe('the Alerts page', () => {
     expect(await screen.findByRole('heading', { name: 'Alerts', level: 1 })).toBeInTheDocument()
     const list = screen.getByRole('region', { name: 'Account alerts' })
     expect(await within(list).findAllByRole('link')).toHaveLength(5)
+    // Every alert stays here: hiding is for the home screen only.
+    expect(within(list).queryByRole('button', { name: 'Hide from home' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'About alerts' })).toHaveTextContent(
       '$100 for checking accounts',
     )

@@ -1,12 +1,13 @@
 // "Heads up": everything that needs the owner, worst first: account alerts,
 // banks that stopped syncing, budgets, transactions to sort, then this
-// month's AI spending alert.
+// month's AI spending alert. Account alerts can be hidden from here for a day.
 
 import { Link } from 'react-router-dom'
-import type { Connection } from '../api/client'
+import type { AccountAlert, Connection } from '../api/client'
+import { useHomeAlerts } from '../api/homeAlerts'
 import { useAction } from '../api/hooks'
 import { AiSpendAlert } from '../components/AiSpendAlert'
-import { ALERT_LABELS as ACCOUNT_ALERT_LABELS } from '../components/AccountAlerts'
+import { ALERT_LABELS as ACCOUNT_ALERT_LABELS, HideableRow } from '../components/AccountAlerts'
 import { Card, Icon } from '../components/ui'
 import { accountPath } from '../lib/accounts'
 import { useApp } from '../lib/app'
@@ -22,7 +23,7 @@ const ALERT_LABELS: Record<WidgetProps['budget']['alerts'][number]['level'], str
 export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
-  const accountAlerts = useAction('list_alerts')
+  const accountAlerts = useHomeAlerts()
   const aiAlert = useAction('get_ai_usage').data?.alert
   const items: {
     key: string
@@ -30,6 +31,8 @@ export function AlertsWidget({ budget }: WidgetProps) {
     text: string
     level: string
     to?: string
+    /** The account alert a row stands for, which the owner may hide from home. */
+    alert?: AccountAlert
   }[] = []
   // Money going wrong in an account comes before everything else.
   for (const alert of accountAlerts.data ?? []) {
@@ -39,6 +42,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
       text: alert.message,
       level: ACCOUNT_ALERT_LABELS[alert.kind],
       to: accountPath(alert.accountId),
+      alert,
     })
   }
   for (const connection of connections.data ?? []) {
@@ -85,23 +89,24 @@ export function AlertsWidget({ budget }: WidgetProps) {
       ) : (
         <>
           {items.map((item) => (
-            <Link
-              key={item.key}
-              to={item.to ?? '/'}
-              className="alert-row clickrow"
-              style={{ margin: 0, flexDirection: 'row' }}
-            >
-              <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
-                <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
-              </span>
-              <span className="grow">{item.text}</span>
-              <span
-                className="small muted strong hide-sm"
-                style={{ textTransform: 'uppercase', letterSpacing: '.06em' }}
+            <HideableRow key={item.key} alert={item.alert}>
+              <Link
+                to={item.to ?? '/'}
+                className="alert-row clickrow"
+                style={{ margin: 0, flexDirection: 'row' }}
               >
-                {item.level}
-              </span>
-            </Link>
+                <span className={`alert-icon ${item.tone === 'warn' ? '' : item.tone}`}>
+                  <Icon name={item.tone === 'info' ? 'info' : 'warn'} size={16} />
+                </span>
+                <span className="grow">{item.text}</span>
+                <span
+                  className="small muted strong hide-sm"
+                  style={{ textTransform: 'uppercase', letterSpacing: '.06em' }}
+                >
+                  {item.level}
+                </span>
+              </Link>
+            </HideableRow>
           ))}
           {aiAlert && <AiSpendAlert alert={aiAlert} linked />}
         </>

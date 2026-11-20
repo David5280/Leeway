@@ -12,7 +12,10 @@ export const DEFAULT_LOW_BALANCE_CENTS = 10_000
 /** How far back an overdraft or returned-payment fee is worth a mention. */
 export const FEE_DAYS = 30
 
-export type AlertKind = 'overdrawn' | 'over_limit' | 'overdraft_fee' | 'low_balance'
+/** Every kind of account alert, most serious first, the order alerts are listed in. */
+export const ALERT_KINDS = ['overdrawn', 'over_limit', 'overdraft_fee', 'low_balance'] as const
+
+export type AlertKind = (typeof ALERT_KINDS)[number]
 
 /** urgent: money is going wrong now. warning: worth a look soon. */
 export type AlertSeverity = 'urgent' | 'warning'
@@ -201,8 +204,6 @@ function feeAlert(
   }
 }
 
-const KIND_ORDER: AlertKind[] = ['overdrawn', 'over_limit', 'overdraft_fee', 'low_balance']
-
 /**
  * Every alert for these accounts, most serious first: overdrawn, over a limit,
  * fees, then low balances; the same kind keeps the accounts' order. Fees on
@@ -223,7 +224,7 @@ export function accountAlerts(
     if (fee) alerts.push(fee)
   }
   // Array sort is stable, so alerts of one kind keep the accounts' order.
-  return alerts.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind))
+  return alerts.sort((a, b) => ALERT_KINDS.indexOf(a.kind) - ALERT_KINDS.indexOf(b.kind))
 }
 
 /** How many of each alert there are: what the server log reports, with nothing identifying. */

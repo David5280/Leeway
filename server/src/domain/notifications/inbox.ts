@@ -28,10 +28,21 @@ export const KEEP_DAYS = 90
  * hovering around zero does not buzz the phone on every sync.
  */
 export const REARM_AFTER_MS = HOUR_MS
+/**
+ * How long a dismissal, or a hide from the home screen, lasts while the
+ * condition still holds. After this, an account still overdrawn (say) shows
+ * again on the home screen and comes back to the inbox unread, until it is
+ * dismissed again or clears.
+ */
+export const RESURFACE_AFTER_MS = DAY_MS
 /** The bell brings the inbox up to date at most this often, however many tabs ask. */
 export const BELL_REFRESH_MS = MINUTE_MS
 /** The most the inbox shows. */
 const LIST_LIMIT = 100
+
+/** A notification's key. A kind never holds a colon, so kind:subject is unique. */
+export const keyOf = ({ kind, subject }: { kind: string; subject: string }): string =>
+  `${kind}:${subject}`
 
 const COLUMNS = `id, kind, title, message, link, created_at AS "createdAt", read_at AS "readAt",
   resolved_at AS "resolvedAt"`
@@ -45,7 +56,7 @@ const COLUMNS = `id, kind, title, message, link, created_at AS "createdAt", read
  */
 export async function recordCandidates(db: Db, candidates: Candidate[], now: Date): Promise<void> {
   // One row per key: a charge seen both pending and posted is one notification.
-  const unique = [...new Map(candidates.map((one) => [`${one.kind}:${one.subject}`, one])).values()]
+  const unique = [...new Map(candidates.map((one) => [keyOf(one), one])).values()]
   if (unique.length === 0) return
   const column = (key: keyof Candidate) => unique.map((candidate) => candidate[key])
   // "fresh": a cleared condition that came back after the re-arm time.
@@ -97,8 +108,7 @@ export async function resolveCleared(
 ): Promise<void> {
   const kinds = checked.filter((kind) => STATE_KINDS.includes(kind))
   if (kinds.length === 0) return
-  // A kind never holds a colon, so kind:subject is a unique key.
-  const keys = current.map((candidate) => `${candidate.kind}:${candidate.subject}`)
+  const keys = current.map(keyOf)
   await db.query(
     `UPDATE notifications SET resolved_at = $3
      WHERE kind = ANY($1) AND resolved_at IS NULL AND kind || ':' || subject <> ALL($2)`,
@@ -155,15 +165,39 @@ export async function markRead(db: Db, ids: string[] | undefined, now: Date): Pr
   )
 }
 
-/** Takes a notification out of the inbox. It stays stored, so the same news does not return. */
+/**
+ * Takes a notification out of the inbox. It stays stored, so the same news
+ * does not return; a condition still going on a day later does (see
+ * resurfaceDismissed). Dismissing again starts that day over.
+ */
 export async function dismissNotification(db: Db, id: string, now: Date): Promise<void> {
   const { rowCount } = await db.query(
-    `UPDATE notifications SET dismissed_at = coalesce(dismissed_at, $2),
-       read_at = coalesce(read_at, $2)
+    `UPDATE notifications SET dismissed_at = $2, read_at = coalesce(read_at, $2)
      WHERE id = $1`,
     [id, now],
   )
   if (rowCount === 0) throw notFound('Notification')
+}
+
+/**
+ * Brings back conditions of these kinds dismissed over a day ago that still
+ * hold, unread, so a problem left alone is not forgotten. One-off news, like
+ * a fee, stays dismissed. The push state is left as it was: the phone had
+ * this news already, and a push still owed when it was dismissed was let go
+ * then (delivery.ts skips read and dismissed news, and news over a day old).
+ */
+export async function resurfaceDismissed(
+  db: Db,
+  checked: NotificationKind[],
+  now: Date,
+): Promise<void> {
+  const kinds = checked.filter((kind) => STATE_KINDS.includes(kind))
+  if (kinds.length === 0) return
+  await db.query(
+    `UPDATE notifications SET dismissed_at = NULL, read_at = NULL
+     WHERE dismissed_at < $2 AND resolved_at IS NULL AND kind = ANY($1)`,
+    [kinds, new Date(now.getTime() - RESURFACE_AFTER_MS)],
+  )
 }
 
 /**

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { fakeLongHomeAlerts } from './homeAlerts'
 import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
@@ -131,6 +132,7 @@ export const SCREENS: Screen[] = [
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,
   }),
+  at('overview', '/', { name: '/ with long account alerts to hide', before: fakeLongHomeAlerts }),
   at('accounts', '/accounts'),
   ...['checking', 'savings', 'credit card', 'loan'].map((kind, index): Screen => ({
     name: `the ${kind} account page`,

@@ -70,7 +70,7 @@ export async function resetData(db: pg.Pool): Promise<void> {
        oauth_codes, oauth_tokens, connections, accounts, categories, rules, transactions,
        bills, goals, goal_contributions, dismissed_recurring, applied_upgrades, ai_summaries,
        imports, pension_plans, paystubs, ai_usage, ai_spend_alerts, ai_unavailable_models,
-       widget_tokens, notifications, push_subscriptions, push_keys CASCADE;
+       widget_tokens, notifications, push_subscriptions, push_keys, alert_hides CASCADE;
      UPDATE settings SET data = '{}';
      DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);
      DELETE FROM notification_settings; INSERT INTO notification_settings (id) VALUES (true);`,

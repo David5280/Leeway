@@ -37,13 +37,21 @@ const ALERT_WORDS: Record<AccountAlert['kind'], { title: string; push: (name: st
   }
 
 /**
- * The account alerts the dashboard shows. A fee is news once per latest fee
- * date; the others are conditions, kept once per account while they last.
+ * What an account alert is about, as its notification and its hide on the
+ * home screen both key it. A fee is news once per latest fee date; the others
+ * are conditions, kept once per account while they last.
  */
+export function accountAlertSubject(
+  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date'>,
+): string {
+  return alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId
+}
+
+/** The account alerts the dashboard shows, one notification each (see accountAlertSubject). */
 export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
   return alerts.map((alert) => ({
     kind: alert.kind,
-    subject: alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId,
+    subject: accountAlertSubject(alert),
     title: ALERT_WORDS[alert.kind].title,
     message: alert.message,
     pushBody: ALERT_WORDS[alert.kind].push(alert.accountName),

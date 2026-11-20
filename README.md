@@ -361,6 +361,13 @@ with no AI involved. The same alert is never stored twice: a condition that
 clears and comes back within an hour picks up where it was, and old items are
 deleted after 90 days.
 
+A condition you dismiss that is still going on a day later, like an account
+still overdrawn or a bill still unpaid, comes back unread, with no second push.
+One-off news, like a fee or a large charge, stays dismissed. Dismissing an
+account alert takes it off the home screen too, and each account alert there
+has its own close button, which hides it from home alone for a day, or until it
+clears, and leaves the inbox as it was.
+
 **Push to your phone or computer** needs nothing in your configuration. On its
 first start Leeway makes its own Web Push keys and keeps them in the database,
 encrypted under your `ENCRYPTION_KEY`; they are never in your variables or
