@@ -231,7 +231,9 @@ describe('get_cash_flow', () => {
       cashCents: 150000,
       billsDue: [{ name: 'Phone', dueDate: '2026-11-20', amountCents: 6000, overdue: false }],
       billsDueCents: 6000,
-      leftAfterBillsCents: 144000,
+      overdraftCents: 0,
+      safeCents: 144000,
+      shortfallCents: 0,
       perDayCents: 14400,
     })
   })
@@ -273,8 +275,11 @@ describe('get_cash_flow', () => {
     expect(flow).toMatchObject({
       nextPayday: '2026-11-20',
       paydaySource: 'detected_income',
+      paydayEstimate: false,
       expectedPayCents: 250000,
-      leftAfterBillsCents: -8000,
+      // Power before payday outruns the $10 in checking: nothing is safe, $80 short.
+      safeCents: 0,
+      shortfallCents: 8000,
       perDayCents: 0,
     })
   })
@@ -315,19 +320,26 @@ describe('get_cash_flow', () => {
     expect(flow.billsDueCents).toBe(13000)
   })
 
-  it('takes the largest regular deposit as pay, skipping one already late', async () => {
+  it('takes payday from paychecks only, an estimate from the new job’s first one', async () => {
     const { accountId } = await insertBankAccount(ctx.db)
-    const deposit = (date: string, name: string, amountCents: number) =>
-      insertBankTransaction(ctx.db, accountId, { date, name, amountCents })
-    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06'])
-      await deposit(date, 'SIDE GIG', -20000)
-    for (const date of ['2026-10-02', '2026-10-16', '2026-10-30'])
-      await deposit(date, 'BIG CO', -400000)
-    for (const date of ['2026-08-27', '2026-09-27', '2026-10-27'])
-      await deposit(date, 'MAIN JOB', -300000)
-    // BIG CO was due November 13th and has not come, so MAIN JOB on the 27th is the payday.
+    const deposit = (date: string, name: string, amountCents: number, detailed: string) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents, detailed })
+    // Money from people and a tax refund come regularly, but are not pay.
+    for (const date of ['2026-10-02', '2026-10-16', '2026-10-30', '2026-11-13'])
+      await deposit(date, 'MOM', -40000, 'TRANSFER_IN_TRANSFER_IN_FROM_APPS')
+    await deposit('2026-10-20', 'IRS TREAS 310', -90000, 'INCOME_TAX_REFUND')
+    // The old job stopped in June; the new one paid once, on Friday the 13th (the 15th is a Sunday).
+    for (const date of ['2026-05-15', '2026-05-29', '2026-06-15', '2026-06-30'])
+      await deposit(date, 'OLD CO PAYROLL', -300000, 'INCOME_SALARY')
+    await deposit('2026-11-13', 'NEW CO PAYROLL', -210000, 'INCOME_SALARY')
     const flow = await call('get_cash_flow')
-    expect(flow).toMatchObject({ nextPayday: '2026-11-27', expectedPayCents: 300000 })
+    // The likeliest cadence from a 15th payday is twice a month: next on the 30th.
+    expect(flow).toMatchObject({
+      nextPayday: '2026-11-30',
+      paydaySource: 'detected_income',
+      paydayEstimate: true,
+      expectedPayCents: 210000,
+    })
   })
 
   it('falls back to the end of the budget period', async () => {

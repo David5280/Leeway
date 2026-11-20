@@ -34,6 +34,7 @@ describe('SavingsRateCard', () => {
         months: [rate('2026-09-01', 10), rate('2026-10-01', 14), rate('2026-11-01', 3, true)],
         targetPercent: null,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)
@@ -42,11 +43,28 @@ describe('SavingsRateCard', () => {
     expect(region()).toHaveTextContent('How much of your pay do you save?')
     expect(region()).toHaveTextContent('12%of pay, in a usual month')
     expect(region()).toHaveTextContent(NOTE)
+    expect(region()).not.toHaveTextContent('Pay is an estimate')
     // Without a target of their own, no month is marked as reaching one.
     expect(fills()).toEqual(['var(--tone-muted)', 'var(--tone-muted)', 'var(--tone-muted)'])
     expect(within(region()).getByText('Usual')).toBeInTheDocument()
     expect(within(region()).getByRole('img')).toHaveAccessibleDescription(
       'Sep 2026: 10%. Oct 2026: 14%. Nov 2026: 3%. Usual: 12%.',
+    )
+  })
+
+  it('says pay is an estimate while the current employer has paid once', async () => {
+    fakeServer({
+      get_savings_rates: () => ({
+        months: [rate('2026-09-01', 10), rate('2026-10-01', 14), rate('2026-11-01', 3, true)],
+        targetPercent: null,
+        note: NOTE,
+        payEstimated: true,
+      }),
+    })
+    renderSignedIn(<SavingsRateCard />)
+    await screen.findByText('of pay, in a usual month')
+    expect(region()).toHaveTextContent(
+      'Pay is an estimate for now: there is one paycheck from your current employer so far.',
     )
   })
 
@@ -56,6 +74,7 @@ describe('SavingsRateCard', () => {
         months: [rate('2026-09-01', 20), rate('2026-10-01', null), rate('2026-11-01', 5, true)],
         targetPercent: 15,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)
@@ -82,6 +101,7 @@ describe('SavingsRateCard', () => {
         months: [rate('2026-11-01', null, true)],
         targetPercent: null,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)
@@ -99,6 +119,7 @@ describe('SavingsRateCard', () => {
         ],
         targetPercent: 90,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)
@@ -111,6 +132,7 @@ describe('SavingsRateCard', () => {
         months: [rate('2026-09-01', 10), rate('2026-10-01', 140), rate('2026-11-01', 12)],
         targetPercent: null,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)
@@ -138,6 +160,7 @@ describe('SavingsRateCard', () => {
         months: [rate('2026-09-01', 10), rate('2026-10-01', 14), rate('2026-11-01', 3, true)],
         targetPercent: null,
         note: NOTE,
+        payEstimated: false,
       }),
     })
     renderSignedIn(<SavingsRateCard />)

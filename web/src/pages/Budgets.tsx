@@ -82,6 +82,10 @@ export function Budgets() {
               <Money cents={b.totals.setAsideCents} /> of it set aside for goals
             </Link>
           )}
+          {/* When checking holds less than this, the server's one line says so. */}
+          {b.period.offset === 0 && b.spendable?.note && (
+            <p className={`small ${b.spendable.problem ? 'over' : 'muted'}`}>{b.spendable.note}</p>
+          )}
         </Card>
       </div>
 

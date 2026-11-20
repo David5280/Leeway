@@ -15,6 +15,8 @@ import {
   type PeriodFlow,
 } from '../../../server/src/domain/accountViewText'
 import { computeBudget, type SetAside } from '../../../server/src/domain/budget'
+import { safeToSpend } from '../../../server/src/domain/cashFlow'
+import { spendable, withSafePerDay } from '../../../server/src/domain/spendable'
 import { kindOf } from '../../../server/src/domain/accountKinds'
 import type { Category } from '../../../server/src/domain/categories'
 import { transactionDisplayName } from '../../../server/src/domain/transactionName'
@@ -27,7 +29,7 @@ import {
 import { weeklyEmailPatchSchema } from '../../../server/src/domain/weeklyEmail/store'
 import { formatCents } from '../../../server/src/lib/money'
 import { periodContaining } from '../../../server/src/lib/periods'
-import type { Account, AccountAlert, AccountsView, Settings, Status } from '../api/client'
+import type { Account, AccountAlert, AccountsView, Budget, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
 import { AppProvider } from '../lib/app'
@@ -299,7 +301,38 @@ export function budgetFor(
       ...extra,
     }),
     previous: { spentCents: 0, spentToDateCents: 0, categories: [] },
+    // No cash figure beside it, as for a past period: the budget leads.
+    spendable: null,
   }
+}
+
+/**
+ * The budget held to checking, as get_budget returns it: `availableCents` in
+ * checking, a payday on Nov 27 and `bills` due before it.
+ */
+export function heldToCash(budget: Budget, availableCents: number, bills: number[] = []): Budget {
+  const due = bills.map((amountCents, i) => ({
+    billId: `bill-${i}`,
+    name: `Bill ${i}`,
+    dueDate: '2026-11-20',
+    amountCents,
+    overdue: false,
+  }))
+  const payday = {
+    date: '2026-11-27',
+    source: 'detected_income' as const,
+    amountCents: 210_000,
+    cadence: 'biweek' as const,
+    estimate: false,
+  }
+  const flow = safeToSpend(
+    [{ availableCents, balanceCents: availableCents }],
+    due,
+    payday,
+    '2026-11-17',
+  )
+  const room = spendable(budget, flow, (cents) => formatCents(cents), 'en-US')
+  return { ...withSafePerDay(budget, room), spendable: room }
 }
 
 /** Reads settings from the cache, as the app does, so saved changes show up. */

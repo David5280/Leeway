@@ -68,9 +68,9 @@ describe('Until payday', () => {
     return screen.getByRole('region', { name: 'Until payday' })
   }
 
-  it('leads with what is left at payday, then checking, the bills and when payday is', async () => {
+  it('leads with what is safe to spend, then checking, the bills and when payday is', async () => {
     const card = await show(cashFlow())
-    expect(card).toHaveTextContent('$1,440 left at payday, after bills.')
+    expect(card).toHaveTextContent('$1,440 safe to spend until payday, after bills.')
     expect(card).toHaveTextContent('$1,500 in checking, minus $60 in bills.')
     expect(card).toHaveTextContent('Next payday Fri, Nov 27.')
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
@@ -82,7 +82,7 @@ describe('Until payday', () => {
     expect(open).not.toContainElement(within(card).getByRole('img'))
     expect(open).not.toContainElement(within(card).getByText('Phone'))
     await userEvent.setup().click(open)
-    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Left at payday')
+    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Safe to spend')
   })
 
   it('draws checking dropping with each bill to payday, close up, and names the bills', async () => {
@@ -132,7 +132,8 @@ describe('Until payday', () => {
           { billId: 'w', name: 'Water', dueDate: '2026-11-05', amountCents: 9000, overdue: true },
         ],
         billsDueCents: 9000,
-        leftAfterBillsCents: -8000,
+        safeCents: 0,
+        shortfallCents: 8000,
         perDayCents: 0,
         daysUntilPayday: 1,
       }),
@@ -147,9 +148,7 @@ describe('Until payday', () => {
   })
 
   it('draws $0 to stay above once the line comes near it', async () => {
-    const card = await show(
-      cashFlow({ cashCents: 10_000, billsDueCents: 6000, leftAfterBillsCents: 4000 }),
-    )
+    const card = await show(cashFlow({ cashCents: 10_000, billsDueCents: 6000, safeCents: 4000 }))
     expect(card).toHaveTextContent('Stay above: $0')
     expect(card).not.toHaveTextContent('goes below')
     expect(card.querySelector('.chart-line.problem')).not.toBeInTheDocument()
@@ -159,16 +158,22 @@ describe('Until payday', () => {
     const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
     const card = await show(
       cashFlow({
-        cashCents: -500,
+        cashCents: 0,
+        overdraftCents: 500,
         billsDue: [
           { ...rent, overdue: false },
           { ...rent, billId: 'p', name: 'Power', overdue: false },
         ],
         billsDueCents: 18_000,
-        leftAfterBillsCents: -18_500,
+        safeCents: 0,
+        shortfallCents: 18_500,
       }),
     )
     expect(card).toHaveTextContent('Checking is already below $0.')
+    expect(card).toHaveTextContent('$185 short of the bills and overdraft due before payday.')
+    expect(card).toHaveTextContent(
+      '$0 in checking, minus $180 in bills and $5 to bring an overdraft back to zero.',
+    )
   })
 
   it('names the bills that take checking below $0 together', async () => {
@@ -181,7 +186,8 @@ describe('Until payday', () => {
           { ...rent, billId: 'p', name: 'Power', overdue: false },
         ],
         billsDueCents: 18_000,
-        leftAfterBillsCents: -8_000,
+        safeCents: 0,
+        shortfallCents: 8_000,
       }),
     )
     expect(later).toHaveTextContent(
@@ -199,7 +205,22 @@ describe('Until payday', () => {
       }),
     )
     expect(card).toHaveTextContent(
-      'Next payday looks like Fri, Nov 20, about $2,500, going by your past deposits.',
+      'Next payday looks like Fri, Nov 20, about $2,500, going by your paychecks.',
+    )
+  })
+
+  it('says when payday is projected from one paycheck', async () => {
+    const card = await show(
+      cashFlow({
+        paydaySource: 'detected_income',
+        paydayEstimate: true,
+        nextPayday: '2026-11-20',
+        expectedPayCents: 250000,
+        daysUntilPayday: 3,
+      }),
+    )
+    expect(card).toHaveTextContent(
+      'Next payday looks like Fri, Nov 20, about $2,500. An estimate: there is one paycheck from this employer so far.',
     )
   })
 

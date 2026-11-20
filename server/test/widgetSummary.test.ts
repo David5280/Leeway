@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountAlert, AlertKind } from '../src/domain/accountAlerts.js'
 import type { BudgetSummary } from '../src/domain/budget.js'
+import { withRoom } from '../src/domain/budgetRoom.js'
 import type { CashFlow } from '../src/domain/cashFlow.js'
 import { settingsSchema } from '../src/domain/settings.js'
 import { widgetSummary, type WidgetSources } from '../src/domain/widget.js'
@@ -10,11 +11,33 @@ import { widgetSummary, type WidgetSources } from '../src/domain/widget.js'
 
 const NOW = new Date('2026-11-17T18:00:00Z')
 
-function budget(totals: Partial<BudgetSummary['totals']>, daysLeft = 12): BudgetSummary {
+const SETTINGS = settingsSchema.parse({})
+
+/** Cash until payday: plenty unless a test says otherwise. */
+function cash(fields: Partial<CashFlow> = {}): CashFlow {
   return {
-    period: { daysLeft },
+    nextPayday: '2026-11-28',
+    cashKnown: true,
+    paydaySource: 'detected_income',
+    paydayEstimate: false,
+    safeCents: 1_000_000,
+    shortfallCents: 0,
+    overdraftCents: 0,
+    perDayCents: 100_000,
+    ...fields,
+  } as CashFlow
+}
+
+function budget(
+  totals: Partial<BudgetSummary['totals']>,
+  daysLeft = 12,
+  cashFlow: CashFlow = cash(),
+) {
+  const summary = {
+    period: { daysLeft, offset: 0 },
     totals: { budgetedCents: 0, leftCents: 0, leewayCents: 0, safePerDayCents: 0, ...totals },
   } as BudgetSummary
+  return withRoom(summary, cashFlow, SETTINGS)
 }
 
 function alert(kind: AlertKind): AccountAlert {
@@ -24,9 +47,9 @@ function alert(kind: AlertKind): AccountAlert {
 function sources(overrides: Partial<WidgetSources> = {}): WidgetSources {
   return {
     now: NOW,
-    settings: settingsSchema.parse({}),
+    settings: SETTINGS,
     budget: budget({}),
-    cashFlow: null,
+    cashFlow: cash(),
     netWorth: {
       assetsCents: 0,
       liabilitiesCents: 0,
@@ -69,19 +92,28 @@ describe('widgetSummary', () => {
     }
   })
 
-  it('falls back to cash until payday with no budgets, or to the budget when that is missing', () => {
-    const cashFlow = {
-      leftAfterBillsCents: -1_200,
-      perDayCents: 0,
-      nextPayday: '2026-11-28',
-    } as CashFlow
-    expect(widgetSummary(sources({ cashFlow })).headline).toEqual({
+  it('leads with safe to spend when checking holds less than the budgets have left', () => {
+    const cashFlow = cash({ safeCents: 17_800, perDayCents: 1_618 })
+    const summary = widgetSummary(
+      sources({
+        budget: budget({ budgetedCents: 300_000, leewayCents: 140_400 }, 12, cashFlow),
+        cashFlow,
+      }),
+    )
+    expect(summary.headline).toEqual({
       kind: 'until_payday',
-      cents: -1_200,
-      perDayCents: 0,
+      cents: 17_800,
+      perDayCents: 1_618,
       payday: '2026-11-28',
     })
-    expect(widgetSummary(sources()).headline.kind).toBe('leeway')
+  })
+
+  it('shows a shortfall as a negative amount, and falls back to cash with no budgets', () => {
+    const cashFlow = cash({ safeCents: 0, shortfallCents: 1_200, perDayCents: 0 })
+    expect(widgetSummary(sources({ budget: budget({}, 12, cashFlow), cashFlow })).headline).toEqual(
+      { kind: 'until_payday', cents: -1_200, perDayCents: 0, payday: '2026-11-28' },
+    )
+    expect(widgetSummary(sources()).headline.kind).toBe('until_payday')
     expect(widgetSummary(sources()).budgetLeftCents).toBeNull()
   })
 

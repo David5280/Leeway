@@ -35,19 +35,29 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
   if (!pay.cadence || !pay.nextPayday) return null
   const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
-  return `Pay: ${CADENCE_WORDS[pay.cadence]}${amount}, next on ${shortDate(pay.nextPayday, locale)}.`
+  const from = pay.employer ? ` from ${pay.employer}` : ''
+  const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
+  // One paycheck cannot show how often pay comes, so the schedule is said to be a guess.
+  const estimate = pay.estimate
+    ? ' This is an estimate from one paycheck: the schedule is confirmed by the second.'
+    : ''
+  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${estimate}`
 }
 
-function monthLine({ monthly }: FinancialProfile, money: Money): string | null {
-  if (monthly.months === 0) return null
+function monthLine({ monthly, locale }: FinancialProfile, money: Money): string | null {
+  if (monthly.spendingCents === null) return null
   const essential =
     monthly.essentialSpendingCents === monthly.spendingCents
       ? ''
       : `, ${money(monthly.essentialSpendingCents!)} of it essential`
   // Pay not seen is left out here and listed as not known, never shown as $0.
+  const estimated = monthly.incomeEstimated ? ' (estimated from one paycheck)' : ''
   const payIn =
-    monthly.incomeCents === null ? '' : `${money(monthly.incomeCents)} take-home pay in, `
-  return `Typical month (last ${plural(monthly.months, 'whole month')}): ${payIn}${money(monthly.spendingCents!)} spent${essential}.`
+    monthly.incomeCents === null
+      ? ''
+      : `${money(monthly.incomeCents)} take-home pay in from the current employer${estimated}, `
+  const since = shortDate(monthly.spendingSince!, locale)
+  return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent${essential}.`
 }
 
 function accountsLine({ accounts }: FinancialProfile, money: Money): string | null {
@@ -216,8 +226,9 @@ function pensionRule({ retirement }: FinancialProfile): string | null {
 function unknownsLine(profile: FinancialProfile): string | null {
   const unknown: string[] = []
   if (!profile.pay.cadence) unknown.push('pay schedule')
-  if (profile.monthly.months === 0) unknown.push('a typical month of income and spending')
-  else if (profile.monthly.incomeCents === null) unknown.push('take-home pay')
+  if (profile.monthly.spendingCents === null) unknown.push('a typical month of spending')
+  if (profile.monthly.incomeCents === null)
+    unknown.push('take-home pay (no paychecks from a current employer)')
   if (profile.savings.hasSavings && !profile.emergencyFund) unknown.push('emergency fund')
   if (!profile.savingsRate) unknown.push('savings rate')
   const retirementMatters =

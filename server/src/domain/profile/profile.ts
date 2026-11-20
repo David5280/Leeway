@@ -13,7 +13,8 @@
  * Sources, and where each is worked out:
  * - accounts and their kinds: accounts.ts and accountKinds.ts
  * - balances over time and contributions: savings/report.ts
- * - pay schedule and a typical month of income and spending: income.ts
+ * - pay schedule and a typical month of income and spending: income.ts, which
+ *   reads pay from the current employer's paychecks (pay/current.ts)
  * - bills: bills.ts; goals: goals.ts
  * - the emergency fund and savings rate: savings/emergency.ts, savings/rate.ts
  * - pensions and the retirement projection: retirement/pensions.ts, retirement/plan.ts
@@ -44,7 +45,7 @@ import {
 import type { BankContributions } from '../savings/contributions.js'
 import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import { periodConfig, type Settings } from '../settings.js'
-import { monthlyAverages, paySchedule, type MonthlyAverages, type PaySchedule } from './income.js'
+import { typicalMonth, type MonthlyAverages, type PaySchedule } from './income.js'
 
 /** The owner's accounts of one kind, added up. */
 export interface KindSummary {
@@ -82,7 +83,7 @@ export interface FinancialProfile {
   currency: string
   locale: string
   pay: PaySchedule
-  /** A typical month of income and spending, from the last whole months. */
+  /** A typical month: pay from the current employer, and recent spending (see income.ts). */
   monthly: MonthlyAverages
   bills: { count: number; monthlyCents: number }
   /** Every kind the owner has an account of, in the standard order. */
@@ -238,8 +239,7 @@ export async function getFinancialProfile(
   // One at a time: db may be a transaction's client, which runs one query at once.
   const accounts = await listAccounts(db, false)
   const savings = await getSavingsReport(db, settings, today, accounts)
-  const monthly = await monthlyAverages(db, settings, today)
-  const pay = await paySchedule(db, settings, today)
+  const { monthly, pay } = await typicalMonth(db, settings, today)
   const bills = await listBills(db, today)
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
   const pensions = await pensionsOf(db, accounts)

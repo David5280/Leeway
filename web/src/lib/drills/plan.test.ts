@@ -14,15 +14,15 @@ const date = (iso: string) => `on ${iso}`
 const duration = (months: number | null) => (months === null ? 'Never' : `${months} months`)
 
 describe('cashFlowDrill', () => {
-  it('takes the bills due before payday from checking, leaving what is left at payday', () => {
+  it('takes the bills due before payday from checking, leaving what is safe to spend', () => {
     const drill = cashFlowDrill(cashFlow(), date)
     expect(said(drill)).toBe(
-      'Left at payday $1,440 = In checking $1,500 minus bills due before payday $60',
+      'Safe to spend $1,440 = In checking $1,500 minus bills due before payday $60',
     )
     expect(drill.subtitle).toBe('Payday on 2026-11-27')
     expect(drill.figure).toEqual({ cents: 144000 })
     expect(drill.math.note).toBe(
-      'Day-to-day spending until payday comes out of this too. Savings is not counted.',
+      'Day-to-day spending until payday comes out of this. Savings is not counted.',
     )
     expect(drill.items!.rows).toEqual([
       {
@@ -43,17 +43,31 @@ describe('cashFlowDrill', () => {
         cashCents: 5000,
         billsDue: [{ ...late, overdue: true }],
         billsDueCents: 9000,
-        leftAfterBillsCents: -4000,
+        safeCents: 0,
+        shortfallCents: 4000,
       }),
       date,
     )
     expect(drill.math.result).toEqual({
-      label: 'Short of the bills by',
+      label: 'Short by',
       value: { cents: 4000, tone: 'problem' },
     })
     expect(drill.figure).toEqual({ cents: 4000, tone: 'problem' })
     expect(drill.math.note).toBe('The bills due before payday come to more than checking holds.')
     expect(drill.items!.rows[0]!.detail).toBe('No payment found yet')
+  })
+
+  it('takes out an overdraft, and says when payday is an estimate or the period end', () => {
+    const overdrawn = cashFlowDrill(
+      cashFlow({ overdraftCents: 10_000, safeCents: 134_000, paydayEstimate: true }),
+      date,
+    )
+    expect(said(overdrawn)).toBe(
+      'Safe to spend $1,340 = In checking $1,500 minus bills due before payday $60 minus to bring an overdraft back to zero $100',
+    )
+    expect(overdrawn.subtitle).toBe('Payday about on 2026-11-27, from one paycheck so far')
+    const end = cashFlowDrill(cashFlow({ paydaySource: 'period_end' }), date)
+    expect(end.subtitle).toBe('To on 2026-11-27, when the budget period ends')
   })
 
   it('lists no bills when none are due', () => {

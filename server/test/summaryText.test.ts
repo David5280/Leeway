@@ -87,34 +87,56 @@ describe('the points', () => {
         { priority: 'now', topic: 'bill', message: 'A bill looks unpaid', tool: 'x' },
         { priority: 'fyi', topic: 'cleanup', message: 'Some need a category', tool: 'x' },
       ],
-      cashFlow: { cashCents: 250000, billsDueCents: 150000, leftAfterBillsCents: 100000 },
+      cashFlow: {
+        cashKnown: true,
+        cashCents: 250000,
+        billsDueCents: 150000,
+        safeCents: 100000,
+        paydaySource: 'detected_income',
+      },
       budget: { previousSpentToDateCents: 70000 },
       goals: [goal('Trip')],
       netWorth: { changeCents: 120000 },
     })
     expect(summarize(busy).points).toEqual([
       '2 things need you today. See Heads up.',
-      '$1,000 is free until payday on Dec 1, after bills.',
+      '$1,000 is safe to spend before payday on Dec 1, after bills.',
       "You've spent $100 more than at this point last month.",
       'Trip is 25% of the way there.',
     ])
     expect(summarize(busy).points).toHaveLength(MAX_POINTS)
   })
 
-  it('warns when bills before payday are more than the cash', () => {
+  it('warns when bills and an overdraft before payday are more than the cash', () => {
     const short = checkin({
-      cashFlow: { cashCents: 50000, billsDueCents: 80000, leftAfterBillsCents: -30000 },
+      cashFlow: {
+        cashKnown: true,
+        cashCents: 50000,
+        billsDueCents: 80000,
+        overdraftCents: 10000,
+        shortfallCents: 40000,
+        paydaySource: 'detected_income',
+        paydayEstimate: true,
+      },
     })
-    expect(summarize(short).points).toEqual([
-      'Bills before payday on Dec 1 come to $800, $300 more than your cash.',
-    ])
+    // The headline says it, so no point repeats it.
+    expect(summarize(short)).toEqual({
+      headline: 'Checking is $400 short of the bills and overdraft before payday, about Dec 1.',
+      points: [],
+    })
   })
 
-  it('says payday is today on payday', () => {
+  it('says payday is today on payday, and the period end when no payday is known', () => {
     const payday = checkin({
-      cashFlow: { cashCents: 1000, leftAfterBillsCents: 1000, nextPayday: '2026-11-17' },
+      cashFlow: { cashKnown: true, cashCents: 1000, safeCents: 1000, nextPayday: '2026-11-17' },
     })
-    expect(summarize(payday).points).toEqual(['$10 is free until payday today, after bills.'])
+    expect(summarize(payday).points).toEqual([
+      '$10 is safe to spend until payday today, after bills.',
+    ])
+    const noPayday = checkin({ cashFlow: { cashKnown: true, cashCents: 1000, safeCents: 1000 } })
+    expect(summarize(noPayday).points).toEqual([
+      '$10 is safe to spend by Nov 30, when this budget period ends (no payday found yet), after bills.',
+    ])
   })
 
   it('says when spending is lower than last period, and when net worth fell', () => {
@@ -253,20 +275,64 @@ describe('summaryFacts', () => {
         attention: [
           { priority: 'soon', topic: 'bill', message: 'Rent is due', tool: 'list_bills' },
         ],
+        cashFlow: {
+          cashKnown: true,
+          cashCents: 30000,
+          billsDueCents: 12200,
+          safeCents: 17800,
+          perDayCents: 1271,
+          paydaySource: 'detected_income',
+        },
+        spendable: {
+          safeCents: 17800,
+          shortfallCents: 0,
+          overdraftCents: 0,
+          budgetLeftCents: 120000,
+          leadCents: 17800,
+          limitedBy: 'cash',
+          perDayCents: 1271,
+          payday: '2026-12-01',
+          paydaySource: 'detected_income',
+          paydayEstimate: false,
+          note: null,
+          problem: false,
+        },
+        pay: {
+          monthlyCents: 420000,
+          estimate: true,
+          cadence: 'semimonth',
+          paycheckCents: 210000,
+          since: '2026-11-13',
+        },
       }),
       monthly,
       money,
     )
     expect(facts).toMatchObject({
       today: 'Nov 17',
-      period: { kind: 'month', ends: 'Nov 30', left: '$1,200', safeToSpendPerDay: '$85.71' },
-      untilPayday: { payday: 'Dec 1' },
+      period: { kind: 'month', ends: 'Nov 30', left: '$1,200', budgetRoomAfterGoals: '$1,200' },
+      // The one figure for what can be spent, with the line that says why it is less than the budget.
+      safeToSpend: {
+        untilPayday: '$178',
+        perDay: '$12.71',
+        payday: 'Dec 1',
+        paydayIsAnEstimate: false,
+        noPaydayFoundSoPeriodEndUsed: false,
+        cashInChecking: '$300',
+        billsDueBeforePayday: '$122',
+        overdraftToBringBackToZero: '$0',
+        shortfall: null,
+        note: 'Your budget has $1,200 left, but you have $178 you can safely spend before payday on Dec 1.',
+      },
+      typicalMonthlyPay: { amount: '$4,200', estimatedFromOnePaycheck: true },
       headsUp: [{ priority: 'soon', message: 'Rent is due' }],
       debts: null,
       fixedHeadline: null,
       netWorthChangeLast30Days: '$0',
     })
     expect(JSON.stringify(facts)).not.toContain('list_bills')
+    // Without a checking balance the cash is unknown, so there is no figure to quote.
+    expect(summaryFacts(checkin(), monthly, money).safeToSpend).toBeNull()
   })
 
   it('gives an AI savings at a glance, with unknowns left null rather than zero', () => {

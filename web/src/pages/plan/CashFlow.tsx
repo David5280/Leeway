@@ -1,6 +1,7 @@
-// Cash until payday: what checking holds, the bills due first, and what that
-// leaves at payday. Savings is left out, as money set aside rather than what
-// the bills come out of. On the Plan's bills, the question and answer open
+// Cash until payday: what checking holds, less the bills due first and any
+// overdraft, is what is safe to spend (server/src/domain/cashFlow.ts).
+// Savings is left out, as money set aside rather than what the bills come
+// out of. On the Plan's bills, the question and answer open
 // the math (lib/drills/plan.ts), and under them a line shows checking
 // stepping down with each bill to payday; if it would go below $0, that part
 // is red and the card says when. The Overview's widget shows the answer alone.
@@ -23,25 +24,29 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
     case 'pay_period':
       return `Next payday ${day}.`
     case 'detected_income':
-      return `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}, going by your past deposits.`
+      return flow.paydayEstimate
+        ? `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}. An estimate: there is one paycheck from this employer so far.`
+        : `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}, going by your paychecks.`
     default:
       return `No paycheck found yet, so this runs to the end of your budget period, ${day}.`
   }
 }
 
-/** The headline: what is left at payday once the bills are paid, or how far short they leave you. */
+/** The headline: what is safe to spend until payday, or how far short the bills leave you. */
 function Headline({ flow }: { flow: CashFlow }) {
-  if (flow.leftAfterBillsCents < 0) {
+  if (flow.shortfallCents > 0) {
+    const owed = flow.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
     return (
       <p style={{ fontSize: 17 }}>
-        <Money cents={-flow.leftAfterBillsCents} tone="problem" className="mid-number" /> short of
-        the bills due before payday.
+        <Money cents={flow.shortfallCents} tone="problem" className="mid-number" /> short of {owed}{' '}
+        due before payday.
       </p>
     )
   }
   return (
     <p style={{ fontSize: 17 }}>
-      <Money cents={flow.leftAfterBillsCents} className="mid-number" /> left at payday, after bills.
+      <Money cents={flow.safeCents} className="mid-number" /> safe to spend until payday, after
+      bills.
     </p>
   )
 }
@@ -90,7 +95,14 @@ export function CashFacts({ flow }: { flow: CashFlow }) {
       <Headline flow={flow} />
       <span className="small muted">
         <Money cents={flow.cashCents} /> in checking, minus <Money cents={flow.billsDueCents} /> in
-        bills. {paydayText(flow, money, settings.locale)}
+        bills
+        {flow.overdraftCents > 0 && (
+          <>
+            {' '}
+            and <Money cents={flow.overdraftCents} /> to bring an overdraft back to zero
+          </>
+        )}
+        . {paydayText(flow, money, settings.locale)}
       </span>
     </>
   )

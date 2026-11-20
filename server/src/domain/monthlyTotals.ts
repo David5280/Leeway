@@ -24,6 +24,7 @@ import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/da
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
+  NOT_CARD_PAYMENT_SQL,
   currentPeriod,
   rangeParams,
   sumTotals,
@@ -31,7 +32,6 @@ import {
 } from './budgetReport.js'
 import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
-import { firstTransactionDay } from './profile/income.js'
 import type { Settings } from './settings.js'
 import { PAIR_WINDOW_DAYS, pairTransfers, unfiledLeg, type PairCandidate } from './transferPairs.js'
 
@@ -73,6 +73,15 @@ export function monthStarts(today: IsoDate, count: number): IsoDate[] {
   const { year, month } = dateParts(today)
   const thisMonth = makeDate(year, month, 1)
   return Array.from({ length: count }, (_, i) => addMonths(thisMonth, i - count + 1))
+}
+
+/** The earliest transaction held on any shown account: where the bank history starts. */
+export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
+  const { rows } = await db.query<{ first: IsoDate | null }>(
+    `SELECT min(t.date) AS first FROM transactions t
+     JOIN accounts a ON a.id = t.account_id WHERE NOT a.hidden`,
+  )
+  return rows[0]!.first
 }
 
 /** Totals for the last `count` calendar months, oldest first, ending with this one, and where the history starts. */
@@ -124,6 +133,7 @@ async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
+  skipCardPayments = false,
 ): Promise<Flows[]> {
   const margin = 2 * PAIR_WINDOW_DAYS
   const span = {
@@ -135,7 +145,7 @@ async function unfiledFlows(
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
        t.category_id IS NOT NULL AS "filedTransfer"
-     ${IN_RANGES_SQL}
+     ${IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
        AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
@@ -169,4 +179,26 @@ function flowTotals(
     incomeCents: budget.incomeCents,
     unfiledInCents: inCents,
   }
+}
+
+/**
+ * Spending in each range as a month's totals count it (see the top of this
+ * file), less every credit card payment (NOT_CARD_PAYMENT_SQL), with each
+ * range's category totals for working out what is essential.
+ */
+export async function spendingByRange(
+  db: Db,
+  ranges: DateRange[],
+): Promise<{ spentCents: number; totals: CategoryTotal[] }[]> {
+  // Posted only: a typical month goes by what has settled.
+  const categories = await listCategories(db)
+  const totalsByRange = await categoryTotalsByRange(db, ranges, false, null, {
+    skipCardPayments: true,
+  })
+  const unfiled = await unfiledFlows(db, ranges, false, true)
+  return ranges.map((_, i) => {
+    const totals = totalsByRange[i]!
+    const flows = flowTotals(sumTotals(categories, totals), totals, unfiled[i]!)
+    return { spentCents: flows.spentCents, totals }
+  })
 }

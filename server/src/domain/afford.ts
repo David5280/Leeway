@@ -1,6 +1,6 @@
-// "Can I afford this?": a purchase checked against cash until payday, the
-// budget, and what goals hold back. Pure: the cash flow and budget come in,
-// nothing is read here.
+// "Can I afford this?": a purchase checked against what is safe to spend
+// before payday (cashFlow.ts), the budget, and what goals hold back. Pure: the
+// cash flow and budget come in, nothing is read here.
 
 import type { BudgetSummary } from './budget.js'
 import type { CashFlow } from './cashFlow.js'
@@ -12,7 +12,10 @@ export interface Affordability {
   /** Plain-language reasons, the deciding one first. */
   reasons: string[]
   amountCents: number
-  /** Cash left after the bills due before payday, once this is bought. */
+  /**
+   * Cash left after the bills due before payday and any overdraft, once this
+   * is bought: safe to spend less the purchase, negative when it does not fit.
+   */
   leftAfterBillsCents: number
   /** What goals set aside from the budget hold back this period. */
   goalsSetAsideCents: number
@@ -58,7 +61,7 @@ function cashReason(
   if (leftAfterBills < 0) {
     return {
       level: 'no',
-      text: `It would leave ${money(-leftAfterBills)} too little for the bills due before payday on ${cashFlow.nextPayday}.`,
+      text: `It would leave ${money(-leftAfterBills)} too little for the bills${cashFlow.overdraftCents > 0 ? ' and overdraft' : ''} due before payday on ${cashFlow.nextPayday}.`,
     }
   }
   if (leftAfterBills < budget.totals.setAsideCents) {
@@ -131,10 +134,12 @@ export function affordability(
 ): Affordability {
   const days = Math.max(1, cashFlow.daysUntilPayday)
   const held = budget.totals.setAsideCents
-  const leftAfterBillsCents = cashFlow.leftAfterBillsCents - amountCents
+  // Safe to spend, or below zero by the shortfall when the bills already do not fit.
+  const leftNow = cashFlow.safeCents - cashFlow.shortfallCents
+  const leftAfterBillsCents = leftNow - amountCents
   // Money held for goals is not there to spend, so it comes off the daily figure.
   const perDay = (left: number) => Math.max(0, Math.floor((left - held) / days))
-  const perDayBeforeCents = perDay(cashFlow.leftAfterBillsCents)
+  const perDayBeforeCents = perDay(leftNow)
   const perDayAfterCents = perDay(leftAfterBillsCents)
   const room = budgetRoom(budget, categoryId, amountCents)
   const reasons = [

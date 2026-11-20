@@ -8,27 +8,44 @@ import { startReference, worthChange } from '../worth'
 
 type Merchants = Output<'top_merchants'>
 
-/** Checking, less the bills due before payday: what is left at payday. */
+/** When the cash runs to: payday, a projected payday, or the period's end. */
+function untilLabel(flow: CashFlow, date: (iso: string) => string): string {
+  if (flow.paydaySource === 'period_end')
+    return `To ${date(flow.nextPayday)}, when the budget period ends`
+  return flow.paydayEstimate
+    ? `Payday about ${date(flow.nextPayday)}, from one paycheck so far`
+    : `Payday ${date(flow.nextPayday)}`
+}
+
+/** Safe to spend until payday: checking, less the bills due first and any overdraft. */
 export function cashFlowDrill(flow: CashFlow, date: (iso: string) => string): DrillDown {
-  const short = flow.leftAfterBillsCents < 0
+  const short = flow.shortfallCents > 0
+  const overdraft =
+    flow.overdraftCents > 0
+      ? [
+          {
+            label: 'to bring an overdraft back to zero',
+            value: { cents: flow.overdraftCents },
+            op: 'minus' as const,
+          },
+        ]
+      : []
   return {
     title: 'Until payday',
-    subtitle: `Payday ${date(flow.nextPayday)}`,
-    figure: short
-      ? { cents: -flow.leftAfterBillsCents, tone: 'problem' }
-      : { cents: flow.leftAfterBillsCents },
+    subtitle: untilLabel(flow, date),
+    figure: short ? { cents: flow.shortfallCents, tone: 'problem' } : { cents: flow.safeCents },
     math: {
       terms: [
         { label: 'In checking', value: { cents: flow.cashCents } },
         { label: 'bills due before payday', value: { cents: flow.billsDueCents }, op: 'minus' },
+        ...overdraft,
       ],
-      result: {
-        label: short ? 'Short of the bills by' : 'Left at payday',
-        value: { cents: Math.abs(flow.leftAfterBillsCents), tone: short ? 'problem' : undefined },
-      },
+      result: short
+        ? { label: 'Short by', value: { cents: flow.shortfallCents, tone: 'problem' } }
+        : { label: 'Safe to spend', value: { cents: flow.safeCents } },
       note: short
         ? 'The bills due before payday come to more than checking holds.'
-        : 'Day-to-day spending until payday comes out of this too. Savings is not counted.',
+        : 'Day-to-day spending until payday comes out of this. Savings is not counted.',
     },
     items:
       flow.billsDue.length > 0

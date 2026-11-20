@@ -96,8 +96,10 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
     today: TODAY,
     nextPayday: '2026-11-27',
     paydaySource: 'pay_period',
+    paydayEstimate: false,
     expectedPayCents: null,
     daysUntilPayday: 10,
+    cashKnown: true,
     cashCents: 150000,
     billsDue: [
       {
@@ -109,7 +111,9 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
       },
     ],
     billsDueCents: 6000,
-    leftAfterBillsCents: 144000,
+    overdraftCents: 0,
+    safeCents: 144000,
+    shortfallCents: 0,
     perDayCents: 14400,
     ...fields,
   }

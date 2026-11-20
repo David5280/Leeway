@@ -16,12 +16,16 @@ const flow = (cashCents: number, billsDue: CashFlow['billsDue']): CashFlow => ({
   today: '2026-11-17',
   nextPayday: '2026-11-28',
   paydaySource: 'pay_period',
+  paydayEstimate: false,
   expectedPayCents: null,
   daysUntilPayday: 11,
+  cashKnown: true,
   cashCents,
   billsDue,
   billsDueCents: billsDue.reduce((sum, one) => sum + one.amountCents, 0),
-  leftAfterBillsCents: cashCents,
+  overdraftCents: 0,
+  safeCents: cashCents,
+  shortfallCents: 0,
   perDayCents: 0,
 })
 

@@ -84,12 +84,14 @@ function bankItems({ connections }: CoachSources): AttentionItem[] {
 }
 
 function cashItems({ cashFlow }: CoachSources, money: Money): AttentionItem[] {
-  if (cashFlow.leftAfterBillsCents >= 0) return []
+  if (cashFlow.shortfallCents === 0) return []
+  const overdraft =
+    cashFlow.overdraftCents > 0 ? ` and an overdraft of ${money(cashFlow.overdraftCents)}` : ''
   return [
     {
       priority: 'now',
       topic: 'cash',
-      message: `Bills due before payday on ${cashFlow.nextPayday} come to ${money(cashFlow.billsDueCents)}, but checking holds ${money(cashFlow.cashCents)}: ${money(-cashFlow.leftAfterBillsCents)} short.`,
+      message: `Bills due before payday on ${cashFlow.nextPayday} come to ${money(cashFlow.billsDueCents)}${overdraft}, but checking holds ${money(cashFlow.cashCents)}: ${money(cashFlow.shortfallCents)} short.`,
       tool: 'get_cash_flow',
     },
   ]

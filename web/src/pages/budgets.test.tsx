@@ -8,6 +8,7 @@ import {
   category,
   failing,
   fakeServer,
+  heldToCash,
   holdRequest,
   renderSignedIn,
   type Handlers,
@@ -375,6 +376,22 @@ describe('budget rows in plain words', () => {
     expect(
       within(left).getByRole('link', { name: '$150 of it set aside for goals' }),
     ).toHaveAttribute('href', '/plan/goals')
+  })
+
+  it('says under Left when checking holds less than the budgets have left', async () => {
+    fakeServer({
+      get_budget: () =>
+        heldToCash(
+          budgetFor([groceries], [{ categoryId: groceries.id, amountCents: 24000 }]),
+          17_800,
+        ),
+      list_categories: () => [groceries],
+    })
+    renderBudgets()
+    const left = await screen.findByRole('region', { name: 'Left' })
+    expect(left).toHaveTextContent(
+      'Your budget has $360 left, but you have $178 you can safely spend before payday on Nov 27.',
+    )
   })
 
   it('draws an empty bar for a budget of zero with nothing spent', async () => {

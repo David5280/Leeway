@@ -7,6 +7,7 @@ import { periodWord, shortDate } from '../lib/words.js'
 import type { AccountAlert } from './accountAlerts.js'
 import type { Checkin } from './checkin.js'
 import type { Settings } from './settings.js'
+import { spendableNote, untilWords } from './spendable.js'
 
 /** A headline and a few short points, the shape every summary writer returns. */
 export interface SummaryText {
@@ -29,11 +30,12 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  * `onTrack` opens the on-track sentence, so it can read as a point under an alert.
  */
 function budgetSentence(
-  { budget }: Checkin,
+  checkin: Checkin,
   money: Money,
-  word: string,
+  { word, locale }: { word: string; locale: string },
   onTrack = "You're on track",
 ): string {
+  const { budget } = checkin
   // Today still counts, as it does for the money left per day.
   const days = plural(budget.daysLeft + 1, 'day', 'days')
   if (budget.budgetedCents === 0) {
@@ -52,6 +54,9 @@ function budgetSentence(
   if (budget.leewayCents < 0) {
     return `Spending has dipped ${money(-budget.leewayCents)} into what you set aside for goals.`
   }
+  // The budget has more room than checking can cover: the cash is what can be spent.
+  const cashLine = cashNote(checkin, money, locale)
+  if (cashLine) return cashLine
   const afterGoals =
     budget.setAsideCents > 0 ? ` after ${money(budget.setAsideCents)} set aside for goals` : ''
   const perDay =
@@ -73,8 +78,12 @@ function urgentAlert({ alerts }: Checkin): AccountAlert | null {
  * since a budget can be on track while an account is below zero. Otherwise,
  * how the period is going.
  */
-export function headline(checkin: Checkin, money: Money, word: string): string {
-  return urgentAlert(checkin)?.summary ?? budgetSentence(checkin, money, word)
+export function headline(
+  checkin: Checkin,
+  money: Money,
+  words: { word: string; locale: string },
+): string {
+  return urgentAlert(checkin)?.summary ?? budgetSentence(checkin, money, words)
 }
 
 /**
@@ -93,9 +102,13 @@ function alertPoint(checkin: Checkin): string | null {
 }
 
 /** How the budget is going, as a point once an urgent alert has taken the headline. */
-function budgetPoint(checkin: Checkin, money: Money, word: string): string | null {
+function budgetPoint(
+  checkin: Checkin,
+  money: Money,
+  words: { word: string; locale: string },
+): string | null {
   if (!urgentAlert(checkin)) return null
-  return budgetSentence(checkin, money, word, 'Your budgets are on track')
+  return budgetSentence(checkin, money, words, 'Your budgets are on track')
 }
 
 /** How many other things the Heads up list says need doing today, if any. */
@@ -106,17 +119,39 @@ function urgentPoint({ attention }: Checkin): string | null {
   return `${plural(now, 'thing needs', 'things need')} you today. See Heads up.`
 }
 
-function cashPoint({ cashFlow, today }: Checkin, money: Money, locale: string): string | null {
-  // No cash accounts means nothing worth saying about payday.
-  if (cashFlow.cashCents === 0 && cashFlow.billsDueCents === 0) return null
-  const payday = shortDate(cashFlow.nextPayday, locale)
-  if (cashFlow.leftAfterBillsCents < 0) {
-    return `Bills before payday on ${payday} come to ${money(cashFlow.billsDueCents)}, ${money(-cashFlow.leftAfterBillsCents)} more than your cash.`
-  }
-  const days = daysBetween(today, cashFlow.nextPayday)
-  const until = days <= 0 ? 'payday today' : `payday on ${payday}`
-  return `${money(cashFlow.leftAfterBillsCents)} is free until ${until}, after bills.`
+/**
+ * The spendable note (spendable.ts) in the summary's own money format: the
+ * cash falling short, or the budget having more room than the cash.
+ */
+function cashNote({ spendable, cashFlow }: Checkin, money: Money, locale: string): string | null {
+  // Without a budget period to compare, the cash alone can still fall short.
+  const facts = spendable ?? { ...spendableOf(cashFlow), ...cashFlow, budgetLeftCents: null }
+  return spendableNote(facts, money, locale)
 }
+
+/** Safe to spend until payday, unless a line already said what the cash allows. */
+function cashPoint(
+  checkin: Checkin,
+  money: Money,
+  locale: string,
+  said: (string | null)[],
+): string | null {
+  const { cashFlow, today } = checkin
+  // No checking balance means nothing worth saying about payday.
+  if (!cashFlow.cashKnown) return null
+  const note = cashNote(checkin, money, locale)
+  if (note) return said.includes(note) ? null : note
+  const days = daysBetween(today, cashFlow.nextPayday)
+  const until = days <= 0 ? 'until payday today' : untilWords(spendableOf(cashFlow), locale)
+  return `${money(cashFlow.safeCents)} is safe to spend ${until}, after bills.`
+}
+
+/** The payday facts of a cash flow, as the words for it read them. */
+const spendableOf = (cashFlow: Checkin['cashFlow']) => ({
+  payday: cashFlow.nextPayday,
+  paydaySource: cashFlow.paydaySource,
+  paydayEstimate: cashFlow.paydayEstimate,
+})
 
 function pacePoint({ budget }: Checkin, money: Money, word: string): string | null {
   const diff = budget.spentCents - budget.previousSpentToDateCents
@@ -155,16 +190,20 @@ export function plainSummary(
   money: Money,
 ): SummaryText {
   const word = periodWord(settings.period.kind)
+  const words = { word, locale: settings.locale }
+  const top = headline(checkin, money, words)
+  const budgetLine = budgetPoint(checkin, money, words)
   const points = [
     alertPoint(checkin),
-    budgetPoint(checkin, money, word),
+    budgetLine,
     urgentPoint(checkin),
-    cashPoint(checkin, money, settings.locale),
+    // The cash line is left out when the headline or budget line already said it.
+    cashPoint(checkin, money, settings.locale, [top, budgetLine]),
     pacePoint(checkin, money, word),
     goalPoint(checkin, money, settings.locale),
     netWorthPoint(checkin, money),
   ].filter((point): point is string => point !== null)
-  return { headline: headline(checkin, money, word), points: points.slice(0, MAX_POINTS) }
+  return { headline: top, points: points.slice(0, MAX_POINTS) }
 }
 
 /**
@@ -190,18 +229,36 @@ export function summaryFacts(
       spent: money(budget.spentCents),
       left: money(budget.leftCents),
       setAsideForGoals: money(budget.setAsideCents),
-      leftAfterGoals: money(budget.leewayCents),
-      safeToSpendPerDay: budget.safePerDayCents === null ? null : money(budget.safePerDayCents),
+      budgetRoomAfterGoals: money(budget.leewayCents),
       budgetedSpendingByPeriodEndAtThisPace: money(budget.projectedBudgetedCents),
-      income: money(budget.incomeCents),
       spentByThisPointLastPeriod: money(budget.previousSpentToDateCents),
     },
-    untilPayday: {
-      payday: date(cashFlow.nextPayday),
-      cashInChecking: money(cashFlow.cashCents),
-      billsDueBeforePayday: money(cashFlow.billsDueCents),
-      leftAfterBills: money(cashFlow.leftAfterBillsCents),
-    },
+    // The one figure for what can be spent now: the budget's room held to the
+    // cash. Quote it, and the note when there is one, rather than the budget's room.
+    // Null until a checking account has a balance: the cash is unknown, not zero.
+    safeToSpend: !cashFlow.cashKnown
+      ? null
+      : {
+          untilPayday: money(cashFlow.safeCents),
+          perDay: money(checkin.spendable?.perDayCents ?? cashFlow.perDayCents),
+          payday: date(cashFlow.nextPayday),
+          paydayIsAnEstimate: cashFlow.paydayEstimate,
+          noPaydayFoundSoPeriodEndUsed: cashFlow.paydaySource === 'period_end',
+          cashInChecking: money(cashFlow.cashCents),
+          billsDueBeforePayday: money(cashFlow.billsDueCents),
+          overdraftToBringBackToZero: money(cashFlow.overdraftCents),
+          shortfall: cashFlow.shortfallCents > 0 ? money(cashFlow.shortfallCents) : null,
+          note: cashNote(checkin, money, settings.locale),
+        },
+    // Pay is paychecks from the current employer only; money from people,
+    // refunds and transfers in are not pay.
+    typicalMonthlyPay:
+      checkin.pay.monthlyCents === null
+        ? null
+        : {
+            amount: money(checkin.pay.monthlyCents),
+            estimatedFromOnePaycheck: checkin.pay.estimate,
+          },
     // Account alerts have their own list below, so the heads-up list leaves them out.
     headsUp: checkin.attention
       .filter((item) => item.topic !== 'account')

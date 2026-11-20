@@ -6,6 +6,7 @@ import { periodContaining, shiftPeriod, type Period } from '../lib/periods.js'
 import { computeBudget, type BudgetSummary, type CategoryTotal, type SetAside } from './budget.js'
 import { listCategories, type Category } from './categories.js'
 import { countedSql, countsAsSpending } from './counted.js'
+import { CARD_PAYMENT_CODE } from './transfers.js'
 import { listGoals } from './goals.js'
 import { rolloverCarries } from './rollover.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -36,6 +37,14 @@ export const IN_RANGES_SQL = `
 export const COUNTED_IN_RANGES_SQL = `${IN_RANGES_SQL}
     AND ${countedSql()}`
 
+/**
+ * Leaves out credit card payments, either side, wherever they are filed: a
+ * typical month's spending counts the purchases, never the payment for them,
+ * nor money paid into a card from an account Leeway cannot see.
+ */
+export const NOT_CARD_PAYMENT_SQL = `
+    AND coalesce(t.provider_category_detailed, '') <> '${CARD_PAYMENT_CODE}'`
+
 /** COUNTED_IN_RANGES_SQL's parameters, in order. */
 export function rangeParams(
   ranges: DateRange[],
@@ -58,11 +67,12 @@ export async function categoryTotalsByRange(
   ranges: DateRange[],
   includePending: boolean,
   accountIds: string[] | null = null,
+  { skipCardPayments = false } = {},
 ): Promise<CategoryTotal[][]> {
   const { rows } = await db.query<CategoryTotal & { range: number }>(
     `SELECT r.n::int AS range, t.category_id AS "categoryId",
        sum(t.amount_cents)::bigint AS "amountCents", count(*)::int AS count
-     ${COUNTED_IN_RANGES_SQL}
+     ${COUNTED_IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
      GROUP BY r.n, t.category_id
      ORDER BY r.n, t.category_id NULLS LAST`,
     rangeParams(ranges, includePending, accountIds),

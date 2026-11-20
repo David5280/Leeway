@@ -8,6 +8,7 @@ import {
   alertsFor,
   budgetFor,
   category,
+  heldToCash,
   fakeServer,
   renderSignedIn,
   transaction,
@@ -68,6 +69,37 @@ const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).
 
 describe('LeewayWidget', () => {
   const region = () => screen.getByRole('region', { name: 'Your leeway' })
+
+  it('leads with the cash when checking holds less than the budget has left, and says why', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
+    renderSignedIn(<LeewayWidget budget={heldToCash(budget, 17_800)} offset={0} />)
+    expect(region()).toHaveTextContent('Safe to spend$178')
+    // $178 over the 10 days to payday, today included.
+    expect(region()).toHaveTextContent('About $18 a day until Fri, Nov 27')
+    const note = screen.getByText(/^Your budget has \$600 left, but you have \$178/)
+    expect(note).toHaveTextContent(
+      'Your budget has $600 left, but you have $178 you can safely spend before payday on Nov 27.',
+    )
+    // Less cash than budget is not a problem in itself, so nothing is red.
+    expect(note).toHaveClass('muted')
+    expect(region().querySelector('.problem')).not.toBeInTheDocument()
+  })
+
+  it('turns red only when the bills before payday outrun the cash', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
+    renderSignedIn(<LeewayWidget budget={heldToCash(budget, 17_800, [30_000])} offset={0} />)
+    expect(region()).toHaveTextContent('Safe to spend$0')
+    expect(
+      screen.getByText('Checking is $122 short of the bills before payday on Nov 27.'),
+    ).toHaveClass('over')
+  })
+
+  it('leads with the budget, with no note, when checking covers it', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
+    renderSignedIn(<LeewayWidget budget={heldToCash(budget, 500_000)} offset={0} />)
+    expect(region()).toHaveTextContent('Left to spend$600')
+    expect(region()).not.toHaveTextContent('safely spend')
+  })
 
   it('asks for budgets when no category has one', () => {
     renderSignedIn(<LeewayWidget budget={budgetFor([category('Fun')], [])} offset={0} />)

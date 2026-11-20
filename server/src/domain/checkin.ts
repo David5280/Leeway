@@ -7,6 +7,7 @@ import { listAccounts } from './accounts.js'
 import { listAlerts } from './alerts.js'
 import { listBills } from './bills.js'
 import { budgetReport } from './budgetReport.js'
+import { withRoom } from './budgetRoom.js'
 import { getCashFlow } from './cashFlow.js'
 import { attentionItems, type AttentionItem } from './coach.js'
 import { listConnections } from './connections.js'
@@ -15,7 +16,7 @@ import { listGoals } from './goals.js'
 import { latestPaystub } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
-import { monthlyAverages, paySchedule } from './profile/income.js'
+import { typicalMonth } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
 import {
   pensionMonthlyTotals,
@@ -33,7 +34,7 @@ export const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
   const [
-    budget,
+    report,
     cashFlow,
     bills,
     goals,
@@ -43,8 +44,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     worth,
     alerts,
     { savings, pensions },
-    monthly,
-    pay,
+    { monthly, pay },
     paystub,
   ] = await Promise.all([
     budgetReport(db, settings, now),
@@ -61,10 +61,10 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       savings: await getSavingsGlance(db, settings, today, accounts),
       pensions: await pensionsOf(db, accounts),
     })),
-    monthlyAverages(db, settings, today),
-    paySchedule(db, settings, today),
+    typicalMonth(db, settings, today),
     latestPaystub(db),
   ])
+  const budget = withRoom(report, cashFlow, settings)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
   const plan = paystubPlan(paystub, today)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
@@ -106,13 +106,28 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       incomeCents: totals.incomeCents,
       previousSpentToDateCents: budget.previous.spentToDateCents,
     },
+    /** Safe to spend until payday (see get_cash_flow): the one figure for what can be spent now. */
     cashFlow: {
+      cashKnown: cashFlow.cashKnown,
       cashCents: cashFlow.cashCents,
       nextPayday: cashFlow.nextPayday,
       paydaySource: cashFlow.paydaySource,
+      paydayEstimate: cashFlow.paydayEstimate,
       billsDueCents: cashFlow.billsDueCents,
-      leftAfterBillsCents: cashFlow.leftAfterBillsCents,
+      overdraftCents: cashFlow.overdraftCents,
+      safeCents: cashFlow.safeCents,
+      shortfallCents: cashFlow.shortfallCents,
       perDayCents: cashFlow.perDayCents,
+    },
+    /** The budget's room held to what is safe to spend, and the one line that says when they differ. */
+    spendable: budget.spendable,
+    /** Pay from the current employer: an estimate while one paycheck is all there is. */
+    pay: {
+      monthlyCents: monthly.incomeCents,
+      estimate: monthly.incomeEstimated,
+      cadence: pay.cadence,
+      paycheckCents: pay.typicalPayCents,
+      since: pay.since,
     },
     bills: { count: bills.length, monthlyCents: billsMonthlyCents },
     goals: goals.map((g) => ({
