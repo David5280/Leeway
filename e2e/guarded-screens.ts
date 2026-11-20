@@ -3,14 +3,14 @@
 // and the forms people open on them.
 
 import { createHash, randomBytes } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
-import { PLACEHOLDER_TOKEN } from './widget'
+import { revealWidgetToken } from './widget'
 
 /** The Settings menu's groups, in order (web/src/pages/settings/groups.tsx). */
 export const SETTINGS_GROUPS = [
@@ -19,15 +19,13 @@ export const SETTINGS_GROUPS = [
   'accounts',
   'banks',
   'email',
+  'notifications',
   'assistant',
   'ai',
   'widget',
   'data',
   'sign-in',
 ]
-
-/** A bank's CSV export, as the import tests use. */
-const CSV = fileURLToPath(new URL('./fixtures/old-checking.csv', import.meta.url))
 
 export interface Screen {
   name: string
@@ -115,22 +113,6 @@ async function revealKey(page: Page) {
   await expect(page.getByLabel('New key')).toBeVisible()
 }
 
-/**
- * A widget token that looks freshly made, answered without making one, so no
- * token is left behind: the page then shows the parameter it shows only once.
- */
-async function revealWidgetToken(page: Page) {
-  const made = { name: 'Widget', createdAt: new Date().toISOString(), lastUsedAt: null }
-  await page.route('**/api/actions/get_widget_token', (route) =>
-    route.fulfill({ json: { result: made } }),
-  )
-  await page.route('**/api/actions/create_widget_token', (route) =>
-    route.fulfill({ json: { result: { ...made, token: PLACEHOLDER_TOKEN } } }),
-  )
-  await page.getByRole('button', { name: 'Create the widget token' }).click()
-  await expect(page.getByLabel('Widget parameter')).toBeVisible()
-}
-
 /** Every screen the app's router answers, and the forms that open on them. */
 export const SCREENS: Screen[] = [
   at('overview', '/'),
@@ -156,6 +138,11 @@ export const SCREENS: Screen[] = [
     path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
   })),
   at('alerts', '/alerts'),
+  at('inbox', '/inbox'),
+  at('inbox', '/inbox', {
+    name: '/inbox with long alerts, read, unread and cleared',
+    before: fakeLongInbox,
+  }),
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {
     name: '/transactions with the add menu open',
@@ -232,7 +219,7 @@ export const SCREENS: Screen[] = [
   at('importTransactions', '/transactions/import', {
     name: '/transactions/import with a file chosen',
     then: async (page) => {
-      await page.getByLabel('Choose a CSV file').setInputFiles(CSV)
+      await page.getByLabel('Choose a CSV file').setInputFiles('e2e/fixtures/old-checking.csv')
       await expect(page.getByText('old-checking.csv')).toBeVisible()
     },
   }),
@@ -290,6 +277,12 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',
     then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),
+  }),
+  at('settings', '/settings/notifications', {
+    name: '/settings/notifications with push on this device',
+    // A fake browser and push service: no test reaches a real one (notifications.ts).
+    before: pushOnThisDevice,
+    then: seePushOn,
   }),
   at('settings', '/settings/assistant', {
     name: '/settings/assistant showing a new key',

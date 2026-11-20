@@ -52,6 +52,7 @@ export const ICONS = {
   ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  bell: <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9M10 20.5a2.2 2.2 0 0 0 4 0" />,
   gear: (
     <>
       <circle cx="12" cy="12" r="3" />

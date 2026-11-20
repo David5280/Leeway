@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'not_configured'
   | 'bank_error'
   | 'mail_error'
+  | 'push_error'
   | 'wrong_password'
   | 'too_many_attempts'
   | 'file_too_large'
@@ -26,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_configured: 503,
   bank_error: 502,
   mail_error: 502,
+  push_error: 502,
   wrong_password: 400,
   too_many_attempts: 429,
   file_too_large: 413,

@@ -52,6 +52,17 @@ import {
 } from './goals.js'
 import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
 import {
+  countNotificationsAction,
+  dismissNotificationAction,
+  getNotificationSettingsAction,
+  listNotificationsAction,
+  markNotificationsReadAction,
+  sendTestPushAction,
+  subscribePushAction,
+  unsubscribePushAction,
+  updateNotificationSettingsAction,
+} from './notifications.js'
+import {
   getCashFlowAction,
   getNetWorthAction,
   listRecentBalancesAction,
@@ -130,6 +141,15 @@ export const actionList = [
   getWeeklyEmailAction,
   setWeeklyEmailAction,
   sendTestWeeklyEmailAction,
+  countNotificationsAction,
+  listNotificationsAction,
+  markNotificationsReadAction,
+  dismissNotificationAction,
+  getNotificationSettingsAction,
+  updateNotificationSettingsAction,
+  subscribePushAction,
+  unsubscribePushAction,
+  sendTestPushAction,
   listCategoriesAction,
   createCategoryAction,
   updateCategoryAction,

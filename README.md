@@ -338,6 +338,64 @@ what's left this period, bills before payday and your goals. It sends through
 Only you can turn it on, in the app. Connected assistants can neither see nor
 change the email or its address.
 
+### Notifications (nothing to set)
+
+The bell at the top of every screen opens the **inbox**: each alert as it
+happens, newest first. Open one to go to the screen that explains it (it is
+then read), or dismiss it. Leeway checks every few minutes and after each bank
+sync, and tells you about:
+
+- an account overdrawn, a card over its limit, an overdraft fee, or a balance
+  under its low-balance warning;
+- a budget reaching a share you choose (100% by default), until it is back
+  under;
+- a bill not on autopay coming due (2 days before, by default), until it is
+  paid;
+- a single charge of at least an amount you choose ($500 by default);
+- a bank that needs you to sign in again;
+- AI spending near or at this month's limit, once each as it happens (see
+  [AI models](#ai-models-and-the-monthly-limit)).
+
+Each is the same alert you already see in the app, worked out by plain rules,
+with no AI involved. The same alert is never stored twice: a condition that
+clears and comes back within an hour picks up where it was, and old items are
+deleted after 90 days.
+
+**Push to your phone or computer** needs nothing in your configuration. On its
+first start Leeway makes its own Web Push keys and keeps them in the database,
+encrypted under your `ENCRYPTION_KEY`; they are never in your variables or
+logs. In **Settings**, then **Notifications**, press **Turn on** on each device
+that should get pushes, and **Send a test notification** to see one.
+
+- **On iPhone and iPad**, push works only once Leeway is on the Home Screen:
+  open it in Safari, tap Share, then **Add to Home Screen**, and open it from
+  there. The Settings screen says so when it is needed.
+- **Quiet hours** (10 PM to 7 AM in your time zone, by default) hold pushes
+  until they end; the inbox still gets each alert at once.
+- **A burst becomes one push.** Leeway sends at most one push every 15
+  minutes. Alerts that pile up meanwhile go out together as one, like "3 new
+  alerts", and nothing is pushed for an alert you have already read,
+  dismissed or turned off, or one that has cleared. One that clears and comes
+  back before its push went out is still pushed.
+- **What a push says.** Browsers carry every push through their maker's push
+  service (Apple, Google, Mozilla or Microsoft), encrypted end to end, and the
+  words then show on your lock screen. So a push holds a short title and the
+  account, category or bill name as you see it in Leeway: never an amount,
+  account number, merchant or bank text. The detail is in the inbox.
+- A device whose push service says it is gone is forgotten. If you change
+  `ENCRYPTION_KEY`, Leeway makes new push keys and forgets every device. In
+  both cases the device's Settings show **Turn on** again, and pressing it
+  replaces the browser's old subscription with a new one.
+- **Who a push is from.** Each push names your Leeway address to the push
+  service: `PUBLIC_URL` when it is `https`, otherwise the `https` address the
+  device turned push on from. Apple refuses pushes without one, so on iPhone
+  turn push on from your `https` address, not a local one.
+
+Each kind of alert has its own switch, and turns it off in the inbox and for
+push alike. Only you can see the inbox or change these settings: connected
+assistants read the same facts through their own alert, budget and bill tools,
+and can't mark anything read or dismiss it.
+
 ## Connect an AI assistant
 
 Your connector address is your Leeway address followed by `/mcp`, like

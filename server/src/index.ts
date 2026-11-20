@@ -1,5 +1,5 @@
 // Starts Leeway: migrates the database, serves the app, and on timers syncs
-// banks and sends the weekly email.
+// banks, sends notifications and sends the weekly email.
 
 import { aiServices } from './ai/services.js'
 import { PlaidProvider } from './bank/plaid.js'
@@ -9,6 +9,11 @@ import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { addSummaryWidget, leadWithLeeway } from './domain/dashboardUpgrade.js'
+import {
+  NOTIFIER_MINUTES,
+  NOTIFY_AFTER_SYNC_MS,
+  runNotifier,
+} from './domain/notifications/notifier.js'
 import { getOwner } from './domain/owner.js'
 import { getSettings } from './domain/settings.js'
 import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
@@ -17,10 +22,12 @@ import { upgradeStarterSet } from './domain/starterUpgrade.js'
 import { sendWeeklyEmailIfDue, WEEKLY_EMAIL_CHECK_MINUTES } from './domain/weeklyEmail/send.js'
 import { buildApp } from './http/app.js'
 import { todayIn } from './lib/dates.js'
-import { repeatEvery } from './lib/repeat.js'
+import { coalesced, repeatEvery } from './lib/repeat.js'
 import { generateSetupCode, setupReminder, type SetupCode } from './lib/setupCode.js'
 import { MINUTE_MS } from './lib/time.js'
 import { ResendSender } from './mail/resend.js'
+import { keysReplacedLine, loadVapidKeys } from './push/keys.js'
+import { WebPushSender } from './push/sender.js'
 import { configWarnings, explainConfigError } from './startupMessages.js'
 
 /** The configuration, or a plain explanation in the log and an exit when a setting is wrong. */
@@ -51,8 +58,16 @@ const ctx: AppContext = {
   db,
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
-  ...aiServices(config, db, now),
+  // AI calls come only from requests and from timers set up after buildApp, so
+  // `app` exists before this can report.
+  ...aiServices(config, db, now, (error, step) =>
+    app.log.warn({ err: error }, `Could not ${step}; the next AI call will try again.`),
+  ),
   mailer: config.mail ? new ResendSender(config.mail) : null,
+  push: new WebPushSender({
+    keys: () => loadVapidKeys(db, config.encryptionKey),
+    publicUrl: config.publicUrl,
+  }),
   now,
 }
 
@@ -63,6 +78,8 @@ const setup: SetupCode = config.setupCode
   ? { code: config.setupCode, from: 'variable' }
   : { code: generateSetupCode(), from: 'log' }
 const app = await buildApp(ctx, { logger: true, setupCode: setup.code })
+// The push key pair is made on first start and kept encrypted; nothing to configure.
+await loadVapidKeys(db, config.encryptionKey, (removed) => app.log.warn(keysReplacedLine(removed)))
 
 /**
  * Moves transactions from banks linked before Leeway used purchase dates onto
@@ -81,6 +98,29 @@ async function logAlerts(): Promise<void> {
   logChangedAlerts(await alertLogLine(db, settings, todayIn(settings.timeZone, ctx.now())))
 }
 
+/** Brings the inbox up to date and sends any push owed; logs only what went out. */
+async function notify(): Promise<void> {
+  const outcome = await runNotifier(ctx)
+  if (outcome === 'sent') app.log.info('Sent a push notification')
+}
+
+/** After any sync (on a timer, from a webhook, by hand or from a new link), one check soon. */
+const notifySoon = coalesced(
+  notify,
+  (error) => app.log.error({ err: error }, 'Notifications check failed'),
+  NOTIFY_AFTER_SYNC_MS,
+)
+ctx.afterBankUpdate = notifySoon
+
+// The inbox follows the data, and pushes wait out quiet hours, so the notifier
+// runs on its own timer as well as after each sync. The first run is at start.
+repeatEvery(
+  NOTIFIER_MINUTES * MINUTE_MS,
+  notify,
+  (error) => app.log.error({ err: error }, 'Notifications check failed'),
+  { runNow: true },
+)
+
 // Webhooks keep banks current, but a periodic sync is the safety net for
 // missed webhooks and for installs without a public URL.
 if (ctx.bank && config.syncIntervalMinutes > 0) {
@@ -90,6 +130,8 @@ if (ctx.bank && config.syncIntervalMinutes > 0) {
       await syncAll(ctx)
       await catchUpDates()
       await logAlerts()
+      // Fresh balances may be news: tell the owner now, not at the next tick.
+      notifySoon()
     },
     (error) => app.log.error({ err: error }, 'Scheduled sync failed'),
   )
