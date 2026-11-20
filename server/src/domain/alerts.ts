@@ -13,6 +13,7 @@ import {
   type AccountAlert,
   type FeeCandidate,
 } from './accountAlerts.js'
+import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import type { Settings } from './settings.js'
 
@@ -49,13 +50,17 @@ export async function listAlerts(
   return alertsFor(selectAccounts(accounts, accountIds), charges, settings)
 }
 
-/** The alerts for accounts already loaded, as listAlerts works them out. */
+/**
+ * The alerts for accounts already loaded, as listAlerts works them out. An
+ * account the bank no longer shares has none: its balance is an old one, and
+ * no new fee on it can arrive.
+ */
 export function alertsFor(
   accounts: Account[],
   charges: FeeCandidate[],
   { currency, locale }: Pick<Settings, 'currency' | 'locale'>,
 ): AccountAlert[] {
-  return accountAlerts(accounts, charges, {
+  return accountAlerts(accounts.filter(isShared), charges, {
     money: (cents) => formatCents(cents, currency, locale),
     date: (date) => shortDate(date, locale),
   })

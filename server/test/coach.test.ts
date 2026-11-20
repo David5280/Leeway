@@ -259,6 +259,7 @@ describe('get_checkin', () => {
         onTrack: false,
         heldBackCents: 0,
         status: 'in_progress',
+        balanceAsOf: null,
       },
     ])
     expect(checkin.debts).toMatchObject({ owedCents: 200000, minimumsCents: 6000 })
@@ -478,6 +479,34 @@ describe('when_can_i_afford', () => {
   it('refuses a missing or non-positive amount to save each period', async () => {
     const error = await callError('when_can_i_afford', { amountCents: 100, perPeriodCents: 0 })
     expect(error.code).toBe('invalid_input')
+  })
+})
+
+describe('goals on an account no longer shared', () => {
+  it('says once that the progress is frozen, instead of calling the goal behind', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Savings', balanceCents: 1000 })
+    await call('create_goal', {
+      name: 'House',
+      targetCents: 4000000,
+      targetDate: '2026-12-31',
+      accountId,
+    })
+    await ctx.db.query(`UPDATE accounts SET unshared_at = '2026-11-10T12:00:00Z' WHERE id = $1`, [
+      accountId,
+    ])
+
+    const goalItems = (await call('get_checkin')).attention.filter((a) => a.topic === 'goal')
+    expect(goalItems).toEqual([
+      {
+        priority: 'fyi',
+        topic: 'goal',
+        message:
+          'House follows Test Savings, which its bank no longer shares, so its progress is as of 2026-11-10. Ask whether to link it to another account or count it by hand.',
+        forOwner:
+          'House follows Test Savings, which its bank no longer shares, so its progress is as of 2026-11-10. You could link it to another account or count it by hand.',
+        tool: 'update_goal',
+      },
+    ])
   })
 })
 

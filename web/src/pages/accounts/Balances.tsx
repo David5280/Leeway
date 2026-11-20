@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react'
 import type { AccountsView } from '../../api/client'
 import { Money } from '../../components/design/Money'
+import { isShared } from '../../lib/accounts'
 import { timeAgo } from '../../lib/format'
 
 /** One balance, to the cent, over a note on what it is. */
@@ -76,7 +77,8 @@ export function Balances({ view }: { view: AccountsView }) {
         )}
         {kinds > 1 && <Figure title="Net" cents={b.netCents} note="Owned, less owed" />}
       </div>
-      <p className="small muted">{updatedNote(accounts)}</p>
+      {/* Only shared accounts' balances are added up above (unshared ones show apart). */}
+      <p className="small muted">{updatedNote(accounts.filter(isShared))}</p>
     </section>
   )
 }

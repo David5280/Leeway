@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
+import { BANK_SCREENS } from './bank-screens'
 import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
@@ -304,6 +305,7 @@ export const SCREENS: Screen[] = [
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
   }),
+  ...BANK_SCREENS,
   // The old Customize address lands on Settings.
   at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),

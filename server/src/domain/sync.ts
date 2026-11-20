@@ -10,6 +10,8 @@ import { messageOf, notFound } from '../errors.js'
 import { accessTokenOf, requireBank } from './bank.js'
 import { loadOwnAccounts, recategorize } from './categorize.js'
 import { sameOwnAccounts } from './transfers.js'
+import { adoptHistory, settleReturns } from './returnedHistory.js'
+import { markUnshared, reattachAccounts } from './unshared.js'
 
 export interface SyncResult {
   connectionId: string
@@ -112,7 +114,12 @@ export async function syncAll(ctx: AppContext): Promise<SyncResult[]> {
   return results
 }
 
-/** Writes one sync's accounts and changes, re-files what they touched, and saves the cursor. */
+/**
+ * Writes one sync's accounts and changes, re-files what they touched, and
+ * saves the cursor. Accounts the bank stopped reporting are marked as no
+ * longer shared, and ones it reports again come back as the accounts they
+ * were, with their history (see unshared.ts and returnedHistory.ts).
+ */
 async function applySync(
   db: pg.PoolClient,
   connectionId: string,
@@ -120,10 +127,15 @@ async function applySync(
   changes: BankChanges,
 ): Promise<void> {
   const cardsBefore = await loadOwnAccounts(db)
+  await reattachAccounts(db, connectionId, accounts)
   const accountIds = await upsertAccounts(db, connectionId, accounts)
-  const touched = await upsertTransactions(db, accountIds, [...changes.added, ...changes.modified])
+  await markUnshared(db, connectionId, accounts)
+  const arrived = [...changes.added, ...changes.modified]
+  const adopted = await adoptHistory(db, connectionId, accountIds, arrived)
+  const touched = await upsertTransactions(db, accountIds, arrived)
   await carryOverPendingEdits(db, touched)
   await removeTransactions(db, accountIds, changes.removed)
+  await settleReturns(db, connectionId, adopted)
   // A newly tracked card turns earlier payments to it into transfers, so
   // when the cards change every transaction is looked at again.
   const cardsChanged = !sameOwnAccounts(cardsBefore, await loadOwnAccounts(db))
@@ -135,7 +147,10 @@ async function applySync(
   )
 }
 
-/** Saves the bank's accounts; returns each one's id here by the bank's id for it. */
+/**
+ * Saves the bank's accounts, as shared again if they had been unshared;
+ * returns each one's id here by the bank's id for it.
+ */
 async function upsertAccounts(
   db: pg.PoolClient,
   connectionId: string,
@@ -153,7 +168,7 @@ async function upsertAccounts(
          name = EXCLUDED.name, official_name = EXCLUDED.official_name, mask = EXCLUDED.mask,
          type = EXCLUDED.type, subtype = EXCLUDED.subtype, balance_cents = EXCLUDED.balance_cents,
          available_cents = EXCLUDED.available_cents, credit_limit_cents = EXCLUDED.credit_limit_cents,
-         currency = EXCLUDED.currency, balance_updated_at = now()
+         currency = EXCLUDED.currency, balance_updated_at = now(), unshared_at = NULL
        RETURNING id`,
       [
         connectionId,

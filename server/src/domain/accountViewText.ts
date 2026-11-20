@@ -122,7 +122,10 @@ export function spendingByCategory(
 
 /** What the summary is worked out from. */
 export interface AccountsSummaryInput {
+  /** The picked accounts the bank still shares, whose balances are added up. */
   accounts: Pick<Account, 'name'>[]
+  /** The picked accounts no longer shared, left out of the figures (unshared.ts). */
+  unshared: Pick<Account, 'name' | 'institutionName'>[]
   balances: CombinedBalances
   /** Oldest first; the last is the current period. */
   flows: PeriodFlow[]
@@ -136,7 +139,8 @@ export interface AccountsSummaryInput {
 function headline(input: AccountsSummaryInput, money: Money): string {
   const urgent = input.alerts.find((alert) => alert.severity === 'urgent')
   if (urgent) return urgent.message
-  const { balances, accounts } = input
+  const { balances, accounts, unshared } = input
+  if (accounts.length === 0 && unshared.length > 0) return onlyUnsharedHeadline(unshared)
   if (accounts.length === 0) return 'No accounts yet. Connect a bank or add one in Settings.'
   const only = accounts.length === 1 ? accounts[0]!.name : null
   if (balances.cashAccounts > 0) {
@@ -153,6 +157,27 @@ function headline(input: AccountsSummaryInput, money: Money): string {
   }
   return `${money(balances.netCents)} in ${only ?? plural(accounts.length, 'account', 'accounts')}.`
 }
+
+/** Where the bank shares none of the picked accounts, there is no balance to give. */
+function onlyUnsharedHeadline(unshared: AccountsSummaryInput['unshared']): string {
+  const [only] = unshared
+  if (unshared.length === 1) {
+    return `${only!.name} is no longer shared from ${bankOf(only!)}, so it has no current balance.`
+  }
+  return 'These accounts are no longer shared from their banks, so they have no current balances.'
+}
+
+/** Accounts no longer shared among shared ones, so the figures are not read as covering them. */
+function unsharedPoint({ accounts, unshared }: AccountsSummaryInput): string | null {
+  if (accounts.length === 0 || unshared.length === 0) return null
+  if (unshared.length > 1) {
+    return `${unshared.length} accounts no longer shared from their banks are left out of these figures.`
+  }
+  const [only] = unshared
+  return `${only!.name} is no longer shared from ${bankOf(only!)} and is left out of these figures.`
+}
+
+const bankOf = (account: Pick<Account, 'institutionName'>) => account.institutionName ?? 'its bank'
 
 /** "1 card or loan", "2 cards or loans". */
 function plural(count: number, one: string, many: string): string {
@@ -187,6 +212,7 @@ export function accountsSummary(input: AccountsSummaryInput, money: Money): Summ
   const current = input.flows[input.flows.length - 1]
   const previous = input.flows[input.flows.length - 2]
   const points = [
+    unsharedPoint(input),
     owedPoint(input, money),
     creditPoint(input, money),
     flowPoint(current, `So far this ${input.periodWord}`, money),

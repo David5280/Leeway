@@ -53,6 +53,11 @@ const BANK_LINES: [raw: string, name: string][] = [
   ['NETFLIX.COM 866-579-7172 CA', 'Netflix.com'],
   ['SPOTIFY P1234ABCD', 'Spotify'],
   ['POS PURCHASE 7-ELEVEN 35512 DENVER', '7-Eleven'],
+  ['POS WITHDRAWAL SHELL 5741', 'Shell'],
+  // A leading card word alone stays, since it can be part of the name.
+  ['PURCHASE COLLEGE BURSAR', 'Purchase College Bursar'],
+  ['ACH FOOD COMPANIES', 'ACH Food Companies'],
+  ['DEBIT FEE', 'Debit Fee'],
   ["CHECKCARD 1118 MCDONALD'S F1234 DENVER CO", "McDonald's"],
   ["O'REILLY AUTO PARTS 4417", "O'Reilly Auto Parts"],
   ['MCX', 'Mcx'],

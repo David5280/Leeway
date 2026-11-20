@@ -28,6 +28,7 @@ describe('progressOf', () => {
     color: '#4f8cff',
     accountName: null,
     accountBalanceCents: null,
+    balanceAsOf: null as string | null,
     kind: 'savings' as const,
     setAside: false,
     createdOn: '2026-11-01',
@@ -61,6 +62,22 @@ describe('progressOf', () => {
       status: 'reached',
     })
     expect(progressOf({ ...goal, targetDate: null }, '2026-11-17').monthlyNeededCents).toBeNull()
+  })
+
+  it('is stale, never reached or needing a monthly amount, once its account is not shared', () => {
+    const frozen = {
+      ...goal,
+      accountId: 'a',
+      accountBalanceCents: 150000,
+      balanceAsOf: '2026-11-10',
+    }
+    expect(progressOf(frozen, '2026-11-17')).toMatchObject({
+      currentCents: 150000,
+      percent: 100,
+      monthlyNeededCents: null,
+      status: 'stale',
+    })
+    expect(progressOf({ ...frozen, targetDate: '2026-10-01' }, '2026-11-17').status).toBe('stale')
   })
 
   it('counts a linked account in overdraft, or with no balance yet, as nothing saved', () => {
@@ -104,6 +121,29 @@ describe('goal actions', () => {
     )
     // Unlinking goes back to counting by hand.
     expect((await call('update_goal', { id: goal.id, accountId: null })).currentCents).toBe(0)
+  })
+
+  it('shows a goal on an account its bank stopped sharing as of that day, with no plan', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 240000 })
+    await call('create_goal', {
+      name: 'House',
+      targetCents: 4000000,
+      targetDate: '2027-11-30',
+      accountId,
+      setAside: true,
+    })
+    await ctx.db.query(`UPDATE accounts SET unshared_at = '2026-11-10T12:00:00Z' WHERE id = $1`, [
+      accountId,
+    ])
+    expect((await call('list_goals'))[0]).toMatchObject({
+      currentCents: 240000,
+      balanceAsOf: '2026-11-10',
+      status: 'stale',
+      monthlyNeededCents: null,
+      perPeriodCents: null,
+      onTrack: null,
+      heldBackCents: 0,
+    })
   })
 
   it('lists goals oldest first, updates only the fields given, and deletes', async () => {

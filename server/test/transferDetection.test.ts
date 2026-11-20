@@ -9,7 +9,7 @@ import { settingsSchema } from '../src/domain/settings.js'
 import { STARTER_CATEGORIES } from '../src/domain/starters.js'
 import { syncConnection } from '../src/domain/sync.js'
 import { actionCaller } from './actionCaller.js'
-import { account, bankTx, FakeBank, page } from './fakeBank.js'
+import { account, bankTx, FakeBank, newLink, page } from './fakeBank.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -122,7 +122,7 @@ describe('deciding transfers from the accounts tracked here', () => {
     })
     // The card is its own bank login, so removing it leaves checking behind.
     bank.accounts = [{ ...account('acc-card', 'Sapphire', 'credit', 50000), mask: '4321' }]
-    const { connectionId } = await linkBank(ctx, 'public-card')
+    const { connectionId } = await linkBank(ctx, newLink('public-card'))
     expect((await filed())[CARD_PAYMENT]).toBe('Transfers')
 
     await removeConnection(ctx, connectionId)
@@ -146,7 +146,7 @@ describe('deciding transfers from the accounts tracked here', () => {
         ],
       }),
     ]
-    const { connectionId } = await linkBank(ctx, 'public-checking')
+    const { connectionId } = await linkBank(ctx, newLink('public-checking'))
     expect((await filed())[CARD_PAYMENT]).toBe('Debt payments')
 
     // The card shows up on a later sync with nothing new to download.

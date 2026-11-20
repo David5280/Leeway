@@ -51,6 +51,15 @@ export interface LinkedItem {
   institutionName: string | null
 }
 
+/** How to open the bank's login window. */
+export interface LinkTokenOptions {
+  /** Opens the window for this existing login (repairing it) instead of for a new bank. */
+  accessToken?: string
+  /** With an access token: also let the owner choose which accounts the login shares. */
+  chooseAccounts?: boolean
+  webhookUrl?: string | null
+}
+
 /** What a bank webhook tells us, after its signature has been checked. */
 export interface BankWebhook {
   itemId: string
@@ -60,7 +69,7 @@ export interface BankWebhook {
 export interface BankProvider {
   readonly name: string
   /** A short-lived token the browser uses to open the bank login. Pass an access token to repair a login. */
-  createLinkToken(options: { accessToken?: string; webhookUrl?: string | null }): Promise<string>
+  createLinkToken(options: LinkTokenOptions): Promise<string>
   exchangePublicToken(publicToken: string): Promise<LinkedItem>
   getAccounts(accessToken: string): Promise<BankAccount[]>
   /** One page of changes since `cursor` (null = from the beginning). */

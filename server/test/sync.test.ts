@@ -10,7 +10,7 @@ import {
 } from '../src/domain/connections.js'
 import { latestOfEach, syncConnection } from '../src/domain/sync.js'
 import { listTransactions, setCategory } from '../src/domain/transactions.js'
-import { account, bankTx, FakeBank, page } from './fakeBank.js'
+import { account, bankTx, FakeBank, newLink, page } from './fakeBank.js'
 import { createTestContext, resetData } from './helpers.js'
 
 let ctx: AppContext
@@ -63,7 +63,7 @@ describe('bank sync', () => {
       }),
     ]
 
-    const result = await linkBank(ctx, 'public-1')
+    const result = await linkBank(ctx, newLink('public-1'))
     expect(result).toMatchObject({ added: 2, error: null, institutionName: 'First Platypus Bank' })
 
     const { rows } = await ctx.db.query(
@@ -86,7 +86,7 @@ describe('bank sync', () => {
     const first = bankTx({ name: 'Coffee', amountCents: 500 })
     const second = bankTx({ name: 'Lunch', amountCents: 1500 })
     bank.pages = [page({ added: [first, second], nextCursor: 'cursor-1' })]
-    const { connectionId } = await linkBank(ctx, 'public-2')
+    const { connectionId } = await linkBank(ctx, newLink('public-2'))
 
     bank.pages = [
       page({
@@ -118,7 +118,7 @@ describe('bank sync', () => {
     )
     const pending = bankTx({ name: 'Bistro', amountCents: 3000, pending: true })
     bank.pages = [page({ added: [pending] })]
-    const { connectionId } = await linkBank(ctx, 'public-3')
+    const { connectionId } = await linkBank(ctx, newLink('public-3'))
     const [pendingRow] = await all()
     await setCategory(ctx.db, [pendingRow!.id], dining.id)
     await ctx.db.query(`UPDATE transactions SET note = 'date night'`)
@@ -149,7 +149,7 @@ describe('bank sync', () => {
 
   it('marks a connection for re-login and keeps the old data when the bank refuses', async () => {
     bank.pages = [page({ added: [bankTx({ name: 'Rent', amountCents: 150000 })] })]
-    const { connectionId } = await linkBank(ctx, 'public-4')
+    const { connectionId } = await linkBank(ctx, newLink('public-4'))
 
     bank.failNext = new BankError('Log in again (ITEM_LOGIN_REQUIRED)', true)
     const result = await syncConnection(ctx, connectionId)
@@ -165,7 +165,7 @@ describe('bank sync', () => {
 
   it('removes a connection with its accounts and tells the bank', async () => {
     bank.pages = [page({ added: [bankTx({ name: 'Gym', amountCents: 4000 })] })]
-    const { connectionId } = await linkBank(ctx, 'public-5')
+    const { connectionId } = await linkBank(ctx, newLink('public-5'))
     await removeConnection(ctx, connectionId)
     expect(bank.removedItems).toEqual(['access-public-5'])
     expect(await all()).toHaveLength(0)
@@ -182,7 +182,7 @@ describe('pending charges that post', () => {
       date: '2026-11-13',
     })
     bank.pages = [page({ added: [pending] })]
-    const { connectionId } = await linkBank(ctx, 'public-6')
+    const { connectionId } = await linkBank(ctx, newLink('public-6'))
     await ctx.db.query(`UPDATE transactions SET excluded = true`)
 
     bank.pages = [
@@ -214,7 +214,7 @@ describe('pending charges that post', () => {
     })
     bank.pages = [page({ added: [pending, posted], removed: [pending.providerTransactionId] })]
 
-    await linkBank(ctx, 'public-7')
+    await linkBank(ctx, newLink('public-7'))
 
     expect((await all()).map((t) => [t.name, t.amountCents, t.pending])).toEqual([
       ['Diner', 2100, false],
@@ -230,7 +230,7 @@ describe('applying many changes at once', () => {
       page({ modified: [{ ...coffee, amountCents: 475, name: 'Coffee bar' }] }),
     ]
 
-    const result = await linkBank(ctx, 'public-8')
+    const result = await linkBank(ctx, newLink('public-8'))
 
     expect(result).toMatchObject({ added: 1, modified: 1, error: null })
     expect((await all()).map((t) => [t.name, t.amountCents])).toEqual([['Coffee bar', 475]])
@@ -246,7 +246,7 @@ describe('applying many changes at once', () => {
       page({ added: history.slice(1000) }),
     ]
 
-    await linkBank(ctx, 'public-9')
+    await linkBank(ctx, newLink('public-9'))
 
     const { rows } = await ctx.db.query<{ n: number; total: number }>(
       'SELECT count(*)::int AS n, sum(amount_cents)::int AS total FROM transactions',
@@ -283,7 +283,7 @@ describe('transfers across syncs', () => {
       })
     const late = arrival('2026-11-14')
     bank.pages = [page({ added: [out, late] })]
-    const { connectionId } = await linkBank(ctx, 'public-pairs')
+    const { connectionId } = await linkBank(ctx, newLink('public-pairs'))
     const byBankId = async () =>
       new Map(
         (

@@ -8,10 +8,11 @@ import type { Account, AccountsView } from '../api/client'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { AlertRows } from '../components/AccountAlerts'
+import { UnsharedAccount } from '../components/bank/UnsharedAccount'
 import { Shell } from '../components/Shell'
 import { TransactionLine } from '../components/TransactionLine'
 import { Card, ErrorNote, LoadingOrError } from '../components/ui'
-import { activePick } from '../lib/accounts'
+import { activePick, isShared } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { settingsPath } from './settings/paths'
 import { AccountPicker } from './accounts/AccountPicker'
@@ -100,13 +101,34 @@ function AccountsBody({ view }: { view: AccountsView }) {
           </ul>
         )}
       </Card>
-      <Balances view={view} />
+      {view.accounts.some(isShared) && <Balances view={view} />}
+      <NoLongerShared accounts={view.accounts.filter((account) => !isShared(account))} />
       <div className="grid">
         <Flows flows={view.flows} />
         <Spending spending={view.spending} period={view.period} />
       </div>
       <Recent view={view} />
     </>
+  )
+}
+
+/**
+ * Picked accounts the bank no longer shares: left out of the balances and
+ * alerts above, with their history still in the figures below.
+ */
+function NoLongerShared({ accounts }: { accounts: Account[] }) {
+  if (accounts.length === 0) return null
+  return (
+    <Card label="No longer shared" className="stack-sm">
+      <h2>No longer shared</h2>
+      <p className="small muted">
+        Left out of the balances and alerts, since the bank no longer updates them. Their past
+        transactions still count.
+      </p>
+      {accounts.map((account) => (
+        <UnsharedAccount key={account.id} account={account} />
+      ))}
+    </Card>
   )
 }
 

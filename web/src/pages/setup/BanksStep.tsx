@@ -2,7 +2,8 @@
 
 import type { Status } from '../../api/client'
 import { useAction } from '../../api/hooks'
-import { BankButton } from '../../components/BankButton'
+import { AddBank } from '../../components/bank/AddBank'
+import { bankName, TRIAL_LIMIT_NOTE } from '../../components/bank/linking'
 import { BankKeysMissing, SandboxNote, WHAT_IS_PLAID } from '../../components/PlaidHelp'
 import { Frame, Nav } from './Frame'
 
@@ -40,8 +41,8 @@ export function BanksStep({
             {status.bank.environment === 'sandbox' && <SandboxNote />}
             {linked.map((c) => (
               <div key={c.id} className="list-row">
-                <span className="grow">
-                  <strong>{c.institutionName ?? 'Bank'}</strong>
+                <span className="grow bank-name">
+                  <strong>{bankName(c)}</strong>
                   <br />
                   <span className="small muted">
                     {c.accountCount} {c.accountCount === 1 ? 'account' : 'accounts'}
@@ -50,12 +51,9 @@ export function BanksStep({
                 <span className="good small">Connected</span>
               </div>
             ))}
-            <div>
-              <BankButton
-                label={linked.length ? 'Connect another bank' : 'Connect a bank'}
-                className={linked.length ? 'btn' : 'btn primary'}
-              />
-            </div>
+            {linked.length > 0 && <p className="small muted">{TRIAL_LIMIT_NOTE}</p>}
+            {/* Wait for the list: adding a bank first shows the ones already connected. */}
+            {connections.data && <AddBank connections={linked} />}
           </>
         ) : (
           <BankKeysMissing platform={status.platform} />

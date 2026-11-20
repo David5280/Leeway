@@ -3,9 +3,11 @@ import type {
   BankProvider,
   BankTransaction,
   BankWebhook,
+  LinkTokenOptions,
   SyncPage,
 } from '../src/bank/provider.js'
 import { BankError } from '../src/bank/provider.js'
+import type { NewLink } from '../src/domain/connections.js'
 
 /** An in-memory bank: tests queue up sync pages and see what the app asked for. */
 export class FakeBank implements BankProvider {
@@ -15,9 +17,15 @@ export class FakeBank implements BankProvider {
   /** The next bank call (of any kind) throws this, once. */
   failNext: Error | null = null
   removedItems: string[] = []
+  /** Public tokens exchanged so far: each one is an Item Plaid would count. */
+  exchanged: string[] = []
+  /** The bank every exchanged token turns out to be. */
+  institution: { id: string | null; name: string | null } = {
+    id: 'ins_1',
+    name: 'First Platypus Bank',
+  }
   cursorsSeen: (string | null)[] = []
-  linkTokenRequests: { accessToken?: string; webhookUrl?: string | null }[] = []
-  private itemCounter = 0
+  linkTokenRequests: LinkTokenOptions[] = []
 
   private throwIfFailing(): void {
     if (!this.failNext) return
@@ -26,7 +34,7 @@ export class FakeBank implements BankProvider {
     throw error
   }
 
-  async createLinkToken(options: { accessToken?: string; webhookUrl?: string | null }) {
+  async createLinkToken(options: LinkTokenOptions) {
     this.throwIfFailing()
     this.linkTokenRequests.push(options)
     return options.accessToken ? `link-update-${options.accessToken}` : 'link-new'
@@ -34,12 +42,12 @@ export class FakeBank implements BankProvider {
 
   async exchangePublicToken(publicToken: string) {
     this.throwIfFailing()
-    this.itemCounter += 1
+    this.exchanged.push(publicToken)
     return {
       accessToken: `access-${publicToken}`,
       itemId: `item-${publicToken}`,
-      institutionId: 'ins_1',
-      institutionName: 'First Platypus Bank',
+      institutionId: this.institution.id,
+      institutionName: this.institution.name,
     }
   }
 
@@ -120,4 +128,9 @@ export function page(fields: Partial<SyncPage>): SyncPage {
     hasMore: false,
     ...fields,
   }
+}
+
+/** A bank picked in the login window that names no bank, as the tests that only need a link send. */
+export function newLink(publicToken: string, fields: Partial<NewLink> = {}): NewLink {
+  return { publicToken, institution: null, accounts: [], allowSecondLogin: false, ...fields }
 }

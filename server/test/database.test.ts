@@ -74,6 +74,19 @@ describe('migrations folder', () => {
     expect(rows).toEqual([{ n: 1 }])
   })
 
+  it('runs a file added later even when it sorts between files already run', async () => {
+    // Branches merge in any order, so a lower number can arrive after a higher one.
+    await writeFile(join(dir, '901_create.sql'), 'CREATE TABLE migration_probe (n int);')
+    await writeFile(join(dir, '903_fill.sql'), 'INSERT INTO migration_probe VALUES (3);')
+    expect(await migrate(ctx.db, dir)).toEqual(['901_create.sql', '903_fill.sql'])
+
+    await writeFile(join(dir, '902_fill.sql'), 'INSERT INTO migration_probe VALUES (2);')
+    expect(await migrate(ctx.db, dir)).toEqual(['902_fill.sql'])
+
+    const { rows } = await ctx.db.query('SELECT n FROM migration_probe ORDER BY n')
+    expect(rows).toEqual([{ n: 2 }, { n: 3 }])
+  })
+
   it('names the file that failed and leaves it unapplied', async () => {
     await writeFile(join(dir, '901_create.sql'), 'CREATE TABLE migration_probe (n int);')
     await writeFile(join(dir, '902_broken.sql'), 'INSERT INTO no_such_table VALUES (1);')
@@ -89,6 +102,40 @@ describe('migrations folder', () => {
   })
 })
 
+describe('the unshared accounts migration', () => {
+  const FILE = '021_unshared_accounts.sql'
+  const BRANCH_NAME = '018_unshared_accounts.sql'
+  afterEach(async () => {
+    await ctx.db.query('DELETE FROM schema_migrations WHERE name = $1', [BRANCH_NAME])
+  })
+
+  // Both of its columns: when an account stopped being shared, and the adoption window.
+  const hasColumns = async () =>
+    (
+      await ctx.db.query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE (table_name, column_name) IN (('accounts', 'unshared_at'), ('transactions', 'adopt_until'))`,
+      )
+    ).rowCount === 2
+
+  it('is picked up by an install that has run every migration before it', async () => {
+    await ctx.db.query('ALTER TABLE accounts DROP COLUMN unshared_at')
+    await ctx.db.query('ALTER TABLE transactions DROP COLUMN adopt_until')
+    await ctx.db.query('DELETE FROM schema_migrations WHERE name = $1', [FILE])
+
+    expect(await migrate(ctx.db)).toEqual([FILE])
+    expect(await hasColumns()).toBe(true)
+  })
+
+  it('runs again cleanly where it already ran under its first name', async () => {
+    await ctx.db.query('DELETE FROM schema_migrations WHERE name = $1', [FILE])
+    await ctx.db.query('INSERT INTO schema_migrations (name) VALUES ($1)', [BRANCH_NAME])
+
+    expect(await migrate(ctx.db)).toEqual([FILE])
+    expect(await hasColumns()).toBe(true)
+  })
+})
+
 describe('indexes', () => {
   it('has the indexes the history queries rely on', async () => {
     const { rows } = await ctx.db.query<{ indexname: string }>(
@@ -100,6 +147,7 @@ describe('indexes', () => {
         'accounts_connection_idx',
         'oauth_tokens_expires_idx',
         'transactions_account_date_idx',
+        'transactions_adopt_until_idx',
         'transactions_category_date_idx',
         'transactions_date_idx',
       ]),

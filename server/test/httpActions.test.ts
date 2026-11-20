@@ -114,6 +114,23 @@ describe('running actions over HTTP', () => {
     expect(response.json().error).toBe('bad_request')
   })
 
+  it('answers a bank that is already connected with 409 and the login to keep', async () => {
+    ctx.bank = new FakeBank()
+    const chase = { publicToken: 'public-1', institution: { id: 'ins_1', name: 'Chase' } }
+    const linked = await runAction('link_bank', chase)
+
+    const response = await runAction('link_bank', { ...chase, publicToken: 'public-2' })
+
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toMatchObject({
+      error: 'duplicate_bank',
+      details: {
+        institutionName: 'Chase',
+        logins: [{ connectionId: linked.json().result.connectionId, sameAccounts: false }],
+      },
+    })
+  })
+
   it('hides the details of an unexpected server failure', async () => {
     const bank = new FakeBank()
     ctx.bank = bank
@@ -150,9 +167,29 @@ describe('status', () => {
       const status = (await app.inject({ url: '/api/status' })).json()
       expect(status).toMatchObject({
         version: VERSION,
-        bank: { provider: 'plaid', environment: 'sandbox' },
+        bank: { provider: 'plaid', environment: 'sandbox', chooseAccounts: true },
       })
       expect(JSON.stringify(status)).not.toContain('secret')
+    } finally {
+      ctx.config.plaid = null
+    }
+  })
+
+  it('says when Plaid cannot let the owner choose accounts again, as in the UK', async () => {
+    ctx.config.plaid = {
+      clientId: 'id',
+      secret: 'secret',
+      env: 'production',
+      countryCodes: ['US', 'GB'],
+      redirectUri: null,
+    }
+    try {
+      const status = (await app.inject({ url: '/api/status' })).json()
+      expect(status.bank).toEqual({
+        provider: 'plaid',
+        environment: 'production',
+        chooseAccounts: false,
+      })
     } finally {
       ctx.config.plaid = null
     }
