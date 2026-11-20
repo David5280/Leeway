@@ -42,5 +42,6 @@ describe('sameMerchant', () => {
   it('never matches text with no readable name in it', () => {
     expect(sameMerchant(named('#1234'), named('#5678'))).toBe(false)
     expect(sameMerchant(named('#1234', '#1234'), named('#5678', '#5678'))).toBe(false)
+    expect(sameMerchant(named('THE'), named('The'))).toBe(false)
   })
 })
