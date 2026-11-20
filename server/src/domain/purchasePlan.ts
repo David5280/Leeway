@@ -15,7 +15,7 @@ export interface PurchasePlan {
   /** What would go toward it each budget period; null when there is nothing to spare. */
   perPeriodCents: number | null
   basis: SavingBasis | null
-  /** Income minus spending, averaged over recent full periods; null without history. */
+  /** A typical period's pay less spending (surplus.ts); null with no employer paying or too little history. */
   surplusPerPeriodCents: number | null
   /** What goals in progress need each period, which comes out of the surplus first. */
   goalsNeedPerPeriodCents: number
@@ -33,7 +33,7 @@ export interface PurchaseInputs {
   savedCents: number
   today: IsoDate
   check: Affordability
-  /** An amount the owner says they can save each period, instead of the recent surplus. */
+  /** An amount the owner says they can save each period, instead of the usual surplus. */
   perPeriodCents: number | null
   surplusPerPeriodCents: number | null
   goalsNeedPerPeriodCents: number
@@ -83,13 +83,13 @@ export function planPurchase(inputs: PurchaseInputs): PurchasePlan {
       periodsNeeded: null,
       affordableBy: null,
       message:
-        'Not today, and recent periods left nothing over after spending and goals. Ask how much the owner could put aside each period, or save for it with a purchase goal.',
+        'Not today, and a typical period leaves nothing over after spending and goals, or no employer is paying yet. Ask how much the owner could put aside each period, or save for it with a purchase goal.',
     }
   }
   const toSave = Math.max(0, amountCents - inputs.savedCents)
   const periodsNeeded = Math.max(1, Math.ceil(toSave / rate.cents))
   const affordableBy = lastDayAfter(inputs.today, periodsNeeded, inputs.config)
-  const from = rate.basis === 'given' ? 'Putting aside' : 'At the recent surplus of'
+  const from = rate.basis === 'given' ? 'Putting aside' : 'At your usual surplus of'
   return {
     ...base,
     perPeriodCents: rate.cents,

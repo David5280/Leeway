@@ -2,12 +2,12 @@
 
 import { z } from 'zod'
 import { affordability } from '../domain/afford.js'
-import { recentSurplus } from '../domain/budgetReport.js'
 import { budgetSummaryWithRoom } from '../domain/budgetRoom.js'
 import { getCheckin } from '../domain/checkin.js'
 import { listGoals } from '../domain/goals.js'
 import { planPurchase } from '../domain/purchasePlan.js'
 import { periodConfig, type Settings } from '../domain/settings.js'
+import { typicalSurplus } from '../domain/surplus.js'
 import type { AppContext } from '../context.js'
 import { formatCents } from '../lib/money.js'
 import { defineAction } from './action.js'
@@ -67,7 +67,7 @@ export const whenCanIAffordAction = defineAction({
   name: 'when_can_i_afford',
   title: 'When can I afford this?',
   description:
-    'When a purchase becomes affordable. If it fits today (as can_i_afford checks), affordableBy is today. Otherwise it counts budget periods of saving: at perPeriodCents if given (what the owner says they can put aside each period), or else the recent surplus (income minus spending, averaged over the last 3 full periods) after what goals in progress need each period. savedCents is what is already put aside toward it. Returns periodsNeeded, affordableBy (the last day of the period it is saved by), the figures used and a plain message. For a purchase goal that already exists, list_goals gives its projectedDate instead. To start saving, create_goal with kind "purchase". Nothing is bought or recorded.',
+    'When a purchase becomes affordable. If it fits today (as can_i_afford checks), affordableBy is today. Otherwise it counts budget periods of saving: at perPeriodCents if given (what the owner says they can put aside each period), or else a typical period\'s surplus (a typical month of pay from the employers paying now less typical spending, as get_financial_profile reads them, in budget period terms; never money from people, refunds or transfers in, and none while no employer is paying) after what goals in progress need each period. savedCents is what is already put aside toward it. Returns periodsNeeded, affordableBy (the last day of the period it is saved by), the figures used and a plain message. For a purchase goal that already exists, list_goals gives its projectedDate instead. To start saving, create_goal with kind "purchase". Nothing is bought or recorded.',
   input: purchaseInput.extend({
     savedCents: z.number().int().min(0).default(0),
     perPeriodCents: z.number().int().positive().nullable().default(null),
@@ -79,7 +79,7 @@ export const whenCanIAffordAction = defineAction({
     const config = periodConfig(settings)
     const [check, surplus, goals] = await Promise.all([
       checkToday(ctx, settings, input),
-      recentSurplus(ctx.db, settings, ctx.now()),
+      typicalSurplus(ctx.db, settings, ctx.now()),
       listGoals(ctx.db, { today, period: config }),
     ])
     return planPurchase({

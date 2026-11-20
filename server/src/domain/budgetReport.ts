@@ -223,24 +223,3 @@ export async function budgetReport(
     },
   }
 }
-
-/** How many full periods the recent surplus is averaged over. */
-const SURPLUS_PERIODS = 3
-
-/**
- * Income minus spending, averaged over the last few full budget periods:
- * roughly what is left over each period to save. Null when those periods
- * have no income or spending at all, since there is nothing to go on.
- */
-export async function recentSurplus(db: Db, settings: Settings, now: Date): Promise<number | null> {
-  const config = periodConfig(settings)
-  const { period } = currentPeriod(settings, now)
-  const first = shiftPeriod(period, -SURPLUS_PERIODS, config)
-  const [categories, totals] = await Promise.all([
-    listCategories(db),
-    categoryTotals(db, first.start, period.start, settings.includePending),
-  ])
-  if (totals.length === 0) return null
-  const { spentCents, incomeCents } = sumTotals(categories, totals)
-  return Math.round((incomeCents - spentCents) / SURPLUS_PERIODS)
-}
