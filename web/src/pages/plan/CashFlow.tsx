@@ -1,4 +1,6 @@
-// Cash until payday: what is on hand, the bills due first, and what that leaves per day.
+// Cash until payday: what is on hand, the bills due first, and what that leaves
+// per day. On Plan, a line shows the cash dropping with each bill to payday,
+// against the $0 it should stay above.
 
 import { Card } from '../../components/design/Card'
 import type { CashFlow } from '../../api/client'
@@ -7,6 +9,8 @@ import { LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
+import { LineChart } from '../../components/charts/LineChart'
+import { cashPath, lowestPoint } from '../../lib/cashPath'
 
 /** One line on where the payday came from, so the number can be trusted the right amount. */
 function paydayText(flow: CashFlow, money: (cents: number) => string, locale: string): string {
@@ -40,7 +44,27 @@ function Headline({ flow }: { flow: CashFlow }) {
   )
 }
 
-/** Cash until payday. Compact leaves out the list of bills, for the dashboard. */
+/** "Will the cash last until payday?": the cash after each bill, day by day. */
+function CashPathChart({ flow }: { flow: CashFlow }) {
+  const { money, settings } = useApp()
+  const points = cashPath(flow)
+  if (points.length < 2) return null
+  const low = lowestPoint(points)
+  return (
+    <LineChart
+      points={points}
+      label="Cash until payday"
+      reference={{ cents: 0, label: 'Stay above' }}
+      details={(index) => {
+        const bills = points[index]!.bills
+        return bills.length ? [`${bills.join(', ')} due`] : []
+      }}
+      description={`Cash from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
+    />
+  )
+}
+
+/** Cash until payday. Compact leaves out the chart and the list of bills, for the dashboard. */
 export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
   const { money, settings } = useApp()
   const cash = useAction('get_cash_flow')
@@ -55,6 +79,7 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
         <Money cents={flow.cashCents} /> in checking and savings, minus{' '}
         <Money cents={flow.billsDueCents} /> in bills. {paydayText(flow, money, settings.locale)}
       </span>
+      {!compact && <CashPathChart flow={flow} />}
       {!compact &&
         flow.billsDue.map((bill) => (
           <div key={`${bill.billId}-${bill.dueDate}`} className="list-row">
@@ -76,7 +101,7 @@ export function CashFlowSummary({ compact = false }: { compact?: boolean }) {
 export function CashFlowCard() {
   return (
     <Card static="pending" label="Until payday" className="stack-sm">
-      <p className="eyebrow">Until payday</p>
+      <h2>Will the cash last until payday?</h2>
       <CashFlowSummary />
     </Card>
   )

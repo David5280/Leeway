@@ -73,6 +73,38 @@ describe('Until payday', () => {
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
   })
 
+  it('draws the cash dropping with each bill to payday, against $0, and names the bills', async () => {
+    const card = await show(cashFlow())
+    expect(
+      within(card).getByRole('heading', { name: 'Will the cash last until payday?' }),
+    ).toBeVisible()
+    expect(
+      within(card).getByRole('img', { name: 'Cash until payday' }),
+    ).toHaveAccessibleDescription(
+      'Cash from $1,500 today to $1,440 on payday, Fri, Nov 27, at its lowest $1,440 on Nov 20.',
+    )
+    expect(card).toHaveTextContent('Stay above: $0')
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 640,
+    } as DOMRect)
+    const hit = within(card).getByTestId('chart-hit')
+    // Points: today, the day before the phone bill, the bill's day, payday.
+    fireEvent.pointerMove(hit, { clientX: 260 })
+    expect(card.querySelector('.chart-readout')).toHaveTextContent('Nov 20$1,440Phone due')
+    fireEvent.pointerMove(hit, { clientX: 630 })
+    expect(card.querySelector('.chart-readout')).toHaveTextContent('Nov 27$1,440')
+    expect(card.querySelector('.chart-readout')).not.toHaveTextContent('due')
+    vi.restoreAllMocks()
+  })
+
+  it('leaves the line out when payday is today', async () => {
+    const card = await show(
+      cashFlow({ nextPayday: '2026-11-17', billsDue: [], daysUntilPayday: 0 }),
+    )
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('says how short the bills leave you, and flags a missed one', async () => {
     const card = await show(
       cashFlow({
