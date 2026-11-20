@@ -33,6 +33,7 @@ interface BillAndCharges {
   reads: RuleReads
   matchPattern: string
   createdAt: Date
+  amountVaries: boolean
   charges: BillCharge[]
 }
 
@@ -44,6 +45,7 @@ async function billsWithCharges(db: Db, today: IsoDate): Promise<BillAndCharges[
   const { rows } = await db.query<BillAndCharges>(
     `SELECT b.id, b.name, b.amount_cents::int AS "amountCents", b.cadence, b.reads,
        b.match_pattern AS "matchPattern", b.created_at AS "createdAt",
+       b.amount_varies AS "amountVaries",
        coalesce(json_agg(json_build_object('accountId', p.account_id,
          'date', to_char(p.date, 'YYYY-MM-DD'), 'amountCents', p.amount_cents)
          ORDER BY p.date DESC) FILTER (WHERE p.date IS NOT NULL), '[]') AS charges
@@ -113,6 +115,7 @@ export async function listBillChanges(
       amountCents: bill.amountCents,
       cadence: bill.cadence,
       trackedOn: todayIn(timeZone, bill.createdAt),
+      amountVaries: bill.amountVaries,
       charges: bill.charges,
     }))
     .map((bill) => billChangeOf(bill, today))

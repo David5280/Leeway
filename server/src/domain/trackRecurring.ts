@@ -49,6 +49,7 @@ export async function trackRecurring(
     billFromSeries(found, forAssistant),
     today,
     { byAssistant: forAssistant },
-    found.series.accountId,
+    // A bill whose amount moves (a utility) would alert most cycles, so it never does.
+    { accountId: found.series.accountId, amountVaries: found.series.amountVaries },
   )
 }

@@ -77,7 +77,7 @@ function Suggestions() {
           <p className="small muted">
             These repeat on a schedule but are not tracked as bills yet.
           </p>
-          <ErrorNote error={dismiss.error ?? track.error ?? undo.error} />
+          <ErrorNote error={dismiss.error ?? track.error} />
           {charges.map((series) => (
             <div key={series.key} className="list-row wrap">
               <span className="grow stack-sm" style={{ gap: 0 }}>
@@ -109,7 +109,8 @@ function Suggestions() {
           ))}
         </Card>
       )}
-      {toast}
+      {/* Undo's error takes the toast's place, so it shows even once the card has gone. */}
+      {toast || <ErrorNote error={undo.error} />}
     </>
   )
 }

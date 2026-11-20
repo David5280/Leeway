@@ -277,6 +277,32 @@ describe('Recurring charges found in history', () => {
     )
   })
 
+  it('shows why Undo failed after the last suggestion was tracked and its card went', async () => {
+    let found = [power]
+    serve(
+      [],
+      {
+        find_recurring: () => found,
+        track_recurring: () => {
+          found = []
+          return bill({ name: 'CITY POWER', amountCents: 9000, anchorDate: '2026-12-02' })
+        },
+      },
+      { '/api/actions/delete_bill': failing('Could not undo it') },
+    )
+    renderPlan('/plan/bills')
+    const user = userEvent.setup()
+    await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
+    // Nothing left to suggest, so the card goes; the toast stays.
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Found in your history' })).toBeNull(),
+    )
+    await user.click(
+      within(await screen.findByRole('status')).getByRole('button', { name: 'Undo' }),
+    )
+    expect(await screen.findByText('Could not undo it')).toBeVisible()
+  })
+
   it('closes the toast, keeping the bill', async () => {
     const server = trackingServer()
     renderPlan('/plan/bills')

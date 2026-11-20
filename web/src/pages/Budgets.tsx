@@ -79,7 +79,10 @@ export function Budgets() {
           />
           {b.totals.setAsideCents > 0 && (
             <Link to="/plan/goals" className="small muted tap">
-              <Money cents={b.totals.setAsideCents} /> of it set aside for goals
+              {/* One span: on a phone .tap is a flex box, which would drop the space. */}
+              <span>
+                <Money cents={b.totals.setAsideCents} /> of it set aside for goals
+              </span>
             </Link>
           )}
         </Card>

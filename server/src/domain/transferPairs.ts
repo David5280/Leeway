@@ -53,10 +53,14 @@ const TRANSFER_WORDS =
 /**
  * Words for pay or money paid back in a line with no code: a paycheck, a
  * payout, a refund. Such a line is money coming in from outside, so it never
- * pairs, even beside an equal purchase on another account.
+ * pairs, even beside an equal purchase on another account. Interest and
+ * dividends only in their paid forms: "Interest Savings" names an account.
  */
 const PAY_WORDS =
-  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate|cash\s?back|dividend|interest)\b/i
+  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate|cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+
+/** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
+const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
 
 const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
 
@@ -74,11 +78,16 @@ export function transferHint(tx: Movement): TransferHint {
   if (code?.startsWith('LOAN_PAYMENTS')) {
     return tx.accountType === 'credit' || tx.accountType === 'loan' ? 'transfer' : 'other'
   }
-  if (code) return 'other'
+  return code ? 'other' : wordsHint(tx)
+}
+
+/** What a line with no code says by its words. */
+function wordsHint(tx: Movement): TransferHint {
   const words = `${tx.name} ${tx.merchantName ?? ''}`
-  // Pay words win over transfer words: pay must never vanish as a move.
-  if (PAY_WORDS.test(words)) return 'other'
-  return TRANSFER_WORDS.test(words) ? 'transfer' : 'none'
+  // Transfer words win: an account's name can hold a pay word, as in
+  // "Online Transfer to Interest Savings".
+  if (TRANSFER_WORDS.test(words)) return 'transfer'
+  return PAY_WORDS.test(words) || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */

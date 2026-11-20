@@ -5,7 +5,7 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
-import { shortDate } from '../../lib/words.js'
+import { longDate, shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
 import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
 import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
@@ -70,7 +70,7 @@ function savingsLine({ savings, locale }: FinancialProfile, money: Money): strin
   if (!savings.hasSavings) return null
   const kinds = savings.kinds.map((k) => `${k.label.toLowerCase()} ${money(k.totalCents)}`)
   const start = savings.historyStartsOn
-    ? ` Balance history starts ${shortDate(savings.historyStartsOn, locale)}.`
+    ? ` Balance history starts ${longDate(savings.historyStartsOn, locale)}.`
     : ''
   return `Saved and invested: ${money(savings.totalCents)} (${kinds.join(', ')})${changeWords(savings.changes.month, money, locale)}.${start}`
 }

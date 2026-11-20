@@ -211,6 +211,29 @@ describe('get_net_worth before balances were recorded', () => {
     expect((await call('get_net_worth', { days: 1825 })).history).toEqual(year.history)
   })
 
+  it('undoes a bank line left out of totals, but not a hand-added duplicate left out', async () => {
+    const checking = await linkedOnNov17(500000)
+    const flight = await insertBankTransaction(ctx.db, checking, {
+      date: '2026-10-01',
+      name: 'Work flight',
+      amountCents: 80000,
+    })
+    // A hand-added copy of the same flight, left out as a duplicate.
+    await ctx.db.query(
+      `INSERT INTO transactions (account_id, date, name, amount_cents, excluded)
+       VALUES ($1, '2026-10-01', 'Work flight (copy)', 80000, true)`,
+      [checking],
+    )
+    await ctx.db.query('UPDATE transactions SET excluded = true WHERE id = $1', [flight])
+    const worth = await call('get_net_worth', { days: 90 })
+    // The money still left checking, so before Oct 1 it held $5,800, counted once.
+    expect(worth.history.map((p) => [p.date, p.netWorthCents])).toEqual([
+      ['2026-09-30', 580000],
+      ['2026-10-01', 500000],
+      ['2026-11-17', 500000],
+    ])
+  })
+
   it('leaves the check-in on recorded balances, so its change is never an estimate', async () => {
     const checking = await linkedOnNov17(500000)
     await insertBankTransaction(ctx.db, checking, {

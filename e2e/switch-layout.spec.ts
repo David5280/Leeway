@@ -1,7 +1,7 @@
 // Every switch draws the same in every engine: its knob centred in its track,
 // off and on, and the switch centred on its row. It runs in Chromium with the
-// desktop tests and in WebKit too (the webkit project in playwright.config.ts),
-// since Safari once drew the knob below and past the track.
+// desktop tests and in WebKit too (playwright.config.ts's webkit project, in
+// CI or with E2E_WEBKIT=1), since Safari once drew the knob below the track.
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
@@ -115,4 +115,24 @@ test('every switch in Settings is drawn the same way', async ({ page }) => {
   }
   // Settings has switches on several pages; finding none would mean the test checked nothing.
   expect(seen).toBeGreaterThan(4)
+})
+
+test('a focused switch rings its round track, not the square box around it', async ({ page }) => {
+  await page.goto('/settings/appearance')
+  const control = page.getByRole('switch', { name: 'Show Money in and out' })
+  await control.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(control).toBeFocused()
+  const ring = await control.evaluate((el) => {
+    const own = getComputedStyle(el)
+    const track = getComputedStyle(el, '::before')
+    return {
+      own: own.outlineStyle,
+      track: track.outlineStyle,
+      width: track.outlineWidth,
+      radius: track.borderRadius,
+    }
+  })
+  expect(ring).toEqual({ own: 'none', track: 'solid', width: '2px', radius: '99px' })
 })

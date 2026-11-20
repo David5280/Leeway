@@ -1,5 +1,5 @@
-// A bill that cost more or less than usual: its latest charge, compared with
-// the amount the bill expects. Pure: the bills and their last few charges
+// A bill that cost more or less than usual: its latest cycle's charges,
+// added up, compared with the amount the bill expects. Pure: the bills and their last few charges
 // come in, changes come out; billChangeSource.ts reads and writes them.
 //
 // A change is an account alert of its own kind (bill_change), so it shows,
@@ -38,8 +38,8 @@ const CYCLE_DAYS: Record<Cadence, number> = {
 /** A gap past this many cycles between charges means one was missed. */
 const MISSED_CYCLES = 1.5
 
-/** Charges read per bill: enough to find the last cycle's past a second payment in this one. */
-export const CHARGES_READ = 4
+/** Charges read per bill: enough for two cycles, each paid in a split or second payment. */
+export const CHARGES_READ = 6
 
 /** A posted charge that paid a bill. */
 export interface BillCharge {
@@ -58,38 +58,54 @@ export interface WatchedBill {
   cadence: Cadence
   /** The day it was tracked, in the owner's time zone. */
   trackedOn: IsoDate
+  /** Whether the recurring finder saw its amount move from cycle to cycle, as a utility's does. */
+  amountVaries: boolean
   /** Its last few posted charges (CHARGES_READ), newest first. */
   charges: BillCharge[]
 }
 
 export type BillChange =
-  /** The latest charge is news: well off the usual amount. */
+  /** The latest cycle is news: well off the usual amount. `charge` is its latest, with the cycle's total. */
   | { kind: 'changed'; bill: WatchedBill; charge: BillCharge }
   /** Two charges in a row at the new amount: it is the usual one now. */
   | { kind: 'settled'; bill: WatchedBill; amountCents: number }
 
 /**
- * What a bill's latest charge says about its amount, or null when nothing:
- * the charge is near the usual amount, a cycle was missed between charges or
- * since the latest, or it is the first charge since the bill was tracked,
- * when the usual amount was only an estimate from history.
+ * One cycle's charges from `first` (newest first) on: those within half a
+ * cycle before it, as a split or second payment is, added up as one.
+ */
+function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
+  const within = charges.filter(
+    (charge) => charge.date <= first.date && daysBetween(charge.date, first.date) < cycle / 2,
+  )
+  return { ...first, amountCents: within.reduce((sum, charge) => sum + charge.amountCents, 0) }
+}
+
+/**
+ * What a bill's latest cycle says about its amount, or null when nothing:
+ * the bill's amount varies by nature, the cycle's total is near the usual
+ * amount, a cycle was missed between charges or since the latest, or it is
+ * the first charge since the bill was tracked, when the usual amount was only
+ * an estimate from history.
  */
 export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
-  const [latest] = bill.charges
-  if (!latest || latest.date <= bill.trackedOn) return null
-  if (!isAmountChange(bill.amountCents, latest.amountCents)) return null
+  const [newest] = bill.charges
+  if (bill.amountVaries || !newest || newest.date <= bill.trackedOn) return null
   const cycle = CYCLE_DAYS[bill.cadence]
-  // The last cycle's charge: one only days before the latest (a split or second payment) is this cycle's.
-  const previous = bill.charges.find((charge) => daysBetween(charge.date, latest.date) >= cycle / 2)
-  if (!previous) return null
+  const latest = cycleFrom(bill.charges, newest, cycle)
+  if (!isAmountChange(bill.amountCents, latest.amountCents)) return null
+  // The last cycle's newest charge: one only days before the newest is this cycle's.
+  const before = bill.charges.find((charge) => daysBetween(charge.date, newest.date) >= cycle / 2)
+  if (!before) return null
   const span = cycle * MISSED_CYCLES
-  if (daysBetween(previous.date, latest.date) > span || daysBetween(latest.date, today) > span) {
+  if (daysBetween(before.date, newest.date) > span || daysBetween(newest.date, today) > span) {
     return null
   }
+  const previous = cycleFrom(bill.charges, before, cycle)
   if (!isAmountChange(previous.amountCents, latest.amountCents)) {
     return { kind: 'settled', bill, amountCents: latest.amountCents }
   }
-  if (previous.date <= bill.trackedOn) return null
+  if (before.date <= bill.trackedOn) return null
   return { kind: 'changed', bill, charge: latest }
 }
 

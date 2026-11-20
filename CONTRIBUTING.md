@@ -251,6 +251,10 @@ npm run build
 npm run e2e
 ```
 
+A few layout checks also run in WebKit (`switch-layout.spec.ts`). CI runs
+them; locally they are skipped, with a note saying so, unless you install
+WebKit (`npx playwright install webkit`) and set `E2E_WEBKIT=1`.
+
 On a machine where Playwright's browsers will not install, run them in
 Playwright's own image instead: `e2e/run-in-docker.sh`. A failed test leaves a
 screenshot and a trace in `test-results/`.
