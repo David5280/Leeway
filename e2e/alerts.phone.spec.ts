@@ -15,11 +15,13 @@ test('a tapped alert row stays inside its card and paints nothing once let go', 
     balanceCents: -14_210,
   })
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    // Yesterday in UTC, which is never ahead of the app's own day: an evening in
+    // Denver is already tomorrow in UTC, and a fee dated tomorrow is not yet counted.
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
     for (let fee = 0; fee < 2; fee++) {
       await action(page, 'create_transaction', {
         accountId: id,
-        date: today,
+        date: yesterday,
         name: 'OVERDRAFT FEE',
         amountCents: 3_400,
       })
