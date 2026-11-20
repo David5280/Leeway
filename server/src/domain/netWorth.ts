@@ -12,7 +12,11 @@ export interface BalanceSnapshot {
 
 export interface NetWorthPoint {
   date: IsoDate
+  /** What was owned that day, less what was owed. */
   netWorthCents: number
+  assetsCents: number
+  /** What was owed on credit cards and loans that day, positive. */
+  liabilitiesCents: number
 }
 
 export interface NetWorth {
@@ -36,25 +40,27 @@ export function netWorthSeries(
   to: IsoDate,
 ): NetWorthPoint[] {
   const latest = new Map<string, number>()
-  const total = () => {
-    let sum = 0
-    for (const [id, cents] of latest) sum += liabilities.has(id) ? -cents : cents
-    return sum
+  const pointOn = (date: IsoDate): NetWorthPoint => {
+    let assetsCents = 0
+    let liabilitiesCents = 0
+    for (const [id, cents] of latest) {
+      if (liabilities.has(id)) liabilitiesCents += cents
+      else assetsCents += cents
+    }
+    return { date, netWorthCents: assetsCents - liabilitiesCents, assetsCents, liabilitiesCents }
   }
   const sorted = [...snapshots].sort((a, b) => a.day.localeCompare(b.day))
   const points: NetWorthPoint[] = []
   for (const snapshot of sorted) {
     if (snapshot.day > to) break
-    if (snapshot.day >= from && points.length === 0 && latest.size > 0) {
-      points.push({ date: from, netWorthCents: total() })
-    }
+    if (snapshot.day >= from && points.length === 0 && latest.size > 0) points.push(pointOn(from))
     latest.set(snapshot.accountId, snapshot.balanceCents)
     if (snapshot.day < from) continue
     // Several accounts change on one day: keep a single point for it.
     if (points.at(-1)?.date === snapshot.day) points.pop()
-    points.push({ date: snapshot.day, netWorthCents: total() })
+    points.push(pointOn(snapshot.day))
   }
-  if (points.length === 0 && latest.size > 0) points.push({ date: from, netWorthCents: total() })
+  if (points.length === 0 && latest.size > 0) points.push(pointOn(from))
   return points
 }
 

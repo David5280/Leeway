@@ -29,6 +29,7 @@ import {
 import { bill, cashFlow, debtPlans, goal, series } from '../../test/planning'
 import { WIDGET_LIBRARY, type WidgetType } from '../../widgets/library'
 import { STATIC_REASONS } from './Card'
+import { worthPoint } from '../../test/worth'
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -147,10 +148,7 @@ function serve() {
       assetsCents: 900000,
       liabilitiesCents: 200000,
       netWorthCents: 700000,
-      history: [
-        { date: '2026-01-01', netWorthCents: 500000 },
-        { date: '2026-11-17', netWorthCents: 700000 },
-      ],
+      history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
     }),
     get_cash_flow: () => cashFlow(),
     list_bills: () => ({

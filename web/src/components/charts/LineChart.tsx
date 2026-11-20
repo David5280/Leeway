@@ -1,7 +1,7 @@
 // A line over time, used for net worth. It can go below zero, unlike the
 // spending charts, and points are placed by date so a month's gap looks like one.
 
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { useApp } from '../../lib/app'
 import {
   axisFormat,
@@ -60,7 +60,8 @@ export interface LineReference {
  * The full chart has value and date axes and the latest value at the line's
  * end. Compact draws the line and its shading alone, for a dashboard widget.
  * A reference, when given, is a dashed level labelled with where the line
- * should be; without one the chart draws exactly as before.
+ * should be; without one the chart draws exactly as before. Details add lines
+ * under a tapped point's amount, like what was owned and owed that day.
  */
 export function LineChart({
   points,
@@ -68,12 +69,15 @@ export function LineChart({
   description,
   compact = false,
   reference,
+  details,
 }: {
   points: LinePoint[]
   label: string
   description: string
   compact?: boolean
   reference?: LineReference
+  /** More lines for the readout of the point at this index. */
+  details?: (index: number) => ReactNode[]
 }) {
   const { money, settings } = useApp()
   const [measure, width] = useWidth<HTMLDivElement>(640)
@@ -109,7 +113,7 @@ export function LineChart({
             x={placed[pointer.active]!.x}
             chartWidth={width}
             title={shortDate(hovered.date, settings.locale)}
-            lines={[<Money cents={hovered.cents} />]}
+            lines={readoutLines(hovered.cents, pointer.active, details)}
           />
         )
       }
@@ -159,6 +163,15 @@ export function LineChart({
       )}
     </ChartFrame>
   )
+}
+
+/** A tapped point's amount, then any details for it. */
+function readoutLines(
+  cents: number,
+  index: number,
+  details: ((index: number) => ReactNode[]) | undefined,
+): ReactNode[] {
+  return [<Money cents={cents} />, ...(details ? details(index) : [])]
 }
 
 /** The amounts the value axis must show: every point, and the reference level if any. */

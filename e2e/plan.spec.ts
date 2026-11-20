@@ -33,5 +33,7 @@ test('a credit card balance shows under debts and in net worth', async ({ page }
 
   await page.getByRole('button', { name: 'Net worth' }).click()
   await expect(page).toHaveURL(/\/plan\/net-worth$/)
-  await expect(page.getByRole('region', { name: 'Debts' })).toContainText('$800')
+  await expect(page.getByRole('region', { name: 'Net worth', exact: true })).toContainText(
+    '$800 owed',
+  )
 })

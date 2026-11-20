@@ -37,9 +37,10 @@ describe('netWorthSeries', () => {
       '2026-10-01',
       '2026-11-17',
     )
+    // Each day keeps what was owned and owed apart, so a chart can show both.
     expect(points).toEqual([
-      { date: '2026-11-01', netWorthCents: 400000 },
-      { date: '2026-11-10', netWorthCents: 350000 },
+      { date: '2026-11-01', netWorthCents: 400000, assetsCents: 500000, liabilitiesCents: 100000 },
+      { date: '2026-11-10', netWorthCents: 350000, assetsCents: 450000, liabilitiesCents: 100000 },
     ])
   })
 
@@ -54,7 +55,7 @@ describe('netWorthSeries', () => {
       '2026-11-01',
       '2026-11-17',
     )
-    expect(points).toEqual([
+    expect(points.map(({ date, netWorthCents }) => ({ date, netWorthCents }))).toEqual([
       { date: '2026-11-01', netWorthCents: 100 },
       { date: '2026-11-05', netWorthCents: 300 },
     ])
@@ -66,7 +67,7 @@ describe('netWorthSeries', () => {
         '2026-11-10',
         '2026-11-17',
       ),
-    ).toEqual([{ date: '2026-11-10', netWorthCents: 300 }])
+    ).toEqual([{ date: '2026-11-10', netWorthCents: 300, assetsCents: 300, liabilitiesCents: 0 }])
     expect(netWorthSeries([], card, '2026-11-01', '2026-11-17')).toEqual([])
   })
 })
@@ -111,8 +112,8 @@ describe('get_net_worth', () => {
     )
     const worth = await call('get_net_worth', { days: 30 })
     expect(worth.history).toEqual([
-      { date: '2026-10-18', netWorthCents: 300000 },
-      { date: '2026-11-01', netWorthCents: 450000 },
+      { date: '2026-10-18', netWorthCents: 300000, assetsCents: 300000, liabilitiesCents: 0 },
+      { date: '2026-11-01', netWorthCents: 450000, assetsCents: 450000, liabilitiesCents: 0 },
     ])
   })
 })

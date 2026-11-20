@@ -15,6 +15,8 @@ import { dayLabel, monthYear, periodWord, shortDate } from '../lib/format'
 import { shortPlan } from '../lib/goalText'
 import { CashFlowSummary } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
+import { worthChange } from '../lib/worth'
+import { WorthChangeLine } from '../components/WorthChange'
 
 /** A widget before it has a figure to explain: its head, and loading or the error. */
 function Waiting({
@@ -151,16 +153,16 @@ export function DebtsWidget() {
   )
 }
 
+/** "Is your net worth growing?": the figure, how far it has come this year, and its line. */
 export function NetWorthWidget() {
   const { money, settings } = useApp()
   const worth = useAction('get_net_worth', { days: 365 })
-  const title = 'Net worth over the last year'
+  const title = 'Is your net worth growing?'
   if (!worth.data) {
     return <Waiting label="Net worth" icon="growth" title={title} error={worth.error} />
   }
   const points = worth.data.history.map((p) => ({ date: p.date, cents: p.netWorthCents }))
-  const first = points[0]
-  const last = points.at(-1)
+  const change = worthChange(worth.data)
   return (
     <Card drill={netWorthDrill(worth.data)} label="Net worth" className="stack-sm">
       <SectionHead icon="growth" title={title} />
@@ -169,18 +171,15 @@ export function NetWorthWidget() {
         tone={worth.data.netWorthCents < 0 ? 'problem' : undefined}
         className="mid-number"
       />
-      {first && last && points.length > 1 && (
+      {change && (
         <>
+          <WorthChangeLine change={change} />
           <LineChart
             compact
             points={points}
-            label={title}
-            description={`From ${money(first.cents)} on ${shortDate(first.date, settings.locale)} to ${money(last.cents)} on ${shortDate(last.date, settings.locale)}.`}
+            label="Net worth over the last year"
+            description={`From ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(worth.data.netWorthCents)} today.`}
           />
-          <span className="small muted row-between">
-            <span>{shortDate(first.date, settings.locale)}</span>
-            <span>{shortDate(last.date, settings.locale)}</span>
-          </span>
         </>
       )}
     </Card>

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, CashFlow } from '../../api/client'
@@ -11,6 +11,7 @@ import {
   renderPlan,
   retirementOf,
 } from '../../test/planning'
+import { worthPoint } from '../../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -261,12 +262,9 @@ describe('Debts', () => {
 })
 
 describe('Net worth', () => {
-  const history = [
-    { date: '2026-06-01', netWorthCents: -50000 },
-    { date: '2026-11-17', netWorthCents: 700000 },
-  ]
+  const history = [worthPoint('2026-06-01', -50000), worthPoint('2026-11-17', 700000)]
 
-  it('shows what is owned, owed and the change over time', async () => {
+  it('leads with the figure, owned less owed, then whether it is growing', async () => {
     const server = planServer({
       ...quietBills,
       get_net_worth: () => ({
@@ -277,12 +275,25 @@ describe('Net worth', () => {
       }),
     })
     renderPlan('/plan/net-worth')
-    expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent('$7,000')
-    expect(screen.getByRole('region', { name: 'Assets' })).toHaveTextContent('$8,200')
-    expect(screen.getByRole('region', { name: 'Debts' })).toHaveTextContent('$1,200')
-    expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
-      'Net worth from −$500 on Jun 1 to $7,000 on Nov 17.',
+    expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent(
+      'Net worth$7,000$8,200 owned, less $1,200 owed',
     )
+    const chart = screen.getByRole('region', { name: 'Net worth over time' })
+    expect(chart).toHaveTextContent('Is your net worth growing?')
+    expect(chart).toHaveTextContent('Up $7,500 since Jun 2026')
+    expect(screen.getByRole('img', { name: 'Net worth over time' })).toHaveAccessibleDescription(
+      'Net worth from −$500 on Jun 1 to $7,000 today.',
+    )
+    // Where it started is the level to stay above.
+    expect(chart).toHaveTextContent('Where you started: −$500')
+    // A tapped day says what was owned and owed then.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 640,
+    } as DOMRect)
+    fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
+    expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
+    vi.restoreAllMocks()
     // A house or a car counts once it is added by hand, in Settings.
     expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
       'href',

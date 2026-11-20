@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { A, B, C, everyAccount, group, renderAccounts, server } from '../test/accounts'
 import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
+import { worthPoint } from '../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -67,10 +68,7 @@ describe('Accounts screen', () => {
   it("draws net worth's year beside the total when there is a history", async () => {
     server(everyAccount, {
       get_net_worth: () => ({
-        history: [
-          { date: '2026-01-01', netWorthCents: 900000 },
-          { date: '2026-11-17', netWorthCents: 1120000 },
-        ],
+        history: [worthPoint('2026-01-01', 900000), worthPoint('2026-11-17', 1120000)],
       }),
     })
     renderAccounts()

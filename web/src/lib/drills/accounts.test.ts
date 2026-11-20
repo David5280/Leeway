@@ -5,6 +5,7 @@ import { mathSentence, trendDescription } from '../drill'
 import { money as formatMoney } from '../money'
 import { accountDrill, allAccountsDrill, averageOf, balanceTrend, selectionDrill } from './accounts'
 import { earlierPeriods, flowsDrill, leftOver, spendingDrill, usualOut } from './accountView'
+import { worthPoint } from '../../test/worth'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
 const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: 'en-US' })
@@ -138,10 +139,7 @@ describe('allAccountsDrill and selectionDrill', () => {
 
   it('adds up the counted accounts, leaving out ignored ones, with net worth as the trend', () => {
     const drill = allAccountsDrill([checking, card, hidden, empty], {
-      history: [
-        { date: '2026-10-01', netWorthCents: 100 },
-        { date: '2026-11-01', netWorthCents: 200 },
-      ],
+      history: [worthPoint('2026-10-01', 100), worthPoint('2026-11-01', 200)],
     } as Parameters<typeof allAccountsDrill>[1])
     expect(said(drill)).toBe(
       'Together $2,130 = Owned in these accounts $2,500 minus owed on cards and loans $370',

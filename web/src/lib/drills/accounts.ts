@@ -8,6 +8,7 @@ import { combine, utilization, UTILIZATION_WATCH } from '../accountCards'
 import { accountDetailPath } from '../accounts'
 import { addDays } from '../dates'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
+import { startReference, worthChange } from '../worth'
 
 /**
  * Daily balances, oldest first and ending today, as dated points for the
@@ -204,6 +205,7 @@ export function allAccountsDrill(accounts: readonly Account[], netWorth?: NetWor
             points: history.map((point) => ({ date: point.date, cents: point.netWorthCents })),
             label: 'Net worth over time',
             description: 'What you own less what you owe, each day a balance changed.',
+            reference: netWorth ? startReference(worthChange(netWorth)) : undefined,
           }
         : undefined,
     items: { title: 'Accounts', rows: accountItems(counted) },

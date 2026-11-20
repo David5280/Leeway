@@ -4,6 +4,7 @@ import { cashFlow, debtPlans } from '../../test/planning'
 import { mathSentence } from '../drill'
 import { money as formatMoney } from '../money'
 import { cashFlowDrill, debtsDrill, merchantsDrill, netWorthDrill } from './plan'
+import { worthPoint } from '../../test/worth'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
 const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: 'en-US' })
@@ -65,10 +66,7 @@ describe('netWorthDrill', () => {
     assetsCents: 900000,
     liabilitiesCents: 200000,
     netWorthCents: 700000,
-    history: [
-      { date: '2026-01-01', netWorthCents: 500000 },
-      { date: '2026-11-17', netWorthCents: 700000 },
-    ],
+    history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
   }
 
   it('takes what is owed from what is owned, with the year as its trend', () => {
@@ -85,7 +83,7 @@ describe('netWorthDrill', () => {
     const drill = netWorthDrill({
       ...worth,
       netWorthCents: -5000,
-      history: [{ date: '2026-11-17', netWorthCents: -5000 }],
+      history: [worthPoint('2026-11-17', -5000)],
     })
     expect(drill.figure).toEqual({ cents: -5000, tone: 'problem' })
     expect(drill.math.result.value).toEqual({ cents: -5000, tone: 'problem' })

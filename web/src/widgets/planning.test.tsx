@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn } from '../test/fake'
 import { bill, cashFlow, debtPlans, goal } from '../test/planning'
 import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
+import { worthPoint } from '../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -168,27 +169,42 @@ describe('Debt payoff widget', () => {
 })
 
 describe('Net worth widget', () => {
-  it('shows the number and a line of the last year', async () => {
+  it('answers whether it is growing: the number, how far it came this year, and its line', async () => {
     const server = fakeServer({
       get_net_worth: () => ({
         assetsCents: 900000,
         liabilitiesCents: 200000,
         netWorthCents: 700000,
-        history: [
-          { date: '2026-01-01', netWorthCents: 500000 },
-          { date: '2026-11-17', netWorthCents: 700000 },
-        ],
+        history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
       }),
     })
     renderSignedIn(<NetWorthWidget />)
     expect(await screen.findByText('$7,000')).toBeInTheDocument()
     const widget = within(screen.getByRole('region', { name: 'Net worth' }))
+    expect(widget.getByText('Is your net worth growing?')).toBeInTheDocument()
+    expect(widget.getByText(/^Up/)).toHaveTextContent('Up $2,000 since Jan 2026')
+    expect(widget.getByText('$2,000')).toHaveClass('money-in')
     expect(widget.getByRole('img', { name: 'Net worth over the last year' })).toBeInTheDocument()
     expect(server.actions('get_net_worth')).toEqual([{ days: 365 }])
     const math = await openMath(screen.getByRole('region', { name: 'Net worth' }), 'Net worth')
     expect(math).toHaveTextContent(
       'Net worth $7,000 = What you own $9,000 minus what you owe $2,000',
     )
+  })
+
+  it('says in red how far it fell', async () => {
+    fakeServer({
+      get_net_worth: () => ({
+        assetsCents: 300000,
+        liabilitiesCents: 0,
+        netWorthCents: 300000,
+        history: [worthPoint('2025-12-01', 500000), worthPoint('2026-11-17', 300000)],
+      }),
+    })
+    renderSignedIn(<NetWorthWidget />)
+    const line = await screen.findByText(/^Down/)
+    expect(line).toHaveTextContent('Down $2,000 since Dec 2025')
+    expect(within(line).getByText('$2,000')).toHaveClass('money-problem')
   })
 
   it('shows why net worth could not be read', async () => {
@@ -203,7 +219,7 @@ describe('Net worth widget', () => {
         assetsCents: 0,
         liabilitiesCents: 5000,
         netWorthCents: -5000,
-        history: [{ date: '2026-11-17', netWorthCents: -5000 }],
+        history: [worthPoint('2026-11-17', -5000)],
       }),
     })
     renderSignedIn(<NetWorthWidget />)

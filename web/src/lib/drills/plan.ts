@@ -4,6 +4,7 @@
 
 import type { CashFlow, DebtPlans, NetWorth, Output } from '../../api/client'
 import type { DrillDown } from '../drill'
+import { startReference, worthChange } from '../worth'
 
 type Merchants = Output<'top_merchants'>
 
@@ -73,6 +74,7 @@ export function netWorthDrill(worth: NetWorth): DrillDown {
             })),
             label: 'Net worth over the last year',
             description: 'What you own less what you owe, each day a balance changed.',
+            reference: startReference(worthChange(worth)),
           }
         : undefined,
     more: { to: '/plan/net-worth', label: 'Open net worth' },
