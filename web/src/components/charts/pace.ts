@@ -80,3 +80,114 @@ export function edgeAnchor(index: number, days: number): 'start' | 'middle' | 'e
   if (index === days - 1) return 'end'
   return 'middle'
 }
+
+export interface Point {
+  x: number
+  y: number
+}
+
+/** A label's room on the chart, edge to edge. */
+export interface Box {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+/** The size of today's spent amount, drawn beside its dot. */
+export const SPENT_FONT = 13
+
+/**
+ * Where today's spent amount sits: up and to the left of the dot, clear of the
+ * line climbing away to the right, but never past the plot's left edge.
+ * `x` is the text's right end, as it is drawn anchored there.
+ */
+export function spentLabel(at: Point, text: string, left: number): { x: number; box: Box } {
+  const width = textWidth(text, SPENT_FONT)
+  const x = Math.max(left + width, at.x - 8)
+  const baseline = at.y - 12
+  return { x, box: { left: x - width, right: x, top: baseline - SPENT_FONT, bottom: baseline + 4 } }
+}
+
+/**
+ * The corners of a label `width` wide turned `angle` degrees about `at`, its
+ * baseline `offset` below that point (negative is above), in drawing order.
+ */
+export function turnedCorners(
+  at: Point,
+  width: number,
+  font: number,
+  angle: number,
+  offset: number,
+): Point[] {
+  const turn = (angle * Math.PI) / 180
+  // From the cap height above the baseline to a descender's depth below it.
+  const corners = [
+    [-width / 2, offset - font],
+    [width / 2, offset - font],
+    [width / 2, offset + 4],
+    [-width / 2, offset + 4],
+  ] as const
+  return corners.map(([dx, dy]) => ({
+    x: at.x + dx * Math.cos(turn) - dy * Math.sin(turn),
+    y: at.y + dx * Math.sin(turn) + dy * Math.cos(turn),
+  }))
+}
+
+/** A box's corners, in drawing order. */
+export function boxCorners(box: Box): Point[] {
+  return [
+    { x: box.left, y: box.top },
+    { x: box.right, y: box.top },
+    { x: box.right, y: box.bottom },
+    { x: box.left, y: box.bottom },
+  ]
+}
+
+/**
+ * Whether two convex shapes (corners in drawing order) overlap. They are
+ * apart exactly when some edge's normal has their shadows on it not meeting
+ * (the separating axis test); shapes that only touch count as apart.
+ */
+export function shapesMeet(a: Point[], b: Point[]): boolean {
+  const normals = [a, b].flatMap((shape) =>
+    shape.map((corner, i) => {
+      const next = shape[(i + 1) % shape.length]!
+      return { x: corner.y - next.y, y: next.x - corner.x }
+    }),
+  )
+  return normals.every((axis) => {
+    const shadow = (shape: Point[]) => shape.map((corner) => corner.x * axis.x + corner.y * axis.y)
+    const [onA, onB] = [shadow(a), shadow(b)]
+    return Math.min(...onA) < Math.max(...onB) && Math.min(...onB) < Math.max(...onA)
+  })
+}
+
+/** How far along the steady slope its label sits: two thirds, where spending has usually not reached yet. */
+export const STEADY_LABEL_SHARE = 0.66
+
+/**
+ * Where the steady pace's label is centred, as an x, once it would sit on
+ * today's amount (spending running close to the steady pace): slid up the
+ * slope past today, centred in the room left before the end, or, when that
+ * room is too short for the label, back before today, kept inside the plot.
+ */
+export function steadyLabelX({
+  from,
+  to,
+  span,
+  today,
+  spent,
+}: {
+  from: Point
+  to: Point
+  /** How wide the turned label is along the x axis. */
+  span: number
+  today: Point
+  spent: Box
+}): number {
+  const pastToday = today.x + (spent.right - spent.left) + 8
+  if (to.x - pastToday >= span) return (pastToday + to.x) / 2
+  const beforeToday = spent.left - 8
+  return Math.max(from.x + span / 2, (from.x + beforeToday) / 2)
+}

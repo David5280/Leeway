@@ -9,13 +9,21 @@ import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import { Money } from '../design/Money'
 import {
+  boxCorners,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
   paceFrame,
   paceState,
+  spentLabel,
   steadyAt,
+  STEADY_LABEL_SHARE,
+  steadyLabelX,
+  shapesMeet,
+  turnedCorners,
+  type Box,
   type Pace,
+  type Point,
 } from './pace'
 import {
   AXIS_FONT,
@@ -28,11 +36,6 @@ import {
   usePointer,
   ValueAxis,
 } from './parts'
-
-interface Point {
-  x: number
-  y: number
-}
 
 export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean }) {
   const { settings, money } = useApp()
@@ -69,6 +72,9 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
     bottom - END_LABEL_GAP / 2,
   )
   const today = points[state.lastIndex]
+  // Today's amount, which the steady pace's label keeps clear of.
+  const spent =
+    state.projecting && today ? spentLabel(today, money(state.spentCents), left) : undefined
 
   return (
     <ChartFrame
@@ -122,6 +128,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
             right={right}
             bottom={bottom}
             labelBelow={pace.projectedCents > pace.budgetCents}
+            avoid={spent && today && { today, spent: spent.box }}
           />
         )}
         <ActualLine points={points} bottom={bottom} fill={`url(#${clipId}-fill)`} />
@@ -132,7 +139,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
           />
         )}
       </g>
-      {state.projecting && today && <SpentDot at={today} cents={state.spentCents} left={left} />}
+      {spent && today && <SpentDot at={today} cents={state.spentCents} x={spent.x} />}
       {ends.map((label, i) => (
         <EndLabel
           key={label.name}
@@ -231,7 +238,8 @@ function TodayMarker({ x, top, bottom }: { x: number; top: number; bottom: numbe
 /**
  * The budget line, and the steady pace climbing to it, labeled along the
  * slope on whichever side the projection line is not. A budget so small the
- * slope lies on the floor is labeled above it, clear of the dates.
+ * slope lies on the floor is labeled above it, clear of the dates. The label
+ * moves along the slope only when it would sit on today's amount.
  */
 function SteadyPace({
   from,
@@ -240,6 +248,7 @@ function SteadyPace({
   right,
   bottom,
   labelBelow,
+  avoid,
 }: {
   from: Point
   to: Point
@@ -247,12 +256,37 @@ function SteadyPace({
   right: number
   bottom: number
   labelBelow: boolean
+  /** Today's dot and the box of its amount, when there is one to keep clear of. */
+  avoid?: { today: Point; spent: Box }
 }) {
   const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
-  // Two thirds along, where the actual line has usually not reached yet.
-  const at = { x: from.x + (to.x - from.x) * 0.66, y: from.y + (to.y - from.y) * 0.66 }
-  const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
-  const offset = below ? AXIS_FONT + 4 : -6
+  const width = textWidth(STEADY_LABEL, AXIS_FONT)
+  /** The label's turning point a share of the way along the slope, and its baseline's offset from there. */
+  const place = (share: number) => {
+    const at = { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share }
+    const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
+    return { at, offset: below ? AXIS_FONT + 4 : -6 }
+  }
+  const usual = place(STEADY_LABEL_SHARE)
+  const meets =
+    avoid &&
+    shapesMeet(
+      turnedCorners(usual.at, width, AXIS_FONT, angle, usual.offset),
+      boxCorners(avoid.spent),
+    )
+  // Only a label that would sit on today's amount moves; every other chart draws as before.
+  let spot = usual
+  if (meets) {
+    const slidX = steadyLabelX({
+      from,
+      to,
+      span: Math.abs(width * Math.cos((angle * Math.PI) / 180)),
+      today: avoid.today,
+      spent: avoid.spent,
+    })
+    spot = place((slidX - from.x) / (to.x - from.x))
+  }
+  const { at, offset } = spot
   return (
     <g aria-hidden="true">
       <line x1={left} x2={right} y1={to.y} y2={to.y} className="chart-line budget" />
@@ -264,21 +298,20 @@ function SteadyPace({
         transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
         className="chart-axis"
       >
-        Steady pace
+        {STEADY_LABEL}
       </text>
     </g>
   )
 }
 
-/** Today's spending: a dot on the line with its amount beside it. */
-function SpentDot({ at, cents, left }: { at: Point; cents: number; left: number }) {
-  const { money } = useApp()
-  // The amount sits up and to the left of the dot, clear of the line climbing away to the right.
-  const labelX = Math.max(left + textWidth(money(cents), 13), at.x - 8)
+const STEADY_LABEL = 'Steady pace'
+
+/** Today's spending: a dot on the line with its amount up and to the left, ending at `x`. */
+function SpentDot({ at, cents, x }: { at: Point; cents: number; x: number }) {
   return (
     <g aria-hidden="true">
       <circle cx={at.x} cy={at.y} r="5" className="chart-dot" />
-      <text x={labelX} y={at.y - 12} textAnchor="end" className="chart-value ink halo">
+      <text x={x} y={at.y - 12} textAnchor="end" className="chart-value ink halo">
         <Money as="tspan" cents={cents} />
       </text>
     </g>

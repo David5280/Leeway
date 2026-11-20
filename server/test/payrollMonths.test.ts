@@ -1,5 +1,6 @@
 // When each payroll deduction counts toward a month's savings rate: from when
-// it began, from a recent paystub only, and in part for the running month.
+// it began (a workplace plan from the start of its paystub's year), from a
+// recent paystub only, and in part for the running month.
 
 import { describe, expect, it } from 'vitest'
 import type { MonthTotals } from '../src/domain/monthlyTotals.js'
@@ -9,7 +10,9 @@ import {
   monthPayroll,
   payrollStreams,
   paystubDate,
+  paystubPlan,
   pensionStart,
+  planStart,
   runningPayShare,
   streamKinds,
 } from '../src/domain/savings/payrollMonths.js'
@@ -56,6 +59,26 @@ describe('a paystub’s date and freshness', () => {
   })
 })
 
+describe('a workplace plan on a paystub', () => {
+  it("ran from the start of the paystub's year, whichever month the paystub is from", () => {
+    expect(planStart(saved('2026-11-13'))).toBe('2026-01-01')
+    expect(planStart(saved('2025-01-31'))).toBe('2025-01-01')
+    expect(planStart(saved(null, '2026-02-02T23:00:00.000Z'))).toBe('2026-01-01')
+  })
+
+  it('counts while the paystub is recent, and says when an old one leaves a plan out', () => {
+    expect(paystubPlan(saved('2026-11-13'), TODAY)).toEqual({ monthlyCents: 40000, stale: false })
+    expect(paystubPlan(saved('2026-03-13'), TODAY)).toEqual({ monthlyCents: null, stale: true })
+    // An old paystub with no plan on it leaves nothing out.
+    const noPlan = {
+      ...saved('2026-03-13'),
+      current: { ...saved('2026-03-13').current, plan457: null },
+    }
+    expect(paystubPlan(noPlan, TODAY)).toEqual({ monthlyCents: null, stale: false })
+    expect(paystubPlan(null, TODAY)).toEqual({ monthlyCents: null, stale: false })
+  })
+})
+
 describe('when a pension began', () => {
   it('counts the years of service back from when they were last checked', () => {
     expect(pensionStart({ ...EMPTY_PLAN, serviceYears: 4, checkedOn: '2026-06-01' }, TODAY)).toBe(
@@ -77,7 +100,8 @@ describe('payrollStreams', () => {
     )
     expect(streams).toEqual([
       { kind: 'pension', monthlyCents: 30000, since: '2025-11-01' },
-      { kind: 'plan', monthlyCents: 40000, since: '2026-11-13' },
+      // The paystub's year-to-date figures show the plan ran from January.
+      { kind: 'plan', monthlyCents: 40000, since: '2026-01-01' },
     ])
     expect(streamKinds(streams)).toEqual({ pension: true, plan: true })
   })

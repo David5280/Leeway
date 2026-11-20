@@ -1,15 +1,9 @@
 // The drill-down behind the savings rate: the usual month as the answer, the
-// newest finished month's money as the math (saved out of pay), what was
-// counted, then each month, newest first. Pure.
+// finished months' rates as the math (lowest to highest, the middle one
+// picked), what was counted, then each month, newest first. Pure.
 
-import type { DrillDown } from '../drill'
+import type { DrillDown, MathTerm } from '../drill'
 import { reachedTarget, usualRate, type MonthRate, type SavingsRates } from '../rates'
-
-/** The newest finished month with a rate, or the running one when none has finished. */
-function shownMonth(months: MonthRate[]): MonthRate | undefined {
-  const finished = months.filter((one) => !one.current && one.percent !== null)
-  return finished.at(-1) ?? months.find((one) => one.current && one.percent !== null)
-}
 
 /** What the usual month is made of, in a few words. */
 function subtitleFor(count: number): string {
@@ -18,31 +12,43 @@ function subtitleFor(count: number): string {
   return `A usual month: the middle of the last ${count} finished months`
 }
 
+/**
+ * The finished months' rates, lowest first, so the usual month sits in the
+ * middle of the list. An odd count has one middle month; an even count has
+ * two, and the usual month is halfway between them.
+ */
+function middleTerms(finished: MonthRate[], month: (iso: string) => string): MathTerm[] {
+  // Equal rates keep their calendar order, so the list reads the same each time.
+  const sorted = [...finished].sort((a, b) => a.percent! - b.percent!)
+  const middle = Math.floor(sorted.length / 2)
+  const middles = sorted.length % 2 ? [middle] : [middle - 1, middle]
+  return sorted.map((one, index) => ({
+    label: middles.includes(index) ? `${month(one.start)}, the middle` : month(one.start),
+    value: { text: `${one.percent}%` },
+    ...(index > 0 && { op: 'and' as const }),
+  }))
+}
+
 export function savingsRateDrill(
   rates: SavingsRates,
   month: (iso: string) => string,
   money: (cents: number) => string,
 ): DrillDown {
   const usual = usualRate(rates.months)
-  const count = rates.months.filter((one) => !one.current && one.percent !== null).length
-  const shown = shownMonth(rates.months)
+  const finished = rates.months.filter((one) => !one.current && one.percent !== null)
+  const twoMiddles = finished.length > 0 && finished.length % 2 === 0
   return {
     title: 'Savings rate',
-    subtitle: subtitleFor(count),
+    subtitle: subtitleFor(finished.length),
     figure: { text: usual === null ? 'Not known yet' : `${usual}%` },
     math: {
-      terms: shown
-        ? [
-            {
-              label: `Saved in ${month(shown.start)}${shown.current ? ', so far' : ''}`,
-              value: { cents: shown.savedCents },
-            },
-            { label: 'pay', value: { cents: shown.payCents }, op: 'over' },
-          ]
-        : [{ label: 'Saved', value: { text: 'Not seen yet' } }],
+      terms:
+        finished.length > 0
+          ? middleTerms(finished, month)
+          : [{ label: 'Finished months', value: { text: 'None yet' } }],
       result: {
-        label: 'Share of pay saved',
-        value: { text: shown ? `${shown.percent}%` : 'Not known yet' },
+        label: twoMiddles ? 'Usual month, halfway between the two' : 'Usual month',
+        value: { text: usual === null ? 'Not known yet' : `${usual}%` },
       },
       note: `${rates.note} The usual month is the middle one, so one big month does not set it.`,
     },

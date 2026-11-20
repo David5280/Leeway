@@ -112,8 +112,8 @@ export function FlowBars({
         const dim = hovered && hovered !== month ? 0.55 : 1
         // The running month is drawn lighter and outlined: it is still filling up.
         const running = month.current ? { fillOpacity: RUNNING_FILL_OPACITY, strokeWidth: 1.5 } : {}
-        // Money out is darker than money in, so the pair differs in lightness as well as hue.
-        const out = overspent(month) ? 'var(--tone-problem)' : 'var(--tone-out)'
+        // Money out is darker than money in, red or not, so the pair differs in lightness as well as hue.
+        const out = overspent(month) ? 'var(--tone-short)' : 'var(--tone-out)'
         return (
           <g key={month.start} opacity={dim} aria-hidden="true">
             <path
@@ -168,13 +168,16 @@ export function FlowBars({
           Nothing in or out yet
         </text>
       )}
-      <PointerLayer
-        left={left}
-        top={top}
-        width={right - left}
-        height={bottom - top}
-        handlers={pointer.handlers}
-      />
+      {/* An empty chart has nothing to read out, so a tap on it does nothing. */}
+      {!empty && (
+        <PointerLayer
+          left={left}
+          top={top}
+          width={right - left}
+          height={bottom - top}
+          handlers={pointer.handlers}
+        />
+      )}
     </ChartFrame>
   )
 }

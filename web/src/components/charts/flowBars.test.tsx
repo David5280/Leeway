@@ -45,7 +45,7 @@ describe('FlowBars', () => {
       'var(--tone-in)',
       'var(--tone-out)',
       'var(--tone-in)',
-      'var(--tone-problem)',
+      'var(--tone-short)',
       'var(--tone-in)',
       // November is still running, so it is not judged yet.
       'var(--tone-out)',
@@ -90,6 +90,9 @@ describe('FlowBars', () => {
     expect(screen.getByRole('img')).not.toHaveTextContent('$0')
     expect(document.querySelector('.chart-grid')).toBeNull()
     expect(document.querySelectorAll('.chart-baseline')).toHaveLength(1)
+    // Nothing to read, so no layer to tap and no $0 readout over the note.
+    expect(screen.queryByTestId('chart-hit')).toBeNull()
+    expect(readout()).toBeNull()
   })
 
   it('keeps huge amounts on the axis', () => {

@@ -169,6 +169,7 @@ describe('savings in the weekly email', () => {
     bankSeenSavingsRatePercent: 9,
     hasSavingsAccounts: true,
     payrollIncludedSavingsRatePercent: null,
+    savingsRateNote: null,
     pension: null,
   }
 

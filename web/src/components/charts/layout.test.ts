@@ -3,12 +3,17 @@ import { addDays } from '../../lib/dates'
 import { lineFrame } from './LineChart'
 import { labelSide, lineYsAcross, timeLabels, timeTickLabel } from './lineParts'
 import {
+  boxCorners,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
   paceFrame,
   paceState,
+  spentLabel,
   steadyAt,
+  steadyLabelX,
+  shapesMeet,
+  turnedCorners,
   type Pace,
 } from './pace'
 import { barAxis, barLayout, barPath, barPrecision } from './PeriodBars'
@@ -274,5 +279,65 @@ describe('labelSide', () => {
     expect(labelSide([140, 155, 160], 150, 0, 300)).toBe('above')
     expect(labelSide([140, 155], 290, 0, 300)).toBe('above')
     expect(labelSide([140, 155], 5, 0, 300)).toBe('below')
+  })
+})
+
+describe('the steady pace label beside today', () => {
+  it("puts today's amount up and to the left of its dot, inside the plot", () => {
+    // "$400" is 4 characters at 13px: 32 wide.
+    expect(spentLabel({ x: 200, y: 100 }, '$400', 40)).toEqual({
+      x: 192,
+      box: { left: 160, right: 192, top: 75, bottom: 92 },
+    })
+    expect(spentLabel({ x: 50, y: 100 }, '$400', 40).x).toBe(72)
+  })
+
+  it("turns a label's corners about its point on the slope", () => {
+    expect(turnedCorners({ x: 100, y: 100 }, 80, 12, 0, -6)).toEqual([
+      { x: 60, y: 82 },
+      { x: 140, y: 82 },
+      { x: 140, y: 98 },
+      { x: 60, y: 98 },
+    ])
+    // Turned a quarter, it stands as tall as it was wide.
+    const upright = turnedCorners({ x: 100, y: 100 }, 80, 12, 90, 0)
+    const ys = upright.map((corner) => corner.y)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(80)
+  })
+
+  it('tells overlapping shapes from ones that only touch or sit apart', () => {
+    const box = boxCorners({ left: 0, right: 10, top: 0, bottom: 10 })
+    expect(shapesMeet(box, boxCorners({ left: 5, right: 15, top: 5, bottom: 15 }))).toBe(true)
+    expect(shapesMeet(box, boxCorners({ left: 10, right: 20, top: 0, bottom: 10 }))).toBe(false)
+    expect(shapesMeet(box, boxCorners({ left: 0, right: 10, top: 11, bottom: 20 }))).toBe(false)
+    // A label turned 45 degrees passes beside a box its square outline would cover.
+    const slanted = turnedCorners({ x: 0, y: 0 }, 40, 4, 45, 0)
+    expect(shapesMeet(slanted, boxCorners({ left: 8, right: 14, top: -14, bottom: -8 }))).toBe(
+      false,
+    )
+    expect(shapesMeet(slanted, boxCorners({ left: -2, right: 2, top: -2, bottom: 2 }))).toBe(true)
+  })
+
+  const slope = { from: { x: 40, y: 200 }, to: { x: 340, y: 20 } }
+  const spentAt = (x: number) => ({ left: x - 40, right: x - 8, top: 70, bottom: 92 })
+
+  it('centres it in the room past today and the amount when that room fits it', () => {
+    // Past 200 + 32 + 8 = 240, up to 340: centred at 290.
+    expect(
+      steadyLabelX({ ...slope, span: 70, today: { x: 200, y: 100 }, spent: spentAt(200) }),
+    ).toBe(290)
+  })
+
+  it('puts it before today when the room past is too short, never past the left edge', () => {
+    // Past 280 + 32 + 8 = 320 leaves 20, too short; before the amount ends at 240 - 8.
+    expect(
+      steadyLabelX({ ...slope, span: 70, today: { x: 280, y: 100 }, spent: spentAt(280) }),
+    ).toBe(136)
+    expect(
+      steadyLabelX({ ...slope, span: 70, today: { x: 300, y: 50 }, spent: spentAt(300) }),
+    ).toBe(146)
+    expect(steadyLabelX({ ...slope, span: 70, today: { x: 300, y: 50 }, spent: spentAt(60) })).toBe(
+      75,
+    )
   })
 })

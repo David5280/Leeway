@@ -54,6 +54,15 @@ function usedStatus(used: number, through: number | null): Status {
   return 'ok'
 }
 
+/** Within this many points of the calendar, spending reads as right on pace. */
+const ON_PACE_POINTS = 2
+
+/** How the share used compares with the share of the period gone, in plain words. */
+export function paceWords(used: number, through: number): string {
+  if (Math.abs(used - through) <= ON_PACE_POINTS) return "You're right on pace."
+  return used < through ? "You're under pace." : "You're ahead of pace."
+}
+
 /** What the room left means, in words: per day now, or plainly over. */
 function Caption({ budget }: { budget: Budget }) {
   const { totals, period } = budget
@@ -112,9 +121,11 @@ export function LeewayWidget({ budget }: WidgetProps) {
       />
       <SetAsideList setAsides={budget.setAsides} />
       {through !== null && (
-        // The ring shows the share used; this says what its mark is.
+        // The ring shows the share used and marks today; this says what the two mean together.
+        // Plain words, never red: the ring's color already carries any warning.
         <p className="small muted">
-          {through}% of the way through the {periodWord(settings.period.kind)}, marked on the ring.
+          The mark is today, {through}% of the way through the {periodWord(settings.period.kind)}.{' '}
+          {paceWords(used, through)}
         </p>
       )}
     </Card>

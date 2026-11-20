@@ -530,5 +530,5 @@
 }
 /* A finished month where more went out than came in; the running month never turns red. */
 .flow-swatch.over {
-  background: var(--tone-problem);
+  background: var(--tone-short);
 }

@@ -82,8 +82,10 @@ describe('LeewayWidget', () => {
     expect(ring).toHaveAttribute('aria-valuenow', '25')
     // 25% used by day 17 of 30 is behind the calendar, so the ring reads fine.
     expect(ring).toHaveClass('ring-ok')
-    // The ring shows the share used, so the line under it only names the ring's mark.
-    expect(region()).toHaveTextContent('57% of the way through the month, marked on the ring.')
+    // The ring shows the share used, so the line under it says what its mark means.
+    expect(region()).toHaveTextContent(
+      "The mark is today, 57% of the way through the month. You're under pace.",
+    )
     expect(region()).not.toHaveTextContent('of the budget used')
     // The comparison with last month belongs to the Activity hero, not this one.
     expect(within(region()).queryByRole('img', { name: /last month/ })).not.toBeInTheDocument()
@@ -94,6 +96,31 @@ describe('LeewayWidget', () => {
     renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
     // 75% used against 57% of the month is more than 10 points ahead.
     expect(screen.getByRole('progressbar', { name: 'Budget used' })).toHaveClass('ring-watch')
+    expect(region()).toHaveTextContent(
+      "The mark is today, 57% of the way through the month. You're ahead of pace.",
+    )
+    // Plain words: the ring's color carries the warning.
+    expect(screen.getByText(/The mark is today/)).toHaveClass('muted')
+  })
+
+  it('says spending is right on pace within a couple of points of the calendar', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 47000 }])
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />)
+    // 59% used against 57% of the month.
+    expect(region()).toHaveTextContent(
+      "The mark is today, 57% of the way through the month. You're right on pace.",
+    )
+  })
+
+  it('names the paycheck when the budget runs by paycheck', () => {
+    const budget = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
+    renderSignedIn(<LeewayWidget budget={budget} offset={0} />, {
+      settings: settingsSchema.parse({
+        timeZone: 'America/Denver',
+        period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-06' },
+      }),
+    })
+    expect(region()).toHaveTextContent('57% of the way through the paycheck.')
   })
 
   it('says how far over it is, in red', () => {

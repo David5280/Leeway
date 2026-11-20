@@ -3,9 +3,10 @@
 //
 // A deduction counts only from when it is known to exist: a pension from when
 // the owner's service began (their years of service, back from when they last
-// checked them), a 401(k), 457 or 403(b) from the month of the paystub that
-// shows it. A pension with no years of service entered counts in every month,
-// since the owner said they pay in and nothing says since when. A paystub
+// checked them), a 401(k), 457 or 403(b) from the start of the year of the
+// paystub that shows it (its year-to-date figures show it ran all year). A
+// pension with no years of service entered counts in every month, since the
+// owner said they pay in and nothing says since when. A paystub
 // older than PAYSTUB_FRESH_DAYS no longer says what pay takes now (a raise, a
 // new job or a changed election may have moved it), so it counts nowhere.
 //
@@ -41,6 +42,22 @@ export function freshPaystub<P extends DatedPaystub>(paystub: P | null, today: I
   return paystub
 }
 
+/**
+ * What the newest paystub shows going into a 401(k), 457 or 403(b) a month,
+ * counted only while it is recent, and whether an old one shows some that is
+ * left out, so the owner can be told to save a newer one.
+ */
+export function paystubPlan(
+  paystub: DatedPaystub | null,
+  today: IsoDate,
+): { monthlyCents: number | null; stale: boolean } {
+  const fresh = freshPaystub(paystub, today)
+  return {
+    monthlyCents: planMonthlyCents(fresh),
+    stale: fresh === null && planMonthlyCents(paystub) !== null,
+  }
+}
+
 /** When the owner's service in a pension began, or null when no years of service are entered. */
 export function pensionStart(plan: PensionPlan, today: IsoDate): IsoDate | null {
   if (plan.serviceYears === null) return null
@@ -71,8 +88,17 @@ export function payrollStreams(
   const fresh = freshPaystub(paystub, today)
   const planCents = planMonthlyCents(fresh)
   if (fresh && planCents)
-    streams.push({ kind: 'plan', monthlyCents: planCents, since: paystubDate(fresh) })
+    streams.push({ kind: 'plan', monthlyCents: planCents, since: planStart(fresh) })
   return streams
+}
+
+/**
+ * When a plan a paystub shows is known to have run from: the first of that
+ * paystub's year. Its year-to-date figures cover every paycheck since then, so
+ * contributions were coming out all year, not only from the stub's own month.
+ */
+export function planStart(paystub: DatedPaystub): IsoDate {
+  return `${paystubDate(paystub).slice(0, 4)}-01-01`
 }
 
 /** Which payroll deductions are counted anywhere, for the note beside the rate. */

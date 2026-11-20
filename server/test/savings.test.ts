@@ -621,6 +621,7 @@ describe('the check-in', () => {
       emergencyFundTargetMonths: null,
       bankSeenSavingsRatePercent: null,
       payrollIncludedSavingsRatePercent: null,
+      savingsRateNote: null,
       pension: null,
     })
   })

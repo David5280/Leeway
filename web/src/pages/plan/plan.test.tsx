@@ -401,11 +401,13 @@ describe('Net worth', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))
-    // The question and its answer open the drill-down; the range and the chart sit outside it.
+    // The chart card is the chart alone; the hero figure above is what opens the math.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    const open = within(chart).getByRole('button', { name: /Is your net worth growing/ })
-    expect(open).not.toContainElement(within(chart).getByRole('img'))
-    await userEvent.setup().click(open)
+    expect(chart).toHaveAttribute('data-static', 'chart')
+    expect(within(chart).queryByRole('button', { name: /Is your net worth growing/ })).toBeNull()
+    await userEvent
+      .setup()
+      .click(within(screen.getByRole('region', { name: 'Net worth' })).getByRole('button'))
     expect(screen.getByRole('dialog', { name: 'Net worth' })).toBeVisible()
   })
 

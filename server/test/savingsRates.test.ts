@@ -131,6 +131,17 @@ describe('what a rate says it counted', () => {
     expect(payrollNote({ pension: true, plan: true })).not.toMatch(/once/)
   })
 
+  it('says when an old paystub leaves a 401(k) out, and how to fix it', () => {
+    const stale =
+      "Your newest paystub is over six months old, so your 401(k) isn't counted. Save a recent one under Retirement."
+    expect(payrollNote({ pension: false, plan: false, stalePlan: true })).toBe(
+      `Counts transfers your bank shows. ${stale} A pension counts once you enter it.`,
+    )
+    expect(payrollNote({ pension: true, plan: false, stalePlan: true })).toBe(
+      `Counts your pension contributions as well as transfers your bank shows. ${stale}`,
+    )
+  })
+
   it('says what a comparison with a target counts', () => {
     const bank = { label: 'Transfers', monthlyCents: 10_000, beforePaycheck: false }
     const pension = { ...bank, beforePaycheck: true, payroll: 'pension' as const }
@@ -243,7 +254,7 @@ describe('get_savings_rates', () => {
     paystub.current = { ...paystub.current, pension: null }
     await call('save_paystub', { paystub })
     expect((await call('get_savings_rates', {})).note).toBe(
-      payrollNote({ pension: false, plan: false }),
+      payrollNote({ pension: false, plan: false, stalePlan: true }),
     )
   })
 })

@@ -109,6 +109,29 @@ describe('PeriodBars', () => {
     expect(readout()).toBeNull()
   })
 
+  it('clears a finger readout when the touch turns into a scroll', () => {
+    fakeServer({})
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} label="Groceries" />)
+    point('last')
+    expect(readout()).not.toBeNull()
+    // The browser cancels the pointer once it takes the touch over for scrolling.
+    fireEvent.pointerCancel(screen.getByTestId('chart-hit'), { pointerType: 'touch' })
+    expect(readout()).toBeNull()
+  })
+
+  it('clears the readout on a press anywhere off the plot, and keeps it on the plot', () => {
+    fakeServer({})
+    renderSignedIn(<PeriodBars bars={bars} budgetCents={null} label="Groceries" />)
+    point('first')
+    fireEvent.pointerDown(screen.getByTestId('chart-hit'), { clientX: 0 })
+    expect(readout()).toHaveTextContent('Sep$500')
+    fireEvent.pointerDown(document.body)
+    expect(readout()).toBeNull()
+    // With no readout up, a press elsewhere changes nothing.
+    fireEvent.pointerDown(document.body)
+    expect(readout()).toBeNull()
+  })
+
   it('says so when nothing was spent, and draws refunds as empty bars', () => {
     fakeServer({})
     renderSignedIn(
@@ -208,6 +231,59 @@ describe('PaceChart', () => {
     // Heading past the budget, the label sits under the slope, clear of the projection.
     expect(offset(80_000)).toBeGreaterThan(0)
     expect(offset(1_000)).toBeLessThan(0)
+  })
+
+  describe("the steady pace label, beside today's amount", () => {
+    /** Spending on the steady pace, a little under it, through day `days` of November. */
+    const onPace = (days: number) =>
+      pace({
+        cumulative: Array.from({ length: days }, (_, i) => ({
+          date: addDays('2026-11-01', i),
+          cents: Math.round((72_000 * (i + 1)) / 30),
+        })),
+        projectedCents: 72_000,
+      })
+    /** Where the label is centred and where today's dot is. */
+    const spots = (chart: Pace, isCurrent = true) => {
+      const { container, unmount } = renderSignedIn(
+        <PaceChart pace={chart} isCurrent={isCurrent} />,
+      )
+      const label = [...container.querySelectorAll('text')].find(
+        (text) => text.textContent === 'Steady pace',
+      )!
+      const dot = container.querySelector('circle.chart-dot')
+      const spot = {
+        label: Number(label.getAttribute('x')),
+        today: Number(dot?.getAttribute('cx')),
+      }
+      unmount()
+      return spot
+    }
+
+    it("stays two thirds along when today's amount is clear of it", () => {
+      fakeServer({})
+      // Through the 17th at $20 a day, spending is well under the steady pace.
+      expect(spots(pace()).label).toBe(spots(pace(), false).label)
+      vi.stubGlobal('ResizeObserver', PhoneObserver)
+      expect(spots(pace()).label).toBe(spots(pace(), false).label)
+    })
+
+    it('slides up the slope past today when spending runs close to it', () => {
+      vi.stubGlobal('ResizeObserver', PhoneObserver)
+      fakeServer({})
+      // Day 16 of 30 on a phone: today's amount sits where the label would.
+      const { label, today } = spots(onPace(16))
+      expect(label).toBeGreaterThan(today)
+      expect(label).not.toBe(spots(onPace(16), false).label)
+    })
+
+    it('goes back before today when the room past it is too short', () => {
+      vi.stubGlobal('ResizeObserver', PhoneObserver)
+      fakeServer({})
+      // Day 17 of 30 on a phone leaves too little slope after today.
+      const { label, today } = spots(onPace(17))
+      expect(label).toBeLessThan(today)
+    })
   })
 
   it('still draws a period with no spending and no budget', () => {

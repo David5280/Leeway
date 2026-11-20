@@ -17,21 +17,36 @@ export type PayrollKind = 'pension' | 'plan'
 export interface PayrollCounted {
   pension: boolean
   plan: boolean
+  /**
+   * A workplace plan the newest paystub shows but that is left out, since
+   * that paystub is too old to say what pay takes now.
+   */
+  stalePlan?: boolean
 }
+
+/** Why a plan an old paystub shows is not counted, and how to fix it. */
+const STALE_PLAN =
+  "Your newest paystub is over six months old, so your 401(k) isn't counted. Save a recent one under Retirement."
 
 /**
  * Said to the owner beside a savings rate: what it counts, naming only what
  * it leaves out and how to add it.
  */
-export function payrollNote({ pension, plan }: PayrollCounted): string {
+export function payrollNote({ pension, plan, stalePlan = false }: PayrollCounted): string {
   if (pension && plan) {
     return 'Counts your pension and workplace plan contributions from pay, as well as transfers your bank shows.'
   }
   if (pension) {
-    return 'Counts your pension contributions as well as transfers your bank shows. A 401(k) or similar plan counts once a paystub from the last six months shows it.'
+    const missing = stalePlan
+      ? STALE_PLAN
+      : 'A 401(k) or similar plan counts once a paystub from the last six months shows it.'
+    return `Counts your pension contributions as well as transfers your bank shows. ${missing}`
   }
   if (plan) {
     return 'Counts the 401(k), 457 or 403(b) contributions your paystub shows, as well as transfers your bank shows. A pension counts once you enter it.'
+  }
+  if (stalePlan) {
+    return `Counts transfers your bank shows. ${STALE_PLAN} A pension counts once you enter it.`
   }
   return 'Counts transfers your bank shows. Money taken from pay, like a pension or a 401(k), counts once you add it under Retirement.'
 }
@@ -66,6 +81,8 @@ export interface SavingsRate {
   /** Take-home pay plus anything saved before the paycheck. */
   payMonthlyCents: number
   sources: SavingSource[]
+  /** A workplace plan left out because the paystub that shows it is too old (see PayrollCounted). */
+  stalePlan?: boolean
 }
 
 /** The payroll deductions Leeway knows, as sources taken before the paycheck. */
@@ -137,7 +154,11 @@ export function payNoun(rate: SavingsRate): string {
 /** Which payroll deductions a rate counts. */
 export function payrollCounted(rate: SavingsRate): PayrollCounted {
   const kinds = new Set(rate.sources.map((source) => source.payroll))
-  return { pension: kinds.has('pension'), plan: kinds.has('plan') }
+  return {
+    pension: kinds.has('pension'),
+    plan: kinds.has('plan'),
+    stalePlan: rate.stalePlan === true,
+  }
 }
 
 /** What the owner is told was counted in a rate, said beside it everywhere. */

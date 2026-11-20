@@ -12,7 +12,7 @@ import { attentionItems, type AttentionItem } from './coach.js'
 import { listConnections } from './connections.js'
 import { debtPlans } from './debts.js'
 import { listGoals } from './goals.js'
-import { latestPaystub, planMonthlyCents } from './paystubs/paystubs.js'
+import { latestPaystub } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
 import { monthlyAverages, paySchedule } from './profile/income.js'
@@ -23,8 +23,8 @@ import {
   type PensionMonthlyTotals,
 } from './retirement/pensions.js'
 import { pensionsOf } from './retirement/pensionStore.js'
-import { freshPaystub } from './savings/payrollMonths.js'
-import { bankSeenRate, countsPayroll } from './savings/rate.js'
+import { paystubPlan } from './savings/payrollMonths.js'
+import { bankSeenRate, countedNote, countsPayroll, type SavingsRate } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import { periodConfig, type Settings } from './settings.js'
 
@@ -66,6 +66,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     latestPaystub(db),
   ])
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
+  const plan = paystubPlan(paystub, today)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
@@ -148,13 +149,34 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
         cashCents: savings.cashCents,
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
-        planMonthlyCents: planMonthlyCents(freshPaystub(paystub, today)),
+        planMonthlyCents: plan.monthlyCents,
+        stalePlan: plan.stale,
         monthly,
         billsMonthlyCents,
         settings,
         today,
       }),
     ),
+  }
+}
+
+/** The savings rate as the check-in reports it, beside what it counts. */
+function rateGlance(savingsRate: SavingsRate | null) {
+  return {
+    /**
+     * The savings rate as far as the bank sees it: payroll deductions are never
+     * in it, so the key says so wherever it is read. Null when pay or saving is
+     * unknown, never a guess of zero.
+     */
+    bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
+    /**
+     * The rate with the payroll deductions Leeway knows (a pension the owner
+     * entered, a 401(k), 457 or 403(b) a recent paystub shows); null when none are known.
+     */
+    payrollIncludedSavingsRatePercent:
+      savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
+    /** What the rate counts, in the words the owner sees beside it; null without a rate. */
+    savingsRateNote: savingsRate ? countedNote(savingsRate) : null,
   }
 }
 
@@ -198,18 +220,7 @@ function savingsGlance(
     changeSince: savings.month?.since ?? null,
     emergencyFundMonths: emergencyFund?.monthsCovered ?? null,
     emergencyFundTargetMonths: emergencyFund?.targetMonths ?? null,
-    /**
-     * The savings rate as far as the bank sees it: payroll deductions are never
-     * in it, so the key says so wherever it is read. Null when pay or saving is
-     * unknown, never a guess of zero.
-     */
-    bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
-    /**
-     * The rate with the payroll deductions Leeway knows (a pension the owner
-     * entered, a 401(k), 457 or 403(b) a recent paystub shows); null when none are known.
-     */
-    payrollIncludedSavingsRatePercent:
-      savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,
+    ...rateGlance(savingsRate),
     pension: pensionGlance(pension),
   }
 }

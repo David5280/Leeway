@@ -1,7 +1,8 @@
 // Every theme, light and dark, reads at WCAG AA: text tones on every surface,
 // status pills and usual chips on their tints, category icons and tile icons
 // on their tinted circles, and chart bars on the card, the running period's
-// lighter fill included, with money in and out apart in lightness too.
+// lighter fill included, with money in apart in lightness from money out,
+// plain or red.
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -67,6 +68,15 @@ const OUT_SHARE = (() => {
   return Number(percent) / 100
 })()
 
+/** How much of the problem red a month that ran short keeps as it is darkened (tokens.css --tone-short). */
+const SHORT_SHARE = (() => {
+  const percent = /--tone-short: color-mix\(in srgb, var\(--over\) (\d+)%, black\)/.exec(
+    STYLES.tokens,
+  )?.[1]
+  if (!percent) throw new Error('tokens.css has no --tone-short mix')
+  return Number(percent) / 100
+})()
+
 const categoryColors = [
   ...new Set([...STARTER_CATEGORIES.map((c) => c.color), ...CATEGORY_COLORS.map(([, c]) => c)]),
 ]
@@ -85,6 +95,11 @@ describe('the mixes read from design.css', () => {
   it('reads how much money out darkens the muted tone', () => {
     expect(OUT_SHARE).toBeGreaterThan(0.5)
     expect(OUT_SHARE).toBeLessThan(1)
+  })
+
+  it('reads how much a month that ran short darkens the problem red', () => {
+    expect(SHORT_SHARE).toBeGreaterThan(0.5)
+    expect(SHORT_SHARE).toBeLessThan(1)
   })
 
   it('says so plainly when a rule is missing', () => {
@@ -126,6 +141,14 @@ describe.each(MODES)('the $name theme', ({ tokens }) => {
     expect(contrastRatio(moneyOut, moneyIn)).toBeGreaterThanOrEqual(1.5)
     expect(contrastRatio(moneyIn, surface)).toBeGreaterThanOrEqual(3)
     expect(contrastRatio(moneyOut, surface)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('draws a month that ran short apart from money in by lightness, and at 3:1 on the card', () => {
+    const surface = parseHex(tokens.surface)
+    const moneyIn = parseHex(tokens.good)
+    const short = mixRgb(parseHex(tokens.over), parseHex('#000000'), SHORT_SHARE)
+    expect(contrastRatio(short, moneyIn)).toBeGreaterThanOrEqual(1.5)
+    expect(contrastRatio(short, surface)).toBeGreaterThanOrEqual(3)
   })
 
   it("draws the running period's lighter bars at 3:1 or more on the card, in every bar tone", () => {

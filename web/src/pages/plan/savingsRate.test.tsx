@@ -121,6 +121,15 @@ describe('SavingsRateCard', () => {
     // The scale stops at all of pay rather than stretching to fit the one month.
     expect(chart).toHaveTextContent('100%')
     expect(chart).not.toHaveTextContent('150%')
+    // The big month's bar stops exactly at the 100% gridline.
+    const tick = [...chart.querySelectorAll('text.chart-axis')].find(
+      (text) => text.textContent === '100%' && text.getAttribute('text-anchor') === 'end',
+    )!
+    const gridY = Number(tick.getAttribute('y')) - 4
+    const bars = [...chart.querySelectorAll('g[aria-hidden] > path')]
+    const barTop = (bar: Element) => Number(/Q[\d.]+,([\d.]+)/.exec(bar.getAttribute('d')!)![1])
+    expect(barTop(bars[1]!)).toBeCloseTo(gridY, 6)
+    expect(barTop(bars[0]!)).toBeGreaterThan(gridY)
   })
 
   it('opens the math from its question, while the bars keep their readout', async () => {
@@ -139,7 +148,7 @@ describe('SavingsRateCard', () => {
     await userEvent.click(button)
     const sheet = screen.getByRole('dialog', { name: 'Savings rate' })
     expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
-      'Share of pay saved 14% = Saved in Oct 2026 $560 out of pay $4,000',
+      'Usual month, halfway between the two 12% = Sep 2026, the middle 10% and Oct 2026, the middle 14%',
     )
   })
 

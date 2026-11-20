@@ -29,12 +29,12 @@ import { ACCOUNT_KINDS, KIND_INFO, type AccountKind, type SavingsKind } from '..
 import { listAccounts, type Account } from '../accounts.js'
 import { listBills } from '../bills.js'
 import { listGoals, type Goal } from '../goals.js'
-import { latestPaystub, planMonthlyCents } from '../paystubs/paystubs.js'
+import { latestPaystub } from '../paystubs/paystubs.js'
 import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
 import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
 import { emergencyFund, type EmergencyFund } from '../savings/emergency.js'
-import { freshPaystub } from '../savings/payrollMonths.js'
+import { paystubPlan } from '../savings/payrollMonths.js'
 import {
   payrollSources,
   savingsRate,
@@ -169,6 +169,8 @@ export interface SavingsMeasuresInput {
   pensionMonthlyCents: number | null
   /** The 401(k), 457 or 403(b) a month the newest saved paystub shows, or null. */
   planMonthlyCents?: number | null
+  /** Whether the newest paystub shows a plan but is too old to count it. */
+  stalePlan?: boolean
   monthly: MonthlyAverages
   /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
   billsMonthlyCents: number
@@ -191,11 +193,16 @@ export function savingsMeasures({
   contributions,
   pensionMonthlyCents,
   planMonthlyCents = null,
+  stalePlan = false,
   monthly,
   billsMonthlyCents,
   settings,
   today,
 }: SavingsMeasuresInput): SavingsMeasures {
+  const rate = savingsRate(
+    monthly.incomeCents,
+    savingSources(contributions, pensionMonthlyCents, planMonthlyCents),
+  )
   // Without a whole month of spending, the bills are the best measure of essentials.
   const essentials = monthly.essentialSpendingCents ?? (billsMonthlyCents || null)
   return {
@@ -210,10 +217,7 @@ export function savingsMeasures({
             monthlyPaceCents: contributions?.monthlyCents?.cash ?? null,
             today,
           }),
-    savingsRate: savingsRate(
-      monthly.incomeCents,
-      savingSources(contributions, pensionMonthlyCents, planMonthlyCents),
-    ),
+    savingsRate: rate && stalePlan ? { ...rate, stalePlan } : rate,
   }
 }
 
@@ -236,7 +240,7 @@ export async function getFinancialProfile(
   const bills = await listBills(db, today)
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
   const pensions = await pensionsOf(db, accounts)
-  const paystub = await latestPaystub(db)
+  const plan = paystubPlan(await latestPaystub(db), today)
 
   const billsMonthlyCents = bills.reduce((sum, bill) => sum + bill.monthlyCents, 0)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
@@ -244,7 +248,8 @@ export async function getFinancialProfile(
     cashCents: cashSaved(savings),
     contributions: savings.contributions,
     pensionMonthlyCents: pensionPay.memberCents,
-    planMonthlyCents: planMonthlyCents(freshPaystub(paystub, today)),
+    planMonthlyCents: plan.monthlyCents,
+    stalePlan: plan.stale,
     monthly,
     billsMonthlyCents,
     settings,

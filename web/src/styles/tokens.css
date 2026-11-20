@@ -48,6 +48,9 @@
      differs in lightness as well as hue, for anyone who cannot tell the two
      colors apart (lib/contrast.test.ts holds it to that in every theme). */
   --tone-out: color-mix(in srgb, var(--muted) 80%, black);
+  /* Money out in a month that ran short: the problem red darkened the same
+     way, so beside the green of money in it still differs in lightness. */
+  --tone-short: color-mix(in srgb, var(--over) 75%, black);
   --tone-warn: var(--warn);
   --tone-problem: var(--over);
   --tone-action: var(--accent);

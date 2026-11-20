@@ -23,6 +23,7 @@ import {
   monthPayroll,
   payrollStreams,
   runningPayShare,
+  paystubPlan,
   streamKinds,
   type PayrollStream,
 } from './savings/payrollMonths.js'
@@ -111,10 +112,11 @@ export async function savingsRates(
   )
   const pensions = await pensionsOf(db, accounts)
   const pay = await paySchedule(db, settings, today)
-  const payroll = payrollStreams(pensions, pay.cadence, await latestPaystub(db), today)
+  const paystub = await latestPaystub(db)
+  const payroll = payrollStreams(pensions, pay.cadence, paystub, today)
   return {
     months: monthRates(months, transfers, payroll),
     targetPercent: settings.savingsPlan.savingsRateTargetPercent,
-    note: payrollNote(streamKinds(payroll)),
+    note: payrollNote({ ...streamKinds(payroll), stalePlan: paystubPlan(paystub, today).stale }),
   }
 }

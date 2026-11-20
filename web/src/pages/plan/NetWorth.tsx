@@ -1,8 +1,7 @@
-// Net worth: the figure first, with what is owned and owed under it, then
-// "Is your net worth growing?" over a range, against where it started, and
-// how much of each month's pay goes to savings. Each card's question and
-// answer open its drill-down; the range buttons and the chart sit under that,
-// so a tapped day reads out what was owned and owed that day.
+// Net worth: the figure first, with what is owned and owed under it, which
+// opens its drill-down; then "Is your net worth growing?" over a range,
+// against where it started, a chart whose tapped day reads out what was owned
+// and owed that day; then how much of each month's pay goes to savings.
 
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -54,42 +53,33 @@ export function NetWorthSection() {
           }
         />
       </Card>
-      <Card
-        drill={netWorthDrill(worth.data)}
-        below={
-          <>
-            <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />
-            {change ? (
-              <LineChart
-                points={points}
-                label="Net worth over time"
-                reference={startReference(change)}
-                details={(index) => [
-                  <>
-                    <Money cents={history[index]!.assetsCents} /> owned
-                  </>,
-                  <>
-                    <Money cents={history[index]!.liabilitiesCents} /> owed
-                  </>,
-                ]}
-                description={`Net worth from ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(netWorthCents)} today.`}
-              />
-            ) : (
-              <p className="empty">
-                History builds as balances change. Check back after a few syncs.
-              </p>
-            )}
-            <p className="small muted">
-              Add a house, car or other account by hand in{' '}
-              <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.
-            </p>
-          </>
-        }
-        label="Net worth over time"
-        className="stack"
-      >
+      {/* The hero above opens the math; this card is the chart, read under a finger. */}
+      <Card static="chart" label="Net worth over time" className="stack">
         <h2>Is your net worth growing?</h2>
         {change && <WorthChangeLine change={change} />}
+        <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />
+        {change ? (
+          <LineChart
+            points={points}
+            label="Net worth over time"
+            reference={startReference(change)}
+            details={(index) => [
+              <>
+                <Money cents={history[index]!.assetsCents} /> owned
+              </>,
+              <>
+                <Money cents={history[index]!.liabilitiesCents} /> owed
+              </>,
+            ]}
+            description={`Net worth from ${money(change.fromCents)} on ${shortDate(change.fromDate, settings.locale)} to ${money(netWorthCents)} today.`}
+          />
+        ) : (
+          <p className="empty">History builds as balances change. Check back after a few syncs.</p>
+        )}
+        <p className="small muted">
+          Add a house, car or other account by hand in{' '}
+          <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.
+        </p>
       </Card>
       <SavingsRateCard />
     </>

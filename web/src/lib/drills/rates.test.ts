@@ -1,5 +1,5 @@
-// The drill-down behind the savings rate: the usual month, the newest month's
-// money as the math, and each month.
+// The drill-down behind the savings rate: the usual month, the finished
+// months' rates as the math with the middle picked, and each month.
 
 import { describe, expect, it } from 'vitest'
 import { mathSentence } from '../drill'
@@ -22,7 +22,7 @@ const drillOf = (months: MonthRate[], targetPercent: number | null = null) =>
   savingsRateDrill({ months, targetPercent, note: 'Counts transfers.' }, label, money)
 
 describe('savingsRateDrill', () => {
-  it('answers with the middle month, shows the newest finished one as the math, and lists each month', () => {
+  it('answers with the usual month, halfway between two middles, and lists each month', () => {
     const drill = drillOf(
       [
         rate('2026-08-01', 9),
@@ -35,7 +35,7 @@ describe('savingsRateDrill', () => {
     expect(drill.subtitle).toBe('A usual month: the middle of the last 2 finished months')
     expect(drill.figure).toEqual({ text: '15%' })
     expect(mathSentence(drill.math, money)).toBe(
-      'Share of pay saved 20% = Saved in 2026-10 $800 out of pay $4,000',
+      'Usual month, halfway between the two 15% = 2026-08, the middle 9% and 2026-10, the middle 20%',
     )
     expect(drill.math.note).toBe(
       'Counts transfers. The usual month is the middle one, so one big month does not set it.',
@@ -49,17 +49,28 @@ describe('savingsRateDrill', () => {
     expect(drill.more).toEqual({ to: '/plan/retirement', label: 'Add money taken from pay' })
   })
 
-  it('shows the running month before any has finished, and says when nothing is known', () => {
+  it('lists an odd count lowest first and picks the one middle month, the figure it shows', () => {
+    const drill = drillOf([
+      rate('2026-08-01', 30),
+      rate('2026-09-01', 9),
+      rate('2026-10-01', 12),
+      rate('2026-11-01', 50, true),
+    ])
+    expect(drill.figure).toEqual({ text: '12%' })
+    expect(mathSentence(drill.math, money)).toBe(
+      'Usual month 12% = 2026-09 9% and 2026-10, the middle 12% and 2026-08 30%',
+    )
+    expect(drill.math.result.value).toEqual(drill.figure)
+  })
+
+  it('says so when no month has finished, leaving the running month to the list', () => {
     const running = drillOf([rate('2026-11-01', 5, true)])
     expect(running.subtitle).toBe('No finished month with a rate yet')
     expect(running.figure).toEqual({ text: 'Not known yet' })
     expect(mathSentence(running.math, money)).toBe(
-      'Share of pay saved 5% = Saved in 2026-11, so far $200 out of pay $4,000',
+      'Usual month Not known yet = Finished months None yet',
     )
-    const nothing = drillOf([rate('2026-11-01', null, true)])
-    expect(mathSentence(nothing.math, money)).toBe(
-      'Share of pay saved Not known yet = Saved Not seen yet',
-    )
+    expect(running.items!.rows[0]!.value).toEqual({ text: '5%', tone: undefined })
     expect(drillOf([rate('2026-10-01', 12)]).subtitle).toBe(
       'A usual month: the one finished month so far',
     )

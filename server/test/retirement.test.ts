@@ -7,8 +7,10 @@ import type { AppContext } from '../src/context.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
 import { patchPension } from '../src/domain/retirement/pensionStore.js'
+import { countedNote, payrollNote } from '../src/domain/savings/rate.js'
 import { getSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
+import { confirmedPaystub } from './fixtures/paystub.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -361,12 +363,40 @@ describe('a pension in the savings rate and the check-in', () => {
     })
   })
 
+  it("counts a recent paystub's plan, and says when an old one leaves it out, alike in both", async () => {
+    await paid()
+    await call('create_pension', { ...PERA, payCadence: 'month' })
+    const paystub = (payDate: string) => {
+      const stub = confirmedPaystub({ payDate })
+      return { ...stub, current: { ...stub.current, pension: null } }
+    }
+    await call('save_paystub', { paystub: paystub('2026-11-13') })
+    const fresh = (await profile()).savingsRate!
+    expect(countedNote(fresh)).toBe(payrollNote({ pension: true, plan: true }))
+    expect(fresh.stalePlan).toBeUndefined()
+
+    await resetData(ctx.db)
+    await paid()
+    await call('create_pension', { ...PERA, payCadence: 'month' })
+    await call('save_paystub', { paystub: paystub('2026-04-15') })
+    const stale = payrollNote({ pension: true, plan: false, stalePlan: true })
+    expect(stale).toContain(
+      "Your newest paystub is over six months old, so your 401(k) isn't counted.",
+    )
+    expect(countedNote((await profile()).savingsRate!)).toBe(stale)
+    expect((await call('get_checkin')).savings).toMatchObject({
+      payrollIncludedSavingsRatePercent: 8,
+      savingsRateNote: stale,
+    })
+  })
+
   it('has no pension and no pension rate in the check-in without one', async () => {
     await insertBankAccount(ctx.db, { subtype: 'savings' })
     const { savings } = await call('get_checkin')
     expect(savings).toMatchObject({
       hasSavingsAccounts: true,
       payrollIncludedSavingsRatePercent: null,
+      savingsRateNote: null,
       pension: null,
     })
     await resetData(ctx.db)
