@@ -3,13 +3,12 @@
 
 import { useId } from 'react'
 import { useApp } from '../../lib/app'
-import { axisFormat, axisIndices, spreadLabels, svgNumber, textWidth } from '../../lib/chartScale'
+import { axisFormat, axisIndices, spreadLabels, svgNumber } from '../../lib/chartScale'
 import { addDays } from '../../lib/dates'
 import { shortDate } from '../../lib/format'
 import { useWidth } from '../../lib/useWidth'
 import { Money } from '../design/Money'
 import {
-  boxCorners,
   edgeAnchor,
   paceAxis,
   paceEndLabels,
@@ -17,16 +16,13 @@ import {
   paceState,
   spentLabel,
   steadyAt,
-  STEADY_LABEL_SHARE,
-  steadyLabelX,
-  shapesMeet,
-  turnedCorners,
+  steadyLabel,
   type Box,
   type Pace,
   type Point,
+  type SteadyLabelSpot,
 } from './pace'
 import {
-  AXIS_FONT,
   ChartFrame,
   END_LABEL_GAP,
   EndLabel,
@@ -75,6 +71,8 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
   // Today's amount, which the steady pace's label keeps clear of.
   const spent =
     state.projecting && today ? spentLabel(today, money(state.spentCents), left) : undefined
+  const steady = { from: { x: x(0), y: y(0) }, to: { x: x(pace.days - 1), y: y(pace.budgetCents) } }
+  const steadyText = steadyTextFor(pace, steady, bottom, today, spent?.box)
 
   return (
     <ChartFrame
@@ -121,15 +119,7 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
       {state.projecting && today && <TodayMarker x={today.x} top={top} bottom={bottom} />}
       <g clipPath={`url(#${clipId})`}>
         {pace.budgetCents > 0 && (
-          <SteadyPace
-            from={{ x: x(0), y: y(0) }}
-            to={{ x: x(pace.days - 1), y: y(pace.budgetCents) }}
-            left={left}
-            right={right}
-            bottom={bottom}
-            labelBelow={pace.projectedCents > pace.budgetCents}
-            avoid={spent && today && { today, spent: spent.box }}
-          />
+          <SteadyPace {...steady} left={left} right={right} label={steadyText} />
         )}
         <ActualLine points={points} bottom={bottom} fill={`url(#${clipId}-fill)`} />
         {state.projecting && today && (
@@ -139,6 +129,8 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
           />
         )}
       </g>
+      {/* A label moved off its usual place may cross the spending line, so it is drawn over it. */}
+      <MovedSteadyText label={steadyText} />
       {spent && today && <SpentDot at={today} cents={state.spentCents} x={spent.x} />}
       {ends.map((label, i) => (
         <EndLabel
@@ -235,72 +227,68 @@ function TodayMarker({ x, top, bottom }: { x: number; top: number; bottom: numbe
   )
 }
 
-/**
- * The budget line, and the steady pace climbing to it, labeled along the
- * slope on whichever side the projection line is not. A budget so small the
- * slope lies on the floor is labeled above it, clear of the dates. The label
- * moves along the slope only when it would sit on today's amount.
- */
+/** Where "Steady pace" sits on this chart, or nothing with no budget to climb to. */
+function steadyTextFor(
+  pace: Pace,
+  steady: { from: Point; to: Point },
+  bottom: number,
+  today: Point | undefined,
+  spent: Box | undefined,
+): SteadyLabelSpot | undefined {
+  if (pace.budgetCents <= 0) return undefined
+  // Today's dot and the box of its amount, when there is one to keep clear of.
+  const avoid = today && spent ? { today, spent } : undefined
+  return steadyLabel({
+    label: STEADY_LABEL,
+    ...steady,
+    bottom,
+    labelBelow: pace.projectedCents > pace.budgetCents,
+    avoid,
+  })
+}
+
+/** The budget line and the steady pace climbing to it, with its label where it usually sits. */
 function SteadyPace({
   from,
   to,
   left,
   right,
-  bottom,
-  labelBelow,
-  avoid,
+  label,
 }: {
   from: Point
   to: Point
   left: number
   right: number
-  bottom: number
-  labelBelow: boolean
-  /** Today's dot and the box of its amount, when there is one to keep clear of. */
-  avoid?: { today: Point; spent: Box }
+  label?: SteadyLabelSpot
 }) {
-  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
-  const width = textWidth(STEADY_LABEL, AXIS_FONT)
-  /** The label's turning point a share of the way along the slope, and its baseline's offset from there. */
-  const place = (share: number) => {
-    const at = { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share }
-    const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
-    return { at, offset: below ? AXIS_FONT + 4 : -6 }
-  }
-  const usual = place(STEADY_LABEL_SHARE)
-  const meets =
-    avoid &&
-    shapesMeet(
-      turnedCorners(usual.at, width, AXIS_FONT, angle, usual.offset),
-      boxCorners(avoid.spent),
-    )
-  // Only a label that would sit on today's amount moves; every other chart draws as before.
-  let spot = usual
-  if (meets) {
-    const slidX = steadyLabelX({
-      from,
-      to,
-      span: Math.abs(width * Math.cos((angle * Math.PI) / 180)),
-      today: avoid.today,
-      spent: avoid.spent,
-    })
-    spot = place((slidX - from.x) / (to.x - from.x))
-  }
-  const { at, offset } = spot
   return (
     <g aria-hidden="true">
       <line x1={left} x2={right} y1={to.y} y2={to.y} className="chart-line budget" />
       <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} className="chart-line steady" />
-      <text
-        x={at.x}
-        y={at.y + offset}
-        textAnchor="middle"
-        transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
-        className="chart-axis"
-      >
-        {STEADY_LABEL}
-      </text>
+      {label && !label.moved && <SteadyText label={label} />}
     </g>
+  )
+}
+
+/** The steady pace's label over the spending line, only when it moved off its usual place. */
+function MovedSteadyText({ label }: { label: SteadyLabelSpot | undefined }) {
+  return label?.moved ? <SteadyText label={label} halo /> : null
+}
+
+/** "Steady pace", turned along the slope; with a halo when it sits over the spending line. */
+function SteadyText({ label, halo = false }: { label: SteadyLabelSpot; halo?: boolean }) {
+  const { at, offset, angle } = label
+  return (
+    <text
+      x={at.x}
+      y={at.y + offset}
+      textAnchor="middle"
+      transform={`rotate(${svgNumber(angle)} ${at.x} ${at.y})`}
+      className={halo ? 'chart-axis halo' : 'chart-axis'}
+      aria-hidden={halo || undefined}
+    >
+      {STEADY_LABEL}
+    </text>
   )
 }
 

@@ -284,6 +284,22 @@ describe('PaceChart', () => {
       const { label, today } = spots(onPace(17))
       expect(label).toBeLessThan(today)
     })
+
+    it('draws a moved label over the spending line, ringed so it stays legible', () => {
+      vi.stubGlobal('ResizeObserver', PhoneObserver)
+      fakeServer({})
+      const steadyText = (container: HTMLElement) =>
+        [...container.querySelectorAll('text')].find((text) => text.textContent === 'Steady pace')!
+      const moved = renderSignedIn(<PaceChart pace={onPace(17)} isCurrent />)
+      const label = steadyText(moved.container)
+      const line = moved.container.querySelector('path.chart-line.actual')!
+      expect(label).toHaveClass('halo')
+      expect(line.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      moved.unmount()
+      // In its usual place it sits under the line, as before.
+      const usual = renderSignedIn(<PaceChart pace={pace()} isCurrent />)
+      expect(steadyText(usual.container)).not.toHaveClass('halo')
+    })
   })
 
   it('still draws a period with no spending and no budget', () => {

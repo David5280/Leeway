@@ -2020,7 +2020,8 @@ details.more[open] summary {
 }
 
 /* A ring of card color behind text that sits over lines, so it stays legible. */
-.chart-value.halo {
+.chart-value.halo,
+.chart-axis.halo {
   paint-order: stroke;
   stroke: var(--surface);
   stroke-width: 4px;

@@ -3,6 +3,7 @@
 
 import type { Output } from '../../api/client'
 import { niceTicks, textWidth } from '../../lib/chartScale'
+import { AXIS_FONT } from './parts'
 
 export type Pace = Output<'get_spending_pace'>
 
@@ -190,4 +191,64 @@ export function steadyLabelX({
   if (to.x - pastToday >= span) return (pastToday + to.x) / 2
   const beforeToday = spent.left - 8
   return Math.max(from.x + span / 2, (from.x + beforeToday) / 2)
+}
+
+/** Where the steady pace's label sits: turned along the slope, and whether it moved. */
+export interface SteadyLabelSpot {
+  at: Point
+  /** The baseline's offset from `at`, across the slope. */
+  offset: number
+  angle: number
+  /** Moved off its usual place to keep clear of today's amount. */
+  moved: boolean
+}
+
+/**
+ * The steady pace's label, along the slope on whichever side the projection
+ * line is not. A budget so small the slope lies on the floor is labeled above
+ * it, clear of the dates. The label moves along the slope only when it would
+ * sit on today's amount.
+ */
+export function steadyLabel({
+  label,
+  from,
+  to,
+  bottom,
+  labelBelow,
+  avoid,
+}: {
+  /** The label's words, which set how long it is. */
+  label: string
+  from: Point
+  to: Point
+  bottom: number
+  labelBelow: boolean
+  /** Today's dot and the box of its amount, when there is one to keep clear of. */
+  avoid?: { today: Point; spent: Box }
+}): SteadyLabelSpot {
+  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
+  const width = textWidth(label, AXIS_FONT)
+  /** The label's turning point a share of the way along the slope, and its baseline's offset from there. */
+  const place = (share: number, moved = false): SteadyLabelSpot => {
+    const at = { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share }
+    const below = labelBelow && at.y + AXIS_FONT + 4 <= bottom
+    return { at, offset: below ? AXIS_FONT + 4 : -6, angle, moved }
+  }
+  const usual = place(STEADY_LABEL_SHARE)
+  const meets =
+    avoid &&
+    shapesMeet(
+      turnedCorners(usual.at, width, AXIS_FONT, angle, usual.offset),
+      boxCorners(avoid.spent),
+    )
+  // Only a label that would sit on today's amount moves; every other chart draws as before.
+  if (!meets) return usual
+  const slidX = steadyLabelX({
+    from,
+    to,
+    span: Math.abs(width * Math.cos((angle * Math.PI) / 180)),
+    today: avoid.today,
+    spent: avoid.spent,
+  })
+  return place((slidX - from.x) / (to.x - from.x), true)
 }
