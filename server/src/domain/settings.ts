@@ -81,15 +81,21 @@ const widgetSchema = z.object({
   visible: z.boolean().default(true),
 })
 
-const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
-  { type: 'summary', size: 'full', visible: true },
+/**
+ * The Overview as it first opens, from the most general answer to the most
+ * detail: what is left to spend, Heads up with every alert, the summary, the
+ * spending pace, the four tiles, then where the money went and the lists.
+ * web/src/widgets/library.ts keeps the same list for "Reset layout".
+ */
+export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
   { type: 'leeway', size: 'wide', visible: true },
-  { type: 'glance', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
+  { type: 'summary', size: 'full', visible: true },
+  { type: 'pace', size: 'full', visible: true },
+  { type: 'glance', size: 'full', visible: true },
   { type: 'categories', size: 'wide', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'recent', size: 'wide', visible: true },
   { type: 'accounts', size: 'half', visible: true },
+  { type: 'recent', size: 'wide', visible: true },
 ]
 
 const widgetsSchema = z

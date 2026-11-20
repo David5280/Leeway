@@ -8,7 +8,7 @@ import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
-import { addSummaryWidget } from './domain/dashboardUpgrade.js'
+import { addSummaryWidget, leadWithLeeway } from './domain/dashboardUpgrade.js'
 import { getOwner } from './domain/owner.js'
 import { getSettings } from './domain/settings.js'
 import { catchUpPurchaseDates, purchaseDatesSummary } from './domain/purchaseDates.js'
@@ -44,6 +44,7 @@ await migrate(db)
 // One-time data upgrades run after the schema is current and before serving.
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
+await leadWithLeeway(db)
 
 const now = () => new Date()
 const ctx: AppContext = {

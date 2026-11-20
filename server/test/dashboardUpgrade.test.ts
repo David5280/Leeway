@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { addSummaryWidget } from '../src/domain/dashboardUpgrade.js'
+import { addSummaryWidget, leadWithLeeway } from '../src/domain/dashboardUpgrade.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, resetData } from './helpers.js'
 
@@ -43,5 +43,48 @@ describe('addSummaryWidget', () => {
     const before = await types()
     expect(await addSummaryWidget(ctx.db)).toBe(false)
     expect(await types()).toEqual(before)
+  })
+})
+
+describe('leadWithLeeway', () => {
+  /** The default Overview before the change, summary first. */
+  const oldDefault = [
+    { type: 'summary', size: 'full' },
+    { type: 'leeway', size: 'wide' },
+    { type: 'glance', size: 'half' },
+    { type: 'alerts', size: 'full' },
+    { type: 'categories', size: 'wide' },
+    { type: 'pace', size: 'half' },
+    { type: 'recent', size: 'wide' },
+    { type: 'accounts', size: 'half' },
+  ] as const
+  const saveOldDefault = () =>
+    call('update_settings', { dashboard: { widgets: oldDefault.map((w) => ({ ...w })) } })
+
+  it('gives a dashboard still in the old default order the new one, once', async () => {
+    await saveOldDefault()
+    expect(await leadWithLeeway(ctx.db)).toBe(true)
+    expect(await types()).toEqual([
+      'leeway',
+      'alerts',
+      'summary',
+      'pace',
+      'glance',
+      'categories',
+      'accounts',
+      'recent',
+    ])
+
+    // Put back by the owner afterwards, it stays as they put it.
+    await saveOldDefault()
+    expect(await leadWithLeeway(ctx.db)).toBe(false)
+    expect(await types()).toEqual(oldDefault.map((w) => w.type))
+  })
+
+  it('leaves a dashboard the owner arranged alone, even one that differs only in size', async () => {
+    const resized = oldDefault.map((w) => ({ ...w, size: w.type === 'pace' ? 'wide' : w.size }))
+    await call('update_settings', { dashboard: { widgets: resized } })
+    expect(await leadWithLeeway(ctx.db)).toBe(false)
+    expect(await types()).toEqual(oldDefault.map((w) => w.type))
   })
 })
