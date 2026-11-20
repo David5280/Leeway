@@ -91,6 +91,30 @@ async function aiInbox() {
     .reverse()
 }
 
+/** The month's spending alerts kept, by level. */
+async function keptAlerts(): Promise<string[]> {
+  const { rows } = await ctx.db.query<{ level: string }>(
+    'SELECT level FROM ai_spend_alerts ORDER BY level',
+  )
+  return rows.map((row) => row.level)
+}
+
+/** Runs `work` while every write to the inbox fails, as a dropped connection would. */
+async function withInboxWritesFailing(work: () => Promise<void>): Promise<void> {
+  await ctx.db.query(`
+    CREATE FUNCTION refuse_inbox() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN RAISE EXCEPTION 'inbox unavailable'; END $$;
+    CREATE TRIGGER refuse_inbox BEFORE INSERT ON notifications
+      FOR EACH ROW EXECUTE FUNCTION refuse_inbox();`)
+  try {
+    await work()
+  } finally {
+    await ctx.db.query(`
+      DROP TRIGGER refuse_inbox ON notifications;
+      DROP FUNCTION refuse_inbox();`)
+  }
+}
+
 /** Runs the notifier past the gap between pushes, as its timer would. */
 async function notifyLater(): Promise<void> {
   ctx.setNow(new Date(ctx.now().getTime() + 20 * MINUTE_MS))
@@ -185,6 +209,35 @@ describe('the AI limit notification', () => {
     await notifyLater()
     expect(await aiInbox()).toEqual([])
     expect(push.sent).toEqual([])
+  })
+
+  it('keeps a paid call when the inbox cannot be written, and tells the warning on the next call', async () => {
+    const ai = centCalls()
+    for (let n = 0; n < 7; n++) await ai.run('summary', ASK)
+    await withInboxWritesFailing(async () => {
+      // The 8th call passes the mark: its answer still arrives, and no alert is kept.
+      const reply = await ai.run('summary', ASK)
+      expect(reply.costMicros).toBe(10_000)
+      expect(await keptAlerts()).toEqual([])
+    })
+    await ai.run('summary', ASK)
+    expect(await keptAlerts()).toEqual(['warning'])
+    expect((await aiInbox()).map((item) => item.message)).toEqual([
+      "AI has spent $0.09 of this month's $0.10 limit. It resets on Dec 1.",
+    ])
+  })
+
+  it('still turns a call away with AiLimitError when the inbox cannot be written', async () => {
+    const ai = centCalls()
+    for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
+    await spendCent()
+    await spendCent()
+    await withInboxWritesFailing(async () => {
+      await expect(ai.run('summary', ASK)).rejects.toThrow(AiLimitError)
+      expect(await keptAlerts()).toEqual(['warning'])
+    })
+    await expect(ai.run('summary', ASK)).rejects.toThrow(AiLimitError)
+    expect(await keptAlerts()).toEqual(['limit', 'warning'])
   })
 
   it("is never found by the notifier's own checks, only told as an alert is raised", async () => {

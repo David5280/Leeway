@@ -4,7 +4,7 @@
 // notification inbox, told once, as it is raised.
 
 import { centsOfMicros } from '../../ai/models.js'
-import type { Db } from '../../db/pool.js'
+import { inTransaction, type Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
@@ -25,26 +25,30 @@ export interface SpendAlertRaise {
 /**
  * Raises an alert for the month, unless it was raised already. Only an alert
  * raised just now goes to the inbox, so each is told once, however many
- * calls find the month past the mark.
+ * calls find the month past the mark. The alert and its inbox item are
+ * written together: if the inbox write fails, the alert is not kept either,
+ * so the next call raises it again rather than losing the news.
  */
 export async function raiseSpendAlert(db: Db, alert: SpendAlertRaise, at: Date): Promise<void> {
   const { month, level, spentMicros, settings } = alert
-  const { rowCount } = await db.query(
-    `INSERT INTO ai_spend_alerts (month, level, raised_at) VALUES ($1, $2, $3)
-     ON CONFLICT (month, level) DO NOTHING`,
-    [month.start, level, at],
-  )
-  if (!rowCount) return
-  await notifySpendAlert(
-    db,
-    {
-      month: month.start,
-      level,
-      capCents: settings.ai.monthlyCapCents,
-      message: spendAlertMessage(level, spentMicros, settings, month.resetsOn),
-    },
-    at,
-  )
+  await inTransaction(db, async (tx) => {
+    const { rowCount } = await tx.query(
+      `INSERT INTO ai_spend_alerts (month, level, raised_at) VALUES ($1, $2, $3)
+       ON CONFLICT (month, level) DO NOTHING`,
+      [month.start, level, at],
+    )
+    if (!rowCount) return
+    await notifySpendAlert(
+      tx,
+      {
+        month: month.start,
+        level,
+        capCents: settings.ai.monthlyCapCents,
+        message: spendAlertMessage(level, spentMicros, settings, month.resetsOn),
+      },
+      at,
+    )
+  })
 }
 
 /** An alert in the owner's language. */

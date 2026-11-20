@@ -38,7 +38,7 @@ import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
 import { getSettings, type Settings } from '../settings.js'
-import { raiseSpendAlert } from './alerts.js'
+import { raiseSpendAlert, type SpendAlertRaise } from './alerts.js'
 import { aiMonth, type AiMonth } from './month.js'
 import { resolveModel, WARN_AT_PERCENT } from './settings.js'
 import { markAvailable, markUnavailable } from './unavailable.js'
@@ -254,7 +254,7 @@ export class AiGateway {
       if (spent + this.reservedMicros >= cap) {
         const spentMicros = spent + this.reservedMicros
         const raise = { month, level: 'limit', spentMicros, settings } as const
-        await raiseSpendAlert(this.deps.db, raise, this.deps.now())
+        await this.raise(raise)
       }
       throw new AiLimitError(
         limitMessage(settings, spent + this.reservedMicros, worst, month.resetsOn),
@@ -270,7 +270,21 @@ export class AiGateway {
     const cap = settings.ai.monthlyCapCents * MICROS_PER_CENT
     if (spent * 100 >= cap * WARN_AT_PERCENT) {
       const raise = { month, level: 'warning', spentMicros: spent, settings } as const
-      await raiseSpendAlert(this.deps.db, raise, this.deps.now())
+      await this.raise(raise)
+    }
+  }
+
+  /**
+   * Raises a spending alert without letting it fail the call: a warning comes
+   * after a call that is already paid for, and a limit must still reach the
+   * caller as AiLimitError. A failed raise keeps nothing (raiseSpendAlert), so
+   * the next call past the mark raises it again.
+   */
+  private async raise(alert: SpendAlertRaise): Promise<void> {
+    try {
+      await raiseSpendAlert(this.deps.db, alert, this.deps.now())
+    } catch {
+      // Left for the next call to raise; see above.
     }
   }
 

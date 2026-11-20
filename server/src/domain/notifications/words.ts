@@ -1,6 +1,6 @@
 // The rules, as pure functions: given alerts, budgets, bills, charges, banks
-// and AI spending, the notifications they call for and how each is worded. No AI, and
-// no database, so every rule reads and tests on its own.
+// and AI spending, the notifications they call for and how each is worded.
+// No AI, and no database, so every rule reads and tests on its own.
 //
 // Each notification has two wordings. The message, shown only in the app,
 // says everything, amounts included. The push body may show on a locked
