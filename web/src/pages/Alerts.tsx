@@ -10,6 +10,7 @@ import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
+import { BILL_CHANGE_THRESHOLD } from '../../../server/src/domain/billChanges'
 import { Money } from '../components/design/Money'
 import { AiSpendAlert } from '../components/AiSpendAlert'
 import { useApp } from '../lib/app'
@@ -37,6 +38,11 @@ export function Alerts() {
             balance.
           </li>
           <li>A credit card past its credit limit.</li>
+          <li>
+            A bill whose latest charge was at least {BILL_CHANGE_THRESHOLD.share * 100}% and{' '}
+            <Money cents={BILL_CHANGE_THRESHOLD.cents} /> off its usual amount. Dismissing it, or
+            the same new amount twice in a row, makes that the usual amount.
+          </li>
           <li>Overdraft and insufficient funds fees in the last {FEE_DAYS} days.</li>
           <li>
             Money available below your warning: <Money cents={DEFAULT_LOW_BALANCE_CENTS} /> for

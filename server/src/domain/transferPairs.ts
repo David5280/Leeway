@@ -50,6 +50,18 @@ export type TransferHint = 'transfer' | 'other' | 'none'
 const TRANSFER_WORDS =
   /\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|payment\W*thank you|online pmt|mobile pmt)\b/i
 
+/**
+ * Words for pay or money paid back in a line with no code: a paycheck, a
+ * payout, a refund. Such a line is money coming in from outside, so it never
+ * pairs, even beside an equal purchase on another account. Interest and
+ * dividends only in their paid forms: "Interest Savings" names an account.
+ */
+const PAY_WORDS =
+  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate|cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+
+/** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
+const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
+
 const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
 
 /**
@@ -66,8 +78,16 @@ export function transferHint(tx: Movement): TransferHint {
   if (code?.startsWith('LOAN_PAYMENTS')) {
     return tx.accountType === 'credit' || tx.accountType === 'loan' ? 'transfer' : 'other'
   }
-  if (code) return 'other'
-  return TRANSFER_WORDS.test(`${tx.name} ${tx.merchantName ?? ''}`) ? 'transfer' : 'none'
+  return code ? 'other' : wordsHint(tx)
+}
+
+/** What a line with no code says by its words. */
+function wordsHint(tx: Movement): TransferHint {
+  const words = `${tx.name} ${tx.merchantName ?? ''}`
+  // Transfer words win: an account's name can hold a pay word, as in
+  // "Online Transfer to Interest Savings".
+  if (TRANSFER_WORDS.test(words)) return 'transfer'
+  return PAY_WORDS.test(words) || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */
@@ -77,19 +97,23 @@ interface Match<T> {
   gap: number
 }
 
-/** Which hints a side may give and still pair. */
-export type HintTest = (hint: TransferHint) => boolean
+/** Whether a side may pair, given its hint and the side itself. */
+export type HintTest = (hint: TransferHint, tx: PairCandidate) => boolean
 
 /** The usual test: a side must say it is a transfer. */
 const saysTransfer: HintTest = (hint) => hint === 'transfer'
 
 /**
  * For legs nobody has filed yet, as monthly totals reads them: a side that
- * says nothing either way may pair too, since two equal amounts moving
- * between the owner's own accounts within days are one move whatever the
- * lines say. A side that says it is something else still never pairs.
+ * says nothing either way may pair too, since a plain "Withdrawal" and an
+ * equal "Deposit" in another checking or savings account within days are one
+ * move whatever the lines say. A silent side must be on a checking or savings
+ * account, though: a silent line on a card is a purchase, never one side of a
+ * move, unless its code or words say it is a payment. A side that says it is
+ * something else never pairs.
  */
-export const unfiledLeg: HintTest = (hint) => hint !== 'other'
+export const unfiledLeg: HintTest = (hint, tx) =>
+  hint === 'transfer' || (hint === 'none' && tx.accountType === 'depository')
 
 /** Whether two transactions may be the two sides of one transfer: both must pass the hint test. */
 function mayPair(
@@ -99,7 +123,7 @@ function mayPair(
   hintOk: HintTest,
 ) {
   if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) return false
-  return hintOk(hints.get(out.id)!) && hintOk(hints.get(arrival.id)!)
+  return hintOk(hints.get(out.id)!, out) && hintOk(hints.get(arrival.id)!, arrival)
 }
 
 /** Closest dates first; then by date and id, so equal gaps always pair the same way. */

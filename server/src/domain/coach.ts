@@ -44,10 +44,19 @@ const PRIORITY_ORDER: Priority[] = ['now', 'soon', 'fyi']
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many)
 
-/** Overdrawn accounts and cards over their limit need the owner today; fees and low balances soon. */
+/**
+ * Overdrawn accounts and cards over their limit need the owner today; fees,
+ * low balances and a bill costing more soon; a bill costing less is only news.
+ */
+const ACCOUNT_PRIORITY: Record<AccountAlert['severity'], Priority> = {
+  urgent: 'now',
+  warning: 'soon',
+  info: 'fyi',
+}
+
 function accountItems({ accountAlerts }: CoachSources): AttentionItem[] {
   return accountAlerts.map((alert) => ({
-    priority: alert.severity === 'urgent' ? 'now' : 'soon',
+    priority: ACCOUNT_PRIORITY[alert.severity],
     topic: 'account',
     message: alert.message,
     tool: 'list_alerts',

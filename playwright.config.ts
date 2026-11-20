@@ -7,6 +7,17 @@ import { SETUP_CODE } from './e2e/owner'
 // E2E_PORT lets a second checkout run its tests while another holds 3100.
 const PORT = Number(process.env.E2E_PORT ?? 3100)
 
+// The WebKit checks run in CI, which installs WebKit, or with E2E_WEBKIT=1.
+// Locally they are left out by default, so a machine without WebKit passes,
+// and the run says so once rather than skipping them silently.
+const WEBKIT =
+  process.env.E2E_WEBKIT === '1' || (Boolean(process.env.CI) && process.env.E2E_WEBKIT !== '0')
+if (!WEBKIT && process.env.TEST_WORKER_INDEX === undefined) {
+  process.stdout.write(
+    'WebKit layout checks skipped: set E2E_WEBKIT=1 to run them (CI runs them).\n',
+  )
+}
+
 export default defineConfig({
   testDir: 'e2e',
   // Every test shares one install, so they run in order, one at a time.
@@ -36,6 +47,19 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Pixel 7'], storageState: 'e2e/.auth/owner.json' },
     },
+    // Layout that has differed between engines, checked in Safari's too. Only
+    // these specs run here, so the suite takes about as long as before. See
+    // WEBKIT above for when it runs.
+    ...(!WEBKIT
+      ? []
+      : [
+          {
+            name: 'webkit',
+            testMatch: /switch-layout\.spec\.ts/,
+            dependencies: ['setup'],
+            use: { ...devices['Desktop Safari'], storageState: 'e2e/.auth/owner.json' },
+          },
+        ]),
   ],
   webServer: {
     command: 'node e2e/start-server.mjs',

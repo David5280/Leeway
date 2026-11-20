@@ -9,6 +9,7 @@ import {
   drawable,
   moveWidget,
   readsGeneralFirst,
+  urgentFirst,
   WIDGET_LIBRARY,
   type Widget,
 } from './library'
@@ -147,5 +148,32 @@ describe('addableTypes', () => {
 
   it('offers everything for an empty dashboard', () => {
     expect(addableTypes([])).toEqual(Object.keys(WIDGET_LIBRARY))
+  })
+})
+
+describe('urgentFirst', () => {
+  const at = (...list: Widget['type'][]) =>
+    list.map((type): Widget => ({ type, size: type === 'leeway' ? 'wide' : 'half', visible: true }))
+
+  it('moves Heads up to just under the hero, full width, and moves nothing else', () => {
+    const moved = urgentFirst(DEFAULT_LAYOUT)
+    expect(types(moved)).toEqual(['leeway', 'alerts', 'net-worth', 'flows', 'pace'])
+    expect(moved.find((w) => w.type === 'alerts')!.size).toBe('full')
+    expect(types(urgentFirst(at('leeway', 'pace', 'recent', 'alerts')))).toEqual([
+      'leeway',
+      'alerts',
+      'pace',
+      'recent',
+    ])
+  })
+
+  it('never moves Heads up down, and leads with it when no hero is shown', () => {
+    expect(types(urgentFirst(at('alerts', 'pace', 'leeway')))).toEqual(['alerts', 'pace', 'leeway'])
+    expect(types(urgentFirst(at('pace', 'recent', 'alerts')))).toEqual(['alerts', 'pace', 'recent'])
+  })
+
+  it('leaves a layout without Heads up as it is', () => {
+    const list = at('leeway', 'pace')
+    expect(urgentFirst(list)).toBe(list)
   })
 })

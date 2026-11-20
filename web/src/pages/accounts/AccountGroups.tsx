@@ -1,10 +1,18 @@
 // The Accounts screen's cards, grouped by kind (checking, credit cards,
 // savings, investments, retirement, loans, other), each group under its
-// icon and title. In Select mode every card is a tick box.
+// icon and title, with the group's total at the end of its heading. In
+// Select mode every card is a tick box, and the totals still count the group.
 
 import type { Account, Goal } from '../../api/client'
 import { SectionHead } from '../../components/design/SectionHead'
-import { accountFacts, goalsOn, groupAccounts } from '../../lib/accountCards'
+import { Money } from '../../components/design/Money'
+import {
+  accountFacts,
+  goalsOn,
+  groupAccounts,
+  groupTotal,
+  type GroupTotal,
+} from '../../lib/accountCards'
 import { AccountCard, PickCard } from './AccountCard'
 
 /** Select mode: which accounts are ticked, and how to tick or untick one. */
@@ -30,7 +38,11 @@ export function AccountGroups({
     <>
       {groupAccounts(accounts).map((group) => (
         <section key={group.kind} className="acct-group" aria-label={group.title}>
-          <SectionHead icon={group.icon} title={group.title} />
+          <SectionHead
+            icon={group.icon}
+            title={group.title}
+            aside={<GroupTotalFigure total={groupTotal(group.kind, group.accounts)} />}
+          />
           <div className="acct-grid">
             {group.accounts.map((account) => {
               const facts = accountFacts(account, {
@@ -53,5 +65,21 @@ export function AccountGroups({
         </section>
       ))}
     </>
+  )
+}
+
+/** A group's total, bold, with "owed" after a card or loan group's; red only for an overdraft. */
+function GroupTotalFigure({ total }: { total: GroupTotal | null }) {
+  if (!total) return null
+  return (
+    <span className="group-total">
+      <Money
+        cents={total.cents}
+        precision="cents"
+        tone={total.problem ? 'problem' : undefined}
+        className="group-total-figure"
+      />
+      {total.owed && <span className="acct-owed">owed</span>}
+    </span>
   )
 }

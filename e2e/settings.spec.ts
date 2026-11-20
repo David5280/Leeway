@@ -1,24 +1,34 @@
 // Settings: its groups and their addresses, the look and the dashboard,
 // connecting an AI assistant, and the weekly email.
 
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { showWidgets } from './dashboard'
+
+/**
+ * Clicks something that saves a setting and waits for the save to land. The
+ * look changes at once, before the server answers, so a reload or another
+ * click too soon could lose the save or have its answer undo the next one.
+ */
+async function saveBy(page: Page, click: () => Promise<void>) {
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_settings'))
+  await click()
+  expect((await saved).ok()).toBe(true)
+}
 
 test('the theme switch changes the look and sticks after a reload', async ({ page }) => {
   await page.goto('/')
   const html = page.locator('html')
+  const harbor = page.getByRole('button', { name: 'Harbor theme' })
+  await expect(harbor).toHaveAttribute('aria-pressed', 'false')
   await expect(html).toHaveAttribute('data-mode', 'dark')
 
-  await page.getByRole('button', { name: 'Harbor theme' }).click()
+  await saveBy(page, () => harbor.click())
   await expect(html).toHaveAttribute('data-mode', 'light')
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Harbor theme' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await expect(harbor).toHaveAttribute('aria-pressed', 'true')
   await expect(html).toHaveAttribute('data-mode', 'light')
 
-  await page.getByRole('button', { name: 'Night theme' }).click()
+  await saveBy(page, () => page.getByRole('button', { name: 'Night theme' }).click())
   await expect(html).toHaveAttribute('data-mode', 'dark')
 })
 
@@ -71,12 +81,14 @@ test('Settings reopens the group last opened on this device', async ({ page }) =
 
 test('an accent color applies right away', async ({ page }) => {
   await page.goto('/settings/appearance')
-  const accent = () =>
-    page.evaluate(() => document.documentElement.style.getPropertyValue('--accent'))
-  await page.getByRole('radio', { name: 'Teal' }).click()
-  await expect.poll(accent).toBe('#2DD4BF')
-  await page.getByRole('radio', { name: 'Theme' }).click()
-  await expect.poll(accent).not.toBe('#2DD4BF')
+  const html = page.locator('html')
+  const teal = page.getByRole('radio', { name: 'Teal' })
+  await expect(teal).not.toBeChecked()
+  await saveBy(page, () => teal.click())
+  await expect(teal).toBeChecked()
+  await expect(html).toHaveCSS('--accent', '#2DD4BF')
+  await saveBy(page, () => page.getByRole('radio', { name: 'Theme' }).click())
+  await expect(html).not.toHaveCSS('--accent', '#2DD4BF')
 })
 
 test('a dashboard card can be hidden and shown again', async ({ page }) => {

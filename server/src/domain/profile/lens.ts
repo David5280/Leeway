@@ -9,7 +9,7 @@
 // loan lens is one more builder over the same shapes.
 
 import type { IsoDate } from '../../lib/dates.js'
-import { shortDate } from '../../lib/words.js'
+import { longDate, shortDate } from '../../lib/words.js'
 import type { AccountKind } from '../accountKinds.js'
 import type { BandPoint } from '../retirement/projection.js'
 import type { BalancePoint } from '../savings/history.js'
@@ -109,7 +109,7 @@ export function longestChange(changes: CombinedChanges) {
 /** What to say when balance history is too new to show a change. */
 export function noHistoryYet(historyStartsOn: IsoDate | null, locale: string): string {
   if (!historyStartsOn) return 'Changes show once Leeway has a balance from an earlier day.'
-  return `History starts ${shortDate(historyStartsOn, locale)}, so changes show from the next day on.`
+  return `History starts ${longDate(historyStartsOn, locale)}, so changes show from the next day on.`
 }
 
 /** How a kind's balance moved: deposits and market moves together, never called a return. */

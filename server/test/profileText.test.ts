@@ -250,7 +250,7 @@ describe('profileDigest', () => {
       'Typical month (last 3 whole months): $5,200 take-home pay in, $4,100 spent, $3,000 of it essential.',
       'Bills: 9 tracked bills, $2,150 a month.',
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
-      'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19.',
+      'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19, 2026.',
       'Emergency fund: savings cover 2.6 months of essentials ($3,000 a month); target 6 months ($18,000), $10,000 to go, reached around July 2028 at the recent pace.',
       `Savings rate seen at the bank: about 10% of take-home pay ($500 of $5,200 a month: transfers to savings $500). ${RATE_GUARD_FOR_AI}`,
       'Goals: Japan trip 40% ($3,000 to go by Jun 1, on track).',

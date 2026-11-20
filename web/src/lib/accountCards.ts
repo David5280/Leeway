@@ -5,7 +5,7 @@
 
 import type { Account, Goal } from '../api/client'
 import type { IconName } from '../components/ui'
-import { isOwed, overdrawn } from './accounts'
+import { isCounted, isOwed, overdrawn } from './accounts'
 
 export type AccountKind = Account['kind']
 
@@ -195,4 +195,32 @@ export function combine(accounts: readonly Pick<Account, 'type' | 'balanceCents'
     else owedCents -= held
   }
   return { ownedCents, owedCents, netCents: ownedCents - owedCents }
+}
+
+/** The groups that hold cash, where a total below zero means an overdraft. */
+const CASH_KINDS: readonly AccountKind[] = ['checking', 'savings']
+
+/** A group's total for its heading: what cards and loans owe, or what the rest hold. */
+export interface GroupTotal {
+  cents: number
+  /** A group of cards or loans: the amount owed, read as "$5,077.06 owed". */
+  owed: boolean
+  /** A cash group below zero, from an overdraft: the one total shown in red. */
+  problem: boolean
+}
+
+/**
+ * The total in a group's heading, from the same accounts its cards count:
+ * shared and not hidden. Null when none of them has a balance.
+ */
+export function groupTotal(
+  kind: AccountKind,
+  accounts: readonly Pick<Account, 'type' | 'balanceCents' | 'hidden' | 'unsharedAt'>[],
+): GroupTotal | null {
+  const counted = accounts.filter((account) => isCounted(account) && account.balanceCents !== null)
+  if (counted.length === 0) return null
+  const owed = counted.every(isOwed)
+  const { netCents } = combine(counted)
+  const cents = owed ? -netCents : netCents
+  return { cents, owed, problem: CASH_KINDS.includes(kind) && cents < 0 }
 }

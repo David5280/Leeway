@@ -1,11 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { billChangeAlert } from '../../../server/src/domain/billChanges'
 import {
   mergeSettings,
   settingsPatchSchema,
   settingsSchema,
 } from '../../../server/src/domain/settings'
+import { formatCents } from '../../../server/src/lib/money'
 import type { Settings } from '../api/client'
 import {
   account,
@@ -233,6 +235,83 @@ describe('account alerts on the Overview', () => {
       expect(within(summary).queryByText(alert.summary)).not.toBeInTheDocument()
     }
     expect(screen.queryByText(/in Heads up on the dashboard/)).not.toBeInTheDocument()
+  })
+
+  it('moves Heads up under the hero while an account is overdrawn, saving nothing', async () => {
+    const server = serve(settings, {
+      list_alerts: () => alerts,
+      list_home_alerts: () => homeList(alerts),
+    })
+    renderOverview()
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    // Ahead of net worth, so it shows above the fold on a phone too.
+    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', ...DEFAULT_PAGE_ORDER.slice(1)])
+    expect(server.actions('update_settings')).toEqual([])
+    // Editing shows the saved order, so moves act on what is saved.
+    await startEditing()
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('leaves Heads up where the layout puts it when nothing is urgent', async () => {
+    const low = alerts.filter((alert) => alert.severity !== 'urgent')
+    expect(low).toHaveLength(1)
+    serve(settings, { list_alerts: () => low, list_home_alerts: () => homeList(low) })
+    renderOverview()
+    await screen.findByText(low[0]!.message)
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('leaves Heads up in place for a bill that costs more: worth a look, not urgent', async () => {
+    const higher = billChangeAlert(
+      {
+        kind: 'changed',
+        bill: {
+          id: 'power',
+          name: 'Power',
+          amountCents: 8000,
+          cadence: 'month',
+          trackedOn: '2026-09-01',
+          amountVaries: false,
+          charges: [],
+        },
+        charge: { accountId: 'everyday', date: '2026-11-16', amountCents: 12000 },
+      },
+      'Everyday',
+      { money: formatCents },
+    )
+    serve(settings, { list_alerts: () => [higher], list_home_alerts: () => homeList([higher]) })
+    renderOverview()
+    await screen.findByText('Power was $120, usually $80.')
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('moves Heads up under the hero from the bottom of a layout the owner arranged', async () => {
+    const arranged = layout([
+      { type: 'leeway', size: 'wide' },
+      { type: 'pace', size: 'full' },
+      { type: 'alerts', size: 'half' },
+    ])
+    serve(arranged, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
+    renderOverview(arranged)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', 'Spending pace'])
+    // At full width, never in a side column beside the hero.
+    expect(screen.getByRole('region', { name: 'Heads up' }).closest('.band')).toBeNull()
   })
 
   it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {

@@ -12,11 +12,11 @@ export const getNetWorthAction = defineAction({
   name: 'get_net_worth',
   title: 'Get net worth',
   description:
-    'Net worth from counted accounts: assets minus what is owed on cards and loans, in cents, plus its history (one point per day a balance changed) over the last `days`. History starts the day Leeway first saw each balance.',
+    'Net worth from counted accounts: assets minus what is owed on cards and loans, in cents, plus its history (one point per day a balance changed) over the last `days`. Before Leeway first saw a balance, history is estimated: bank and card balances walked back through their transactions, and investment, loan and hand-kept accounts held at their first recorded balance. Points dated before estimatedBefore are such estimates (null when none are); say so when quoting them. historyStart is the first day history reaches, so a longer range shows nothing more.',
   input: z.object({ days: z.number().int().min(7).max(3660).default(365) }),
   scope: 'read',
   surface: 'all',
-  run: async (ctx, { days }) => getNetWorth(ctx.db, await today(ctx), days),
+  run: async (ctx, { days }) => getNetWorth(ctx.db, await today(ctx), days, { estimate: true }),
 })
 
 export const listRecentBalancesAction = defineAction({

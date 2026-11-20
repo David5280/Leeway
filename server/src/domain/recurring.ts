@@ -26,6 +26,8 @@ export interface PastTransaction {
   name: string
   amountCents: number
   categoryId: string | null
+  /** The account it came out of or went into. */
+  accountId?: string
 }
 
 /** A past transaction as stored, with what its shown name is worked out from. */
@@ -48,6 +50,8 @@ export interface RecurringSeries {
   nextDate: IsoDate
   /** The category most of them were filed under, if any. */
   categoryId: string | null
+  /** The account most of them came out of or went into. */
+  accountId: string | null
   /** A fixed monthly or yearly charge reads as a subscription; anything else as a bill. */
   suggestedKind: 'bill' | 'subscription'
 }
@@ -132,6 +136,7 @@ function seriesOf(
     lastDate: last.date,
     nextDate,
     categoryId: mostCommon(charges.map((c) => c.categoryId)),
+    accountId: mostCommon(charges.map((c) => c.accountId ?? null)),
     suggestedKind: subscriptionLike ? 'subscription' : 'bill',
   }
 }
@@ -196,7 +201,7 @@ const HISTORY_DAYS = 400
 export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTransaction[]> {
   const { rows } = await db.query<StoredTransaction>(
     `SELECT t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
-       t.category_id AS "categoryId",
+       t.category_id AS "categoryId", t.account_id AS "accountId",
        t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
      FROM transactions t
@@ -223,7 +228,7 @@ interface Asker {
 }
 
 /** A series not tracked or dismissed yet, with the key made from its shown name. */
-interface Untracked {
+export interface Untracked {
   series: RecurringSeries
   shownKey: string
 }
@@ -240,7 +245,7 @@ function tracks(bill: Bill, { series, shownKey }: Untracked): boolean {
 }
 
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
-async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
+export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
   const [history, dismissed, bills, masks] = await Promise.all([
     recentHistory(db, today),
     dismissedKeys(db),

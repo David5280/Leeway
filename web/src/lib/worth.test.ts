@@ -1,15 +1,25 @@
 // How net worth moved over a range, and the words and level the card and chart use.
 
 import { describe, expect, it } from 'vitest'
+import { addDays } from '../../../server/src/lib/dates'
 import type { NetWorth } from '../api/client'
 import { worthPoint } from '../test/worth'
-import { changeWords, startReference, worthChange } from './worth'
+import {
+  changeWords,
+  historyNote,
+  RANGE_MORE_PERCENT,
+  rangesWithMore,
+  startReference,
+  worthChange,
+} from './worth'
 
 const worth = (netWorthCents: number, history: NetWorth['history']): NetWorth => ({
   assetsCents: Math.max(0, netWorthCents),
   liabilitiesCents: Math.max(0, -netWorthCents),
   netWorthCents,
   history,
+  historyStart: history[0]?.date ?? null,
+  estimatedBefore: null,
 })
 
 describe('worthChange', () => {
@@ -50,5 +60,46 @@ describe('worthChange', () => {
       worth(9e14, [worthPoint('2026-01-01', 1e14), worthPoint('2026-11-17', 9e14)]),
     )
     expect(huge!.changeCents).toBe(8e14)
+  })
+})
+
+describe('rangesWithMore', () => {
+  // Today is Nov 17, 2026.
+  const startOf = (days: number) => addDays('2026-11-17', -days)
+  const ranges = [90, 365, 1825]
+
+  it('offers a longer range only while history reaches well past the shorter one', () => {
+    expect(rangesWithMore(ranges, '2026-03-14', startOf)).toEqual([true, true, false])
+    expect(rangesWithMore(ranges, '2020-01-01', startOf)).toEqual([true, true, true])
+    // History from inside the shortest range: only that one shows anything new.
+    expect(rangesWithMore(ranges, '2026-10-01', startOf)).toEqual([true, false, false])
+    expect(rangesWithMore(ranges, null, startOf)).toEqual([true, false, false])
+  })
+
+  it('needs RANGE_MORE_PERCENT more days than the shorter range, or it draws the same chart', () => {
+    expect(RANGE_MORE_PERCENT).toBe(10)
+    // A year back holds 99 days: only 9 more than 90, so the year adds nothing.
+    expect(rangesWithMore(ranges, startOf(98), startOf)).toEqual([true, false, false])
+    expect(rangesWithMore(ranges, startOf(99), startOf)).toEqual([true, true, false])
+    // Five years need 402 days of the year's 365.
+    expect(rangesWithMore(ranges, startOf(401), startOf)).toEqual([true, true, false])
+    expect(rangesWithMore(ranges, startOf(402), startOf)).toEqual([true, true, true])
+  })
+})
+
+describe('historyNote', () => {
+  const date = (iso: string) => iso.slice(5)
+
+  it('says where the estimate ends and where history starts, or nothing', () => {
+    expect(
+      historyNote(
+        { estimatedBefore: '2026-11-17', historyStart: '2026-03-14' },
+        '2025-11-17',
+        date,
+      ),
+    ).toBe('Before 11-17, estimated from transactions. History starts 03-14.')
+    expect(
+      historyNote({ estimatedBefore: null, historyStart: '2026-03-14' }, '2026-08-19', date),
+    ).toBeNull()
   })
 })

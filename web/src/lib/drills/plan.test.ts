@@ -68,6 +68,8 @@ describe('netWorthDrill', () => {
     liabilitiesCents: 200000,
     netWorthCents: 700000,
     history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
+    historyStart: '2026-01-01',
+    estimatedBefore: null,
   }
 
   it('takes what is owed from what is owned, with the year as its trend', () => {

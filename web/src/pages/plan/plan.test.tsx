@@ -377,6 +377,9 @@ describe('Net worth', () => {
         liabilitiesCents: 120000,
         netWorthCents: 700000,
         history,
+        // History from long ago, so every range has more to show.
+        historyStart: '2020-01-01',
+        estimatedBefore: null,
       }),
     })
     renderPlan('/plan/net-worth')
@@ -426,12 +429,56 @@ describe('Net worth', () => {
         liabilitiesCents: 5000,
         netWorthCents: -5000,
         history: history.slice(0, 1),
+        historyStart: '2026-06-01',
+        estimatedBefore: null,
       }),
     })
     renderPlan('/plan/net-worth')
     const card = await screen.findByRole('region', { name: 'Net worth' })
     expect(within(card).getByText('−$50')).toHaveClass('money-problem')
     expect(screen.getByText(/History builds as balances change/)).toBeInTheDocument()
+  })
+
+  it('redraws for each range, notes the estimate, and offers no range past the history', async () => {
+    // Only Date is faked, so ranges count back from a known day: Nov 17, 2026.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-17T18:00:00Z'))
+    const server = planServer({
+      ...quietBills,
+      get_net_worth: (input) => ({
+        assetsCents: 500000,
+        liabilitiesCents: 0,
+        netWorthCents: 500000,
+        history:
+          Number(input.days) === 90
+            ? [worthPoint('2026-08-19', 520000), worthPoint('2026-11-17', 500000)]
+            : [worthPoint('2026-03-14', 220000), worthPoint('2026-11-17', 500000)],
+        // Rebuilt from transactions back to March; recorded from Nov 17.
+        historyStart: '2026-03-14',
+        estimatedBefore: '2026-11-17',
+      }),
+    })
+    renderPlan('/plan/net-worth')
+    const chart = await screen.findByRole('region', { name: 'Net worth over time' })
+    const line = () => screen.getByRole('img', { name: 'Net worth over time' })
+    await waitFor(() =>
+      expect(line()).toHaveAccessibleDescription(
+        'Net worth from $2,200 on Mar 14 to $5,000 today. Before Nov 17, 2026, estimated from transactions. History starts Mar 14, 2026.',
+      ),
+    )
+    expect(chart).toHaveTextContent('Before Nov 17, 2026, estimated from transactions.')
+    // Five years would draw the same line as one, so it cannot be picked.
+    expect(screen.getByRole('button', { name: '5 years' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '1 year' })).toBeEnabled()
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '3 months' }))
+    await waitFor(() =>
+      expect(line()).toHaveAccessibleDescription(
+        'Net worth from $5,200 on Aug 19 to $5,000 today. Before Nov 17, 2026, estimated from transactions.',
+      ),
+    )
+    expect(server.actions('get_net_worth')).toEqual([{ days: 365 }, { days: 90 }])
+    vi.useRealTimers()
   })
 
   it('shows why it could not load', async () => {

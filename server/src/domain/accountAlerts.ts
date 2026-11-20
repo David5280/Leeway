@@ -1,5 +1,6 @@
 // Account alerts: an overdrawn account, a card over its limit, a balance below
-// the owner's warning, and overdraft fees the bank charged lately. Pure: the
+// the owner's warning, and overdraft fees the bank charged lately; a bill that
+// cost more or less than usual is one too (billChanges.ts). Pure: the
 // accounts and recent charges come in, alerts come out, nothing is read here.
 // Alerts are worked out fresh from current balances, never stored.
 
@@ -13,12 +14,18 @@ export const DEFAULT_LOW_BALANCE_CENTS = 10_000
 export const FEE_DAYS = 30
 
 /** Every kind of account alert, most serious first, the order alerts are listed in. */
-export const ALERT_KINDS = ['overdrawn', 'over_limit', 'overdraft_fee', 'low_balance'] as const
+export const ALERT_KINDS = [
+  'overdrawn',
+  'over_limit',
+  'overdraft_fee',
+  'low_balance',
+  'bill_change',
+] as const
 
 export type AlertKind = (typeof ALERT_KINDS)[number]
 
-/** urgent: money is going wrong now. warning: worth a look soon. */
-export type AlertSeverity = 'urgent' | 'warning'
+/** urgent: money is going wrong now. warning: worth a look soon. info: worth knowing. */
+export type AlertSeverity = 'urgent' | 'warning' | 'info'
 
 export interface AccountAlert {
   kind: AlertKind
@@ -27,12 +34,12 @@ export interface AccountAlert {
   accountName: string
   /**
    * The amount the alert is about: how far overdrawn or over the limit, the
-   * balance left for a low balance, or the fees charged.
+   * balance left for a low balance, the fees charged, or what a changed bill cost.
    */
   amountCents: number
   /** Fees counted, for an overdraft fee alert; 1 for every other kind. */
   count: number
-  /** The latest fee's date, for an overdraft fee alert; null for every other kind. */
+  /** The latest fee's date, or the changed charge's; null for every other kind. */
   date: IsoDate | null
   /** The alert in a sentence, for the app and assistants. */
   message: string
@@ -41,6 +48,8 @@ export interface AccountAlert {
    * the AI summary writer. Both name the account the same way (accountName.ts).
    */
   summary: string
+  /** For a bill change: the bill, and what it usually costs. */
+  bill?: { id: string; name: string; usualCents: number }
 }
 
 /** What an alert needs to know about an account. */

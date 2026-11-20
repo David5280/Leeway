@@ -10,6 +10,7 @@ import {
   updateBill,
 } from '../domain/bills.js'
 import { dismissRecurring, untrackedRecurring } from '../domain/recurring.js'
+import { trackRecurring } from '../domain/trackRecurring.js'
 import { defineAction } from './action.js'
 import { today } from './today.js'
 
@@ -74,7 +75,7 @@ export const findRecurringAction = defineAction({
   name: 'find_recurring',
   title: 'Find recurring charges',
   description:
-    'Charges and deposits that repeat on a schedule in the last 400 days of transactions, still active, that are not tracked as a bill yet and were not dismissed. direction "out" is money spent (subscriptions, bills), "in" is money received (paychecks). Each has a cadence, typical amount in cents, whether the amount varies, the next expected date and a suggested kind. To track one, call create_bill with its key as matchPattern and nextDate as anchorDate; to stop suggesting it, call dismiss_recurring.',
+    'Charges and deposits that repeat on a schedule in the last 400 days of transactions, still active, that are not tracked as a bill yet and were not dismissed. direction "out" is money spent (subscriptions, bills), "in" is money received (paychecks). Each has a cadence, typical amount in cents, whether the amount varies, the next expected date and a suggested kind. To track one as a bill, call track_recurring with its key; to stop suggesting it, call dismiss_recurring.',
   input: z.object({}),
   scope: 'read',
   surface: 'all',
@@ -93,4 +94,15 @@ export const dismissRecurringAction = defineAction({
     await dismissRecurring(ctx.db, key, await today(ctx), { forAssistant: ctx.agent })
     return { dismissed: key }
   },
+})
+
+export const trackRecurringAction = defineAction({
+  name: 'track_recurring',
+  title: 'Track a recurring charge as a bill',
+  description: `Track a recurring charge from find_recurring as a bill in one step, by the key it gave: the bill takes its name, typical amount, cadence, next date as the first due date, category and account. Change it afterwards with update_bill, or undo it with delete_bill. Only money going out can be tracked. ${BILLS_EXPLAINED}`,
+  input: z.object({ key: z.string().trim().min(1).max(200) }),
+  scope: 'write',
+  surface: 'all',
+  run: async (ctx, { key }) =>
+    trackRecurring(ctx.db, key, await today(ctx), { forAssistant: ctx.agent }),
 })

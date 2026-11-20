@@ -52,6 +52,8 @@ interface BillRow extends BillInput {
    * assistant added or re-patterned, the transaction's shown name.
    */
   reads: RuleReads
+  /** The account it is paid from, when known: set when tracked from a recurring charge. */
+  accountId: string | null
   lastPaidDate: IsoDate | null
   lastPaidCents: number | null
 }
@@ -139,7 +141,7 @@ export function dueBefore(bill: Bill, until: IsoDate): IsoDate[] {
 const SELECT = `
   SELECT b.id, b.name, b.kind, b.amount_cents AS "amountCents", b.cadence,
     b.anchor_date AS "anchorDate", b.match_pattern AS "matchPattern",
-    b.category_id AS "categoryId", b.autopay, b.reads,
+    b.category_id AS "categoryId", b.autopay, b.reads, b.account_id AS "accountId",
     paid.date AS "lastPaidDate", paid.amount_cents AS "lastPaidCents"
   FROM bills b
   -- The newest payment whose merchant or description contains the pattern.
@@ -170,7 +172,7 @@ export async function listBills(db: Db, today: IsoDate): Promise<Bill[]> {
     .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.name.localeCompare(b.name))
 }
 
-async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
+export async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
   const [row] = await loadBills(db, today, id)
   if (!row) throw notFound('Bill')
   return scheduleOf(row, today)
@@ -178,19 +180,24 @@ async function getBill(db: Db, id: string, today: IsoDate): Promise<Bill> {
 
 /**
  * Adds a bill. One an assistant adds reads shown names, since the pattern is
- * its own choice and it may not find out what the bank's text holds.
+ * its own choice and it may not find out what the bank's text holds. A bill
+ * tracked from a recurring charge also keeps the account it is paid from.
  */
 export async function createBill(
   db: Db,
   input: BillInput,
   today: IsoDate,
   { byAssistant = false }: RuleAuthor = {},
+  {
+    accountId = null,
+    amountVaries = false,
+  }: { accountId?: string | null; amountVaries?: boolean } = {},
 ): Promise<Bill> {
   if (input.categoryId) await assertCategoryExists(db, input.categoryId)
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO bills (name, kind, amount_cents, cadence, anchor_date, match_pattern, category_id,
-       autopay, reads)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+       autopay, reads, account_id, amount_varies)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
     [
       input.name,
       input.kind,
@@ -201,6 +208,8 @@ export async function createBill(
       input.categoryId,
       input.autopay,
       byAssistant ? 'shown_name' : 'bank_text',
+      accountId,
+      amountVaries,
     ],
   )
   return getBill(db, rows[0]!.id, today)

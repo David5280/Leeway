@@ -30,11 +30,26 @@ import {
   subscriptionSchema,
 } from '../push/subscriptions.js'
 import type { AppContext } from '../context.js'
+import { acceptBillChange } from '../domain/billChangeSource.js'
+import { getSettings } from '../domain/settings.js'
+import { todayIn } from '../lib/dates.js'
 import { defineAction } from './action.js'
 
 /** The bell's count, for the kinds the owner has on. */
 async function unread(ctx: AppContext): Promise<{ unread: number }> {
   return { unread: await unreadCount(ctx.db, kindsOn(await getNotificationSettings(ctx.db))) }
+}
+
+/**
+ * A bill's change dismissed in the inbox takes its charge's amount as the
+ * bill's usual one, so the alert clears on home and in the inbox alike. Its
+ * subject is the bill's id and the charge's date (accountAlertSubject).
+ */
+async function acceptDismissedChange(ctx: AppContext, subject: string, now: Date): Promise<void> {
+  const [billId, date] = subject.split(':')
+  if (!billId || !date) return
+  const { timeZone } = await getSettings(ctx.db)
+  await acceptBillChange(ctx.db, timeZone, todayIn(timeZone, now), { billId, date })
 }
 
 export const countNotificationsAction = defineAction({
@@ -83,12 +98,15 @@ export const markNotificationsReadAction = defineAction({
 export const dismissNotificationAction = defineAction({
   name: 'dismiss_notification',
   title: 'Dismiss a notification',
-  description: 'Take a notification out of the inbox.',
+  description:
+    "Take a notification out of the inbox. Dismissing a bill's change takes its new amount as the bill's usual one.",
   input: z.object({ id: z.uuid() }).strict(),
   scope: 'write',
   surface: 'app',
   run: async (ctx, { id }) => {
-    await dismissNotification(ctx.db, id, ctx.now())
+    const now = ctx.now()
+    const { kind, subject } = await dismissNotification(ctx.db, id, now)
+    if (kind === 'bill_change') await acceptDismissedChange(ctx, subject, now)
     return unread(ctx)
   },
 })

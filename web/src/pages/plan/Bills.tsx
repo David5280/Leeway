@@ -1,9 +1,11 @@
-// Bills and subscriptions: what is due and when, and repeating charges found in history.
+// Bills and subscriptions: what is due and when, and repeating charges found
+// in history, each tracked as a bill in one tap, with Undo in a toast.
 
 import { Card } from '../../components/design/Card'
-import { useState } from 'react'
-import type { Bill, Category, RecurringSeries } from '../../api/client'
+import { useCallback, useState } from 'react'
+import type { Bill, Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
+import { Toast } from '../../components/Toast'
 import { ErrorNote, LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
@@ -13,7 +15,7 @@ import { BillForm, billFields, type BillFields } from './BillForm'
 import { BILL_CADENCES, billStatus } from './text'
 import { Money } from '../../components/design/Money'
 
-/** Which bill is open in the form: a new one (with any prefilled fields) or an existing one. */
+/** Which bill is open in the form: a new one or an existing one. */
 type Editing = { bill?: Bill; initial: BillFields } | null
 
 function BillRow({ bill, onEdit }: { bill: Bill; onEdit: () => void }) {
@@ -37,45 +39,79 @@ function BillRow({ bill, onEdit }: { bill: Bill; onEdit: () => void }) {
   )
 }
 
-/** Repeating charges not tracked yet, each one tap from becoming a bill. */
-function Suggestions({ onTrack }: { onTrack: (series: RecurringSeries) => void }) {
+/**
+ * Repeating charges not tracked yet, each one tap from becoming a bill: the
+ * bill takes the name, usual amount, due day, cadence and account found
+ * (track_recurring), and a toast offers Undo. It can be changed in Bills after.
+ */
+function Suggestions() {
   const { settings } = useApp()
   const found = useAction('find_recurring')
   const dismiss = useActionMutation('dismiss_recurring')
+  const track = useActionMutation('track_recurring')
+  const undo = useActionMutation('delete_bill')
+  const [tracked, setTracked] = useState<Bill | null>(null)
+  // Stable, so the toast's timer is not restarted by each render.
+  const closeToast = useCallback(() => setTracked(null), [])
   // Paychecks show up here too; they shape the payday, not the bills.
   const charges = found.data?.filter((s) => s.direction === 'out') ?? []
+  const toast = tracked && (
+    <Toast
+      key={tracked.id}
+      message={`${tracked.name} added to Bills`}
+      actionLabel="Undo"
+      onAction={() => {
+        undo.mutate({ id: tracked.id })
+        setTracked(null)
+      }}
+      onClose={closeToast}
+    />
+  )
   if (found.error) return <ErrorNote error={found.error} />
-  if (charges.length === 0) return null
+  // The toast sits beside the card, so it stays put when tracking the last charge empties it.
   return (
-    <Card static="list" label="Found in your history" className="stack-sm">
-      <h2>Found in your history</h2>
-      <p className="small muted">These repeat on a schedule but are not tracked as bills yet.</p>
-      <ErrorNote error={dismiss.error} />
-      {charges.map((series) => (
-        <div key={series.key} className="list-row wrap">
-          <span className="grow stack-sm" style={{ gap: 0 }}>
-            <span style={{ fontWeight: 500 }}>{series.name}</span>
-            <span className="small muted">
-              {series.amountVaries ? 'About ' : ''}
-              <Money cents={series.typicalAmountCents} precision="cents" />{' '}
-              {BILL_CADENCES[series.cadence].toLowerCase()}, next around{' '}
-              {shortDate(series.nextDate, settings.locale)}
-            </span>
-          </span>
-          <button type="button" className="btn" onClick={() => onTrack(series)}>
-            Track
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={dismiss.isPending}
-            onClick={() => dismiss.mutate({ key: series.key })}
-          >
-            Not a bill
-          </button>
-        </div>
-      ))}
-    </Card>
+    <>
+      {charges.length > 0 && (
+        <Card static="list" label="Found in your history" className="stack-sm">
+          <h2>Found in your history</h2>
+          <p className="small muted">
+            These repeat on a schedule but are not tracked as bills yet.
+          </p>
+          <ErrorNote error={dismiss.error ?? track.error} />
+          {charges.map((series) => (
+            <div key={series.key} className="list-row wrap">
+              <span className="grow stack-sm" style={{ gap: 0 }}>
+                <span style={{ fontWeight: 500 }}>{series.name}</span>
+                <span className="small muted">
+                  {series.amountVaries ? 'About ' : ''}
+                  <Money cents={series.typicalAmountCents} precision="cents" />{' '}
+                  {BILL_CADENCES[series.cadence].toLowerCase()}, next around{' '}
+                  {shortDate(series.nextDate, settings.locale)}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="btn"
+                disabled={track.isPending}
+                onClick={() => track.mutate({ key: series.key }, { onSuccess: setTracked })}
+              >
+                Track
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={dismiss.isPending}
+                onClick={() => dismiss.mutate({ key: series.key })}
+              >
+                Not a bill
+              </button>
+            </div>
+          ))}
+        </Card>
+      )}
+      {/* Undo's error takes the toast's place, so it shows even once the card has gone. */}
+      {toast || <ErrorNote error={undo.error} />}
+    </>
   )
 }
 
@@ -123,21 +159,6 @@ export function BillsSection() {
     const error = bills.error ?? categories.error
     return <LoadingOrError error={error} />
   }
-  const track = (series: RecurringSeries) =>
-    setEditing({
-      initial: billFields(
-        {
-          name: series.name,
-          kind: series.suggestedKind,
-          amountCents: series.typicalAmountCents,
-          cadence: series.cadence,
-          anchorDate: series.nextDate,
-          matchPattern: series.key,
-          categoryId: series.categoryId,
-        },
-        today,
-      ),
-    })
   const { monthlyCents, subscriptionsMonthlyCents } = bills.data
 
   return (
@@ -183,7 +204,7 @@ export function BillsSection() {
         ))}
       </Card>
 
-      <Suggestions onTrack={track} />
+      <Suggestions />
     </>
   )
 }

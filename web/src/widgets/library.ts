@@ -68,6 +68,22 @@ export const DEFAULT_LAYOUT: Widget[] = [
 ]
 
 /**
+ * The widgets as drawn while Heads up holds something urgent (an overdrawn
+ * account, a budget gone over): Heads up moves up to just under the hero, at
+ * full width, so money going wrong shows above the fold on every screen.
+ * It only ever moves up, nothing else moves, and the saved layout stays as
+ * the owner left it. With no hero shown, it leads.
+ */
+export function urgentFirst(widgets: Widget[]): Widget[] {
+  const alerts = widgets.find((widget) => widget.type === 'alerts')
+  if (!alerts) return widgets
+  const rest = widgets.filter((widget) => widget !== alerts)
+  const hero = rest.findIndex((widget) => widget.type === 'leeway')
+  const at = Math.min(widgets.indexOf(alerts), hero + 1)
+  return [...rest.slice(0, at), { ...alerts, size: 'full' }, ...rest.slice(at)]
+}
+
+/**
  * Whether widgets read from the most general answer down to the most detail
  * (DEPTHS) as a phone stacks them: each band's columns one after another.
  */

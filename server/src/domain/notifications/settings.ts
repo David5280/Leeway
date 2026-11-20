@@ -13,6 +13,7 @@ export const NOTIFICATION_KINDS = [
   'low_balance',
   'over_budget',
   'bill_due',
+  'bill_change',
   'large_transaction',
   'bank_login',
   'ai_limit',
@@ -23,7 +24,7 @@ export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 /**
  * Kinds that are a condition, like being overdrawn or a bill unpaid: they
  * clear when the data no longer calls for them (a deposit, a payment, a
- * refund), and can come back.
+ * refund, a bill's new amount taken as usual), and can come back.
  */
 export const STATE_KINDS: readonly NotificationKind[] = [
   'overdrawn',
@@ -31,6 +32,7 @@ export const STATE_KINDS: readonly NotificationKind[] = [
   'low_balance',
   'over_budget',
   'bill_due',
+  'bill_change',
   'bank_login',
 ]
 
@@ -38,9 +40,11 @@ export const STATE_KINDS: readonly NotificationKind[] = [
  * Conditions the owner can fix, which come back a day after they were
  * dismissed or hidden if they still hold. A budget is left out: spending
  * cannot be undone mid-period, so one dismissed stays dismissed for its period.
+ * So is a bill's change: dismissing it takes the new amount as usual, so it
+ * no longer holds.
  */
 export const RESURFACE_KINDS: readonly NotificationKind[] = STATE_KINDS.filter(
-  (kind) => kind !== 'over_budget',
+  (kind) => kind !== 'over_budget' && kind !== 'bill_change',
 )
 
 /** The kinds the owner has turned on. */

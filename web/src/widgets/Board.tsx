@@ -9,7 +9,7 @@ import { canMove, changeWidget, moveWidget, SIZES, WIDGET_LIBRARY, type Widget }
 interface BoardProps {
   /** The full saved list, widgets this build cannot draw included. */
   all: Widget[]
-  /** The widgets to draw, in saved order: hidden ones only while editing. */
+  /** The widgets to draw, in saved order (but see urgentFirst): hidden ones only while editing. */
   shown: Widget[]
   editing: boolean
   budget: Budget

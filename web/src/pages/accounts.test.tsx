@@ -1,7 +1,19 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { A, B, C, checking, everyAccount, group, renderAccounts, server } from '../test/accounts'
+import {
+  A,
+  B,
+  C,
+  card,
+  checking,
+  everyAccount,
+  group,
+  pickBox,
+  renderAccounts,
+  savings,
+  server,
+} from '../test/accounts'
 import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
 import { worthPoint } from '../test/worth'
 
@@ -30,6 +42,35 @@ describe('Accounts screen', () => {
       'aria-valuenow',
       '30',
     )
+  })
+
+  it("puts each group's total in its heading, a card group's as owed, kept whole in Select mode", async () => {
+    const overdrawn = account({
+      id: 'od',
+      name: 'Joint',
+      subtype: 'checking',
+      balanceCents: -400000,
+    })
+    const hidden = account({ id: 'hid', name: 'Old', subtype: 'savings', hidden: true })
+    server([checking, overdrawn, savings, hidden, card])
+    renderAccounts()
+    await screen.findByRole('region', { name: 'Checking' })
+    const total = (title: string) => group(title).querySelector('.section-head .group-total')!
+    // $2,500 less the $4,000 overdraft: the one total in red.
+    expect(total('Checking')).toHaveTextContent('−$1,500.00')
+    expect(total('Checking').querySelector('.money')).toHaveClass('money-problem')
+    // The hidden account has a card but no part in the total.
+    expect(total('Savings')).toHaveTextContent(/^\$9,000\.00$/)
+    expect(total('Credit cards')).toHaveTextContent('$300.00owed')
+    expect(total('Credit cards').querySelector('.money')).not.toHaveClass('money-problem')
+    // Static text, as the heading is: nothing to press.
+    expect(
+      within(group('Credit cards').querySelector('.section-head')!).queryByRole('button'),
+    ).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select' }))
+    await userEvent.click(pickBox('Everyday'))
+    expect(total('Checking')).toHaveTextContent('−$1,500.00')
   })
 
   it("draws an investment's month as a line beside how far it moved", async () => {
