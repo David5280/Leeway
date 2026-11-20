@@ -120,10 +120,18 @@ export async function reattachAccounts(
       providerAccountId,
     ])
   }
+  const returned = [...pairs.values()]
+  // A charge still pending when the account left may since have posted on
+  // another day, so it would match nothing, and the bank never removes the
+  // old id. Plaid sends the account's current state again, pending charges
+  // included, so the stale ones go.
+  await db.query('DELETE FROM transactions WHERE account_id = ANY($1::uuid[]) AND pending', [
+    returned,
+  ])
   await db.query(
     `UPDATE transactions SET adopt_until = now() + make_interval(days => $2)
      WHERE account_id = ANY($1::uuid[]) AND provider_transaction_id IS NOT NULL`,
-    [[...pairs.values()], ADOPTION_WINDOW_DAYS],
+    [returned, ADOPTION_WINDOW_DAYS],
   )
 }
 
@@ -164,32 +172,38 @@ export interface Adoption {
 const historyKey = (line: Omit<HistoryLine, 'providerTransactionId'>) =>
   [line.accountId, line.date, line.amountCents, line.name].join('\u0000')
 
+/** A transaction's bank id on its account, as one key. */
+const idKey = (line: Pick<HistoryLine, 'accountId' | 'providerTransactionId'>) =>
+  `${line.accountId}\u0000${line.providerTransactionId}`
+
 /**
  * Matches transactions arriving under ids not seen before to the ones kept
  * here with the same account, day, amount and name, one to one, so history
  * that comes back is not counted twice. A kept transaction the bank still
- * sends under its old id is not a candidate, and two equal charges on one
- * day each match one of their own.
+ * sends under its old id is not a candidate, two equal charges on one day
+ * each match one of their own, and a line the bank lists twice (added and
+ * modified in one sync) matches once.
  */
 export function matchHistory(
   kept: (HistoryLine & { id: string })[],
   arriving: HistoryLine[],
 ): Adoption[] {
-  const idsOf = (lines: HistoryLine[]) =>
-    new Set(lines.map((line) => `${line.accountId}\u0000${line.providerTransactionId}`))
-  const keptIds = idsOf(kept)
-  const arrivingIds = idsOf(arriving)
+  const keptIds = new Set(kept.map(idKey))
+  const arrivingIds = new Set(arriving.map(idKey))
   const candidates = new Map<string, string[]>()
   for (const line of kept) {
-    if (arrivingIds.has(`${line.accountId}\u0000${line.providerTransactionId}`)) continue
+    if (arrivingIds.has(idKey(line))) continue
     const key = historyKey(line)
     candidates.set(key, [...(candidates.get(key) ?? []), line.id])
   }
   const adoptions: Adoption[] = []
+  const matched = new Set<string>()
   for (const line of arriving) {
-    if (keptIds.has(`${line.accountId}\u0000${line.providerTransactionId}`)) continue
+    if (keptIds.has(idKey(line)) || matched.has(idKey(line))) continue
     const id = candidates.get(historyKey(line))?.shift()
-    if (id) adoptions.push({ id, providerTransactionId: line.providerTransactionId })
+    if (!id) continue
+    adoptions.push({ id, providerTransactionId: line.providerTransactionId })
+    matched.add(idKey(line))
   }
   return adoptions
 }
@@ -216,19 +230,31 @@ export async function adoptHistory(
      WHERE a.id = t.account_id AND a.connection_id = $1 AND t.adopt_until <= now()`,
     [connectionId],
   )
-  const arriving: HistoryLine[] = []
+  const lines: HistoryLine[] = []
   for (const tx of transactions) {
     const accountId = accountIds.get(tx.providerAccountId)
-    if (accountId) arriving.push({ ...tx, accountId })
+    if (accountId) lines.push({ ...tx, accountId })
   }
-  if (arriving.length === 0) return
+  if (lines.length === 0) return
+  const accounts = [...new Set(lines.map((line) => line.accountId))]
   const { rows: kept } = await db.query<HistoryLine & { id: string }>(
-    `SELECT t.id, t.account_id AS "accountId", t.provider_transaction_id AS "providerTransactionId",
-       t.date, t.amount_cents AS "amountCents", t.name
-     FROM transactions t JOIN accounts a ON a.id = t.account_id
-     WHERE a.connection_id = $1 AND t.adopt_until > now()`,
-    [connectionId],
+    `SELECT id, account_id AS "accountId", provider_transaction_id AS "providerTransactionId",
+       date, amount_cents AS "amountCents", name
+     FROM transactions WHERE account_id = ANY($1::uuid[]) AND adopt_until > now()`,
+    [accounts],
   )
+  if (kept.length === 0) return
+  // An id already stored, adopted earlier or saved since the account came
+  // back, is an update to that row: adopting it again would give two rows
+  // the same id, which the unique key refuses and the whole sync with it.
+  const { rows: stored } = await db.query<{ accountId: string; providerTransactionId: string }>(
+    `SELECT account_id AS "accountId", provider_transaction_id AS "providerTransactionId"
+     FROM transactions
+     WHERE account_id = ANY($1::uuid[]) AND provider_transaction_id = ANY($2::text[])`,
+    [accounts, lines.map((line) => line.providerTransactionId)],
+  )
+  const storedIds = new Set(stored.map(idKey))
+  const arriving = lines.filter((line) => !storedIds.has(idKey(line)))
   const adoptions = matchHistory(kept, arriving)
   if (adoptions.length === 0) return
   await db.query(

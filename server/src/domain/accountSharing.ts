@@ -6,7 +6,7 @@
 export interface SharingFacts {
   hidden: boolean
   /** When the bank stopped sharing the account (see unshared.ts), or null while it does. */
-  unsharedAt: unknown
+  unsharedAt: string | Date | null
 }
 
 /**

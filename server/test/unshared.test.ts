@@ -371,6 +371,60 @@ describe('history after an account comes back', () => {
     expect((await transactionsOf(savingsId)).filter((t) => t.name === 'Metro fare')).toHaveLength(2)
   })
 
+  it('never adopts a second row for an id already adopted, when Plaid sends it again', async () => {
+    const fare = { name: 'Metro fare', amountCents: 275, date: '2026-11-16' }
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    bank.pages = [
+      page({
+        added: [
+          bankTx({ ...fare, providerAccountId: 'acc-savings', providerTransactionId: 'ptx-f1' }),
+          bankTx({ ...fare, providerAccountId: 'acc-savings', providerTransactionId: 'ptx-f2' }),
+        ],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+    await untickSavings(connectionId)
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    // The first fare comes back under a new id and is adopted...
+    bank.pages = [page({ added: [bankTx({ ...fare, ...onNew, providerTransactionId: 'n1' })] })]
+    await reconnected(ctx, connectionId)
+    // ...then Plaid sends it again as modified, while the second fare's window is open.
+    bank.pages = [page({ modified: [bankTx({ ...fare, ...onNew, providerTransactionId: 'n1' })] })]
+    const result = await syncConnection(ctx, connectionId)
+
+    expect(result.error).toBeNull()
+    const fares = (await transactionsOf(savingsId)).filter((t) => t.name === 'Metro fare')
+    expect(fares).toHaveLength(2)
+  })
+
+  it('drops a charge still pending when the account left, since Plaid sends it again', async () => {
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    const shell = { providerAccountId: 'acc-savings', name: 'Shell', amountCents: 8000 }
+    bank.pages = [
+      page({
+        added: [
+          bankTx({ ...shell, providerTransactionId: 'ptx-p', date: '2026-11-15', pending: true }),
+        ],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+    await untickSavings(connectionId)
+
+    // Back under a new id, the charge has posted, dated two days later.
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    bank.pages = [
+      page({
+        added: [
+          bankTx({ ...shell, ...onNew, providerTransactionId: 'n-posted', date: '2026-11-17' }),
+        ],
+      }),
+    ]
+    await reconnected(ctx, connectionId)
+
+    const charges = (await transactionsOf(savingsId)).filter((t) => t.name === 'Shell')
+    expect(charges.map((t) => [t.date, t.pending])).toEqual([['2026-11-17', false]])
+  })
+
   it('keeps two equal fares on one day when the account comes back under the same id', async () => {
     const fare = {
       providerAccountId: 'acc-savings',
@@ -573,6 +627,14 @@ describe('matchHistory', () => {
       { id: 'row-1', providerTransactionId: 'new-1' },
       { id: 'row-2', providerTransactionId: 'new-2' },
     ])
+  })
+
+  it('adopts once for a line the bank lists twice in one sync', () => {
+    const adopted = matchHistory(
+      [keptLine('row-1', 'old-1'), keptLine('row-2', 'old-2')],
+      [line('new-1'), line('new-1')],
+    )
+    expect(adopted).toEqual([{ id: 'row-1', providerTransactionId: 'new-1' }])
   })
 
   it('leaves alone ids the bank still sends, and lines that differ', () => {
