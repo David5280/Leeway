@@ -57,6 +57,21 @@ describe('checkingCash', () => {
       overdraftCents: 3_000,
     })
   })
+
+  it('counts nothing to spend in an overdrawn account that overdraft protection shows money in', () => {
+    // $50 below zero with $450 of protection available: credit owed back, not cash.
+    expect(checkingCash({ availableCents: 45_000, balanceCents: -5_000 })).toEqual({
+      cashCents: 0,
+      overdraftCents: 5_000,
+    })
+    const flow = safeToSpend(
+      [{ availableCents: 45_000, balanceCents: -5_000 }, everyday],
+      [],
+      payday(),
+      TODAY,
+    )
+    expect(flow).toMatchObject({ cashCents: 17_800, overdraftCents: 5_000, safeCents: 12_800 })
+  })
 })
 
 describe('safeToSpend', () => {

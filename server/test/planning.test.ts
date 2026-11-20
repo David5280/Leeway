@@ -320,6 +320,27 @@ describe('get_cash_flow', () => {
     expect(flow.billsDueCents).toBe(13000)
   })
 
+  it('counts a bill due on payday itself, since the paycheck may land after it', async () => {
+    await insertBankAccount(ctx.db, { balanceCents: 500000 })
+    // No employer yet: the period's end stands in for payday, and rent is due that day.
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150000,
+      cadence: 'month',
+      anchorDate: '2026-12-01',
+    })
+    await call('create_bill', {
+      name: 'Gym',
+      amountCents: 3000,
+      cadence: 'month',
+      anchorDate: '2026-12-02',
+    })
+    const flow = await call('get_cash_flow')
+    expect(flow.nextPayday).toBe('2026-12-01')
+    expect(flow.billsDue.map((b) => [b.name, b.dueDate])).toEqual([['Rent', '2026-12-01']])
+    expect(flow.safeCents).toBe(350000)
+  })
+
   it('takes payday from paychecks only, an estimate from the new job’s first one', async () => {
     const { accountId } = await insertBankAccount(ctx.db)
     const deposit = (date: string, name: string, amountCents: number, detailed: string) =>

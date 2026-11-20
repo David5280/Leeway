@@ -6,12 +6,12 @@
 //
 // It is the cash in checking (each account's available balance where the
 // bank gives one, else its balance; never savings, investments or
-// retirement), less the bills due before payday, less what an overdrawn
+// retirement), less the bills due by payday, less what an overdrawn
 // account needs to get back to zero, and never below zero: what those
 // outrun the cash by is the shortfall, a figure of its own.
 
 import type { Db } from '../db/pool.js'
-import { daysBetween, type IsoDate } from '../lib/dates.js'
+import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { paysBills } from './accountKinds.js'
 import { listAccounts, type Account } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
@@ -54,11 +54,15 @@ export interface CashFlow {
   perDayCents: number
 }
 
-/** Every unpaid bill date before payday, soonest first. */
+/**
+ * Every unpaid bill date up to and including payday, soonest first. A bill
+ * due on payday itself counts: nothing says the paycheck lands before it
+ * comes out, and a payday that is only an estimate may come later still.
+ */
 function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] {
   return bills
     .flatMap((bill) =>
-      dueBefore(bill, payday).map((dueDate) => ({
+      dueBefore(bill, addDays(payday, 1)).map((dueDate) => ({
         billId: bill.id,
         name: bill.name,
         dueDate,
@@ -76,6 +80,10 @@ type CheckingAccount = Pick<Account, 'availableCents' | 'balanceCents'>
  * to zero. Available balance comes first, since it already takes out pending
  * charges; an overdrawn account holds nothing to spend, and owes the lower of
  * its two balances back.
+ *
+ * Overdrawn means either balance below zero. A bank with overdraft
+ * protection can show money available while the balance is negative: that
+ * is credit, owed back, never cash to spend.
  */
 export function checkingCash(account: CheckingAccount): {
   cashCents: number
@@ -83,7 +91,7 @@ export function checkingCash(account: CheckingAccount): {
 } {
   const held = account.availableCents ?? account.balanceCents ?? 0
   const lowest = Math.min(account.balanceCents ?? held, held)
-  return { cashCents: Math.max(0, held), overdraftCents: Math.max(0, -lowest) }
+  return { cashCents: lowest < 0 ? 0 : held, overdraftCents: Math.max(0, -lowest) }
 }
 
 /** Safe to spend from checking, the bills before payday and the payday. Pure. */
