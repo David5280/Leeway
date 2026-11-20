@@ -30,8 +30,11 @@ export const syncBanksAction = defineAction({
   input: z.object({ connectionId: z.uuid().optional() }),
   scope: 'write',
   surface: 'all',
-  run: async (ctx, { connectionId }) =>
-    connectionId ? [await syncConnection(ctx, connectionId)] : syncAll(ctx),
+  run: async (ctx, { connectionId }) => {
+    const results = connectionId ? [await syncConnection(ctx, connectionId)] : await syncAll(ctx)
+    ctx.afterBankUpdate?.()
+    return results
+  },
 })
 
 // Linking a bank needs the bank's own login window, so these live in the app only.

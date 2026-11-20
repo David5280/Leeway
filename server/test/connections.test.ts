@@ -24,6 +24,7 @@ beforeEach(async () => {
   bank = new FakeBank()
   ctx.bank = bank
   ctx.config.publicUrl = null
+  ctx.afterBankUpdate = undefined
 })
 
 // A well-formed id that matches no connection.
@@ -375,6 +376,38 @@ describe('bank webhooks', () => {
     expect(checking).toMatchObject({ balanceCents: 12000, availableCents: -4210 })
     expect((await call('list_alerts')).map((a) => [a.kind, a.amountCents])).toEqual([
       ['overdrawn', 4210],
+    ])
+  })
+})
+
+describe('telling the notifier', () => {
+  it('says bank data changed after a link, a sync, a repair and each kind of webhook', async () => {
+    const told: string[] = []
+    let step = ''
+    ctx.afterBankUpdate = () => told.push(step)
+    const as = async (name: string, work: () => Promise<unknown>) => {
+      step = name
+      await work()
+    }
+    let id = ''
+    await as('link', async () => {
+      id = (await call('link_bank', { publicToken: 'public-1' })).connectionId
+    })
+    await as('sync one', () => call('sync_banks', { connectionId: id }))
+    await as('sync all', () => call('sync_banks'))
+    await as('repair', () => call('bank_reconnected', { connectionId: id }))
+    await as('webhook sync', () => handleBankWebhook(ctx, 'item-public-1', 'sync'))
+    await as('webhook sign-in', () => handleBankWebhook(ctx, 'item-public-1', 'needs_reauth'))
+    await as('webhook repaired', () => handleBankWebhook(ctx, 'item-public-1', 'repaired'))
+    await as('webhook ignored', () => handleBankWebhook(ctx, 'item-public-1', 'ignored'))
+    expect(told).toEqual([
+      'link',
+      'sync one',
+      'sync all',
+      'repair',
+      'webhook sync',
+      'webhook sign-in',
+      'webhook repaired',
     ])
   })
 })
