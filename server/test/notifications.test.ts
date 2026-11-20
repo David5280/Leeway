@@ -369,12 +369,10 @@ describe('keeping the inbox tidy', () => {
 })
 
 describe('notification settings', () => {
-  it('starts with every kind on but the opt-in AI limit, and sensible thresholds', async () => {
+  it('starts with every kind on and sensible thresholds', async () => {
     expect(await getNotificationSettings(ctx.db)).toEqual(DEFAULT_NOTIFICATION_SETTINGS)
     expect(Object.keys(DEFAULT_NOTIFICATION_SETTINGS.kinds)).toEqual([...NOTIFICATION_KINDS])
-    expect(kindsOn(DEFAULT_NOTIFICATION_SETTINGS)).toEqual(
-      NOTIFICATION_KINDS.filter((kind) => kind !== 'ai_limit'),
-    )
+    expect(kindsOn(DEFAULT_NOTIFICATION_SETTINGS)).toEqual([...NOTIFICATION_KINDS])
     expect(DEFAULT_NOTIFICATION_SETTINGS).toMatchObject({
       overBudgetPercent: 100,
       billDueDays: 2,

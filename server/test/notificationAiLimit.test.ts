@@ -78,7 +78,9 @@ async function spendCent(): Promise<void> {
   )
 }
 
-const optIn = () => updateNotificationSettings(ctx.db, { kinds: { ai_limit: true } })
+/** Turns the AI limit kind on or off, as the owner would in Settings. */
+const setAiLimitKind = (on: boolean) =>
+  updateNotificationSettings(ctx.db, { kinds: { ai_limit: on } })
 
 /** The AI limit notifications in the inbox, oldest first. */
 async function aiInbox() {
@@ -97,7 +99,6 @@ async function notifyLater(): Promise<void> {
 
 describe('the AI limit notification', () => {
   it('tells the inbox of the warning once, as it is raised, and pushes it with no amount', async () => {
-    await optIn()
     const ai = centCalls()
     for (let n = 0; n < 7; n++) await ai.run('summary', ASK)
     expect(await aiInbox()).toEqual([])
@@ -129,7 +130,6 @@ describe('the AI limit notification', () => {
   })
 
   it('tells of the limit reached once, however many calls it turns away', async () => {
-    await optIn()
     const ai = centCalls()
     for (let n = 0; n < 9; n++) await ai.run('summary', ASK)
     await spendCent()
@@ -154,7 +154,6 @@ describe('the AI limit notification', () => {
   })
 
   it('tells again once a changed limit is reached afresh', async () => {
-    await optIn()
     const ai = centCalls()
     for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
     // A minute on, a new limit of 9 cents: the 8 spent are past its warning, raised again.
@@ -168,20 +167,27 @@ describe('the AI limit notification', () => {
     ])
   })
 
-  it('is opt-in: nothing reaches the inbox or a device while the kind is off', async () => {
+  it('starts on, like every kind', async () => {
+    const ai = centCalls()
+    for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
+    expect(await aiInbox()).toHaveLength(1)
+  })
+
+  it('tells nothing while the owner has it off, nor once they turn it back on', async () => {
+    await setAiLimitKind(false)
     const ai = centCalls()
     for (let n = 0; n < 8; n++) await ai.run('summary', ASK)
     await runNotifier(ctx)
     expect(await aiInbox()).toEqual([])
     expect(push.sent).toEqual([])
-    // Turning it on later does not bring back an alert raised while it was off.
-    await optIn()
+    // Turning it back on later does not bring back an alert raised while it was off.
+    await setAiLimitKind(true)
     await notifyLater()
     expect(await aiInbox()).toEqual([])
+    expect(push.sent).toEqual([])
   })
 
   it("is never found by the notifier's own checks, only told as an alert is raised", async () => {
-    await optIn()
     await ctx.db.query(
       `INSERT INTO ai_spend_alerts (month, level, raised_at) VALUES ('2026-11-01', 'warning', $1)`,
       [ctx.now()],

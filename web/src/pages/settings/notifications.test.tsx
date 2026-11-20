@@ -43,14 +43,13 @@ const kindSwitch = (label: string) => screen.getByRole('switch', { name: `Notify
 const turnOn = () => screen.getByRole('button', { name: 'Turn on' })
 
 describe('NotificationsSection: what to hear about', () => {
-  it('lists every kind the server raises, on but for the AI limit, with their thresholds', async () => {
+  it('lists every kind the server raises, all on, with their thresholds', async () => {
     serve()
     await renderSection()
-    for (const label of ['Overdrawn', 'Low balance', 'Budgets', 'Bills due', 'Large charges']) {
+    const labels = ['Overdrawn', 'Low balance', 'Budgets', 'Bills due', 'Large charges', 'AI limit']
+    for (const label of labels) {
       expect(kindSwitch(label)).toHaveAttribute('aria-checked', 'true')
     }
-    // AI spending is opt-in.
-    expect(kindSwitch('AI limit')).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByRole('combobox', { name: 'Share of a budget' })).toHaveDisplayValue('100%')
     expect(screen.getByRole('combobox', { name: 'When a bill is due' })).toHaveDisplayValue(
       '2 days before',
