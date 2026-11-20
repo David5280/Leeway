@@ -11,6 +11,8 @@ import {
   trends,
 } from '../domain/insights.js'
 import { monthlyTotals } from '../domain/monthlyTotals.js'
+import { RATE_GUARD_FOR_AI } from '../domain/savings/rate.js'
+import { savingsRates } from '../domain/savingsRates.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
 
@@ -37,6 +39,17 @@ export const getMonthlyTotalsAction = defineAction({
   surface: 'all',
   run: async (ctx, { months }) =>
     monthlyTotals(ctx.db, await getSettings(ctx.db), ctx.now(), months),
+})
+
+export const getSavingsRatesAction = defineAction({
+  name: 'get_savings_rates',
+  title: 'Savings rate by month',
+  description: `The savings rate for each of the last N calendar months, oldest first, ending with the current month (current: true, so far): money moved to savings and investments, plus pension contributions the owner entered, as a whole percent of that month's pay. percent is null when pay or any saving is unknown; never read that as saving nothing. targetPercent is the owner's own target, or null when they set none. ${RATE_GUARD_FOR_AI}`,
+  input: z.object({ months: z.number().int().min(2).max(12).default(6) }),
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx, { months }) =>
+    savingsRates(ctx.db, await getSettings(ctx.db), ctx.now(), months),
 })
 
 export const suggestBudgetsAction = defineAction({

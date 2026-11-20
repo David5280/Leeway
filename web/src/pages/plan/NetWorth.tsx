@@ -1,6 +1,7 @@
 // Net worth: the figure first, with what is owned and owed under it, then
-// "Is your net worth growing?" over a range, against where it started. A
-// tapped day reads out what was owned and owed that day.
+// "Is your net worth growing?" over a range, against where it started, and
+// how much of each month's pay goes to savings. A tapped day reads out what
+// was owned and owed that day.
 
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -17,6 +18,7 @@ import { netWorthDrill } from '../../lib/drills/plan'
 import { shortDate } from '../../lib/format'
 import { startReference, worthChange } from '../../lib/worth'
 import { settingsPath } from '../settings/paths'
+import { SavingsRateCard } from './SavingsRate'
 
 const RANGES = [
   { value: '90', label: '3 months' },
@@ -82,6 +84,7 @@ export function NetWorthSection() {
           <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.
         </p>
       </Card>
+      <SavingsRateCard />
     </>
   )
 }

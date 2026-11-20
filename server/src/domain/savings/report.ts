@@ -175,7 +175,7 @@ type SavingsKindAccount = Account & { kind: SavingsKind }
  * never counted from both ends. A pension is neither: what goes into it is
  * counted from what the owner entered (retirement/pensions.ts).
  */
-function splitAccounts(accounts: Account[]) {
+export function splitAccounts(accounts: Account[]) {
   const everyday = accounts.filter((a) => !isSavingsKind(a.kind) && a.kind !== 'pension')
   return {
     savings: accounts.filter((a): a is SavingsKindAccount => isSavingsKind(a.kind)),
