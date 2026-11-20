@@ -23,8 +23,12 @@ export const GENERIC_NAME = 'Bank transaction'
 /** What a card's own side of a payment to it is called. */
 const CARD_PAYMENT_NAME = 'Card payment'
 
-/** What a transfer is called, alone or before where it went: "Transfer to Savings". */
-const TRANSFER_NAME = 'Transfer'
+/**
+ * What a transfer is called, alone or before where it went ("Transfer to
+ * Savings"), and what a transfer or a payment between people is shown as when
+ * its names can't be shown (transactionName.ts).
+ */
+export const TRANSFER_NAME = 'Transfer'
 
 /** Short words that stay uppercase: acronyms people know in merchant and bank names. */
 const ACRONYMS = new Set([

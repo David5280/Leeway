@@ -57,4 +57,13 @@ describe('sameMerchant', () => {
     expect(sameMerchant(named('PAYMENT THANK YOU'), named('AUTOPAY PAYMENT THANK YOU'))).toBe(false)
     expect(sameMerchant(named('TRANSFER'), named('TRANSFER'))).toBe(false)
   })
+
+  it('reads a merchant name the bank gave as a name, even one that sounds like money moving', () => {
+    expect(
+      sameMerchant(
+        named('TRANSFER STATION 12', 'Transfer Station'),
+        named('TRANSFER STATION 34', 'Transfer Station'),
+      ),
+    ).toBe(true)
+  })
 })

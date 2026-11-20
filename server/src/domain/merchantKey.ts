@@ -4,6 +4,7 @@
 
 import {
   cleanMerchantName,
+  GENERIC_NAME,
   namesNoMerchant,
   SMALL_WORDS,
   tidyMerchantName,
@@ -36,11 +37,11 @@ export function textKey(text: string): string {
 
 /**
  * The first word of a readable name (merchantName.ts), with a leading small
- * word like "the" skipped; '' when the name names no merchant ("Bank
- * transaction", "Card payment", "Transfer to Savings").
+ * word like "the" skipped; '' when nothing readable is left ("Bank
+ * transaction").
  */
 function firstWord(name: string): string {
-  if (namesNoMerchant(name)) return ''
+  if (name === GENERIC_NAME) return ''
   return (
     textKey(name)
       .split(' ')
@@ -64,9 +65,14 @@ const CARD_WORDING = /^(?:(?:visa|debit|purchase|ach)\s+-?)+/i
 /**
  * The first word of the raw text, cleaned as for display and without card
  * wording, so processor codes are gone too: "SQ *BLUE BOTTLE" gives "blue".
+ * A cleaned name that only says money moved ("Transfer to Savings", "Card
+ * payment") gives none. A merchant name the bank gave is never read that
+ * way, since a real merchant may be called "Transfer Station".
  */
-const textWord = (tx: MerchantText) =>
-  firstWord(cleanMerchantName(tx.name).replace(CARD_WORDING, ''))
+const textWord = (tx: MerchantText) => {
+  const name = cleanMerchantName(tx.name).replace(CARD_WORDING, '')
+  return namesNoMerchant(name) ? '' : firstWord(name)
+}
 
 /**
  * Whether two charges read as the same merchant, by the first word of the

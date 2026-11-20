@@ -2,7 +2,7 @@
 // alerts, the weekly email, assistants over MCP and the AI writer's facts.
 // Pure. The bank's raw text is kept apart and only shown in its details.
 
-import { cleanMerchantName, GENERIC_NAME, tidyMerchantName } from './merchantName.js'
+import { cleanMerchantName, GENERIC_NAME, tidyMerchantName, TRANSFER_NAME } from './merchantName.js'
 import { safeName, type AccountMasks } from './safeName.js'
 import type { PersonPayment } from './transfers.js'
 
@@ -29,9 +29,6 @@ export interface NameGuard {
   /** Shown when a merchant name would show an account number: the category's name, say. */
   fallback?: string
 }
-
-/** What a transfer or a payment between people is called when its names can't be shown. */
-export const TRANSFER_NAME = 'Transfer'
 
 /**
  * The name a transaction is shown under, in this order:
