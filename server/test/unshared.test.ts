@@ -11,13 +11,15 @@ import { debtPlans } from '../src/domain/debts.js'
 import { getNetWorth } from '../src/domain/netWorth.js'
 import { getSettings } from '../src/domain/settings.js'
 import { syncConnection } from '../src/domain/sync.js'
-import { listTransactions, setCategory } from '../src/domain/transactions.js'
+import { refreshInbox } from '../src/domain/notifications/notifier.js'
+import { listTransactions, setCategory, type Transaction } from '../src/domain/transactions.js'
 import {
   matchHistory,
-  pairReturning,
+  pairHeldPending,
+  type HeldPending,
   type HistoryLine,
-  type KeptAccount,
-} from '../src/domain/unshared.js'
+} from '../src/domain/returnedHistory.js'
+import { pairReturning, type KeptAccount } from '../src/domain/unshared.js'
 import { AppError } from '../src/errors.js'
 import { account, bankTx, FakeBank, newLink, page } from './fakeBank.js'
 import { createTestContext, resetData } from './helpers.js'
@@ -397,32 +399,126 @@ describe('history after an account comes back', () => {
     expect(fares).toHaveLength(2)
   })
 
-  it('drops a charge still pending when the account left, since Plaid sends it again', async () => {
+  const shell = { providerAccountId: 'acc-savings', name: 'Shell', amountCents: 8000 }
+
+  /**
+   * Links with an $80 Shell charge pending on savings (after any `earlier`
+   * ones), lets `edit` touch it, un-ticks savings, then ticks it again under
+   * a new id with `arriving`.
+   */
+  async function pendingThenBack(
+    arriving: BankTransaction[],
+    edit: (pendingId: string) => Promise<void> = async () => {},
+    earlier: BankTransaction[] = [],
+  ): Promise<{ savingsId: string; charges: () => Promise<Transaction[]> }> {
     const { connectionId, savingsId } = await linkCheckingAndSavings()
-    const shell = { providerAccountId: 'acc-savings', name: 'Shell', amountCents: 8000 }
     bank.pages = [
       page({
         added: [
+          ...earlier,
           bankTx({ ...shell, providerTransactionId: 'ptx-p', date: '2026-11-15', pending: true }),
         ],
       }),
     ]
     await syncConnection(ctx, connectionId)
+    await edit((await transactionsOf(savingsId)).find((t) => t.pending)!.id)
+    await untickSavings(connectionId)
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    bank.pages = [page({ added: arriving })]
+    await reconnected(ctx, connectionId)
+    const charges = async () => (await transactionsOf(savingsId)).filter((t) => t.name === 'Shell')
+    return { savingsId, charges }
+  }
+
+  const posted = (id: string, date: string) =>
+    bankTx({ ...shell, ...onNew, providerTransactionId: id, date })
+
+  it('drops a charge still pending when the account left, since Plaid sends it again', async () => {
+    // Back under a new id, the charge has posted, dated two days later.
+    const { charges } = await pendingThenBack([posted('n-posted', '2026-11-17')])
+    expect((await charges()).map((t) => [t.date, t.pending])).toEqual([['2026-11-17', false]])
+  })
+
+  it("carries the owner's edits on a dropped pending charge over to the one it became", async () => {
+    const fuel = await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Fuel' }))
+    const { charges } = await pendingThenBack([posted('n-posted', '2026-11-17')], async (id) => {
+      await setCategory(ctx.db, [id], fuel.id)
+      await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+    })
+    expect(await charges()).toEqual([
+      expect.objectContaining({
+        date: '2026-11-17',
+        categoryId: fuel.id,
+        categorySource: 'manual',
+        note: 'Road trip',
+      }),
+    ])
+  })
+
+  it('carries nothing over when more than one charge could be the one it became', async () => {
+    const { charges } = await pendingThenBack(
+      [posted('n-1', '2026-11-16'), posted('n-2', '2026-11-18')],
+      async (id) => {
+        await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+      },
+    )
+    expect((await charges()).map((t) => t.note)).toEqual([null, null])
+  })
+
+  it('carries edits past an older equal charge whose history comes back too', async () => {
+    const older = bankTx({ ...shell, providerTransactionId: 'ptx-old', date: '2026-11-16' })
+    const { charges } = await pendingThenBack(
+      [posted('n-old', '2026-11-16'), posted('n-posted', '2026-11-17')],
+      async (id) => {
+        await ctx.db.query(`UPDATE transactions SET note = 'Road trip' WHERE id = $1`, [id])
+      },
+      [older],
+    )
+    const notes = (await charges()).map((t) => [t.date, t.note]).sort()
+    expect(notes).toEqual([
+      ['2026-11-16', null],
+      ['2026-11-17', 'Road trip'],
+    ])
+  })
+
+  it('keeps a note on the fare the bank still sends under its own id', async () => {
+    const fare = { name: 'Metro fare', amountCents: 275, date: '2026-11-16' }
+    const { connectionId, savingsId } = await linkCheckingAndSavings()
+    bank.pages = [
+      page({
+        added: [
+          bankTx({ ...fare, providerAccountId: 'acc-savings', providerTransactionId: 'ptx-f1' }),
+          bankTx({ ...fare, providerAccountId: 'acc-savings', providerTransactionId: 'ptx-f2' }),
+        ],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+    await ctx.db.query(
+      `UPDATE transactions SET note = 'Commute' WHERE provider_transaction_id = 'ptx-f1'`,
+    )
     await untickSavings(connectionId)
 
-    // Back under a new id, the charge has posted, dated two days later.
+    // Back under a new account id, fare 1 keeps its own id while fare 2 gets a new one.
     bank.accounts = [checking, { ...savings, ...onNew }]
     bank.pages = [
       page({
         added: [
-          bankTx({ ...shell, ...onNew, providerTransactionId: 'n-posted', date: '2026-11-17' }),
+          bankTx({ ...fare, ...onNew, providerTransactionId: 'ptx-f1' }),
+          bankTx({ ...fare, ...onNew, providerTransactionId: 'n2' }),
         ],
       }),
     ]
     await reconnected(ctx, connectionId)
 
-    const charges = (await transactionsOf(savingsId)).filter((t) => t.name === 'Shell')
-    expect(charges.map((t) => [t.date, t.pending])).toEqual([['2026-11-17', false]])
+    const { rows } = await ctx.db.query<{ id: string; note: string | null }>(
+      `SELECT provider_transaction_id AS id, note FROM transactions
+       WHERE account_id = $1 AND name = 'Metro fare' ORDER BY provider_transaction_id`,
+      [savingsId],
+    )
+    expect(rows).toEqual([
+      { id: 'n2', note: null },
+      { id: 'ptx-f1', note: 'Commute' },
+    ])
   })
 
   it('keeps two equal fares on one day when the account comes back under the same id', async () => {
@@ -612,8 +708,11 @@ describe('matchHistory', () => {
     ...line(providerTransactionId, fields),
   })
 
+  const none = new Set<string>()
+  const stored = (...ids: string[]) => new Set(ids.map((id) => `acct\u0000${id}`))
+
   it('gives a kept transaction the new id of the one it matches', () => {
-    expect(matchHistory([keptLine('row-1', 'old')], [line('new')])).toEqual([
+    expect(matchHistory([keptLine('row-1', 'old')], [line('new')], none)).toEqual([
       { id: 'row-1', providerTransactionId: 'new' },
     ])
   })
@@ -622,6 +721,7 @@ describe('matchHistory', () => {
     const adopted = matchHistory(
       [keptLine('row-1', 'old-1'), keptLine('row-2', 'old-2')],
       [line('new-1'), line('new-2'), line('new-3')],
+      none,
     )
     expect(adopted).toEqual([
       { id: 'row-1', providerTransactionId: 'new-1' },
@@ -633,6 +733,7 @@ describe('matchHistory', () => {
     const adopted = matchHistory(
       [keptLine('row-1', 'old-1'), keptLine('row-2', 'old-2')],
       [line('new-1'), line('new-1')],
+      none,
     )
     expect(adopted).toEqual([{ id: 'row-1', providerTransactionId: 'new-1' }])
   })
@@ -645,7 +746,121 @@ describe('matchHistory', () => {
         line('other-day', { date: '2026-11-02' }),
         line('other-account', { accountId: 'elsewhere', amountCents: 999 }),
       ],
+      stored('same'),
     )
     expect(adopted).toEqual([])
+  })
+
+  it('adopts nothing for a line already stored', () => {
+    expect(matchHistory([keptLine('row-1', 'old')], [line('saved')], stored('saved'))).toEqual([])
+  })
+
+  it('offers no kept row whose own id arrived, even when that line was stored before', () => {
+    const adopted = matchHistory(
+      [keptLine('fare-1', 'f1')],
+      [line('f1'), line('new')],
+      stored('f1'),
+    )
+    expect(adopted).toEqual([])
+  })
+})
+
+describe('pairHeldPending', () => {
+  const pending = (fields: Partial<HeldPending> = {}): HeldPending => ({
+    accountId: 'acct',
+    date: '2026-11-10',
+    amountCents: 8000,
+    manualCategoryId: null,
+    note: 'Dinner',
+    excluded: false,
+    subject: 'p-1',
+    ...fields,
+  })
+  const charge = (id: string, date: string, fields: object = {}) => ({
+    id,
+    accountId: 'acct',
+    date,
+    amountCents: 8000,
+    ...fields,
+  })
+
+  it('pairs a pending charge with the one charge dated that day to a week later', () => {
+    const arrived = [
+      charge('before', '2026-11-09'),
+      charge('late', '2026-11-18'),
+      charge('other-amount', '2026-11-12', { amountCents: 8001 }),
+      charge('other-account', '2026-11-12', { accountId: 'elsewhere' }),
+      charge('it', '2026-11-17'),
+    ]
+    expect([...pairHeldPending([pending()], arrived)]).toEqual([[0, 'it']])
+  })
+
+  it('pairs nothing when two charges could be it', () => {
+    const arrived = [charge('a', '2026-11-10'), charge('b', '2026-11-11')]
+    expect(pairHeldPending([pending()], arrived).size).toBe(0)
+  })
+
+  it('pairs nothing when two pending charges could be the same one', () => {
+    const held = [pending(), pending({ date: '2026-11-11', subject: 'p-2' })]
+    expect(pairHeldPending(held, [charge('a', '2026-11-12')]).size).toBe(0)
+  })
+})
+
+describe('a large charge after an account comes back', () => {
+  const onNew = { providerAccountId: 'acc-savings-new' }
+  const tv = { name: 'Best Buy', amountCents: 150_000, date: '2026-11-16' }
+
+  const largeCharges = async () =>
+    (
+      await ctx.db.query<{ subject: string; push_state: string }>(
+        `SELECT subject, push_state FROM notifications WHERE kind = 'large_transaction'`,
+      )
+    ).rows
+
+  /** Links with the $1,500 charge on savings, notified and pushed, then un-ticks savings. */
+  async function notifiedThenUnticked(pending: boolean): Promise<string> {
+    const { connectionId } = await linkCheckingAndSavings()
+    bank.pages = [
+      page({
+        added: [
+          bankTx({
+            ...tv,
+            providerAccountId: 'acc-savings',
+            providerTransactionId: 'ptx-tv',
+            pending,
+          }),
+        ],
+      }),
+    ]
+    await syncConnection(ctx, connectionId)
+    await refreshInbox(ctx)
+    await ctx.db.query(`UPDATE notifications SET push_state = 'sent', pushed_at = now()`)
+    expect(await largeCharges()).toHaveLength(1)
+    await untickSavings(connectionId)
+    return connectionId
+  }
+
+  it('is not news again when it comes back under a new id', async () => {
+    const connectionId = await notifiedThenUnticked(false)
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    bank.pages = [page({ added: [bankTx({ ...tv, ...onNew, providerTransactionId: 'n-tv' })] })]
+    await reconnected(ctx, connectionId)
+    await refreshInbox(ctx)
+
+    expect(await largeCharges()).toEqual([{ subject: 'n-tv', push_state: 'sent' }])
+  })
+
+  it('is not news again when it was pending and comes back posted under a new id', async () => {
+    const connectionId = await notifiedThenUnticked(true)
+    bank.accounts = [checking, { ...savings, ...onNew }]
+    bank.pages = [
+      page({
+        added: [bankTx({ ...tv, ...onNew, providerTransactionId: 'n-tv', date: '2026-11-17' })],
+      }),
+    ]
+    await reconnected(ctx, connectionId)
+    await refreshInbox(ctx)
+
+    expect(await largeCharges()).toEqual([{ subject: 'n-tv', push_state: 'sent' }])
   })
 })

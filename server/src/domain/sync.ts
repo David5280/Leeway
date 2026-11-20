@@ -10,7 +10,8 @@ import { messageOf, notFound } from '../errors.js'
 import { accessTokenOf, requireBank } from './bank.js'
 import { loadOwnAccounts, recategorize } from './categorize.js'
 import { sameOwnAccounts } from './transfers.js'
-import { adoptHistory, markUnshared, reattachAccounts } from './unshared.js'
+import { adoptHistory, settleReturns } from './returnedHistory.js'
+import { markUnshared, reattachAccounts } from './unshared.js'
 
 export interface SyncResult {
   connectionId: string
@@ -117,7 +118,7 @@ export async function syncAll(ctx: AppContext): Promise<SyncResult[]> {
  * Writes one sync's accounts and changes, re-files what they touched, and
  * saves the cursor. Accounts the bank stopped reporting are marked as no
  * longer shared, and ones it reports again come back as the accounts they
- * were, with their history (see unshared.ts).
+ * were, with their history (see unshared.ts and returnedHistory.ts).
  */
 async function applySync(
   db: pg.PoolClient,
@@ -126,13 +127,14 @@ async function applySync(
   changes: BankChanges,
 ): Promise<void> {
   const cardsBefore = await loadOwnAccounts(db)
-  await reattachAccounts(db, connectionId, accounts)
+  const held = await reattachAccounts(db, connectionId, accounts)
   const accountIds = await upsertAccounts(db, connectionId, accounts)
   await markUnshared(db, connectionId, accounts)
   const arrived = [...changes.added, ...changes.modified]
-  await adoptHistory(db, connectionId, accountIds, arrived)
+  const adopted = await adoptHistory(db, connectionId, accountIds, arrived)
   const touched = await upsertTransactions(db, accountIds, arrived)
   await carryOverPendingEdits(db, touched)
+  await settleReturns(db, held, adopted, touched)
   await removeTransactions(db, accountIds, changes.removed)
   // A newly tracked card turns earlier payments to it into transfers, so
   // when the cards change every transaction is looked at again.
