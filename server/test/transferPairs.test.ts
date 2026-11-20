@@ -78,12 +78,21 @@ describe('transferHint', () => {
       'Etsy payout',
       'Store refund',
       'Expense reimbursement',
-      'Payroll transfer',
+      'INTEREST PAID',
+      'INT PD 11/30',
+      'Dividend paid',
+      'Interest',
     ]) {
       expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('other')
     }
     // Whole words only, and a plain deposit or withdrawal still says nothing.
-    for (const name of ['Deposit', 'Withdrawal', 'Paycheckers Diner', 'DIRECTORY DEPOT']) {
+    for (const name of [
+      'Deposit',
+      'Withdrawal',
+      'Paycheckers Diner',
+      'DIRECTORY DEPOT',
+      'Interest Savings',
+    ]) {
       expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('none')
     }
   })
@@ -153,6 +162,40 @@ describe('pairTransfers', () => {
         tx('in', { accountId: 'imported-savings', amountCents: -2500, name: 'XFER FROM CHK' }),
       ]),
     ).toEqual(['out:in'])
+  })
+
+  it('pairs a move between own accounts whose names hold a pay word', () => {
+    expect(
+      pairsOf([
+        tx('out', {
+          accountId: 'checking',
+          amountCents: 2500,
+          name: 'Online Transfer to Interest Savings',
+        }),
+        tx('in', {
+          accountId: 'savings',
+          amountCents: -2500,
+          name: 'Online Transfer from Interest Checking',
+        }),
+      ]),
+    ).toEqual(['out:in'])
+  })
+
+  it('does not pair a direct deposit with a card purchase of the same amount', () => {
+    expect(
+      pairsOf(
+        [
+          tx('dinner', {
+            accountId: 'card',
+            amountCents: 5000,
+            accountType: 'credit',
+            name: 'DINNER AT LUCA',
+          }),
+          tx('pay', { accountId: 'checking', amountCents: -5000, name: 'ACME DIRECT DEPOSIT' }),
+        ],
+        unfiledLeg,
+      ),
+    ).toEqual([])
   })
 
   it('does not pair two sides that say nothing about being a transfer', () => {

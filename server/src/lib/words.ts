@@ -23,3 +23,13 @@ export function shortDate(date: IsoDate, locale: string): string {
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00Z`))
 }
+
+/** "Nov 19, 2026", for a day that can be a year or more back, like where history starts. */
+export function longDate(date: IsoDate, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T00:00:00Z`))
+}

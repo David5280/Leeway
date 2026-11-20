@@ -22,10 +22,11 @@ export const ALERT_LABELS: Record<AccountAlert['kind'], string> = {
   bill_change: 'Bill',
 }
 
-/** How an alert reads: urgent ones and a bill costing more in the problem tone, never red for less. */
+/** How an alert reads: urgent ones in the problem tone, a bill costing more as a warning, less as news. */
 export function alertTone(alert: AccountAlert): 'over' | 'warn' | 'info' {
   if (alert.severity === 'urgent') return 'over'
-  if (alert.bill) return alert.amountCents > alert.bill.usualCents ? 'over' : 'info'
+  // A higher bill is worth a look, not urgent: amber, like an overdraft fee.
+  if (alert.bill) return alert.amountCents > alert.bill.usualCents ? 'warn' : 'info'
   return alert.severity === 'info' ? 'info' : 'warn'
 }
 

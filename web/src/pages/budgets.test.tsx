@@ -373,9 +373,11 @@ describe('budget rows in plain words', () => {
     })
     renderBudgets()
     const left = await screen.findByRole('region', { name: 'Left' })
-    expect(
-      within(left).getByRole('link', { name: '$150 of it set aside for goals' }),
-    ).toHaveAttribute('href', '/plan/goals')
+    const link = within(left).getByRole('link', { name: '$150 of it set aside for goals' })
+    expect(link).toHaveAttribute('href', '/plan/goals')
+    // The amount and words in one box, so the flex link on a phone keeps the space between.
+    expect(link.children).toHaveLength(1)
+    expect(link.firstElementChild).toHaveTextContent(/^\$150 of it set aside for goals$/)
   })
 
   it('says under Left when checking holds less than the budgets have left', async () => {

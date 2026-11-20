@@ -74,6 +74,29 @@ describe('track_recurring', () => {
     expect((await owner.call('find_recurring')).map((s) => s.name)).toContain('Comcast')
   })
 
+  it('remembers when the amount varies, so a utility never alerts on its own swings', async () => {
+    const accountId = await comcastHistory()
+    for (const [date, amountCents] of [
+      ['2026-08-25', 6000],
+      ['2026-09-25', 9000],
+      ['2026-10-25', 7500],
+    ] as const) {
+      await insertBankTransaction(ctx.db, accountId, { date, name: 'CITY POWER', amountCents })
+    }
+    const found = await owner.call('find_recurring')
+    const power = found.find((s) => s.name === 'City Power')!
+    expect(power.amountVaries).toBe(true)
+    await owner.call('track_recurring', { key: power.key })
+    await owner.call('track_recurring', { key: 'comcast' })
+    const { rows } = await ctx.db.query<{ name: string; amount_varies: boolean }>(
+      'SELECT name, amount_varies FROM bills ORDER BY name',
+    )
+    expect(rows).toEqual([
+      { name: 'City Power', amount_varies: true },
+      { name: 'Comcast', amount_varies: false },
+    ])
+  })
+
   it('stays editable like any bill', async () => {
     await comcastHistory()
     const bill = await owner.call('track_recurring', { key: 'comcast' })

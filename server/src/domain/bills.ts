@@ -188,13 +188,16 @@ export async function createBill(
   input: BillInput,
   today: IsoDate,
   { byAssistant = false }: RuleAuthor = {},
-  accountId: string | null = null,
+  {
+    accountId = null,
+    amountVaries = false,
+  }: { accountId?: string | null; amountVaries?: boolean } = {},
 ): Promise<Bill> {
   if (input.categoryId) await assertCategoryExists(db, input.categoryId)
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO bills (name, kind, amount_cents, cadence, anchor_date, match_pattern, category_id,
-       autopay, reads, account_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+       autopay, reads, account_id, amount_varies)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
     [
       input.name,
       input.kind,
@@ -206,6 +209,7 @@ export async function createBill(
       input.autopay,
       byAssistant ? 'shown_name' : 'bank_text',
       accountId,
+      amountVaries,
     ],
   )
   return getBill(db, rows[0]!.id, today)

@@ -410,6 +410,7 @@ function billChange(amountCents: number, name: string) {
         amountCents: 8000,
         cadence: 'month',
         trackedOn: '2026-09-01',
+        amountVaries: false,
         charges: [],
       },
       charge: { accountId: 'everyday', date: '2026-11-16', amountCents },
@@ -536,7 +537,7 @@ describe('AlertsWidget', () => {
     expect(region()).toHaveClass('over-card')
   })
 
-  it("shows a bill's change, higher in the problem tone and lower never red, hidden by its bill", async () => {
+  it("shows a bill's change, higher in amber and lower never red, hidden by its bill", async () => {
     const server = fakeServer({
       list_connections: () => [],
       ...homeAlertHandlers([billChange(9500, 'Comcast'), billChange(6500, 'Phone')]).handlers,
@@ -546,10 +547,12 @@ describe('AlertsWidget', () => {
     const lower = screen.getByText('Phone was $65, usually $80.').closest('a')!
     // Each opens Bills, where its bill can be changed.
     expect(higher).toHaveAttribute('href', '/plan/bills')
-    expect(higher.querySelector('.alert-icon')).toHaveClass('over')
+    // Worth a look, not urgent: amber like an overdraft fee, never red.
+    expect(higher.querySelector('.alert-icon')).not.toHaveClass('over')
+    expect(higher.querySelector('.alert-icon')).not.toHaveClass('info')
     expect(lower.querySelector('.alert-icon')).toHaveClass('info')
-    expect(lower.querySelector('.alert-icon')).not.toHaveClass('over')
-    expect(region()).toHaveClass('over-card')
+    expect(region()).toHaveClass('warn-card')
+    expect(region()).not.toHaveClass('over-card')
 
     await userEvent.click(
       screen.getByRole('button', { name: 'Hide from home: Phone was $65, usually $80.' }),

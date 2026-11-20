@@ -29,6 +29,7 @@ const comcast = (charges: [string, number][], fields: Partial<WatchedBill> = {})
   amountCents: 8000,
   cadence: 'month',
   trackedOn: '2026-09-25',
+  amountVaries: false,
   charges: charges.map(([date, amountCents]) => ({ accountId: 'checking', date, amountCents })),
   ...fields,
 })
@@ -80,13 +81,51 @@ describe('billChangeOf', () => {
     expect(billChangeOf(twice, TODAY)).toMatchObject({ kind: 'settled', amountCents: 9500 })
   })
 
-  it('compares with the last cycle, past a second payment days before', () => {
-    const split = comcast([
-      ['2026-11-16', 9500],
-      ['2026-11-14', 9000],
+  it('adds up a cycle paid in parts, so a split payment is no change', () => {
+    // $50 and then $10 in one cycle is the usual $60, not a $10 bill.
+    const split = comcast(
+      [
+        ['2026-11-16', 1000],
+        ['2026-11-14', 5000],
+        ['2026-10-20', 6000],
+      ],
+      { amountCents: 6000 },
+    )
+    expect(billChangeOf(split, TODAY)).toBeNull()
+    // The last cycle is added up too: $60 then, $95 now.
+    const higher = comcast(
+      [
+        ['2026-11-16', 9500],
+        ['2026-10-20', 1000],
+        ['2026-10-18', 5000],
+      ],
+      { amountCents: 6000 },
+    )
+    expect(billChangeOf(higher, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { date: '2026-11-16', amountCents: 9500 },
+    })
+    // A second payment this cycle reads as the cycle's total.
+    const twice = comcast([
+      ['2026-11-16', 5000],
+      ['2026-11-14', 4500],
       ['2026-10-20', 8000],
     ])
-    expect(billChangeOf(split, TODAY)?.kind).toBe('changed')
+    expect(billChangeOf(twice, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { date: '2026-11-16', amountCents: 9500 },
+    })
+  })
+
+  it('never alerts for a bill whose amount varies, such as power or water', () => {
+    const power = comcast(
+      [
+        ['2026-11-16', 14000],
+        ['2026-10-20', 8000],
+      ],
+      { amountVaries: true },
+    )
+    expect(billChangeOf(power, TODAY)).toBeNull()
   })
 
   it('never calls the first charge since tracking a change', () => {

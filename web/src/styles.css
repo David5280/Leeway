@@ -904,6 +904,16 @@ button.chip {
   border-color: var(--accent);
 }
 
+/* The focus ring follows the round track, not the square tap box around it. */
+.switch:focus-visible {
+  outline: none;
+}
+
+.switch:focus-visible::before {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .switch[aria-checked='true']::after {
   background: var(--accent-ink);
   transform: translateX(20px);

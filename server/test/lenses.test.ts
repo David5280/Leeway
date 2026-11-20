@@ -343,10 +343,10 @@ describe('the retirement and investing lenses', () => {
       { historyStartsOn: TODAY },
     ).lenses
     expect(investing!.answer.detail).toBe(
-      'in investing across 1 account. History starts Nov 19, so changes show from the next day on.',
+      'in investing across 1 account. History starts Nov 19, 2026, so changes show from the next day on.',
     )
     expect(retirement!.meters.map((m) => [m.headline, m.detail])).toEqual([
-      [null, 'History starts Nov 19, so changes show from the next day on.'],
+      [null, 'History starts Nov 19, 2026, so changes show from the next day on.'],
       [
         null,
         'No transfers from your bank to investment or retirement accounts in the last year. Payroll deductions, like a 401(k), do not show in bank transactions.',

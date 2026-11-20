@@ -152,10 +152,13 @@ async function postedMovements(
   today: IsoDate,
 ): Promise<PostedMovement[]> {
   const ids = accounts.filter(rebuildable).map((account) => account.id)
-  // As totals read them: none left out (a duplicate, say), and none still pending.
+  // Every posted line the bank fed moved the balance, left out of totals or
+  // not: that is a budgeting choice. Only an imported or hand-added line left
+  // out is skipped, since there it can mean a duplicate of a bank line.
   const { rows } = await db.query<PostedMovement>(
     `SELECT account_id AS "accountId", date, amount_cents AS "amountCents" FROM transactions
-     WHERE account_id = ANY($1::uuid[]) AND NOT pending AND NOT excluded AND date <= $2`,
+     WHERE account_id = ANY($1::uuid[]) AND NOT pending AND date <= $2
+       AND (provider_transaction_id IS NOT NULL OR NOT excluded)`,
     [ids, today],
   )
   return rows

@@ -1,11 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { billChangeAlert } from '../../../server/src/domain/billChanges'
 import {
   mergeSettings,
   settingsPatchSchema,
   settingsSchema,
 } from '../../../server/src/domain/settings'
+import { formatCents } from '../../../server/src/lib/money'
 import type { Settings } from '../api/client'
 import {
   account,
@@ -261,6 +263,35 @@ describe('account alerts on the Overview', () => {
     serve(settings, { list_alerts: () => low, list_home_alerts: () => homeList(low) })
     renderOverview()
     await screen.findByText(low[0]!.message)
+    expect(shownWidgets()).toEqual([
+      'Your leeway',
+      'Net worth',
+      'Heads up',
+      ...DEFAULT_PAGE_ORDER.slice(2),
+    ])
+  })
+
+  it('leaves Heads up in place for a bill that costs more: worth a look, not urgent', async () => {
+    const higher = billChangeAlert(
+      {
+        kind: 'changed',
+        bill: {
+          id: 'power',
+          name: 'Power',
+          amountCents: 8000,
+          cadence: 'month',
+          trackedOn: '2026-09-01',
+          amountVaries: false,
+          charges: [],
+        },
+        charge: { accountId: 'everyday', date: '2026-11-16', amountCents: 12000 },
+      },
+      'Everyday',
+      { money: formatCents },
+    )
+    serve(settings, { list_alerts: () => [higher], list_home_alerts: () => homeList([higher]) })
+    renderOverview()
+    await screen.findByText('Power was $120, usually $80.')
     expect(shownWidgets()).toEqual([
       'Your leeway',
       'Net worth',
