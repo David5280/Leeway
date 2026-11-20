@@ -61,8 +61,11 @@ beforeEach(async () => {
 /** The steps the usage layer let fail quietly, as the server log would get them. */
 const quietFailures: string[] = []
 
-/** The usage layer around a fake provider whose every call costs exactly one cent. */
-function centCalls() {
+/**
+ * The usage layer around a fake provider whose every call costs exactly one
+ * cent. Steps it lets fail quietly go to `report`, by default the log above.
+ */
+function centCalls(report: (step: string) => void = (step) => quietFailures.push(step)) {
   const provider = new FakeProvider()
   provider.reply = {
     stop: 'done',
@@ -73,7 +76,7 @@ function centCalls() {
     db: ctx.db,
     now: ctx.now,
     overrides: NO_OVERRIDES,
-    onQuietFailure: (_error, step) => quietFailures.push(step),
+    onQuietFailure: (_error, step) => report(step),
   })
 }
 
@@ -272,6 +275,17 @@ describe('the AI limit notification', () => {
     })
     expect(quietFailures).toEqual(['mark the model available'])
     expect(await keptAlerts()).toEqual(['warning'])
+  })
+
+  it('keeps a paid call even when reporting a quiet failure fails too', async () => {
+    const ai = centCalls(() => {
+      throw new Error('logger unavailable')
+    })
+    for (let n = 0; n < 7; n++) await ai.run('summary', ASK)
+    await withInboxWritesFailing(async () => {
+      const reply = await ai.run('summary', ASK)
+      expect(reply.costMicros).toBe(10_000)
+    })
   })
 
   it('reports nothing when every step works', async () => {

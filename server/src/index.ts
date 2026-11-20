@@ -57,7 +57,8 @@ const ctx: AppContext = {
   db,
   config,
   bank: config.plaid ? new PlaidProvider(config.plaid) : null,
-  // AI calls start only once the app serves, so `app` exists before this can report.
+  // AI calls come only from requests and from timers set up after buildApp, so
+  // `app` exists before this can report.
   ...aiServices(config, db, now, (error, step) =>
     app.log.warn({ err: error }, `Could not ${step}; the next AI call will try again.`),
   ),

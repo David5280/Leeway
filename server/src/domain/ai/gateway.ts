@@ -293,7 +293,11 @@ export class AiGateway {
     try {
       await work()
     } catch (error) {
-      this.deps.onQuietFailure?.(error, step)
+      try {
+        this.deps.onQuietFailure?.(error, step)
+      } catch {
+        // A failing reporter must not fail the call either.
+      }
     }
   }
 

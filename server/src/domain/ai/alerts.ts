@@ -3,8 +3,8 @@
 // dismiss them; a new month starts with none. Each is also news for the
 // notification inbox, told once, as it is raised.
 
-import { centsOfMicros } from '../../ai/models.js'
 import type pg from 'pg'
+import { centsOfMicros } from '../../ai/models.js'
 import { withTransaction, type Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
