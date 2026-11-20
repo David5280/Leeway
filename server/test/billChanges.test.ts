@@ -5,10 +5,12 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
+  amountMoves,
   billChangeAlert,
   billChangeOf,
   BILL_CHANGE_THRESHOLD,
   isAmountChange,
+  VARIES_AFTER_CYCLES,
   type WatchedBill,
 } from '../src/domain/billChanges.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
@@ -126,6 +128,70 @@ describe('billChangeOf', () => {
       { amountVaries: true },
     )
     expect(billChangeOf(power, TODAY)).toBeNull()
+  })
+
+  it('tells a bill whose amount keeps moving by its own cycles, however it was added', () => {
+    // Power added by hand, so not marked as varying: $120, $85, $140, then $95.
+    const power = comcast(
+      [
+        ['2026-11-16', 9500],
+        ['2026-10-20', 14000],
+        ['2026-09-19', 8500],
+        ['2026-08-20', 12000],
+      ],
+      { amountCents: 12000, trackedOn: '2026-08-01' },
+    )
+    expect(billChangeOf(power, TODAY)).toBeNull()
+  })
+
+  it('still alerts when a steady bill changes price, after an earlier change too', () => {
+    // $80 for three months, then $95: one move is a price change, not a varying bill.
+    const steady = comcast(
+      [
+        ['2026-11-16', 9500],
+        ['2026-10-20', 8000],
+        ['2026-09-19', 8000],
+        ['2026-08-20', 8000],
+      ],
+      { trackedOn: '2026-08-01' },
+    )
+    expect(billChangeOf(steady, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { amountCents: 9500 },
+    })
+    // A second price rise after the first settled: still news.
+    const again = comcast(
+      [
+        ['2026-11-16', 11000],
+        ['2026-10-20', 9500],
+        ['2026-09-19', 9500],
+        ['2026-08-20', 8000],
+      ],
+      { amountCents: 9500, trackedOn: '2026-08-01' },
+    )
+    expect(billChangeOf(again, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { amountCents: 11000 },
+    })
+  })
+
+  it('judges by the usual amount alone with fewer than three earlier cycles', () => {
+    expect(VARIES_AFTER_CYCLES).toBe(3)
+    // Two earlier cycles that moved can be a price change and its settling: as before.
+    const short = comcast(
+      [
+        ['2026-11-16', 9500],
+        ['2026-10-20', 14000],
+        ['2026-09-19', 8000],
+      ],
+      { trackedOn: '2026-08-01' },
+    )
+    expect(billChangeOf(short, TODAY)).toMatchObject({ kind: 'changed' })
+    const cycle = (amountCents: number) => ({ accountId: 'a', date: '2026-11-01', amountCents })
+    expect(amountMoves([cycle(14000), cycle(8000)])).toBe(false)
+    expect(amountMoves([cycle(14000), cycle(8000), cycle(12000)])).toBe(true)
+    // Moves under the threshold are no moves.
+    expect(amountMoves([cycle(8100), cycle(8000), cycle(8200)])).toBe(false)
   })
 
   it('never calls the first charge since tracking a change', () => {
@@ -311,6 +377,29 @@ describe('bill change alerts', () => {
     await refreshInbox(ctx)
     expect(await usual(billId)).toBe(9500)
     expect(await inbox()).toMatchObject([{ resolved: true }])
+  })
+
+  it('stays quiet for a utility bill added by hand whose amount swings', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Everyday' })
+    const bill = await call('create_bill', {
+      name: 'City Power',
+      amountCents: 11000,
+      cadence: 'month',
+      anchorDate: '2026-11-16',
+      matchPattern: 'city power',
+    })
+    await ctx.db.query(`UPDATE bills SET created_at = '2026-07-25T12:00:00Z' WHERE id = $1`, [
+      bill.id,
+    ])
+    for (const [date, amountCents] of [
+      ['2026-08-18', 12000],
+      ['2026-09-17', 8500],
+      ['2026-10-19', 14000],
+      ['2026-11-16', 9000],
+    ] as const) {
+      await insertBankTransaction(ctx.db, accountId, { date, name: 'CITY POWER', amountCents })
+    }
+    expect(await changes()).toEqual([])
   })
 
   it('never fires on the first charge since tracking', async () => {

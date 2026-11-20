@@ -105,6 +105,20 @@ describe('transferHint', () => {
     expect(transferHint({ ...base, name: 'x', merchantName: 'Funds transfer' })).toBe('transfer')
     expect(transferHint({ ...base, name: 'KING SOOPERS' })).toBe('none')
   })
+
+  it('lets pay words win over transfer words, but not words an account can be named by', () => {
+    const base = tx('a', { accountId: 'x', amountCents: -100 })
+    for (const name of ['Payroll transfer ACME', 'DIR DEP XFER', 'Refund transfer']) {
+      expect(transferHint({ ...base, name })).toBe('other')
+    }
+    for (const name of [
+      'Online Transfer from Interest Checking',
+      'Transfer to Cash Back Savings',
+      'Transfer from Dividend Paid Account',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('transfer')
+    }
+  })
 })
 
 describe('pairTransfers', () => {
@@ -179,6 +193,18 @@ describe('pairTransfers', () => {
         }),
       ]),
     ).toEqual(['out:in'])
+  })
+
+  it('does not pair a payroll deposit that says transfer with an equal silent withdrawal', () => {
+    expect(
+      pairsOf(
+        [
+          tx('out', { accountId: 'savings', amountCents: 300000, name: 'WITHDRAWAL' }),
+          tx('pay', { accountId: 'checking', amountCents: -300000, name: 'Payroll transfer ACME' }),
+        ],
+        unfiledLeg,
+      ),
+    ).toEqual([])
   })
 
   it('does not pair a direct deposit with a card purchase of the same amount', () => {
