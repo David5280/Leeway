@@ -39,6 +39,6 @@ export async function fakeLongHomeAlerts(page: Page): Promise<void> {
     }),
   ]
   await page.route('**/api/actions/list_home_alerts', (route) =>
-    route.fulfill({ json: { result: alerts } }),
+    route.fulfill({ json: { result: { alerts, hidden: 0 } } }),
   )
 }

@@ -10,6 +10,9 @@ import { useAction } from './hooks'
 /** The home list's place in the cache, as useAction keys it. */
 export const HOME_ALERTS_KEY = ['action', 'list_home_alerts', {}] as const
 
+/** The home list: the alerts to show, and how many current ones are put away. */
+export type HomeAlerts = Output<'list_home_alerts'>
+
 /** The alerts the home screen shows: every current one, less those put away. */
 export function useHomeAlerts() {
   return useAction('list_home_alerts')
@@ -24,14 +27,19 @@ const isTarget = (alert: AccountAlert, target: Target) =>
 /** Hides an alert from the home screen, taking its row away at once. */
 export function useHideHomeAlert() {
   const client = useQueryClient()
-  return useMutation<Output<'hide_home_alert'>, Error, Target, { before?: AccountAlert[] }>({
+  return useMutation<Output<'hide_home_alert'>, Error, Target, { before?: HomeAlerts }>({
     mutationFn: (target) => call('hide_home_alert', target),
     onMutate: async (target) => {
       // A read already on its way could land after this and bring the row back.
       await client.cancelQueries({ queryKey: HOME_ALERTS_KEY })
-      const before = client.getQueryData<AccountAlert[]>(HOME_ALERTS_KEY)
-      client.setQueryData<AccountAlert[]>(HOME_ALERTS_KEY, (alerts) =>
-        alerts?.filter((alert) => !isTarget(alert, target)),
+      const before = client.getQueryData<HomeAlerts>(HOME_ALERTS_KEY)
+      client.setQueryData<HomeAlerts>(
+        HOME_ALERTS_KEY,
+        (home) =>
+          home && {
+            alerts: home.alerts.filter((alert) => !isTarget(alert, target)),
+            hidden: home.hidden + 1,
+          },
       )
       return { before }
     },

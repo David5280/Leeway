@@ -1,7 +1,7 @@
 // The account health banner at the top of the dashboard: any account that is
 // overdrawn, over its limit, low or charged an overdraft fee lately. It is not
 // a widget, so it cannot be hidden or moved below the fold, but each alert
-// can be hidden from it for a day (useHideHomeAlert).
+// in it can be hidden from home (useHideHomeAlert).
 
 import { Link } from 'react-router-dom'
 import { useHomeAlerts } from '../../api/homeAlerts'
@@ -13,7 +13,7 @@ export const BANNER_ROWS = 3
 /** Nothing at all when every account is fine. */
 export function AccountHealth() {
   const alerts = useHomeAlerts()
-  const list = alerts.data ?? []
+  const list = alerts.data?.alerts ?? []
   if (list.length === 0) return null
   const urgent = list.some((alert) => alert.severity === 'urgent')
   const more = list.length - BANNER_ROWS

@@ -4,7 +4,7 @@
 import type { Db } from '../../db/pool.js'
 import { notFound } from '../../errors.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../lib/time.js'
-import { STATE_KINDS, type NotificationKind } from './settings.js'
+import { RESURFACE_KINDS, STATE_KINDS, type NotificationKind } from './settings.js'
 import type { Candidate } from './words.js'
 
 /** A notification as the app shows it. The push body stays on the server. */
@@ -181,8 +181,9 @@ export async function dismissNotification(db: Db, id: string, now: Date): Promis
 
 /**
  * Brings back conditions of these kinds dismissed over a day ago that still
- * hold, unread, so a problem left alone is not forgotten. One-off news, like
- * a fee, stays dismissed. The push state is left as it was: the phone had
+ * hold, unread, so a problem left alone is not forgotten. Only conditions the
+ * owner can fix come back (RESURFACE_KINDS); one-off news, like a fee, and a
+ * budget stay dismissed. The push state is left as it was: the phone had
  * this news already, and a push still owed when it was dismissed was let go
  * then (delivery.ts skips read and dismissed news, and news over a day old).
  */
@@ -191,7 +192,7 @@ export async function resurfaceDismissed(
   checked: NotificationKind[],
   now: Date,
 ): Promise<void> {
-  const kinds = checked.filter((kind) => STATE_KINDS.includes(kind))
+  const kinds = checked.filter((kind) => RESURFACE_KINDS.includes(kind))
   if (kinds.length === 0) return
   await db.query(
     `UPDATE notifications SET dismissed_at = NULL, read_at = NULL

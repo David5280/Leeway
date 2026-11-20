@@ -5,39 +5,33 @@
 
 import { z } from 'zod'
 import { ALERT_KINDS } from '../domain/accountAlerts.js'
-import { listAlerts } from '../domain/alerts.js'
-import { hideHomeAlert, listHomeAlerts } from '../domain/notifications/homeAlerts.js'
-import type { AppContext } from '../context.js'
+import { currentAlerts, hideHomeAlert, listHomeAlerts } from '../domain/notifications/homeAlerts.js'
+import { refreshInbox } from '../domain/notifications/notifier.js'
 import { defineAction } from './action.js'
-import { settingsAndToday } from './today.js'
-
-/** Every current alert, for all accounts, as the home rules need them. */
-async function currentAlerts(ctx: AppContext) {
-  const { settings, today } = await settingsAndToday(ctx)
-  return listAlerts(ctx.db, settings, today)
-}
 
 export const listHomeAlertsAction = defineAction({
   name: 'list_home_alerts',
   title: 'Home screen alerts',
   description:
-    'The account alerts for the home screen: every current one, less those hidden there or dismissed in the inbox lately.',
+    'The account alerts for the home screen: every current one, less those hidden there or dismissed in the inbox lately, and how many are put away.',
   input: z.object({}),
   scope: 'read',
   surface: 'app',
-  run: async (ctx) => listHomeAlerts(ctx.db, await currentAlerts(ctx), ctx.now()),
+  run: async (ctx) => listHomeAlerts(ctx.db, await currentAlerts(ctx.db, ctx.now()), ctx.now()),
 })
 
 export const hideHomeAlertAction = defineAction({
   name: 'hide_home_alert',
   title: 'Hide an alert from home',
   description:
-    'Hide an account alert from the home screen for a day, or until it clears. The inbox is left as it was.',
+    'Hide an account alert from the home screen: a condition for a day while it holds, a fee for good. The inbox is left as it was.',
   input: z.object({ kind: z.enum(ALERT_KINDS), accountId: z.uuid() }).strict(),
   scope: 'write',
   surface: 'app',
   run: async (ctx, target) => {
-    await hideHomeAlert(ctx.db, await currentAlerts(ctx), target, ctx.now())
+    // The inbox first, so this run of the alert is on record before its hide.
+    await refreshInbox(ctx)
+    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, ctx.now()), target, ctx.now())
     return { hidden: true }
   },
 })

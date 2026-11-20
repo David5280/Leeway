@@ -1,9 +1,10 @@
 // Putting account alerts away, against a real database: hiding one from the
 // home screen leaves the inbox alone, dismissing one in the inbox takes it off
-// home too, and either lasts a day while the alert still holds. Then it is
-// back on home and back in the inbox unread, but never pushed twice. A fee
-// dismissed in the inbox stays dismissed, and an alert that clears starts
-// afresh if it comes back. Every push goes to a fake.
+// home too, and a condition put away comes back after a day if it still holds:
+// on home, and in the inbox unread, but never pushed twice. A fee stays away,
+// and so does a budget dismissed in the inbox. An alert that clears and comes
+// back over an hour later is a new run of it and shows afresh; one that only
+// flickers stays away. Every push goes to a fake.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { findAction } from '../src/actions/index.js'
@@ -75,7 +76,7 @@ async function feeCharged(date = '2026-11-16'): Promise<string> {
 
 /** Each home alert as "kind name", which reads plainly in a failing test. */
 const home = async () =>
-  (await call('list_home_alerts')).map((alert) => `${alert.kind} ${alert.accountName}`)
+  (await call('list_home_alerts')).alerts.map((alert) => `${alert.kind} ${alert.accountName}`)
 
 /** The inbox as the owner opens it (which brings it up to date). */
 const inbox = async () => {
@@ -90,8 +91,18 @@ const onlyItemId = async () => {
   return items[0]!.id
 }
 
+/** A run of the notifier at `ms` past NOW, as the timer makes one every few minutes. */
+const notifyAt = async (ms: number) => {
+  ctx.setNow(at(ms))
+  await refreshInbox(ctx)
+}
+
 const hideCount = async () =>
   (await ctx.db.query<{ n: number }>('SELECT count(*)::int AS n FROM alert_hides')).rows[0]!.n
+
+/** Whether the one stored notification is still dismissed, read without refreshing. */
+const stillDismissed = async () =>
+  (await ctx.db.query('SELECT dismissed_at IS NOT NULL AS away FROM notifications')).rows[0]!.away
 
 describe('the subject an alert is kept under', () => {
   const alert = (fields: Partial<AccountAlert>): AccountAlert => ({
@@ -126,11 +137,24 @@ describe('the subject an alert is kept under', () => {
 
 describe('the home screen', () => {
   it('shows every current alert while nothing is put away, as list_alerts does', async () => {
-    expect(await call('list_home_alerts')).toEqual([])
+    expect(await call('list_home_alerts')).toEqual({ alerts: [], hidden: 0 })
     await overdrawn('Everyday')
     await feeCharged()
-    expect(await call('list_home_alerts')).toEqual(await call('list_alerts'))
+    expect(await call('list_home_alerts')).toEqual({
+      alerts: await call('list_alerts'),
+      hidden: 0,
+    })
     expect(await home()).toEqual(['overdrawn Test Everyday', 'overdraft_fee Test Spare'])
+  })
+
+  it('only reads: a spent hide is cleared away by the notifier, not by home', async () => {
+    const accountId = await overdrawn()
+    await call('hide_home_alert', { kind: 'overdrawn', accountId })
+    ctx.setNow(at(RESURFACE_AFTER_MS + 1))
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+    expect(await hideCount()).toBe(1)
+    await refreshInbox(ctx)
+    expect(await hideCount()).toBe(0)
   })
 })
 
@@ -143,20 +167,19 @@ describe('hiding an alert from home', () => {
     expect(await call('hide_home_alert', { kind: 'overdrawn', accountId: everyday })).toEqual({
       hidden: true,
     })
+    expect(await call('list_home_alerts')).toMatchObject({ hidden: 1 })
     expect(await home()).toEqual(['overdrawn Test Joint'])
     expect(await inbox()).toEqual({ titles: ['Overdrawn', 'Overdrawn'], unread: 2 })
     expect((await call('list_alerts')).map((alert) => alert.accountId)).toContain(everyday)
   })
 
-  it('lasts a day while the alert holds, then shows again', async () => {
+  it('lasts a day while the condition holds, then shows again', async () => {
     const accountId = await overdrawn()
     await call('hide_home_alert', { kind: 'overdrawn', accountId })
-    ctx.setNow(at(RESURFACE_AFTER_MS))
+    await notifyAt(RESURFACE_AFTER_MS)
     expect(await home()).toEqual([])
     ctx.setNow(at(RESURFACE_AFTER_MS + 1))
     expect(await home()).toEqual(['overdrawn Test Everyday'])
-    // The spent hide is cleared away as home is read.
-    expect(await hideCount()).toBe(0)
   })
 
   it('starts the day over when hidden again', async () => {
@@ -170,32 +193,87 @@ describe('hiding an alert from home', () => {
     expect(await home()).toEqual(['overdrawn Test Everyday'])
   })
 
-  it('goes once the alert clears, so the alert shows afresh if it comes back', async () => {
+  it('shows a condition that cleared and came back over an hour later, as the inbox does', async () => {
+    // Hidden at 6 PM, fixed by 7, overdrawn again at 8:30: news again in both.
+    await saveSubscription(ctx.db, subscriptionFor(PHONE))
     const accountId = await overdrawn()
     await call('hide_home_alert', { kind: 'overdrawn', accountId })
     await setBalance(accountId, 50_000)
-    ctx.setNow(at(MINUTE_MS))
+    await notifyAt(HOUR_MS)
+    await setBalance(accountId, -100)
+    ctx.setNow(at(2.5 * HOUR_MS))
+    // Before the notifier catches up, home already counts it as a new run.
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+    expect(await runNotifier(ctx)).toBe('sent')
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+    expect(await inbox()).toEqual({ titles: ['Overdrawn'], unread: 1 })
+    expect(await hideCount()).toBe(0)
+  })
+
+  it('keeps a low balance that flickers across its warning hidden, as the inbox keeps it quiet', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, {
+      name: 'Bills',
+      subtype: 'checking',
+      balanceCents: 4_000,
+    })
+    await call('hide_home_alert', { kind: 'low_balance', accountId })
+    await setBalance(accountId, 20_000)
+    await notifyAt(5 * MINUTE_MS)
+    await setBalance(accountId, 4_000)
+    ctx.setNow(at(10 * MINUTE_MS))
     expect(await home()).toEqual([])
+    await notifyAt(10 * MINUTE_MS)
+    await notifyAt(2 * HOUR_MS)
+    expect(await home()).toEqual([])
+    expect(await inbox()).toEqual({ titles: ['Low balance'], unread: 1 })
+  })
+
+  it('does the same with that kind of notification turned off', async () => {
+    await updateNotificationSettings(ctx.db, { kinds: { overdrawn: false } })
+    const accountId = await overdrawn()
+    await call('hide_home_alert', { kind: 'overdrawn', accountId })
+    // Back within the hour: still hidden.
+    await setBalance(accountId, 50_000)
+    await notifyAt(MINUTE_MS)
+    await setBalance(accountId, -100)
+    ctx.setNow(at(30 * MINUTE_MS))
+    expect(await home()).toEqual([])
+    // Gone for over an hour, then back: shows afresh.
+    await setBalance(accountId, 50_000)
+    await notifyAt(31 * MINUTE_MS)
+    await notifyAt(2 * HOUR_MS)
     expect(await hideCount()).toBe(0)
     await setBalance(accountId, -100)
-    ctx.setNow(at(2 * MINUTE_MS))
     expect(await home()).toEqual(['overdrawn Test Everyday'])
   })
 
-  it('hides a fee for a day too, and a newer fee shows at once', async () => {
+  it('never outlives a newer run of the alert in the inbox', async () => {
+    // Hidden while overdrawn notifications were off; turned on, it is news in the inbox.
+    await updateNotificationSettings(ctx.db, { kinds: { overdrawn: false } })
+    const accountId = await overdrawn()
+    await call('hide_home_alert', { kind: 'overdrawn', accountId })
+    await updateNotificationSettings(ctx.db, { kinds: { overdrawn: true } })
+    ctx.setNow(at(MINUTE_MS))
+    expect(await inbox()).toEqual({ titles: ['Overdrawn'], unread: 1 })
+    expect(await home()).toEqual(['overdrawn Test Everyday'])
+  })
+
+  it('hides a fee for good, while a newer fee shows at once', async () => {
     const accountId = await feeCharged('2026-11-10')
     await call('hide_home_alert', { kind: 'overdraft_fee', accountId })
+    await notifyAt(3 * DAY_MS)
     expect(await home()).toEqual([])
-    ctx.setNow(at(RESURFACE_AFTER_MS + 1))
-    expect(await home()).toEqual(['overdraft_fee Test Spare'])
 
-    await call('hide_home_alert', { kind: 'overdraft_fee', accountId })
     await insertBankTransaction(ctx.db, accountId, {
-      date: '2026-11-17',
+      date: '2026-11-20',
       name: 'OVERDRAFT FEE',
       amountCents: 3500,
     })
     expect(await home()).toEqual(['overdraft_fee Test Spare'])
+    // The old fee's hide goes once it has been out of date for over an hour.
+    await notifyAt(3 * DAY_MS + MINUTE_MS)
+    await notifyAt(3 * DAY_MS + 2 * HOUR_MS)
+    expect(await hideCount()).toBe(0)
   })
 
   it('keeps the order of the alerts it leaves', async () => {
@@ -251,17 +329,45 @@ describe('dismissing an alert in the inbox', () => {
     expect(await call('count_notifications')).toEqual({ unread: 1 })
   })
 
-  it('starts the day over when dismissed again', async () => {
+  it('counts the later of two dismissals, as from a tab that had not caught up', async () => {
+    await overdrawn()
+    const id = await onlyItemId()
+    await call('dismiss_notification', { id })
+    ctx.setNow(at(12 * HOUR_MS))
+    await call('dismiss_notification', { id })
+    ctx.setNow(at(RESURFACE_AFTER_MS + 1))
+    expect(await inbox()).toEqual({ titles: [], unread: 0 })
+    expect(await home()).toEqual([])
+    ctx.setNow(at(12 * HOUR_MS + RESURFACE_AFTER_MS + 1))
+    expect(await inbox()).toEqual({ titles: ['Overdrawn'], unread: 1 })
+  })
+
+  it('starts the day over when dismissed again once it is back', async () => {
     await overdrawn()
     await call('dismiss_notification', { id: await onlyItemId() })
     ctx.setNow(at(RESURFACE_AFTER_MS + 1))
-    const id = await onlyItemId()
-    await call('dismiss_notification', { id })
+    await call('dismiss_notification', { id: await onlyItemId() })
     ctx.setNow(at(2 * RESURFACE_AFTER_MS))
     expect(await inbox()).toEqual({ titles: [], unread: 0 })
-    expect(await home()).toEqual([])
     ctx.setNow(at(2 * RESURFACE_AFTER_MS + 2))
     expect(await inbox()).toEqual({ titles: ['Overdrawn'], unread: 1 })
+  })
+
+  it('leaves a condition that cleared dismissed, however long ago', async () => {
+    const accountId = await overdrawn()
+    await call('dismiss_notification', { id: await onlyItemId() })
+    await setBalance(accountId, 50_000)
+    await notifyAt(MINUTE_MS)
+    await notifyAt(RESURFACE_AFTER_MS + 2 * MINUTE_MS)
+    expect(await stillDismissed()).toBe(true)
+  })
+
+  it('leaves one dismissed that clears in the very check that would bring it back', async () => {
+    const accountId = await overdrawn()
+    await call('dismiss_notification', { id: await onlyItemId() })
+    await setBalance(accountId, 50_000)
+    await notifyAt(RESURFACE_AFTER_MS + 1)
+    expect(await stillDismissed()).toBe(true)
   })
 
   it('never pushes a condition that comes back, whether its push was sent or still owed', async () => {
@@ -289,6 +395,20 @@ describe('dismissing an alert in the inbox', () => {
     expect(await inbox()).toEqual({ titles: [], unread: 0 })
   })
 
+  it('keeps a budget dismissed for its period, as spending cannot be undone', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    const food = await call('create_category', { name: 'Groceries', budgetCents: 10_000 })
+    const tx = await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-10',
+      name: 'KING SOOPERS',
+      amountCents: 12_000,
+    })
+    await call('update_transaction', { id: tx, categoryId: food.id })
+    await call('dismiss_notification', { id: await onlyItemId() })
+    ctx.setNow(at(3 * DAY_MS))
+    expect(await inbox()).toEqual({ titles: [], unread: 0 })
+  })
+
   it('counts a condition that cleared and came back as new, as the inbox will', async () => {
     const accountId = await overdrawn()
     await call('dismiss_notification', { id: await onlyItemId() })
@@ -309,12 +429,10 @@ describe('dismissing an alert in the inbox', () => {
     await overdrawn()
     await call('dismiss_notification', { id: await onlyItemId() })
     await updateNotificationSettings(ctx.db, { kinds: { overdrawn: false } })
-    ctx.setNow(at(RESURFACE_AFTER_MS + 1))
-    await refreshInbox(ctx)
+    await notifyAt(RESURFACE_AFTER_MS + 1)
     // A fee is news, never a condition, so there is nothing of its kind to bring back.
     await resurfaceDismissed(ctx.db, ['overdraft_fee'], ctx.now())
-    const { rows } = await ctx.db.query('SELECT dismissed_at FROM notifications')
-    expect(rows).toEqual([{ dismissed_at: NOW }])
+    expect(await stillDismissed()).toBe(true)
     // Home goes by its own day all the same.
     expect(await home()).toEqual(['overdrawn Test Everyday'])
   })

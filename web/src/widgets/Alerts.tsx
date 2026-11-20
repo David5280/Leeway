@@ -1,6 +1,6 @@
 // "Heads up": everything that needs the owner, worst first: account alerts,
 // banks that stopped syncing, budgets, transactions to sort, then this
-// month's AI spending alert. Account alerts can be hidden from here for a day.
+// month's AI spending alert. Account alerts can be hidden from home here.
 
 import { Link } from 'react-router-dom'
 import type { AccountAlert, Connection } from '../api/client'
@@ -20,42 +20,24 @@ const ALERT_LABELS: Record<WidgetProps['budget']['alerts'][number]['level'], str
   warning: 'Warning',
 }
 
+/** One row of the card. */
+interface HeadsUpItem {
+  key: string
+  tone: 'over' | 'warn' | 'info'
+  text: string
+  level: string
+  to?: string
+  /** The account alert a row stands for, which the owner may hide from home. */
+  alert?: AccountAlert
+}
+
 export function AlertsWidget({ budget }: WidgetProps) {
   const { money } = useApp()
   const connections = useAction('list_connections')
-  const accountAlerts = useHomeAlerts()
+  const home = useHomeAlerts().data
   const aiAlert = useAction('get_ai_usage').data?.alert
-  const items: {
-    key: string
-    tone: 'over' | 'warn' | 'info'
-    text: string
-    level: string
-    to?: string
-    /** The account alert a row stands for, which the owner may hide from home. */
-    alert?: AccountAlert
-  }[] = []
   // Money going wrong in an account comes before everything else.
-  for (const alert of accountAlerts.data ?? []) {
-    items.push({
-      key: `${alert.kind}-${alert.accountId}`,
-      tone: alert.severity === 'urgent' ? 'over' : 'warn',
-      text: alert.message,
-      level: ACCOUNT_ALERT_LABELS[alert.kind],
-      to: accountPath(alert.accountId),
-      alert,
-    })
-  }
-  for (const connection of connections.data ?? []) {
-    const text = bankAlertText(connection)
-    if (text)
-      items.push({
-        key: connection.id,
-        tone: 'warn',
-        text,
-        level: 'Bank',
-        to: settingsPath('banks'),
-      })
-  }
+  const items = [...accountItems(home?.alerts), ...bankItems(connections.data)]
   for (const alert of budget.alerts) {
     items.push({
       key: `${alert.categoryId}-${alert.level}`,
@@ -84,7 +66,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
           <span className="alert-icon info">
             <Icon name="info" size={16} />
           </span>
-          <span className="grow">Nothing needs you right now. Every budget is on track.</span>
+          <span className="grow">{nothingText(home?.hidden)}</span>
         </div>
       ) : (
         <>
@@ -113,6 +95,38 @@ export function AlertsWidget({ budget }: WidgetProps) {
       )}
     </Card>
   )
+}
+
+/** A row for each account alert on the home list. */
+function accountItems(alerts: AccountAlert[] = []): HeadsUpItem[] {
+  return alerts.map((alert) => ({
+    key: `${alert.kind}-${alert.accountId}`,
+    tone: alert.severity === 'urgent' ? 'over' : 'warn',
+    text: alert.message,
+    level: ACCOUNT_ALERT_LABELS[alert.kind],
+    to: accountPath(alert.accountId),
+    alert,
+  }))
+}
+
+/** A row for each bank that is not syncing. */
+function bankItems(connections: Connection[] = []): HeadsUpItem[] {
+  return connections.flatMap((connection) => {
+    const text = bankAlertText(connection)
+    if (!text) return []
+    return [
+      { key: connection.id, tone: 'warn' as const, text, level: 'Bank', to: settingsPath('banks') },
+    ]
+  })
+}
+
+/**
+ * What to say when no row is left. With an account alert hidden from home,
+ * something may still be wrong, so it claims no more than what is shown.
+ */
+function nothingText(hidden = 0): string {
+  if (hidden > 0) return 'Nothing else needs you right now.'
+  return 'Nothing needs you right now. Every budget is on track.'
 }
 
 /** "1 transaction ($45) needs a category." or "3 transactions ($90) need a category." */

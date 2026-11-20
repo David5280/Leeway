@@ -34,7 +34,9 @@ test.describe('hiding an alert from home', () => {
     await expect(rowIn(page, 'Account alerts')).toContainText('is overdrawn')
     await expect(rowIn(page, 'Heads up')).toContainText('is overdrawn')
 
-    await rowIn(page, 'Account alerts').getByRole('button', { name: 'Hide from home' }).click()
+    await rowIn(page, 'Account alerts')
+      .getByRole('button', { name: new RegExp(`^Hide from home: .*${NAME}`) })
+      .click()
     await expect(rowIn(page, 'Account alerts')).toHaveCount(0)
     await expect(rowIn(page, 'Heads up')).toHaveCount(0)
     await expect(page).toHaveURL(/\/$/)
