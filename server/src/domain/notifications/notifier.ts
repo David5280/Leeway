@@ -4,7 +4,8 @@
 import type { AppContext } from '../../context.js'
 import { SECOND_MS } from '../../lib/time.js'
 import { deliverPushes, type DeliveryResult } from './delivery.js'
-import { pruneInbox, recordCandidates, resolveCleared } from './inbox.js'
+import { currentAlerts, trackHomeHides } from './homeAlerts.js'
+import { pruneInbox, recordCandidates, resolveCleared, resurfaceDismissed } from './inbox.js'
 import { getNotificationSettings, kindsOn, type NotificationSettings } from './settings.js'
 import { gatherCandidates } from './sources.js'
 
@@ -17,7 +18,9 @@ export const NOTIFIER_MINUTES = 5
 export const NOTIFY_AFTER_SYNC_MS = 5 * SECOND_MS
 
 /**
- * Adds new notifications, clears conditions that ended, and prunes old ones.
+ * Adds new notifications, clears conditions that ended, brings back ones
+ * dismissed a day ago that still hold, and prunes old ones. Hides from the
+ * home screen are kept current too, from every alert, whichever kinds are on.
  * Opening the inbox runs this too, so it is current without waiting for the timer.
  */
 export async function refreshInbox(ctx: AppContext): Promise<NotificationSettings> {
@@ -27,6 +30,9 @@ export async function refreshInbox(ctx: AppContext): Promise<NotificationSetting
   await recordCandidates(ctx.db, candidates, now)
   const on = kindsOn(choices)
   await resolveCleared(ctx.db, on, candidates, now)
+  // After clearing, so only conditions still going on come back.
+  await resurfaceDismissed(ctx.db, on, now)
+  await trackHomeHides(ctx.db, await currentAlerts(ctx.db, now), now)
   await pruneInbox(ctx.db, now, on)
   return choices
 }

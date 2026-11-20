@@ -34,6 +34,15 @@ export const STATE_KINDS: readonly NotificationKind[] = [
   'bank_login',
 ]
 
+/**
+ * Conditions the owner can fix, which come back a day after they were
+ * dismissed or hidden if they still hold. A budget is left out: spending
+ * cannot be undone mid-period, so one dismissed stays dismissed for its period.
+ */
+export const RESURFACE_KINDS: readonly NotificationKind[] = STATE_KINDS.filter(
+  (kind) => kind !== 'over_budget',
+)
+
 /** The kinds the owner has turned on. */
 export function kindsOn(choices: Pick<NotificationSettings, 'kinds'>): NotificationKind[] {
   return NOTIFICATION_KINDS.filter((kind) => choices.kinds[kind])

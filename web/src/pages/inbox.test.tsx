@@ -4,9 +4,11 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { failing, fakeServer, renderSignedIn } from '../test/fake'
+import { account, alertsFor, failing, fakeServer, renderSignedIn } from '../test/fake'
+import { homeAlertHandlers } from '../test/homeAlerts'
 import { inboxHandlers, inboxItem } from '../test/notifications'
 import { Inbox, type InboxItem } from './Inbox'
+import { AccountHealth } from './overview/AccountHealth'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -111,6 +113,37 @@ describe('Inbox', () => {
     )
     await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(1))
     expect(server.actions('dismiss_notification')).toEqual([{ id: 'n2' }])
+  })
+
+  it('takes a dismissed alert off the home screen too, at once', async () => {
+    const everyday = account({ id: 'a', name: 'Everyday', balanceCents: -4000 })
+    const home = homeAlertHandlers(alertsFor([everyday]))
+    const inbox = inboxHandlers([overdrawn])
+    const server = fakeServer({
+      ...inbox,
+      ...home.handlers,
+      // The server puts a dismissed alert away from home as well.
+      dismiss_notification: (input) => (
+        home.hide({ kind: 'overdrawn', accountId: 'a' }),
+        inbox.dismiss_notification!(input)
+      ),
+    })
+    // Both on one screen, as the home list stays cached while the inbox is open.
+    renderSignedIn(
+      <>
+        <AccountHealth />
+        <Inbox />
+      </>,
+      { route: '/inbox' },
+    )
+    expect(await screen.findByRole('region', { name: 'Account alerts' })).toBeVisible()
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Dismiss Overdrawn: Test Everyday is at -$40.' }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument(),
+    )
+    expect(server.actions('list_home_alerts')).toHaveLength(2)
   })
 
   it('says why a dismissal failed', async () => {
