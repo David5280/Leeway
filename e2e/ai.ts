@@ -28,6 +28,7 @@ const BUSY_MONTH = {
   spend: {
     summary: { calls: 36, costMicros: 3_600_000 },
     paystub: { calls: 2, costMicros: 500_000 },
+    chat: { calls: 0, costMicros: 0 },
   },
   alert: {
     level: 'warning',
@@ -38,7 +39,7 @@ const BUSY_MONTH = {
 /** An action's answer, as the real server gave it. */
 type Answer = Record<string, unknown>
 /** One job in get_ai_usage's answer. */
-type Job = { job: 'summary' | 'paystub' } & Answer
+type Job = { job: 'summary' | 'paystub' | 'chat' } & Answer
 
 /** Answers an action with the real server's answer, changed by `change`. */
 async function patchAnswer(page: Page, action: string, change: (result: Answer) => Answer) {
@@ -84,6 +85,7 @@ export async function pretendModelTrouble(page: Page): Promise<void> {
   const trouble: Record<Job['job'], Answer> = {
     summary: { model: GONE_MODEL, unavailable: true, priced: false, retiresOn: null },
     paystub: { retiresOn: RETIRES_ON },
+    chat: {},
   }
   await patchAnswer(page, 'get_ai_usage', (result) => ({
     ...result,
@@ -116,7 +118,7 @@ export async function seeSummaryModelGone(page: Page): Promise<void> {
 
 /** Puts the models and the limit back as a new install has them, since later specs share it. */
 export async function resetAi(page: Page): Promise<void> {
-  for (const job of ['summary', 'paystub']) {
+  for (const job of ['summary', 'paystub', 'chat']) {
     await page.request.post('/api/actions/set_ai_model', { data: { job, model: null } })
   }
   await page.request.post('/api/actions/set_ai_limit', { data: { monthlyCapCents: 500 } })

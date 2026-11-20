@@ -18,6 +18,8 @@ export const SCREEN_ROUTES = {
   importTransactions: '/transactions/import',
   budgets: '/budgets',
   category: '/budgets/:id',
+  /** Chat with Leeway about the owner's money, only when the server has an AI key. */
+  chat: '/chat',
   plan: '/plan',
   planSection: '/plan/:section',
   /** Settings; the group is optional. */

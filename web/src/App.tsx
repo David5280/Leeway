@@ -12,6 +12,7 @@ import { Accounts } from './pages/Accounts'
 import { Alerts } from './pages/Alerts'
 import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
+import { ChatPage } from './pages/Chat'
 import { Connect, ConnectProblem } from './pages/Connect'
 import { ImportTransactions } from './pages/ImportTransactions'
 import { Inbox } from './pages/Inbox'
@@ -40,6 +41,7 @@ function Screens() {
       <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
       <Route path={SCREEN_ROUTES.budgets} element={<Budgets />} />
       <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
+      <Route path={SCREEN_ROUTES.chat} element={<ChatPage />} />
       <Route path={SCREEN_ROUTES.plan} element={<Plan />} />
       <Route path={SCREEN_ROUTES.planSection} element={<Plan />} />
       <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />

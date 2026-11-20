@@ -157,7 +157,7 @@ describe('AiDocumentReader', () => {
     const settings = await getSettings(ctx.db)
     await saveSettings(ctx.db, {
       ...settings,
-      ai: { ...settings.ai, models: { summary: null, paystub: 'claude-sonnet-5-5' } },
+      ai: { ...settings.ai, models: { summary: null, paystub: 'claude-sonnet-5-5', chat: null } },
     })
     const file = checkPaystubFile(jpeg())
     expect(await reader.countPaystubTokens(file)).toBe(2_000)

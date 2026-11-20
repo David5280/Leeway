@@ -218,9 +218,10 @@ with a note.
 | `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`. Default `US`.             |
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
-| `ANTHROPIC_API_KEY`     | No       | Lets Claude write the dashboard summary and read imported paystubs.    |
+| `ANTHROPIC_API_KEY`     | No       | Turns on Chat, the dashboard summary by Claude and paystub reading.    |
 | `SUMMARY_MODEL`         | No       | Fixes the summary's Claude model, instead of choosing it in Settings.  |
 | `PAYSTUB_MODEL`         | No       | Fixes the paystub reader's model, instead of choosing it in Settings.  |
+| `CHAT_MODEL`            | No       | Fixes Chat's model, instead of choosing it in Settings.                |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
@@ -274,16 +275,44 @@ retirement saving. Nothing is saved until you choose **Save**.
 An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set
 the camera to **Most Compatible**.
 
+### Chat (optional)
+
+With `ANTHROPIC_API_KEY` set, **Chat** asks Claude about your money in your
+own words, like "Can I afford a PS5 Pro right now?". It is a button in the
+header and on **Overview**. Without a key there is no Chat at all: no button,
+no page.
+
+- Claude answers by reading Leeway through the same read-only tools an
+  assistant gets, so it can look at everything and change nothing. A purchase
+  question is checked against the cash you have before payday, the bills due
+  by then, your goals and your budgets, and when it doesn't fit, how many
+  budget periods of saving it takes.
+- Tell it something that will matter later, like a trip you are saving for,
+  and it remembers it. **Leeway remembers** under the conversation lists each
+  thing, and **Forget** deletes it. **Start over** deletes the conversation
+  and keeps what it remembers.
+- Account numbers, masks, bank file names and the bank's own transaction text
+  are never sent, and people you pay or are paid by appear as "someone".
+- The conversation is kept on your server: only the words of each question
+  and answer, saved once the answer is finished.
+- Chat runs on Claude Haiku 5.5 unless you pick another model in **Settings**,
+  then **AI models**. Its fixed instructions and tools are cached, which
+  makes each further step of an answer much cheaper. An answer takes up to 6
+  calls, one question runs at a time, at most 10 are asked a minute, and Chat
+  stops for the day after about 600,000 tokens (cache reads count a tenth),
+  starting again at midnight in your time zone. Every call also counts
+  against the monthly limit below.
+
 ### AI models and the monthly limit
 
-Every paid AI call, the summary and the paystub reader today, goes through
+Every paid AI call, Chat, the summary and the paystub reader, goes through
 one place that picks the model, checks a monthly limit and records what the
 call cost. **Settings**, then **AI models** shows:
 
 - this month's AI spending against the limit, in all and by job;
 - the monthly limit, $5 to start, from $0 (paid AI off) to $1,000;
 - the model for each job, with what it is for and its price per million
-  tokens. Both jobs start on Claude Haiku 5.5, the small, cheap model.
+  tokens. Every job starts on Claude Haiku 5.5, the small, cheap model.
   Claude Sonnet 5.5 and Claude Opus 5.5 cost about 20 and 40 times as much.
 
 How the limit works:
@@ -291,7 +320,7 @@ How the limit works:
 - The month follows the time zone in **Settings**, then **Budgeting**.
 - Before each call, Leeway works out the most it could cost: the prompt
   (counted free by Anthropic for a paystub file, estimated from its length
-  for the summary's short text) as if every token were a cache write, plus
+  for the summary's short text and each Chat step) as if every token were a cache write, plus
   the most output the call may use. If that would take the month past the
   limit, the call is not made. The summary is then Leeway's own, and the
   paystub reader says the limit is reached and when it resets.
@@ -313,7 +342,7 @@ How the limit works:
 - Each record holds token counts and a cost, never what was asked or
   answered.
 
-`SUMMARY_MODEL` or `PAYSTUB_MODEL` fixes that job's model on the server, and
+`SUMMARY_MODEL`, `PAYSTUB_MODEL` or `CHAT_MODEL` fixes that job's model on the server, and
 Settings then shows it locked. When Anthropic says it has no such model
 (retired or mistyped), Settings and the summary card say so and where to pick
 another, and a model with an announced retirement day shows that day. A model

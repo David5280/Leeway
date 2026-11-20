@@ -203,6 +203,23 @@ describe('moveWidget', () => {
   })
 })
 
+describe('the way into Chat on the Overview', () => {
+  it('asks about your money when Chat is on', async () => {
+    serve(settings, { get_chat_status: () => ({ available: true }) })
+    renderOverview()
+    const bar = await screen.findByRole('link', { name: /Ask about your money/ })
+    expect(bar).toHaveAttribute('href', '/chat')
+  })
+
+  it('is not there without an AI key', async () => {
+    const server = serve(settings, { get_chat_status: () => ({ available: false }) })
+    renderOverview()
+    await waitFor(() => expect(server.actions('get_chat_status').length).toBeGreaterThan(0))
+    expect(await screen.findByRole('region', { name: 'Your leeway' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Ask about your money/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('account alerts on the Overview', () => {
   const alerts = alertsFor([
     account({ id: 'a', name: 'Everyday', balanceCents: -4210 }),

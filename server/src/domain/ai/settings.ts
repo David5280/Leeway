@@ -6,7 +6,10 @@ import { z } from 'zod'
 import { JOB_INFO, type AiJob } from '../../ai/jobs.js'
 import { MODEL_IDS } from '../../ai/models.js'
 
-/** A limit that covers years of the summary and paystubs on the small model. */
+/**
+ * A limit that covers years of the summary and paystubs, and a few questions
+ * a day in Chat, on the small model.
+ */
 export const DEFAULT_MONTHLY_CAP_CENTS = 500
 
 /** The highest limit the app takes: $1,000 a month. */
@@ -29,8 +32,12 @@ export const monthlyCapSchema = z
 
 export const aiSettingsSchema = z.object({
   models: z
-    .object({ summary: modelPick.default(null), paystub: modelPick.default(null) })
-    .default({ summary: null, paystub: null }),
+    .object({
+      summary: modelPick.default(null),
+      paystub: modelPick.default(null),
+      chat: modelPick.default(null),
+    })
+    .default({ summary: null, paystub: null, chat: null }),
   monthlyCapCents: monthlyCapSchema
     .catch(DEFAULT_MONTHLY_CAP_CENTS)
     .default(DEFAULT_MONTHLY_CAP_CENTS),

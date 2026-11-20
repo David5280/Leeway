@@ -99,25 +99,28 @@ async function send<T>(
     throw new ApiError(0, 'unreachable', UNREACHABLE)
   }
   if (response.status === 204) return undefined as T
-  if (!response.ok) {
-    // The error body; details carry what the app can act on, like a duplicate bank's logins.
-    const data = (await readJson(response)) as {
-      error?: string
-      message?: string
-      details?: unknown
-    }
-    if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
-    const fallback = PROXY_DOWN.has(response.status)
-      ? UNREACHABLE
-      : 'Something went wrong. Please try again.'
-    throw new ApiError(
-      response.status,
-      data.error ?? 'error',
-      data.message ?? fallback,
-      data.details,
-    )
-  }
+  if (!response.ok) throw await errorFrom(response, path)
   return (await read(response)) as T
+}
+
+/** The ApiError for a refused request, showing sign-in when the session has lapsed. */
+export async function errorFrom(response: Response, path: string): Promise<ApiError> {
+  // The error body; details carry what the app can act on, like a duplicate bank's logins.
+  const data = (await readJson(response)) as {
+    error?: string
+    message?: string
+    details?: unknown
+  }
+  if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
+  const fallback = PROXY_DOWN.has(response.status)
+    ? UNREACHABLE
+    : 'Something went wrong. Please try again.'
+  return new ApiError(
+    response.status,
+    data.error ?? 'error',
+    data.message ?? fallback,
+    data.details,
+  )
 }
 
 /** Runs a server action by name, typed by the server's own definition. */

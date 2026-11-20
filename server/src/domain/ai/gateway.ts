@@ -29,10 +29,13 @@ import type { AiJob } from '../../ai/jobs.js'
 import { MICROS_PER_CENT, centsOfMicros, costMicros, worstCostMicros } from '../../ai/models.js'
 import {
   AiProviderError,
+  type AiChatReply,
+  type AiChatRequest,
   type AiFailure,
   type AiProvider,
   type AiReply,
   type AiRequest,
+  type TokenUsage,
 } from '../../ai/provider.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { formatCents } from '../../lib/money.js'
@@ -62,11 +65,23 @@ export function billedNothing(error: unknown): boolean {
 /** What a job asks: a request without the model, which the job's settings choose. */
 export type AiAsk = Omit<AiRequest, 'model'>
 
-/** An answer with the model that gave it and what it cost. */
-export interface AiResult extends AiReply {
+/** What Chat asks for one step of a conversation, without the model. */
+export type AiChatAsk = Omit<AiChatRequest, 'model'>
+
+/** What a paid call adds to its reply: the model that gave it and what it cost. */
+interface Paid {
   model: string
   costMicros: number
 }
+
+/** An answer with the model that gave it and what it cost. */
+export type AiResult = AiReply & Paid
+
+/** A conversation step's reply with the model that gave it and what it cost. */
+export type AiChatResult = AiChatReply & Paid
+
+/** The part of a request that bounds its cost: the model and the most output it may use. */
+type Bounds = Pick<AiRequest, 'model' | 'maxTokens'>
 
 /**
  * Room for what the provider adds around a text-only request: the message
@@ -92,6 +107,16 @@ export function estimateInputTokens(request: AiAsk): number {
     JSON.stringify(z.toJSONSchema(request.format)),
     ...request.content.map((part) => (part.type === 'text' ? part.text : '')),
   ]
+  return texts.reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), FRAMING_TOKENS)
+}
+
+/**
+ * The most a conversation step can send: every byte of its instructions, tools
+ * and messages, and the framing. A reply passed back whole counts its thinking
+ * signature as bytes too, which only makes the estimate safer.
+ */
+export function estimateChatTokens(ask: AiChatAsk): number {
+  const texts = [ask.system, ask.context, JSON.stringify(ask.tools), JSON.stringify(ask.messages)]
   return texts.reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), FRAMING_TOKENS)
 }
 
@@ -155,12 +180,42 @@ export class AiGateway {
   async run(job: AiJob, ask: AiAsk, countedTokens?: number): Promise<AiResult> {
     const { request, settings } = await this.prepare(job, ask)
     const inputTokens = countedTokens ?? (await this.inputTokens(request))
+    return this.paid(job, request, inputTokens, settings, () => this.provider.send(request))
+  }
+
+  /**
+   * Sends one step of a conversation for a job, streaming its text to
+   * `onText`, under the same limit as run. Its input is estimated from its
+   * length: a conversation is text only.
+   */
+  async converse(
+    job: AiJob,
+    ask: AiChatAsk,
+    onText: (text: string) => void,
+  ): Promise<AiChatResult> {
+    const { request, settings } = await this.prepare(job, ask)
+    const send = () => this.provider.converse(request, onText)
+    return this.paid(job, request, estimateChatTokens(ask), settings, send)
+  }
+
+  /**
+   * Holds a call's worst cost against the month, sends it, and records what
+   * it really cost; or throws an AiLimitError before sending when the call
+   * could take the month past the limit.
+   */
+  private async paid<R extends { usage: TokenUsage }>(
+    job: AiJob,
+    request: Bounds,
+    inputTokens: number,
+    settings: Settings,
+    send: () => Promise<R>,
+  ): Promise<R & Paid> {
     const worst = worstCostMicros(request.model, inputTokens, request.maxTokens)
     const month = aiMonth(this.deps.now(), settings.timeZone)
     await this.serially(() => this.reserve(worst, month, settings))
-    let reply: AiReply
+    let reply: R
     try {
-      reply = await this.provider.send(request)
+      reply = await send()
     } catch (error) {
       await this.settleFailure(job, request, inputTokens, worst, error)
       throw error
@@ -190,7 +245,7 @@ export class AiGateway {
    */
   private async settleFailure(
     job: AiJob,
-    request: AiRequest,
+    request: Bounds,
     inputTokens: number,
     worst: number,
     error: unknown,
@@ -216,10 +271,10 @@ export class AiGateway {
     })
   }
 
-  private async prepare(
+  private async prepare<A>(
     job: AiJob,
-    ask: AiAsk,
-  ): Promise<{ request: AiRequest; settings: Settings }> {
+    ask: A,
+  ): Promise<{ request: A & { model: string }; settings: Settings }> {
     const settings = await getSettings(this.deps.db)
     const { model } = resolveModel(job, settings.ai, this.deps.overrides)
     return { request: { ...ask, model }, settings }

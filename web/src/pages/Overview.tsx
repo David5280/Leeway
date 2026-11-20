@@ -1,6 +1,8 @@
 // The Overview dashboard: widgets the owner arranges, sizes and hides.
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useChatAvailable } from '../api/chat'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { Shell } from '../components/Shell'
@@ -18,6 +20,21 @@ import {
   WIDGET_LIBRARY,
   type Widget,
 } from '../widgets/library'
+
+/** The way into Chat from Overview, only when Chat is on. */
+function AskBar() {
+  if (!useChatAvailable()) return null
+  return (
+    <Link to="/chat" className="card ask-bar">
+      <Icon name="chat" size={20} />
+      <span className="ask-bar-text">
+        <span className="ask-bar-title">Ask about your money</span>
+        <span className="small muted">Can I afford a PS5 Pro right now?</span>
+      </span>
+      <Icon name="forward" size={18} />
+    </Link>
+  )
+}
 
 export function Overview() {
   const { settings } = useApp()
@@ -66,6 +83,8 @@ export function Overview() {
       )}
 
       {!headsUpShown && <AccountHealth />}
+
+      {!editing && <AskBar />}
 
       <section className="row-between" style={{ alignItems: 'end' }}>
         <div>
