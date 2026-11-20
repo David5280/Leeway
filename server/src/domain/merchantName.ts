@@ -51,7 +51,7 @@ const ACRONYMS = new Set([
 ])
 
 /** Small words that stay lowercase inside a name, as in "Bank of America". */
-const SMALL_WORDS = new Set(['of', 'and', 'the', 'for', 'at', 'by', 'in', 'on', 'to', 'from'])
+export const SMALL_WORDS = new Set('of and the for at by in on to from'.split(' '))
 
 /** Abbreviations banks use that have one plain meaning, spelled out. */
 const SPELLED_OUT = new Map([
@@ -95,8 +95,10 @@ const PROCESSORS = new Set([
 const LEADING_NOISE = [
   /^purchase authorized on \d{1,2}\/\d{1,2}\s+/i,
   /^recurring payment authorized on \d{1,2}\/\d{1,2}\s+/i,
-  /^(pos|debit card|dbt crd|visa dda|checkcard|check card)( purchase| pur| debit)?\s+(\d{4}\s+)?/i,
+  /^(pos|debit card|dbt crd|visa dda|checkcard|check card)( purchase| pur| debit| withdrawal)?\s+(\d{4}\s+)?/i,
   /^(ach|ppd|web)\s+(debit|credit|deposit|withdrawal|pmt)\s+/i,
+  // A bare word for how the card or account was used: "VISA PURCHASE SHELL", "DEBIT SHELL".
+  /^(visa\s+)?(purchase|debit|ach)\s+/i,
   /^(www\.)/i,
 ]
 

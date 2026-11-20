@@ -6,11 +6,13 @@
 // first pending under its new id or already posted.
 //
 // Each sync weighs every charge on the account that came in since the hold
-// began, not only that sync's, so a doubt seen once is never forgotten when
-// one of the charges behind it posts. A pending charge and the posted one
-// replacing it count once. A held charge with exactly one such charge, that
-// no other held charge could be either, pairs with it; one with a doubt is
-// let go, carrying nothing, since its charge cannot be told for sure.
+// began, not only that sync's arrivals, since a charge saved in an earlier
+// sync can become the one that fits later, as when the bank changes a
+// pending amount. A pending charge and the posted one replacing it count
+// once. A held charge with exactly one such charge, that no other held charge
+// could be either, pairs with it. One with more is let go, carrying nothing,
+// since its charge cannot be told for sure; deleting it is what keeps a
+// doubt from being forgotten when one of the charges behind it posts or goes.
 
 import type pg from 'pg'
 import { addDays, type IsoDate } from '../lib/dates.js'
@@ -161,7 +163,10 @@ export async function settleHeldCharges(
 const earliest = (held: HeldCharge[]) =>
   new Date(Math.min(...held.map((charge) => charge.heldAt.getTime())))
 
-/** What the owner set on each pending charge, onto the charge it became, as when one posts (sync.ts). */
+/**
+ * What the owner set on each pending charge, onto the charge it became, as
+ * when one posts (sync.ts).
+ */
 async function carryEdits(db: pg.PoolClient, carried: (HeldCharge & { to: string })[]) {
   if (carried.length === 0) return
   await db.query(
