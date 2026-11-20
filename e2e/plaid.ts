@@ -146,7 +146,7 @@ const UNSHARED = {
   manual: false,
   balanceUpdatedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
   unsharedAt: new Date(Date.now() - 13 * 86_400_000).toISOString(),
-  mayBeBackAs: null,
+  mayBeBackAs: null as string | null,
   aprPercent: null,
   minimumPaymentCents: null,
   lowBalanceCents: null,
@@ -160,11 +160,23 @@ const UNSHARED = {
  * from the balances, with a word in the summary.
  */
 export async function standInForUnsharedAccount(page: Page): Promise<void> {
+  await addUnshared(page, UNSHARED)
+}
+
+/**
+ * The same, with the account possibly back under a new id as one just as
+ * long-named, so its row also carries the note that its history may be here twice.
+ */
+export async function standInForReturnedAccount(page: Page): Promise<void> {
+  await addUnshared(page, { ...UNSHARED, mayBeBackAs: `${UNSHARED.name} (2)` })
+}
+
+async function addUnshared(page: Page, unshared: typeof UNSHARED): Promise<void> {
   // With bank sync on, so the account offers Share it again beside Remove.
   await turnOnBankSync(page)
   await page.route('**/api/actions/list_accounts', async (route) => {
     const { result } = await (await route.fetch()).json()
-    await route.fulfill({ json: { result: [...result, UNSHARED] } })
+    await route.fulfill({ json: { result: [...result, unshared] } })
   })
   await page.route('**/api/actions/summarize_accounts', async (route) => {
     const { result } = await (await route.fetch()).json()
@@ -173,7 +185,7 @@ export async function standInForUnsharedAccount(page: Page): Promise<void> {
       json: {
         result: {
           ...result,
-          accounts: [...result.accounts, UNSHARED],
+          accounts: [...result.accounts, unshared],
           summary: { ...result.summary, points: [point, ...result.summary.points].slice(0, 4) },
         },
       },

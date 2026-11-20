@@ -11,6 +11,7 @@ import {
   confirmRemovingUnshared,
   pickConnectedBankAgain,
   standInForPlaid,
+  standInForReturnedAccount,
   standInForUnsharedAccount,
 } from './plaid'
 
@@ -41,6 +42,9 @@ export const BANK_SCREENS: Screen[] = [
   }),
   screen('settings', '/settings/accounts', 'with an account no longer shared', {
     before: standInForUnsharedAccount,
+  }),
+  screen('settings', '/settings/accounts', 'with an account that may be back under a new id', {
+    before: standInForReturnedAccount,
   }),
   screen('settings', '/settings/accounts', 'confirming removal of an account no longer shared', {
     before: standInForUnsharedAccount,
