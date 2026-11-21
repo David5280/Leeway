@@ -29,6 +29,9 @@ export type PayView = Output<'get_pay'>
 export type OverdraftForecast = Output<'get_overdraft_forecast'>
 export type AccountForecast = OverdraftForecast['accounts'][number]
 export type SinkingFundsView = Output<'list_sinking_funds'>
+export type Playbook = Output<'get_payday_playbook'>
+export type PaycheckPlan = NonNullable<Playbook['plan']>
+export type PlanStep = PaycheckPlan['steps'][number]
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
 

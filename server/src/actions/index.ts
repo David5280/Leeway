@@ -72,6 +72,7 @@ import {
 } from './planning.js'
 import { getOverdraftForecastAction } from './overdraft.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
+import { getPaydayPlaybookAction } from './playbook.js'
 import {
   addSinkingFundAction,
   deleteSinkingFundAction,
@@ -221,6 +222,7 @@ export const actionList = [
   addSinkingFundAction,
   deleteSinkingFundAction,
   dismissSinkingFundAction,
+  getPaydayPlaybookAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

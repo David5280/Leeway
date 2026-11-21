@@ -228,6 +228,12 @@ export const SCREENS: Screen[] = [
     then: open('Not quite', (page) => page.getByRole('form', { name: 'Your pay' })),
   }),
   at('planSection', '/plan/payday', {
+    name: '/plan/payday what was left',
+    then: open(/Your last paycheck/, (page) =>
+      page.getByRole('dialog', { name: /Left over|Over budget/ }),
+    ),
+  }),
+  at('planSection', '/plan/payday', {
     name: '/plan/payday adding a yearly cost',
     then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
   }),

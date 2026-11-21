@@ -41,6 +41,13 @@ export const COACH_PROMPTS: CoachPrompt[] = [
       `I want to save for ${item}, which costs ${amount}${by?.trim() ? `, by ${by.trim()}` : ''}. Use when_can_i_afford to tell me when I could afford it. Then offer to start a purchase goal with create_goal (kind "purchase"), tell me what I would need to set aside each budget period, and ask whether to hold that back from my safe-to-spend (setAside) before turning it on.`,
   },
   {
+    name: 'payday',
+    title: 'Plan my paycheck',
+    description: 'What was left from the last paycheck, and a plan for the new one.',
+    text: () =>
+      'Help me plan my paycheck. Use get_payday_playbook. First tell me what I had left from my last paycheck against my budget. Then walk me through the plan for the new one in its order, with the real amounts, and say plainly if any account may go below zero before payday and what move would cover it. These are suggestions: remind me that I move the money myself.',
+  },
+  {
     name: 'debt_plan',
     title: 'Plan my debt payoff',
     description: 'Compares avalanche and snowball, and what paying extra changes.',

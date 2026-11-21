@@ -532,3 +532,19 @@
 .flow-swatch.over {
   background: var(--tone-short);
 }
+
+/* The paycheck plan's steps: a quiet list under the figure, each amount lined up at the end. */
+.plan-steps,
+.plan-note {
+  display: block;
+}
+.plan-steps .list-row {
+  padding: 8px 0;
+}
+.plan-amount {
+  text-align: end;
+  white-space: nowrap;
+}
+.plan-amount .small {
+  display: block;
+}

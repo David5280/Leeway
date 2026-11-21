@@ -13,6 +13,7 @@ import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '
 import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
+import { playbookOf } from './playbook'
 import { retirementProfile } from './profile'
 
 export const TODAY = '2026-11-17'
@@ -151,7 +152,10 @@ export function debtPlans(
 
 /** The server for the Plan screen: cash flow is always there, the rest per test. */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
-  return fakeServer({ get_cash_flow: () => cashFlow(), ...handlers }, routes)
+  return fakeServer(
+    { get_cash_flow: () => cashFlow(), get_payday_playbook: () => playbookOf(), ...handlers },
+    routes,
+  )
 }
 
 /** The Plan screen at an address, with its routes, as the app has them. */
