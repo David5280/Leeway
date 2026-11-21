@@ -130,18 +130,24 @@ describe('transferHint', () => {
     ]) {
       expect(transferHint({ ...base, name })).toBe('transfer')
     }
-    // The bank's two fields are read apart, so a tail in one never hides the other.
+    // The name is read before the merchant, and a tail ends with its field.
     expect(transferHint({ ...base, name: 'Transfer', merchantName: 'From Refund Savings' })).toBe(
       'transfer',
     )
     expect(transferHint({ ...base, name: 'Payroll transfer', merchantName: 'to ACME' })).toBe(
       'other',
     )
-    // Pay words ahead of the tail still win, and a pay word in a tail with no
-    // transfer word still says the line is pay.
+    expect(
+      transferHint({ ...base, name: 'Transfer to Savings', merchantName: 'ACME Payroll' }),
+    ).toBe('other')
+    // Pay words ahead of the tail still win, a "to" or "from" before any
+    // transfer word is no tail, and a pay word in a tail with no transfer word
+    // still says the line is pay.
     for (const name of [
       'Payroll transfer ACME',
       'Payroll transfer from ACME',
+      'Back To Basics Payroll transfer',
+      'From The Ground Up LLC payroll transfer',
       'DIR DEP XFER',
       'Refund transfer',
       'ACH Deposit from ACME PAYROLL',

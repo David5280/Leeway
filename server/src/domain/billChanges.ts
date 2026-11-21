@@ -45,7 +45,7 @@ const CYCLE_DAYS: Record<Cadence, number> = {
 /** A gap past this many cycles between charges means one was missed. */
 const MISSED_CYCLES = 1.5
 
-/** Charges read per bill: enough for four cycles, each paid in a split or second payment. */
+/** Charges read per bill: about a year of monthly cycles, fewer when cycles are paid in parts. */
 export const CHARGES_READ = 12
 
 /** Moves needed before a bill's own history can say its amount varies, so three cycles at least. */
@@ -108,16 +108,27 @@ function cyclesOf(charges: BillCharge[], cycle: number): BillCharge[] {
 }
 
 /**
+ * How near two cycles must be to sit at one level: a steady bill repeats to
+ * the cent, or within a few cents of tax, while a utility's jitter is wider.
+ */
+const SAME_LEVEL = { share: 0.01, cents: 100 } as const
+
+/** Whether two cycle totals sit at one level (SAME_LEVEL). */
+function sameLevel(aCents: number, bCents: number): boolean {
+  return Math.abs(aCents - bCents) <= Math.max(SAME_LEVEL.cents, bCents * SAME_LEVEL.share)
+}
+
+/**
  * Where the first one-off sits in `amounts` (newest first), or -1: an amount
- * off from its neighbours while they match each other, as a credit, a late
- * fee or a double payment is.
+ * off from its neighbours while they sit at one level, as a credit, a late
+ * fee or a double payment on a steady bill is.
  */
 function oneOffAt(amounts: number[]): number {
   return amounts.findIndex((amount, i) => {
     const newer = amounts[i - 1]
     const older = amounts[i + 1]
     if (newer === undefined || older === undefined) return false
-    return isAmountChange(newer, amount) && !isAmountChange(older, newer)
+    return isAmountChange(newer, amount) && sameLevel(older, newer)
   })
 }
 

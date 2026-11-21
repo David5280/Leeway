@@ -66,7 +66,7 @@ const PAY_WORDS =
  */
 const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
 
-/** A "to ..." or "from ..." tail, which names the other side of a move, often an account. */
+/** A "to ..." or "from ..." tail, which can name the other side of a move, often an account. */
 const COUNTERPARTY_TAIL = /\b(to|from)\b.*$/i
 
 /** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
@@ -92,17 +92,38 @@ export function transferHint(tx: Movement): TransferHint {
 }
 
 /**
+ * The words of a line read for pay: all of it but a "to" or "from" tail after
+ * a transfer word, which names the other account ("Transfer from Tax Refund
+ * Savings"). A "to" or "from" before any transfer word is part of a name
+ * ("Back To Basics Payroll transfer"). The name is read before the merchant,
+ * and a tail ends with its field, so one field's tail never hides the other's
+ * pay words.
+ */
+function wordsReadForPay(fields: string[]): string {
+  const read: string[] = []
+  let afterTransfer = false
+  for (const field of fields) {
+    const transfer = TRANSFER_WORDS.exec(field)
+    // Where in this field a tail may start: anywhere once a transfer word has come.
+    let tailFrom = field.length
+    if (afterTransfer) tailFrom = 0
+    else if (transfer) tailFrom = transfer.index + transfer[0].length
+    read.push(field.slice(0, tailFrom) + field.slice(tailFrom).replace(COUNTERPARTY_TAIL, ''))
+    afterTransfer ||= transfer !== null
+  }
+  return read.join(' ')
+}
+
+/**
  * What a line with no code says by its words. Pay words win over transfer
- * words only ahead of a "to" or "from" tail: "Payroll transfer from ACME" is
- * pay, but "Transfer from Tax Refund Savings" names an account and is a move.
- * Each of the bank's two fields loses its own tail, so one never hides the
- * other. With no transfer word, a pay word anywhere still says pay.
+ * words, except in a tail naming the other account (see wordsReadForPay):
+ * "Payroll transfer from ACME" is pay, "Online Transfer to PAYROLL CHK" is a
+ * move. With no transfer word, a pay word anywhere still says pay.
  */
 function wordsHint(tx: Movement): TransferHint {
   const fields = [tx.name, tx.merchantName ?? '']
   const words = fields.join(' ')
-  const lead = fields.map((field) => field.replace(COUNTERPARTY_TAIL, '')).join(' ')
-  if (PAY_WORDS.test(lead)) return 'other'
+  if (PAY_WORDS.test(wordsReadForPay(fields))) return 'other'
   if (TRANSFER_WORDS.test(words)) return 'transfer'
   const paidIn = [PAY_WORDS, EARNED_WORDS].some((paid) => paid.test(words))
   return paidIn || PAID_ALONE.test(tx.name) ? 'other' : 'none'

@@ -62,6 +62,16 @@ describe('billChangeOf for a bill whose amount varies', () => {
     expect(billChangeOf(charged([4000, 8000, 4000, 8000, 4000, 8000]), TODAY)).toBeNull()
   })
 
+  it("never takes a utility's jitter for a one-off, since a steady bill repeats to the cent", () => {
+    // Water: $60, $45, $62, $58, $44, $61, then $75. $60 and $62 are near, not the same.
+    const water = charged([7500, 6000, 4500, 6200, 5800, 4400, 6100], { amountCents: 6000 })
+    expect(billChangeOf(water, TODAY)).toBeNull()
+    // Power: $120, $85, $118, then $90; and the same with $90, then $135.
+    const power = { amountCents: 12000 }
+    expect(billChangeOf(charged([9000, 12000, 8500, 11800], power), TODAY)).toBeNull()
+    expect(billChangeOf(charged([13500, 9000, 12000, 8500, 11800], power), TODAY)).toBeNull()
+  })
+
   it('still alerts when a steady bill changes price, after an earlier change too', () => {
     // $80 for three months, then $95: one move is a price change, not a varying bill.
     expect(riseAfter([8000, 8000, 8000])).toMatchObject(RISE)
@@ -78,6 +88,8 @@ describe('billChangeOf for a bill whose amount varies', () => {
     expect(riseAfter([8000, 4000, 8000, 8000, 8000])).toMatchObject(RISE)
     expect(riseAfter([8000, 9500, 8000, 8000, 8000])).toMatchObject(RISE)
     expect(riseAfter([8000, 16000, 8000, 8000])).toMatchObject(RISE)
+    // One deeper in a steady history.
+    expect(riseAfter([8000, 8000, 8000, 4000, 8000])).toMatchObject(RISE)
     // A weekly bill with one odd week about nine weeks back.
     const weeks = [8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 4000, 8000, 8000]
     expect(riseAfter(weeks, { cadence: 'week' })).toMatchObject(RISE)
@@ -93,6 +105,16 @@ describe('billChangeOf for a bill whose amount varies', () => {
   it('settles a new amount charged twice, even after an odd cycle', () => {
     const twice = charged([9500, 9500, 8000, 4000, 8000])
     expect(billChangeOf(twice, TODAY)).toMatchObject({ kind: 'settled', amountCents: 9500 })
+  })
+
+  it('stays quiet by design where a short history cannot tell a steady bill from a varying one', () => {
+    // Two one-offs within five earlier cycles: $80, $40, $80, $160, $80, then $95.
+    expect(riseAfter([8000, 16000, 8000, 4000, 8000])).toBeNull()
+    // A one-off at a price step in a short history: $80, $40, $95, then $110.
+    const stepped = { amountCents: 9500 }
+    expect(billChangeOf(charged([11000, 9500, 4000, 8000], stepped), TODAY)).toBeNull()
+    // Price steps in consecutive months: $65, $80, $95, $95, then $110.
+    expect(billChangeOf(charged([11000, 9500, 9500, 8000, 6500], stepped), TODAY)).toBeNull()
   })
 
   it(`needs ${VARIES_AFTER_MOVES} moves, so three earlier cycles, to call a bill varying`, () => {
