@@ -378,14 +378,13 @@ describe('the assumptions', () => {
     const user = userEvent.setup()
     const form = within(await screen.findByRole('form', { name: 'Retirement assumptions' }))
     expect(form.getByRole('textbox', { name: 'Retire at' })).toHaveValue('65')
-    await user.type(form.getByRole('textbox', { name: 'Birth year' }), '1986')
+    expect(form.queryByRole('textbox', { name: /birth/i })).toBeNull()
     await user.type(form.getByRole('textbox', { name: 'Income you want a month' }), '4,000')
     await user.click(form.getByRole('button', { name: 'Save assumptions' }))
 
     await waitFor(() => expect(server.actions('update_settings')).toHaveLength(1))
     expect(server.actions('update_settings')[0]).toEqual({
       retirement: {
-        birthYear: 1986,
         retirementAge: 65,
         returnPercent: 6,
         inflationPercent: 2.5,
@@ -410,9 +409,45 @@ describe('the assumptions', () => {
     await user.clear(form.getByRole('textbox', { name: 'Retire at' }))
     await user.click(form.getByRole('button', { name: 'Save assumptions' }))
     expect(form.getByRole('alert')).toHaveTextContent('Enter a retirement age.')
-    expect(form.getByRole('textbox', { name: 'Birth year' })).toHaveAccessibleDescription(
-      'Projections start from your age',
+    expect(form.getByRole('textbox', { name: 'Retire at' })).toHaveAccessibleDescription(
+      'The age you want to stop working',
     )
     expect(server.actions('update_settings')).toHaveLength(0)
+  })
+})
+
+describe('the birth year', () => {
+  it('is asked once under the projection, as a year only, and saved to settings', async () => {
+    const server = serve(retirementOf())
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    const ask = within(await card('What year were you born?'))
+    expect(ask.getByText(/Only the year/)).toBeVisible()
+    await user.type(ask.getByRole('textbox', { name: 'Year you were born' }), '1986')
+    await user.click(ask.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(server.actions('update_settings')).toHaveLength(1))
+    expect(server.actions('update_settings')[0]).toEqual({ retirement: { birthYear: 1986 } })
+  })
+
+  it('refuses anything but a four-digit year gone by, and sends nothing', async () => {
+    const server = serve(retirementOf())
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    const ask = within(await card('What year were you born?'))
+    const field = ask.getByRole('textbox', { name: 'Year you were born' })
+    for (const typed of ['86', '3000', 'May 4 1986']) {
+      await user.clear(field)
+      await user.type(field, typed)
+      await user.click(ask.getByRole('button', { name: 'Save' }))
+      expect(ask.getByRole('alert')).toHaveTextContent('Enter the year as four digits, like 1986.')
+    }
+    expect(server.actions('update_settings')).toHaveLength(0)
+  })
+
+  it('is not asked once it is known', async () => {
+    serve(withPension)
+    renderPlan('/plan/retirement')
+    await card('Retirement projection')
+    expect(screen.queryByRole('region', { name: 'What year were you born?' })).toBeNull()
   })
 })

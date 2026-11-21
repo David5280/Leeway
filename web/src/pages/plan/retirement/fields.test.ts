@@ -181,9 +181,8 @@ describe('pensionCandidates', () => {
 describe('the assumptions', () => {
   const defaults = retirementOf().plan.assumptions
 
-  it('show the defaults, with the birth year and the amounts left blank', () => {
+  it('show the defaults, with the amounts left blank and no birth year to fill', () => {
     expect(assumptionsText(defaults)).toEqual({
-      birthYear: '',
       retirementAge: '65',
       returnPercent: '6',
       inflationPercent: '2.5',
@@ -193,15 +192,19 @@ describe('the assumptions', () => {
     })
   })
 
-  it('read back to the same assumptions', () => {
-    const chosen = retirementOf(
+  it('read back to the same assumptions, leaving the birth year to its own form', () => {
+    const { birthYear, ...chosen } = retirementOf(
       {},
       { birthYear: 1986, monthlyContributionCents: 50_000, targetMonthlyIncomeCents: 400_000 },
     ).plan.assumptions
-    expect(readAssumptions(assumptionsText(chosen))).toEqual({ ok: true, value: chosen })
+    expect(birthYear).toBe(1986)
+    expect(readAssumptions(assumptionsText({ birthYear, ...chosen }))).toEqual({
+      ok: true,
+      value: chosen,
+    })
   })
 
-  it('require the rates and the age, but not the birth year or the amounts', () => {
+  it('require the rates and the age, but not the amounts', () => {
     const text = assumptionsText(defaults)
     expect(readAssumptions({ ...text, retirementAge: ' ' })).toEqual({
       ok: false,
@@ -210,10 +213,6 @@ describe('the assumptions', () => {
     expect(readAssumptions({ ...text, returnPercent: '' })).toEqual({
       ok: false,
       error: 'Enter a yearly return.',
-    })
-    expect(readAssumptions({ ...text, birthYear: 'soon' })).toEqual({
-      ok: false,
-      error: 'Enter your birth year as a number.',
     })
     expect(readAssumptions({ ...text, targetIncome: 'enough' })).toEqual({
       ok: false,
