@@ -9,6 +9,7 @@ import { countedSql, countsAsSpending } from './counted.js'
 import { CARD_PAYMENT_CODE } from './transfers.js'
 import { listGoals } from './goals.js'
 import { rolloverCarries } from './rollover.js'
+import { fundSetAsides } from './sinkingFunds/setAsides.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** A span of days: `end` is exclusive, like a Period's. */
@@ -109,12 +110,13 @@ export function currentPeriod(
 }
 
 /**
- * What goals set aside from the budget hold back this period. Only the current
- * period holds anything: a goal's share of an earlier one is not kept.
+ * What goals set aside from the budget, and sinking funds, hold back this
+ * period. Only the current period holds anything: a goal's share of an
+ * earlier one is not kept.
  */
 export async function setAsides(db: Db, settings: Settings, today: IsoDate): Promise<SetAside[]> {
   const goals = await listGoals(db, { today, period: periodConfig(settings) })
-  return goals
+  const held = goals
     .filter((goal) => goal.heldBackCents > 0)
     .map((goal) => ({
       goalId: goal.id,
@@ -122,6 +124,7 @@ export async function setAsides(db: Db, settings: Settings, today: IsoDate): Pro
       color: goal.color,
       amountCents: goal.heldBackCents,
     }))
+  return [...held, ...(await fundSetAsides(db, settings, today))]
 }
 
 /** The budget for one period, as computeBudget works it out from stored data. */

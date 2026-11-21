@@ -73,6 +73,12 @@ import {
 import { getOverdraftForecastAction } from './overdraft.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
 import {
+  addSinkingFundAction,
+  deleteSinkingFundAction,
+  dismissSinkingFundAction,
+  listSinkingFundsAction,
+} from './sinkingFunds.js'
+import {
   createRuleAction,
   deleteRuleAction,
   listRulesAction,
@@ -211,6 +217,10 @@ export const actionList = [
   confirmPayAction,
   setPayAction,
   getOverdraftForecastAction,
+  listSinkingFundsAction,
+  addSinkingFundAction,
+  deleteSinkingFundAction,
+  dismissSinkingFundAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

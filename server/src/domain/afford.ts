@@ -48,13 +48,16 @@ interface Reason {
   text: string
 }
 
-/** "the $115 set aside for Road bike", or "the $165 set aside for your goals" for several. */
+/**
+ * "the $115 set aside for Road bike", or "the $165 set aside for your goals"
+ * for several ("your goals and yearly costs" when sinking funds are among them).
+ */
 function heldFor(budget: BudgetSummary, money: Money): string {
   const { setAsides } = budget
   const amount = money(budget.totals.setAsideCents)
-  return setAsides.length === 1
-    ? `the ${amount} set aside for ${setAsides[0]!.name}`
-    : `the ${amount} set aside for your goals`
+  if (setAsides.length === 1) return `the ${amount} set aside for ${setAsides[0]!.name}`
+  const funds = setAsides.some((held) => held.kind === 'sinking_fund')
+  return `the ${amount} set aside for your goals${funds ? ' and yearly costs' : ''}`
 }
 
 /** Whether the cash covers the purchase, the bills before payday and the goals, and how it squeezes each day. */

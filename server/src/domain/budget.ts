@@ -17,12 +17,15 @@ import type { Settings } from './settings.js'
 
 export type { BudgetAlert, BudgetStatus, CategoryBudget, Pace } from './budgetCategory.js'
 
-/** A goal's share of this period, held back from what is safe to spend. */
+/** A goal's (or a sinking fund's) share of this period, held back from what is safe to spend. */
 export interface SetAside {
+  /** The goal's id, or for a sinking fund the fund's. */
   goalId: string
   name: string
   color: string
   amountCents: number
+  /** Present only for a sinking fund (sinkingFunds/funds.ts). */
+  kind?: 'sinking_fund'
 }
 
 export interface BudgetSummary {
