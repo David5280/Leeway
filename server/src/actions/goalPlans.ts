@@ -1,5 +1,5 @@
-// Actions for the emergency fund goal: offered, started, and moved a step or
-// pointed at the accounts that hold it.
+// Actions for the emergency fund goal (offered, started, and moved a step or
+// pointed at the accounts that hold it) and for ranking goals against each other.
 
 import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
@@ -8,6 +8,7 @@ import {
   getEmergencyFund,
   startEmergencyFund,
 } from '../domain/emergencyGoal.js'
+import { getGoalOrder, reorderGoals } from '../domain/goalRanking.js'
 import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
@@ -54,5 +55,35 @@ export const changeEmergencyFundAction = defineAction({
   run: async (ctx, change) => {
     const { settings, today } = await settingsAndToday(ctx)
     return withTransaction(ctx.db, (db) => changeEmergencyFund(db, settings, today, change))
+  },
+})
+
+const ORDER_EXPLAINED =
+  'Goals fill one after another in the owner\'s order: the first takes all of monthlyCents until it is reached, then the next. monthlyCents is the owner\'s own amount (source "entered", set with update_settings savingsPlan.goalsMonthlyCents), the recent pace into goals ("found") or nothing yet ("none", so no dates). Each goal comes back first to last with remainingCents, status, landsOn (the first day of the month it is reached; null once reached, for a stale goal, with no amount, or past fifty years) and ifMovedUp: what moving it one place up would do (its landsOn, and the goal it passes with that goal\'s new passedLandsOn), so a trade-off can be said plainly. Amounts are in cents. Nothing moves money.'
+
+export const getGoalOrderAction = defineAction({
+  name: 'get_goal_order',
+  title: 'Get goals in order, with dates',
+  description: `The owner's goals in their order of priority, with the month each lands in. ${ORDER_EXPLAINED}`,
+  input: z.object({}),
+  scope: 'read',
+  surface: 'all',
+  run: async (ctx) => {
+    const { settings, today } = await settingsAndToday(ctx)
+    return getGoalOrder(ctx.db, settings, today)
+  },
+})
+
+export const reorderGoalsAction = defineAction({
+  name: 'reorder_goals',
+  title: 'Put goals in order',
+  description: `Ranks goals, first to last, by id. Goals left out keep their order after the ones given, so naming one goal moves it to the top. Returns the order with its dates, as get_goal_order does. ${ORDER_EXPLAINED}`,
+  input: z.object({ ids: z.array(z.uuid()).min(1).max(200) }),
+  scope: 'write',
+  surface: 'all',
+  run: async (ctx, { ids }) => {
+    const { settings, today } = await settingsAndToday(ctx)
+    await withTransaction(ctx.db, (db) => reorderGoals(db, ids))
+    return getGoalOrder(ctx.db, settings, today)
   },
 })

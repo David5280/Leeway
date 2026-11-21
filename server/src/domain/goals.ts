@@ -131,6 +131,9 @@ const SELECT = `
     a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
 
+/** The order goals are listed in: the owner's ranking (goalOrder.ts), oldest first within it. */
+const IN_ORDER = 'ORDER BY g.position, g.created_at, g.name'
+
 type StoredGoal = Omit<GoalRow, 'accountName' | 'followedAccountIds'>
 
 /**
@@ -160,7 +163,7 @@ async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goa
 }
 
 export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
-  const { rows } = await db.query<StoredGoal>(`${SELECT} ORDER BY g.created_at, g.name`)
+  const { rows } = await db.query<StoredGoal>(`${SELECT} ${IN_ORDER}`)
   return withPlans(db, await namedGoals(db, rows), clock)
 }
 

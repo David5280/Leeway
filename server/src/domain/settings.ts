@@ -7,7 +7,11 @@ import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { aiSettingsSchema } from './ai/settings.js'
 import type { PeriodConfig } from '../lib/periods.js'
-import { retirementPatchSchema, retirementSchema } from './retirement/assumptions.js'
+import {
+  MAX_MONTHLY_CENTS,
+  retirementPatchSchema,
+  retirementSchema,
+} from './retirement/assumptions.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
 
 const periodSchema = z.discriminatedUnion('kind', [
@@ -111,7 +115,7 @@ const accountSelectionSchema = z.array(z.uuid()).max(100)
 
 /**
  * How savings are judged: the emergency fund's target, what counts as
- * essential spending and the savings rate to aim for.
+ * essential spending, the savings rate to aim for and what goes to goals.
  */
 const savingsPlanFields = {
   /** Months of essential spending the emergency fund should cover. */
@@ -137,6 +141,16 @@ const savingsPlanFields = {
     .min(1, 'Aim for at least 1%')
     .max(90, 'Use 90% or less')
     .nullable(),
+  /**
+   * What the owner puts toward goals each month, which fills them in their
+   * order (goalOrder.ts). Null uses the pace Leeway sees going into them.
+   */
+  goalsMonthlyCents: z
+    .number()
+    .int('Use whole cents')
+    .min(0, 'An amount cannot be negative')
+    .max(MAX_MONTHLY_CENTS, 'Use $100,000 a month or less')
+    .nullable(),
 }
 
 const savingsPlanSchema = z.object({
@@ -146,6 +160,7 @@ const savingsPlanSchema = z.object({
   // shows, so a default would call a pension member short of a goal they
   // may well meet through payroll.
   savingsRateTargetPercent: savingsPlanFields.savingsRateTargetPercent.default(null),
+  goalsMonthlyCents: savingsPlanFields.goalsMonthlyCents.default(null),
 })
 
 /**
