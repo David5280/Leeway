@@ -70,6 +70,7 @@ import {
   listRecentBalancesAction,
   planDebtPayoffAction,
 } from './planning.js'
+import { getOverdraftForecastAction } from './overdraft.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
 import {
   createRuleAction,
@@ -209,6 +210,7 @@ export const actionList = [
   getPayAction,
   confirmPayAction,
   setPayAction,
+  getOverdraftForecastAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

@@ -26,6 +26,8 @@ export type DebtPlans = Output<'plan_debt_payoff'>
 export type NetWorth = Output<'get_net_worth'>
 export type CashFlow = Output<'get_cash_flow'>
 export type PayView = Output<'get_pay'>
+export type OverdraftForecast = Output<'get_overdraft_forecast'>
+export type AccountForecast = OverdraftForecast['accounts'][number]
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
 

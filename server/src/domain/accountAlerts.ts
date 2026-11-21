@@ -1,6 +1,7 @@
 // Account alerts: an overdrawn account, a card over its limit, a balance below
 // the owner's warning, and overdraft fees the bank charged lately; a bill that
-// cost more or less than usual is one too (billChanges.ts). Pure: the
+// cost more or less than usual is one too (billChanges.ts), and so is a
+// checking account forecast to go below zero before payday (overdraft/). Pure: the
 // accounts and recent charges come in, alerts come out, nothing is read here.
 // Alerts are worked out fresh from current balances, never stored.
 
@@ -18,6 +19,7 @@ export const ALERT_KINDS = [
   'overdrawn',
   'over_limit',
   'overdraft_fee',
+  'overdraft_forecast',
   'low_balance',
   'bill_change',
 ] as const
@@ -34,12 +36,13 @@ export interface AccountAlert {
   accountName: string
   /**
    * The amount the alert is about: how far overdrawn or over the limit, the
-   * balance left for a low balance, the fees charged, or what a changed bill cost.
+   * balance left for a low balance, the fees charged, what a changed bill
+   * cost, or how far below zero a forecast says an account would go.
    */
   amountCents: number
   /** Fees counted, for an overdraft fee alert; 1 for every other kind. */
   count: number
-  /** The latest fee's date, or the changed charge's; null for every other kind. */
+  /** The latest fee's date, the changed charge's, or the day a forecast goes below zero; else null. */
   date: IsoDate | null
   /** The alert in a sentence, for the app and assistants. */
   message: string

@@ -15,7 +15,9 @@ import {
   holdRequest,
   renderSignedIn,
 } from '../test/fake'
+import { forecastAlerts } from '../../../server/src/domain/overdraft/alerts'
 import { homeAlertHandlers, homeList } from '../test/homeAlerts'
+import { checkingInput, forecastOf, RENT } from '../test/overdraft'
 import { Alerts } from './Alerts'
 import { AccountHealth } from './overview/AccountHealth'
 
@@ -47,6 +49,16 @@ describe('the account health banner', () => {
       '/alerts',
     )
     expect(banner()).toHaveTextContent('From your last bank sync')
+  })
+
+  it('sends checking forecast to go below zero to Payday, in amber', async () => {
+    const forecast = forecastOf([checkingInput({ bills: [RENT] })])
+    const format = { money: (cents: number) => `$${cents / 100}`, date: (iso: string) => iso }
+    fakeServer({ list_home_alerts: () => homeList(forecastAlerts(forecast.accounts, format)) })
+    renderSignedIn(<AccountHealth />)
+    const link = await screen.findByRole('link', { name: /Everyday may go \$200 below zero/ })
+    expect(link).toHaveAttribute('href', '/plan/payday')
+    expect(banner()).toHaveClass('warn-card')
   })
 
   it('is amber when nothing is urgent', async () => {

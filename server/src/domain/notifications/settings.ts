@@ -10,6 +10,7 @@ export const NOTIFICATION_KINDS = [
   'overdrawn',
   'over_limit',
   'overdraft_fee',
+  'overdraft_forecast',
   'low_balance',
   'over_budget',
   'bill_due',
@@ -29,6 +30,7 @@ export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 export const STATE_KINDS: readonly NotificationKind[] = [
   'overdrawn',
   'over_limit',
+  'overdraft_forecast',
   'low_balance',
   'over_budget',
   'bill_due',

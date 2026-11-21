@@ -139,6 +139,7 @@ describe('get_checkin', () => {
       ['now', 'bank', 'list_connections'],
       ['now', 'cash', 'get_cash_flow'],
       ['now', 'bill', 'list_bills'],
+      ['soon', 'account', 'list_alerts'],
       ['soon', 'bill', 'list_bills'],
       ['soon', 'budget', 'get_budget'],
       ['soon', 'goal', 'list_goals'],
@@ -152,6 +153,8 @@ describe('get_checkin', () => {
       'A bank failed to sync. Try sync_banks; if it keeps failing, check the bank in the Leeway app.',
       'Bills due before payday on 2026-12-01 come to $250, but checking holds $10: $240 short.',
       'No payment found for Water ($50), due 2026-10-20. It may be unpaid, or paid under a different name.',
+      // The overdue Water comes out today, so checking is forecast below zero today.
+      'Test Checking may go $240 below zero on Nov 17, before payday.',
       'Phone ($60) is due 2026-11-20.',
       'Dining is over budget by $10 ($20 of $10).',
       'Trip passed its target date of 2026-10-31 with $1,000 still to go. Ask whether to move the date or the target.',

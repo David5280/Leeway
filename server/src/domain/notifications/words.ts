@@ -34,6 +34,10 @@ const ALERT_WORDS: Record<
   overdrawn: { title: 'Overdrawn', push: (a) => `${a.accountName} is below zero.` },
   over_limit: { title: 'Over credit limit', push: (a) => `${a.accountName} is past its limit.` },
   overdraft_fee: { title: 'Overdraft fee', push: (a) => `${a.accountName} was charged a fee.` },
+  overdraft_forecast: {
+    title: 'May go below zero',
+    push: (a) => `${a.accountName} may go below zero before payday.`,
+  },
   low_balance: {
     title: 'Low balance',
     push: (a) => `${a.accountName} is below your warning amount.`,
@@ -44,6 +48,13 @@ const ALERT_WORDS: Record<
     push: (a) =>
       `${a.bill?.name ?? 'A bill'} cost ${a.amountCents > (a.bill?.usualCents ?? 0) ? 'more' : 'less'} than usual.`,
   },
+}
+
+/** Where an alert is dealt with, when not the Alerts page. */
+const ALERT_LINKS: Partial<Record<AccountAlert['kind'], string>> = {
+  bill_change: '/plan/bills',
+  // The playbook shows the forecast and the move that covers it.
+  overdraft_forecast: '/plan/payday',
 }
 
 /**
@@ -67,7 +78,7 @@ export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
     title: ALERT_WORDS[alert.kind].title,
     message: alert.message,
     pushBody: ALERT_WORDS[alert.kind].push(alert),
-    link: alert.kind === 'bill_change' ? '/plan/bills' : '/alerts',
+    link: ALERT_LINKS[alert.kind] ?? '/alerts',
   }))
 }
 

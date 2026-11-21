@@ -16,6 +16,10 @@ export const KIND_TEXT: Record<NotificationKind, { label: string; hint: string }
   overdrawn: { label: 'Overdrawn', hint: 'A checking or savings account below zero' },
   over_limit: { label: 'Over a credit limit', hint: 'A card past its limit' },
   overdraft_fee: { label: 'Overdraft fees', hint: 'A fee charged for a short balance' },
+  overdraft_forecast: {
+    label: 'Going below zero',
+    hint: 'Checking that may go below zero before payday',
+  },
   low_balance: {
     label: 'Low balance',
     hint: "Money available below an account's warning, set in Accounts",

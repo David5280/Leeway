@@ -1,6 +1,7 @@
 // Account alerts as rows: an overdrawn account, a card over its limit, a fee
-// or a low balance, each opening its account, and a bill that cost more or
-// less than usual, opening Bills. Shared by the dashboard banner,
+// or a low balance, each opening its account, a bill that cost more or less
+// than usual, opening Bills, and checking forecast to go below zero before
+// payday, opening Payday. Shared by the dashboard banner,
 // the Alerts page, the Accounts screen and each account's page. On the home
 // screen each row also has a button that hides it there.
 
@@ -18,6 +19,7 @@ export const ALERT_LABELS: Record<AccountAlert['kind'], string> = {
   overdrawn: 'Overdrawn',
   over_limit: 'Over limit',
   overdraft_fee: 'Fee',
+  overdraft_forecast: 'Before payday',
   low_balance: 'Low',
   bill_change: 'Bill',
 }
@@ -37,9 +39,12 @@ export function alertsTint(alerts: AccountAlert[]): '' | 'over-card' | 'warn-car
   return tones.includes('warn') ? 'warn-card' : ''
 }
 
-/** Where an alert is dealt with: its bill's list, or its account. */
+/** Where an alert is dealt with: its bill's list, Payday for a forecast, or its account. */
 export function alertPath(alert: AccountAlert): string {
-  return alert.bill ? '/plan/bills' : accountDetailPath(alert.accountId)
+  if (alert.bill) return '/plan/bills'
+  // Payday shows the forecast and the move that would cover it.
+  if (alert.kind === 'overdraft_forecast') return '/plan/payday'
+  return accountDetailPath(alert.accountId)
 }
 
 /** One key per alert: a kind and account, and the bill for a bill's change. */

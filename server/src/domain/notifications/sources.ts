@@ -89,7 +89,13 @@ export async function gatherCandidates(
   const on = choices.kinds
   const found: Candidate[][] = []
 
-  if (on.overdrawn || on.over_limit || on.overdraft_fee || on.low_balance) {
+  if (
+    on.overdrawn ||
+    on.over_limit ||
+    on.overdraft_fee ||
+    on.overdraft_forecast ||
+    on.low_balance
+  ) {
     const alerts = await listAlerts(db, settings, today)
     found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }
