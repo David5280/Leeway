@@ -78,6 +78,28 @@ describe('widgetSummary', () => {
       cents: 40_000,
       perDayCents: 3_076,
       daysLeft: 13,
+      shortfallCents: 0,
+      payday: '2026-11-28',
+      paydayEstimate: false,
+    })
+  })
+
+  it('carries a cash shortfall beside an overspent budget, as the hero says both', () => {
+    const cashFlow = cash({ safeCents: 0, shortfallCents: 12_000, perDayCents: 0 })
+    const summary = widgetSummary(
+      sources({
+        budget: budget({ budgetedCents: 90_000, leewayCents: -5_000 }, 12, cashFlow),
+        cashFlow,
+      }),
+    )
+    expect(summary.headline).toEqual({
+      kind: 'leeway',
+      cents: -5_000,
+      perDayCents: null,
+      daysLeft: 13,
+      shortfallCents: 12_000,
+      payday: '2026-11-28',
+      paydayEstimate: false,
     })
   })
 
@@ -124,6 +146,7 @@ describe('widgetSummary', () => {
       shortfallCents: 0,
       perDayCents: 1_618,
       payday: '2026-11-28',
+      paydayEstimate: false,
     })
   })
 
@@ -136,6 +159,7 @@ describe('widgetSummary', () => {
         shortfallCents: 1_200,
         perDayCents: 0,
         payday: '2026-11-28',
+        paydayEstimate: false,
       },
     )
     expect(widgetSummary(sources()).headline.kind).toBe('until_payday')

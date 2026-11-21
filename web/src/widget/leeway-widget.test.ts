@@ -25,6 +25,7 @@ import {
   parseJson,
   REFRESH_MINUTES,
   shortDate,
+  SUMMARY_VERSION,
   summaryUrl,
   THEME_COLORS,
   THEME_MODES,
@@ -118,7 +119,8 @@ describe('connecting', () => {
     expect(outcomeOf(500, {})).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, null)).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, 'text')).toEqual({ ok: false, problem: 'server' })
-    expect(outcomeOf(200, { ...summary, version: 2 })).toEqual({ ok: false, problem: 'outdated' })
+    // A summary of another shape: an older script on a newer server says to update.
+    expect(outcomeOf(200, { ...summary, version: 3 })).toEqual({ ok: false, problem: 'outdated' })
   })
 
   it('reads JSON, or nothing', () => {
@@ -211,7 +213,7 @@ describe('what the widget says', () => {
   })
 
   it('leads with cash until payday before any budget is set, $0 in red when bills do not fit', () => {
-    const until = (cents: number, shortfallCents: number) =>
+    const until = (cents: number, shortfallCents: number, paydayEstimate = false) =>
       widgetSummary({
         headline: {
           kind: 'until_payday',
@@ -219,6 +221,7 @@ describe('what the widget says', () => {
           shortfallCents,
           perDayCents: 2_000,
           payday: '2026-11-28',
+          paydayEstimate,
         },
       })
     expect(headlineOf(until(22_000, 0))).toEqual({
@@ -232,15 +235,35 @@ describe('what the widget says', () => {
       label: 'Until payday',
       value: '$0',
       tone: 'over',
-      note: '$40 short of bills due by Nov 28',
+      note: 'Checking is $40 short of bills due by Nov 28',
+    })
+    // Against a payday that is only a guess, the shortfall may be less: said, not red.
+    expect(headlineOf(until(0, 4_000, true))).toEqual({
+      label: 'Until payday',
+      value: '$0',
+      tone: 'ink',
+      note: 'Checking may be $40 short of bills due by about Nov 28',
     })
   })
 
-  it('reads an older server that sent a shortfall as a negative figure', () => {
-    const older = widgetSummary({
-      headline: { kind: 'until_payday', cents: -4_000, perDayCents: 0, payday: '2026-11-28' },
-    } as never)
-    expect(headlineOf(older)).toMatchObject({ value: '$0', tone: 'over' })
+  it('says checking is short of the bills when over budget too, as the Overview does', () => {
+    const over = troubledWidgetSummary()
+    const short = { ...over, headline: { ...over.headline, shortfallCents: 12_000 } }
+    expect(headlineOf(short as typeof over)).toEqual({
+      label: 'Safe to spend',
+      value: '$50 over',
+      tone: 'over',
+      note: 'Checking is $120 short of bills due by Nov 28',
+    })
+  })
+
+  it('is version 2: a script from before the shortfall had its own field asks to be updated', () => {
+    // Version 1 sent the shortfall as a negative figure; that script would show $0 and no shortfall.
+    expect(SUMMARY_VERSION).toBe(2)
+    expect(outcomeOf(200, { ...widgetSummary(), version: 1 })).toEqual({
+      ok: false,
+      problem: 'outdated',
+    })
   })
 
   it('lists budget left, net worth and the next bill', () => {

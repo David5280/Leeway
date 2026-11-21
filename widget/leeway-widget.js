@@ -36,7 +36,7 @@
 const REFRESH_MINUTES = 30
 
 /** The summary shape this script reads; the server bumps it only if a field changes meaning. */
-const SUMMARY_VERSION = 1
+const SUMMARY_VERSION = 2
 
 /** Where the script keeps the address and token when they are not the widget's parameter. */
 const KEYCHAIN_SERVER = 'leeway.widget.server'
@@ -273,6 +273,35 @@ function paletteFor(appearance) {
 // What the widget says --------------------------------------------------------
 
 /**
+ * How far checking falls short of the bills due by payday. Against a payday
+ * that is only a guess it may be less, and the words say so.
+ * @param {{ shortfallCents: number, payday: string, paydayEstimate: boolean }} headline
+ * @param {Summary} summary
+ * @returns {string}
+ */
+function shortfallNote(headline, summary) {
+  const short = money(headline.shortfallCents, summary)
+  const payday = shortDate(headline.payday, summary.locale)
+  return headline.paydayEstimate
+    ? `Checking may be ${short} short of bills due by about ${payday}`
+    : `Checking is ${short} short of bills due by ${payday}`
+}
+
+/**
+ * The line under the budgets' figure: checking short of the bills first, as
+ * the Overview says it, then what is left a day.
+ * @param {Summary} summary
+ * @returns {string}
+ */
+function leewayNote(summary) {
+  const { headline } = summary
+  if (headline.kind !== 'leeway') return ''
+  if (headline.shortfallCents > 0) return shortfallNote(headline, summary)
+  if (headline.perDayCents === null) return 'Nothing left to spend this period'
+  return `About ${money(headline.perDayCents, summary)} a day for ${count(headline.daysLeft, 'day')}`
+}
+
+/**
  * The leading number, as the Overview leads: safe to spend, or before any
  * budget is set, cash until payday. A problem is in red and in words ("over",
  * "short"), so color is never the only sign.
@@ -284,29 +313,25 @@ function headlineOf(summary) {
   const amount = money(Math.abs(headline.cents), summary)
   if (headline.kind === 'leeway') {
     const short = headline.cents < 0
-    const perDay = headline.perDayCents
     return {
       label: 'Safe to spend',
       value: short ? `${amount} over` : amount,
       tone: short ? 'over' : 'ink',
-      note:
-        perDay === null
-          ? 'Nothing left to spend this period'
-          : `About ${money(perDay, summary)} a day for ${count(headline.daysLeft, 'day')}`,
+      note: leewayNote(summary),
     }
   }
   const payday = shortDate(headline.payday, locale)
   // The figure is never below zero, as on the Overview; how far bills outrun
-  // the cash is its own line. An older server sent the shortfall as a negative figure.
-  const shortfall = headline.shortfallCents ?? Math.max(0, -headline.cents)
+  // the cash is its own line.
+  const shortfall = headline.shortfallCents > 0
   return {
     label: 'Until payday',
     value: money(Math.max(0, headline.cents), summary),
-    tone: shortfall > 0 ? 'over' : 'ink',
-    note:
-      shortfall > 0
-        ? `${money(shortfall, summary)} short of bills due by ${payday}`
-        : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
+    // Red only when short before a payday read from paychecks, as on the Overview.
+    tone: shortfall && !headline.paydayEstimate ? 'over' : 'ink',
+    note: shortfall
+      ? shortfallNote(headline, summary)
+      : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
   }
 }
 
