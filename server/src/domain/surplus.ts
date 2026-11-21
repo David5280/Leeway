@@ -26,12 +26,12 @@ export function surplusPerPeriod(
   return convertCadence(perMonth, 'month', cadenceOf(periodConfig(settings)))
 }
 
-/** The surplus a typical budget period leaves, read as of now. */
+/** The surplus a typical budget period leaves, read as of now, and whether its pay is an estimate. */
 export async function typicalSurplus(
   db: Db,
   settings: Settings,
   now: Date,
-): Promise<number | null> {
+): Promise<{ cents: number | null; estimate: boolean }> {
   const { monthly } = await typicalMonth(db, settings, currentPeriod(settings, now).today)
-  return surplusPerPeriod(monthly, settings)
+  return { cents: surplusPerPeriod(monthly, settings), estimate: monthly.incomeEstimated }
 }

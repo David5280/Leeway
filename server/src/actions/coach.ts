@@ -67,7 +67,7 @@ export const whenCanIAffordAction = defineAction({
   name: 'when_can_i_afford',
   title: 'When can I afford this?',
   description:
-    'When a purchase becomes affordable. If it fits today (as can_i_afford checks), affordableBy is today. Otherwise it counts budget periods of saving: at perPeriodCents if given (what the owner says they can put aside each period), or else a typical period\'s surplus (a typical month of pay from the employers paying now less typical spending, as get_financial_profile reads them, in budget period terms; never money from people, refunds or transfers in, and none while no employer is paying) after what goals in progress need each period. savedCents is what is already put aside toward it. Returns periodsNeeded, affordableBy (the last day of the period it is saved by), the figures used and a plain message. For a purchase goal that already exists, list_goals gives its projectedDate instead. To start saving, create_goal with kind "purchase". Nothing is bought or recorded.',
+    'When a purchase becomes affordable. If it fits today (as can_i_afford checks), affordableBy is today. Otherwise it counts budget periods of saving: at perPeriodCents if given (what the owner says they can put aside each period), or else a typical period\'s surplus (a typical month of pay from the employers paying now less typical spending, as get_financial_profile reads them, in budget period terms; never money from people, refunds or transfers in, and none while no employer is paying) after what goals in progress need each period. savedCents is what is already put aside toward it. Returns periodsNeeded, affordableBy (the last day of the period it is saved by), the figures used and a plain message; surplusEstimated is true while that pay is an estimate, and the message then says the date is one too. For a purchase goal that already exists, list_goals gives its projectedDate instead. To start saving, create_goal with kind "purchase". Nothing is bought or recorded.',
   input: purchaseInput.extend({
     savedCents: z.number().int().min(0).default(0),
     perPeriodCents: z.number().int().positive().nullable().default(null),
@@ -88,7 +88,8 @@ export const whenCanIAffordAction = defineAction({
       today,
       check,
       perPeriodCents: input.perPeriodCents,
-      surplusPerPeriodCents: surplus,
+      surplusPerPeriodCents: surplus.cents,
+      surplusEstimated: surplus.estimate,
       // Goals already being saved for get the surplus first.
       goalsNeedPerPeriodCents: goals
         .filter((goal) => goal.status === 'in_progress')

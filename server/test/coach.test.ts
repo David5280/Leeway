@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { carriesMask } from '../src/domain/accountNumber.js'
+import { ESTIMATE_CAVEAT } from '../src/domain/purchasePlan.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -479,6 +480,34 @@ describe('when_can_i_afford', () => {
       affordableBy: '2027-05-31',
     })
     expect(plan.message).toContain('At your usual surplus of $793.13 each budget period')
+    // Four months of pay is enough to be sure, so the date carries no caveat.
+    expect(plan.surplusEstimated).toBe(false)
+    expect(plan.message).not.toContain(ESTIMATE_CAVEAT)
+  })
+
+  it('says the date is an estimate while one paycheck is all there is to go on', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    const home = await call('create_category', { name: 'Home' })
+    for (const date of ['2026-09-10', '2026-10-10', '2026-11-10']) {
+      const rent = await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Rent',
+        amountCents: 50000,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [rent, home.id])
+    }
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'ACME PAYROLL',
+      amountCents: -300000,
+      detailed: 'INCOME_SALARY',
+    })
+    const plan = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(plan).toMatchObject({ basis: 'recent_surplus', surplusEstimated: true })
+    expect(plan.message.endsWith(` ${ESTIMATE_CAVEAT}`)).toBe(true)
+    // A savings amount the owner gives is theirs, so it needs no caveat.
+    const given = await call('when_can_i_afford', { amountCents: 500000, perPeriodCents: 50000 })
+    expect(given.message).not.toContain(ESTIMATE_CAVEAT)
   })
 
   it('has no date with no employer paying, or when nothing is left over', async () => {
