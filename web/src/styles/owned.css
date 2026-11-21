@@ -1,0 +1,11 @@
+/* The Net worth section's things entered by hand (pages/plan/owned/). */
+
+/* A row is a button, so it starts from a button's look: none. */
+.owned-row {
+  width: calc(100% + 24px);
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}

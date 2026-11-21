@@ -256,6 +256,14 @@ export const SCREENS: Screen[] = [
   }),
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
+  at('planSection', '/plan/net-worth', {
+    name: '/plan/net-worth adding something owned or owed',
+    then: open(/^Add$/, (page) => page.getByRole('form', { name: 'Add something' })),
+  }),
+  at('planSection', '/plan/net-worth', {
+    name: '/plan/net-worth changing a loan entered by hand',
+    then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
+  }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',

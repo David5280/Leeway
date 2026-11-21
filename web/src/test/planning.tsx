@@ -143,9 +143,19 @@ export function debtPlans(
   }
 }
 
-/** The server for the Plan screen: cash flow is always there, the rest per test. */
+/**
+ * The server for the Plan screen: cash flow is always there, with nothing
+ * entered by hand unless a test says otherwise; the rest per test.
+ */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
-  return fakeServer({ get_cash_flow: () => cashFlow(), ...handlers }, routes)
+  return fakeServer(
+    {
+      get_cash_flow: () => cashFlow(),
+      list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
+      ...handlers,
+    },
+    routes,
+  )
 }
 
 /** The Plan screen at an address, with its routes, as the app has them. */
