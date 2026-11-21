@@ -1,8 +1,7 @@
 // The calendar stays out of the way until linked, a link is checked before
 // anything is saved, and the weeks ahead show what is coming and open a
-// trip. No real
-// calendar can be reached from the tests, so a linked one is stood in for
-// (calendar.ts).
+// trip. No real calendar can be reached from the tests, so a linked one is
+// stood in for (calendar.ts).
 
 import { expect, test } from '@playwright/test'
 import { LONG_EVENT, LONG_TRIP, pretendCalendar } from './calendar'

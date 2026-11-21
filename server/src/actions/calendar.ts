@@ -1,6 +1,6 @@
-// Actions for the linked calendar, the forecast of the weeks ahead and trips. All
-// are for the app only: the calendar's address is a secret and its events
-// are the owner's own, so none of this reaches an agent.
+// Actions for the linked calendar, the forecast of the weeks ahead and trips.
+// All are for the app only: the calendar's address is a secret and its
+// events are the owner's own, so none of this reaches an agent.
 
 import { z } from 'zod'
 import type { AppContext } from '../context.js'
