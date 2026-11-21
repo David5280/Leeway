@@ -1,6 +1,7 @@
 // The Plan screen: bills, goals, debts, net worth or retirement, one section
 // at a time. Cash until payday leads the bills, the section it answers for,
-// and stays off the others so each opens on its own subject.
+// with any spare cash that could sit in savings under it, and both stay off
+// the others so each opens on its own subject.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Shell } from '../components/Shell'
@@ -8,6 +9,7 @@ import { TabRow } from '../components/TabRow'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
+import { IdleCashCard } from './plan/IdleCash'
 import { GoalsSection } from './plan/goals/GoalsSection'
 import { NetWorthSection } from './plan/NetWorth'
 import { RetirementSection } from './plan/retirement/RetirementSection'
@@ -42,7 +44,12 @@ export function Plan() {
         options={OPTIONS}
         onChange={(next) => navigate(`/plan/${next}`)}
       />
-      {current === 'bills' && <CashFlowCard />}
+      {current === 'bills' && (
+        <>
+          <CashFlowCard />
+          <IdleCashCard />
+        </>
+      )}
       <Content />
     </Shell>
   )

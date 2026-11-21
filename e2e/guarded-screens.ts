@@ -8,6 +8,7 @@ import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { CONNECT_SCREEN } from './connect-screen'
+import { fakeSpareCash } from './idleCash'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
@@ -223,6 +224,11 @@ export const SCREENS: Screen[] = [
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
   at('plan', '/plan'),
+  at('plan', '/plan', {
+    name: '/plan with spare cash in checking',
+    // The shared install can't promise spare cash, so the answer is stood in for.
+    before: fakeSpareCash,
+  }),
   at('plan', '/plan', {
     name: '/plan adding a bill',
     then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
