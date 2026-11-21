@@ -223,8 +223,13 @@ export const SCREENS: Screen[] = [
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
   at('plan', '/plan'),
-  at('plan', '/plan', {
-    name: '/plan adding a bill',
+  at('planSection', '/plan/payday', {
+    name: '/plan/payday changing the pay',
+    then: open('Not quite', (page) => page.getByRole('form', { name: 'Your pay' })),
+  }),
+  at('planSection', '/plan/bills'),
+  at('planSection', '/plan/bills', {
+    name: '/plan/bills adding a bill',
     then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
   }),
   at('planSection', '/plan/goals'),

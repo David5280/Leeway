@@ -50,11 +50,12 @@ export const portableConfigSchema = z.object({
 
 export type PortableConfig = z.infer<typeof portableConfigSchema>
 
-/** Settings without the retirement assumptions, which never leave this install. */
-function withoutRetirement<T extends { retirement: unknown }>({
+/** Settings without the retirement assumptions or the owner's pay, which never leave this install. */
+function withoutLocalOnly<T extends { retirement: unknown; pay: unknown }>({
   retirement: _retirement,
+  pay: _pay,
   ...rest
-}: T): Omit<T, 'retirement'> {
+}: T): Omit<T, 'retirement' | 'pay'> {
   return rest
 }
 
@@ -73,7 +74,7 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     exportedAt: new Date().toISOString(),
     // Essential categories go by name below, not by this install's ids; the
     // retirement assumptions stay on this install (see the schema above).
-    settings: { ...withoutRetirement(settings), savingsPlan },
+    settings: { ...withoutLocalOnly(settings), savingsPlan },
     // Rollover counts from a day on this install, so it stays here.
     categories: categories.map(
       ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,

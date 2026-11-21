@@ -240,8 +240,18 @@ describe('HTTP API', () => {
 })
 
 describe('MCP endpoint', () => {
+  // Its own app without per-address limits: these tests call every tool, more
+  // than a minute's allowance. The flood test above checks the limit itself.
+  let mcpApp: FastifyInstance
+  beforeAll(async () => {
+    mcpApp = await buildApp(ctx, { webDir: null, rateLimit: false })
+  })
+  afterAll(async () => {
+    await mcpApp.close()
+  })
+
   const rpc = (token: string, method: string, params: Record<string, unknown> = {}) =>
-    app.inject({
+    mcpApp.inject({
       method: 'POST',
       url: '/mcp',
       headers: {

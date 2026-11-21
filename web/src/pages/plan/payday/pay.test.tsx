@@ -1,0 +1,147 @@
+// The Payday section's pay card: what Leeway found, the one-tap confirm, and
+// the owner's own pay in its place.
+
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PayView } from '../../../api/client'
+import { failing } from '../../../test/fake'
+import { noPay, payView } from '../../../test/pay'
+import { planServer, renderPlan } from '../../../test/planning'
+
+afterEach(() => vi.unstubAllGlobals())
+
+const yours = { amountCents: 250_000, cadence: 'semimonth' as const, nextPayday: '2026-11-30' }
+
+function show(view: PayView, more: Parameters<typeof planServer>[0] = {}) {
+  const server = planServer({ get_pay: () => view, ...more })
+  renderPlan('/plan/payday')
+  return { server, user: userEvent.setup() }
+}
+
+const card = () => screen.findByRole('region', { name: 'Your pay' })
+
+describe('Your pay', () => {
+  it('shows the paycheck found, how often and the next payday, as an estimate until confirmed', async () => {
+    show(payView())
+    const pay = await card()
+    expect(pay).toHaveTextContent('Each paycheck$2,100')
+    expect(pay).toHaveTextContent('Every 2 weeks from Acme Corp. Next payday Fri, Nov 27.')
+    expect(within(pay).getByText('Estimate')).toBeVisible()
+    // The paycheck is money in, so it is drawn green.
+    expect(within(pay).getByText('$2,100')).toHaveClass('money-in')
+  })
+
+  it('confirms it in one tap', async () => {
+    const { server, user } = show(payView())
+    await user.click(await screen.findByRole('button', { name: 'Looks right' }))
+    await waitFor(() => expect(server.actions('confirm_pay')).toEqual([{}]))
+  })
+
+  it('drops the estimate once confirmed, and offers a change instead of a confirm', async () => {
+    show(payView([{}], { confirmed: true }))
+    const pay = await card()
+    expect(within(pay).queryByText('Estimate')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Looks right' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change my pay' })).toBeVisible()
+  })
+
+  it('names a second job beside the first', async () => {
+    show(payView([{}, { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }]))
+    expect(await card()).toHaveTextContent('from Acme Corp and 1 more.')
+  })
+
+  it('takes the owner’s own pay, filled in from what was found', async () => {
+    const { server, user } = show(payView())
+    await user.click(await screen.findByRole('button', { name: 'Not quite' }))
+    const form = screen.getByRole('form', { name: 'Your pay' })
+    expect(within(form).getByLabelText('One paycheck')).toHaveValue('2100')
+    expect(within(form).getByLabelText('How often you are paid')).toHaveDisplayValue(
+      'Every 2 weeks',
+    )
+    expect(within(form).getByLabelText('Next payday')).toHaveValue('2026-11-27')
+    await user.clear(within(form).getByLabelText('One paycheck'))
+    await user.type(within(form).getByLabelText('One paycheck'), '2,500')
+    await user.selectOptions(within(form).getByLabelText('How often you are paid'), 'Twice a month')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('set_pay')).toEqual([
+        { pay: { amountCents: 250_000, cadence: 'semimonth', nextPayday: '2026-11-27' } },
+      ]),
+    )
+  })
+
+  it('closes the form on Cancel without saving', async () => {
+    const { server, user } = show(payView())
+    await user.click(await screen.findByRole('button', { name: 'Not quite' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: 'Your pay' })).not.toBeInTheDocument()
+    expect(server.actions('set_pay')).toEqual([])
+  })
+
+  it('says when the pay is the owner’s own, and goes back to the paychecks', async () => {
+    const { server, user } = show(payView([{}], { override: yours }))
+    const pay = await card()
+    expect(pay).toHaveTextContent('Each paycheck$2,500')
+    expect(pay).toHaveTextContent('Twice a month, as you entered it. Next payday Mon, Nov 30.')
+    expect(within(pay).queryByText('Estimate')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Use my paychecks' }))
+    await waitFor(() => expect(server.actions('set_pay')).toEqual([{ pay: null }]))
+  })
+
+  it('opens the owner’s own pay as it was entered', async () => {
+    const { user } = show(payView([], { override: yours }))
+    await user.click(await screen.findByRole('button', { name: 'Change my pay' }))
+    expect(screen.getByLabelText('One paycheck')).toHaveValue('2500')
+    // With no paychecks to go back to, there is nothing to offer instead.
+    expect(screen.queryByRole('button', { name: 'Use my paychecks' })).not.toBeInTheDocument()
+  })
+
+  it('asks for the pay when no paycheck has been found, and waits for a full answer', async () => {
+    const { server, user } = show(noPay)
+    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
+    const save = screen.getByRole('button', { name: 'Save' })
+    expect(save).toBeDisabled()
+    await user.type(screen.getByLabelText('One paycheck'), '1800')
+    expect(save).toBeDisabled()
+    await user.type(screen.getByLabelText('Next payday'), '2026-11-20')
+    await user.click(save)
+    await waitFor(() =>
+      expect(server.actions('set_pay')).toEqual([
+        { pay: { amountCents: 180_000, cadence: 'biweek', nextPayday: '2026-11-20' } },
+      ]),
+    )
+    // No Cancel: with no pay at all, the form is the card.
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
+  it('opens how the paycheck adds up to a month', async () => {
+    const { user } = show(payView())
+    await user.click(within(await card()).getByRole('button', { name: /Each paycheck/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Your pay' })
+    expect(sheet).toHaveTextContent('Next payday Fri, Nov 27')
+    expect(
+      within(sheet).getByText(
+        'About a month $4,566 = One paycheck $2,100 and paychecks a year, over 12 months 26.1',
+      ),
+    ).toBeInTheDocument()
+    expect(sheet).toHaveTextContent('Paid every 2 weeks, next Fri, Nov 27')
+  })
+
+  it('shows why a confirm failed', async () => {
+    const { user } = show(payView(), {})
+    vi.unstubAllGlobals()
+    planServer(
+      { get_pay: () => payView() },
+      { '/api/actions/confirm_pay': failing('Leeway has not found a paycheck to confirm yet.') },
+    )
+    await user.click(await screen.findByRole('button', { name: 'Looks right' }))
+    expect(await screen.findByText(/has not found a paycheck to confirm/)).toBeVisible()
+  })
+
+  it('shows why the pay could not load', async () => {
+    planServer({}, { '/api/actions/get_pay': failing('Server is down', 500) })
+    renderPlan('/plan/payday')
+    expect(await screen.findByText('Server is down')).toBeVisible()
+  })
+})

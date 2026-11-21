@@ -1,5 +1,6 @@
 // Reads the deposits pay is worked out from, and the cadence the owner gave
-// (a saved paystub's, or a paycheck budget period's), for current.ts.
+// (a saved paystub's, or a paycheck budget period's), for current.ts; then
+// lays the owner's own word on their pay over it (given.ts).
 
 import type { Db } from '../../db/pool.js'
 import { addDays, type IsoDate } from '../../lib/dates.js'
@@ -9,6 +10,7 @@ import { freshPaystub } from '../savings/payrollMonths.js'
 import { periodConfig, type Settings } from '../settings.js'
 import { currentPay, type CurrentPay } from './current.js'
 import type { Deposit } from './deposits.js'
+import { withOwnersPay } from './given.js'
 import { PAY_CADENCE } from './payday.js'
 
 /** How far back pay is read: long enough to see a job end and a long gap before the next. */
@@ -40,8 +42,8 @@ async function givenCadence(db: Db, settings: Settings, today: IsoDate): Promise
   return config.kind === 'paycheck' ? PAY_CADENCE[config.frequency] : null
 }
 
-/** The owner's pay now, read fresh: see current.ts. */
-export async function readCurrentPay(
+/** The pay the paychecks show, before the owner's word on it: see current.ts. */
+export async function readDetectedPay(
   db: Db,
   settings: Settings,
   today: IsoDate,
@@ -49,4 +51,13 @@ export async function readCurrentPay(
   // One at a time: db may be a transaction's client, which runs one query at once.
   const deposits = await readDeposits(db, today)
   return currentPay(deposits, today, await givenCadence(db, settings, today))
+}
+
+/** The owner's pay now, read fresh, with their own word on it laid over (given.ts). */
+export async function readCurrentPay(
+  db: Db,
+  settings: Settings,
+  today: IsoDate,
+): Promise<CurrentPay> {
+  return withOwnersPay(await readDetectedPay(db, settings, today), settings.pay, today)
 }

@@ -6,6 +6,7 @@ import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { aiSettingsSchema } from './ai/settings.js'
+import { paySettingsSchema } from './pay/given.js'
 import type { PeriodConfig } from '../lib/periods.js'
 import { retirementPatchSchema, retirementSchema } from './retirement/assumptions.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
@@ -187,6 +188,11 @@ export const settingsSchema = z.object({
   savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
   /** Assumptions for retirement projections (retirement/assumptions.ts). */
   retirement: retirementSchema.default(retirementSchema.parse({})),
+  /**
+   * The owner's word on their pay (pay/given.ts). Changed only through
+   * confirm_pay and set_pay, which keep a paycheck budget period in step.
+   */
+  pay: paySettingsSchema.default(paySettingsSchema.parse({})),
 })
 
 export type Settings = z.infer<typeof settingsSchema>

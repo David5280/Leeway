@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test'
 import { addAccount } from './manual'
 
 test('a bill added by hand is listed with the others', async ({ page }) => {
-  await page.goto('/plan')
+  await page.goto('/plan/bills')
   await page.getByRole('button', { name: 'Add a bill' }).click()
   const form = page.getByRole('form', { name: 'New bill' })
   await form.getByRole('textbox', { name: 'Name' }).fill('Rent')

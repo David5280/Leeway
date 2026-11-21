@@ -70,6 +70,7 @@ import {
   listRecentBalancesAction,
   planDebtPayoffAction,
 } from './planning.js'
+import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -205,6 +206,9 @@ export const actionList = [
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
+  getPayAction,
+  confirmPayAction,
+  setPayAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,
