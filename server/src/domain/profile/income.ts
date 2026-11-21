@@ -9,6 +9,7 @@ import type { CategoryTotal } from '../budget.js'
 import { categoryTotalsByRange, sumTotals, type DateRange } from '../budgetReport.js'
 import { nextPayday, type PaydaySource } from '../cashFlow.js'
 import { listCategories, type Category } from '../categories.js'
+import { essentialIdsOf } from '../essentials.js'
 import type { Settings } from '../settings.js'
 
 /** How many recent months the averages look at. */
@@ -35,7 +36,10 @@ export interface MonthlyAverages {
   incomeCents: number | null
   /** Spending through expense categories (and uncategorized), transfers left out. */
   spendingCents: number | null
-  /** Spending in the categories the owner counts as essential (all spending by default). */
+  /**
+   * Spending in the essential categories: the owner's pick, or the ones found
+   * by their codes and names (essentials.ts), or all spending when none are.
+   */
   essentialSpendingCents: number | null
 }
 
@@ -71,13 +75,17 @@ export function currentEssentials(
   return current.length ? new Set(current.map((c) => c.id)) : null
 }
 
-/** Sums the essential categories' spending in one month's totals. Null ids count all spending. */
+/**
+ * Sums the essential categories' spending in one month's totals. Without a
+ * pick, the essentials found by their codes and names count (essentials.ts),
+ * and all spending counts when none are found.
+ */
 export function essentialSpending(
   categories: Category[],
   totals: CategoryTotal[],
   essentialIds: string[] | null,
 ): number {
-  const essentials = currentEssentials(categories, essentialIds)
+  const essentials = essentialIdsOf(categories, currentEssentials(categories, essentialIds))
   if (essentials === null) return sumTotals(categories, totals).spentCents
   return totals
     .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))

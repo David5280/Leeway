@@ -14,6 +14,7 @@ import './styles/depth.css'
 import './styles/figures.css'
 import './styles/accounts.css'
 import './styles/motion.css'
+import './styles/goals.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

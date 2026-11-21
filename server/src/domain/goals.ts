@@ -9,7 +9,8 @@ import { dateParts, type IsoDate } from '../lib/dates.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { periodContaining, type PeriodConfig } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
-import { accountNames } from './accounts.js'
+import { listAccounts } from './accounts.js'
+import { fundsOf } from './goalFunds.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import { planOf, type GoalPlan, type GoalProgressFacts, type GoalStatus } from './goalPlan.js'
 
@@ -50,6 +51,14 @@ export interface GoalRow extends GoalInput {
   balanceAsOf: IsoDate | null
   /** The day the goal was made. */
   createdOn: IsoDate
+  /** For the emergency fund: its target in months of essential spending. Null for any other goal. */
+  emergencyMonths: number | null
+  /**
+   * The accounts an emergency fund counts when it is not linked to one
+   * account (see emergencyPlan.ts); accountBalanceCents is then their total.
+   * Null for any other goal.
+   */
+  followedAccountIds: string[] | null
 }
 
 export interface GoalProgress extends GoalRow {
@@ -90,7 +99,8 @@ function goalStatus(row: GoalRow, reached: boolean, today: IsoDate): GoalStatus 
 
 /** A goal's progress and what it takes each month to reach it on time. */
 export function progressOf(row: GoalRow, today: IsoDate): GoalProgress {
-  const current = row.accountId ? Math.max(0, row.accountBalanceCents ?? 0) : row.savedCents
+  const follows = row.accountId !== null || row.followedAccountIds !== null
+  const current = follows ? Math.max(0, row.accountBalanceCents ?? 0) : row.savedCents
   const remaining = Math.max(0, row.targetCents - current)
   const months = row.targetDate ? monthsUntil(today, row.targetDate) : null
   const status = goalStatus(row, remaining === 0, today)
@@ -117,19 +127,29 @@ export function goalOf(row: GoalRow, facts: GoalProgressFacts, clock: GoalClock)
 const SELECT = `
   SELECT g.id, g.kind, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
     g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
-    g.created_at::date AS "createdOn",
+    g.created_at::date AS "createdOn", g.emergency_months AS "emergencyMonths",
     a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
 
-type StoredGoal = Omit<GoalRow, 'accountName'>
+type StoredGoal = Omit<GoalRow, 'accountName' | 'followedAccountIds'>
 
-/** Goals as read, with the account each follows named as everywhere else. */
+/**
+ * Goals as read, with the account each follows named as everywhere else, and
+ * an emergency fund's balance added up from the accounts it counts.
+ */
 async function namedGoals(db: Db, rows: StoredGoal[]): Promise<GoalRow[]> {
-  const names = await accountNames(db)
-  return rows.map((row) => ({
-    ...row,
-    accountName: row.accountId === null ? null : (names.get(row.accountId) ?? null),
-  }))
+  const accounts = await listAccounts(db)
+  const names = new Map(accounts.map((account) => [account.id, account.name]))
+  const funds = await fundsOf(db, accounts, rows)
+  return rows.map((row) => {
+    const fund = funds.get(row.id)
+    return {
+      ...row,
+      accountName: row.accountId === null ? null : (names.get(row.accountId) ?? null),
+      accountBalanceCents: fund ? fund.balanceCents : row.accountBalanceCents,
+      followedAccountIds: fund ? fund.accountIds : null,
+    }
+  })
 }
 
 async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goal[]> {
@@ -144,7 +164,7 @@ export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
   return withPlans(db, await namedGoals(db, rows), clock)
 }
 
-async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
+export async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
   const { rows } = await db.query<StoredGoal>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
   return (await withPlans(db, await namedGoals(db, rows), clock))[0]!
@@ -230,10 +250,11 @@ export async function addToGoal(
     throw new AppError('invalid_input', 'Record money on today or an earlier day')
   }
   const goal = await getGoal(db, id, clock)
-  if (goal.accountId) {
+  if (goal.accountId || goal.followedAccountIds) {
+    const balance = goal.accountId ? `the balance of ${goal.accountName}` : 'your savings'
     throw new AppError(
       'invalid_input',
-      `${goal.name} follows the balance of ${goal.accountName}, so its progress updates on its own`,
+      `${goal.name} follows ${balance}, so its progress updates on its own`,
     )
   }
   const { rows } = await db.query<{ saved: number }>(

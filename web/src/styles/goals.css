@@ -1,0 +1,34 @@
+/* The Goals section's emergency fund (pages/plan/goals/).
+   Colors come from the theme's tokens, so all three themes draw them;
+   nothing here is red. */
+
+/* Emergency fund ---------------------------------------------------------- */
+
+/* The one-tap offer leans on the accent, softly, so it reads as a next step
+   rather than a warning. */
+.emergency-offer {
+  background: var(--tone-action-soft);
+}
+
+/* A tick and its account, the whole line a target for the finger. */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap, 44px);
+  cursor: pointer;
+}
+
+.check-row input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.check-words {
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-1) var(--space-3);
+  overflow-wrap: anywhere;
+}

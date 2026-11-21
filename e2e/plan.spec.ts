@@ -21,8 +21,10 @@ test('a savings goal shows what is saved so far', async ({ page }) => {
   await form.getByRole('textbox', { name: 'Target amount' }).fill('3000')
   await form.getByRole('textbox', { name: 'Saved so far' }).fill('500')
   await form.getByRole('button', { name: 'Add goal' }).click()
-  await expect(page.getByText('Emergency fund')).toBeVisible()
-  await expect(page.getByText(/\$500/).first()).toBeVisible()
+  // Its own card, apart from the offer to start an emergency fund that tracks savings.
+  const card = page.getByRole('region', { name: 'Emergency fund', exact: true })
+  await expect(card).toBeVisible()
+  await expect(card.getByText(/\$500/).first()).toBeVisible()
 })
 
 test('a credit card balance shows under debts and in net worth', async ({ page }) => {

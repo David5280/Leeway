@@ -69,7 +69,16 @@ export function goal(
   fields: { name: string; targetCents: number } & Partial<Goal>,
   facts: GoalProgressFacts = NO_PROGRESS,
 ): Goal {
-  const { id, accountName, accountBalanceCents, balanceAsOf, createdOn, ...input } = fields
+  const {
+    id,
+    accountName,
+    accountBalanceCents,
+    balanceAsOf,
+    createdOn,
+    emergencyMonths,
+    followedAccountIds,
+    ...input
+  } = fields
   return goalOf(
     {
       // Test account ids are not UUIDs, so the account is checked apart from the schema.
@@ -80,6 +89,8 @@ export function goal(
       accountBalanceCents: accountBalanceCents ?? null,
       balanceAsOf: balanceAsOf ?? null,
       createdOn: createdOn ?? '2026-09-01',
+      emergencyMonths: emergencyMonths ?? null,
+      followedAccountIds: followedAccountIds ?? null,
     },
     facts,
     { today: TODAY, period: { kind: 'monthly', startDay: 1 } },
@@ -143,9 +154,19 @@ export function debtPlans(
   }
 }
 
-/** The server for the Plan screen: cash flow is always there, the rest per test. */
+/**
+ * The server for the Plan screen: cash flow is always there, with no
+ * emergency fund to offer unless a test says otherwise; the rest per test.
+ */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
-  return fakeServer({ get_cash_flow: () => cashFlow(), ...handlers }, routes)
+  return fakeServer(
+    {
+      get_cash_flow: () => cashFlow(),
+      get_emergency_fund: () => null,
+      ...handlers,
+    },
+    routes,
+  )
 }
 
 /** The Plan screen at an address, with its routes, as the app has them. */

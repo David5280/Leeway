@@ -1,5 +1,6 @@
-// The Goals section of the Plan tab: savings goals and purchases being saved
-// for, with what each budget period needs and whether recent progress makes it.
+// The Goals section of the Plan tab, most general first: the emergency fund
+// offer while there is none, then each goal (purchases being saved for among
+// them) with what each budget period needs and whether recent progress makes it.
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here.
 
@@ -10,6 +11,8 @@ import type { Account, Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { LoadingOrError } from '../../../components/ui'
 import { FormCard } from '../FormCard'
+import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
+import type { EmergencyView } from './emergencyText'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
 
@@ -58,6 +61,48 @@ function GoalEditor({
   )
 }
 
+/** Every goal's card, in the owner's order; the emergency fund draws its own. */
+function GoalCards({
+  goals,
+  emergency,
+  today,
+  onEdit,
+}: {
+  goals: Goal[]
+  emergency: EmergencyView | null
+  today: string
+  onEdit: (goal: Goal) => void
+}) {
+  return (
+    <div className="grid">
+      {goals.map((goal) =>
+        goal.emergencyMonths !== null && emergency ? (
+          <EmergencyCard key={goal.id} goal={goal} view={emergency} onEdit={() => onEdit(goal)} />
+        ) : (
+          <GoalCard key={goal.id} goal={goal} today={today} onEdit={() => onEdit(goal)} />
+        ),
+      )}
+    </div>
+  )
+}
+
+/**
+ * How a first goal starts: the emergency fund offer when there is one,
+ * otherwise, with no goals yet, a line on what to save for.
+ */
+function GoalsStart({ goals, emergency }: { goals: Goal[]; emergency: EmergencyView | null }) {
+  if (emergency && emergency.goalId === null) return <EmergencyOffer view={emergency} />
+  if (goals.length > 0) return null
+  return (
+    <Card static="empty" label="No goals">
+      <p className="empty">
+        No goals yet. Save for something you want to buy, or start an emergency fund once a month of
+        spending is in.
+      </p>
+    </Card>
+  )
+}
+
 export function GoalsSection() {
   const [params, setParams] = useSearchParams()
   // Opened from a link that asks for a new purchase; otherwise nothing is open.
@@ -68,9 +113,10 @@ export function GoalsSection() {
   const accounts = useAction('list_accounts')
   // The Plan screen loads cash flow anyway; its date is the server's today.
   const cash = useAction('get_cash_flow')
+  const emergency = useAction('get_emergency_fund')
 
-  if (!goals.data || !accounts.data || !cash.data) {
-    const error = goals.error ?? accounts.error ?? cash.error
+  if (!goals.data || !accounts.data || !cash.data || emergency.data === undefined) {
+    const error = goals.error ?? accounts.error ?? cash.error ?? emergency.error
     return <LoadingOrError error={error} />
   }
 
@@ -110,25 +156,13 @@ export function GoalsSection() {
           </button>
         </div>
       </div>
-      {goals.data.length === 0 ? (
-        <Card static="empty" label="No goals">
-          <p className="empty">
-            No goals yet. Save for something you want to buy, or start an emergency fund of one
-            month of spending.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid">
-          {goals.data.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              today={cash.data.today}
-              onEdit={() => setEditing({ goal, kind: goal.kind })}
-            />
-          ))}
-        </div>
-      )}
+      <GoalsStart goals={goals.data} emergency={emergency.data} />
+      <GoalCards
+        goals={goals.data}
+        emergency={emergency.data}
+        today={cash.data.today}
+        onEdit={(goal) => setEditing({ goal, kind: goal.kind })}
+      />
     </>
   )
 }

@@ -32,6 +32,8 @@ describe('progressOf', () => {
     kind: 'savings' as const,
     setAside: false,
     createdOn: '2026-11-01',
+    emergencyMonths: null,
+    followedAccountIds: null as string[] | null,
   }
 
   it('works out what to set aside each month, counting this month', () => {
