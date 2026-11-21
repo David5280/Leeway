@@ -271,8 +271,12 @@ export const SCREENS: Screen[] = [
     before: (page) => pretendCalendar(page),
   }),
   at('trip', SOON_TRIP_PATH, {
-    name: 'a trip, its spending by part',
+    name: 'a trip ahead, planning its budget',
     before: (page) => pretendCalendar(page),
+  }),
+  at('trip', SOON_TRIP_PATH, {
+    name: 'a trip under way, over its budget',
+    before: (page) => pretendCalendar(page, { budgeted: true }),
   }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {

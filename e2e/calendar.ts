@@ -92,21 +92,34 @@ function forecast() {
 
 function trips() {
   return [
-    { ...SOON, name: LONG_TRIP, source: 'calendar', totalCents: 1234567 },
-    { ...trip(-90, 3), name: null, source: 'spending', totalCents: 45000 },
+    { ...SOON, name: LONG_TRIP, source: 'calendar', totalCents: 1234567, goalId: 'g1' },
+    { ...trip(-90, 3), name: null, source: 'spending', totalCents: 45000, goalId: null },
   ]
 }
 
-/** A trip's page, its spending by part and a transaction with a long name. */
-function tripDetail() {
+/** A trip's page: under way with a budget it went over, or ahead with none. */
+function tripDetail(budgeted: boolean) {
+  const planned = { travel: 120000, stay: 240000, food: 45000, activities: 60000 }
   return {
     ...SOON,
     name: LONG_TRIP,
     source: 'calendar',
     totalCents: 1234567,
+    goalId: budgeted ? 'g1' : null,
     days: 9,
-    status: 'upcoming',
+    status: budgeted ? 'under_way' : 'upcoming',
     spentByPart: { travel: 734567, stay: 300000, food: 150000, activities: 50000 },
+    budget: budgeted
+      ? {
+          goalId: 'g1',
+          name: LONG_TRIP,
+          ...SOON,
+          plannedByPart: planned,
+          plannedCents: 465000,
+          leftCents: -769567,
+          leftByPart: { travel: -614567, stay: -60000, food: -105000, activities: 10000 },
+        }
+      : null,
     transactions: [
       {
         id: '00000000-0000-4000-8000-0000000000e1',
@@ -141,10 +154,10 @@ async function answer(page: Page, action: string, result: unknown) {
 }
 
 /** A linked calendar whose last read failed, with the weeks ahead and trips it brings. */
-export async function pretendCalendar(page: Page) {
+export async function pretendCalendar(page: Page, options: { budgeted?: boolean } = {}) {
   await answer(page, 'calendar_status', LINKED)
   await answer(page, 'get_forecast', forecast())
   await answer(page, 'list_trips', trips())
-  await answer(page, 'get_trip', tripDetail())
+  await answer(page, 'get_trip', tripDetail(options.budgeted ?? false))
   await answer(page, 'trip_of_transaction', { ...SOON, name: LONG_TRIP })
 }

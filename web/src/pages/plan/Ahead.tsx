@@ -136,7 +136,10 @@ function Trips({ trips }: { trips: TripSummary[] }) {
             <span className="ellipsis" style={{ fontWeight: 500 }}>
               {tripName(trip)}
             </span>
-            <span className="small muted">{dayRange(trip, settings.locale)}</span>
+            <span className="small muted">
+              {dayRange(trip, settings.locale)}
+              {trip.goalId ? ', budget planned' : ''}
+            </span>
           </span>
           <Money cents={trip.totalCents} />
         </Link>

@@ -79,6 +79,15 @@ async function seed() {
   await call('connect_calendar', { url: 'https://calendar.example.com/secret.ics' })
 }
 
+const LISBON_BUDGET = {
+  name: 'Lisbon trip',
+  ...LISBON,
+  travelCents: 80000,
+  stayCents: 60000,
+  foodPerDayCents: 5000,
+  activitiesCents: 20000,
+}
+
 describe('partOf', () => {
   const tx = (fields: Partial<Parameters<typeof partOf>[0]>) =>
     partOf({
@@ -129,20 +138,34 @@ describe('clusters', () => {
 })
 
 describe('trips', () => {
-  it('lists calendar trips and runs of travel spending, newest first', async () => {
+  it('lists calendar trips, trip budgets and runs of travel spending, newest first', async () => {
     await seed()
+    await call('create_trip_budget', LISBON_BUDGET)
+    const austin = await call('create_trip_budget', {
+      ...LISBON_BUDGET,
+      name: 'Weekend in Austin',
+      startsOn: '2027-01-08',
+      endsOn: '2027-01-10',
+    })
     const trips = await call('list_trips')
-    expect(trips.map((t) => [t.startsOn, t.endsOn, t.name, t.source, t.totalCents])).toEqual([
+    expect(
+      trips.map((t) => [t.startsOn, t.endsOn, t.name, t.source, t.totalCents, t.goalId !== null]),
+    ).toEqual([
+      ['2027-01-08', '2027-01-10', 'Weekend in Austin', 'budget', 0, true],
       // The flight booked in November is part of the Lisbon trip, not a trip of its own.
-      ['2026-12-10', '2026-12-14', 'Lisbon trip', 'calendar', 70000],
-      ['2026-10-01', '2026-10-01', null, 'spending', 15000],
-      ['2026-07-01', '2026-07-03', null, 'spending', 45000],
-      ['2026-03-10', '2026-03-13', 'Ski trip', 'calendar', 110000],
+      ['2026-12-10', '2026-12-14', 'Lisbon trip', 'calendar', 70000, true],
+      ['2026-10-01', '2026-10-01', null, 'spending', 15000, false],
+      ['2026-07-01', '2026-07-03', null, 'spending', 45000, false],
+      ['2026-03-10', '2026-03-13', 'Ski trip', 'calendar', 110000, false],
     ])
+    // Deleting the goal deletes its plan; the calendar trip stays.
+    await call('delete_goal', { id: austin.id })
+    expect((await call('list_trips')).map((t) => t.name)).not.toContain('Weekend in Austin')
   })
 
-  it('shows a trip’s spending by part', async () => {
+  it('shows a trip’s spending by part, against its budget', async () => {
     await seed()
+    const goal = await call('create_trip_budget', LISBON_BUDGET)
     const lisbon = await call('get_trip', LISBON)
     expect(lisbon).toMatchObject({
       name: 'Lisbon trip',
@@ -150,13 +173,21 @@ describe('trips', () => {
       days: 5,
       status: 'upcoming',
       totalCents: 70000,
+      goalId: goal.id,
       spentByPart: { travel: 70000, stay: 0, food: 0, activities: 0 },
+      budget: {
+        plannedCents: 185000,
+        plannedByPart: { travel: 80000, stay: 60000, food: 25000, activities: 20000 },
+        leftCents: 115000,
+        leftByPart: { travel: 10000, stay: 60000, food: 25000, activities: 20000 },
+      },
     })
     expect(lisbon.transactions.map((t) => t.id)).toEqual([ids.lisbonFlight])
 
     const ski = await call('get_trip', SKI)
     expect(ski).toMatchObject({
       status: 'past',
+      budget: null,
       totalCents: 110000,
       spentByPart: { travel: 40000, stay: 50000, food: 8000, activities: 12000 },
     })
@@ -171,6 +202,21 @@ describe('trips', () => {
     expect(await call('get_trip', { startsOn: '2026-11-16', endsOn: '2026-11-18' })).toMatchObject({
       status: 'under_way',
       totalCents: 0,
+    })
+  })
+
+  it('names a trip from its budget when the calendar does not have it', async () => {
+    await seed()
+    await call('create_trip_budget', {
+      ...LISBON_BUDGET,
+      name: 'Austin',
+      startsOn: '2027-01-08',
+      endsOn: '2027-01-10',
+    })
+    expect(await call('get_trip', { startsOn: '2027-01-08', endsOn: '2027-01-10' })).toMatchObject({
+      name: 'Austin',
+      source: 'budget',
+      status: 'upcoming',
     })
   })
 
@@ -201,5 +247,57 @@ describe('trips', () => {
     // Food on a run of travel spending is not part of it.
     expect(await call('trip_of_transaction', { id: ids.julyFood })).toBeNull()
     expect(await call('trip_of_transaction', { id: ids.everyday })).toBeNull()
+  })
+})
+
+describe('trip budgets', () => {
+  it('make one purchase goal set aside for by the day the trip starts', async () => {
+    const goal = await call('create_trip_budget', LISBON_BUDGET)
+    expect(goal).toMatchObject({
+      kind: 'purchase',
+      name: 'Lisbon trip',
+      targetCents: 185000,
+      targetDate: '2026-12-10',
+      setAside: true,
+      color: '#2fb3a6',
+      accountId: null,
+    })
+    expect((await call('list_goals')).map((g) => g.id)).toEqual([goal.id])
+  })
+
+  it('refuse a second budget for the same trip, a trip already started, and an empty plan', async () => {
+    await call('create_trip_budget', LISBON_BUDGET)
+    expect(await callError('create_trip_budget', LISBON_BUDGET)).toMatchObject({ code: 'conflict' })
+    expect(
+      await callError('create_trip_budget', {
+        ...LISBON_BUDGET,
+        startsOn: '2026-11-16',
+        endsOn: '2026-11-18',
+      }),
+    ).toMatchObject({
+      code: 'invalid_input',
+      message: expect.stringMatching(/before the trip starts/),
+    })
+    const empty = { ...LISBON_BUDGET, startsOn: '2027-02-01', endsOn: '2027-02-02' }
+    expect(
+      await callError('create_trip_budget', {
+        ...empty,
+        travelCents: 0,
+        stayCents: 0,
+        foodPerDayCents: 0,
+        activitiesCents: 0,
+      }),
+    ).toMatchObject({ code: 'invalid_input', message: expect.stringMatching(/at least one part/) })
+    expect((await call('list_goals')).length).toBe(1)
+  })
+
+  it('refuse a trip that ends before it starts or runs past two months', async () => {
+    const backward = await callError('create_trip_budget', {
+      ...LISBON_BUDGET,
+      endsOn: '2026-12-01',
+    })
+    expect(backward.message).toMatch(/ends on or after/)
+    const long = await callError('create_trip_budget', { ...LISBON_BUDGET, endsOn: '2027-03-01' })
+    expect(long.message).toMatch(/up to 60 days/)
   })
 })

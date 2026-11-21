@@ -1,6 +1,6 @@
-// Actions for the linked calendar, the forecast of the weeks ahead and trips.
-// All are for the app only: the calendar's address is a secret and its
-// events are the owner's own, so none of this reaches an agent.
+// Actions for the linked calendar, the forecast of the weeks ahead, trips and
+// trip budgets. All are for the app only: the calendar's address is a secret
+// and its events are the owner's own, so none of this reaches an agent.
 
 import { z } from 'zod'
 import type { AppContext } from '../context.js'
@@ -12,10 +12,11 @@ import {
   refreshCalendar,
   type CalendarDeps,
 } from '../domain/calendar/store.js'
+import { createTripBudget, tripBudgetInputSchema } from '../domain/trips/budget.js'
 import { getTrip, listTrips, tripOfTransaction } from '../domain/trips/trips.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { defineAction } from './action.js'
-import { settingsAndToday, today } from './today.js'
+import { goalClock, settingsAndToday, today } from './today.js'
 
 /** What reading the calendar needs, from the context and the owner's time zone. */
 async function calendarDeps(ctx: AppContext): Promise<CalendarDeps> {
@@ -63,7 +64,7 @@ export const refreshCalendarAction = defineAction({
 export const disconnectCalendarAction = defineAction({
   name: 'disconnect_calendar',
   title: 'Unlink the calendar',
-  description: 'Forget the calendar link and its events.',
+  description: 'Forget the calendar link and its events. Trip budgets already planned stay.',
   input: z.object({}),
   scope: 'write',
   surface: 'app',
@@ -88,7 +89,7 @@ export const listTripsAction = defineAction({
   name: 'list_trips',
   title: 'Trips',
   description:
-    'Recent and coming trips, from the calendar and runs of travel spending, each with its total.',
+    'Recent and coming trips, from the calendar, trip budgets and runs of travel spending, each with its total.',
   input: z.object({}),
   scope: 'read',
   surface: 'app',
@@ -98,7 +99,7 @@ export const listTripsAction = defineAction({
 export const getTripAction = defineAction({
   name: 'get_trip',
   title: 'A trip',
-  description: "One trip's transactions and total, by part.",
+  description: "One trip's transactions and total, by part, against its budget when it has one.",
   input: z.object({ startsOn: isoDateSchema, endsOn: isoDateSchema }),
   scope: 'read',
   surface: 'app',
@@ -113,4 +114,15 @@ export const tripOfTransactionAction = defineAction({
   scope: 'read',
   surface: 'app',
   run: async (ctx, { id }) => tripOfTransaction(ctx.db, id, await today(ctx)),
+})
+
+export const createTripBudgetAction = defineAction({
+  name: 'create_trip_budget',
+  title: 'Plan a trip budget',
+  description:
+    'Plan a trip: travel, a place to stay, food per day and things to do become one purchase goal named for the trip, set aside for by the day it starts.',
+  input: tripBudgetInputSchema,
+  scope: 'write',
+  surface: 'app',
+  run: async (ctx, input) => createTripBudget(ctx.db, input, await goalClock(ctx)),
 })

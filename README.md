@@ -30,6 +30,9 @@ bank, and nothing in Leeway can ever move money.
 - **Trips**: the spending around time away, from your calendar or from a run
   of travel charges, gathered on one page by part (getting there, a place to
   stay, food, things to do). A transaction on a trip links to it.
+- **Trip budgets**: plan a coming trip by its parts and it becomes one savings
+  goal, set aside for by the day you leave; during the trip its page shows
+  what is left of each part.
 - **Savings and investments**: savings, retirement and investing accounts
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI

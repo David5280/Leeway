@@ -124,7 +124,7 @@ export async function connectCalendar(
   return calendarStatus(pool)
 }
 
-/** Unlinks the calendar and forgets its events. */
+/** Unlinks the calendar and forgets its events. Trip budgets already made stay. */
 export async function disconnectCalendar(pool: pg.Pool): Promise<CalendarStatus> {
   await withTransaction(pool, async (db) => {
     await db.query('DELETE FROM calendar_events')

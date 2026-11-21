@@ -28,7 +28,7 @@ describe('Coming up', () => {
       calendar_status: () => linked(),
       get_forecast: () => forecastOf(ITEMS),
       list_trips: () => [
-        tripSummary(),
+        tripSummary({ goalId: 'g1' }),
         tripSummary({
           name: null,
           source: 'spending',
@@ -66,7 +66,9 @@ describe('Coming up', () => {
     )
     expect(screen.getByRole('region', { name: 'Week of Dec 22' })).toHaveTextContent('Nothing due.')
     const trips = within(screen.getByRole('region', { name: 'Trips' }))
-    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveTextContent('Dec 10 to Dec 14')
+    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveTextContent(
+      'Dec 10 to Dec 14, budget planned',
+    )
     expect(trips.getByRole('link', { name: /Travel/ })).toHaveAttribute(
       'href',
       '/trips/2026-07-01/2026-07-01',

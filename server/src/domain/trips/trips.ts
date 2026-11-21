@@ -1,7 +1,7 @@
 // Trips: the spending around one time away, gathered into one view with its
-// total. A trip comes from the calendar (an event that reads as a trip), or
-// from a run of travel spending (flights, hotels, rentals a few days apart)
-// when no calendar says so.
+// total. A trip comes from the calendar (an event that reads as a trip), from
+// a trip budget, or from a run of travel spending (flights, hotels, rentals a
+// few days apart) when no calendar says so.
 
 import type { Db } from '../../db/pool.js'
 import { AppError } from '../../errors.js'
@@ -11,6 +11,7 @@ import { daysOf, kindOf } from '../calendar/kinds.js'
 import { eventsBetween } from '../calendar/store.js'
 import { transactionsByIds, type Transaction } from '../transactions.js'
 import { partOf, TRIP_PARTS, type TripPart } from './parts.js'
+import { tripBudgets, type TripBudget } from './budget.js'
 
 /** The longest trip, in days. */
 export const MAX_TRIP_DAYS = 60
@@ -23,21 +24,24 @@ const LIST_DAYS = 365
 /** The most trips listed. */
 const LIST_LIMIT = 24
 
-export type TripSource = 'calendar' | 'spending'
+export type TripSource = 'calendar' | 'budget' | 'spending'
 
 export interface TripSummary {
   startsOn: IsoDate
   endsOn: IsoDate
-  /** The calendar event's name; null for a run of travel spending. */
+  /** The calendar event's or the budget's name; null for a run of travel spending. */
   name: string | null
   source: TripSource
   totalCents: number
+  /** The trip budget's goal, when one was planned. */
+  goalId: string | null
 }
 
 export interface TripDetail extends TripSummary {
   days: number
   status: 'upcoming' | 'under_way' | 'past'
   spentByPart: Record<TripPart, number>
+  budget: (TripBudget & { leftCents: number; leftByPart: Record<TripPart, number> }) | null
   transactions: Transaction[]
 }
 
@@ -97,7 +101,22 @@ export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> 
       name: event.title,
       source: 'calendar',
       totalCents: 0,
+      goalId: null,
     })
+  }
+  for (const budget of await tripBudgets(db)) {
+    const found = planned.get(keyOf(budget))
+    if (found) found.goalId = budget.goalId
+    else {
+      planned.set(keyOf(budget), {
+        startsOn: budget.startsOn,
+        endsOn: budget.endsOn,
+        name: budget.name,
+        source: 'budget',
+        totalCents: 0,
+        goalId: budget.goalId,
+      })
+    }
   }
   const known = [...planned.values()]
   const costs = await costsOf(db, 'trip', known)
@@ -116,6 +135,7 @@ export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> 
       name: null,
       source: 'spending' as const,
       totalCents: run.cents,
+      goalId: null,
     }))
   return [...known, ...spending]
     .sort((a, b) => b.startsOn.localeCompare(a.startsOn))
@@ -123,17 +143,23 @@ export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> 
 }
 
 /** Where a trip on these days comes from, and its name. */
-async function sourceOf(db: Db, startsOn: IsoDate, endsOn: IsoDate) {
+async function sourceOf(
+  db: Db,
+  startsOn: IsoDate,
+  endsOn: IsoDate,
+  budget: TripBudget | undefined,
+) {
   const event = (await calendarTrips(db, startsOn, endsOn)).find(
     (e) => e.startsOn === startsOn && e.endsOn === endsOn,
   )
   if (event) return { name: event.title, source: 'calendar' as const }
+  if (budget) return { name: budget.name, source: 'budget' as const }
   return { name: null, source: 'spending' as const }
 }
 
 const zeroParts = (): Record<TripPart, number> => ({ travel: 0, stay: 0, food: 0, activities: 0 })
 
-/** One trip's spending, by part. */
+/** One trip's spending, by part, against its budget when it has one. */
 export async function getTrip(
   db: Db,
   startsOn: IsoDate,
@@ -143,7 +169,8 @@ export async function getTrip(
   if (endsOn < startsOn || daysOf({ startsOn, endsOn }) > MAX_TRIP_DAYS) {
     throw new AppError('invalid_input', `A trip runs forward, up to ${MAX_TRIP_DAYS} days`)
   }
-  const { name, source } = await sourceOf(db, startsOn, endsOn)
+  const budget = (await tripBudgets(db)).find((b) => b.startsOn === startsOn && b.endsOn === endsOn)
+  const { name, source } = await sourceOf(db, startsOn, endsOn, budget)
   // A run of travel spending is only its travel; a planned trip is everything on its days too.
   const belongs =
     source === 'spending'
@@ -186,14 +213,24 @@ export async function getTrip(
     name,
     source,
     totalCents,
+    goalId: budget?.goalId ?? null,
     days: daysOf({ startsOn, endsOn }),
     status,
     spentByPart,
+    budget: budget ? withLeft(budget, spentByPart) : null,
     transactions: await transactionsByIds(
       db,
       rows.map((row) => row.id),
     ),
   }
+}
+
+/** What is left of each part of the budget, and in all. */
+function withLeft(budget: TripBudget, spent: Record<TripPart, number>) {
+  const leftByPart = zeroParts()
+  for (const part of TRIP_PARTS) leftByPart[part] = budget.plannedByPart[part] - spent[part]
+  const spentCents = TRIP_PARTS.reduce((sum, part) => sum + spent[part], 0)
+  return { ...budget, leftCents: budget.plannedCents - spentCents, leftByPart }
 }
 
 /** The trip a transaction belongs to, if any of the listed trips holds it. */

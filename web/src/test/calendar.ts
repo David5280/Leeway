@@ -71,6 +71,7 @@ export function tripSummary(fields: Partial<TripSummary> = {}): TripSummary {
     name: 'Lisbon trip',
     source: 'calendar',
     totalCents: 70000,
+    goalId: null,
     ...fields,
   }
 }
@@ -83,6 +84,7 @@ export function tripDetail(fields: Partial<TripDetail> = {}): TripDetail {
     days: 5,
     status: 'upcoming',
     spentByPart: { ...NO_PARTS, travel: 70000 },
+    budget: null,
     transactions: [],
     ...fields,
   }

@@ -1,5 +1,6 @@
 // One trip: what it cost, by part (getting there, a place to stay, food and
-// things to do), and the transactions that make it up.
+// things to do), against its budget when one was planned, and the
+// transactions that make it up. A trip still ahead with no budget offers one.
 
 import { Link, useParams } from 'react-router-dom'
 import type { TripDetail } from '../api/client'
@@ -12,18 +13,37 @@ import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
 import { dayRange } from '../lib/calendar'
 import { TRIP_PART_NAMES, tripName } from '../lib/trips'
+import { TripBudgetForm } from './trips/TripBudgetForm'
 
 const STATUS = { upcoming: 'Coming up', under_way: 'Under way', past: 'Done' } as const
 const PARTS = ['travel', 'stay', 'food', 'activities'] as const
 
 function Parts({ trip }: { trip: TripDetail }) {
+  const { budget } = trip
   return (
     <Card static="list" label="By part" className="stack-sm">
-      <h2>By part</h2>
+      <div className="row-between wrap">
+        <h2>By part</h2>
+        {budget && (
+          <span className={`small ${budget.leftCents < 0 ? 'over' : 'muted'}`}>
+            <Money cents={Math.abs(budget.leftCents)} />{' '}
+            {budget.leftCents < 0 ? 'over budget' : 'left of'}{' '}
+            {budget.leftCents < 0 ? '' : <Money cents={budget.plannedCents} />}
+          </span>
+        )}
+      </div>
       {PARTS.map((part) => (
         <div key={part} className="trip-part">
           <span>{TRIP_PART_NAMES[part]}</span>
-          <Money cents={trip.spentByPart[part]} />
+          <span className="stack-sm" style={{ gap: 0 }}>
+            <Money cents={trip.spentByPart[part]} />
+            {budget && (
+              <span className={`small ${budget.leftByPart[part] < 0 ? 'over' : 'muted'}`}>
+                <Money cents={Math.abs(budget.leftByPart[part])} />{' '}
+                {budget.leftByPart[part] < 0 ? 'over' : 'left'}
+              </span>
+            )}
+          </span>
         </div>
       ))}
     </Card>
@@ -84,6 +104,17 @@ export function TripPage() {
           </span>
         )}
       </p>
+      {detail.status === 'upcoming' && !detail.budget && (
+        <Card static="form" label="Plan a trip budget" className="stack">
+          <h2>Plan a trip budget</h2>
+          <TripBudgetForm
+            name={tripName(detail)}
+            startsOn={detail.startsOn}
+            endsOn={detail.endsOn}
+            days={detail.days}
+          />
+        </Card>
+      )}
       <Parts trip={detail} />
       <Transactions trip={detail} />
     </Shell>

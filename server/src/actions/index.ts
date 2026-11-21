@@ -89,6 +89,7 @@ import {
 import {
   calendarStatusAction,
   connectCalendarAction,
+  createTripBudgetAction,
   disconnectCalendarAction,
   getForecastAction,
   getTripAction,
@@ -223,6 +224,7 @@ export const actionList = [
   listTripsAction,
   getTripAction,
   tripOfTransactionAction,
+  createTripBudgetAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

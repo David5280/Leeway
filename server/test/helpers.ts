@@ -71,7 +71,7 @@ export async function resetData(db: pg.Pool): Promise<void> {
        held_charges, bills, goals, goal_contributions, dismissed_recurring, applied_upgrades,
        ai_summaries, imports, pension_plans, paystubs, ai_usage, ai_spend_alerts,
        ai_unavailable_models, widget_tokens, notifications, push_subscriptions, push_keys,
-       alert_hides, calendar_feed, calendar_events CASCADE;
+       alert_hides, calendar_feed, calendar_events, trip_budgets CASCADE;
      UPDATE settings SET data = '{}';
      DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);
      DELETE FROM notification_settings; INSERT INTO notification_settings (id) VALUES (true);`,
