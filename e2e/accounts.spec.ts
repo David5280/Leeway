@@ -78,20 +78,28 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
 
 test('a low-balance warning set in Settings becomes an alert', async ({ page }) => {
   await addAccount(page, { name: 'Bills', balance: '50' })
-  // A cash account other than checking has no warning until one is set.
-  await page.goto('/alerts')
-  await expect(page.getByText(/Every account is fine/)).toBeVisible()
+  try {
+    // A cash account other than checking has no warning until one is set.
+    await page.goto('/alerts')
+    await expect(page.getByText(/Every account is fine/)).toBeVisible()
 
-  await page.goto('/settings/accounts')
-  const warning = page.getByRole('textbox', { name: 'Low balance warning for Bills' })
-  await expect(warning).toHaveAttribute('placeholder', 'Off')
-  await warning.fill('100')
-  await warning.press('Tab')
+    await page.goto('/settings/accounts')
+    const warning = page.getByRole('textbox', { name: 'Low balance warning for Bills' })
+    await expect(warning).toHaveAttribute('placeholder', 'Off')
+    await warning.fill('100')
+    // The box saves when it loses focus. Wait for that save, since leaving the
+    // page first can cancel it and the warning would never be set.
+    const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_account'))
+    await warning.press('Tab')
+    expect((await saved).ok()).toBe(true)
 
-  await page.goto('/alerts')
-  await expect(page.getByRole('region', { name: 'Account alerts' })).toContainText(
-    'Bills is down to $50, below your $100 warning.',
-  )
-
-  await removeAccounts(page, ['Bills'])
+    await page.goto('/alerts')
+    await expect(page.getByRole('region', { name: 'Account alerts' })).toContainText(
+      'Bills is down to $50, below your $100 warning.',
+    )
+  } finally {
+    // Removed even when a check fails, so a leftover low account cannot add an
+    // alert to the specs that run after this one.
+    await removeAccounts(page, ['Bills'])
+  }
 })
