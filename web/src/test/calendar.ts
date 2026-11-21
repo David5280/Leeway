@@ -1,7 +1,7 @@
-// Calendar and forecast samples, shaped as the server returns them.
+// Calendar, forecast and trip samples, shaped as the server returns them.
 
 import { intoWeeks } from '../../../server/src/domain/calendar/weeks'
-import type { CalendarStatus, Forecast, ForecastItem } from '../api/client'
+import type { CalendarStatus, Forecast, ForecastItem, TripDetail, TripSummary } from '../api/client'
 
 export const TODAY = '2026-11-17'
 
@@ -63,3 +63,27 @@ export const ITEMS: ForecastItem[] = [
   },
   { type: 'payday', date: '2026-12-04', amountCents: null },
 ]
+
+export function tripSummary(fields: Partial<TripSummary> = {}): TripSummary {
+  return {
+    startsOn: '2026-12-10',
+    endsOn: '2026-12-14',
+    name: 'Lisbon trip',
+    source: 'calendar',
+    totalCents: 70000,
+    ...fields,
+  }
+}
+
+const NO_PARTS = { travel: 0, stay: 0, food: 0, activities: 0 }
+
+export function tripDetail(fields: Partial<TripDetail> = {}): TripDetail {
+  return {
+    ...tripSummary(),
+    days: 5,
+    status: 'upcoming',
+    spentByPart: { ...NO_PARTS, travel: 70000 },
+    transactions: [],
+    ...fields,
+  }
+}

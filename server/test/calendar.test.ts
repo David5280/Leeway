@@ -174,13 +174,16 @@ describe('linking a calendar', () => {
     expect(rowCount).toBe(0)
   })
 
-  it('stays in the app: no agent can link, read or see the calendar', () => {
+  it('stays in the app: no agent can link, read or see the calendar or trips', () => {
     const names = [
       'calendar_status',
       'connect_calendar',
       'refresh_calendar',
       'disconnect_calendar',
       'get_forecast',
+      'list_trips',
+      'get_trip',
+      'trip_of_transaction',
     ]
     for (const name of names) expect(findAction(name)).toMatchObject({ surface: 'app' })
     const tools = agentTools('write').map((tool) => tool.name)

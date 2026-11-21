@@ -1,4 +1,4 @@
-// Helpers for the calendar and the weeks ahead. The browser tests have
+// Helpers for the calendar, the weeks ahead and trips. The browser tests have
 // no network, so no real calendar can be linked: a linked calendar and what
 // it brings are stood in for at the network, by answering the calendar
 // actions in the page with names as long as a calendar may give.
@@ -90,12 +90,61 @@ function forecast() {
   }
 }
 
+function trips() {
+  return [
+    { ...SOON, name: LONG_TRIP, source: 'calendar', totalCents: 1234567 },
+    { ...trip(-90, 3), name: null, source: 'spending', totalCents: 45000 },
+  ]
+}
+
+/** A trip's page, its spending by part and a transaction with a long name. */
+function tripDetail() {
+  return {
+    ...SOON,
+    name: LONG_TRIP,
+    source: 'calendar',
+    totalCents: 1234567,
+    days: 9,
+    status: 'upcoming',
+    spentByPart: { travel: 734567, stay: 300000, food: 150000, activities: 50000 },
+    transactions: [
+      {
+        id: '00000000-0000-4000-8000-0000000000e1',
+        accountId: '00000000-0000-4000-8000-0000000000a1',
+        accountName: 'Joint everyday checking',
+        date: SOON.startsOn,
+        name: 'TAP AIR PORTUGAL LISBOA PT international flight booking and seats',
+        merchantName: null,
+        displayName: 'Tap Air Portugal Lisboa international flight booking and seats',
+        amountCents: 734567,
+        currency: 'USD',
+        pending: false,
+        categoryId: null,
+        categorySource: null,
+        bankCategory: 'TRAVEL_FLIGHTS',
+        note: null,
+        excluded: false,
+        manual: false,
+        source: 'bank',
+        person: null,
+        transfer: null,
+      },
+    ],
+  }
+}
+
+/** The path of the trip the stand-ins describe. */
+export const SOON_TRIP_PATH = `/trips/${SOON.startsOn}/${SOON.endsOn}`
+
 async function answer(page: Page, action: string, result: unknown) {
   await page.route(`**/api/actions/${action}`, (route) => route.fulfill({ json: { result } }))
 }
 
-/** A linked calendar whose last read failed, with the weeks ahead it brings. */
+/** A linked calendar whose last read failed, with the weeks ahead and trips it brings. */
 export async function pretendCalendar(page: Page) {
   await answer(page, 'calendar_status', LINKED)
   await answer(page, 'get_forecast', forecast())
+  await answer(page, 'list_trips', trips())
+  await answer(page, 'get_trip', tripDetail())
+  await answer(page, 'trip_of_transaction', { ...SOON, name: LONG_TRIP })
 }

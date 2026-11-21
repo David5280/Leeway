@@ -1,0 +1,21 @@
+/* Trips: the trip page's parts. */
+
+/* A part of a trip: what it is, then what it cost. */
+.trip-part {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.trip-part > :first-child {
+  min-width: 0;
+}
+
+.trip-part > :last-child {
+  flex: none;
+  text-align: right;
+}

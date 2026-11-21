@@ -1,9 +1,10 @@
 // Coming up: the next six weeks with a calendar linked, week by week, with
 // paydays, bills due and the events likely to cost money, each with what to
-// set aside where past ones show it. Shown in Plan only while a calendar is
-// linked.
+// set aside where past ones show it. Recent and coming trips follow, each
+// opening its own page. Shown in Plan only while a calendar is linked.
 
-import type { Forecast, ForecastItem } from '../../api/client'
+import { Link } from 'react-router-dom'
+import type { Forecast, ForecastItem, TripSummary } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
@@ -11,6 +12,7 @@ import { LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { relativeDay } from '../../lib/format'
 import { dayRange, EVENT_KIND_NAMES, weekLabel } from '../../lib/calendar'
+import { tripName, tripPath } from '../../lib/trips'
 
 type Event = Extract<ForecastItem, { type: 'event' }>
 
@@ -23,8 +25,8 @@ function setAsideText(event: Event): string {
 
 function EventRow({ event, today }: { event: Event; today: string }) {
   const { settings } = useApp()
-  return (
-    <div className="list-row">
+  const content = (
+    <>
       <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
         <span className="ellipsis" style={{ fontWeight: 500 }}>
           {event.title}
@@ -43,7 +45,16 @@ function EventRow({ event, today }: { event: Event; today: string }) {
           <span className="small muted">set aside</span>
         </span>
       )}
-    </div>
+    </>
+  )
+  if (event.kind !== 'trip') return <div className="list-row">{content}</div>
+  return (
+    <Link
+      to={tripPath({ startsOn: event.date, endsOn: event.endsOn })}
+      className="list-row clickrow"
+    >
+      {content}
+    </Link>
   )
 }
 
@@ -113,15 +124,40 @@ function itemName(item: ForecastItem): string {
   return item.type === 'bill' ? item.billId : item.title
 }
 
+function Trips({ trips }: { trips: TripSummary[] }) {
+  const { settings } = useApp()
+  return (
+    <Card static="list" label="Trips" className="stack-sm">
+      <h2>Trips</h2>
+      {trips.length === 0 && <p className="empty">No trips in the last year.</p>}
+      {trips.map((trip) => (
+        <Link key={tripPath(trip)} to={tripPath(trip)} className="list-row clickrow">
+          <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
+            <span className="ellipsis" style={{ fontWeight: 500 }}>
+              {tripName(trip)}
+            </span>
+            <span className="small muted">{dayRange(trip, settings.locale)}</span>
+          </span>
+          <Money cents={trip.totalCents} />
+        </Link>
+      ))}
+    </Card>
+  )
+}
+
 export function AheadSection() {
   const forecast = useAction('get_forecast')
-  if (!forecast.data) return <LoadingOrError error={forecast.error} />
+  const trips = useAction('list_trips')
+  if (!forecast.data || !trips.data) {
+    return <LoadingOrError error={forecast.error ?? trips.error} />
+  }
   const { today, weeks } = forecast.data
   return (
     <>
       {weeks.map((week, index) => (
         <Week key={week.start} week={week} index={index} today={today} />
       ))}
+      <Trips trips={trips.data} />
     </>
   )
 }

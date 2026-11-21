@@ -1,5 +1,6 @@
 // The calendar stays out of the way until linked, a link is checked before
-// anything is saved, and the weeks ahead show what is coming. No real
+// anything is saved, and the weeks ahead show what is coming and open a
+// trip. No real
 // calendar can be reached from the tests, so a linked one is stood in for
 // (calendar.ts).
 
@@ -34,7 +35,7 @@ test('a calendar link is checked before anything is saved', async ({ page }) => 
   expect(await action(page.request, 'calendar_status')).toMatchObject({ connected: false })
 })
 
-test('the weeks ahead show paydays, bills and events from the calendar', async ({ page }) => {
+test('the weeks ahead show paydays, bills and events, and open a trip', async ({ page }) => {
   await pretendCalendar(page)
   await page.goto('/plan/ahead')
   await expect(page.getByRole('button', { name: 'Coming up' })).toHaveAttribute(
@@ -45,4 +46,7 @@ test('the weeks ahead show paydays, bills and events from the calendar', async (
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText(LONG_TRIP)
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText('to set aside')
   await expect(page.getByText(LONG_EVENT)).toBeVisible()
+  await page.getByRole('region', { name: 'Next week' }).getByRole('link').click()
+  await expect(page.getByRole('heading', { level: 1, name: LONG_TRIP })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'By part' })).toContainText('Getting there')
 })

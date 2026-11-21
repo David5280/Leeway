@@ -7,7 +7,7 @@ import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
-import { pretendCalendar } from './calendar'
+import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
 import { CONNECT_SCREEN } from './connect-screen'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
@@ -150,6 +150,14 @@ export const SCREENS: Screen[] = [
     },
   }),
   at('transactions', '/transactions', {
+    name: "/transactions with a transaction's sheet open, part of a trip",
+    before: (page) => pretendCalendar(page),
+    then: async (page) => {
+      const sheet = await openTransaction(page)
+      await expect(sheet.getByRole('link', { name: /^Lisbon, Porto/ })).toBeVisible()
+    },
+  }),
+  at('transactions', '/transactions', {
     name: "/transactions changing a transaction's category",
     then: inTransaction(/Change$/, (sheet) => sheet.getByRole('list', { name: /^Category for / })),
   }),
@@ -260,6 +268,10 @@ export const SCREENS: Screen[] = [
   // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
   at('planSection', '/plan/ahead', {
     name: '/plan/ahead with a calendar linked',
+    before: (page) => pretendCalendar(page),
+  }),
+  at('trip', SOON_TRIP_PATH, {
+    name: 'a trip, its spending by part',
     before: (page) => pretendCalendar(page),
   }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
