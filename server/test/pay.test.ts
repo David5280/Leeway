@@ -213,12 +213,13 @@ describe('currentPay', () => {
     expect(pay).toMatchObject({
       employer: { firstPaycheck: '2026-11-13', lastPaycheck: '2026-11-13', paychecks: 1 },
       // One paycheck cannot show how often pay comes, so it is read as monthly,
-      // the guess that projects the least pay and the latest next payday.
+      // the guess that projects the least pay and the latest next payday:
+      // a month on is Sunday Dec 13, so the Friday before, as payrolls pay.
       cadence: 'month',
       estimate: true,
       paycheckCents: 210_000,
       monthlyCents: 210_000,
-      nextPayday: '2026-12-13',
+      nextPayday: '2026-12-11',
     })
     expect(pay.employer!.newest.name).toBe('INITECH PAYROLL')
   })
@@ -251,12 +252,34 @@ describe('currentPay', () => {
     })
   })
 
-  it('confirms the cadence, and stops calling it an estimate, with a second paycheck', () => {
+  it('confirms twice a month, and stops calling it an estimate, once a payday leaves the grid', () => {
+    const second = [...history(), salary('2026-11-30', 'INITECH PAYROLL', 210_000)]
+    // Nov 13 and Nov 30 fit the 15th and the month's end, and a 14-day grid with a late posting.
+    expect(currentPay(second, '2026-12-02')).toMatchObject({ cadence: 'biweek', estimate: true })
+    // Tuesday Dec 15 is two business days off the grid: twice a month it is.
+    const third = [...second, salary('2026-12-15', 'INITECH PAYROLL', 210_000)]
+    expect(currentPay(third, '2026-12-16')).toMatchObject({
+      cadence: 'semimonth',
+      estimate: false,
+      monthlyCents: 420_000,
+      nextPayday: '2026-12-31',
+    })
+  })
+
+  it('reads a biweekly job paid Nov 13 and Nov 27 cautiously, as either cadence', () => {
     const pay = currentPay(
-      [...history(), salary('2026-11-30', 'INITECH PAYROLL', 210_000)],
-      '2026-12-02',
+      ['2026-11-13', '2026-11-27'].map((date) => salary(date, 'INITECH PAYROLL', 240_000)),
+      '2026-11-28',
     )
-    expect(pay).toMatchObject({ cadence: 'semimonth', estimate: false, monthlyCents: 420_000 })
+    expect(pay).toMatchObject({
+      cadence: 'biweek',
+      // Both Fridays fit the 15th and the month's end too, so nothing is settled yet.
+      estimate: true,
+      // Twice a month is the fewer paychecks a year: $4,800, not about $5,218.
+      monthlyCents: 480_000,
+      // Every two weeks is the later payday: Dec 11, not Nov 30, so bills before it count.
+      nextPayday: '2026-12-11',
+    })
   })
 
   it('counts nothing but paychecks, and nothing once the last job stopped', () => {
@@ -303,8 +326,8 @@ describe('currentPay', () => {
   })
 
   it('counts every job paying now, and the main one stays put whoever paid last', () => {
-    const main = ['2026-10-15', '2026-10-30', '2026-11-13'].map((date) =>
-      salary(date, 'INITECH PAYROLL', 200_000),
+    const main = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'].map(
+      (date) => salary(date, 'INITECH PAYROLL', 200_000),
     )
     const side = ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'].map((date) =>
       salary(date, 'BLUTH CO PAYROLL', 60_000),
@@ -315,9 +338,9 @@ describe('currentPay', () => {
       paycheckCents: 200_000,
       // $4,000 a month, plus $600 every two weeks (about $1,304 a month).
       monthlyCents: 400_000 + 130_446,
-      // The side job pays first.
-      nextPayday: '2026-11-20',
-      nextPaycheckCents: 60_000,
+      // The main job's payday, though the side job pays first: its $600 may not cover the bills.
+      nextPayday: '2026-11-30',
+      nextPaycheckCents: 200_000,
       estimate: false,
     })
     expect(pay.employers.map((e) => [e.newest.name, e.cadence, e.monthlyCents])).toEqual([
@@ -329,6 +352,21 @@ describe('currentPay', () => {
     const after = currentPay(later, '2026-11-21')
     expect(after.employer!.newest.name).toBe('INITECH PAYROLL')
     expect(after.monthlyCents).toBe(400_000 + 130_446)
+  })
+
+  it('stops counting a side job once it misses a payday, while the main job may miss one', () => {
+    const main = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'].map(
+      (date) => salary(date, 'INITECH PAYROLL', 200_000),
+    )
+    const side = ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23'].map((date) =>
+      salary(date, 'BLUTH CO PAYROLL', 60_000),
+    )
+    // The side job last paid Oct 23 and missed Nov 6: more than a cycle ago, so it is left out.
+    const pay = currentPay([...main, ...side], TODAY)
+    expect(pay.employers.map((e) => e.newest.name)).toEqual(['INITECH PAYROLL'])
+    expect(pay.monthlyCents).toBe(400_000)
+    // The main job missing Nov 30 still counts until it misses a second.
+    expect(currentPay(main, '2026-12-05').monthlyCents).toBe(400_000)
   })
 
   it('calls the month an estimate while any job has paid only once', () => {

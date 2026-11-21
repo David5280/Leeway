@@ -163,12 +163,15 @@ export function bestSchedule(
 }
 
 /**
- * The schedule paydays keep to, or null when they do not read as twice a
- * month: more than half of them on it, and, with two or more, both of its
- * days paid on.
+ * The schedule paydays keep to, of `candidates` (every likely schedule by
+ * default), or null when they do not read as twice a month: more than half
+ * of them on it, and, with two or more, both of its days paid on.
  */
-export function semimonthlyFit(dates: IsoDate[]): ScheduleFit | null {
-  const fit = bestSchedule(dates)
+export function semimonthlyFit(
+  dates: IsoDate[],
+  candidates: readonly SemimonthSchedule[] = CANDIDATES,
+): ScheduleFit | null {
+  const fit = bestSchedule(dates, candidates)
   const majority = fit.matched * 2 > dates.length
   const bothDays = dates.length < 2 || fit.bothDays
   return majority && bothDays ? fit : null

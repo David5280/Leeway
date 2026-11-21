@@ -3,6 +3,15 @@
 // A payroll can split one paycheck across accounts (a fixed part into one,
 // the rest into another), and the parts do not always post the same day, so
 // deposits from one payer within SPLIT_DAYS of each other are one paycheck.
+//
+// Two known limits of that window, kept because widening it would merge
+// real paychecks a week apart:
+// - a split part posting more than SPLIT_DAYS after the first reads as a
+//   paycheck of its own, and its run as an irregular one;
+// - payouts that come every day, as gig apps pay, merge into lumps of a few
+//   days that fit no cadence, so they count as one cautious monthly lump.
+//   Such pay is better entered from a paystub or left out of pay.
+//
 // A payer's paychecks form a run while they keep coming; a gap of more than
 // two cycles ends it, so a job that stopped, or a payer that comes back after
 // a long gap, is told apart from one still paying.
@@ -34,9 +43,14 @@ export interface EmployerRun {
   paychecks: Paycheck[]
   /** How often it pays: from its paychecks, a paystub's, or a cautious guess from one. */
   cadence: Cadence
-  /** For twice a month, the two days of the month it pays on; else null. */
+  /** For twice a month, the two days of the month it pays on (or may, when ambiguous); else null. */
   schedule: SemimonthSchedule | null
-  /** False while the cadence is only a guess: one paycheck, or paydays that fit no cadence. */
+  /**
+   * True while the paydays fit every two weeks and twice a month alike
+   * (cadence.ts): read as every two weeks, `schedule` the other reading.
+   */
+  ambiguous: boolean
+  /** False while the cadence is only a guess: one paycheck, paydays that fit no cadence, or two. */
   cadenceConfirmed: boolean
   /**
    * Paychecks left out of what a usual one is: more than OUTLIER_SHARE times
@@ -114,12 +128,12 @@ export function stoppedAfter(gapDays: number, cadence: Cadence): boolean {
 function runPattern(
   dates: IsoDate[],
   given: Cadence | null,
-): Pick<EmployerRun, 'cadence' | 'schedule' | 'cadenceConfirmed'> {
+): Pick<EmployerRun, 'cadence' | 'schedule' | 'ambiguous' | 'cadenceConfirmed'> {
   const found = dates.length > 1 ? payPattern(dates) : null
   // The owner's paystub says how often pay comes; a second paycheck still confirms it is landing.
   if (given) return { ...givenPattern(given, dates), cadenceConfirmed: dates.length > 1 }
-  if (found) return { ...found, cadenceConfirmed: true }
-  return { cadence: CAUTIOUS_CADENCE, schedule: null, cadenceConfirmed: false }
+  if (found) return { ...found, cadenceConfirmed: !found.ambiguous }
+  return { cadence: CAUTIOUS_CADENCE, schedule: null, ambiguous: false, cadenceConfirmed: false }
 }
 
 /** Big paychecks at the end of a run: a final check, not what the job usually paid. */
@@ -187,10 +201,10 @@ export function runsOf(paychecks: Paycheck[], newest: Deposit): EmployerRun[] {
  */
 const GUESSED_CYCLE: Cadence = 'semimonth'
 
-/** Whether a run is still paying: its last paycheck is within MISSED_CYCLES cycles of today. */
-export function stillPaying(run: EmployerRun, today: IsoDate): boolean {
+/** Whether a run is still paying: its last paycheck is within `missed` cycles of today. */
+export function stillPaying(run: EmployerRun, today: IsoDate, missed = MISSED_CYCLES): boolean {
   const cycle = run.cadenceConfirmed ? run.cadence : GUESSED_CYCLE
-  return !stoppedAfter(daysBetween(run.paychecks.at(-1)!.date, today), cycle)
+  return daysBetween(run.paychecks.at(-1)!.date, today) <= missed * CYCLE_DAYS[cycle] + SLACK_DAYS
 }
 
 /** A usual paycheck in a run: the middle of the newest few, leaving out the outliers. */

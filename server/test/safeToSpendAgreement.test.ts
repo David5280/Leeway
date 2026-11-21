@@ -68,8 +68,15 @@ async function checking(balanceCents: number | null, availableCents: number | nu
   return accountId
 }
 
-/** A $2,100 paycheck every other Friday into the account; the last of `dates` is the newest. */
-async function paidBiweekly(accountId: string, dates = ['2026-10-16', '2026-10-30', '2026-11-13']) {
+/**
+ * A $2,100 paycheck every other Friday into the account; the last of `dates` is
+ * the newest. Four checks, since three that land near the 15th and month end
+ * could be either cadence and would leave payday a guess.
+ */
+async function paidBiweekly(
+  accountId: string,
+  dates = ['2026-10-02', '2026-10-16', '2026-10-30', '2026-11-13'],
+) {
   for (const date of dates) {
     await insertBankTransaction(ctx.db, accountId, {
       date,

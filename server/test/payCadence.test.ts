@@ -1,17 +1,22 @@
 // How often a payroll pays (domain/pay/cadence.ts and semimonthly.ts): every
 // two weeks told from twice a month by a 14-day grid against two days of the
 // month, with room for holidays, weekends and schedules other than the 15th
-// and the month's end. Every date here is made up.
+// and the month's end. Twice a month is read only once a payday sits off any
+// 14-day grid; until then paydays that fit both are ambiguous, read as every
+// two weeks. Every date here is made up.
 
 import { describe, expect, it } from 'vitest'
+import { addDays, dayOfWeek, type IsoDate } from '../src/lib/dates.js'
 import {
-  biweeklyOffBy,
   cadenceOfDates,
+  GRID_SLACK,
+  gridOffBy,
   nextPaydayAfter,
   payPattern,
 } from '../src/domain/pay/cadence.js'
 import {
   bestSchedule,
+  businessDayOnOrBefore,
   businessDaysApart,
   MONTH_END,
   nextSemimonthlyPayday,
@@ -31,6 +36,15 @@ const FIFTEENTH_AND_END = [
   '2026-10-15',
   '2026-10-30',
 ]
+
+/** `count` paydays two weeks apart from `start`: as paid, and with the last one a business day early. */
+function biweeklyRuns(start: IsoDate, count: number): IsoDate[][] {
+  const paid = Array.from({ length: count }, (_, i) => addDays(start, 14 * i))
+  const early = paid.map((date, i) =>
+    i === count - 1 ? businessDayOnOrBefore(addDays(date, -1)) : date,
+  )
+  return [paid, early]
+}
 
 describe('business days', () => {
   it('counts the weekdays between two dates, so a weekend payday moved to Friday is on time', () => {
@@ -77,7 +91,7 @@ describe('cadenceOfDates', () => {
   })
 
   it('tells twice a month from every two weeks', () => {
-    expect(cadenceOfDates(['2026-10-15', '2026-10-30', '2026-11-13'])).toBe('semimonth')
+    expect(cadenceOfDates(FIFTEENTH_AND_END)).toBe('semimonth')
     expect(cadenceOfDates(['2026-10-02', '2026-10-16', '2026-10-30'])).toBe('biweek')
     // Fridays two weeks apart that fall near, not on, the 15th and the month's end.
     expect(cadenceOfDates(['2026-10-16', '2026-10-30', '2026-11-13'])).toBe('biweek')
@@ -107,26 +121,88 @@ describe('cadenceOfDates', () => {
     expect(payPattern(tenthAndTwentyFifth)).toEqual({
       cadence: 'semimonth',
       schedule: { first: 10, second: 25 },
+      ambiguous: false,
     })
-    const firstAndFifteenth = ['2026-10-01', '2026-10-15', '2026-10-30', '2026-11-13']
+    const firstAndFifteenth = [
+      '2026-09-01',
+      '2026-09-15',
+      '2026-10-01',
+      '2026-10-15',
+      '2026-10-30',
+      '2026-11-13',
+    ]
     expect(payPattern(firstAndFifteenth)).toEqual({
       cadence: 'semimonth',
       schedule: { first: 1, second: 15 },
+      ambiguous: false,
+    })
+  })
+})
+
+describe('paydays that fit both cadences', () => {
+  it('reads a biweekly job paid Nov 13 and Nov 27 as every two weeks, not yet settled', () => {
+    // Both Fridays sit on the 15th-and-end schedule too (the 15th is a Sunday,
+    // the 30th a Monday), but nothing yet rules out a 14-day grid.
+    expect(payPattern(['2026-11-13', '2026-11-27'])).toEqual({
+      cadence: 'biweek',
+      schedule: { first: 15, second: MONTH_END },
+      ambiguous: true,
     })
   })
 
-  it('reads Jan 31, Feb 14 and Feb 28 as twice a month, though each gap is 14 days', () => {
-    expect(cadenceOfDates(['2025-01-31', '2025-02-14', '2025-02-28'])).toBe('semimonth')
+  it('reads Jan 31, Feb 14 and Feb 28 as either, until a payday leaves the grid', () => {
+    const both = ['2025-01-31', '2025-02-14', '2025-02-28']
+    expect(payPattern(both)).toEqual({
+      cadence: 'biweek',
+      schedule: { first: 15, second: MONTH_END },
+      ambiguous: true,
+    })
+    // Mar 14 and Mar 31 stay within a business day of the grid; Tuesday Apr 15 leaves it.
+    const march = [...both, '2025-03-14', '2025-03-31']
+    expect(payPattern(march)?.ambiguous).toBe(true)
+    expect(payPattern([...march, '2025-04-15'])).toMatchObject({
+      cadence: 'semimonth',
+      ambiguous: false,
+    })
+    expect(payPattern(['2026-10-15', '2026-10-30', '2026-11-13'])?.ambiguous).toBe(true)
   })
 
-  it('needs two or more gaps before a 14-day grid counts against a schedule', () => {
-    // One 14-day gap, both days exactly on the 15th-and-end schedule.
-    expect(cadenceOfDates(['2025-01-31', '2025-02-14'])).toBe('semimonth')
-    // One 14-day gap off any common schedule.
-    expect(cadenceOfDates(['2026-10-02', '2026-10-16'])).toBe('biweek')
-    expect(biweeklyOffBy(['2026-10-02', '2026-10-16', '2026-10-30'])).toBe(0)
-    // Off the grid by more than three business days.
-    expect(biweeklyOffBy(['2026-10-02', '2026-10-16', '2026-11-05'])).toBeNull()
+  it('reads two paydays off any common schedule as every two weeks, settled', () => {
+    expect(payPattern(['2026-10-02', '2026-10-16'])).toEqual({
+      cadence: 'biweek',
+      schedule: null,
+      ambiguous: false,
+    })
+  })
+
+  it("never reads a biweekly job's first two to four paychecks as twice a month", () => {
+    // Every weekday start from 2024 through 2026, as paid, and with the last
+    // payday a business day early for a holiday.
+    const runs: IsoDate[][] = []
+    for (let start = '2024-01-01'; start <= '2026-12-31'; start = addDays(start, 1)) {
+      if (dayOfWeek(start) === 0 || dayOfWeek(start) === 6) continue
+      for (const count of [2, 3, 4]) runs.push(...biweeklyRuns(start, count))
+    }
+    const misread = runs.filter((dates) => cadenceOfDates(dates) === 'semimonth')
+    expect(misread).toEqual([])
+  })
+
+  it('lets a biweekly payroll move one payday a business day for a holiday, no more', () => {
+    expect(GRID_SLACK).toBe(1)
+    expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-10-30'])).toBe(0)
+    // Thursday Oct 29 for a Friday holiday, or Monday Nov 2 posted late.
+    expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-10-29'])).toBe(1)
+    expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-11-02'])).toBe(1)
+    // Tuesday Nov 3 is two business days off Friday Oct 30.
+    expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-11-03'])).toBeNull()
+    // Two moved, whichever payday the grid is read from, is not one payroll's grid.
+    expect(gridOffBy(['2026-10-01', '2026-10-16', '2026-10-29', '2026-11-13'])).toBeNull()
+  })
+
+  it('settles on every two weeks once the grid fits clearly closer than any schedule', () => {
+    // Fridays from Sep 18 sit near the 15th and the month's end, but up to three days off.
+    const fridays = ['2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30', '2026-11-13']
+    expect(payPattern(fridays)).toEqual({ cadence: 'biweek', schedule: null, ambiguous: false })
   })
 })
 
@@ -138,5 +214,12 @@ describe('nextPaydayAfter', () => {
     )
     expect(nextPaydayAfter('2026-10-30', 'biweek', TODAY)).toBe('2026-11-27')
     expect(nextPaydayAfter('2026-11-01', 'month', TODAY)).toBe('2026-12-01')
+  })
+
+  it('moves a monthly payday off a weekend to the Friday before, as a payroll does', () => {
+    // A month on from Friday Nov 13 is Sunday Dec 13.
+    expect(nextPaydayAfter('2026-11-13', 'month', TODAY)).toBe('2026-12-11')
+    // Each month counts from the last payday, so January is the 13th again.
+    expect(nextPaydayAfter('2026-11-13', 'month', '2026-12-12')).toBe('2027-01-13')
   })
 })

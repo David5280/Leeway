@@ -245,14 +245,18 @@ describe('getFinancialProfile', () => {
     const result = await profile()
     // $4,000 a month plus $600 every two weeks.
     expect(result.monthly.incomeCents).toBe(400_000 + 130_446)
+    // Three checks near the 15th and month end could be either cadence: the
+    // cautious reading counts the lower monthly pay and the later payday, and
+    // ends the period at the main job's payday, not the side job's.
     expect(result.pay).toMatchObject({
-      cadence: 'semimonth',
+      cadence: 'biweek',
       employer: 'Initech Payroll',
-      nextPayday: '2026-11-20',
+      nextPayday: '2026-11-30',
       since: '2026-09-25',
+      estimate: true,
     })
     expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
-      ['Initech Payroll', 'semimonth', 400_000],
+      ['Initech Payroll', 'biweek', 400_000],
       ['Bluth Co Payroll', 'biweek', 130_446],
     ])
     expect(JSON.stringify(result.pay)).not.toContain('4821')

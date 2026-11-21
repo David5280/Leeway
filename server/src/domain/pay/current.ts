@@ -5,12 +5,19 @@
 // Typical income comes from the employers paying now, each from its first
 // paycheck on: every payer whose paychecks are still coming, so a second job
 // counts beside the first. An old job that stopped, and every deposit that is
-// not a paycheck (see deposits.ts), never counts, however recent. With one
-// paycheck from an employer the cadence is a guess (a saved paystub's, else
-// the cautious monthly one), so the figures are an estimate until a second
-// paycheck confirms it.
+// not a paycheck (see deposits.ts), never counts, however recent. A side
+// job counts only while it pays on schedule; the main job may miss a cycle.
+//
+// With one paycheck from an employer the cadence is a guess (a saved
+// paystub's, else the cautious monthly one), and paydays that fit every two
+// weeks and twice a month alike are read the cautious way for each figure:
+// the fewer paychecks a year, and the later next payday. Either way the
+// figures are an estimate until more paychecks settle it.
+//
+// The next payday is the main employer's: safe to spend counts the bills due
+// before it, and a side job's smaller paycheck may not cover them first.
 
-import type { IsoDate } from '../../lib/dates.js'
+import { maxDate, type IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import { nextPaydayAfter } from './cadence.js'
 import { depositKind, type Deposit, type DepositKind } from './deposits.js'
@@ -32,7 +39,7 @@ export interface Employer {
   lastPaycheck: IsoDate
   paychecks: number
   cadence: Cadence
-  /** True until a second paycheck confirms the cadence. */
+  /** True until paychecks confirm the cadence: one so far, or paydays that fit two cadences. */
   estimate: boolean
   /** A usual paycheck: the middle of the newest few, leaving out a final check. */
   paycheckCents: number
@@ -55,7 +62,7 @@ export interface CurrentPay {
   paycheckCents: number | null
   /** A usual month of pay from every employer paying now, added up. */
   monthlyCents: number | null
-  /** The soonest next paycheck from any employer, after today. */
+  /** The main employer's next payday, after today: what safe to spend runs until. */
   nextPayday: IsoDate | null
   /** The usual paycheck expected on nextPayday. */
   nextPaycheckCents: number | null
@@ -96,10 +103,32 @@ function payRuns(deposits: Deposit[]): EmployerRun[] {
   })
 }
 
+/**
+ * Paychecks a year and the next payday. Paydays that fit every two weeks and
+ * twice a month alike take the fewer paychecks a year (twice a month) and
+ * the later of the two next paydays, so no figure promises more than may come.
+ */
+function cautiousReading(run: EmployerRun, last: IsoDate, today: IsoDate) {
+  if (!run.ambiguous) {
+    return {
+      perYear: PER_YEAR[run.cadence],
+      nextPayday: nextPaydayAfter(last, run.cadence, today, run.schedule ?? undefined),
+    }
+  }
+  return {
+    perYear: Math.min(PER_YEAR.biweek, PER_YEAR.semimonth),
+    nextPayday: maxDate(
+      nextPaydayAfter(last, 'biweek', today),
+      nextPaydayAfter(last, 'semimonth', today, run.schedule!),
+    ),
+  }
+}
+
 /** What a run still paying comes to. */
 function employerOf(run: EmployerRun, today: IsoDate): Employer {
   const paycheckCents = usualPaycheckCents(run)
   const last = run.paychecks.at(-1)!.date
+  const { perYear, nextPayday } = cautiousReading(run, last, today)
   return {
     newest: run.newest,
     firstPaycheck: run.paychecks[0]!.date,
@@ -108,13 +137,16 @@ function employerOf(run: EmployerRun, today: IsoDate): Employer {
     cadence: run.cadence,
     estimate: !run.cadenceConfirmed,
     paycheckCents,
-    monthlyCents: Math.round((paycheckCents * PER_YEAR[run.cadence]) / 12),
-    nextPayday: nextPaydayAfter(last, run.cadence, today, run.schedule ?? undefined),
+    monthlyCents: Math.round((paycheckCents * perYear) / 12),
+    nextPayday,
   }
 }
 
 /** A paystub's cadence belongs to the main job, the one paying the most a month. */
 const mostFirst = (a: Employer, b: Employer) => b.monthlyCents - a.monthlyCents
+
+/** Cycles a side job may miss and still count: none, so pay that stopped soon stops counting. */
+const SIDE_JOB_MISSED_CYCLES = 1
 
 /**
  * The employers paying now, the main one first. `paystubCadence` is the
@@ -134,7 +166,10 @@ function payingEmployers(
     const main = withGivenCadence(ranked[0].run, paystubCadence)
     ranked[0] = { run: main, employer: employerOf(main, today) }
   }
-  return ranked.map(({ employer }) => employer).sort(mostFirst)
+  // The main job may miss a payroll; a side job that has missed one has likely stopped.
+  const [main, ...side] = ranked
+  const onSchedule = side.filter(({ run }) => stillPaying(run, today, SIDE_JOB_MISSED_CYCLES))
+  return (main ? [main, ...onSchedule] : []).map(({ employer }) => employer).sort(mostFirst)
 }
 
 /** The owner's pay now, from deposits oldest first. */
@@ -150,7 +185,6 @@ export function currentPay(
   const employers = payingEmployers(runs, today, paystubCadence)
   const main = employers[0]
   if (!main) return { ...NO_PAY, paychecks }
-  const next = [...employers].sort((a, b) => a.nextPayday.localeCompare(b.nextPayday))[0]!
   return {
     employer: main,
     employers,
@@ -158,8 +192,8 @@ export function currentPay(
     estimate: employers.some((employer) => employer.estimate),
     paycheckCents: main.paycheckCents,
     monthlyCents: employers.reduce((sum, employer) => sum + employer.monthlyCents, 0),
-    nextPayday: next.nextPayday,
-    nextPaycheckCents: next.paycheckCents,
+    nextPayday: main.nextPayday,
+    nextPaycheckCents: main.paycheckCents,
     paychecks,
   }
 }
