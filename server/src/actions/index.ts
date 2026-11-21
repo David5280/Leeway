@@ -20,6 +20,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
+import { exportTaxYearAction } from './taxExport.js'
 import { hideHomeAlertAction, listHomeAlertsAction } from './homeAlerts.js'
 import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
@@ -226,6 +227,7 @@ export const actionList = [
   disconnectAppAction,
   getConnectRequestAction,
   answerConnectRequestAction,
+  exportTaxYearAction,
 ] as const
 
 export type Actions = (typeof actionList)[number]

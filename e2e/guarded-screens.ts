@@ -277,6 +277,13 @@ export const SCREENS: Screen[] = [
     before: ai.pretendModelTrouble,
     then: ai.seeModelTrouble,
   }),
+  at('settings', '/settings/data', {
+    name: '/settings/data with a tax year exported',
+    then: async (page) => {
+      await page.getByRole('button', { name: /^Download \d{4} CSV$/ }).click()
+      await expect(page.getByText('Interest')).toBeVisible()
+    },
+  }),
   at('settings', '/settings/widget', {
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
