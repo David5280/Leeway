@@ -183,7 +183,7 @@ describe('spendable', () => {
   it('says when payday is a guess, or not found, so the end of the period stands in', () => {
     const estimate = safeToSpend([everyday], [], payday({ estimate: true }), TODAY)
     expect(room(140_400, estimate).note).toBe(
-      'Your budget has $1,404 left, but you have $178 you can safely spend before payday, about Nov 30.',
+      'Your budget has $1,404 left, but you have $178 you can safely spend before payday, best guess Nov 30.',
     )
     const periodEnd = safeToSpend(
       [everyday],

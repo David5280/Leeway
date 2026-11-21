@@ -25,21 +25,31 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
       return `Next payday ${day}.`
     case 'detected_income':
       return flow.paydayEstimate
-        ? `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}. An estimate: there is one paycheck from this employer so far.`
+        ? `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}. A best guess until more paychecks show how often pay comes.`
         : `Next payday looks like ${day}, about ${money(flow.expectedPayCents!)}, going by your paychecks.`
     default:
       return `No paycheck found yet, so this runs to the end of your budget period, ${day}.`
   }
 }
 
-/** The headline: what is safe to spend until payday, or how far short the bills leave you. */
+/**
+ * The headline: what is safe to spend until payday, or how far short the
+ * bills leave you. Against a payday that is only a guess the shortfall may
+ * be less, so it is said plainly, not in red.
+ */
 function Headline({ flow }: { flow: CashFlow }) {
   if (flow.shortfallCents > 0) {
     const owed = flow.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
+    const guess = flow.paydayEstimate
     return (
       <p style={{ fontSize: 17 }}>
-        <Money cents={flow.shortfallCents} tone="problem" className="mid-number" /> short of {owed}{' '}
-        due before payday.
+        {guess && 'Maybe '}
+        <Money
+          cents={flow.shortfallCents}
+          tone={guess ? 'warn' : 'problem'}
+          className="mid-number"
+        />{' '}
+        short of {owed} due before payday.
       </p>
     )
   }

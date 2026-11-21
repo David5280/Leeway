@@ -147,6 +147,22 @@ describe('Until payday', () => {
     expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
   })
 
+  it('says a shortfall before a guessed payday as a maybe, not in red', async () => {
+    const card = await show(
+      cashFlow({
+        paydaySource: 'detected_income',
+        paydayEstimate: true,
+        expectedPayCents: 250_000,
+        cashCents: 1000,
+        billsDueCents: 6000,
+        safeCents: 0,
+        shortfallCents: 5000,
+      }),
+    )
+    expect(card).toHaveTextContent('Maybe $50 short of the bills due before payday.')
+    expect(within(card).getByText('$50')).not.toHaveClass('money-problem')
+  })
+
   it('draws $0 to stay above once the line comes near it', async () => {
     const card = await show(cashFlow({ cashCents: 10_000, billsDueCents: 6000, safeCents: 4000 }))
     expect(card).toHaveTextContent('Stay above: $0')
@@ -220,7 +236,7 @@ describe('Until payday', () => {
       }),
     )
     expect(card).toHaveTextContent(
-      'Next payday looks like Fri, Nov 20, about $2,500. An estimate: there is one paycheck from this employer so far.',
+      'Next payday looks like Fri, Nov 20, about $2,500. A best guess until more paychecks show how often pay comes.',
     )
   })
 
