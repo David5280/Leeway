@@ -11,6 +11,7 @@ export const SETTINGS_GROUPS = [
   'notifications',
   'assistant',
   'ai',
+  'calendar',
   'widget',
   'data',
   'sign-in',

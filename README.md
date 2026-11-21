@@ -24,6 +24,9 @@ bank, and nothing in Leeway can ever move money.
   balance is low or an overdraft fee was charged.
 - **Planning**: bills and subscriptions, recurring charges found for you,
   savings goals, debt payoff plans, cash until payday and net worth.
+- **Coming up**, if you connect a calendar by its private link: six weeks of
+  paydays, bills and events like trips and weddings, with what to set aside
+  for each from what past ones cost. Nothing changes until you connect one.
 - **Savings and investments**: savings, retirement and investing accounts
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI

@@ -7,6 +7,7 @@ import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
+import { pretendCalendar } from './calendar'
 import { CONNECT_SCREEN } from './connect-screen'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
@@ -256,6 +257,11 @@ export const SCREENS: Screen[] = [
   }),
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
+  // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
+  at('planSection', '/plan/ahead', {
+    name: '/plan/ahead with a calendar linked',
+    before: (page) => pretendCalendar(page),
+  }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',
@@ -280,6 +286,10 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/widget', {
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
+  }),
+  at('settings', '/settings/calendar', {
+    name: '/settings/calendar linked, its last read failed',
+    before: (page) => pretendCalendar(page),
   }),
   ...BANK_SCREENS,
   ...ALERT_SCREENS,

@@ -1,0 +1,67 @@
+// The Calendar section: linking a calendar by its private address, reading it again, unlinking.
+
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { failing, fakeServer, renderSignedIn } from '../../test/fake'
+import { linked, unlinked } from '../../test/calendar'
+import { CalendarSection } from './Calendar'
+
+afterEach(() => vi.unstubAllGlobals())
+
+const SECRET = 'https://calendar.google.com/calendar/ical/me/private-abc/basic.ics'
+
+describe('Calendar', () => {
+  it('offers one quiet way to connect, and links what is pasted', async () => {
+    let status = unlinked
+    const server = fakeServer({
+      calendar_status: () => status,
+      connect_calendar: () => (status = linked()),
+    })
+    renderSignedIn(<CalendarSection />)
+    const user = userEvent.setup()
+    const button = await screen.findByRole('button', { name: 'Connect a calendar' })
+    expect(button).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'Calendar link' }), SECRET)
+    await user.click(button)
+    expect(await screen.findByText('Linked to calendar.google.com')).toBeVisible()
+    expect(screen.getByText('48 events, read 12 min ago')).toBeVisible()
+    expect(server.actions('connect_calendar')).toEqual([{ url: SECRET }])
+  })
+
+  it('says why a link was refused, and keeps it to fix', async () => {
+    fakeServer(
+      { calendar_status: () => unlinked },
+      { '/api/actions/connect_calendar': failing('That link is not a calendar.', 502) },
+    )
+    renderSignedIn(<CalendarSection />)
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: 'Calendar link' }), SECRET)
+    await user.click(screen.getByRole('button', { name: 'Connect a calendar' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('That link is not a calendar.')
+    expect(screen.getByRole('textbox', { name: 'Calendar link' })).toHaveValue(SECRET)
+  })
+
+  it('reads it again, shows why a read failed, and unlinks', async () => {
+    let status = linked({ eventCount: 1, lastError: 'The calendar did not answer.' })
+    const server = fakeServer({
+      calendar_status: () => status,
+      refresh_calendar: () => status,
+      disconnect_calendar: () => (status = unlinked),
+    })
+    renderSignedIn(<CalendarSection />)
+    const user = userEvent.setup()
+    expect(await screen.findByText(/1 event, read/)).toBeVisible()
+    expect(screen.getByText('The calendar did not answer.')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Read it now' }))
+    await waitFor(() => expect(server.actions('refresh_calendar')).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: 'Unlink' }))
+    expect(await screen.findByRole('button', { name: 'Connect a calendar' })).toBeVisible()
+  })
+
+  it('shows why the link could not be read', async () => {
+    fakeServer({}, { '/api/actions/calendar_status': failing('Server trouble', 500) })
+    renderSignedIn(<CalendarSection />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Server trouble')
+  })
+})
