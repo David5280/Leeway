@@ -4,8 +4,7 @@
 // the order of steps, the clean-up and the exit code are unit-tested.
 
 import type { JSONReport } from '@playwright/test/reporter'
-import type { RunOptions } from './options.ts'
-import { UsageError } from './options.ts'
+import { UsageError, type RunOptions } from './options.ts'
 import { planShards, shardCount, type Shard } from './plan.ts'
 import { collectTests, formatSummary, passed, summarize, type ShardResult } from './report.ts'
 
