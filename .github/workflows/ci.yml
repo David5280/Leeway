@@ -1,14 +1,21 @@
-# Every push and pull request: formatting, lint, types, tests with coverage,
-# a production build, browser tests against that build, and the Docker image.
+# Every push to any branch, every pull request, and on demand: formatting,
+# lint, types, tests with coverage, a production build, the browser tests
+# against that build in parallel shards, and the Docker image.
 name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# A newer push to a branch cancels that branch's run still going. Every run on
+# main finishes, so each of its commits keeps a result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
@@ -39,8 +46,17 @@ jobs:
       - run: npm run check
       - run: npm run build
 
-  e2e:
+  # The browser tests, split by Playwright's --shard across machines. Each
+  # shard has its own Postgres and server and runs setup.spec.ts for itself,
+  # so no shard depends on another. Each uploads a blob report for `e2e`.
+  e2e-shard:
+    name: e2e shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    strategy:
+      # One failing shard must not cancel the others: their results still count.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:17-alpine
@@ -63,16 +79,57 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The browsers are cached by Playwright's version; their system
+      # libraries are installed every time, which is quick.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run build
-      - run: npm run e2e
-      # Screenshots and traces of any failure, to see what the browser saw.
+      # The shard count is the matrix's size, so adding a shard is one entry above.
+      - name: Run shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob,list
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 7
+
+  # One report of every shard, with screenshots and traces of any failure, and
+  # one result: it fails when any shard failed or did not finish.
+  e2e:
+    needs: e2e-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+      - name: Merge the shards' reports
+        run: npx playwright merge-reports --reporter=html,list ./all-blob-reports
+      - uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+      - name: Fail unless every shard passed
+        if: ${{ needs.e2e-shard.result != 'success' }}
+        run: |
+          echo "A browser test shard failed or did not finish: ${{ needs.e2e-shard.result }}"
+          exit 1
 
   docker:
     runs-on: ubuntu-latest

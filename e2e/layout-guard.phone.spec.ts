@@ -8,7 +8,7 @@
 // layout.ts. Every route the app answers (web/src/routes.ts) must have a
 // screen here; a test below makes sure.
 
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, type Screen } from './guarded-screens'
 import { SETTINGS_GROUPS } from './settings-groups'
@@ -23,6 +23,39 @@ import { OWNER, SETUP_CODE } from './owner'
 import { patchSettings } from './patchSettings'
 import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
+
+/**
+ * Long names in every list while this file's tests run, gone again after.
+ * They are added once per worker, before its first test here, and removed
+ * when the worker ends (Playwright gives this file workers of its own, since
+ * no other file has this fixture), rather than around a describe block.
+ * That leaves each test standing alone, so it can run in any shard.
+ */
+const test = base.extend<object, { seeded: Seeded }>({
+  seeded: [
+    async ({ playwright }, use, workerInfo) => {
+      // The signed-in owner of the project's server, as the request fixture has it.
+      const { baseURL, storageState } = workerInfo.project.use
+      const request = await playwright.request.newContext({ baseURL, storageState })
+      const seeded = emptySeed()
+      try {
+        await seedEveryScreen(request, seeded)
+        await use(seeded)
+      } finally {
+        // However far the seed got, so a seed that fails halfway still cleans up.
+        await removeSeed(request, seeded)
+        await request.dispose()
+      }
+    },
+    { scope: 'worker', auto: true },
+  ],
+})
+
+// Every test stands alone (see the fixture above), so a sharded run
+// (scripts/e2e) shares this file's hundreds of tests out across its shards
+// one by one, rather than give one shard them all. A plain run, with one
+// worker, still runs them in order.
+test.describe.configure({ mode: 'parallel' })
 
 /** Waits until the screen has its data, fonts and final layout. */
 async function settle(page: Page): Promise<void> {
@@ -115,18 +148,8 @@ for (const phone of GUARDED_PHONES) {
     test.use(phone.screen)
 
     test.describe('signed in', () => {
-      // Long names in every list while these run, gone again after.
-      const seeded: Seeded = emptySeed()
-      test.beforeAll(async ({ request }) => {
-        await seedEveryScreen(request, seeded)
-      })
-      test.afterAll(async ({ request }) => {
-        await removeSeed(request, seeded)
-        Object.assign(seeded, emptySeed())
-      })
-
       for (const screen of screensFor(phone)) {
-        test(`${screen.name} lays out cleanly`, async ({ page, request }) => {
+        test(`${screen.name} lays out cleanly`, async ({ page, request, seeded }) => {
           await open(page, screen, phone, await screen.path(seeded, request))
           expect(await problemsOn(page)).toEqual([])
         })
@@ -272,17 +295,8 @@ test.describe('in the widest theme, packed tight', () => {
   const phone = GUARDED_PHONES[0]!
   test.use(phone.screen)
 
-  const seeded: Seeded = emptySeed()
-  test.beforeAll(async ({ request }) => {
-    await seedEveryScreen(request, seeded)
-  })
-  test.afterAll(async ({ request }) => {
-    await removeSeed(request, seeded)
-    Object.assign(seeded, emptySeed())
-  })
-
   for (const screen of screensFor(phone)) {
-    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request }) => {
+    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request, seeded }) => {
       // The look is changed on its way to the page, so the install keeps its own.
       await patchSettings(page, (settings) => ({
         ...settings,
