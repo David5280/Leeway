@@ -52,11 +52,18 @@ export interface GoalLink {
   emergencyMonths: number | null
 }
 
+/**
+ * The order goals are listed in, for a query on goals as g: the owner's
+ * ranking (goalRanking.ts), oldest first within it. Shared by the goals list
+ * and goalLinks, so findFund picks the same fund from either.
+ */
+export const GOALS_IN_ORDER = 'ORDER BY g.position, g.created_at, g.name'
+
 /** Every goal, in the goals list's order, so findFund picks the same fund it does. */
 export async function goalLinks(db: Db): Promise<GoalLink[]> {
   const { rows } = await db.query<GoalLink>(
-    `SELECT id, name, account_id AS "accountId", emergency_months AS "emergencyMonths"
-     FROM goals ORDER BY created_at, name`,
+    `SELECT g.id, g.name, g.account_id AS "accountId", g.emergency_months AS "emergencyMonths"
+     FROM goals g ${GOALS_IN_ORDER}`,
   )
   return rows
 }
