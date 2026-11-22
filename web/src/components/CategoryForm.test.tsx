@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { category, renderSignedIn } from '../test/fake'
-import { bankCategoryLabel, CategoryForm, fieldsOf } from './CategoryForm'
+import { bankCategoryLabel } from './bankCategories'
+import { CategoryForm, fieldsOf } from './CategoryForm'
 
 describe('CategoryForm', () => {
   function renderForm(props: Partial<ComponentProps<typeof CategoryForm>> = {}) {
@@ -106,12 +107,22 @@ describe('CategoryForm', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('treats a budget that is not a number as no budget', async () => {
+  it('refuses a budget it cannot read, rather than save it as no budget', async () => {
     const { onSubmit, user } = renderForm()
     await user.type(screen.getByLabelText('Name'), 'Fun')
-    await user.type(screen.getByLabelText('Budget amount'), 'lots')
+    await user.type(screen.getByLabelText('Budget amount'), '5OO')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
+    expect(screen.getByRole('button', { name: 'Add category' })).toBeDisabled()
+    // A transfer takes no budget, so what is in the box no longer matters.
+    await user.click(screen.getByRole('button', { name: 'Transfer' }))
+    expect(screen.getByRole('button', { name: 'Add category' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Spending' }))
+    const amount = screen.getByLabelText('Budget amount')
+    await user.clear(amount)
+    await user.type(amount, '500')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await save(user)
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ budgetCents: null }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ budgetCents: 50000 }))
   })
 
   it('asks what is expected for income, with no warning or pace', async () => {

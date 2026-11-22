@@ -8,9 +8,10 @@ import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { UnsharedAccount } from '../../components/bank/UnsharedAccount'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { ACCOUNT_TYPES, accountDetailPath, isOwed, isShared } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
-import { parseMoney } from '../../lib/format'
+import { isUnreadableMoney, parseMoney } from '../../lib/format'
 import { LowBalanceField } from './LowBalance'
 import { Section } from './Section'
 
@@ -140,10 +141,12 @@ function AddAccount({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('')
   const [type, setType] = useState<Input<'create_account'>['type']>('depository')
   const [balance, setBalance] = useState('')
+  const badBalance = isUnreadableMoney(balance)
 
   function submit(event: FormEvent) {
     event.preventDefault()
     create.mutate(
+      // Only a blank balance is null here, and a blank balance starts at $0.
       { name, type, balanceCents: parseMoney(balance) ?? 0, currency: settings.currency },
       { onSuccess: onDone },
     )
@@ -182,12 +185,13 @@ function AddAccount({ onDone }: { onDone: () => void }) {
           onChange={(e) => setBalance(e.target.value)}
         />
       </div>
+      <UnreadableAmount text={balance} />
       <ErrorNote error={create.error} />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button type="button" className="btn ghost" onClick={onDone}>
           Cancel
         </button>
-        <button type="submit" className="btn primary" disabled={create.isPending}>
+        <button type="submit" className="btn primary" disabled={create.isPending || badBalance}>
           Add account
         </button>
       </div>

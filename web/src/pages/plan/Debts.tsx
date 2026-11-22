@@ -7,6 +7,7 @@ import { useState } from 'react'
 import type { Account, DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { cardInterestTotal, isCounted, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
@@ -143,6 +144,8 @@ export function DebtsSection() {
             />
           </Setting>
         </div>
+        {/* The plan then counts no extra, so say why rather than show it quietly. */}
+        <UnreadableAmount text={extra} />
         <PayoffPlan extraCents={extraCents} />
       </Card>
     </>

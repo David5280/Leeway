@@ -4,11 +4,11 @@ import { useState, type FormEvent } from 'react'
 import type { Category, Output } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { useApp } from '../../lib/app'
-import { parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
 import { CategorySelect } from '../CategorySelect'
 import { ErrorNote, Icon, Segmented } from '../ui'
-import { FIELDS, MATCHES, type RuleDraft } from './rules'
+import { UnreadableAmount } from '../UnreadableAmount'
+import { amountLimits, FIELDS, MATCHES, type RuleDraft } from './rules'
 
 /**
  * Builds a rule with a live preview of what it would catch, so nothing
@@ -31,8 +31,7 @@ export function RuleBuilder({
   const set = (change: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...change }))
   const names = new Map(categories.map((c) => [c.id, c.name]))
 
-  const minAmountCents = draft.minAmount ? parseMoney(draft.minAmount) : null
-  const maxAmountCents = draft.maxAmount ? parseMoney(draft.maxAmount) : null
+  const { minAmountCents, maxAmountCents, unreadable: badLimit } = amountLimits(draft)
   const settled = useDebounced({
     field: draft.field,
     matchType: draft.matchType,
@@ -127,7 +126,7 @@ export function RuleBuilder({
         <button
           type="submit"
           className="btn primary"
-          disabled={!draft.categoryId || !draft.pattern.trim() || create.isPending}
+          disabled={!draft.categoryId || !draft.pattern.trim() || badLimit || create.isPending}
         >
           {create.isPending ? 'Saving' : 'Save rule and apply'}
         </button>
@@ -182,15 +181,18 @@ function AmountInput({
   onChange: (value: string) => void
 }) {
   return (
-    <input
-      className="input num"
-      style={{ width: 100 }}
-      inputMode="decimal"
-      placeholder="Any"
-      aria-label={label}
-      value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <>
+      <input
+        className="input num"
+        style={{ width: 100 }}
+        inputMode="decimal"
+        placeholder="Any"
+        aria-label={label}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <UnreadableAmount text={value ?? ''} />
+    </>
   )
 }
 

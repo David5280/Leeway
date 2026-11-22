@@ -5,8 +5,9 @@ import { useState } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { useApp } from '../../lib/app'
-import { parseMoney } from '../../lib/format'
+import { isUnreadableMoney, parseMoney } from '../../lib/format'
 import { lowBalanceThreshold } from '../../../../server/src/domain/accountAlerts'
 
 /** The amount as typed in the box: whole units, without a currency sign. */
@@ -29,6 +30,8 @@ export function LowBalanceField({ account }: { account: Account }) {
   const [text, setText] = useState(asTyped(account.lowBalanceCents))
 
   function save() {
+    // One typed that can't be read stays in the box with its note, never saved as the default.
+    if (isUnreadableMoney(text)) return
     // Empty goes back to the default; 0 turns the warning off.
     const cents = text.trim() === '' ? null : parseMoney(text)
     if (cents !== null && cents < 0) return setText(asTyped(account.lowBalanceCents))
@@ -49,6 +52,7 @@ export function LowBalanceField({ account }: { account: Account }) {
         onChange={(e) => setText(e.target.value)}
         onBlur={save}
       />
+      <UnreadableAmount text={text} />
       <ErrorNote error={update.error} />
     </label>
   )

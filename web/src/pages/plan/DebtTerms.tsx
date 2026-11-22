@@ -5,7 +5,8 @@ import { useState, type FormEvent } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { parseMoney, parseRate } from '../../lib/format'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
+import { isUnreadableMoney, parseMoney, parseRate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
 
 export function DebtTerms({ account }: { account: Account }) {
@@ -18,8 +19,10 @@ export function DebtTerms({ account }: { account: Account }) {
   const minimumPaymentCents = parseMoney(minimum)
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
-  // A blank rate clears it, but one typed that cannot be a rate ("-5", "150") must not.
+  // A blank rate or payment clears it, but one typed that cannot be read
+  // ("-5" or "150" for a rate, "6O" for a payment) must not.
   const badRate = aprPercent === null && rate.trim() !== ''
+  const badPayment = isUnreadableMoney(minimum)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -56,9 +59,14 @@ export function DebtTerms({ account }: { account: Account }) {
         value={minimum}
         onChange={(e) => setMinimum(e.target.value)}
       />
-      <button type="submit" className="btn" disabled={unchanged || badRate || save.isPending}>
+      <button
+        type="submit"
+        className="btn"
+        disabled={unchanged || badRate || badPayment || save.isPending}
+      >
         Save
       </button>
+      <UnreadableAmount text={minimum} />
       <ErrorNote error={save.error} />
     </form>
   )

@@ -5,12 +5,14 @@ import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { alphabeticalGroups } from '../../lib/alphabetical'
 import { useApp } from '../../lib/app'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
   defaultStart,
+  hasUnreadableAmount,
   starterRows,
   type Edits,
   type Start,
@@ -58,7 +60,11 @@ export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () =
           onBack={onBack}
           next="Continue"
           busy={finish.isPending}
-          disabled={start === null || (start === 'import' && !imported)}
+          disabled={
+            start === null ||
+            (start === 'import' && !imported) ||
+            (listed && hasUnreadableAmount(rows))
+          }
         />
       </form>
     </Frame>
@@ -187,16 +193,19 @@ function StarterItem({
         </span>
       </label>
       {category.kind === 'expense' ? (
-        <input
-          className="input num"
-          style={{ width: 110 }}
-          inputMode="decimal"
-          placeholder="No budget"
-          aria-label={`${category.name} budget`}
-          value={amount}
-          disabled={!include}
-          onChange={(e) => onEdit(category.name, { amount: e.target.value })}
-        />
+        <>
+          <input
+            className="input num"
+            style={{ width: 110 }}
+            inputMode="decimal"
+            placeholder="No budget"
+            aria-label={`${category.name} budget`}
+            value={amount}
+            disabled={!include}
+            onChange={(e) => onEdit(category.name, { amount: e.target.value })}
+          />
+          {include && <UnreadableAmount text={amount} />}
+        </>
       ) : (
         // Income and transfers take no budget, so say how each is counted
         // instead of repeating the name.

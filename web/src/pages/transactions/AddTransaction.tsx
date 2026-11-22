@@ -6,6 +6,7 @@ import type { Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { CategorySelect } from '../../components/CategorySelect'
 import { ErrorNote, Segmented } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
 import { parseMoney } from '../../lib/format'
@@ -124,6 +125,7 @@ export function AddTransaction({
           Add
         </button>
       </div>
+      <UnreadableAmount text={amount} />
       <ErrorNote error={create.error} />
     </form>
   )

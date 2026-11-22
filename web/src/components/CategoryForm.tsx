@@ -3,11 +3,13 @@
 import { useState, type FormEvent } from 'react'
 import type { Category, Input } from '../api/client'
 import { useApp } from '../lib/app'
-import { parseMoney } from '../lib/format'
+import { isUnreadableMoney, parseMoney } from '../lib/format'
 import { CATEGORY_COLORS } from '../lib/theme'
+import { BANK_CATEGORIES, bankCategoryLabel } from './bankCategories'
 import { ColorPicker } from './ColorPicker'
 import { PercentInput } from './PercentInput'
 import { ErrorNote, Segmented, Setting, Switch } from './ui'
+import { UnreadableAmount } from './UnreadableAmount'
 
 export type CategoryFields = Required<Omit<Input<'create_category'>, 'icon'>>
 
@@ -24,43 +26,6 @@ export const CADENCE_LABELS = {
   month: 'a month',
   year: 'a year',
 } as const
-
-/**
- * Plaid's top-level categories and the detailed ones people reach for most.
- * Any other detailed code (see Plaid's taxonomy) can be typed in.
- */
-const BANK_CATEGORIES = [
-  'FOOD_AND_DRINK',
-  'FOOD_AND_DRINK_GROCERIES',
-  'FOOD_AND_DRINK_RESTAURANT',
-  'FOOD_AND_DRINK_FAST_FOOD',
-  'FOOD_AND_DRINK_COFFEE',
-  'FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR',
-  'GENERAL_MERCHANDISE',
-  'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES',
-  'GENERAL_SERVICES',
-  'ENTERTAINMENT',
-  'TRANSPORTATION',
-  'TRAVEL',
-  'RENT_AND_UTILITIES',
-  'HOME_IMPROVEMENT',
-  'MEDICAL',
-  'PERSONAL_CARE',
-  'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS',
-  'GOVERNMENT_AND_NON_PROFIT',
-  'BANK_FEES',
-  'LOAN_PAYMENTS',
-  'LOAN_PAYMENTS_CAR_PAYMENT',
-  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-  'INCOME',
-  'TRANSFER_IN',
-  'TRANSFER_OUT',
-]
-
-export const bankCategoryLabel = (code: string) => {
-  const text = code.toLowerCase().replaceAll('_', ' ')
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
 
 /** What a brand new category starts with. */
 const NEW_CATEGORY: CategoryFields = {
@@ -120,6 +85,8 @@ export function CategoryForm({
   )
   const [bankCode, setBankCode] = useState('')
   const set = (change: Partial<CategoryFields>) => setFields((f) => ({ ...f, ...change }))
+  // A blank budget means none; one typed that can't be read must not save as none.
+  const badAmount = fields.kind !== 'transfer' && isUnreadableMoney(amount)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -203,6 +170,7 @@ export function CategoryForm({
                 </option>
               ))}
             </select>
+            <UnreadableAmount text={amount} />
           </div>
         </Setting>
       )}
@@ -288,7 +256,7 @@ export function CategoryForm({
             Cancel
           </button>
         )}
-        <button type="submit" className="btn primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy || badAmount}>
           {busy ? 'Saving' : submitLabel}
         </button>
       </div>

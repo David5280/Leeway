@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import type { Bill, Category, Input } from '../../api/client'
 import { CategorySelect } from '../../components/CategorySelect'
 import { ErrorNote, Segmented, Setting, Switch } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { parseMoney } from '../../lib/format'
 import { BILL_CADENCES, type BillCadence } from './text'
 
@@ -102,6 +103,7 @@ export function BillForm({
               </option>
             ))}
           </select>
+          <UnreadableAmount text={amount} />
         </div>
       </Setting>
       <Setting label="Next due" hint="Later dates repeat from this one">

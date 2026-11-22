@@ -5,9 +5,10 @@ import { useState, type FormEvent } from 'react'
 import type { Account, Goal, Input } from '../../../api/client'
 import { ColorPicker } from '../../../components/ColorPicker'
 import { ErrorNote, Setting, Switch } from '../../../components/ui'
+import { UnreadableAmount } from '../../../components/UnreadableAmount'
 import { useApp } from '../../../lib/app'
 import { followHint, fundTargetHint, type EmergencyView } from '../../../lib/emergencyText'
-import { parseMoney, periodWord } from '../../../lib/format'
+import { isUnreadableMoney, parseMoney, periodWord } from '../../../lib/format'
 import { CATEGORY_COLORS } from '../../../lib/theme'
 
 export type GoalFields = Required<Input<'create_goal'>>
@@ -99,6 +100,7 @@ function ProgressFields({
           />
         </Setting>
       )}
+      {accountId === BY_HAND && <UnreadableAmount text={saved} />}
     </>
   )
 }
@@ -114,6 +116,14 @@ function fundHints(goal: Goal | undefined, emergency: EmergencyView | null, acco
     target: isFund ? fundTargetHint(emergency) : undefined,
     follow: followHint(emergency, goal?.id ?? null, accountId),
   }
+}
+
+/**
+ * Whether saved so far holds an amount that can't be read. It counts only
+ * when kept by hand, and then one that can't be read must not save as $0.
+ */
+function savedIsUnreadable(saved: string, accountId: string, followsSavings: boolean): boolean {
+  return !followsSavings && accountId === BY_HAND && isUnreadableMoney(saved)
 }
 
 export function GoalForm({
@@ -157,6 +167,7 @@ export function GoalForm({
   // The emergency fund counts the accounts picked on its own card.
   const followsSavings = goal?.emergencyMonths !== null && goal?.emergencyMonths !== undefined
   const hints = fundHints(goal, emergency, accountId)
+  const badSaved = savedIsUnreadable(saved, accountId, followsSavings)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -197,6 +208,7 @@ export function GoalForm({
           onChange={(e) => setTarget(e.target.value)}
         />
       </Setting>
+      <UnreadableAmount text={target} />
       <Setting label={words.date} hint={`Optional. Shows what to set aside each ${period}`}>
         <input
           className="input"
@@ -237,7 +249,7 @@ export function GoalForm({
       </Setting>
       <ErrorNote error={error} />
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy || !targetCents}>
+        <button type="submit" className="btn primary" disabled={busy || !targetCents || badSaved}>
           {goal ? 'Save' : words.submit}
         </button>
         <button type="button" className="btn" onClick={onCancel}>

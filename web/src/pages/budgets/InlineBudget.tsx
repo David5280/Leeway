@@ -8,6 +8,7 @@ import { useActionMutation } from '../../api/hooks'
 import { CADENCE_LABELS } from '../../components/CategoryForm'
 import { Money } from '../../components/design/Money'
 import { ErrorNote } from '../../components/ui'
+import { UnreadableAmount } from '../../components/UnreadableAmount'
 import { parseMoney } from '../../lib/format'
 
 /** The amount to save from what was typed: cents, null for a blank box, undefined if unreadable. */
@@ -78,6 +79,7 @@ export function InlineBudget({
         onBlur={() => save()}
       />
       <span className="small muted">{CADENCE_LABELS[category.budgetCadence]}</span>
+      <UnreadableAmount text={text} />
       <ErrorNote error={update.error} />
     </form>
   )

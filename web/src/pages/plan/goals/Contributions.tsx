@@ -5,6 +5,7 @@ import { useState } from 'react'
 import type { Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, LoadingOrError } from '../../../components/ui'
+import { UnreadableAmount } from '../../../components/UnreadableAmount'
 import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
 import { Money } from '../../../components/design/Money'
@@ -40,6 +41,7 @@ export function AddMoney({ goal }: { goal: Goal }) {
       <button type="submit" className="btn" disabled={!cents || add.isPending}>
         Add
       </button>
+      <UnreadableAmount text={amount} />
       <ErrorNote error={add.error} />
     </form>
   )

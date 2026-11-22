@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeRule, FIELDS, MATCHES } from './rules'
+import { amountLimits, describeRule, FIELDS, MATCHES, type RuleDraft } from './rules'
 
 describe('describeRule', () => {
   it('reads a merchant rule as a sentence', () => {
@@ -37,5 +37,39 @@ describe('describeRule', () => {
   it('has words for every field and match type', () => {
     expect(FIELDS.map((f) => f.value)).toEqual(['merchant', 'description'])
     expect(Object.keys(MATCHES)).toEqual(['contains', 'equals', 'starts_with'])
+  })
+})
+
+describe('amountLimits', () => {
+  const draft: RuleDraft = {
+    field: 'merchant',
+    matchType: 'contains',
+    pattern: 'Costco',
+    categoryId: null,
+  }
+
+  it('reads blank or missing limits as any amount', () => {
+    expect(amountLimits(draft)).toEqual({
+      minAmountCents: null,
+      maxAmountCents: null,
+      unreadable: false,
+    })
+    expect(amountLimits({ ...draft, minAmount: '', maxAmount: '' }).unreadable).toBe(false)
+  })
+
+  it('reads typed limits into cents', () => {
+    expect(amountLimits({ ...draft, minAmount: '$10', maxAmount: '1,000' })).toEqual({
+      minAmountCents: 1000,
+      maxAmountCents: 100000,
+      unreadable: false,
+    })
+  })
+
+  it('says when either limit cannot be read, rather than read it as no limit', () => {
+    expect(amountLimits({ ...draft, minAmount: '5k' })).toMatchObject({
+      minAmountCents: null,
+      unreadable: true,
+    })
+    expect(amountLimits({ ...draft, minAmount: '10', maxAmount: '2MM' }).unreadable).toBe(true)
   })
 })
