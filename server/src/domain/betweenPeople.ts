@@ -1,14 +1,13 @@
 // Whether a transaction is money between the owner and another person, and
-// who: the one rule everything that tells people apart reads, so Chat
-// (chat/people.ts), merchant totals (insights.ts), repeating charges
-// (recurring.ts) and the names the app shows (transactions.ts) always agree.
+// who, as the owner's own app shows it ("To Jane Doe", transactions.ts), and
+// the words of a bank's line that can name a person (chat/personNames.ts).
 // Pure; peopleContext.ts loads what it reads.
 //
 // Only a payment app ("Zelle payment to JANE DOE") says a person was paid.
 // A plain bank transfer can go to a person, a landlord or another bank of
-// the owner's own, and its line ("ONLINE TRANSFER TO ALLY BANK SAVINGS")
-// cannot tell them apart, so it is never read as either: Chat shows it by
-// what kind of transfer Plaid says it is (bankTransferLabel), not by its line.
+// the owner's own, and its line cannot tell them apart. What Chat sends a
+// model never relies on this rule: it hides any line it cannot vouch for as
+// a merchant (modelLabels.ts).
 
 import { isKnownShop, NO_SHOPS, type KnownShops } from './knownShops.js'
 import { tidyMerchantName } from './merchantName.js'
@@ -44,19 +43,31 @@ const MORE_APPS: { app: string; pattern: RegExp }[] = [
   { app: 'a payment app', pattern: /\b(?:sent|received) money\b/i },
 ]
 
+// A name that starts with a payment app's own name.
+const STARTS_WITH_APP = /^(?:zelle|zel|venmo|cash ?app|paypal|apple cash)\b/i
+
 /** The most specific code the bank gave, or an empty string. */
 function codeOf(tx: Movement): string {
   return tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 }
 
 /** The payment app a text names, short forms ("ZEL", "SENT MONEY") included. */
-function appIn(text: string): string | null {
+export function appIn(text: string): string | null {
   return appNamedIn(text) ?? MORE_APPS.find(({ pattern }) => pattern.test(text))?.app ?? null
 }
 
-/** The payment app a transaction went through, if any. */
+/** The payment app a transaction went through, named in its line or merchant, if any. */
 export function paymentAppOf(tx: Movement): string | null {
-  return personToPersonApp(tx) ?? appIn(tx.name)
+  return personToPersonApp(tx) ?? appIn(`${tx.name} ${tx.merchantName ?? ''}`)
+}
+
+/**
+ * Whether a name after "to" or "from" is the owner's own card or balance at
+ * an app: it starts with the app ("to Venmo Credit Card", "from Venmo"). A
+ * name with the app after it ("to Jane Doe via Zelle") is still a person.
+ */
+export function namesOwnAppAccount(named: string): boolean {
+  return STARTS_WITH_APP.test(named)
 }
 
 /** Plaid's merchant name made readable, or an empty string when it gave none. */
@@ -108,15 +119,15 @@ function unnamedAppPayment(tx: Movement, app: string, shops: KnownShops): boolea
  * The payment between the owner and a person a transaction is, or null.
  * Only a payment app pays a person, and never when the code is a loan, card
  * or purchase one. The counterparty is who the line names after "to" or
- * "from". A line that names the app there ("to Venmo Credit Card", "from
- * Venmo") pays the owner's own card or balance, and so does money moved
- * between their app balance and bank ("VENMO CASHOUT").
+ * "from". A name that starts with the app ("to Venmo Credit Card", "from
+ * Venmo") is the owner's own card or balance, and so is money moved between
+ * their app balance and bank ("VENMO CASHOUT").
  */
 export function betweenPeople(tx: Movement, context: PeopleContext): PersonPayment | null {
   const app = paymentAppOf(tx)
   if (!app || tx.amountCents === 0 || paysNoPerson(app, codeOf(tx))) return null
   const named = nameAfterToOrFrom(tx.name)
-  if (named !== null && appIn(named) !== null) return null
+  if (named !== null && namesOwnAppAccount(named)) return null
   const counterparty = (named && personWords(named)) || null
   const payment: PersonPayment = {
     app,
@@ -145,30 +156,4 @@ export function personPayment(tx: Movement): PersonPayment | null {
 export function personInLine(line: string): string {
   const words = line.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []
   return personWords(words.filter((word) => !/\d/.test(word)).join(' '))
-}
-
-// A line that reads as a bank transfer whatever Plaid filed it as.
-const TRANSFER_LINE = /\btransfer\s+(?:to|from)\b/i
-
-// What kind of transfer Plaid's detailed code says it is, for its label.
-const TRANSFER_KINDS: { code: RegExp; out: string; in: string }[] = [
-  { code: /SAVINGS/, out: 'Transfer to savings', in: 'Transfer from savings' },
-  { code: /INVESTMENT/, out: 'Transfer to investments', in: 'Transfer from investments' },
-  { code: /WITHDRAWAL/, out: 'Cash withdrawal', in: 'Cash withdrawal returned' },
-  { code: /DEPOSIT/, out: 'Deposit returned', in: 'Deposit' },
-]
-
-/**
- * How Chat names a bank transfer with no payment app, instead of its line:
- * by the kind of transfer Plaid's code says it is ("Transfer to savings"),
- * else "Transfer to another account" or "Transfer from another account".
- * Null for anything else, a payment app's line included.
- */
-export function bankTransferLabel(tx: Movement): string | null {
-  const code = codeOf(tx)
-  if (!code.startsWith('TRANSFER') && !TRANSFER_LINE.test(tx.name)) return null
-  if (paymentAppOf(tx) !== null) return null
-  const kind = TRANSFER_KINDS.find((one) => one.code.test(code))
-  const label = kind ?? { out: 'Transfer to another account', in: 'Transfer from another account' }
-  return tx.amountCents < 0 ? label.in : label.out
 }

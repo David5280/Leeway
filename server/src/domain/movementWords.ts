@@ -8,10 +8,11 @@
  */
 const MOVEMENT_WORDS = new Set(
   (
-    'a ach add apple app bank cash cashout ccd co conf credit debit dep deposit des from fund ' +
-    'funds id indn inst instant memo mobile money online out p2p payment payments paypal ppd ' +
-    'quickpay received recurring ref request sent standard the to transaction transfer ' +
-    'transfers venmo web with withdrawal xfer zel zelle'
+    'a ach add apple app bank banking cash cashout ccd co conf credit debit dep deposit des ' +
+    'external from fund funds id indn inst instant internet memo mobile money online out p2p ' +
+    'payment payments paypal pmt pos ppd quickpay received recurring ref request sent sq ' +
+    'standard the to transaction transfer transfers trnsfr venmo via web wire with ' +
+    'withdrawal xfer zel zelle'
   ).split(' '),
 )
 

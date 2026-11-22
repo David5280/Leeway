@@ -1,12 +1,13 @@
-// What telling a payment between people reads beyond the transaction itself
-// (betweenPeople.ts): the shops the owner buys from, so a PayPal transfer to
-// one is never read as paying a person, nor a shop's name hidden as one.
+// What labelling a row for a model and telling a payment between people read
+// beyond the transaction itself (modelLabels.ts, betweenPeople.ts): the shops
+// the owner buys from, so a purchase at one is shown by name, and a shop's
+// name is never hidden as a person's.
 
 import type { Db } from '../db/pool.js'
-import type { PeopleContext } from './betweenPeople.js'
+import { paymentAppOf, type PeopleContext } from './betweenPeople.js'
 import { knownShops, NO_SHOPS, type KnownShops } from './knownShops.js'
 import { tidyMerchantName } from './merchantName.js'
-import { personToPersonApp, type Movement } from './transfers.js'
+import type { Movement } from './transfers.js'
 
 /** The most specific code the bank gave a row, or an empty string, in SQL. */
 export const CODE_SQL = `coalesce(provider_category_detailed, provider_category_primary, '')`
@@ -20,7 +21,8 @@ export const NAMES_AN_APP_SQL = `name || ' ' || coalesce(merchant_name, '')
  * Plaid named and a code it gave. Anything that could be paying a person is
  * left out, so it can never vouch for a shop: transfers, income, loan and
  * rent payments, numbered checks ("CHECK 1043"; a "CHECK CARD" purchase
- * still counts), and anything through a payment app.
+ * still counts), lines that read as a transfer or payment to or from
+ * someone, and anything through a payment app.
  */
 async function shopNames(db: Db): Promise<string[]> {
   const { rows } = await db.query<{ merchantName: string }>(
@@ -31,6 +33,8 @@ async function shopNames(db: Db): Promise<string[]> {
        AND ${CODE_SQL} <> ''
        AND ${CODE_SQL} !~ '^(TRANSFER|INCOME|LOAN_PAYMENTS|RENT_AND_UTILITIES_RENT)'
        AND name !~* '^\\s*check\\s*#?\\s*\\d'
+       AND name !~* '\\y(transfer|xfer|trnsfr)\\y|^\\W*(to|from)\\s'
+       AND name !~* '^\\W*(\\w+\\s+)?(payment|pmt|sent|received)\\y.*\\y(to|from)\\y'
        AND NOT (${NAMES_AN_APP_SQL})`,
   )
   return rows.map((row) => tidyMerchantName(row.merchantName))
@@ -42,11 +46,15 @@ export async function loadKnownShops(db: Db): Promise<KnownShops> {
 }
 
 /**
- * What betweenPeople reads to tell the payments among these rows. Only a
- * PayPal transfer that names no one asks about shops, so the scan of every
- * purchase is skipped when no row goes through PayPal.
+ * The shops the owner buys from, as labelling these rows needs them
+ * (modelLabels.ts): only a payment app's line, or a line with no code, is
+ * ever checked against them, so with neither the scan of every purchase is
+ * skipped.
  */
 export async function loadPeopleContext(db: Db, rows: readonly Movement[]): Promise<PeopleContext> {
-  const asks = rows.some((tx) => personToPersonApp(tx) === 'PayPal')
+  const asks = rows.some(
+    (tx) =>
+      paymentAppOf(tx) !== null || !(tx.providerCategoryDetailed ?? tx.providerCategoryPrimary),
+  )
   return { shops: asks ? await loadKnownShops(db) : NO_SHOPS }
 }

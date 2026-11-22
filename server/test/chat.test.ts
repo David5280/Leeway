@@ -191,7 +191,11 @@ describe('answering a question', () => {
       primary: 'TRANSFER_OUT',
       detailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
     })
-    // A shop paid through PayPal is no person, so its name stays.
+    // A shop the owner buys from, paid through PayPal, is no person, so its name stays.
+    await pay('2026-11-10', 'SPOTIFY USA', 1_199, {
+      merchantName: 'Spotify',
+      detailed: 'ENTERTAINMENT_MUSIC',
+    })
     await pay('2026-11-17', 'PAYPAL *SPOTIFY', 1_199)
     const looks = ['list_transactions', 'top_merchants', 'summarize_accounts'].map((name) => ({
       id: name,
@@ -208,13 +212,13 @@ describe('answering a question', () => {
       expect(content).not.toContain('JPM99A1B2C3')
       expect(content).not.toContain('PP0ABC')
     }
-    // Each payment between people is named by its direction alone: three out, one in.
-    expect(transactions!.match(/"To someone"/g)).toHaveLength(3)
-    expect(transactions!.match(/"From someone"/g)).toHaveLength(1)
-    expect(transactions).toMatch(/spotify/i)
-    expect(merchants).toContain('Payment app')
+    // Each payment between people is shown by its kind alone: three out, one in.
+    expect(transactions!.match(/ \(sent\)"/g)).toHaveLength(3)
+    expect(transactions!.match(/"Venmo payment \(received\)"/g)).toHaveLength(1)
+    expect(transactions!.match(/spotify/gi)).toHaveLength(2)
+    expect(merchants).toContain('"Zelle payment (sent)"')
     expect(merchants).toMatch(/spotify/i)
-    expect(accounts).toContain('To someone')
+    expect(accounts).toContain('Zelle payment (sent)')
   })
 
   it('remembers what the owner says, and sends it with later questions', async () => {

@@ -1,15 +1,14 @@
-// The pure rules behind who Chat keeps out of what it sends a model: which
-// shops the owner buys from, which names are read from a payment between
-// people (betweenPeople.test.ts finds them), and where each is hidden.
-// Every name is made up.
+// The pure rules behind which names Chat hides: which shops the owner buys
+// from, which names are read from a labelled row (modelLabels.test.ts labels
+// them), and in which forms each is hidden. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
 import { isCommonWord } from '../src/domain/chat/commonWords.js'
 import { isKnownShop, knownShops, NO_SHOPS, startsAShop } from '../src/domain/knownShops.js'
 import { loneNamesOf } from '../src/domain/chat/loneNames.js'
 import { namesSomeone } from '../src/domain/movementWords.js'
-import { namesIn, namesToHide } from '../src/domain/chat/personNames.js'
-import type { Movement, PersonPayment } from '../src/domain/transfers.js'
+import { namesIn, namesToHide, type FoundName } from '../src/domain/chat/personNames.js'
+import type { Movement } from '../src/domain/transfers.js'
 
 /** A transaction as the rules read it: money out, with only what a case sets. */
 const movement = (fields: Partial<Movement>): Movement => ({
@@ -21,28 +20,39 @@ const movement = (fields: Partial<Movement>): Movement => ({
   ...fields,
 })
 
-describe('the names read from a payment between people', () => {
-  const context = {
-    shops: knownShops(['eBay']),
-    accounts: { words: new Set<string>(), masks: new Set<string>() },
-  }
-  const person = (counterparty: string | null): PersonPayment => ({
-    app: 'Zelle',
-    direction: 'out',
-    counterparty,
-  })
+/** Names as found on a payment app's line, named as the person paid when `paid`. */
+const found = (...names: string[]): FoundName[] => names.map((name) => ({ name }))
+
+describe('the names read from a labelled row', () => {
+  const shops = knownShops(['eBay'])
 
   it('are the name after "to" or "from" and the merchant, unless the merchant is a shop', () => {
     const tx = movement({ name: 'Zelle payment to JANE DOE 4417', merchantName: 'JANE Q DOE' })
-    expect(namesIn(tx, person('Jane Doe'), context)).toEqual(['Jane Doe', 'Jane Q Doe'])
+    expect(namesIn(tx, 'app', shops)).toEqual([
+      { name: 'Jane Doe', paid: true },
+      { name: 'Jane Q Doe' },
+    ])
     const shop = movement({ name: 'PAYPAL INST XFER', merchantName: 'EBAY' })
-    expect(namesIn(shop, person(null), context)).toEqual([])
+    expect(namesIn(shop, 'app', shops)).toEqual([])
   })
 
-  it("are what is left of the bank's line when it names no one otherwise", () => {
-    const tx = movement({ name: 'Zelle Transfer Conf# T0ABCD123; Jane Doe', merchantName: 'Zelle' })
-    expect(namesIn(tx, person(null), context)).toEqual(['Jane Doe'])
-    expect(namesIn(movement({ name: 'VENMO 1234567' }), person(null), context)).toEqual([])
+  it("are what is left of an app's line when it names no one otherwise", () => {
+    const tx = movement({ name: 'Zelle Transfer Conf# T0ABCD123; Halvorsen, Ingrid' })
+    expect(namesIn(tx, 'app', shops)).toEqual([{ name: 'Halvorsen Ingrid' }])
+    expect(namesIn(movement({ name: 'VENMO 1234567' }), 'app', shops)).toEqual([])
+  })
+
+  it("leave out the owner's own app account, and mark a transfer's", () => {
+    expect(
+      namesIn(movement({ name: 'Online Payment to Venmo Credit Card' }), 'app', shops),
+    ).toEqual([])
+    expect(namesIn(movement({ name: 'XFER TO JANE OSTROVSKA' }), 'transfer', shops)).toEqual([
+      { name: 'Jane Ostrovska', paid: false, transfer: true },
+    ])
+  })
+
+  it('are none from a line only labelled for having no code', () => {
+    expect(namesIn(movement({ name: 'JANE PRYCEWOOD' }), 'unknown', shops)).toEqual([])
   })
 })
 
@@ -64,51 +74,101 @@ describe('the shops the owner buys from', () => {
 })
 
 describe('the words of a name hidden alone', () => {
-  it('are every word of it, middle names too, and a name of one word itself', () => {
-    expect(
-      loneNamesOf(['Jane Q Doe', 'José María Núñez', 'Quillon', 'Jane Roe'], NO_SHOPS),
-    ).toEqual(['Jane', 'Doe', 'José', 'María', 'Núñez', 'Quillon', 'Roe'])
-    expect(loneNamesOf(['D’Arcy Vane'], NO_SHOPS)).toEqual(['D’Arcy', 'Vane'])
+  it('are every word of it, in any case when long enough, or as a name when short', () => {
+    const names = found('Jane Q Doe', 'José María Núñez', 'Quillon', 'JANE Roe', 'D’Arcy Vane')
+    expect(loneNamesOf(names, NO_SHOPS)).toEqual({
+      capital: ['Q', 'Doe', 'Roe'].filter((word) => word.length > 1),
+      anyCase: ['Jane', 'José', 'María', 'Núñez', 'Quillon', 'D’Arcy', 'Vane'],
+      inNotes: [],
+    })
   })
 
   it('leave out common words, months, banks, contacts, money words and odd parts', () => {
-    const names = ['Bill', 'RENT', 'WILL', 'CHASE', 'Mom', 'May Chen', 'Online Fennwick', 'J. Doe']
-    expect(loneNamesOf(names, NO_SHOPS)).toEqual(['Chen', 'Fennwick', 'Doe'])
+    const names = found('Bill', 'RENT', 'WILL', 'CHASE', 'Mom', 'May Chen', 'Online Fennwick')
+    expect(loneNamesOf([...names, ...found('J. Doe')], NO_SHOPS)).toEqual({
+      capital: ['Doe'],
+      anyCase: ['Chen', 'Fennwick'],
+      inNotes: [],
+    })
     expect(isCommonWord('JUNE')).toBe(true)
     expect(isCommonWord('Jane')).toBe(false)
   })
 
-  it('leave out how a shop is called, but not a word a shop only contains', () => {
+  it('keep a common word an app named as the person paid, for notes only', () => {
+    expect(loneNamesOf([{ name: 'CHASE', paid: true }], NO_SHOPS)).toEqual({
+      capital: [],
+      anyCase: [],
+      inNotes: ['CHASE'],
+    })
+  })
+
+  it('leave out how a shop is called, a word to skip, but not a word a shop only contains', () => {
     const shops = knownShops(['Marigold Bakery', "Wendy's"])
-    expect(loneNamesOf(['Marigold Pettiwhistle', 'Wendy Bakery'], shops)).toEqual([
-      'Pettiwhistle',
-      'Wendy',
-      'Bakery',
-    ])
+    const names = found('Marigold Pettiwhistle', 'Wendy Bakery', 'Clara Everyday')
+    expect(loneNamesOf(names, shops, new Set(['everyday']))).toEqual({
+      capital: [],
+      anyCase: ['Pettiwhistle', 'Wendy', 'Bakery', 'Clara'],
+      inNotes: [],
+    })
   })
 })
 
 describe('where each name is hidden', () => {
-  it('is everywhere for a full name, and only alone in notes for each word of one', () => {
-    expect(namesToHide(['Jane Doe', 'Jane Doe', 'Bill', 'Quillon'], NO_SHOPS)).toEqual({
-      names: ['Jane Doe'],
-      loneNames: ['Jane', 'Doe', 'Quillon'],
+  it('is every form of a full name, the other way round too, and each word alone', () => {
+    expect(namesToHide(found('Jane Doe', 'Jane Doe', 'Bill', 'Quillon'), NO_SHOPS)).toEqual({
+      names: ['Jane Doe', 'Doe Jane'],
+      loneNames: ['Doe'],
+      loneAnyCase: ['Jane', 'Quillon'],
+      noteNames: [],
     })
   })
 
   it("hides a business's name with and without its ending, which is never a name alone", () => {
     // A practice can trade under a person's own name, and say what they treat.
-    expect(namesToHide(['Jane Doe Pc'], NO_SHOPS)).toEqual({
-      names: ['Jane Doe Pc', 'Jane Doe'],
-      loneNames: ['Jane', 'Doe'],
+    expect(namesToHide(found('Jane Doe Pc'), NO_SHOPS)).toEqual({
+      names: ['Jane Doe Pc', 'Jane Doe', 'Doe Jane'],
+      loneNames: ['Doe'],
+      loneAnyCase: ['Jane'],
+      noteNames: [],
     })
-    expect(namesToHide(['Vale Co'], NO_SHOPS)).toEqual({ names: ['Vale Co'], loneNames: ['Vale'] })
+    expect(namesToHide(found('Vale Co'), NO_SHOPS)).toEqual({
+      names: ['Vale Co', 'Co Vale'],
+      loneNames: [],
+      loneAnyCase: ['Vale'],
+      noteNames: [],
+    })
+  })
+
+  it('hides a name without the account words a bank wrote after it', () => {
+    expect(namesToHide(found('Clara Thornbury Everyday Checking'), NO_SHOPS)).toEqual({
+      names: ['Clara Thornbury Everyday Checking', 'Clara Thornbury', 'Thornbury Clara'],
+      loneNames: [],
+      loneAnyCase: ['Clara', 'Thornbury'],
+      noteNames: [],
+    })
+  })
+
+  it("drops a transfer's name made only of the owner's accounts, and those words alone", () => {
+    const own = new Set(['chase', 'checking', 'ally'])
+    const transfers: FoundName[] = [
+      { name: 'Chase Checking', transfer: true },
+      { name: 'Ally Pellworth', transfer: true },
+    ]
+    expect(namesToHide(transfers, NO_SHOPS, own)).toEqual({
+      names: ['Ally Pellworth', 'Pellworth Ally'],
+      loneNames: [],
+      loneAnyCase: ['Pellworth'],
+      noteNames: [],
+    })
   })
 
   it('leaves a business the owner buys from its name, with or without its ending', () => {
     const shops = knownShops(['Acme Plumbing', 'Quorn & Sons Inc.'])
     for (const business of ['Acme Plumbing LLC', 'Quorn & Sons Inc.']) {
-      expect(namesToHide([business, 'Jane Doe'], shops).names).toEqual(['Jane Doe'])
+      expect(namesToHide(found(business, 'Jane Doe'), shops).names).toEqual([
+        'Jane Doe',
+        'Doe Jane',
+      ])
     }
   })
 

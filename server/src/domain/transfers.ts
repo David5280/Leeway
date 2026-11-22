@@ -131,13 +131,17 @@ export interface PersonPayment {
 
 // "Zelle payment to JANE DOE JPM99A1B2C3" or "Zelle Payment From Jane Doe 12345":
 // the name sits between "to" or "from" and a trailing confirmation code.
-const NAMED_PAYMENT = /\b(?:to|from)\s+(.+)$/i
+const NAMED_PAYMENT = /\b(to|from)\s+(.+)$/i
 
 // Where the name ends when a bank adds more after it: a date ("ZELLE TO JANE
-// DOE ON 11/15"), a reference ("... REF # PP0ABC", "... CONF 12AB", "... #4471")
-// or the sender's memo ("... FOR RENT", '... "dinner"', "...; dinner").
+// DOE ON 11/15"), a reference ("... REF # PP0ABC", "... CONF 12AB", "... #4471"),
+// the sender's memo ("... FOR RENT", '... "dinner"', "...; dinner") or the
+// app it went through ("... VIA ZELLE", "... WITH VENMO").
 const NAME_END =
-  /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf|for)\b)|\s*[;#"\u201C\u201D]/i
+  /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf|for|via)\b|with\s+(?:zelle|venmo|cash\s?app|paypal|apple\s+cash)\b)|\s*[;#"\u201C\u201D]/i
+
+// After "from", where the account it arrived in starts: "Zelle from JANE DOE to CHASE CHECKING".
+const ARRIVED_IN = /\s+to\s+/i
 
 /** Drops trailing reference codes (any word with a digit in it) from a name. */
 function withoutReference(text: string): string {
@@ -154,7 +158,9 @@ function tidyName(name: string): string {
 
 /** The name a bank wrote after "to" or "from", without what it added after it, if any. */
 export function nameAfterToOrFrom(line: string): string | null {
-  const named = NAMED_PAYMENT.exec(line)?.[1]?.split(NAME_END)[0]
-  const name = named ? withoutReference(named) : ''
+  const [, word, rest] = NAMED_PAYMENT.exec(line) ?? []
+  const named = rest?.split(NAME_END)[0]
+  const sender = word?.toLowerCase() === 'from' ? named?.split(ARRIVED_IN)[0] : named
+  const name = sender ? withoutReference(sender) : ''
   return name ? tidyName(name) : null
 }

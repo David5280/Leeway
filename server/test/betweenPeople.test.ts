@@ -1,12 +1,13 @@
-// The one rule for money between the owner and another person: only through
-// a payment app, never a shop, a loan or card or the owner's own app
-// balance. A plain bank transfer is neither: it is shown by its kind. Every
-// name is made up.
+// The one rule for money between the owner and another person, as the
+// owner's own app shows it: only through a payment app, never a shop, a loan
+// or card or the owner's own app balance. A plain bank transfer is neither.
+// What a model is shown instead is in modelLabels.test.ts. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
 import {
-  bankTransferLabel,
+  appIn,
   betweenPeople,
+  namesOwnAppAccount,
   personInLine,
   personWords,
   type PeopleContext,
@@ -123,41 +124,20 @@ describe('a bank transfer with no app', () => {
   it('is never a payment between people, whatever its line names', () => {
     for (const line of lines) expect(paid(line, transfer)).toBeNull()
   })
+})
 
-  it('is labelled by the kind of transfer Plaid says it is, and its direction', () => {
-    const label = (name: string, fields: Partial<Movement>) =>
-      bankTransferLabel(movement({ name, ...fields }))
-    for (const line of lines) expect(label(line, transfer)).toBe('Transfer to another account')
-    const savings = { providerCategoryDetailed: 'TRANSFER_OUT_SAVINGS' }
-    expect(label('ONLINE TRANSFER TO MARCUS', savings)).toBe('Transfer to savings')
-    expect(
-      label('ONLINE TRANSFER FROM WEALTHFRONT', {
-        providerCategoryDetailed: 'TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS',
-        amountCents: -9_000,
-      }),
-    ).toBe('Transfer from investments')
-    expect(label('ATM WITHDRAWAL', { providerCategoryDetailed: 'TRANSFER_OUT_WITHDRAWAL' })).toBe(
-      'Cash withdrawal',
-    )
-    expect(
-      label('ATM REVERSAL', {
-        providerCategoryDetailed: 'TRANSFER_OUT_WITHDRAWAL',
-        amountCents: -1,
-      }),
-    ).toBe('Cash withdrawal returned')
-    const deposit = { providerCategoryDetailed: 'TRANSFER_IN_DEPOSIT' }
-    expect(label('MOBILE DEPOSIT', { ...deposit, amountCents: -5_000 })).toBe('Deposit')
-    expect(label('DEPOSIT REVERSAL', deposit)).toBe('Deposit returned')
-    // A line that says it is a transfer is one, whatever Plaid filed it as.
-    expect(label('Online Transfer to Clara Thornbury', { providerCategoryPrimary: 'RENT' })).toBe(
-      'Transfer to another account',
-    )
+describe('a payment app named in a line', () => {
+  it('is found anywhere in it, by name or by what only an app writes', () => {
+    expect(appIn('Payment to Wilhelmina Ashcombe via Zelle')).toBe('Zelle')
+    expect(appIn('APPLE CASH SENT MONEY')).toBe('Apple Cash')
+    expect(appIn('SENT MONEY TO PELLWORTH ODA')).toBe('a payment app')
+    expect(appIn('KING SOOPERS')).toBeNull()
   })
 
-  it('is no bank transfer through a payment app, or when nothing says it is a transfer', () => {
-    expect(bankTransferLabel(movement({ name: 'ZEL TO MIRABEL QUINT' }))).toBeNull()
-    expect(bankTransferLabel(movement({ name: 'Transfer from Venmo' }))).toBeNull()
-    expect(bankTransferLabel(movement({ name: 'KING SOOPERS' }))).toBeNull()
+  it("names the owner's own app account only when the name starts with the app", () => {
+    expect(namesOwnAppAccount('Venmo Credit Card')).toBe(true)
+    expect(namesOwnAppAccount('Cash App')).toBe(true)
+    expect(namesOwnAppAccount('Jane Corrigan Cash App')).toBe(false)
   })
 })
 
@@ -169,6 +149,17 @@ describe("a person's name as the bank wrote it", () => {
     expect(nameAfterToOrFrom('Zelle payment to JANE DOE; dinner')).toBe('Jane Doe')
     expect(nameAfterToOrFrom('Zelle payment to JANE DOE #A1B2C3')).toBe('Jane Doe')
     expect(nameAfterToOrFrom('Zelle payment to JANE DOE Conf# T0ABCD')).toBe('Jane Doe')
+    // The app and the account money arrived in come after the name, not in it.
+    expect(nameAfterToOrFrom('Payment to Wilhelmina Ashcombe via Zelle')).toBe(
+      'Wilhelmina Ashcombe',
+    )
+    expect(nameAfterToOrFrom('Transfer to Jane Lindqvist with Zelle')).toBe('Jane Lindqvist')
+    expect(nameAfterToOrFrom('Zelle from Ambrose Kettering to CHASE CHECKING')).toBe(
+      'Ambrose Kettering',
+    )
+    expect(nameAfterToOrFrom('Online Payment 18334 To Bertram Quillfeather')).toBe(
+      'Bertram Quillfeather',
+    )
     // "For" inside a name is left alone, and a line with no "to" or "from" names no one.
     expect(nameAfterToOrFrom('Zelle payment to JANE FORD')).toBe('Jane Ford')
     expect(nameAfterToOrFrom('ZELLE PAYMENT 99')).toBeNull()

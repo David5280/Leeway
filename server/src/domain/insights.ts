@@ -15,11 +15,12 @@ import {
 import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
 import { accountMasks } from './accounts.js'
-import { bankTransferLabel, betweenPeople, type PeopleContext } from './betweenPeople.js'
+import { betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { spendingSql } from './counted.js'
 import { GENERIC_NAME } from './merchantName.js'
+import { neutralLabel } from './modelLabels.js'
 import { loadPeopleContext } from './peopleContext.js'
 import { withShownNames } from './ruleText.js'
 import { periodConfig, type Settings } from './settings.js'
@@ -189,27 +190,27 @@ export interface MerchantTotal {
   merchant: string
   spentCents: number
   count: number
-  /** Set on payments to a person through an app, kept apart from any shop of the same name. */
-  betweenPeople?: true
   /**
-   * Set on bank transfers with no payment app, kept apart too: the label Chat
-   * shows instead of their name, which may be anyone's (betweenPeople.ts).
+   * Set when the name could be anyone's, as on a payment through an app or a
+   * transfer: what a model is shown instead (modelLabels.ts). Such a total is
+   * kept apart from any shop of the same name.
    */
-  transferLabel?: string
+  modelLabel?: string
 }
 
 type MerchantRow = Pick<Movement, 'name' | 'merchantName'> &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'> & {
     spentCents: number
     count: number
+    handEntered: boolean
   }
 
 /**
  * Which total a merchant row adds to. Payments between people
  * (betweenPeople.ts) are named as the activity list names them ("To Jane
- * Doe"), kept apart and flagged, so paying a person never adds to a shop
- * that goes by their name (a sole trader, say). Bank transfers are kept
- * apart and labelled the same way.
+ * Doe"). A row whose name could be anyone's carries the label a model is
+ * shown instead and is kept apart, so paying a person never adds to a shop
+ * that goes by their name (a sole trader, say).
  */
 function merchantTotalOf(
   row: MerchantRow,
@@ -219,14 +220,12 @@ function merchantTotalOf(
   const empty = { spentCents: 0, count: 0 }
   const tx = { ...row, amountCents: row.spentCents }
   const person = betweenPeople(tx, people)
-  if (person) {
-    const merchant = transactionDisplayName({ ...row, person }, null, { masks })
-    return { key: `between people: ${merchant}`, merchant, ...empty, betweenPeople: true }
-  }
-  const merchant = merchantDisplayName(row, { masks })
-  const transferLabel = bankTransferLabel(tx)
-  if (!transferLabel) return { key: merchant, merchant, ...empty }
-  return { key: `bank transfer: ${merchant}`, merchant, ...empty, transferLabel }
+  const merchant = person
+    ? transactionDisplayName({ ...row, person }, null, { masks })
+    : merchantDisplayName(row, { masks })
+  const modelLabel = neutralLabel(tx, people.shops)?.label
+  if (!modelLabel) return { key: merchant, merchant, ...empty }
+  return { key: `${modelLabel}: ${merchant}`, merchant, ...empty, modelLabel }
 }
 
 /**
@@ -249,6 +248,7 @@ export async function topMerchants(
     `SELECT t.name, t.merchant_name AS "merchantName",
             t.provider_category_primary AS "providerCategoryPrimary",
             t.provider_category_detailed AS "providerCategoryDetailed",
+            (t.provider_transaction_id IS NULL AND t.import_id IS NULL) AS "handEntered",
             sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
@@ -256,7 +256,7 @@ export async function topMerchants(
      WHERE t.date >= $1 AND t.date < $2
        AND NOT t.excluded AND NOT a.hidden AND ($3 OR NOT t.pending)
        AND ${spendingSql()}
-     GROUP BY 1, 2, 3, 4`,
+     GROUP BY 1, 2, 3, 4, 5`,
     [period.start, period.end, settings.includePending],
   )
   // Merchant names go to assistants and the AI writer, so they show no account number.

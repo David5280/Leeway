@@ -50,8 +50,16 @@ beforeEach(async () => {
   })
 })
 
+/** Adds a purchase with the code Plaid gives every one, which no rule here reads. */
 async function spend(date: string, name: string, amountCents: number, merchantName?: string) {
-  await insertBankTransaction(ctx.db, accountId, { date, name, amountCents, merchantName })
+  const detailed = 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'
+  await insertBankTransaction(ctx.db, accountId, {
+    date,
+    name,
+    amountCents,
+    merchantName,
+    detailed,
+  })
 }
 
 async function recategorize() {
@@ -274,7 +282,7 @@ describe('insights with little or no history', () => {
   })
 })
 
-describe('payments between people', () => {
+describe('payments that could be between people', () => {
   const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
 
   /** Adds a transaction with Plaid's merchant and code, as a sync would. */
@@ -282,7 +290,7 @@ describe('payments between people', () => {
     await insertBankTransaction(ctx.db, accountId, { date, name, amountCents, ...more })
   }
 
-  it('are totalled apart from a shop of the same name, flagged and named as people', async () => {
+  it('are totalled apart from a shop of the same name, with the label a model sees', async () => {
     await bank('2026-11-03', 'Zelle payment to ROSALIND FAIRWEATHER', 2_500)
     await bank('2026-11-04', 'SQ *ROSALIND FAIRWEATHER', 4_000, {
       merchantName: 'Rosalind Fairweather',
@@ -295,36 +303,62 @@ describe('payments between people', () => {
     await recategorize()
     expect(await call('top_merchants')).toEqual([
       { merchant: 'Rosalind Fairweather', spentCents: 4_000, count: 1 },
-      { merchant: 'Clara', spentCents: 3_000, count: 1, betweenPeople: true },
-      { merchant: 'To Rosalind Fairweather', spentCents: 2_500, count: 1, betweenPeople: true },
+      { merchant: 'Clara', spentCents: 3_000, count: 1, modelLabel: 'PayPal payment (sent)' },
+      {
+        merchant: 'To Rosalind Fairweather',
+        spentCents: 2_500,
+        count: 1,
+        modelLabel: 'Zelle payment (sent)',
+      },
     ])
   })
 
-  it('repeat as a series flagged and named as people, beside a shop that is not', async () => {
+  it('repeat as a series named as people, with its label, beside a shop that has none', async () => {
     for (const month of ['08', '09', '10', '11']) {
       await bank(`2026-${month}-05`, 'Zelle payment to CLARA JPM99A1B2C3', 20_000)
-      await bank(`2026-${month}-06`, 'NETFLIX.COM', 1_599, { merchantName: 'Netflix' })
+      await bank(`2026-${month}-06`, 'NETFLIX.COM', 1_599, {
+        merchantName: 'Netflix',
+        detailed: 'ENTERTAINMENT_TV_AND_MOVIES',
+      })
     }
-    const found = (await call('find_recurring')) as { name: string; betweenPeople?: true }[]
-    expect(found.map(({ name, betweenPeople }) => ({ name, betweenPeople }))).toEqual([
-      { name: 'To Clara', betweenPeople: true },
-      { name: 'Netflix', betweenPeople: undefined },
+    const found = (await call('find_recurring')) as { name: string; modelLabel?: string }[]
+    expect(found.map(({ name, modelLabel }) => ({ name, modelLabel }))).toEqual([
+      { name: 'To Clara', modelLabel: 'Zelle payment (sent)' },
+      { name: 'Netflix', modelLabel: undefined },
     ])
   })
 
-  it('keep a bank transfer apart, totalled and repeating with the label Chat shows', async () => {
+  it('keep a bank transfer apart, totalled and repeating with its label', async () => {
     for (const month of ['08', '09', '10', '11']) {
       await bank(`2026-${month}-05`, 'Online Transfer to Pellworth Oda', 90_000, {
         detailed: ACCOUNT_TRANSFER,
       })
     }
     await recategorize()
-    const label = { transferLabel: 'Transfer to another account' }
+    const label = { modelLabel: 'Transfer to another account' }
     expect(await call('top_merchants')).toEqual([
       { merchant: 'Transfer to Pellworth Oda', spentCents: 90_000, count: 1, ...label },
     ])
     expect(await call('find_recurring')).toEqual([
       expect.objectContaining({ name: 'Transfer to Pellworth Oda', ...label }),
+    ])
+  })
+
+  it('label a line with no code that is no shop the owner buys from, unless typed in', async () => {
+    await bank('2026-11-06', 'JANE PRYCEWOOD', 1_000)
+    await ctx.db.query(
+      `INSERT INTO transactions (account_id, date, name, amount_cents) VALUES ($1, '2026-11-07', 'Farmers market', 800)`,
+      [accountId],
+    )
+    await recategorize()
+    expect(await call('top_merchants')).toEqual([
+      {
+        merchant: 'Jane Prycewood',
+        spentCents: 1_000,
+        count: 1,
+        modelLabel: 'Purchase or payment',
+      },
+      { merchant: 'Farmers market', spentCents: 800, count: 1 },
     ])
   })
 })

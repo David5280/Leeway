@@ -13,6 +13,7 @@ import { AppError } from '../errors.js'
 import { agentTools, UNEXPECTED_TOOL_ERROR } from '../mcp/server.js'
 import { checkPurchaseTool } from './afford.js'
 import { listRememberedTool, rememberTool } from './memory.js'
+import { refusedSearch } from './searchGuard.js'
 import { chatToolText } from './toolOutput.js'
 import { withoutAbsentTools } from './toolWords.js'
 
@@ -49,7 +50,8 @@ export function toolTitle(name: string): string | null {
 /**
  * Runs one tool the model asked for, as an assistant over MCP would: with
  * the agent's view of the data, its input checked, and its output cleaned
- * (toolOutput.ts). A failure goes back to the model as the tool's answer, so
+ * (toolOutput.ts). A search that could confirm a hidden name is refused
+ * before it runs (searchGuard.ts). A failure goes back to the model as the tool's answer, so
  * it can explain or try again; one that is not the caller's fault goes to
  * `onError` and the model only hears that something went wrong.
  */
@@ -62,6 +64,8 @@ export async function runChatTool(
   const action = BY_NAME.get(call.name)
   const failed = (content: string) => ({ id: call.id, content, isError: true })
   if (!action) return failed(`Unknown tool ${call.name}`)
+  const refused = refusedSearch(call.name, call.input, people)
+  if (refused) return failed(refused)
   try {
     const result: unknown = await runAction({ ...ctx, agent: true }, action, call.input)
     return { id: call.id, content: chatToolText(result, people), isError: false }

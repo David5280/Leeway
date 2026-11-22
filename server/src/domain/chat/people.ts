@@ -1,115 +1,205 @@
-// The people the owner paid or was paid by, read by the one rule that tells
-// people apart (betweenPeople.ts), and the bank transfers whose line may
-// name anyone, so Chat can keep both out of what it sends a model
-// (chat/toolOutput.ts).
+// Everything Chat keeps out of what it sends a model (chat/toolOutput.ts):
+// which rows are shown by a label instead of their name, the names those rows
+// could show a person under, and the bills that track them.
 //
-// The payment rows themselves are shown without their person. Their names
-// are collected so they can be hidden everywhere else too, as a merchant, in
-// a summary or in the owner's notes. Which names are read is in personNames.ts.
-// A bank transfer is shown by its kind alone, and its line's words are never
-// collected as names: most go to the owner's own banks.
+// Chat hides by default (modelLabels.ts): a row's own name reaches the model
+// only when it is surely a merchant. Every other row is labelled ("Zelle
+// payment (sent)", "Transfer to savings"), and what it would have been shown
+// as is replaced by that label wherever else it is written. The names read
+// from the rows paying or paid through an app or a transfer (personNames.ts)
+// are hidden everywhere too, and no search may find them (chat/searchGuard.ts).
 
-import type pg from 'pg'
+import type { Db } from '../../db/pool.js'
 import { accountMasks } from '../accounts.js'
-import { bankTransferLabel, betweenPeople, paymentAppOf } from '../betweenPeople.js'
-import { NO_SHOPS } from '../knownShops.js'
-import { merchantKey, textKey } from '../merchantKey.js'
-import { CODE_SQL, loadKnownShops, NAMES_AN_APP_SQL } from '../peopleContext.js'
+import { GENERIC_NAME } from '../merchantName.js'
+import { bankTextKey, textKey } from '../merchantKey.js'
+import { neutralLabel, type LabelSubject, type RowLabel } from '../modelLabels.js'
+import { isMovementWord } from '../movementWords.js'
+import { CODE_SQL, loadPeopleContext, NAMES_AN_APP_SQL } from '../peopleContext.js'
 import { shownNameOf } from '../ruleText.js'
 import type { AccountMasks } from '../safeName.js'
-import type { Movement } from '../transfers.js'
-import { namesIn, namesToHide } from './personNames.js'
+import { merchantDisplayName } from '../transactionName.js'
+import { labelBills, wordsOf, type BillShown, type StoredBill } from './billLabels.js'
+import { namesIn, namesToHide, type HiddenNames } from './personNames.js'
 
-/** Stands in for a person in a list of merchants, series or bills. */
-export const PAYMENT_APP = 'Payment app'
-
-/** Who to keep out of Chat, and where they appear. */
-export interface PaymentPeople {
-  /** Full names to replace wherever they are written. */
-  names: string[]
-  /** Single words of names, to replace where written alone, with a capital, in a note. */
-  loneNames: string[]
-  /** The ids of transactions that are payments between people. */
-  transactionIds: ReadonlySet<string>
-  /** Bank transfers with no payment app, by id: the label shown instead of their line. */
-  bankTransfers: ReadonlyMap<string, string>
-  /**
-   * What a bill tracking one of those payments or transfers is shown as
-   * (PAYMENT_APP or a transfer's label), by every key its pattern can match.
-   */
-  billKeys: ReadonlyMap<string, string>
+/** Text a labelled row hides, in lower case, beside its label, for refusing a search. */
+export interface HiddenText {
+  text: string
+  label: string
 }
 
-/** Nobody paid or paying and no bank transfer: nothing is replaced. */
+/** What Chat keeps out of a model's sight, and what it shows instead. */
+export interface PaymentPeople extends HiddenNames {
+  /** The label each labelled transaction is shown by, by id. */
+  rows: ReadonlyMap<string, RowLabel>
+  /** How each bill tracking labelled rows is shown, by id. */
+  bills: ReadonlyMap<string, BillShown>
+  /**
+   * What labelled rows and renamed bills would have been shown as, each
+   * beside the label replacing it wherever it is written, longest first.
+   */
+  phrases: readonly (readonly [phrase: string, label: string])[]
+  /** The hidden names' words that could find one alone, in lower case without accents (wordsOf). */
+  hiddenWords: readonly string[]
+  /** What labelled rows hide, so a search for it is refused (chat/searchGuard.ts). */
+  hiddenTexts: readonly HiddenText[]
+  /**
+   * Every word of the owner's account names, in lower case: a single word of
+   * a name that is one of these is hidden only in notes, so account names stay.
+   */
+  accountWords: readonly string[]
+}
+
+/** No row labelled, no name and no bill hidden: nothing is replaced. */
 export const NO_PEOPLE: PaymentPeople = {
   names: [],
   loneNames: [],
-  transactionIds: new Set(),
-  bankTransfers: new Map(),
-  billKeys: new Map(),
+  loneAnyCase: [],
+  noteNames: [],
+  rows: new Map(),
+  bills: new Map(),
+  phrases: [],
+  hiddenWords: [],
+  hiddenTexts: [],
+  accountWords: [],
 }
 
-type Row = Movement & { id: string }
+type Row = LabelSubject & { id: string; note: string | null }
+type Labelled = RowLabel & { tx: Row }
 
 /**
- * The rows that could be a payment between people or a bank transfer: those
- * naming a payment app, those the bank filed as a transfer, and those whose
- * line says "transfer to" or "transfer from".
+ * The rows that could be labelled: through a payment app, with no code, filed
+ * as a transfer, or with a word a transfer or payment to someone is written with.
  */
-async function possiblePayments(db: pg.Pool): Promise<Row[]> {
+async function labelCandidates(db: Db): Promise<Row[]> {
   const { rows } = await db.query<Row>(
     `SELECT id::text, name, merchant_name AS "merchantName", amount_cents AS "amountCents",
        provider_category_primary AS "providerCategoryPrimary",
-       provider_category_detailed AS "providerCategoryDetailed"
+       provider_category_detailed AS "providerCategoryDetailed", note,
+       (provider_transaction_id IS NULL AND import_id IS NULL) AS "handEntered"
      FROM transactions
-     WHERE ${NAMES_AN_APP_SQL} OR ${CODE_SQL} LIKE 'TRANSFER%'
-       OR name ~* '\\ytransfer\\s+(to|from)\\y'`,
+     WHERE ${NAMES_AN_APP_SQL} OR ${CODE_SQL} = '' OR ${CODE_SQL} LIKE 'TRANSFER%'
+       OR name ~* '\\y(transfer|xfer|trnsfr|payment|pmt|sent|received|to|from)\\y'`,
   )
   return rows
 }
 
-/** The keys a bill's pattern could match a row by, from its bank text and shown name. */
-function keysOf(rows: { tx: Row; label: string }[], masks: AccountMasks): [string, string][] {
-  return rows.flatMap(({ tx, label }) =>
-    [merchantKey(tx), textKey(shownNameOf(tx, masks))]
-      .filter(Boolean)
-      .map((key): [string, string] => [key, label]),
+/** The owner's bills, as labelling reads them. */
+async function storedBills(db: Db): Promise<StoredBill[]> {
+  const { rows } = await db.query<StoredBill>(
+    `SELECT id::text, name, match_pattern AS "matchPattern", reads FROM bills`,
   )
+  return rows
 }
 
-/** Every payment between people and bank transfer, and every name a person shows under. */
-export async function paymentPeople(db: pg.Pool): Promise<PaymentPeople> {
-  const rows = await possiblePayments(db)
-  const transfers = rows.flatMap((tx) => {
-    const label = bankTransferLabel(tx)
-    return label ? [{ tx, label }] : []
-  })
-  const throughApps = rows.filter((tx) => paymentAppOf(tx) !== null)
-  // The owner's shops are only read when a payment app was used at all.
-  const shops = throughApps.length > 0 ? await loadKnownShops(db) : NO_SHOPS
-  const payments = throughApps.flatMap((tx) => {
-    const person = betweenPeople(tx, { shops })
-    return person ? [{ tx, person, label: PAYMENT_APP }] : []
-  })
-  if (payments.length === 0 && transfers.length === 0) return NO_PEOPLE
-  const masks = await accountMasks(db)
-  const found = payments.flatMap(({ tx, person }) => namesIn(tx, person, { shops }))
-  return {
-    ...namesToHide(found, shops),
-    transactionIds: new Set(payments.map(({ tx }) => tx.id)),
-    bankTransfers: new Map(transfers.map(({ tx, label }) => [tx.id, label])),
-    // A payment's label goes last, so it wins a key a transfer shares.
-    billKeys: new Map([...keysOf(transfers, masks), ...keysOf(payments, masks)]),
-  }
+/** Every word of the owner's account names, in lower case, which a transfer's line names. */
+async function ownAccountWords(db: Db): Promise<Set<string>> {
+  const { rows } = await db.query<{ names: string }>(
+    `SELECT concat_ws(' ', name, display_name, official_name) AS names FROM accounts`,
+  )
+  return new Set(rows.flatMap((row) => wordsOf(row.names)))
+}
+
+/** What a labelled row would have been shown as: its shown name, and its merchant's. */
+function shownForms(tx: Row, masks: AccountMasks): string[] {
+  return [shownNameOf(tx, masks), merchantDisplayName(tx, { masks })]
+}
+
+/** What a phrase is checked against: the owner's account words and the names hidden anyway. */
+interface PhraseContext {
+  masks: AccountMasks
+  ownWords: ReadonlySet<string>
+  /** Hidden names and words in lower case, which "someone" replaces instead. */
+  names: ReadonlySet<string>
 }
 
 /**
- * What a bill is shown as when it tracks a payment between people or a bank
- * transfer: its pattern, read as a key, is part of one of theirs, as a bill
- * is matched to a series (recurring.ts). Null for any other bill.
+ * Whether a shown name is worth replacing by its label: it has a word beyond
+ * how money moved and the owner's own accounts ("Transfer to Ally Savings"
+ * names no one, and account names stay), and it is neither the label nor a
+ * hidden name already.
  */
-export function billLabel(pattern: string, people: PaymentPeople): string | null {
-  const key = textKey(pattern)
-  if (!key) return null
-  return [...people.billKeys].find(([tracked]) => tracked.includes(key))?.[1] ?? null
+function worthReplacing(phrase: string, label: string, context: PhraseContext): boolean {
+  const plain = phrase.toLowerCase()
+  if (phrase === GENERIC_NAME || plain === label.toLowerCase() || context.names.has(plain)) {
+    return false
+  }
+  return wordsOf(phrase).some((word) => !isMovementWord(word) && !context.ownWords.has(word))
+}
+
+/** Each labelled row's shown names and renamed bill's name, beside its label, longest first. */
+function phrasesOf(
+  labelled: readonly Labelled[],
+  bills: readonly StoredBill[],
+  shown: ReadonlyMap<string, BillShown>,
+  context: PhraseContext,
+): [string, string][] {
+  const phrases = new Map<string, string>()
+  for (const { tx, label } of labelled) {
+    for (const phrase of shownForms(tx, context.masks)) {
+      if (worthReplacing(phrase, label, context) && !phrases.has(phrase)) phrases.set(phrase, label)
+    }
+  }
+  for (const bill of bills) {
+    const how = shown.get(bill.id)
+    if (how?.renamed) phrases.set(bill.name, how.label)
+  }
+  return [...phrases].sort(([a], [b]) => b.length - a.length)
+}
+
+/**
+ * What each labelled row hides from a search: its shown names, its line and
+ * merchant, and the note of a payment through an app, which is never shown.
+ */
+function hiddenTextsOf(labelled: readonly Labelled[], masks: AccountMasks): HiddenText[] {
+  const texts = new Map<string, HiddenText>()
+  for (const { tx, label, kind } of labelled) {
+    const note = kind === 'app' ? tx.note : null
+    for (const text of [...shownForms(tx, masks), tx.name, tx.merchantName, note]) {
+      const hidden = { text: (text ?? '').toLowerCase(), label: label.toLowerCase() }
+      if (hidden.text) texts.set(`${hidden.text}\n${hidden.label}`, hidden)
+    }
+  }
+  return [...texts.values()]
+}
+
+/** Every hidden name and word, in lower case. */
+function hiddenSet(hidden: HiddenNames): Set<string> {
+  const all = [...hidden.names, ...hidden.loneNames, ...hidden.loneAnyCase, ...hidden.noteNames]
+  return new Set(all.map((name) => name.toLowerCase()))
+}
+
+/** Every labelled row, bill and name Chat hides from a model, and what it shows instead. */
+export async function paymentPeople(db: Db): Promise<PaymentPeople> {
+  const [rows, bills] = await Promise.all([labelCandidates(db), storedBills(db)])
+  const { shops } = await loadPeopleContext(db, rows)
+  const labelled = rows.flatMap((tx): Labelled[] => {
+    const label = neutralLabel(tx, shops)
+    return label ? [{ tx, ...label }] : []
+  })
+  if (labelled.length === 0 && bills.length === 0) return NO_PEOPLE
+  const [masks, ownWords] = await Promise.all([accountMasks(db), ownAccountWords(db)])
+  const found = labelled.flatMap(({ tx, kind }) => namesIn(tx, kind, shops))
+  const hidden = namesToHide(found, shops, ownWords)
+  // The words a name could be found by alone: no account or movement word.
+  const alone = [...hidden.loneNames, ...hidden.loneAnyCase, ...hidden.noteNames]
+  const hiddenWords = [...new Set(alone.flatMap(wordsOf))]
+  // A bill's payments are money out, matched by its pattern's whole words.
+  const payments = labelled
+    .filter(({ tx }) => tx.amountCents > 0)
+    .map(({ tx, label }) => ({
+      label,
+      bankKey: bankTextKey(tx),
+      shownKey: textKey(shownNameOf(tx, masks)),
+    }))
+  const shown = labelBills(bills, payments, new Set(hiddenWords))
+  return {
+    ...hidden,
+    rows: new Map(labelled.map(({ tx, label, kind }) => [tx.id, { label, kind }])),
+    bills: shown,
+    phrases: phrasesOf(labelled, bills, shown, { masks, ownWords, names: hiddenSet(hidden) }),
+    hiddenWords,
+    hiddenTexts: hiddenTextsOf(labelled, masks),
+    accountWords: [...ownWords],
+  }
 }

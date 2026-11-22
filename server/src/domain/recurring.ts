@@ -11,11 +11,12 @@ import { notFound } from '../errors.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { accountMasks } from './accounts.js'
-import { bankTransferLabel, betweenPeople, type PeopleContext } from './betweenPeople.js'
+import { betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { listBills, type Bill } from './bills.js'
 import { CADENCE_BANDS, type CadenceBand } from './cadenceBands.js'
 import { countedSql } from './counted.js'
 import { bankTextKey, merchantKey, textKey } from './merchantKey.js'
+import { neutralLabel } from './modelLabels.js'
 import { loadPeopleContext } from './peopleContext.js'
 import { shownNameOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
@@ -34,7 +35,12 @@ export interface PastTransaction {
 }
 
 /** A past transaction as stored, with its id and what its shown name is worked out from. */
-export type StoredTransaction = PastTransaction & Movement & { id: string }
+export type StoredTransaction = PastTransaction &
+  Movement & {
+    id: string
+    /** Entered by hand, so its name is the owner's own words (modelLabels.ts). */
+    handEntered?: boolean
+  }
 
 export interface RecurringSeries {
   /** Stable key for the merchant, used to dismiss a suggestion and to match it again. */
@@ -57,10 +63,8 @@ export interface RecurringSeries {
   accountId: string | null
   /** A fixed monthly or yearly charge reads as a subscription; anything else as a bill. */
   suggestedKind: 'bill' | 'subscription'
-  /** Set on payments to or from a person (betweenPeople.ts), named as the activity list names them. */
-  betweenPeople?: true
-  /** Set on bank transfers with no payment app: the label Chat shows instead of their name. */
-  transferLabel?: string
+  /** Set when the name could be anyone's: what a model is shown instead (modelLabels.ts). */
+  modelLabel?: string
 }
 
 /** Share of gaps that must fit the cadence. One skipped or doubled month is tolerated. */
@@ -199,7 +203,8 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTrans
     `SELECT t.id, t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
        t.category_id AS "categoryId", t.account_id AS "accountId",
        t.provider_category_primary AS "providerCategoryPrimary",
-       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
+       t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
+       (t.provider_transaction_id IS NULL AND t.import_id IS NULL) AS "handEntered"
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id
@@ -266,9 +271,9 @@ function tracks(bill: Bill, { bankKey, shownKey }: Keyed<PastTransaction>): bool
 
 /**
  * A series as suggested. Payments to or from a person are named as the
- * activity list names them ("To Jane Doe") and flagged, as merchant totals
- * are; the key stays, so bills keep matching. Bank transfers carry the label
- * Chat shows them by.
+ * activity list names them ("To Jane Doe"); the key stays, so bills keep
+ * matching. One whose name could be anyone's carries the label a model is
+ * shown instead, as merchant totals do.
  */
 function suggested(
   series: RecurringSeries,
@@ -277,12 +282,9 @@ function suggested(
   people: PeopleContext,
 ): RecurringSeries {
   const person = betweenPeople(last, people)
-  if (person) {
-    const name = transactionDisplayName({ ...last, person }, null, { masks })
-    return { ...series, name, betweenPeople: true }
-  }
-  const transferLabel = bankTransferLabel(last)
-  return transferLabel ? { ...series, transferLabel } : series
+  const name = person ? transactionDisplayName({ ...last, person }, null, { masks }) : series.name
+  const modelLabel = neutralLabel(last, people.shops)?.label
+  return modelLabel ? { ...series, name, modelLabel } : { ...series, name }
 }
 
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
