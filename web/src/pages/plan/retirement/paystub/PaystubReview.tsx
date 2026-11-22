@@ -18,6 +18,7 @@ import {
   type PensionChoice,
   type ReviewText,
 } from './review'
+import { stillOffered } from '../fields'
 import type { Candidate } from '../PensionFields'
 import { FigureGroup, PaystubDetails } from './ReviewFields'
 import { NewPensionFields, SavingChoice, UseFigures } from './ReviewUse'
@@ -53,11 +54,13 @@ export function PaystubReview({
   const [text, setText] = useState<ReviewText>(() => reviewText(extraction))
   const [pension, setPension] = useState(pensionAccountId ?? '')
   // The new pension's name starts as the plan name on the paystub's pension line, if Claude read one.
-  const [created, setCreated] = useState<NewPensionText>({
+  const [typed, setCreated] = useState<NewPensionText>({
     accountId: '',
     name: extraction.pensionPlanName ?? '',
     balance: '',
   })
+  // An account chosen, then made a pension elsewhere, leaves the list; the choice falls back.
+  const created = { ...typed, accountId: stillOffered(typed.accountId, candidates) }
   const [contribution, setContribution] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const set = (change: Partial<ReviewText>) => setText((current) => ({ ...current, ...change }))

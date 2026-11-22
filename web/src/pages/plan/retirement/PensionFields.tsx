@@ -74,6 +74,9 @@ export function Choice({
   )
 }
 
+/** The label of the choice of where a new pension goes, which focus returns to after a retry. */
+export const ACCOUNT_CHOICE_LABEL = 'Add it to'
+
 /** Where a new pension goes: a new account, or one Leeway already has. */
 export function PensionAccount({
   candidates,
@@ -90,7 +93,7 @@ export function PensionAccount({
   ]
   return (
     <Choice
-      label="Add it to"
+      label={ACCOUNT_CHOICE_LABEL}
       hint="An account you already have, so it is not counted twice"
       value={accountId}
       options={options}

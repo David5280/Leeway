@@ -96,7 +96,7 @@ export function redactSource(text: string | null): string | null {
  * so is everything after the first thing taken out, since a city and state
  * follow a street address ("1437 Bannock St Denver CO").
  */
-function leadingName(text: string | null, max: number): string | null {
+export function leadingName(text: string | null, max: number): string | null {
   if (text === null) return null
   const parts = redact(text.split(/[\n,]/)[0]!).split(REMOVED)
   // The name is what comes before the first removal, or after it when the line began with one.
@@ -107,87 +107,4 @@ function leadingName(text: string | null, max: number): string | null {
 /** The employer's name only, never the address printed after it. */
 export function redactEmployer(text: string | null): string | null {
   return leadingName(text, MAX_EMPLOYER_LENGTH)
-}
-
-/**
- * A word that starts a member number or a figure, never part of a plan's
- * name: one holding #, % or $, like a rate or "#4417", or a number on its own
- * with no letters, like "4417" or "422.95". Letters with digits, as in
- * "1199SEIU", may be a name.
- */
-const NOT_A_NAME_WORD = /[#%$]|^\P{L}*\d\P{L}*$/u
-
-/**
- * A plan's own number after "Plan" or "Tier", one digit from 1 to 9, as in
- * "PERS Plan 2" or "NYSLRS Tier 6"; a closing "." or ":" may follow it.
- */
-const PLAN_NUMBER = /^[1-9][.:]?$/
-const NUMBERED_WORDS = new Set(['plan', 'tier'])
-
-/** Words that label the member number printed after them, so the name ends before them. */
-const ID_LABELS = new Set(['no', 'id'])
-
-/**
- * Words a pension line prints after the plan's name, which name the
- * deduction or the member, not the plan.
- */
-const LABEL_WORDS = new Set([
-  'member',
-  'mbr',
-  'employee',
-  'ee',
-  'pre-tax',
-  'pretax',
-  'contribution',
-  'contrib',
-  'deduction',
-  'ded',
-])
-
-/**
- * A word as LABEL_WORDS and ID_LABELS hold it: lower case, with no brackets
- * around it and no closing "." or ":", so "(Member)", "No." and "ID:" count.
- */
-const labelForm = (word: string) =>
-  word
-    .toLowerCase()
-    .replace(/^[([]+|[)\]]+$/g, '')
-    .replace(/[.:]$/, '')
-
-/** Whether a word ends a plan's name: a member number, a figure or an ID label. */
-function endsName(word: string, before: string | undefined): boolean {
-  if (ID_LABELS.has(labelForm(word))) return true
-  if (!NOT_A_NAME_WORD.test(word)) return false
-  // "Plan 2" and "Tier 6" are the plan's own name, not a member number.
-  const planNumber = PLAN_NUMBER.test(word) && NUMBERED_WORDS.has(labelForm(before ?? ''))
-  return !planNumber
-}
-
-/**
- * Whether a word left at the end of a name labels the deduction or member
- * rather than naming the plan, or is bare punctuation, like a bracket left
- * open where a member number was taken out.
- */
-function isTrailingLabel(word: string): boolean {
-  const form = labelForm(word)
-  return LABEL_WORDS.has(form) || !/[\p{L}\p{N}]/u.test(form)
-}
-
-/**
- * The pension plan's name only, like "PERA" or "PERS Plan 2", short enough to
- * name a pension by: everything from the first member number, figure or ID
- * label on is dropped, then any label words left at its end and a trailing
- * colon. "PERA Member 11.00% 422.95", "PERA No. 4417" and "PERA (Member)" are
- * all "PERA"; "PERA (DB)" and "1199SEIU Pension" are kept whole.
- */
-export function redactPlanName(text: string | null): string | null {
-  const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
-  if (name === null) return null
-  const words = name.split(' ')
-  const cut = words.findIndex((word, index) => endsName(word, words[index - 1]))
-  const kept = cut === -1 ? words : words.slice(0, cut)
-  while (kept.length > 0 && isTrailingLabel(kept.at(-1)!)) kept.pop()
-  // A label's colon may be left on the name itself, as in "PERA: 422.95".
-  const named = kept.join(' ').replace(/:$/, '')
-  return named === '' ? null : named
 }

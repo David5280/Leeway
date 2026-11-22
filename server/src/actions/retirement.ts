@@ -29,7 +29,7 @@ const PLAN_FIELDS =
 export const createPensionAction = defineAction({
   name: 'create_pension',
   title: 'Add a pension',
-  description: `Records a pension as a new account of kind "pension", with its name, its member balance (balanceCents, null when not known) and any plan figures. When the pension is already an account in Leeway, such as one linked from the bank, use attach_pension instead, so it is not counted twice. ${PLAN_FIELDS} To remove one, use delete_account.`,
+  description: `Records a pension as a new account of kind "pension", with its name, its member balance (balanceCents, null when not known) and any plan figures. When the pension is already an account in Leeway, do not add it again, so it is not counted twice: use attach_pension for an account listed under retirement, investing or other, or update_pension when its kind is "pension" already, as a pension linked from the bank is. ${PLAN_FIELDS} To remove one, use delete_account.`,
   input: newPensionSchema,
   scope: 'write',
   surface: 'all',
@@ -42,7 +42,7 @@ export const createPensionAction = defineAction({
 export const attachPensionAction = defineAction({
   name: 'attach_pension',
   title: 'Record a pension on an existing account',
-  description: `Records a pension's plan on an account Leeway already has (accountId), such as a pension linked from the bank or one listed under retirement or investing, instead of adding a second account. The account becomes a pension, and its balance is then what pays the benefit, not savings. An account that is a pension already is refused, so its figures are never replaced; change them with update_pension. ${PLAN_FIELDS}`,
+  description: `Records a pension's plan on an account Leeway already has (accountId) that is listed under retirement, investing or other, instead of adding a second account. The account becomes a pension, and its balance is then what pays the benefit, not savings. An account whose kind is "pension" already, including a pension linked from the bank, is refused, so its figures are never replaced; give it figures with update_pension. ${PLAN_FIELDS}`,
   input: attachPensionSchema,
   scope: 'write',
   surface: 'all',
@@ -52,7 +52,7 @@ export const attachPensionAction = defineAction({
 export const updatePensionAction = defineAction({
   name: 'update_pension',
   title: 'Update a pension',
-  description: `Changes the plan figures of a pension, the account given by accountId. Only the fields given change; null clears one. An account the owner marked as a pension may be given figures this way too. ${PLAN_FIELDS}`,
+  description: `Changes the plan figures of a pension, the account given by accountId. Only the fields given change; null clears one. Any account whose kind is "pension" takes figures this way, including one linked from the bank as a pension or marked as one by the owner. ${PLAN_FIELDS}`,
   input: pensionPlanPatchSchema.extend({ accountId: z.uuid() }),
   scope: 'write',
   surface: 'all',

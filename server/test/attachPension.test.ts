@@ -4,6 +4,7 @@
 // that is a pension already, so a kept plan is never wiped.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { findAction } from '../src/actions/index.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { pensionAlready } from '../src/domain/retirement/pensionStore.js'
 import type { Pension } from '../src/domain/retirement/pensions.js'
@@ -141,5 +142,21 @@ describe('attach_pension on a pension kept already', () => {
       message: pensionAlready('Test State Plan'),
     })
     expect(await keptPlans()).toEqual([planOf((won[0] as PromiseFulfilledResult<Pension>).value)])
+  })
+})
+
+describe('what an assistant reads about adding a pension on an account Leeway has', () => {
+  const description = (name: string) => findAction(name)!.description
+
+  it('sends a pension linked from the bank to update_pension, never to attach_pension', () => {
+    expect(description('attach_pension')).toContain('listed under retirement, investing or other')
+    expect(description('attach_pension')).toContain(
+      'An account whose kind is "pension" already, including a pension linked from the bank, is refused',
+    )
+    expect(description('attach_pension')).not.toMatch(/such as a pension linked from the bank/)
+    expect(description('create_pension')).toContain(
+      'or update_pension when its kind is "pension" already, as a pension linked from the bank is',
+    )
+    expect(description('update_pension')).toContain('including one linked from the bank')
   })
 })

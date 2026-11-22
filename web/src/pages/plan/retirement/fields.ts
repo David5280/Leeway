@@ -137,6 +137,15 @@ export function pensionCandidates(accounts: Account[]): Account[] {
   )
 }
 
+/**
+ * The account chosen for a new pension while it is still offered, or '' for
+ * a new account. The accounts are read again after a refusal, and one made a
+ * pension meanwhile leaves the list, so the choice falls back with it.
+ */
+export function stillOffered(accountId: string, candidates: readonly { id: string }[]): string {
+  return candidates.some((candidate) => candidate.id === accountId) ? accountId : ''
+}
+
 export function assumptionsText(assumptions: Assumptions): AssumptionsText {
   return {
     retirementAge: String(assumptions.retirementAge),

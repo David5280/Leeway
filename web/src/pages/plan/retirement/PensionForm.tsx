@@ -11,6 +11,7 @@ import {
   planText,
   readAmount,
   readPlan,
+  stillOffered,
   type PensionPlan,
   type PlanChange,
   type PlanText,
@@ -89,7 +90,8 @@ export function PensionForm({
   const [name, setName] = useState('')
   const [balance, setBalance] = useState('')
   // '' adds a new account; otherwise the id of the account the plan goes on.
-  const [accountId, setAccountId] = useState('')
+  const [picked, setAccountId] = useState('')
+  const accountId = stillOffered(picked, candidates)
   const [problem, setProblem] = useState<string | null>(null)
 
   function submit(event: FormEvent) {

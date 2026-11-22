@@ -11,6 +11,7 @@ import {
   readAmount,
   readAssumptions,
   readPlan,
+  stillOffered,
   switchContribution,
   type PlanText,
 } from './fields'
@@ -175,6 +176,16 @@ describe('pensionCandidates', () => {
       'broker',
       'other',
     ])
+  })
+})
+
+describe('stillOffered', () => {
+  it('keeps a choice still in the list, and falls back to a new account once it leaves', () => {
+    const offered = [{ id: 'plan' }, { id: 'ira' }]
+    expect(stillOffered('plan', offered)).toBe('plan')
+    expect(stillOffered('gone', offered)).toBe('')
+    expect(stillOffered('', offered)).toBe('')
+    expect(stillOffered('plan', [])).toBe('')
   })
 })
 

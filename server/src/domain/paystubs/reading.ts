@@ -7,7 +7,8 @@ import { z } from 'zod'
 import { isIsoDate, type IsoDate } from '../../lib/dates.js'
 import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
 import { PAY_CADENCES } from '../retirement/pensions.js'
-import { redactEmployer, redactPlanName, redactSource } from './redact.js'
+import { redactPlanName } from './planName.js'
+import { redactEmployer, redactSource } from './redact.js'
 
 /** How sure the reader is of a figure: the owner checks a low one first. */
 export const CONFIDENCES = ['high', 'medium', 'low'] as const
