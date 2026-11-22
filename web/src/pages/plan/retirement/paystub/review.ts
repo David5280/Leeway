@@ -184,25 +184,47 @@ export function readsPension(extraction: Extraction): boolean {
   return (extraction.current.pension.cents ?? 0) > 0
 }
 
-/** A new pension read back: its name and balance, or the first thing to fix. */
-export type NewPensionRead = { ok: true; pension: NewPension } | { ok: false; error: string }
+/** Where a new pension goes: a new account, named here, or one Leeway already has. */
+export interface NewPensionTarget {
+  newPension: NewPension | null
+  attachAccountId: string | null
+}
+
+/** The new pension as typed on the review screen. */
+export interface NewPensionText {
+  /** '' for a new account; otherwise the account Leeway already has that becomes the pension. */
+  accountId: string
+  name: string
+  balance: string
+}
+
+/** A new pension read back: where it goes, or the first thing to fix. */
+export type NewPensionRead = { ok: true; target: NewPensionTarget } | { ok: false; error: string }
 
 /**
- * A new pension from the review screen: the name the owner confirmed and the
- * member balance if typed, for a paystub that still shows a pension
- * contribution after their edits, since an empty pension is never added.
+ * A new pension from the review screen, for a paystub that still shows a
+ * pension contribution after the owner's edits, since an empty pension is
+ * never added. An account Leeway already has keeps its own name and balance;
+ * a new account takes the name the owner confirmed and the balance if typed.
  */
-export function readNewPension(paystub: Paystub, name: string, balance: string): NewPensionRead {
+export function readNewPension(paystub: Paystub, typed: NewPensionText): NewPensionRead {
   if ((paystub.current.pension ?? 0) <= 0) {
     return {
       ok: false,
       error: 'Enter the pension contribution from your paystub, or add the pension by hand.',
     }
   }
-  if (name.trim() === '') return { ok: false, error: 'Name your pension, like Colorado PERA.' }
-  const member = readAmount(balance, 'the member balance')
+  if (typed.accountId !== '') {
+    return { ok: true, target: { newPension: null, attachAccountId: typed.accountId } }
+  }
+  const name = typed.name.trim()
+  if (name === '') return { ok: false, error: 'Name your pension, like Colorado PERA.' }
+  const member = readAmount(typed.balance, 'the member balance')
   if (!member.ok) return member
-  return { ok: true, pension: { name: name.trim(), balanceCents: member.value } }
+  return {
+    ok: true,
+    target: { newPension: { name, balanceCents: member.value }, attachAccountId: null },
+  }
 }
 
 /** A chosen file's type, as the browser names it, when it is one Leeway reads. */

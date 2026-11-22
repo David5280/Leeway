@@ -47,26 +47,37 @@ function HowToAdd({
 /** Adding a pension, one step at a time: how, then the paystub's review or the form. */
 export function NewPension({ readerName, onClose }: { readerName: string; onClose: () => void }) {
   const [step, setStep] = useState<Step>('choose')
-  if (step === 'manual') return <PensionFigures pension={null} onClose={onClose} />
+  // Each step after the first takes focus to its heading, so a screen reader hears it.
+  const [moved, setMoved] = useState(false)
+  const go = (next: Step) => {
+    setStep(next)
+    setMoved(true)
+  }
+  if (step === 'manual') {
+    return (
+      <PensionFigures pension={null} onClose={onClose} onCancel={() => go('choose')} focusHeading />
+    )
+  }
+  // Keyed by step, so each step's card opens afresh and takes focus.
   if (step === 'paystub') {
     return (
-      <FormCard title="Add a pension from a paystub">
+      <FormCard key="paystub" title="Add a pension from a paystub" focusHeading>
         <PaystubImport
           readerName={readerName}
           adding
-          onManual={() => setStep('manual')}
+          onManual={() => go('manual')}
           onSaved={onClose}
-          onCancel={() => setStep('choose')}
+          onCancel={() => go('choose')}
         />
       </FormCard>
     )
   }
   return (
-    <FormCard title="Add a pension">
+    <FormCard key="choose" title="Add a pension" focusHeading={moved}>
       <HowToAdd
         readerName={readerName}
-        onPaystub={() => setStep('paystub')}
-        onManual={() => setStep('manual')}
+        onPaystub={() => go('paystub')}
+        onManual={() => go('manual')}
         onCancel={onClose}
       />
     </FormCard>

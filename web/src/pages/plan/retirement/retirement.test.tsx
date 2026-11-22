@@ -245,7 +245,7 @@ describe('pensions', () => {
     await user.type(form.getByLabelText('Name'), 'Colorado PERA')
     await user.type(form.getByRole('textbox', { name: 'Member balance' }), '65,000')
     await user.selectOptions(
-      form.getByRole('combobox', { name: 'Contribution type' }),
+      form.getByRole('combobox', { name: 'Your contribution' }),
       'An amount each paycheck',
     )
     await user.type(form.getByRole('textbox', { name: 'Amount each paycheck' }), '275')
@@ -309,7 +309,7 @@ describe('pensions', () => {
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
-    const type = form.getByRole('combobox', { name: 'Contribution type' })
+    const type = form.getByRole('combobox', { name: 'Your contribution' })
     await user.selectOptions(type, 'A percent of gross pay')
     await user.type(form.getByRole('textbox', { name: 'Percent of pay' }), '11')
     await user.selectOptions(type, 'An amount each paycheck')
@@ -337,7 +337,7 @@ describe('pensions', () => {
     )
     // A figure with no hint names nothing.
     await user.selectOptions(
-      form.getByRole('combobox', { name: 'Contribution type' }),
+      form.getByRole('combobox', { name: 'Your contribution' }),
       'An amount each paycheck',
     )
     expect(form.getByRole('textbox', { name: 'Amount each paycheck' })).not.toHaveAttribute(

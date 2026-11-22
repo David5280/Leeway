@@ -32,7 +32,6 @@ function WhatGoesIn({ text, set, setText }: { text: PlanText; set: SetField; set
       <h3>What goes in</h3>
       <Choice
         label="Your contribution"
-        name="Contribution type"
         hint="What each paycheck pays in"
         value={text.contributionKind}
         options={CONTRIBUTION_KINDS}
@@ -52,8 +51,7 @@ function WhatGoesIn({ text, set, setText }: { text: PlanText; set: SetField; set
         onChange={set('grossPay')}
       />
       <Choice
-        label="Paid"
-        name="Pay schedule"
+        label="Pay schedule"
         hint="How often a paycheck comes"
         value={text.payCadence}
         options={CADENCES}

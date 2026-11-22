@@ -6,8 +6,9 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { paystubs } from '../../../../api/client'
-import { useActionMutation } from '../../../../api/hooks'
+import { useAction, useActionMutation } from '../../../../api/hooks'
 import { ErrorNote, Loading } from '../../../../components/ui'
+import { pensionCandidates } from '../fields'
 import { PaystubReview } from './PaystubReview'
 import { ACCEPT, fileProblem, readsPension, type PensionChoice } from './review'
 
@@ -85,17 +86,21 @@ function ChooseFile({
 /**
  * Said plainly when a paystub read to add a pension shows no pension
  * contribution, since an empty pension is never added: typing it in comes
- * first, when offered, then another paystub.
+ * first, when offered, then a look at the figures anyway (the review still
+ * refuses a pension with no contribution), or another paystub.
  */
 function NoPensionFound({
   readerName,
   onManual,
   onRetry,
+  onReview,
   onCancel,
 }: {
   readerName: string
   onManual?: () => void
   onRetry: () => void
+  /** Opens the review anyway, to check a figure Claude may have missed. */
+  onReview: () => void
   onCancel: () => void
 }) {
   return (
@@ -110,6 +115,9 @@ function NoPensionFound({
             Enter it myself
           </button>
         )}
+        <button type="button" className="btn" onClick={onReview}>
+          Check the figures anyway
+        </button>
         <button type="button" className="btn" onClick={onRetry}>
           Try another paystub
         </button>
@@ -144,11 +152,16 @@ export function PaystubImport({
 }) {
   const read = useMutation({ mutationFn: paystubs.read })
   const save = useActionMutation('save_paystub')
+  // A new pension may belong on an account Leeway already has, such as one linked from the bank.
+  const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: adding })
   const [problem, setProblem] = useState<string | null>(null)
+  // Whether the owner chose to review a paystub that seemed to show no pension.
+  const [reviewAnyway, setReviewAnyway] = useState(false)
 
   function choose(file: File) {
     const found = fileProblem(file)
     setProblem(found)
+    setReviewAnyway(false)
     read.reset()
     if (found === null) read.mutate(file)
   }
@@ -165,12 +178,13 @@ export function PaystubImport({
       />
     )
   }
-  if (adding && !readsPension(read.data.extraction)) {
+  if (adding && !reviewAnyway && !readsPension(read.data.extraction)) {
     return (
       <NoPensionFound
         readerName={readerName}
         onManual={onManual}
         onRetry={() => read.reset()}
+        onReview={() => setReviewAnyway(true)}
         onCancel={onCancel}
       />
     )
@@ -181,6 +195,7 @@ export function PaystubImport({
       pensions={pensions}
       pensionAccountId={pensionAccountId}
       adding={adding}
+      candidates={pensionCandidates(accounts.data ?? [])}
       busy={save.isPending}
       error={save.error}
       onSave={(input) =>

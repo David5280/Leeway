@@ -1,5 +1,7 @@
 // A paystub's pension figures and where they go: onto a pension the owner
-// keeps already, or onto a new one added in the same step, named by the owner.
+// keeps already, or onto a new one added in the same step, either a new
+// account named by the owner or one Leeway already has, so it is not counted
+// twice.
 // Only figures the paystub shows are applied; nothing about a plan is guessed.
 
 import type { z } from 'zod'
@@ -11,7 +13,7 @@ import {
   type Pension,
   type PensionPlanPatch,
 } from '../retirement/pensions.js'
-import { insertPension, patchPension } from '../retirement/pensionStore.js'
+import { attachPlan, insertPension, patchPension } from '../retirement/pensionStore.js'
 import { getSettings } from '../settings.js'
 import type { Paystub } from './paystubs.js'
 
@@ -24,8 +26,10 @@ export type NewPaystubPension = z.infer<typeof newPaystubPensionSchema>
 export interface PensionTarget {
   /** A pension Leeway keeps already. */
   pensionAccountId: string | null
-  /** A pension to add, holding this paystub's figures from the start. */
+  /** A pension to add as a new account, holding this paystub's figures from the start. */
   newPension: NewPaystubPension | null
+  /** An account Leeway already has, such as one linked from the bank, to become the new pension. */
+  attachAccountId: string | null
 }
 
 export const NO_PENSION_CONTRIBUTION =
@@ -61,25 +65,37 @@ export function pensionPatchFrom(paystub: Paystub): PensionPlanPatch {
 
 /**
  * Applies a paystub's pension figures inside the caller's transaction: to the
- * pension kept already, or to a new one added here, so a failure anywhere
- * after leaves no half-made pension behind. A new pension needs a paystub
- * that shows a pension contribution, so an empty one is never added quietly.
- * Returns the pension as it now stands, or null when none was chosen.
+ * pension kept already, or to a new one made here, as a new account or on an
+ * account Leeway already has, so a failure anywhere after leaves no half-made
+ * pension behind. A new pension needs a paystub that shows a pension
+ * contribution, so an empty one is never added quietly. Returns the pension
+ * as it now stands, or null when none was chosen.
  */
 export async function applyToPension(
   db: Db,
   paystub: Paystub,
-  { pensionAccountId, newPension }: PensionTarget,
+  { pensionAccountId, newPension, attachAccountId }: PensionTarget,
 ): Promise<Pension | null> {
   const patch = pensionPatchFrom(paystub)
   if (pensionAccountId !== null) return patchPension(db, pensionAccountId, patch)
-  if (newPension === null) return null
+  if (newPension === null && attachAccountId === null) return null
   if (!showsPensionContribution(paystub)) {
     throw new AppError('invalid_input', NO_PENSION_CONTRIBUTION)
   }
-  const { currency } = await getSettings(db)
-  // Added empty, then given the paystub's figures through the same checked
+  // Made empty, then given the paystub's figures through the same checked
   // merge an update uses, so no figure the pension form refuses gets stored.
-  const added = await insertPension(db, { ...EMPTY_PLAN, ...newPension }, currency)
-  return patchPension(db, added.accountId, patch)
+  const made = await makePension(db, newPension, attachAccountId)
+  return patchPension(db, made.accountId, patch)
+}
+
+/** A new pension with an empty plan: on the account given, or else as a new account. */
+async function makePension(
+  db: Db,
+  newPension: NewPaystubPension | null,
+  attachAccountId: string | null,
+): Promise<Pension> {
+  if (attachAccountId !== null) return attachPlan(db, { ...EMPTY_PLAN, accountId: attachAccountId })
+  const { currency } = await getSettings(db)
+  // The schema lets only one of the two through, and the caller checked there is one.
+  return insertPension(db, { ...EMPTY_PLAN, ...newPension! }, currency)
 }

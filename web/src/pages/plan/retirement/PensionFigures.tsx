@@ -29,10 +29,17 @@ export function PensionFigures({
   pension,
   onImport,
   onClose,
+  onCancel = onClose,
+  focusHeading = false,
 }: {
   pension: PlanPension | null
   onImport?: () => void
+  /** Closes the form once saved, and on cancel unless onCancel says otherwise. */
   onClose: () => void
+  /** Where Cancel goes, such as back to the choice of how to add a pension. */
+  onCancel?: () => void
+  /** Moves focus to the card's heading, when the form is the next step of adding a pension. */
+  focusHeading?: boolean
 }) {
   const create = useActionMutation('create_pension')
   const attach = useActionMutation('attach_pension')
@@ -46,7 +53,7 @@ export function PensionFigures({
     else create.mutate({ ...created, ...change }, close)
   }
   return (
-    <FormCard title={pension ? pension.name : 'Add a pension'}>
+    <FormCard title={pension ? pension.name : 'Add a pension'} focusHeading={focusHeading}>
       {onImport && <PaystubOffer onImport={onImport} />}
       <PensionForm
         plan={pension?.plan ?? null}
@@ -55,7 +62,7 @@ export function PensionFigures({
         busy={create.isPending || attach.isPending || update.isPending}
         error={create.error ?? attach.error ?? update.error}
         onSubmit={save}
-        onCancel={onClose}
+        onCancel={onCancel}
       />
     </FormCard>
   )

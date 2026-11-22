@@ -74,15 +74,24 @@ export const savePaystubSchema = z
     paystub: paystubSchema,
     /** The pension to update with this paystub's pension figures; null leaves every pension as it is. */
     pensionAccountId: z.uuid().nullable().default(null),
-    /** A pension to add with this paystub's pension figures, in the same step; null adds none. */
+    /** A pension to add as a new account with this paystub's pension figures, in the same step. */
     newPension: newPaystubPensionSchema.nullable().default(null),
+    /** An account Leeway already has to become a pension with these figures, so it counts once. */
+    attachAccountId: z.uuid().nullable().default(null),
     /** Whether the 401(k), 457 and 403(b) figures become the monthly retirement contribution. */
     setRetirementContribution: z.boolean().default(false),
   })
-  .refine(({ pensionAccountId, newPension }) => pensionAccountId === null || newPension === null, {
-    message: 'Choose a pension to update or a new one to add, not both.',
-    path: ['newPension'],
-  })
+  // At most one place for the pension figures: a kept pension, a new account or an account Leeway has.
+  .refine(
+    ({ pensionAccountId, newPension, attachAccountId }) =>
+      [pensionAccountId, newPension, attachAccountId].filter((target) => target !== null).length <=
+      1,
+    {
+      message:
+        'Choose one pension for these figures: one you keep, a new one, or an account you have.',
+      path: ['newPension'],
+    },
+  )
 
 export type SavePaystub = z.infer<typeof savePaystubSchema>
 

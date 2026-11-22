@@ -40,6 +40,8 @@ describe('the reader prompt', () => {
       expect(PAYSTUB_PROMPT).toContain(label)
     }
     expect(PAYSTUB_PROMPT).toContain('It is never a 401(k), 457 or 403(b)')
+    // A plan's own defined-contribution side is not its pension either.
+    expect(PAYSTUB_PROMPT).toContain('such as PERA 401(k) or PERA DC, is never the pension')
   })
 
   it("asks only for what the paystub prints, never a plan's rules from what the model knows", () => {
@@ -52,6 +54,7 @@ describe('the reader prompt', () => {
   it('asks for the plan name alone, and none without a pension contribution', () => {
     expect(PAYSTUB_PROMPT).toMatch(/pensionPlanName: the pension's plan name/)
     expect(PAYSTUB_PROMPT).toContain('Null when the stub shows no pension contribution.')
+    expect(PAYSTUB_PROMPT).toContain("never a person's name or member number")
   })
 })
 
@@ -65,20 +68,23 @@ describe('a pension line, read and mapped', () => {
     ['Pension 422.95', 'Pension'],
   ] as const
 
-  it.each(LINES)('reads "%s" as the pension contribution, named %s', (line, name) => {
-    const extraction = extractionFrom(readingWithPension(line, '422.95', name))
-    expect(extraction.current.pension).toMatchObject({ cents: 42_295, source: line })
-    expect(extraction.pensionPlanName).toBe(name)
-    // Nothing of it lands on a workplace plan.
-    for (const plan of ['plan401k', 'plan403b'] as const) {
-      expect(extraction.current[plan].cents).toBeNull()
-    }
-    expect(pensionPatchFrom(confirmedFrom(extraction))).toEqual({
-      contribution: { kind: 'amount', cents: 42_295 },
-      grossPayCents: 384_500,
-      payCadence: 'semimonth',
-    })
-  })
+  it.each(LINES)(
+    'maps a pension the reader gave from "%s" onto the pension, named %s',
+    (line, name) => {
+      const extraction = extractionFrom(readingWithPension(line, '422.95', name))
+      expect(extraction.current.pension).toMatchObject({ cents: 42_295, source: line })
+      expect(extraction.pensionPlanName).toBe(name)
+      // Kept as the pension alone, never also as a workplace plan.
+      for (const plan of ['plan401k', 'plan403b'] as const) {
+        expect(extraction.current[plan].cents).toBeNull()
+      }
+      expect(pensionPatchFrom(confirmedFrom(extraction))).toEqual({
+        contribution: { kind: 'amount', cents: 42_295 },
+        grossPayCents: 384_500,
+        payCadence: 'semimonth',
+      })
+    },
+  )
 
   it('keeps no plan name without a pension contribution to name', () => {
     const extraction = extractionFrom(readingWithPension('PERA', null, 'PERA'))
@@ -90,6 +96,11 @@ describe('a pension line, read and mapped', () => {
     const named = (planName: string | null) =>
       extractionFrom(readingWithPension('PERA 422.95', '422.95', planName)).pensionPlanName
     expect(named('PERA Employee ID 004417')).toBe('PERA')
+    expect(named('PERA Member ID 4417')).toBe('PERA')
+    expect(named('PERA Member # A1234')).toBe('PERA')
+    expect(named('PERA Member 11.00% 422.95')).toBe('PERA')
+    expect(named('Colorado PERA EE Pre-tax $422.95')).toBe('Colorado PERA')
+    expect(named('Member 422.95')).toBeNull()
     expect(named('Colorado PERA 0044172')).toBe('Colorado PERA')
     expect(named(`${REMOVED}`)).toBeNull()
     expect(named('   ')).toBeNull()

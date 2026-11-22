@@ -54,7 +54,7 @@ describe('adding a pension by hand', () => {
     const more = form.getByText('More details (optional)')
     expect(more.closest('details')).not.toHaveAttribute('open')
     for (const name of DETAILS) expect(form.getByRole('textbox', { name })).not.toBeVisible()
-    expect(form.getByRole('combobox', { name: 'Contribution type' })).not.toBeVisible()
+    expect(form.getByRole('combobox', { name: 'Your contribution' })).not.toBeVisible()
 
     // Unfolded, each detail says in one line what it is for.
     await user.click(more)
@@ -63,7 +63,7 @@ describe('adding a pension by hand', () => {
       expect(figure).toBeVisible()
       expect(figure).toHaveAccessibleDescription(/\w+/)
     }
-    expect(form.getByRole('combobox', { name: 'Contribution type' })).toHaveAccessibleDescription(
+    expect(form.getByRole('combobox', { name: 'Your contribution' })).toHaveAccessibleDescription(
       'What each paycheck pays in',
     )
   })

@@ -230,11 +230,14 @@ describe('adding a pension from the review', () => {
     return read.paystub
   }
 
+  /** The new pension as typed: a new account unless an account id is given. */
+  const asTyped = (name: string, balance = '', accountId = '') => ({ accountId, name, balance })
+
   it('needs a paystub that shows a pension contribution', () => {
     expect(readsPension(cityRead().extraction)).toBe(true)
     expect(readsPension(noPensionRead.extraction)).toBe(false)
     for (const pension of ['', '0']) {
-      expect(readNewPension(confirmed(pension), 'PERA', '')).toEqual({
+      expect(readNewPension(confirmed(pension), asTyped('PERA'))).toEqual({
         ok: false,
         error: 'Enter the pension contribution from your paystub, or add the pension by hand.',
       })
@@ -242,22 +245,32 @@ describe('adding a pension from the review', () => {
   })
 
   it('takes the name trimmed, and the balance as cents or not known', () => {
-    expect(readNewPension(confirmed('422.95'), '  Colorado PERA ', '65,000')).toEqual({
+    expect(readNewPension(confirmed('422.95'), asTyped('  Colorado PERA ', '65,000'))).toEqual({
       ok: true,
-      pension: { name: 'Colorado PERA', balanceCents: 6_500_000 },
+      target: {
+        newPension: { name: 'Colorado PERA', balanceCents: 6_500_000 },
+        attachAccountId: null,
+      },
     })
-    expect(readNewPension(confirmed('422.95'), 'PERA', '')).toEqual({
+    expect(readNewPension(confirmed('422.95'), asTyped('PERA'))).toEqual({
       ok: true,
-      pension: { name: 'PERA', balanceCents: null },
+      target: { newPension: { name: 'PERA', balanceCents: null }, attachAccountId: null },
+    })
+  })
+
+  it('puts it on an account Leeway has, which keeps its own name and balance', () => {
+    expect(readNewPension(confirmed('422.95'), asTyped('', 'lots', 'acct-plan'))).toEqual({
+      ok: true,
+      target: { newPension: null, attachAccountId: 'acct-plan' },
     })
   })
 
   it('names what to fix: a blank name, then a balance that is not an amount', () => {
-    expect(readNewPension(confirmed('422.95'), '  ', '')).toEqual({
+    expect(readNewPension(confirmed('422.95'), asTyped('  '))).toEqual({
       ok: false,
       error: 'Name your pension, like Colorado PERA.',
     })
-    expect(readNewPension(confirmed('422.95'), 'PERA', 'lots')).toEqual({
+    expect(readNewPension(confirmed('422.95'), asTyped('PERA', 'lots'))).toEqual({
       ok: false,
       error: 'Enter the member balance as an amount.',
     })

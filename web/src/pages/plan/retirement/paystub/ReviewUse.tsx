@@ -1,9 +1,11 @@
 // Where a reviewed paystub's figures go: a pension kept already, or the new
-// pension being added from it, and, when the paystub shows one, the 401(k),
-// 457 or 403(b) contribution as the monthly retirement saving.
+// pension being added from it (on an account Leeway has, or a new one), and,
+// when the paystub shows one, the 401(k), 457 or 403(b) contribution as the
+// monthly retirement saving.
 
 import { useId } from 'react'
-import type { PensionChoice } from './review'
+import { PensionAccount, type Candidate } from '../PensionFields'
+import type { NewPensionText, PensionChoice } from './review'
 
 /** The offer to make the 401(k), 457 and 403(b) figures the monthly retirement saving. */
 function ContributionChoice({
@@ -63,26 +65,36 @@ export function UseFigures({
   )
 }
 
+/** The offer of the monthly contribution in a group of its own, beside the new pension. */
+export function SavingChoice({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <fieldset className="review-group">
+      <legend>Retirement saving</legend>
+      <ContributionChoice checked={checked} onChange={onChange} />
+    </fieldset>
+  )
+}
+
 /**
- * The pension being added: its name, offered from the paystub's pension line
- * when Claude read one, and its member balance, which no paystub shows.
+ * The pension being added: on an account Leeway already has, when there is
+ * one it could be, so it is not counted twice; or else a new account, named
+ * from the paystub's pension line when Claude read one, with its member
+ * balance, which no paystub shows.
  */
 export function NewPensionFields({
-  name,
-  onName,
-  balance,
-  onBalance,
-  plans,
-  contribution,
-  onContribution,
+  candidates,
+  typed,
+  onChange,
 }: {
-  name: string
-  onName: (name: string) => void
-  balance: string
-  onBalance: (balance: string) => void
-  plans: boolean
-  contribution: boolean
-  onContribution: (checked: boolean) => void
+  candidates: Candidate[]
+  typed: NewPensionText
+  onChange: (change: Partial<NewPensionText>) => void
 }) {
   const balanceId = useId()
   return (
@@ -91,35 +103,44 @@ export function NewPensionFields({
       <p className="small muted">
         It takes the pension contribution, gross pay, pay schedule and employer share above.
       </p>
-      <div className="review-figures">
-        <label className="field">
-          Pension name
-          <input
-            className="input"
-            required
-            maxLength={80}
-            placeholder="Like Colorado PERA"
-            value={name}
-            onChange={(e) => onName(e.target.value)}
-          />
-        </label>
-        {/* A div, not a label, so the hint is read as a description, not as part of the name. */}
-        <div className="review-figure">
-          <label htmlFor={balanceId}>Member balance</label>
-          <input
-            id={balanceId}
-            className="input num"
-            inputMode="decimal"
-            aria-describedby={`${balanceId}-hint`}
-            value={balance}
-            onChange={(e) => onBalance(e.target.value)}
-          />
-          <small id={`${balanceId}-hint`} className="muted">
-            Optional, from your plan&apos;s statement
-          </small>
+      {candidates.length > 0 && (
+        <PensionAccount
+          candidates={candidates}
+          accountId={typed.accountId}
+          onChange={(accountId) => onChange({ accountId })}
+        />
+      )}
+      {/* An account Leeway already has keeps its own name and balance. */}
+      {typed.accountId === '' && (
+        <div className="review-figures">
+          <label className="field">
+            Pension name
+            <input
+              className="input"
+              required
+              maxLength={80}
+              placeholder="Like Colorado PERA"
+              value={typed.name}
+              onChange={(e) => onChange({ name: e.target.value })}
+            />
+          </label>
+          {/* A div, not a label, so the hint is read as a description, not as part of the name. */}
+          <div className="review-figure">
+            <label htmlFor={balanceId}>Member balance</label>
+            <input
+              id={balanceId}
+              className="input num"
+              inputMode="decimal"
+              aria-describedby={`${balanceId}-hint`}
+              value={typed.balance}
+              onChange={(e) => onChange({ balance: e.target.value })}
+            />
+            <small id={`${balanceId}-hint`} className="muted">
+              Optional, from your plan&apos;s statement
+            </small>
+          </div>
         </div>
-      </div>
-      {plans && <ContributionChoice checked={contribution} onChange={onContribution} />}
+      )}
     </fieldset>
   )
 }

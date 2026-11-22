@@ -28,7 +28,7 @@ const SSN = /(?<![\w*•])[\dXx*•]{3}[-\s.]?[\dXx*•]{2}[-\s.]?\d{4}\b/g
  * "#", so its end is "no word character next" rather than a word boundary.
  */
 const LABELED_ID =
-  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
+  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|member\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
 
 /** A street address: a house number, up to four words, and a street word. */
 const STREET =
@@ -109,7 +109,34 @@ export function redactEmployer(text: string | null): string | null {
   return leadingName(text, MAX_EMPLOYER_LENGTH)
 }
 
-/** The pension plan's name only, like "PERA", short enough to name a pension by. */
+/** A word that is no part of a plan's name: one holding a digit, #, % or $, like a rate or an ID. */
+const NOT_A_NAME_WORD = /[\d#%$]/
+
+/** Words a pension line prints after the plan's name, which name the deduction, not the plan. */
+const DEDUCTION_WORDS = new Set([
+  'member',
+  'employee',
+  'ee',
+  'pre-tax',
+  'pretax',
+  'contribution',
+  'contrib',
+  'deduction',
+  'ded',
+])
+
+/**
+ * The pension plan's name only, like "PERA", short enough to name a pension
+ * by: everything from the first word holding a digit, #, % or $ on is dropped,
+ * then any deduction words left at its end ("PERA Member 11.00% 422.95" is
+ * "PERA").
+ */
 export function redactPlanName(text: string | null): string | null {
-  return leadingName(text, MAX_PLAN_NAME_LENGTH)
+  const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
+  if (name === null) return null
+  const words = name.split(' ')
+  const cut = words.findIndex((word) => NOT_A_NAME_WORD.test(word))
+  const kept = cut === -1 ? words : words.slice(0, cut)
+  while (kept.length > 0 && DEDUCTION_WORDS.has(kept.at(-1)!.toLowerCase())) kept.pop()
+  return kept.length === 0 ? null : kept.join(' ')
 }

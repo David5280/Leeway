@@ -40,19 +40,15 @@ export function Figure({
   )
 }
 
-/** A labelled list to choose from, its hint read with it like a figure's. */
+/** A labelled list to choose from, named by its visible label, its hint read with it like a figure's. */
 export function Choice({
   label,
-  name,
   hint,
   value,
   options,
   onChange,
 }: {
-  /** What the owner reads beside it. */
   label: string
-  /** What a screen reader calls it, when the label alone would be unclear. */
-  name?: string
   hint: string
   value: string
   options: readonly { value: string; label: string }[]
@@ -63,7 +59,7 @@ export function Choice({
     <Setting label={label} hint={hint} hintId={hintId}>
       <select
         className="input"
-        aria-label={name ?? label}
+        aria-label={label}
         aria-describedby={hintId}
         value={value}
         onChange={(e) => onChange(e.target.value)}

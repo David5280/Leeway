@@ -8,7 +8,7 @@ import { NO_PENSION_CONTRIBUTION } from '../src/domain/paystubs/pension.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
 import { actionCaller } from './actionCaller.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
-import { createTestContext, resetData } from './helpers.js'
+import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 
 let ctx: AppContext
 const { call, callError } = actionCaller(() => ctx)
@@ -116,11 +116,18 @@ describe('save_paystub with a new pension', () => {
   it('leaves no pension behind when a later step fails', async () => {
     await withFailingPaystubInsert(async () => {
       await expect(
-        call('save_paystub', { paystub: confirmedPaystub(), newPension: NEW_PERA }),
+        call('save_paystub', {
+          paystub: confirmedPaystub(),
+          newPension: NEW_PERA,
+          setRetirementContribution: true,
+        }),
       ).rejects.toThrow('paystub insert failed')
     })
     expect(await pensionAccounts()).toEqual([])
-    expect((await call('project_retirement')).plan.pensions).toEqual([])
+    const { plan } = await call('project_retirement')
+    expect(plan.pensions).toEqual([])
+    // The monthly contribution, set before the paystub was, is undone with it.
+    expect(plan.assumptions.monthlyContributionCents).toBeNull()
   })
 
   it('holds to the most pensions Leeway keeps, saving nothing past it', async () => {
@@ -150,8 +157,93 @@ describe('save_paystub with a new pension', () => {
       pensionAccountId: kept.accountId,
       newPension: NEW_PERA,
     })
-    expect(both.message).toContain('Choose a pension to update or a new one to add, not both.')
+    expect(both.message).toContain('Choose one pension for these figures')
+    const plan = await insertBankAccount(ctx.db, { name: 'State Plan', type: 'investment' })
+    const twice = await callError('save_paystub', {
+      paystub: confirmedPaystub(),
+      newPension: NEW_PERA,
+      attachAccountId: plan.accountId,
+    })
+    expect(twice.message).toContain('Choose one pension for these figures')
     expect(await pensionAccounts()).toHaveLength(1)
     expect((await call('get_paystub')).latest).toBeNull()
+  })
+})
+
+describe('save_paystub making an account Leeway has the new pension', () => {
+  /** A plan linked from the bank, as Leeway first sees it: an investment account. */
+  const linkedPlan = (fields: { hidden?: boolean; type?: string } = {}) =>
+    insertBankAccount(ctx.db, {
+      name: 'State Plan',
+      type: 'investment',
+      subtype: 'other',
+      balanceCents: 6_500_000,
+      ...fields,
+    })
+
+  it('gives that account the paystub figures, so the balance counts once', async () => {
+    const { accountId } = await linkedPlan()
+    const saved = await call('save_paystub', {
+      paystub: confirmedPaystub(),
+      attachAccountId: accountId,
+    })
+    expect(saved.pension).toMatchObject({
+      accountId,
+      // Named as Leeway names a bank's account, with the bank's name first.
+      name: 'Test State Plan',
+      balanceCents: 6_500_000,
+      plan: { contribution: { kind: 'amount', cents: 42_295 }, payCadence: 'semimonth' },
+    })
+    expect(saved.paystub.pensionAccountId).toBe(accountId)
+    // No second account: the one Leeway had is now the pension.
+    const accounts = await call('list_accounts')
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0]).toMatchObject({ id: accountId, kind: 'pension' })
+  })
+
+  it('refuses one that cannot be a pension, a hidden one, or a stub with no pension', async () => {
+    const checking = await insertBankAccount(ctx.db, { type: 'depository', subtype: 'checking' })
+    const notPlan = await callError('save_paystub', {
+      paystub: confirmedPaystub(),
+      attachAccountId: checking.accountId,
+    })
+    expect(notPlan.message).toContain('cannot be a pension')
+    const hidden = await linkedPlan({ hidden: true })
+    const unseen = await callError('save_paystub', {
+      paystub: confirmedPaystub(),
+      attachAccountId: hidden.accountId,
+    })
+    expect(unseen.message).toContain('is hidden, so a pension on it would not count')
+    const plan = await linkedPlan()
+    const empty = await callError('save_paystub', {
+      paystub: paystubWithPension(null),
+      attachAccountId: plan.accountId,
+    })
+    expect(empty.message).toBe(NO_PENSION_CONTRIBUTION)
+    expect(await pensionAccounts()).toEqual([])
+    expect((await call('get_paystub')).latest).toBeNull()
+  })
+
+  it('leaves the account as it was when a later step fails', async () => {
+    const { accountId } = await linkedPlan()
+    await withFailingPaystubInsert(async () => {
+      await expect(
+        call('save_paystub', { paystub: confirmedPaystub(), attachAccountId: accountId }),
+      ).rejects.toThrow('paystub insert failed')
+    })
+    const [account] = await call('list_accounts')
+    expect(account).toMatchObject({ id: accountId, kind: 'investment' })
+    expect((await call('project_retirement')).plan.pensions).toEqual([])
+  })
+
+  it('holds to the most pensions Leeway keeps', async () => {
+    for (let n = 0; n < MAX_PENSIONS; n++) await call('create_pension', { name: `Plan ${n}` })
+    const { accountId } = await linkedPlan()
+    const refused = await callError('save_paystub', {
+      paystub: confirmedPaystub(),
+      attachAccountId: accountId,
+    })
+    expect(refused.message).toBe(`Leeway keeps up to ${MAX_PENSIONS} pensions`)
+    expect(await pensionAccounts()).toHaveLength(MAX_PENSIONS)
   })
 })

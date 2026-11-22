@@ -13,18 +13,21 @@ import {
   reviewText,
   showsPlanFigures,
   YEAR_TO_DATE_LABELS,
+  type NewPensionText,
   type PaystubRead,
   type PensionChoice,
   type ReviewText,
 } from './review'
+import type { Candidate } from '../PensionFields'
 import { FigureGroup, PaystubDetails } from './ReviewFields'
-import { NewPensionFields, UseFigures } from './ReviewUse'
+import { NewPensionFields, SavingChoice, UseFigures } from './ReviewUse'
 
 export function PaystubReview({
   read,
   pensions,
   pensionAccountId,
   adding = false,
+  candidates = [],
   busy,
   error,
   onSave,
@@ -36,6 +39,8 @@ export function PaystubReview({
   pensionAccountId: string | null
   /** Adding a new pension from this paystub, named here, instead of updating a kept one. */
   adding?: boolean
+  /** When adding: accounts Leeway already has that the new pension could be. */
+  candidates?: Candidate[]
   busy: boolean
   error: unknown
   onSave: (input: Input<'save_paystub'>) => void
@@ -45,8 +50,11 @@ export function PaystubReview({
   const [text, setText] = useState<ReviewText>(() => reviewText(extraction))
   const [pension, setPension] = useState(pensionAccountId ?? '')
   // The new pension's name starts as the plan name on the paystub's pension line, if Claude read one.
-  const [name, setName] = useState(extraction.pensionPlanName ?? '')
-  const [balance, setBalance] = useState('')
+  const [created, setCreated] = useState<NewPensionText>({
+    accountId: '',
+    name: extraction.pensionPlanName ?? '',
+    balance: '',
+  })
   const [contribution, setContribution] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const set = (change: Partial<ReviewText>) => setText((current) => ({ ...current, ...change }))
@@ -60,16 +68,17 @@ export function PaystubReview({
       setProblem(reviewed.error)
       return
     }
-    const created = adding ? readNewPension(reviewed.paystub, name, balance) : null
-    if (created && !created.ok) {
-      setProblem(created.error)
+    const target = adding ? readNewPension(reviewed.paystub, created) : null
+    if (target && !target.ok) {
+      setProblem(target.error)
       return
     }
     setProblem(null)
     onSave({
       paystub: reviewed.paystub,
       pensionAccountId: adding ? null : pension || null,
-      newPension: created ? created.pension : null,
+      newPension: target ? target.target.newPension : null,
+      attachAccountId: target ? target.target.attachAccountId : null,
       setRetirementContribution: plans && contribution,
     })
   }
@@ -96,15 +105,14 @@ export function PaystubReview({
         onChange={(field, value) => set({ yearToDate: { ...text.yearToDate, [field]: value } })}
       />
       {adding ? (
-        <NewPensionFields
-          name={name}
-          onName={setName}
-          balance={balance}
-          onBalance={setBalance}
-          plans={plans}
-          contribution={contribution}
-          onContribution={setContribution}
-        />
+        <>
+          <NewPensionFields
+            candidates={candidates}
+            typed={created}
+            onChange={(change) => setCreated((current) => ({ ...current, ...change }))}
+          />
+          {plans && <SavingChoice checked={contribution} onChange={setContribution} />}
+        </>
       ) : (
         <UseFigures
           pensions={pensions}
