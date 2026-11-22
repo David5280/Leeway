@@ -10,6 +10,12 @@
 // (one tap, the form or an assistant); see amountsVary. Its usual amount
 // still follows its recent cycles (varyingUsualCents), so the cash flow and
 // idle cash hold back what it costs now rather than what it cost when tracked.
+// Each cycle is read paid once there, so a bill paid twice by mistake is
+// never taken to cost double.
+//
+// An amount the owner sets stands: nothing is settled from a cycle with a
+// charge on or before the day they set it (postedSinceOwnerSet), so following
+// resumes only with a cycle that came after.
 //
 // A change is an account alert of its own kind (bill_change), so it shows,
 // notifies, hides and dismisses as the other alerts do. Dismissing or hiding
@@ -20,7 +26,14 @@
 import type { IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
-import { CYCLE_DAYS, cycleCharges, cyclesOf, missedBetween, type BillCharge } from './billCycles.js'
+import {
+  CYCLE_DAYS,
+  cycleCharges,
+  cyclesOf,
+  missedBetween,
+  paidOnceCycle,
+  type BillCharge,
+} from './billCycles.js'
 
 /**
  * How far a charge must be from the usual amount to be news: at least this
@@ -58,6 +71,12 @@ export interface WatchedBill {
    * the bill was tracked. Its own charges can say so too (see amountsVary).
    */
   amountVaries: boolean
+  /**
+   * The day the owner last set its amount (update_bill), in their time zone,
+   * or null when they never have since tracking it. Settling waits for a cycle
+   * that posted after it, so the owner's figure stands until then.
+   */
+  amountSetOn: IsoDate | null
   /** Its last few posted charges (CHARGES_READ), newest first. */
   charges: BillCharge[]
 }
@@ -159,15 +178,22 @@ function cyclesJustBefore(latest: BillCharge, earlier: BillCharge[], cycle: numb
   return before
 }
 
-/** A varying bill never alerts; its usual amount follows its recent cycles instead. */
+/**
+ * A varying bill never alerts; its usual amount follows its recent cycles
+ * instead, each read paid once: autopay and a manual payment in one cycle are
+ * a mistake "Charged twice?" tells, not what the bill costs. Only here: the
+ * steady path keeps raw totals, so a doubled cycle shows as changed and
+ * doublePaidBills.ts can tell it once.
+ */
 function followVaryingBill(
   bill: WatchedBill,
   latest: BillCharge,
   earlier: BillCharge[],
   cycle: number,
 ): BillChange | null {
-  const before = cyclesJustBefore(latest, earlier, cycle).map((one) => one.amountCents)
-  const usualCents = varyingUsualCents(latest.amountCents, before)
+  const paidOnce = (first: BillCharge) => paidOnceCycle(bill.charges, first, cycle).amountCents
+  const before = cyclesJustBefore(latest, earlier, cycle).map(paidOnce)
+  const usualCents = varyingUsualCents(paidOnce(latest), before)
   // Already there: nothing to write, so refreshing again settles nothing.
   if (usualCents === bill.amountCents) return null
   return { kind: 'settled', bill, amountCents: usualCents }
@@ -194,13 +220,25 @@ function steadyBillChange(
 }
 
 /**
+ * Whether every charge in the cycle from `latest` posted after the day the
+ * owner last set the bill's amount. A charge on that very day may have come
+ * before the edit, so it does not count: the owner's figure stands.
+ */
+function postedSinceOwnerSet(bill: WatchedBill, latest: BillCharge, cycle: number): boolean {
+  const setOn = bill.amountSetOn
+  if (setOn === null) return true
+  return cycleCharges(bill.charges, latest, cycle).every((charge) => charge.date > setOn)
+}
+
+/**
  * What a bill's latest cycle says about its amount, or null when nothing:
  * no charge since the bill was tracked or within the last cycle and a half,
  * or, for a steady bill, a total near the usual amount, a missed cycle or no
  * cycle before it, or a change on the first charge since tracking, when the
  * usual amount was only an estimate from history. A bill whose amount varies
  * (flagged when tracked, or by its own history) is never changed, only
- * settled at what its recent cycles say it costs now.
+ * settled at what its recent cycles say it costs now. Nothing is settled
+ * from a cycle that began on or before the owner last set the amount.
  */
 export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
   const cycle = CYCLE_DAYS[bill.cadence]
@@ -209,8 +247,12 @@ export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | nu
   if (missedBetween(latest.date, today, cycle)) return null
   // Judged by the cycles before the latest, so the latest's own change cannot hide itself.
   const varies = bill.amountVaries || amountsVary(earlier.map((one) => one.amountCents))
-  if (varies) return followVaryingBill(bill, latest, earlier, cycle)
-  return steadyBillChange(bill, latest, earlier[0], cycle)
+  const change = varies
+    ? followVaryingBill(bill, latest, earlier, cycle)
+    : steadyBillChange(bill, latest, earlier[0], cycle)
+  // An amount the owner set is never overwritten by a cycle from before they set it.
+  if (change?.kind === 'settled' && !postedSinceOwnerSet(bill, latest, cycle)) return null
+  return change
 }
 
 /**

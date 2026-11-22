@@ -30,6 +30,7 @@ const comcast = (charges: [string, number][], fields: Partial<WatchedBill> = {})
   cadence: 'month',
   trackedOn: '2026-09-25',
   amountVaries: false,
+  amountSetOn: null,
   charges: charges.map(([date, amountCents]) => ({ accountId: 'checking', date, amountCents })),
   ...fields,
 })

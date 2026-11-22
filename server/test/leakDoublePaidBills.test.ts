@@ -21,6 +21,7 @@ const bill: WatchedBill = {
   cadence: 'month',
   trackedOn: '2026-01-01',
   amountVaries: false,
+  amountSetOn: null,
   charges: [],
 }
 
