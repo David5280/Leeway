@@ -7,12 +7,10 @@
 // ("Hawthorne"), so it is shown as the label unless it is made only of
 // everyday words ("Rent", "Cleaner") and reads as no app's or transfer's line.
 
-import { isBusinessWord } from '../businessWords.js'
 import { textKey } from '../merchantKey.js'
 import { neutralLabel, readsAsLabelled } from '../modelLabels.js'
-import { isMovementWord } from '../movementWords.js'
+import { isEverydayWord } from '../personShape.js'
 import type { RuleReads } from '../rules.js'
-import { isCommonWord } from './commonWords.js'
 
 /** A bill as stored, as labelling reads it. */
 export interface StoredBill {
@@ -81,11 +79,6 @@ function labelOf(
   return bill.matchPattern && namesHidden(bill.matchPattern, hiddenWords) ? 'Payment sent' : null
 }
 
-/** Whether a word is an everyday one, never a name to hide: a common, business or movement word. */
-function isEveryday(word: string): boolean {
-  return isCommonWord(word) || isBusinessWord(word) || isMovementWord(word)
-}
-
 /** Whether a text holds a full name's words in a row: "ally auto loan" holds "Ally Auto". */
 function holdsName(text: string, names: readonly string[]): boolean {
   const spaced = ` ${wordsOf(text).join(' ')} `
@@ -100,7 +93,7 @@ function holdsName(text: string, names: readonly string[]): boolean {
 function keepsItsName(name: string, hidden: HiddenInBills): boolean {
   if (readsAsLabelled(name) || namesHidden(name, hidden.words)) return false
   const words = wordsOf(name)
-  return words.length > 0 && words.every(isEveryday) && !holdsName(name, hidden.names)
+  return words.length > 0 && words.every(isEverydayWord) && !holdsName(name, hidden.names)
 }
 
 /** The hidden names a bill's name is checked against. */

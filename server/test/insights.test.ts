@@ -351,10 +351,11 @@ describe('payments that could be between people', () => {
     ])
   })
 
-  it('label a line with no code that is no shop the owner buys from, unless typed in', async () => {
+  it('label a line with no code, or typed in, unless it is in everyday words', async () => {
     await bank('2026-11-06', 'JANE PRYCEWOOD', 1_000)
     await ctx.db.query(
-      `INSERT INTO transactions (account_id, date, name, amount_cents) VALUES ($1, '2026-11-07', 'Farmers market', 800)`,
+      `INSERT INTO transactions (account_id, date, name, amount_cents) VALUES
+         ($1, '2026-11-07', 'Farmers market', 800), ($1, '2026-11-08', 'House cleaner', 700)`,
       [accountId],
     )
     await recategorize()
@@ -365,7 +366,9 @@ describe('payments that could be between people', () => {
         count: 1,
         modelLabel: 'Purchase or payment',
       },
-      { merchant: 'Farmers market', spentCents: 800, count: 1 },
+      // "Farmers" could be a surname, so it is labelled too.
+      { merchant: 'Farmers market', spentCents: 800, count: 1, modelLabel: 'Purchase or payment' },
+      { merchant: 'House cleaner', spentCents: 700, count: 1 },
     ])
   })
 })

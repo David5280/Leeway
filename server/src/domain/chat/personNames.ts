@@ -19,6 +19,7 @@ import {
   personInLine,
   personWords,
 } from '../betweenPeople.js'
+import { isBusinessWord } from '../businessWords.js'
 import { isKnownShop, type KnownShops } from '../knownShops.js'
 import type { LabelKind } from '../modelLabels.js'
 import { plainLetters } from '../plainLetters.js'
@@ -46,10 +47,15 @@ function readable(text: string): string {
   return plainLetters(text).replace(/(?<=\p{L})\/(?=\p{L})/gu, ' ')
 }
 
-/** The words of a line that is no app's that could be a name: personInLine, less a bank's words. */
+/**
+ * The words of a line that is no app's that could be a name: personInLine,
+ * less a bank's words and what a business or bill is called ("Jane Doe
+ * babysitting" reads "Jane Doe").
+ */
 function nameInLine(line: string): string {
   const words = personInLine(line).split(' ')
-  return personWords(words.filter((word) => !BANK_WORDS.has(word.toLowerCase())).join(' '))
+  const kept = words.filter((word) => !BANK_WORDS.has(word.toLowerCase()) && !isBusinessWord(word))
+  return personWords(kept.join(' '))
 }
 
 /** The names one labelled row could show its person under. */
@@ -67,7 +73,8 @@ export function namesIn(tx: Movement, kind: LabelKind, shops: KnownShops): Found
   // "BILL PAY JANE DOE"), unless it is a shop the owner buys from ("MARIGOLD CAFE
   // 0042"); an app's is read only when nothing else named them.
   const inLine = !named && kind !== 'app' ? nameInLine(line) : ''
-  if (inLine && !isKnownShop(shops, inLine)) found.push({ name: inLine })
+  const aShop = [inLine, personInLine(line)].some((name) => isKnownShop(shops, name))
+  if (inLine && !aShop) found.push({ name: inLine })
   if (!named && kind === 'app' && !found.some(({ name }) => name)) {
     found.push({ name: personInLine(line) })
   }

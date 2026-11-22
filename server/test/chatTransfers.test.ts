@@ -139,11 +139,44 @@ describe('a line with no code, as an import brings', () => {
     expect(JSON.stringify(transactions)).not.toMatch(/prycewood|halloway|foxhall|mossgiel/i)
   })
 
-  it('shows what the owner typed in by hand as they wrote it', async () => {
-    await probe.ctx.db.query(
-      `INSERT INTO transactions (account_id, date, name, amount_cents) VALUES ($1, '2026-11-15', 'Farmers market', 800)`,
-      [probe.accountId],
-    )
-    expect((await probe.transactions()).map((tx) => tx.displayName)).toEqual(['Farmers market'])
+  it('shows what the owner typed in by hand only as a shop or in everyday words', async () => {
+    const typed = async (name: string, amountCents: number) =>
+      probe.ctx.db.query(
+        `INSERT INTO transactions (account_id, date, name, amount_cents) VALUES ($1, '2026-11-15', $2, $3)`,
+        [probe.accountId, name, amountCents],
+      )
+    for (const [name, cents] of [
+      ['Jane Doe babysitting', 6_000],
+      ['Rent to John Smith', 150_000],
+      ['Rent', 1_000],
+      ['House cleaner', 9_000],
+      ['King Soopers', 2_000],
+    ] as const) {
+      await typed(name, cents)
+    }
+    await pay('KING SOOPERS', 900, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'Jane Doe came, and SMITH',
+    })
+
+    const transactions = await probe.transactions()
+    expect(transactions.map((tx) => tx.displayName).sort()).toEqual([
+      'House cleaner',
+      'King Soopers',
+      'King Soopers',
+      'Purchase or payment',
+      'Purchase or payment',
+      'Rent',
+    ])
+    expect(await probe.notes()).toEqual(['someone came, and someone'])
+    const totals = await probe.sent('top_merchants', { limit: 50 })
+    expect(totals).toContain('"merchant":"King Soopers","spentCents":2900')
+    for (const tool of ['list_transactions', 'top_merchants', 'get_summary', 'find_recurring']) {
+      expect([tool, await probe.sent(tool)]).not.toEqual([
+        tool,
+        expect.stringMatching(/jane|doe|smith/i),
+      ])
+    }
   })
 })

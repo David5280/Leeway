@@ -15,7 +15,9 @@ import { accountMasks } from './accounts.js'
 import { listBills, type Bill } from './bills.js'
 import { countedSql } from './counted.js'
 import { bankTextKey, textKey } from './merchantKey.js'
+import type { KnownShops } from './knownShops.js'
 import { neutralLabel, type LabelSubject } from './modelLabels.js'
+import { shopsIn } from './peopleContext.js'
 import { findSeries, type PastTransaction, type RecurringSeries } from './recurringSeries.js'
 import { shownNameOf, shownNamesOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
@@ -111,8 +113,12 @@ function tracks(bill: Bill, { bankKey, shownKeys }: Keyed<PastTransaction>): boo
 }
 
 /** A series with the label a model is shown instead when its name could be anyone's. */
-function labelled(series: RecurringSeries, last: StoredTransaction): RecurringSeries {
-  const modelLabel = neutralLabel(last)?.label
+function labelled(
+  series: RecurringSeries,
+  last: StoredTransaction,
+  shops: KnownShops,
+): RecurringSeries {
+  const modelLabel = neutralLabel(last, shops)?.label
   return modelLabel ? { ...series, modelLabel } : series
 }
 
@@ -124,10 +130,11 @@ export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
     listBills(db, today),
     accountMasks(db),
   ])
+  const shops = shopsIn(history)
   return keyedSeries(history, today, masks)
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
     .map(({ series, shownKey, shownKeys, charges }) => ({
-      series: labelled(series, charges.at(-1)!),
+      series: labelled(series, charges.at(-1)!, shops),
       shownKey,
       shownKeys,
     }))

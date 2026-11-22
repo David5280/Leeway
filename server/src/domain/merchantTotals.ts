@@ -8,6 +8,7 @@ import { currentPeriod } from './budgetReport.js'
 import { spendingSql } from './counted.js'
 import { GENERIC_NAME } from './merchantName.js'
 import { neutralLabel, type LabelSubject } from './modelLabels.js'
+import { shopsIn } from './peopleContext.js'
 import type { Settings } from './settings.js'
 import { merchantDisplayName } from './transactionName.js'
 
@@ -70,10 +71,13 @@ export async function topMerchants(
   )
   // Merchant names go to assistants and the AI writer, so they show no account number.
   const masks = await accountMasks(db)
+  const spent = rows.map((row) => ({ ...row, amountCents: row.spentCents }))
+  // A row typed in by hand joins a total of the same name, so a shop in it is one seen here.
+  const shops = shopsIn(spent)
   const byMerchant = new Map<string, MerchantTotal>()
-  for (const row of rows) {
+  for (const row of spent) {
     const merchant = merchantDisplayName(row, { masks })
-    const label = neutralLabel({ ...row, amountCents: row.spentCents })?.label
+    const label = neutralLabel(row, shops)?.label
     const total = withLabel(
       byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 },
       label,

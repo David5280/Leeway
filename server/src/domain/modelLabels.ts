@@ -22,17 +22,19 @@
 // To show a new code by name, add it to SHOWN_CODES only when Plaid files
 // nothing but businesses under it; when it can also be a person, give it a
 // label in LABELS instead, so its rows say what they were without a name.
-// A row the owner typed in shows: its name is their own words, like a
-// category's, and names in it are hidden as in theirs (chat/toolOutput.ts).
+// A row the owner typed in has no code, so it shows only as a shop they buy
+// from or in everyday words ("Rent", "House cleaner"); a line like "Jane Doe
+// babysitting" is labelled, and its names hidden, as an imported one is.
 
 import { appIn, merchantOf, paymentAppOf } from './betweenPeople.js'
+import { isKnownShop, NO_SHOPS, type KnownShops } from './knownShops.js'
 import { cleanMerchantName } from './merchantName.js'
-import { hasAPersonsShape, namesAClinician } from './personShape.js'
+import { hasAPersonsShape, namesAClinician, onlyEverydayWords } from './personShape.js'
 import { nameAfterToOrFrom, type Movement } from './transfers.js'
 
 /** A transaction as labelling reads it: its bank fields, and whether the owner typed it in. */
 export type LabelSubject = Movement & {
-  /** Entered by hand: its name is the owner's own words, like a category's. */
+  /** Entered by hand: no code, and a name the owner typed, which may be anyone's. */
   handEntered?: boolean
   /** Plaid's id for the merchant, set only when it recognised a business. */
   merchantEntityId?: string | null
@@ -167,6 +169,16 @@ function showsItsName(tx: LabelSubject): boolean {
 }
 
 /**
+ * Whether a row the owner typed in may show its name: a shop they buy from,
+ * or one made only of everyday words that reads as no money moved. Anything
+ * else could name a person ("Jane Doe babysitting", "Rent to John Smith").
+ */
+function handEnteredShows(tx: LabelSubject, shops: KnownShops): boolean {
+  if (isKnownShop(shops, shownMerchant(tx))) return true
+  return !readsAsMoved(tx.name) && onlyEverydayWords(tx.name)
+}
+
+/**
  * Whether a PayPal line is a purchase whose merchant may show ("PAYPAL
  * *SPOTIFY", merchant Spotify): it names no one after "to" or "from", Plaid
  * named a merchant that is no app, its code is a shop's but general goods,
@@ -197,15 +209,17 @@ function appLabel(tx: Movement, app: string): string {
  *   "Transfer to savings", "Rent payment", "Bill payment", "Payment sent";
  * - anything else not shown, by its code: "Service payment", "Deposit",
  *   or "Purchase or payment" and "Money received" with none.
+ *
+ * `shops` are the shops the owner buys from (peopleContext.ts), which a row
+ * typed in by hand may show as; without them, it shows only in everyday words.
  */
-export function neutralLabel(tx: LabelSubject): RowLabel | null {
-  if (tx.handEntered) return null
+export function neutralLabel(tx: LabelSubject, shops: KnownShops = NO_SHOPS): RowLabel | null {
   const app = paymentAppOf(tx)
   if (app) {
     if (app === 'PayPal' && paysAShopThroughPayPal(tx)) return null
     return { label: appLabel(tx, app), kind: 'app' }
   }
-  if (showsItsName(tx)) return null
+  if (tx.handEntered ? handEnteredShows(tx, shops) : showsItsName(tx)) return null
   const moved = codeOf(tx).startsWith('TRANSFER') || readsAsMoved(tx.name)
   return { label: labelOf(tx, moved), kind: moved ? 'transfer' : 'unknown' }
 }

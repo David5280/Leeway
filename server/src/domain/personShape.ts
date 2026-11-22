@@ -20,10 +20,20 @@ const TITLE = /(?:^|[^\p{L}])(?:dr|lcsw|dds|dmd|phd|ph\.d|lpc|psyd|lmft|lmhc)(?:
 // "MD" after a name: "JANE DOE MD", "Jane Doe, M.D.". Alone it is too often Maryland.
 const TRAILING_MD = /[\s,]+m\.?d\.?\s*$/i
 
+/** Whether a word is an everyday one, never a name to hide: a common, business or movement word. */
+export function isEverydayWord(word: string): boolean {
+  return isCommonWord(word) || isBusinessWord(word) || isMovementWord(word)
+}
+
 /** Whether one word could be part of a person's name and is no everyday or business word. */
 function couldBeANameWord(word: string): boolean {
-  if (!NAME_WORD.test(word) || POSSESSIVE.test(word)) return false
-  return !isCommonWord(word) && !isBusinessWord(word) && !isMovementWord(word)
+  return NAME_WORD.test(word) && !POSSESSIVE.test(word) && !isEverydayWord(word)
+}
+
+/** Whether a text has words and every one is an everyday word ("Rent", "House cleaner"). */
+export function onlyEverydayWords(text: string): boolean {
+  const words = text.toLowerCase().match(/\p{L}+/gu) ?? []
+  return words.length > 0 && words.every(isEverydayWord)
 }
 
 /**

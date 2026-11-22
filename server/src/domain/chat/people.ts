@@ -182,7 +182,7 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
   const [rows, bills] = await Promise.all([allRows(db), storedBills(db)])
   const shops = shopsIn(rows)
   const labelled = rows.flatMap((tx): Labelled[] => {
-    const label = neutralLabel(tx)
+    const label = neutralLabel(tx, shops)
     return label ? [{ tx, ...label }] : []
   })
   if (labelled.length === 0 && bills.length === 0) return NO_PEOPLE

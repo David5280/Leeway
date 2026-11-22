@@ -4,6 +4,7 @@
 // no code Plaid files a person under, can reach the model. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
+import { knownShops } from '../src/domain/knownShops.js'
 import { neutralLabel, readsAsLabelled, type LabelSubject } from '../src/domain/modelLabels.js'
 
 const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
@@ -11,9 +12,9 @@ const SERVICES = 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES'
 const GOODS = 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'
 const COFFEE = 'FOOD_AND_DRINK_COFFEE'
 
-/** The label a line gets: money out with no code unless a case says otherwise. */
-function labelOf(name: string, fields: Partial<LabelSubject> = {}) {
-  const tx: LabelSubject = {
+/** A line as labelling reads it: money out with no code unless a case says otherwise. */
+function movement(name: string, fields: Partial<LabelSubject> = {}): LabelSubject {
+  return {
     name,
     merchantName: null,
     amountCents: 2_000,
@@ -21,8 +22,11 @@ function labelOf(name: string, fields: Partial<LabelSubject> = {}) {
     providerCategoryDetailed: null,
     ...fields,
   }
-  return neutralLabel(tx)
 }
+
+/** The label a line gets, with no shops known. */
+const labelOf = (name: string, fields: Partial<LabelSubject> = {}) =>
+  neutralLabel(movement(name, fields))
 
 const label = (name: string, fields: Partial<LabelSubject> = {}) => labelOf(name, fields)?.label
 /** A line with the given detailed code, money out unless an amount is given. */
@@ -117,8 +121,28 @@ describe('the allowlist: a line shows its name only when all of it holds', () =>
     expect(medical('MAYO CLINIC')).toBeUndefined()
   })
 
-  it('shows a row the owner typed in, as their own words', () => {
-    expect(labelOf('Farmers market', { handEntered: true })).toBeNull()
+  it('shows a row the owner typed in only as a shop they buy from, or in everyday words', () => {
+    const typed = { handEntered: true }
+    for (const name of ['Rent', 'House cleaner', 'Groceries', 'Cash']) {
+      expect([name, labelOf(name, typed)]).toEqual([name, null])
+    }
+    // A shop is one the owner buys from only when the shops are known.
+    const shops = knownShops(['King Soopers'])
+    expect(neutralLabel({ ...movement('King Soopers'), ...typed }, shops)).toBeNull()
+    expect(label('King Soopers', typed)).toBe('Purchase or payment')
+    // Anything else could name a person, so it is labelled like a line with no code.
+    expect(labelOf('Jane Doe babysitting', typed)).toEqual({
+      label: 'Purchase or payment',
+      kind: 'unknown',
+    })
+    expect(label('Rent to John Smith', typed)).toBe('Purchase or payment')
+    expect(labelOf('Transfer to John Smith', typed)).toEqual({
+      label: 'Payment sent',
+      kind: 'transfer',
+    })
+    expect(label('Jane Doe', { ...typed, amountCents: -500 })).toBe('Money received')
+    expect(label('Venmo Jane', typed)).toBe('Venmo payment (sent)')
+    expect(label('1043', typed)).toBe('Purchase or payment')
   })
 })
 
