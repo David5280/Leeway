@@ -19,6 +19,14 @@ export function parseRate(text: string): number | null {
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
 }
 
+/**
+ * Whether a rate was typed that cannot be read ("-5", "abc"). A blank one
+ * clears the rate on purpose; an unreadable one must not quietly clear it.
+ */
+export function isUnreadableRate(text: string): boolean {
+  return parseRate(text) === null && text.trim() !== ''
+}
+
 export function DebtTerms({ account }: { account: Account }) {
   const [rate, setRate] = useState(account.aprPercent === null ? '' : String(account.aprPercent))
   const [minimum, setMinimum] = useState(
@@ -29,8 +37,7 @@ export function DebtTerms({ account }: { account: Account }) {
   const minimumPaymentCents = parseMoney(minimum)
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
-  // A blank rate clears it, but one typed that cannot be a rate ("-5") must not.
-  const badRate = aprPercent === null && rate.trim() !== ''
+  const badRate = isUnreadableRate(rate)
 
   function submit(event: FormEvent) {
     event.preventDefault()
