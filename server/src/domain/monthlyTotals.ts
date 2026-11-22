@@ -21,19 +21,24 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
+import { currentPeriod } from './budgetReport.js'
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
-  currentPeriod,
   rangeParams,
   sumTotals,
   type DateRange,
-} from './budgetReport.js'
+} from './categoryTotals.js'
 import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
 import { firstTransactionDay } from './profile/income.js'
 import type { Settings } from './settings.js'
-import { PAIR_WINDOW_DAYS, pairTransfers, unfiledLeg, type PairCandidate } from './transferPairs.js'
+import {
+  filedOrUnfiledLeg,
+  PAIR_WINDOW_DAYS,
+  pairTransfers,
+  type PairCandidate,
+} from './transferPairs.js'
 
 export interface MonthTotals {
   /** First day of the month. */
@@ -139,9 +144,11 @@ async function unfiledFlows(
        AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
-  const filedIds = new Set(rows.filter((row) => row.filedTransfer).map((row) => row.id))
   // The owner filed a transfer leg as one, so it may pair whatever its line says.
-  const paired = pairTransfers(rows, (hint, tx) => filedIds.has(tx.id) || unfiledLeg(hint, tx))
+  const paired = pairTransfers(
+    rows,
+    filedOrUnfiledLeg((tx) => tx.filedTransfer),
+  )
   const flows = ranges.map((): Flows => ({ outCents: 0, inCents: 0 }))
   for (const tx of rows) {
     const i = ranges.findIndex((range) => tx.date >= range.start && tx.date < range.end)

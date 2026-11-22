@@ -53,6 +53,11 @@ import {
   listGoalsAction,
   updateGoalAction,
 } from './goals.js'
+import {
+  changeEmergencyFundAction,
+  getEmergencyFundAction,
+  startEmergencyFundAction,
+} from './goalPlans.js'
 import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
 import {
   countNotificationsAction,
@@ -112,6 +117,7 @@ import {
   importConfigAction,
   starterCategoriesAction,
 } from './setup.js'
+import { exportTaxYearAction } from './taxExport.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
@@ -212,6 +218,9 @@ export const actionList = [
   addToGoalAction,
   listGoalContributionsAction,
   deleteGoalAction,
+  getEmergencyFundAction,
+  startEmergencyFundAction,
+  changeEmergencyFundAction,
   getNetWorthAction,
   listOwnedAndOwedAction,
   addOwnedOrOwedAction,
@@ -246,6 +255,7 @@ export const actionList = [
   disconnectAppAction,
   getConnectRequestAction,
   answerConnectRequestAction,
+  exportTaxYearAction,
 ] as const
 
 export type Actions = (typeof actionList)[number]
