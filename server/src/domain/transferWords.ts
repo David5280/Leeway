@@ -40,18 +40,26 @@ const PAY_WORDS = new RegExp(`(${PAYCHECK_WORDS.source}|${PAID_BACK_WORDS.source
  */
 const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
 
-/** Words for an account in a line, as in "PAYROLL CHK", "Tax Refund Savings" or "Payroll Fund". */
-const ACCOUNT_WORDS = String.raw`\b(savings|sav|checking|chk|account|acct|fund)\b`
+/**
+ * Words for a kind of account the owner keeps, short forms too: "PAYROLL
+ * SVGS", "Payroll CK", "Payroll Share 01", "Payroll Fund". These name the
+ * owner's own account wherever they end a "from" tail.
+ */
+const ACCOUNT_KINDS = String.raw`\b(savings|svgs|svg|sav|checking|chk|ck|share|mmkt|fund)\b`
 
 /**
- * An account number's last digits marked as banks mark them: "x1234",
- * "XXXX1234", "*1234", "#1234" or "...1234". Bare digits alone could be a
- * date or a reference, as in "ACME PAYROLL 1130".
+ * Words for an account in a line: a kind, or plain "account" ("Refund Account
+ * Transfer"). Plain "account" also names a sender's account ("ACME Payroll
+ * Acct 5678"), so a "from" tail reads only the kinds.
  */
-const MARKED_MASK = String.raw`(\bx+|[*#]|\.{2,})\d{2,4}\b`
+const ACCOUNT_WORDS = String.raw`(${ACCOUNT_KINDS}|\b(account|acct)\b)`
 
-/** An account number's last digits, marked, or bare right after an account word ("CHK 1234"). */
-const MASK = String.raw`(${MARKED_MASK}|\b\d{4}\b)`
+/**
+ * An account number's last digits right after an account word, marked as
+ * banks mark them or bare: "x1234", "XXXX1234", "*1234", "#1234", "...1234",
+ * "1234", or a credit union's share number like "01".
+ */
+const MASK = String.raw`((\bx+|[*#]|\.{2,})\d{1,4}|\b\d{1,4})\b`
 
 /**
  * A pay word and an account word that stand alone as an account's name, so
@@ -72,16 +80,27 @@ const ACCOUNT_NAMED_BY_PAY = new RegExp(
   'gi',
 )
 
+/**
+ * A transfer the owner made in online or mobile banking, which only moves
+ * money between their own accounts: whatever its "from" tail says, it names
+ * one of them ("Online Transfer from Tax Refund").
+ */
+const OWN_TRANSFER = /\b(online|mobile|internet|web)\s+(transfer|xfer|trnsfr)\b/i
+
 /** A "to ..." tail, which names where the money of a move went, often an account. */
 const DESTINATION_TAIL = /\bto\b.*$/i
 
+/** Any "from ..." tail, dropped whole after an own transfer (OWN_TRANSFER). */
+const SOURCE_TAIL = /\bfrom\b.*$/i
+
 /**
- * A "from ..." tail that names an account, by an account word or a marked
- * mask anywhere in it: "from PAYROLL-SAVINGS", "from SAV 1234 Tax Refund".
- * Any other "from" tail names who sent the money, so its pay words stay.
+ * A "from ..." tail that ends with a kind of account, perhaps with its last
+ * digits: "from PAYROLL-SAVINGS", "from Payroll Share 01". Any other "from"
+ * tail names who sent the money, so its pay words stay: "from ADP Payroll
+ * Fund Services", "from Paychex Payroll *1234", "from ACME Payroll Acct 5678".
  */
 const SOURCE_ACCOUNT_TAIL = new RegExp(
-  String.raw`\bfrom\b(?=.*(${ACCOUNT_WORDS}|${MARKED_MASK})).*$`,
+  String.raw`\bfrom\b.*${ACCOUNT_KINDS}([\s-]*${MASK})?\s*$`,
   'i',
 )
 
@@ -90,20 +109,23 @@ const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
 
 /**
  * The tail of a field after a transfer word, less the parts that name an
- * account: a "to" tail always, then a "from" tail that names an account
- * (SOURCE_ACCOUNT_TAIL). The "to" tail goes first, so in "from ACME Payroll
- * to Savings" the "from" tail is read without the destination's name.
+ * account: a "to" tail always, then a "from" tail after an own transfer or
+ * one that ends with a kind of account (SOURCE_ACCOUNT_TAIL). The "to" tail
+ * goes first, so in "from ACME Payroll to Savings" the "from" tail is read
+ * without the destination's name.
  */
-function withoutAccountTails(tail: string): string {
-  return tail.replace(DESTINATION_TAIL, '').replace(SOURCE_ACCOUNT_TAIL, '')
+function withoutAccountTails(tail: string, ownTransfer: boolean): string {
+  const sentFrom = tail.replace(DESTINATION_TAIL, '')
+  return sentFrom.replace(ownTransfer ? SOURCE_TAIL : SOURCE_ACCOUNT_TAIL, '')
 }
 
 /**
  * The words of a line read for pay: all of it but the account names its pay
  * words stand alone in (ACCOUNT_NAMED_BY_PAY) and the tails after a transfer
  * word that name an account (withoutAccountTails). So "Online Transfer to
- * ACME Payroll Fund" and "Transfer from Payroll Savings" are moves, while
- * "ACH Transfer from ADP Payroll" is pay. A "to" or "from" before any
+ * ACME Payroll Fund", "Online Transfer from Tax Refund" and "Transfer from
+ * Payroll Savings" are moves, while "ACH Transfer from ADP Payroll" and
+ * "Transfer from ACME Refund" are pay. A "to" or "from" before any
  * transfer word is part of a name ("Back To Basics Payroll transfer"). The
  * name is read before the merchant, and a tail ends with its field, so one
  * field's tail never hides the other's pay words.
@@ -111,14 +133,16 @@ function withoutAccountTails(tail: string): string {
 function wordsReadForPay(fields: string[]): string {
   const read: string[] = []
   let afterTransfer = false
+  let ownTransfer = false
   for (const field of fields) {
     const named = field.replace(ACCOUNT_NAMED_BY_PAY, '')
     const transfer = TRANSFER_WORDS.exec(named)
+    ownTransfer ||= OWN_TRANSFER.test(named)
     // Where in this field a tail may start: anywhere once a transfer word has come.
     let tailFrom = named.length
     if (afterTransfer) tailFrom = 0
     else if (transfer) tailFrom = transfer.index + transfer[0].length
-    read.push(named.slice(0, tailFrom) + withoutAccountTails(named.slice(tailFrom)))
+    read.push(named.slice(0, tailFrom) + withoutAccountTails(named.slice(tailFrom), ownTransfer))
     afterTransfer ||= transfer !== null
   }
   return read.join(' ')

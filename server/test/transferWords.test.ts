@@ -23,8 +23,16 @@ describe('wordsHint', () => {
     // A sender's name before or after the account words: the employer's payroll account.
     'Salary Account Transfer ACME Corp',
     'ACME CORP PAYROLL ACCT TRANSFER',
-    // A "from" tail with no account word or mask names who sent it.
+    // A "from" tail that does not end with a kind of account names who sent it.
     'ACH Transfer from ADP Payroll',
+    'Transfer from ACME Refund',
+    'Transfer from Payroll Account Services',
+    'Transfer from PAYROLL ACCT SVCS INC',
+    'Transfer from ADP Payroll Fund Services',
+    // A sender's account, with its number: plain "account" is no kind, and digits alone no account.
+    'ACH Transfer from ACME Payroll Acct 5678',
+    'Transfer from Paychex Payroll *1234',
+    'Transfer from ACME Refund x1234',
     // With no transfer word, a pay word anywhere is pay.
     'Payroll Account Services',
     'Direct Dep Savings Bank',
@@ -33,13 +41,19 @@ describe('wordsHint', () => {
   })
 
   it.each([
-    // A "from" tail that names an account, by an account word or a mask anywhere in it.
-    'Online Transfer from Payroll Fund',
+    // A "from" tail that ends with a kind of account, in its short forms too, perhaps numbered.
     'Transfer from PAYROLL-SAVINGS',
     'Transfer from Refund Holding Savings',
-    'Online Transfer from SAV 1234 Tax Refund',
     'Transfer from Payroll Savings',
-    'Transfer from ACME Refund x1234',
+    'TRANSFER FROM PAYROLL CK',
+    'Transfer from Payroll Share 01',
+    'Transfer from Payroll MMKT x5678',
+    // An own transfer, made in online or mobile banking, only moves the owner's money.
+    'Online Transfer from Payroll Fund',
+    'Online Transfer from SAV 1234 Tax Refund',
+    'Online Transfer from Tax Refund',
+    'Online Transfer from PAYROLL SVGS',
+    'Mobile Transfer from Refund Holding',
     // A "to" tail always names where the money went.
     'Online Transfer to PAYROLL CHK',
     // An account's name standing alone, with a hyphen or a mask too.
