@@ -69,11 +69,24 @@ async function pushManager(): Promise<PushManager> {
   return (await navigator.serviceWorker.ready).pushManager
 }
 
-/** This browser's push address, or null when push is off here (or no worker runs yet). */
+/**
+ * This browser's push address, or null when push is off here (or no worker runs yet).
+ *
+ * A subscription needs notifications allowed, and browsers drop it when they
+ * are not, so until then the push manager is not asked at all. Asking anyway
+ * finds nothing, and in the WebKit that the browser tests run it is worse:
+ * getSubscription() blocks the page for good, which hung Settings > Notifications.
+ */
 export async function currentEndpoint(): Promise<string | null> {
+  if (!notificationsAllowed()) return null
   const registration = await navigator.serviceWorker.getRegistration()
   const subscription = await registration?.pushManager.getSubscription()
   return subscription?.endpoint ?? null
+}
+
+/** Whether the owner has allowed notifications in this browser. */
+function notificationsAllowed(): boolean {
+  return typeof Notification !== 'undefined' && Notification.permission === 'granted'
 }
 
 /** A subscription as the server takes it. */
