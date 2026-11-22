@@ -20,7 +20,7 @@ import { CHAT_TOOLS, chatToolList, toolTitle } from '../src/chat/tools.js'
 import { withoutAbsentTools } from '../src/chat/toolWords.js'
 import { estimateChatTokens, FRAMING_TOKENS, type AiChatAsk } from '../src/domain/ai/gateway.js'
 import { NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
-import { namesSomeone } from '../src/domain/chat/personNames.js'
+import { namesSomeone } from '../src/domain/chat/movementWords.js'
 import { MESSAGE_MAX_LENGTH, type ChatMessage } from '../src/domain/chat/store.js'
 
 const message = (role: ChatMessage['role'], text: string, id = '1'): ChatMessage => ({
@@ -174,10 +174,11 @@ describe('the answer kept', () => {
 
 describe("a tool's output for Chat", () => {
   /** People as paymentPeople finds them: names, and which transactions pay a person. */
-  const people = (names: string[], transactionIds: string[] = []): PaymentPeople => ({
-    names,
-    transactionIds: new Set(transactionIds),
-  })
+  const people = (
+    names: string[],
+    transactionIds: string[] = [],
+    loneNames: string[] = [],
+  ): PaymentPeople => ({ names, loneNames, transactionIds: new Set(transactionIds) })
 
   it('leaves out bank text, account masks and every person paid or paying', () => {
     const result = {
@@ -248,6 +249,28 @@ describe("a tool's output for Chat", () => {
       JSON.stringify({ who: 'From someone, ZoëRuiz' }),
     )
     expect(chatToolText({ a: [1, 2] }, NO_PEOPLE)).toBe('{"a":[1,2]}')
+  })
+
+  it('matches a full name however its words are joined', () => {
+    const text = chatToolText(
+      { who: 'JANE_DOE, jane-doe, Jane.Doe, Jane  Doe' },
+      people(['Jane Doe']),
+    )
+    expect(text).toBe(JSON.stringify({ who: 'someone, someone, someone, someone' }))
+  })
+
+  it('replaces a given name or surname alone only in a note, and only with its capital', () => {
+    const result = {
+      displayName: 'Jane Street Deli',
+      merchant: 'Doe Hardware',
+      summary: 'Jane paid',
+      note: "JANE DOE's; jane-doe; Doe, Jane; jane; Janet",
+    }
+    const text = chatToolText(result, people(['Jane Doe'], [], ['Jane', 'Doe']))
+    expect(JSON.parse(text)).toEqual({
+      ...result,
+      note: "someone's; someone; someone, someone; jane; Janet",
+    })
   })
 })
 
