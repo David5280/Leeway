@@ -7,7 +7,6 @@ import {
   fromDayNumber,
   isValidTimeZone,
   makeDate,
-  todayIn,
   toDayNumber,
   type IsoDate,
 } from '../../lib/dates.js'
@@ -87,10 +86,19 @@ export function onDate(moment: Moment, date: IsoDate): Moment {
   return { ...moment, date }
 }
 
+/**
+ * True when a moment is on the day it is written on by `zone`'s clock, with
+ * no time zone math: a whole day, a floating moment, or one written on that
+ * very clock.
+ */
+export function onOwnClock(moment: Moment, zone: string | null): boolean {
+  return moment.seconds === null || moment.zone === null || zone === null || moment.zone === zone
+}
+
 /** The day a moment falls on by `zone`'s clock (the zone a rule repeats in); floating stays put. */
 export function dateIn(moment: Moment, zone: string | null): IsoDate {
-  if (moment.seconds === null || moment.zone === null || zone === null) return moment.date
-  return todayIn(zone, new Date(timelineMs(moment)))
+  if (onOwnClock(moment, zone)) return moment.date
+  return fromDayNumber(Math.floor(wallClockMs(timelineMs(moment), zone!) / DAY_MS))
 }
 
 /**
@@ -121,4 +129,38 @@ export function lengthOf(start: Moment, end: Moment | null, duration: string | u
   const length = durationMs(duration)
   if (length > 0) return length
   return start.seconds === null ? DAY_MS : 0
+}
+
+/**
+ * Zones' clocks are at most 26 hours apart, and daylight saving moves the
+ * owner's own clock an hour or two: so a length read off the clocks as
+ * written is never more than this short of the real one.
+ */
+const CLOCK_SLACK_MS = 28 * HOUR_MS
+
+/** A moment's wall clock as written, read as if it were UTC, in milliseconds. */
+function writtenMs(moment: Moment): number {
+  return toDayNumber(moment.date) * DAY_MS + (moment.seconds ?? 0) * SECOND_MS
+}
+
+/**
+ * The most days an event could cover on the owner's calendar, from its
+ * clocks as written and no time zone math: exact for a whole-day event, and
+ * never too few for a timed one. A first look, so most events can be left
+ * out before the costly work of finding their real days (daysCovered).
+ */
+export function mostDaysCovered(
+  start: Moment,
+  end: Moment | null,
+  duration: string | undefined,
+): number {
+  const written = end
+    ? Math.max(0, writtenMs(end) - writtenMs(start))
+    : durationMs(duration) || (start.seconds === null ? DAY_MS : 0)
+  // A whole-day event covers the days written, counted as daysCovered counts them.
+  if (start.seconds === null && (end === null || end.seconds === null)) {
+    return Math.max(1, Math.round(written / DAY_MS))
+  }
+  // A span of n milliseconds touches at most ceil(n / day) + 1 days.
+  return Math.ceil((written + CLOCK_SLACK_MS) / DAY_MS) + 1
 }

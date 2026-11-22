@@ -4,7 +4,7 @@ import type { AppContext } from '../src/context.js'
 import { median, setAsideFor } from '../src/domain/calendar/forecast.js'
 import type { Fetcher } from '../src/domain/calendar/feed.js'
 import { MAX_EVENTS } from '../src/domain/calendar/ics.js'
-import { INCOMPLETE } from '../src/domain/calendar/reading.js'
+import { CAPPED, INCOMPLETE } from '../src/domain/calendar/reading.js'
 import {
   connectCalendar,
   refreshCalendar,
@@ -235,11 +235,35 @@ describe('linking a calendar', () => {
       '2025-01-04',
     ])
     serving(ics([...past, LISBON]))
+    // Settings and coming up both say some were left out, those furthest from today.
     expect(await call('connect_calendar', { url: SECRET })).toMatchObject({
       eventCount: MAX_EVENTS,
+      note: CAPPED,
     })
+    expect(await call('get_forecast')).toMatchObject({ note: CAPPED })
     const { rowCount } = await ctx.db.query(`SELECT 1 FROM calendar_events WHERE uid = 'lisbon'`)
     expect(rowCount).toBe(1)
+  })
+
+  it('gives both notes when a read was cut short by the budget and by the cap', async () => {
+    const past = Array.from({ length: MAX_EVENTS + 1 }, (_, i): [string, string, string] => [
+      `p${i}`,
+      'Weekend trip',
+      '2025-01-04',
+    ])
+    const costly: [string, string, string, string, string] = [
+      'camp',
+      'Camping trip',
+      '2000-01-01',
+      '2000-01-01',
+      'FREQ=DAILY;COUNT=99999',
+    ]
+    const fetcher = serving(ics([...past, LISBON, costly]))
+    const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: () => NOW, fetcher }
+    expect(await connectCalendar(ctx.db, SECRET, { ...deps, unitsPerRead: 100 })).toMatchObject({
+      eventCount: MAX_EVENTS,
+      note: `${INCOMPLETE} ${CAPPED}`,
+    })
   })
 
   it('reads again on the schedule only once the last read is a few hours old', async () => {
@@ -567,7 +591,41 @@ describe('the forecast', () => {
     expect(weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(150000)
   })
 
-  it('lists two people’s birthdays on one day as two, setting aside for each', async () => {
+  it('costs a trip written only as its travel and the trip once, its booking claimed by it', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    // Two past trips, each a flight the day before the trip itself: $1,000 booked, $600 while away.
+    await spend(accountId, '2025-04-01', 100000, { primary: 'TRAVEL' })
+    await spend(accountId, '2025-05-11', 60000)
+    await spend(accountId, '2026-02-01', 100000, { primary: 'TRAVEL' })
+    await spend(accountId, '2026-03-12', 60000)
+    serving(
+      ics([
+        ['paris-flight', 'Flight to Paris', '2025-05-09'],
+        ['france', 'France vacation', '2025-05-10', '2025-05-14'],
+        ['tokyo-flight', 'Flight to Tokyo', '2026-03-09'],
+        ['japan', 'Japan trip', '2026-03-10', '2026-03-14'],
+        ['lisbon-flight', 'Flight to Lisbon', '2026-12-09'],
+        ['portugal', 'Portugal vacation', '2026-12-10', '2026-12-14'],
+      ]),
+    )
+    await call('connect_calendar', { url: SECRET })
+    const weeks = (await call('get_forecast')).weeks
+    // One trip of six days: the $1,000 booking once and $100 a day, never a second trip for the flight.
+    expect(weeks.flatMap((week) => week.items)).toMatchObject([
+      {
+        type: 'event',
+        id: 'lisbon-flight 2026-12-09',
+        date: '2026-12-09',
+        endsOn: '2026-12-14',
+        title: 'Portugal vacation',
+        suggestedCents: 160000,
+        basedOn: 2,
+      },
+    ])
+    expect(weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(160000)
+  })
+
+  it('lists two people’s birthdays on one day as two, setting aside for each and no more', async () => {
     const gifts = await call('create_category', { name: 'Gifts' })
     const { accountId } = await insertBankAccount(ctx.db)
     // Two past birthdays, a $50 gift before each.
@@ -579,6 +637,8 @@ describe('the forecast', () => {
         ['di', "Di's birthday", '2025-09-01'],
         ['alice', "Alice's birthday", '2026-11-25'],
         ['bob', "Bob's birthday", '2026-11-25'],
+        // A dinner naming no one joins one of them, rather than a third gift.
+        ['dinner', 'Birthday dinner', '2026-11-25'],
       ]),
     )
     await call('connect_calendar', { url: SECRET })

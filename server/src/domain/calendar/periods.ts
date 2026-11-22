@@ -148,6 +148,19 @@ function monthlyDays(anchor: Anchor, rule: Rule, period: number): Day[] {
   return daysOfMonth(year, month, rule, anchor)
 }
 
+/** Every month of the year, for a yearly rule naming days of the month but no month. */
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+/**
+ * The months a yearly rule looks at each year, in order: BYMONTH's; every
+ * month when it names days of the month without one (as RFC 5545 expands
+ * BYMONTHDAY); otherwise the first day's.
+ */
+export function monthsOfYear(anchor: Anchor, rule: Rule): number[] {
+  if (rule.byMonth.length) return [...rule.byMonth].sort((a, b) => a - b)
+  return rule.byMonthDay.length ? ALL_MONTHS : [anchor.month]
+}
+
 /** A yearly rule's days in the year `period` years after the first day's. */
 function yearlyDays(anchor: Anchor, rule: Rule, period: number): Day[] {
   const year = anchor.year + period
@@ -155,8 +168,7 @@ function yearlyDays(anchor: Anchor, rule: Rule, period: number): Day[] {
     // The same day each year; February 29 falls on the 28th, as a birthday is kept.
     return [dayOf(year, anchor.month, Math.min(anchor.date, daysInMonth(year, anchor.month)))]
   }
-  const months = rule.byMonth.length ? [...rule.byMonth].sort((a, b) => a - b) : [anchor.month]
-  return months.flatMap((month) => daysOfMonth(year, month, rule, anchor))
+  return monthsOfYear(anchor, rule).flatMap((month) => daysOfMonth(year, month, rule, anchor))
 }
 
 export const DAYS_OF_PERIOD: Record<Frequency, typeof dailyDays> = {

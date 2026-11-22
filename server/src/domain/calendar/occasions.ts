@@ -1,8 +1,8 @@
 // What a calendar event is about, beyond its kind: the words in its title that
 // say whose birthday, which show or where a trip goes, which holiday it is,
-// and whether it is a trip's travel (a flight, a hotel) rather than the trip
-// itself. spans.ts uses these to tell one occasion written as several events
-// from two occasions that fall on the same days. Pure.
+// and what part of a trip it is (a flight, a hotel, or the trip itself).
+// spans.ts uses these to tell one occasion written as several events from
+// two occasions that fall on the same days. Pure.
 
 import { HOLIDAYS } from './kinds.js'
 
@@ -28,9 +28,14 @@ const FILLER = new Set(
     .split(' '),
 )
 
-/** A trip's travel: getting there and somewhere to sleep, not the trip itself. */
-const TRAVEL =
-  /\b(flights?|fly(ing)?|hotel|airbnb|vrbo|lodging|motel|hostel|check[- ]?(in|out))\b|✈/i
+/** Getting there: a flight. */
+const TRANSPORT = /\b(flights?|fly(ing)?)\b|✈/i
+
+/** Somewhere to sleep on a trip. A check-in alone is a hotel's; a flight's says "flight". */
+const LODGING = /\b(hotel|airbnb|vrbo|lodging|motel|hostel|check[- ]?(in|out))\b/i
+
+/** What part of a trip an event is: its travel there and back, a stay, or the trip itself. */
+export type TripRole = 'own' | 'transport' | 'lodging'
 
 /**
  * The words that say what an event is about, lower case: whose birthday,
@@ -71,9 +76,10 @@ export function holidayNames(title: string): Set<string> {
   return names
 }
 
-/** True for a trip's travel: a flight, a hotel or another place to stay. */
-export function isTravel(title: string): boolean {
-  return TRAVEL.test(title)
+/** What part of a trip an event titled so is: a flight is transport even if it says check-in. */
+export function tripRoleOf(title: string): TripRole {
+  if (TRANSPORT.test(title)) return 'transport'
+  return LODGING.test(title) ? 'lodging' : 'own'
 }
 
 /** True when the two have a word in common. */

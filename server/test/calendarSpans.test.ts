@@ -1,8 +1,9 @@
-// mergeSpans and the words it reads from titles: one occasion written as
-// several events becomes one span, and two occasions never become one.
+// mergeSpans for birthdays, weddings, shows and holidays, and the words it
+// reads from titles: one occasion written as several events becomes one
+// span, and two occasions never become one. Trips are in calendarTrips.test.ts.
 
 import { describe, expect, it } from 'vitest'
-import { holidayNames, occasionWords } from '../src/domain/calendar/occasions.js'
+import { holidayNames, occasionWords, tripRoleOf } from '../src/domain/calendar/occasions.js'
 import { mergeSpans, type KindedEvent } from '../src/domain/calendar/spans.js'
 
 /** An event for these tests; its title doubles as its calendar id. */
@@ -19,32 +20,7 @@ const trip = (title: string, startsOn: string, endsOn = startsOn) =>
 /** The spans as [kind, title, first day, last day], for reading at a glance. */
 const merged = (...events: KindedEvent[]) =>
   mergeSpans(events).map((span) => [span.kind, span.title, span.startsOn, span.endsOn])
-
 describe('mergeSpans', () => {
-  it('merges a trip with its flight and hotel, named for its longest event', () => {
-    expect(
-      merged(
-        trip('Flight to Rome', '2026-12-09'),
-        trip('Hotel Rome', '2026-12-10', '2026-12-13'),
-        trip('Rome trip', '2026-12-10', '2026-12-14'),
-        trip('Flight home', '2026-12-15'),
-        trip('Ski weekend', '2026-12-20', '2026-12-21'),
-      ),
-    ).toEqual([
-      ['trip', 'Rome trip', '2026-12-09', '2026-12-15'],
-      ['trip', 'Ski weekend', '2026-12-20', '2026-12-21'],
-    ])
-  })
-
-  it('names a trip for its own event over a longer hotel booking', () => {
-    expect(
-      merged(
-        trip('Hotel Rome', '2026-12-09', '2026-12-14'),
-        trip('Rome trip', '2026-12-10', '2026-12-12'),
-      ),
-    ).toEqual([['trip', 'Rome trip', '2026-12-09', '2026-12-14']])
-  })
-
   it('merges back-to-back days only for kinds that run over days', () => {
     expect(
       merged(
@@ -118,8 +94,8 @@ describe('mergeSpans', () => {
     ])
   })
 
-  it('joins a piece naming nothing only when one occasion alone could take it', () => {
-    // With one show that night, "Opera night" is that show; with two, it is a guess, so it stands alone.
+  it('joins a piece naming nothing to one occasion, never making one of its own', () => {
+    // "Opera night" is that night's show; beside two shows it joins one, rather than be a third.
     expect(
       merged(
         event('show', 'Opera night', '2026-12-10'),
@@ -133,9 +109,19 @@ describe('mergeSpans', () => {
         event('show', 'Hamilton tickets', '2026-12-10'),
       ),
     ).toEqual([
-      ['show', 'Concert', '2026-12-10', '2026-12-10'],
       ['show', 'Hamilton tickets', '2026-12-10', '2026-12-10'],
       ['show', 'Tosca tickets', '2026-12-10', '2026-12-10'],
+    ])
+    // Two birthdays and a dinner that day are two gifts, not three.
+    expect(
+      merged(
+        event('birthday', "Alice's birthday", '2026-12-05'),
+        event('birthday', "Bob's birthday", '2026-12-05'),
+        event('birthday', 'Birthday dinner', '2026-12-05'),
+      ),
+    ).toEqual([
+      ['birthday', "Alice's birthday", '2026-12-05', '2026-12-05'],
+      ['birthday', "Bob's birthday", '2026-12-05', '2026-12-05'],
     ])
   })
 
@@ -193,129 +179,6 @@ describe('mergeSpans', () => {
   })
 })
 
-describe('mergeSpans with trips and their travel', () => {
-  it('keeps two trips each named for itself apart, back to back or overlapping', () => {
-    expect(
-      merged(
-        trip('Trip to Rome', '2027-01-02', '2027-01-08'),
-        trip('Ski trip', '2027-01-09', '2027-01-11'),
-        trip("Mom's trip to Florida", '2027-02-01', '2027-02-07'),
-        trip('Camping trip', '2027-02-05', '2027-02-08'),
-      ),
-    ).toEqual([
-      ['trip', 'Trip to Rome', '2027-01-02', '2027-01-08'],
-      ['trip', 'Ski trip', '2027-01-09', '2027-01-11'],
-      ['trip', "Mom's trip to Florida", '2027-02-01', '2027-02-07'],
-      ['trip', 'Camping trip', '2027-02-05', '2027-02-08'],
-    ])
-  })
-
-  it('never lets the flight home bridge into the next trip', () => {
-    expect(
-      merged(
-        trip('Trip to Rome', '2026-12-02', '2026-12-08'),
-        trip('Flight to Denver', '2026-12-09'),
-        trip('Ski trip', '2026-12-09', '2026-12-11'),
-      ),
-    ).toEqual([
-      ['trip', 'Trip to Rome', '2026-12-02', '2026-12-09'],
-      ['trip', 'Ski trip', '2026-12-09', '2026-12-11'],
-    ])
-  })
-
-  it('gives travel naming a place to the trip going there', () => {
-    // On the day both are open, the flight goes to the trip it names.
-    expect(
-      merged(
-        trip('Trip to Rome', '2026-12-02', '2026-12-08'),
-        trip('Flight to Denver', '2026-12-09'),
-        trip('Denver ski trip', '2026-12-09', '2026-12-11'),
-      ),
-    ).toEqual([
-      ['trip', 'Trip to Rome', '2026-12-02', '2026-12-08'],
-      ['trip', 'Denver ski trip', '2026-12-09', '2026-12-11'],
-    ])
-  })
-
-  it('keeps travel to one place apart from travel to the next', () => {
-    expect(
-      merged(
-        trip('Flight to Chicago', '2027-02-01'),
-        trip('Hotel Chicago', '2027-02-01', '2027-02-02'),
-        trip('Flight to Maui', '2027-02-03'),
-        trip('Maui vacation', '2027-02-03', '2027-02-08'),
-      ),
-    ).toEqual([
-      ['trip', 'Hotel Chicago', '2027-02-01', '2027-02-02'],
-      ['trip', 'Maui vacation', '2027-02-03', '2027-02-08'],
-    ])
-  })
-
-  it('keeps a flight to one place the day before a trip to another apart', () => {
-    expect(
-      merged(
-        trip('Flight to Chicago', '2027-02-01'),
-        trip('Vacation in Maui', '2027-02-02', '2027-02-06'),
-      ),
-    ).toEqual([
-      ['trip', 'Flight to Chicago', '2027-02-01', '2027-02-01'],
-      ['trip', 'Vacation in Maui', '2027-02-02', '2027-02-06'],
-    ])
-  })
-
-  it('joins a flight the day before a trip to it, and the flight home wherever it says', () => {
-    expect(
-      merged(
-        trip('Flight to Lisbon', '2027-03-01'),
-        trip('Lisbon and Porto trip', '2027-03-02', '2027-03-06'),
-        trip('Flight to Denver', '2027-03-07'),
-        trip('Flight out', '2027-04-01'),
-        trip('Portugal trip', '2027-04-02', '2027-04-05'),
-      ),
-    ).toEqual([
-      ['trip', 'Lisbon and Porto trip', '2027-03-01', '2027-03-07'],
-      ['trip', 'Portugal trip', '2027-04-01', '2027-04-05'],
-    ])
-  })
-
-  it('joins travel during a trip to it, wherever it says it goes', () => {
-    expect(
-      merged(
-        trip('Italy vacation', '2027-01-02', '2027-01-10'),
-        trip('Flight to Florence', '2027-01-05'),
-      ),
-    ).toEqual([['trip', 'Italy vacation', '2027-01-02', '2027-01-10']])
-  })
-
-  it('joins trips that overlap or touch when they name the same place, or one names nowhere', () => {
-    expect(
-      merged(
-        trip('Italy vacation', '2027-01-02', '2027-01-10'),
-        trip('Day trip', '2027-01-05'),
-        trip('Lisbon trip', '2027-02-01', '2027-02-03'),
-        trip('Lisbon getaway, part two', '2027-02-04', '2027-02-05'),
-      ),
-    ).toEqual([
-      ['trip', 'Italy vacation', '2027-01-02', '2027-01-10'],
-      ['trip', 'Lisbon trip', '2027-02-01', '2027-02-05'],
-    ])
-  })
-
-  it('leaves a flight home alone when it could be either of two trips', () => {
-    expect(
-      merged(
-        trip('Trip to Rome', '2026-12-02', '2026-12-08'),
-        trip('Flight home', '2026-12-09'),
-        trip('Ski trip', '2026-12-09', '2026-12-11'),
-      ),
-    ).toEqual([
-      ['trip', 'Trip to Rome', '2026-12-02', '2026-12-08'],
-      ['trip', 'Flight home', '2026-12-09', '2026-12-09'],
-      ['trip', 'Ski trip', '2026-12-09', '2026-12-11'],
-    ])
-  })
-})
-
 describe('occasionWords', () => {
   it('keeps the words that say whose or where, and drops the ones that say what kind', () => {
     expect([...occasionWords("Jo's bday dinner")]).toEqual(['jo'])
@@ -328,6 +191,18 @@ describe('occasionWords', () => {
     expect([...occasionWords("Alex M's birthday")]).toEqual(['alex', 'm'])
     expect([...occasionWords('B-day party')]).toEqual([])
     expect([...occasionWords("Mom's b'day")]).toEqual(['mom'])
+  })
+})
+
+describe('tripRoleOf', () => {
+  it('tells getting there and a stay from the trip itself', () => {
+    expect(tripRoleOf('Flight to Rome')).toBe('transport')
+    expect(tripRoleOf('✈ UA 123 DEN→SFO')).toBe('transport')
+    expect(tripRoleOf('Check in for flight to Lisbon')).toBe('transport')
+    expect(tripRoleOf('Hotel Rome')).toBe('lodging')
+    expect(tripRoleOf('Airbnb in Lisbon')).toBe('lodging')
+    expect(tripRoleOf('Check-in: Hotel Arts')).toBe('lodging')
+    expect(tripRoleOf('Rome trip')).toBe('own')
   })
 })
 

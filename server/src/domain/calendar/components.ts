@@ -70,7 +70,10 @@ export function componentsOf(text: string): Component[] {
 
 function addProperty(component: Component, property: Property | null): void {
   if (!property) return
-  component.set(property.name, [...(component.get(property.name) ?? []), property])
+  // Pushed in place: an event may list a property thousands of times (EXDATE).
+  const lines = component.get(property.name)
+  if (lines) lines.push(property)
+  else component.set(property.name, [property])
 }
 
 /** The first line giving a property. */

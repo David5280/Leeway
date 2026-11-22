@@ -42,24 +42,31 @@ export interface Bounds {
   until: IsoDate | null
 }
 
-/** A comma list of whole numbers each within min..max and not 0, or null when one is not. */
+/**
+ * A comma list of whole numbers each within min..max and not 0, each kept
+ * once, or null when one is not. Kept once, a list padded with a hundred
+ * thousand repeats costs no more to expand than the few values it holds.
+ */
 function numbers(text: string | undefined, min: number, max: number): number[] | null {
   if (!text) return []
-  const values = text.split(',').map(Number)
-  const valid = values.every((n) => Number.isInteger(n) && n !== 0 && n >= min && n <= max)
-  return valid ? values : null
+  const values = new Set(text.split(',').map(Number))
+  for (const n of values) {
+    if (!Number.isInteger(n) || n === 0 || n < min || n > max) return null
+  }
+  return [...values]
 }
 
-/** BYDAY's entries, or null when one cannot be read. */
+/** BYDAY's entries, each kept once (at most 77 can differ), or null when one cannot be read. */
 function byDays(text: string | undefined): ByDay[] | null {
   if (!text) return []
   const days: ByDay[] = []
-  for (const entry of text.split(',')) {
+  for (const entry of new Set(text.split(','))) {
     const match = /^([+-]?\d{1,2})?([A-Z]{2})$/.exec(entry)
     const weekday = WEEKDAYS.indexOf(match?.[2] ?? '')
     const nth = match?.[1] ? Number(match[1]) : null
     if (weekday < 0 || nth === 0 || (nth !== null && Math.abs(nth) > 5)) return null
-    days.push({ weekday, nth })
+    // "+2MO" and "2MO" are one entry written two ways.
+    if (!days.some((day) => day.weekday === weekday && day.nth === nth)) days.push({ weekday, nth })
   }
   return days
 }

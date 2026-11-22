@@ -7,6 +7,7 @@ import { fromDayNumber, toDayNumber, type IsoDate } from '../../lib/dates.js'
 import {
   anchorOf,
   DAYS_OF_PERIOD,
+  monthsOfYear,
   periodStart,
   periodsUntil,
   type Anchor,
@@ -16,14 +17,22 @@ import type { Bounds, Frequency, Rule } from './rule.js'
 
 /**
  * Work done for one whole file, shared by all its rules: one unit for each
- * month a period looks at (a weekly or daily period counts as one) and one
- * for each day it picks. A rule is walked only across the window, or from its
+ * month a period looks at (a weekly or daily period counts as one), one for
+ * each day it picks, and what each repeat in the bounds costs to become an
+ * event (REPEAT_UNITS). A rule is walked only across the window, or from its
  * first day when it has a COUNT that cannot be skipped, so a calendar of
- * people's lives needs a small share of this: a daily rule across the window
- * is about 3,000. It is the stop for a file built to keep the server busy. A
- * unit takes around a microsecond, so the whole budget is a fraction of a second.
+ * people's lives needs a small share of this. It is the stop for a file built
+ * to keep the server busy. A unit takes around half a microsecond, so the
+ * whole budget is a fraction of a second.
  */
 export const UNITS_PER_FILE = 200_000
+
+/**
+ * The work of turning one repeat into the days it covers, on top of finding
+ * it: next to nothing for a whole day or a floating time, around a dozen
+ * units' worth of time zone math for a time on a named zone's clock.
+ */
+export const REPEAT_UNITS = { plain: 1, zoned: 12 } as const
 
 /** What is left of the work a rule, or a file's rules, may still do. */
 export interface WorkBudget {
@@ -37,8 +46,8 @@ export function workBudget(units = UNITS_PER_FILE): WorkBudget {
 }
 
 /** The work of looking at one period of the rule: a yearly one looks at each of its months. */
-function costOfPeriod(rule: Rule): number {
-  return rule.frequency === 'YEARLY' ? Math.max(1, rule.byMonth.length) : 1
+function costOfPeriod(anchor: Anchor, rule: Rule): number {
+  return rule.frequency === 'YEARLY' ? monthsOfYear(anchor, rule).length : 1
 }
 
 /**
@@ -69,8 +78,7 @@ const DAYS_PER_PERIOD: Record<Frequency, (anchor: Anchor, rule: Rule) => number 
     // Without BYMONTH or BYMONTHDAY a yearly rule keeps its day, Feb 29 on the 28th.
     if (!rule.byMonth.length && !rule.byMonthDay.length) return 1
     const perMonth = sameDaysEachMonth(anchor, rule)
-    // Without BYMONTH, only the first day's month.
-    return perMonth === null ? null : (new Set(rule.byMonth).size || 1) * perMonth
+    return perMonth === null ? null : monthsOfYear(anchor, rule).length * perMonth
   },
 }
 
@@ -81,10 +89,11 @@ function daysIn(anchor: Anchor, rule: Rule, period: number): Day[] {
   return picked.filter((day) => day >= anchor.day)
 }
 
-/** Where a walk starts: the period, and how many repeats come before it. */
+/** Where a walk starts: the period, how many repeats come before it, and the work of finding out. */
 interface Start {
   period: number
   seen: number
+  units: number
 }
 
 /**
@@ -93,18 +102,23 @@ interface Start {
  * the same number of days, counted without walking; otherwise the walk
  * starts at the first day so the count comes out right.
  */
-function startOf(anchor: Anchor, rule: Rule, from: IsoDate, budget: WorkBudget): Start {
+function startOf(anchor: Anchor, rule: Rule, from: IsoDate): Start {
   // A period before the one holding `from`, so none of the days skipped is in the window.
   const ahead = Math.floor(periodsUntil(anchor, from, rule.frequency) / rule.interval) - 1
-  if (ahead <= 0) return { period: 0, seen: 0 }
-  if (rule.count === null) return { period: ahead * rule.interval, seen: 0 }
+  const fromFirst = { period: 0, seen: 0, units: 0 }
+  if (ahead <= 0) return fromFirst
+  if (rule.count === null) return { period: ahead * rule.interval, seen: 0, units: 0 }
   const perPeriod = DAYS_PER_PERIOD[rule.frequency](anchor, rule)
-  if (perPeriod === null) return { period: 0, seen: 0 }
+  if (perPeriod === null) return fromFirst
   // The first period may pick fewer (days before the first day do not count).
   const firstDays = daysIn(anchor, rule, 0).length
-  budget.unitsLeft -= costOfPeriod(rule) + firstDays
   const seen = firstDays + perPeriod * (ahead - 1)
-  return { period: ahead * rule.interval, seen }
+  return { period: ahead * rule.interval, seen, units: costOfPeriod(anchor, rule) + firstDays }
+}
+
+/** The last day a rule may pick: the bounds' end, or UNTIL when sooner. */
+function lastDayOf(bounds: Bounds): IsoDate {
+  return bounds.until && bounds.until < bounds.to ? bounds.until : bounds.to
 }
 
 /**
@@ -112,24 +126,34 @@ function startOf(anchor: Anchor, rule: Rule, from: IsoDate, budget: WorkBudget):
  * day always counts as the first repeat, as the format says. The walk ends
  * at the first period starting after the bounds, so a rule that never picks
  * a day (BYMONTHDAY=30 in February) costs only the window's periods. Each
- * period walked, and each day it picks, is taken from `budget`; when it runs
- * out the rule stops where it is and the budget says so.
+ * period walked, each day it picks and each repeat it gives (at
+ * `unitsPerRepeat`) is taken from `budget`; when it runs out the rule stops
+ * where it is and the budget says so.
  */
 export function expandRule(
   first: IsoDate,
   rule: Rule,
   bounds: Bounds,
   budget: WorkBudget = workBudget(),
+  unitsPerRepeat = 0,
 ): IsoDate[] {
   const anchor = anchorOf(first)
   const from = toDayNumber(bounds.from)
-  const stop = toDayNumber(bounds.until && bounds.until < bounds.to ? bounds.until : bounds.to)
-  let { period, seen } = startOf(anchor, rule, bounds.from, budget)
+  const stop = toDayNumber(lastDayOf(bounds))
+  const periodCost = costOfPeriod(anchor, rule)
+  const start = startOf(anchor, rule, bounds.from)
+  let { period, seen } = start
   const starts: IsoDate[] = []
+  if (budget.unitsLeft < start.units) {
+    budget.ranOut = true
+    return starts
+  }
+  budget.unitsLeft -= start.units
   if (rule.count !== null && seen >= rule.count) return starts
   for (; periodStart(anchor, rule, period) <= stop; period += rule.interval) {
     const days = daysIn(anchor, rule, period)
-    const cost = costOfPeriod(rule) + days.length
+    const repeats = days.filter((day) => day >= from && day <= stop).length
+    const cost = periodCost + days.length + repeats * unitsPerRepeat
     if (budget.unitsLeft < cost) {
       budget.ranOut = true
       return starts
@@ -143,4 +167,45 @@ export function expandRule(
     }
   }
   return starts
+}
+
+/** The most days one month of a monthly or yearly rule can pick. */
+function mostDaysInMonth(rule: Rule): number {
+  // BYDAY only narrows BYMONTHDAY's days; on its own, "MO" is up to five days and "2MO" one.
+  if (rule.byMonthDay.length) return Math.min(31, rule.byMonthDay.length)
+  if (!rule.byDay.length) return 1
+  return Math.min(
+    31,
+    rule.byDay.reduce((sum, day) => sum + (day.nth === null ? 5 : 1), 0),
+  )
+}
+
+/** The most days any one period of a rule can pick. */
+const MOST_DAYS_PER_PERIOD: Record<Frequency, (anchor: Anchor, rule: Rule) => number> = {
+  DAILY: () => 1,
+  WEEKLY: (_, rule) => Math.max(1, new Set(rule.byDay.map((day) => day.weekday)).size),
+  MONTHLY: (_, rule) => mostDaysInMonth(rule),
+  YEARLY: (anchor, rule) =>
+    rule.byMonth.length || rule.byMonthDay.length
+      ? monthsOfYear(anchor, rule).length * mostDaysInMonth(rule)
+      : 1,
+}
+
+/**
+ * The most work expandRule could do for a rule: every period from where its
+ * walk starts to the bounds' end, each picking as many days as a period of
+ * it can, plus the first day. Never less than the work it does, and worked
+ * out in a moment, so a file's rules can be expanded cheapest first.
+ */
+export function mostUnits(first: IsoDate, rule: Rule, bounds: Bounds, unitsPerRepeat = 0): number {
+  const anchor = anchorOf(first)
+  const start = startOf(anchor, rule, bounds.from)
+  // The last period starting by the bounds' end: periodsUntil counts whole
+  // periods from the first day's, and a week may start a day or more earlier.
+  const lastPeriod = periodsUntil(anchor, lastDayOf(bounds), rule.frequency) + 1
+  const walked = Math.max(0, Math.floor((lastPeriod - start.period) / rule.interval) + 1)
+  const perDay = 1 + unitsPerRepeat
+  const perPeriod =
+    costOfPeriod(anchor, rule) + MOST_DAYS_PER_PERIOD[rule.frequency](anchor, rule) * perDay
+  return start.units + walked * perPeriod + perDay
 }

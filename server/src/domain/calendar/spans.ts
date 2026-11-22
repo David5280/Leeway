@@ -3,12 +3,20 @@
 // dinner" is one birthday. Those pieces are merged into one span, so each
 // occasion is costed and listed once. Two occasions that only share a kind
 // and a day ("Alice's birthday" and "Bob's birthday") stay two, since merging
-// them would set aside for one. Pure.
+// them would set aside for one, but a piece naming nothing ("Birthday
+// dinner") always joins one of them rather than make a third. Pure.
 
-import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
+import { addDays, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
 import { daysOf, type EventKind } from './kinds.js'
-import { holidayNames, isTravel, occasionWords, sameOccasion, sharesWord } from './occasions.js'
-import { tripFit, type Fit, type TripSoFar } from './tripPieces.js'
+import {
+  holidayNames,
+  occasionWords,
+  sameOccasion,
+  sharesWord,
+  tripRoleOf,
+  type TripRole,
+} from './occasions.js'
+import { followsTrip, tripFit, type Fit, type TripSoFar } from './tripPieces.js'
 
 /** An event already sorted into a kind. */
 export interface KindedEvent {
@@ -45,6 +53,8 @@ interface Piece {
   event: KindedEvent
   /** Whose, which or where: a holiday's own name, for a holiday. */
   words: Set<string>
+  /** What part of a trip it is; 'own' for every other kind. */
+  role: TripRole
   /** A trip's travel (a flight, a hotel) rather than the trip itself. */
   travel: boolean
 }
@@ -56,11 +66,14 @@ interface Building extends TripSoFar {
   namedDays: number
   /** True while the span is named for its travel, which any trip piece of its own outranks. */
   namedForTravel: boolean
+  /** True while its anchor came from travel, which a trip piece of its own replaces. */
+  anchorIsTravel: boolean
 }
 
 function pieceOf(event: KindedEvent): Piece {
   const words = event.kind === 'holiday' ? holidayNames(event.title) : occasionWords(event.title)
-  return { event, words, travel: event.kind === 'trip' && isTravel(event.title) }
+  const role = event.kind === 'trip' ? tripRoleOf(event.title) : 'own'
+  return { event, words, role, travel: role !== 'own' }
 }
 
 /** The last day a piece may start on and still join the span. */
@@ -83,12 +96,19 @@ function fitOf(building: Building, piece: Piece): Fit {
 
 /**
  * The span a piece joins, if any: the one it names, else the first it fits.
- * A piece naming nothing ("Concert", "Flight home") joins only when one span
- * alone could take it, since picking between two would be a guess.
+ * A piece naming nothing ("Birthday dinner", "Flight home") belongs to one of
+ * the spans it fits, never to an occasion of its own, which would set aside
+ * twice: a way home joins the trip whose days it follows, anything else the
+ * first span it fits.
  */
 function homeOf(open: Building[], piece: Piece): Building | undefined {
   const fits = open.filter((building) => fitOf(building, piece) !== 'none')
-  if (!piece.words.size) return fits.length === 1 ? fits[0] : undefined
+  if (!piece.words.size) {
+    const tripHome = fits.find(
+      (building) => building.span.kind === 'trip' && followsTrip(building, piece),
+    )
+    return tripHome ?? fits[0]
+  }
   return fits.find((building) => fitOf(building, piece) === 'named') ?? fits[0]
 }
 
@@ -99,6 +119,8 @@ function startSpan(piece: Piece): Building {
     anchor: piece.words,
     anchorIsTravel: piece.travel,
     ownEnd: piece.travel ? null : event.endsOn,
+    stayEnd: piece.role === 'transport' ? null : event.endsOn,
+    stayFrom: piece.role === 'lodging' ? event.startsOn : null,
     namedDays: daysOf(event),
     namedForTravel: piece.travel,
   }
@@ -106,9 +128,13 @@ function startSpan(piece: Piece): Building {
 
 function addPiece(building: Building, piece: Piece): void {
   const { span } = building
-  const { event, words, travel } = piece
+  const { event, words, travel, role } = piece
   span.endsOn = maxDate(span.endsOn, event.endsOn)
-  if (!travel) building.ownEnd = maxDate(building.ownEnd ?? event.endsOn, event.endsOn)
+  if (role === 'own') building.ownEnd = maxDate(building.ownEnd ?? event.endsOn, event.endsOn)
+  if (role !== 'transport')
+    building.stayEnd = maxDate(building.stayEnd ?? event.endsOn, event.endsOn)
+  if (role === 'lodging')
+    building.stayFrom = minDate(building.stayFrom ?? event.startsOn, event.startsOn)
   // The first piece naming the occasion says what it is about; a trip's own
   // piece says it better than its travel ("Lisbon and Porto trip" over "Flight to Lisbon").
   if (words.size && (!building.anchor.size || (building.anchorIsTravel && !travel))) {
@@ -125,15 +151,17 @@ function addPiece(building: Building, piece: Piece): void {
 
 /**
  * The order pieces are placed in: soonest first, then on one day a trip's
- * own pieces before its travel and named pieces before ones naming nothing,
- * so each of the day's occasions is open before what might belong to either
- * arrives. The sort is stable, so ties keep the calendar's own order.
+ * own pieces before its travel, named pieces before ones naming nothing and
+ * longer before shorter, so each of the day's occasions is open before what
+ * might belong to it arrives ("Italy vacation" before the "Florence day trip"
+ * within it). The sort is stable, so ties keep the calendar's own order.
  */
 function byPlacing(a: Piece, b: Piece): number {
   return (
     a.event.startsOn.localeCompare(b.event.startsOn) ||
     Number(a.travel) - Number(b.travel) ||
-    Number(!a.words.size) - Number(!b.words.size)
+    Number(!a.words.size) - Number(!b.words.size) ||
+    daysOf(b.event) - daysOf(a.event)
   )
 }
 

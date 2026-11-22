@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { zonedInstant } from '../src/lib/zonedTime.js'
+import { wallClockMs, zonedInstant } from '../src/lib/zonedTime.js'
 
 const at = (date: string, hour: number, zone: string) =>
   zonedInstant(date, hour, zone).toISOString()
@@ -30,5 +30,62 @@ describe('zonedInstant', () => {
     expect(at('2026-03-29', 1, 'Europe/London')).toBe('2026-03-29T01:00:00.000Z')
     // Lord Howe moves only half an hour: 2 AM becomes 2:30 AM.
     expect(at('2026-10-04', 2, 'Australia/Lord_Howe')).toBe('2026-10-03T15:30:00.000Z')
+  })
+})
+
+describe('wallClockMs', () => {
+  /** The wall clock read straight from Intl, to the second, with no remembering. */
+  function fromIntl(instant: number, timeZone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    }).formatToParts(new Date(instant))
+    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+    const { year, month, day, hour, minute, second } = {
+      year: part('year'),
+      month: part('month'),
+      day: part('day'),
+      hour: part('hour'),
+      minute: part('minute'),
+      second: part('second'),
+    }
+    return Date.UTC(year, month - 1, day, hour, minute, second)
+  }
+
+  it.each([
+    'America/Denver',
+    'America/St_Johns',
+    'Europe/London',
+    'Australia/Sydney',
+    'Australia/Lord_Howe',
+    'Pacific/Auckland',
+    'Pacific/Chatham',
+    'Asia/Kolkata',
+    'UTC',
+  ])(
+    'reads the same clock as Intl in %s, hour by hour through two years of clock changes',
+    (zone) => {
+      // Every 50 minutes across 2025 and 2026, so each change of clocks is passed through mid-day.
+      const from = Date.UTC(2025, 0, 1)
+      const to = Date.UTC(2027, 0, 1)
+      const wrong: string[] = []
+      for (let instant = from; instant < to; instant += 50 * 60_000) {
+        if (wallClockMs(instant, zone) !== fromIntl(instant, zone))
+          wrong.push(new Date(instant).toISOString())
+      }
+      expect(wrong).toEqual([])
+    },
+  )
+
+  it('reads the same clock again for an instant read before', () => {
+    const instant = Date.UTC(2026, 2, 8, 9, 30)
+    expect(wallClockMs(instant, 'America/Denver')).toBe(wallClockMs(instant, 'America/Denver'))
+    expect(wallClockMs(instant, 'America/Denver')).toBe(Date.UTC(2026, 2, 8, 3, 30))
   })
 })

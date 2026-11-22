@@ -74,15 +74,27 @@ export function dayOfWeek(date: IsoDate): number {
   return (((toDayNumber(date) + 4) % 7) + 7) % 7
 }
 
+/** One YYYY-MM-DD formatter per zone, made on first use, since building one is slow. */
+const calendars = new Map<string, Intl.DateTimeFormat>()
+
+function calendarOf(timeZone: string): Intl.DateTimeFormat {
+  let format = calendars.get(timeZone)
+  if (!format) {
+    // en-CA formats as YYYY-MM-DD.
+    format = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    calendars.set(timeZone, format)
+  }
+  return format
+}
+
 /** Today's date on the wall calendar of `timeZone`, e.g. "America/Denver". */
 export function todayIn(timeZone: string, now: Date = new Date()): IsoDate {
-  // en-CA formats as YYYY-MM-DD.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now)
+  return calendarOf(timeZone).format(now)
 }
 
 export function isValidTimeZone(timeZone: string): boolean {

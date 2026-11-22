@@ -4,8 +4,8 @@
 
 import { addDays, todayIn, type IsoDate } from '../../lib/dates.js'
 import { fetchCalendar, type Fetcher } from './feed.js'
-import { parseCalendar, type CalendarEvent, type Window } from './ics.js'
-import { kindOf } from './kinds.js'
+import { parseCalendar, type CalendarEvent, type Keep, type Window } from './ics.js'
+import { kindOf, mayHaveKind } from './kinds.js'
 import { workBudget } from './recurrence.js'
 
 /** Events are kept this far back, for what past trips and birthdays cost. */
@@ -32,10 +32,20 @@ function windowFor(today: IsoDate): Window {
 export const INCOMPLETE =
   'Some repeating events had too many repeats to work out, so they were left out.'
 
+/** What Settings says when the calendar held more events likely to cost money than are kept. */
+export const CAPPED =
+  'Your calendar has more events than Leeway keeps, so those furthest from today were left out.'
+
 /** The events read, and what to note for Settings about the read: null when nothing. */
 export interface Read {
   events: CalendarEvent[]
   note: string | null
+}
+
+/** Only the events likely to cost money, most ruled out on a first look. */
+const LIKELY_TO_COST: Keep = {
+  mayKeep: mayHaveKind,
+  keeps: (event) => kindOf(event) !== null,
 }
 
 /**
@@ -45,14 +55,13 @@ export interface Read {
  */
 export async function readEvents(url: URL, deps: CalendarDeps): Promise<Read> {
   const text = await fetchCalendar(url, deps.fetcher)
-  const window = windowFor(todayIn(deps.timeZone, deps.now()))
+  const today = todayIn(deps.timeZone, deps.now())
   const budget = workBudget(deps.unitsPerRead)
-  const events = parseCalendar(
-    text,
-    deps.timeZone,
-    window,
-    (event) => kindOf(event) !== null,
+  const { events, capped } = parseCalendar(text, deps.timeZone, windowFor(today), {
+    keep: LIKELY_TO_COST,
     budget,
-  )
-  return { events, note: budget.ranOut ? INCOMPLETE : null }
+    today,
+  })
+  const notes = [budget.ranOut ? INCOMPLETE : null, capped ? CAPPED : null]
+  return { events, note: notes.filter((note) => note !== null).join(' ') || null }
 }

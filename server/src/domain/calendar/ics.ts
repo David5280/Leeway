@@ -1,34 +1,33 @@
 // Reads an iCalendar (.ics) file into events: what each is called, where, and
 // which days it covers in the owner's time zone. Only what a money forecast
-// needs is read. A repeating event is expanded across the window asked for
-// (recurrence.ts), less the days it skips (EXDATE) and the repeats changed on
-// their own (RECURRENCE-ID), which replace the repeat or, when cancelled,
-// remove it. Working out repeats draws on one budget per file, shared among
-// its rules (repeatShares.ts), so no file can keep the server busy. Pure.
+// needs is read. Each event is first looked at by its words and the most days
+// it could cover, so the many a forecast has no use for (meetings) are left
+// out before any time zone math. A repeating event is expanded across the
+// window asked for (recurrence.ts), less the days it skips (EXDATE) and the
+// repeats changed on their own (RECURRENCE-ID), which replace the repeat or,
+// when cancelled, remove it. Working out repeats draws on one budget per
+// file, shared among its rules (repeatShares.ts), so no file can keep the
+// server busy. Pure.
 
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
+import { componentsOf, first, isCancelled, uidOf, type Component } from './components.js'
+import { skippedDays } from './exceptions.js'
+import { dateIn, momentOf, onDate, timelineMs, type Moment } from './moments.js'
+import { bySoonest, MAX_EVENTS, nearest } from './nearest.js'
 import {
-  componentsOf,
-  first,
-  isCancelled,
-  textOf,
-  uidOf,
-  type Component,
-  type Property,
-} from './components.js'
-import {
-  dateIn,
-  daysCovered,
-  lengthOf,
-  momentOf,
-  onDate,
-  timelineMs,
-  type Moment,
-} from './moments.js'
+  baseOf,
+  measure,
+  occurrence,
+  previewOf,
+  unitsPerRepeat,
+  type Measured,
+} from './occurrences.js'
 import { workBudget, type WorkBudget } from './recurrence.js'
 import { expandAll, type RuleJob } from './repeatShares.js'
 import { parseRule, type Bounds } from './rule.js'
+
+export { MAX_EVENTS } from './nearest.js'
 
 export interface CalendarEvent {
   /** The calendar's own id for the event; a repeat shares it, told apart by its start. */
@@ -47,64 +46,37 @@ export interface Window {
   to: IsoDate
 }
 
-/** Which events to keep, asked of each event once, before its repeats are worked out. */
-export type Keep = (event: CalendarEvent) => boolean
-
-/** The most events kept from one file, so a huge calendar stays small to store. */
-export const MAX_EVENTS = 5000
-
-function momentOfProperty(property: Property | undefined): Moment | null {
-  return property ? momentOf(property.value, property.params.TZID) : null
-}
-
-/** What every repeat of an event shares. */
-interface Base {
-  uid: string
+/** What is known of an event before its days are worked out: enough to leave most out cheaply. */
+export interface Preview {
   title: string
   location: string | null
-  start: Moment
-  lengthMs: number
+  allDay: boolean
+  /** The most days it could cover on the owner's calendar; it may cover fewer. */
+  mostDays: number
 }
 
-function baseOf(component: Component, uid: string): Base | null {
-  const start = momentOfProperty(first(component, 'DTSTART'))
-  if (!start) return null
-  const end = momentOfProperty(first(component, 'DTEND'))
-  return {
-    uid,
-    title: textOf(first(component, 'SUMMARY')?.value) ?? 'Untitled event',
-    location: textOf(first(component, 'LOCATION')?.value),
-    start,
-    lengthMs: lengthOf(start, end, first(component, 'DURATION')?.value),
-  }
+/** Which events to keep, asked of each event once, before its repeats are worked out. */
+export interface Keep {
+  /** A first look, before any time zone math. Never false for an event `keeps` would keep. */
+  mayKeep: (preview: Preview) => boolean
+  /** The last word, on the days the event's first repeat covers. */
+  keeps: (event: CalendarEvent) => boolean
 }
 
-/** The repeat starting on `date` (as written in the event's zone), on the owner's days. */
-function occurrence(base: Base, date: IsoDate, timeZone: string): CalendarEvent {
-  const days = daysCovered(onDate(base.start, date), base.lengthMs, timeZone)
-  return {
-    uid: base.uid,
-    ...days,
-    title: base.title,
-    location: base.location,
-    allDay: base.start.seconds === null,
-  }
+export const KEEP_ALL: Keep = { mayKeep: () => true, keeps: () => true }
+
+export interface ReadOptions {
+  keep?: Keep
+  /** The work allowed for repeats, which says afterwards whether it ran out. */
+  budget?: WorkBudget
+  /** The day the events kept past MAX_EVENTS are nearest to: the window's end when not given. */
+  today?: IsoDate
 }
 
-/** The days, in the event's zone, its repeats are skipped on or replaced from. */
-function skippedDays(master: Component, zone: string | null, overrides: Component[]): Set<IsoDate> {
-  const skipped = new Set<IsoDate>()
-  for (const exdate of master.get('EXDATE') ?? []) {
-    for (const value of exdate.value.split(',')) {
-      const moment = momentOf(value, exdate.params.TZID)
-      if (moment) skipped.add(dateIn(moment, zone))
-    }
-  }
-  for (const override of overrides) {
-    const original = momentOfProperty(first(override, 'RECURRENCE-ID'))
-    if (original) skipped.add(dateIn(original, zone))
-  }
-  return skipped
+/** A calendar read: its events, and whether MAX_EVENTS left some out. */
+export interface ParsedCalendar {
+  events: CalendarEvent[]
+  capped: boolean
 }
 
 /**
@@ -112,19 +84,19 @@ function skippedDays(master: Component, zone: string | null, overrides: Componen
  * time is an instant, so a repeat later that day is past it; a whole-day
  * event, or a whole-day UNTIL, is compared by day, as expandRule already did.
  */
-function beforeUntil(base: Base, until: Moment | null, date: IsoDate): boolean {
-  if (!until || until.seconds === null || base.start.seconds === null) return true
-  return timelineMs(onDate(base.start, date)) <= timelineMs(until)
+function beforeUntil(event: Measured, until: Moment | null, date: IsoDate): boolean {
+  if (!until || until.seconds === null || event.start.seconds === null) return true
+  return timelineMs(onDate(event.start, date)) <= timelineMs(until)
 }
 
 /** The days a rule is asked for: near the window, and none after UNTIL. */
-function boundsOf(base: Base, until: Moment | null, window: Window): Bounds {
+function boundsOf(event: Measured, until: Moment | null, window: Window): Bounds {
   // A day's slack either side, as the event's zone and the owner's may differ by one.
-  const spanDays = Math.ceil(base.lengthMs / DAY_MS) + 1
+  const spanDays = Math.ceil(event.lengthMs / DAY_MS) + 1
   return {
     from: addDays(window.from, -spanDays),
     to: addDays(window.to, 1),
-    until: until ? dateIn(until, base.start.zone) : null,
+    until: until ? dateIn(until, event.start.zone) : null,
   }
 }
 
@@ -132,6 +104,7 @@ interface Reading {
   timeZone: string
   window: Window
   keep: Keep
+  budget: WorkBudget
 }
 
 /** An event with its id, which every event kept has. */
@@ -142,78 +115,90 @@ interface Identified {
 
 /** An event kept, waiting for its repeats to be worked out: null `job` when it does not repeat. */
 interface Planned {
-  base: Base
+  event: Measured
   skipped: Set<IsoDate>
   until: Moment | null
   job: RuleJob | null
 }
 
+/** An event read and kept (its first repeat too), or null when it is left out. */
+function keptEvent({ uid, component }: Identified, read: Reading): Measured | null {
+  const base = baseOf(component, uid)
+  if (!base || isCancelled(component) || !read.keep.mayKeep(previewOf(base))) return null
+  const event = measure(base)
+  return read.keep.keeps(occurrence(event, base.start.date, read.timeZone)) ? event : null
+}
+
 /** What an event needs for its repeats, or null when it is left out (cancelled, not kept). */
-function planOf(
-  { uid, component: master }: Identified,
-  overrides: Component[],
-  read: Reading,
-): Planned | null {
-  const base = baseOf(master, uid)
-  if (!base || isCancelled(master)) return null
-  if (!read.keep(occurrence(base, base.start.date, read.timeZone))) return null
-  const rule = parseRule(first(master, 'RRULE')?.value)
+function planOf(master: Identified, overrides: Component[], read: Reading): Planned | null {
+  const event = keptEvent(master, read)
+  if (!event) return null
+  const rule = parseRule(first(master.component, 'RRULE')?.value)
   const until = momentOf(rule?.until ?? undefined)
-  const job = rule && { first: base.start.date, rule, bounds: boundsOf(base, until, read.window) }
-  return { base, skipped: skippedDays(master, base.start.zone, overrides), until, job }
+  const bounds = boundsOf(event, until, read.window)
+  const skipped = skippedDays(master.component, event.start.zone, overrides, bounds, read.budget)
+  if (!skipped) return null
+  const job = rule && {
+    first: event.start.date,
+    rule,
+    bounds,
+    unitsPerRepeat: unitsPerRepeat(event),
+  }
+  return { event, skipped, until, job }
 }
 
 /** An event's repeats on these days (in its zone), less those skipped, changed or past UNTIL. */
 function eventsOf(plan: Planned, starts: IsoDate[], timeZone: string): CalendarEvent[] {
   return starts
-    .filter((date) => !plan.skipped.has(date) && beforeUntil(plan.base, plan.until, date))
-    .map((date) => occurrence(plan.base, date, timeZone))
+    .filter((date) => !plan.skipped.has(date) && beforeUntil(plan.event, plan.until, date))
+    .map((date) => occurrence(plan.event, date, timeZone))
 }
 
 /** One repeat changed on its own (it has a RECURRENCE-ID): kept as written, unless cancelled. */
-function changedRepeat({ uid, component: override }: Identified, read: Reading): CalendarEvent[] {
-  const base = baseOf(override, uid)
-  if (!base || isCancelled(override)) return []
-  const event = occurrence(base, base.start.date, read.timeZone)
-  return read.keep(event) ? [event] : []
+function changedRepeat(repeat: Identified, read: Reading): CalendarEvent[] {
+  const event = keptEvent(repeat, read)
+  return event ? [occurrence(event, event.start.date, read.timeZone)] : []
 }
 
-/** The latest MAX_EVENTS: the far past goes first, since the forecast looks ahead. */
-function latest(events: Iterable<CalendarEvent>): CalendarEvent[] {
-  return [...events]
-    .sort((a, b) => a.startsOn.localeCompare(b.startsOn) || a.uid.localeCompare(b.uid))
-    .slice(-MAX_EVENTS)
-}
-
-/**
- * The events in an .ics file that touch the window and that `keep` keeps,
- * soonest first. Past MAX_EVENTS, the oldest are dropped. A repeat of the
- * same event on the same day is kept once. Repeats are worked out within
- * `budget`, shared among the repeating events; one that needs more than its
- * share is left out, and the budget says so, for the caller to tell the owner.
- */
-export function parseCalendar(
-  text: string,
-  timeZone: string,
-  window: Window,
-  keep: Keep = () => true,
-  budget: WorkBudget = workBudget(),
-): CalendarEvent[] {
+/** The file's events, split into the events themselves and their repeats changed on their own. */
+function sortedOut(text: string) {
   const masters: Identified[] = []
-  const changed: Identified[] = []
+  const changedOf = new Map<string, Component[]>()
   // Events called off as a whole: a repeat of one changed on its own is called off too.
   const cancelled = new Set<string>()
   for (const component of componentsOf(text)) {
     const uid = uidOf(component)
     if (!uid) continue
-    if (component.has('RECURRENCE-ID')) changed.push({ uid, component })
-    else {
+    if (component.has('RECURRENCE-ID')) {
+      const changed = changedOf.get(uid)
+      if (changed) changed.push(component)
+      else changedOf.set(uid, [component])
+    } else {
       masters.push({ uid, component })
       if (isCancelled(component)) cancelled.add(uid)
     }
   }
-  const read: Reading = { timeZone, window, keep }
+  return { masters, changedOf, cancelled }
+}
+
+/**
+ * The events in an .ics file that touch the window and that `keep` keeps,
+ * soonest first. Past MAX_EVENTS, those furthest from `today` are dropped
+ * and `capped` says so. A repeat of the same event on the same day is kept
+ * once. Repeats are worked out within `budget`, shared among the repeating
+ * events; one that needs more than the budget can give is left out, and the
+ * budget says so, for the caller to tell the owner.
+ */
+export function parseCalendar(
+  text: string,
+  timeZone: string,
+  window: Window,
+  { keep = KEEP_ALL, budget = workBudget(), today = window.to }: ReadOptions = {},
+): ParsedCalendar {
+  const { masters, changedOf, cancelled } = sortedOut(text)
+  const read: Reading = { timeZone, window, keep, budget }
   let found = new Map<string, CalendarEvent>()
+  let capped = false
   const add = (events: CalendarEvent[]) => {
     for (const event of events) {
       if (event.endsOn < window.from || event.startsOn > window.to) continue
@@ -221,17 +206,14 @@ export function parseCalendar(
     }
     // Trimmed as it grows, so a file of many repeating events stays small in memory.
     if (found.size > 2 * MAX_EVENTS) {
-      found = new Map(latest(found.values()).map((e) => [`${e.uid} ${e.startsOn}`, e]))
+      found = new Map(nearest(found.values(), today).map((e) => [`${e.uid} ${e.startsOn}`, e]))
+      capped = true
     }
-  }
-  const changedOf = new Map<string, Component[]>()
-  for (const { uid, component } of changed) {
-    changedOf.set(uid, [...(changedOf.get(uid) ?? []), component])
   }
   const plans = masters.flatMap(
     (master) => planOf(master, changedOf.get(master.uid) ?? [], read) ?? [],
   )
-  // Every rule's repeats at once, so the file's work is shared fairly among them.
+  // Every rule's repeats at once, so the file's work is shared among them.
   const repeats = expandAll(
     plans.flatMap((plan) => plan.job ?? []),
     budget,
@@ -239,11 +221,13 @@ export function parseCalendar(
   let next = 0
   for (const plan of plans) {
     // An event that does not repeat starts once, on its first day; a rule left out, never.
-    const starts = plan.job ? repeats[next++] : [plan.base.start.date]
+    const starts = plan.job ? repeats[next++] : [plan.event.start.date]
     if (starts) add(eventsOf(plan, starts, timeZone))
   }
-  for (const repeat of changed) {
-    if (!cancelled.has(repeat.uid)) add(changedRepeat(repeat, read))
+  for (const [uid, changed] of changedOf) {
+    if (cancelled.has(uid)) continue
+    for (const repeat of changed) add(changedRepeat({ uid, component: repeat }, read))
   }
-  return latest(found.values())
+  if (found.size <= MAX_EVENTS) return { events: [...found.values()].sort(bySoonest), capped }
+  return { events: nearest(found.values(), today), capped: true }
 }
