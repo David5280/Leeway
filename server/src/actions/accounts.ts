@@ -12,7 +12,7 @@ import {
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../domain/accountAlerts.js'
 import { getAccountsView } from '../domain/accountView.js'
 import { listAlerts } from '../domain/alerts.js'
-import { BILL_CHANGE_THRESHOLD } from '../domain/billChanges.js'
+import { BILL_CHANGE_THRESHOLD } from '../domain/billAmountChange.js'
 import { DUPLICATE_DAYS } from '../domain/leaks/duplicates.js'
 import { PRICE_RISE } from '../domain/leaks/priceRises.js'
 import { updateAccountWithinPensionLimit } from '../domain/retirement/pensionStore.js'

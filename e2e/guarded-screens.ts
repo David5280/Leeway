@@ -10,7 +10,7 @@ import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
-import { importPaystub, mockReader } from './paystub'
+import { PAYSTUB_SCREENS } from './paystub-screens'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
 import { SETTINGS_GROUPS } from './settings-groups'
@@ -270,25 +270,17 @@ export const SCREENS: Screen[] = [
   at('planSection', '/plan/retirement'),
   at('planSection', '/plan/retirement', {
     name: '/plan/retirement adding a pension',
-    then: open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' })),
+    then: async (page) => {
+      await open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' }))(page)
+      // Unfold the plan's figures, so they are checked too.
+      await page.getByText('More details (optional)').click()
+    },
   }),
   at('planSection', '/plan/retirement', {
     name: "/plan/retirement changing a pension's figures",
     then: open('Edit figures', (page) => page.getByRole('form', { name: 'Pension figures' })),
   }),
-  at('planSection', '/plan/retirement', {
-    name: '/plan/retirement reviewing a paystub',
-    // No model reads it in the tests: the reader is stood in for (paystub.ts).
-    before: async (page) => {
-      await mockReader(page)
-    },
-    then: async (page) => {
-      await importPaystub(page)
-      // Open the folds, so the figures not found are checked too.
-      const review = page.getByRole('form', { name: 'Review the paystub' })
-      for (const fold of await review.locator('details summary').all()) await fold.click()
-    },
-  }),
+  ...PAYSTUB_SCREENS,
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
   at('planSection', '/plan/net-worth', {

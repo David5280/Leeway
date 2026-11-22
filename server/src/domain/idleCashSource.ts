@@ -54,6 +54,8 @@ export function cardsOwed(accounts: Account[]): number {
  * flow leaves payday's bills out, which is why they are counted here.
  */
 export function billsByPayday(bills: Bill[], payday: IsoDate): number {
+  // Every bill is held back from checking, even one a card pays whose balance
+  // is also kept back (cardsOwed): deliberate, as counting it twice errs safe.
   return bills.reduce(
     (sum, bill) => sum + dueBefore(bill, addDays(payday, 1)).length * bill.amountCents,
     0,

@@ -528,16 +528,25 @@ describe('goals behind their date', () => {
     await call('create_goal', { name: 'New', targetCents: 50000, targetDate: '2027-03-31' })
 
     const goalItems = (await call('get_checkin')).attention.filter((a) => a.topic === 'goal')
-    // Oldest goal first. Bike's $30 in a month is $1 a day; its share counts from the month's start.
+    // In the owner's order, which is the order they were added (goalRanking.ts). Bike's $30
+    // in a month is $1 a day; its share counts from the month's start.
     expect(goalItems.map((a) => [a.priority, a.message])).toEqual([
-      [
-        'fyi',
-        'Nothing was put toward Trip lately, and it is due 2027-03-31. Setting aside $100 each budget period would make it.',
-      ],
       [
         'fyi',
         'At its recent pace Bike would be reached 2029-07-14, after its date of 2026-12-31. Setting aside $500 each budget period would make it.',
       ],
+      [
+        'fyi',
+        'Nothing was put toward Trip lately, and it is due 2027-03-31. Setting aside $100 each budget period would make it.',
+      ],
+    ])
+
+    // Once the owner ranks Trip first, it is said first.
+    await call('reorder_goals', { ids: [stalled.id] })
+    const ranked = (await call('get_checkin')).attention.filter((a) => a.topic === 'goal')
+    expect(ranked.map((a) => a.message.split(' ').slice(0, 5).join(' '))).toEqual([
+      'Nothing was put toward Trip',
+      'At its recent pace Bike',
     ])
   })
 })

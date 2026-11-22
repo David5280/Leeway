@@ -4,12 +4,13 @@
 // keeps it; only the figures the owner saves are kept.
 
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
-import { paystubs } from '../../../../api/client'
-import { useActionMutation } from '../../../../api/hooks'
+import { useRef, useState } from 'react'
+import { paystubs, type Input } from '../../../../api/client'
+import { useAction, useActionMutation } from '../../../../api/hooks'
 import { ErrorNote, Loading } from '../../../../components/ui'
+import { pensionCandidates } from '../fields'
 import { PaystubReview } from './PaystubReview'
-import { ACCEPT, fileProblem, type PensionChoice } from './review'
+import { ACCEPT, fileProblem, readsPension, type PensionChoice } from './review'
 
 /** What the owner sees before choosing a file: who reads it, what is sent, and what is kept. */
 function ChooseFile({
@@ -82,27 +83,102 @@ function ChooseFile({
   )
 }
 
+/**
+ * Said plainly when a paystub read to add a pension shows no pension
+ * contribution, since an empty pension is never added: typing it in comes
+ * first, when offered, then a look at the figures anyway (the review still
+ * refuses a pension with no contribution), or another paystub.
+ */
+function NoPensionFound({
+  readerName,
+  onManual,
+  onRetry,
+  onReview,
+  onCancel,
+}: {
+  readerName: string
+  onManual?: () => void
+  onRetry: () => void
+  /** Opens the review anyway, to check a figure Claude may have missed. */
+  onReview: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="stack paystub">
+      <p className="notice" role="status">
+        {readerName} found no pension contribution on this paystub, so there is no pension to add
+        from it.
+      </p>
+      <div className="row wrap">
+        {onManual && (
+          <button type="button" className="btn primary" onClick={onManual}>
+            Enter it myself
+          </button>
+        )}
+        <button type="button" className="btn" onClick={onReview}>
+          Check the figures anyway
+        </button>
+        <button type="button" className="btn" onClick={onRetry}>
+          Try another paystub
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function PaystubImport({
   readerName,
-  pensions,
+  pensions = [],
   pensionAccountId = null,
+  adding = false,
+  onManual,
   onSaved,
   onCancel,
 }: {
   readerName: string
-  pensions: PensionChoice[]
+  /** The kept pensions the figures can update; none when adding one. */
+  pensions?: PensionChoice[]
   /** The pension to update, chosen to start with, as when opened from its form. */
   pensionAccountId?: string | null
+  /** Adding a new pension from the paystub, named on the review, instead of updating one. */
+  adding?: boolean
+  /** Goes on to typing the pension in, when the paystub shows none to add. */
+  onManual?: () => void
   onSaved: (payDate: string | null) => void
   onCancel: () => void
 }) {
   const read = useMutation({ mutationFn: paystubs.read })
   const save = useActionMutation('save_paystub')
+  // A new pension may belong on an account Leeway already has, such as one linked from the bank.
+  const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: adding })
+  // Set the moment a save starts, before React shows it as busy, so a double click saves once.
+  const saving = useRef(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // Whether the owner chose to review a paystub that seemed to show no pension.
+  const [reviewAnyway, setReviewAnyway] = useState(false)
+
+  // Until the accounts are known, a new pension could not be offered the one it belongs on.
+  const accountsPending = adding && accounts.isPending
+  const accountsError = adding ? accounts.error : null
+
+  function saveOnce(input: Input<'save_paystub'>) {
+    if (saving.current) return
+    saving.current = true
+    save.mutate(input, {
+      onSuccess: ({ paystub }) => onSaved(paystub.payDate),
+      onSettled: () => {
+        saving.current = false
+      },
+    })
+  }
 
   function choose(file: File) {
     const found = fileProblem(file)
     setProblem(found)
+    setReviewAnyway(false)
     read.reset()
     if (found === null) read.mutate(file)
   }
@@ -119,16 +195,27 @@ export function PaystubImport({
       />
     )
   }
+  if (adding && !reviewAnyway && !readsPension(read.data.extraction)) {
+    return (
+      <NoPensionFound
+        readerName={readerName}
+        onManual={onManual}
+        onRetry={() => read.reset()}
+        onReview={() => setReviewAnyway(true)}
+        onCancel={onCancel}
+      />
+    )
+  }
   return (
     <PaystubReview
       read={read.data}
       pensions={pensions}
       pensionAccountId={pensionAccountId}
-      busy={save.isPending}
-      error={save.error}
-      onSave={(input) =>
-        save.mutate(input, { onSuccess: ({ paystub }) => onSaved(paystub.payDate) })
-      }
+      adding={adding}
+      candidates={pensionCandidates(accounts.data ?? [])}
+      busy={save.isPending || accountsPending || accountsError !== null}
+      error={save.error ?? accountsError}
+      onSave={saveOnce}
       onCancel={onCancel}
     />
   )
