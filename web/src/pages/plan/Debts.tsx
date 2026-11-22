@@ -1,9 +1,10 @@
-// Debt payoff: the terms of each card and loan, and how fast each strategy clears them.
+// Debt payoff: what the cards cost in interest a month, the terms of each
+// card and loan, and how fast each strategy clears them.
 
 import { Card } from '../../components/design/Card'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
-import type { DebtPlans } from '../../api/client'
+import type { Account, DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
 import { isCounted, isOwed } from '../../lib/accounts'
@@ -13,6 +14,7 @@ import { useDebounced } from '../../lib/useDebounced'
 import { DebtTerms } from './DebtTerms'
 import { durationText } from './text'
 import { Money } from '../../components/design/Money'
+import { cardInterestTotal } from '../../../../server/src/domain/cardInterest'
 
 type Strategy = 'avalanche' | 'snowball' | 'minimumsOnly'
 
@@ -89,6 +91,18 @@ function PayoffPlan({ extraCents }: { extraCents: number }) {
   )
 }
 
+/** What the cards cost in interest a month, once at least one has its APR. */
+function CardsCost({ accounts }: { accounts: Account[] }) {
+  const { monthlyInterestCents, missingApr, cards } = cardInterestTotal(accounts)
+  if (cards.length === missingApr) return null
+  return (
+    <p style={{ fontSize: 17 }}>
+      Your cards cost about <Money cents={monthlyInterestCents} className="mid-number" /> a month in
+      interest.
+    </p>
+  )
+}
+
 export function DebtsSection() {
   const [extra, setExtra] = useState('')
   const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
@@ -107,6 +121,7 @@ export function DebtsSection() {
     <>
       <Card static="list" label="Your debts" className="stack-sm">
         <h2>Your debts</h2>
+        <CardsCost accounts={debts} />
         <p className="small muted">
           Banks rarely send interest rates. Find them on each statement and add them here.
         </p>
