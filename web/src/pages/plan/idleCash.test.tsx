@@ -5,7 +5,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkIdleCash } from '../../../../server/src/domain/idleCash'
+import { checkIdleCash } from '../../lib/idleCash'
 import { planServer, renderPlan } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())

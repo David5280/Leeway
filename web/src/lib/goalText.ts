@@ -39,21 +39,23 @@ export function planText(goal: Goal, money: Money, word: string, locale: string)
 /**
  * Whether recent progress makes the date, from the server's projection.
  * Null when there is nothing worth saying (reached, stale, or no date and no pace).
+ * Said as the goal's own pace, so it never reads against the month the goal
+ * order gives it when one amount fills goals one after another.
  */
 export function paceText(goal: Goal, locale: string): ToneText | null {
   if (goal.status === 'reached' || goal.status === 'stale') return null
   const projected = goal.projectedDate && longDate(goal.projectedDate, locale)
   if (goal.onTrack === true) {
-    return { text: `On track: at your recent pace, ready by ${projected}.`, tone: 'good' }
+    return { text: `On track: at its own recent pace, ready by ${projected}.`, tone: 'good' }
   }
   if (goal.onTrack === false) {
     const due = longDate(goal.targetDate!, locale)
     return projected
-      ? { text: `Behind: at your recent pace, ready ${projected}, after ${due}.`, tone: 'warn' }
+      ? { text: `Behind: at its own recent pace, ready ${projected}, after ${due}.`, tone: 'warn' }
       : { text: 'Behind: nothing was put toward it lately.', tone: 'warn' }
   }
   // No date to be on track for: the projection alone still helps.
-  return projected ? { text: `At your recent pace, ready by ${projected}.`, tone: '' } : null
+  return projected ? { text: `At its own recent pace, ready by ${projected}.`, tone: '' } : null
 }
 
 /** "$50 of $150 set aside this month", when the goal has a per-period amount. */

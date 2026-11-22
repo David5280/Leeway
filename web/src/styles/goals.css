@@ -1,4 +1,4 @@
-/* The Goals section's emergency fund (pages/plan/goals/).
+/* The Goals section's emergency fund and goal order (pages/plan/goals/).
    Colors come from the theme's tokens, so all three themes draw them;
    nothing here is red. */
 
@@ -46,4 +46,76 @@
 .essential-group legend {
   padding: 0;
   margin-bottom: var(--space-1);
+}
+
+/* Goals in order --------------------------------------------------------- */
+
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* One goal: its place, then its name over its stretch of the timeline, then
+   the move buttons, kept on one line at every width. */
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.order-row + .order-row {
+  border-top: 1px solid var(--line);
+}
+
+.order-rank {
+  flex: none;
+  width: 1.5em;
+  text-align: center;
+}
+
+/* Takes what is left, and may shrink below its words' width, so a long name
+   wraps instead of pushing the buttons off the card. */
+.order-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.order-words {
+  gap: var(--space-1) var(--space-3);
+}
+
+.order-name {
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+/* The shared timeline: every row's track is the same span of months, and each
+   goal fills the stretch from when the one before it lands to when it lands. */
+.order-track {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.order-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-pill);
+  background: var(--tone-action);
+}
+
+.order-moves {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
 }

@@ -92,6 +92,8 @@ export async function getIdleCash(
     checkingCents: flow.cashCents,
     cashKnown: flow.cashKnown,
     // Payday's own bills included: pay can land after a bill drawn the same day.
+    // Every bill is held back, even one a card pays whose balance is also kept
+    // back (cardsOwed): deliberate, as counting it twice errs safe.
     billsCents: flow.billsDueCents,
     cardsOwedCents: cardsOwed(accounts),
     dailySpendCents: daily,

@@ -7,10 +7,10 @@
 // - the same amount, out of one account and into a different one;
 // - dates at most PAIR_WINDOW_DAYS apart;
 // - both sides saying they are a transfer: Plaid's transfer or card payment
-//   codes, or words like "transfer" in a line with no code. A side that says
-//   nothing either way never pairs, since a line imported from a file or added
-//   by hand has no code, and its silence is as true of a refund, a paycheck or
-//   a friend paying back as of a transfer. A side that says it is something
+//   codes, or words like "transfer" in a line with no code (transferWords.ts).
+//   A side that says nothing either way never pairs, since a line imported
+//   from a file or added by hand has no code, and its silence is as true of a
+//   refund, a paycheck or a friend paying back as of a transfer. A side that says it is something
 //   else (a purchase, a paycheck, a payment to another person through an app
 //   like Zelle) never pairs either.
 // Every account Leeway knows is the owner's, so both sides are always the
@@ -30,7 +30,6 @@ import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { accountMasks } from './accounts.js'
 import type { Category } from './categories.js'
 import { withShownNames } from './ruleText.js'
-import { PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
 import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
 import {
   CARD_PAYMENT_CODE,
@@ -38,6 +37,7 @@ import {
   personToPersonApp,
   type Movement,
 } from './transfers.js'
+import { wordsHint, type TransferHint } from './transferWords.js'
 
 /** How far apart, in days, the two sides of one transfer may post. */
 export const PAIR_WINDOW_DAYS = 5
@@ -48,41 +48,6 @@ export interface PairCandidate extends Movement {
   accountId: string
   date: IsoDate
 }
-
-/** What a transaction says about itself: a transfer, something else, or nothing either way. */
-export type TransferHint = 'transfer' | 'other' | 'none'
-
-/** Words a bank uses for a transfer or a card payment in a line with no category code. */
-const TRANSFER_WORDS = new RegExp(
-  String.raw`\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|${PAYMENT_THANK_YOU}|online pmt|mobile pmt)\b`,
-  'i',
-)
-
-/** Words for money paid out or paid back to the owner: a payout, a refund. */
-const PAID_BACK_WORDS = /\b(payout|refund|reimburs\w*|rebate)\b/i
-
-/**
- * Whether words say pay or money paid back, in a line with no code. Such a
- * line is money coming in from outside, so it never pairs, even beside an
- * equal purchase on another account, and even when it also says "transfer",
- * as in "Payroll transfer ACME" (see wordsHint).
- */
-function saysPaidIn(words: string): boolean {
-  return PAYCHECK_WORDS.test(words) || PAID_BACK_WORDS.test(words)
-}
-
-/**
- * Words for money a bank pays in, which can also be part of an account's
- * name, so transfer words win over them: "Online Transfer to Interest
- * Savings" is a move. Interest and dividends only in their paid forms.
- */
-const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
-
-/** A "to ..." or "from ..." tail, which can name the other side of a move, often an account. */
-const COUNTERPARTY_TAIL = /\b(to|from)\b.*$/i
-
-/** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
-const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
 
 /**
  * Whether a transaction says it is a transfer. Plaid's codes decide when
@@ -99,44 +64,6 @@ export function transferHint(tx: Movement): TransferHint {
     return tx.accountType === 'credit' || tx.accountType === 'loan' ? 'transfer' : 'other'
   }
   return code ? 'other' : wordsHint(tx)
-}
-
-/**
- * The words of a line read for pay: all of it but a "to" or "from" tail after
- * a transfer word, which names the other account ("Transfer from Tax Refund
- * Savings"). A "to" or "from" before any transfer word is part of a name
- * ("Back To Basics Payroll transfer"). The name is read before the merchant,
- * and a tail ends with its field, so one field's tail never hides the other's
- * pay words.
- */
-function wordsReadForPay(fields: string[]): string {
-  const read: string[] = []
-  let afterTransfer = false
-  for (const field of fields) {
-    const transfer = TRANSFER_WORDS.exec(field)
-    // Where in this field a tail may start: anywhere once a transfer word has come.
-    let tailFrom = field.length
-    if (afterTransfer) tailFrom = 0
-    else if (transfer) tailFrom = transfer.index + transfer[0].length
-    read.push(field.slice(0, tailFrom) + field.slice(tailFrom).replace(COUNTERPARTY_TAIL, ''))
-    afterTransfer ||= transfer !== null
-  }
-  return read.join(' ')
-}
-
-/**
- * What a line with no code says by its words. Pay words win over transfer
- * words, except in a tail naming the other account (see wordsReadForPay):
- * "Payroll transfer from ACME" is pay, "Online Transfer to PAYROLL CHK" is a
- * move. With no transfer word, a pay word anywhere still says pay.
- */
-function wordsHint(tx: Movement): TransferHint {
-  const fields = [tx.name, tx.merchantName ?? '']
-  const words = fields.join(' ')
-  if (saysPaidIn(wordsReadForPay(fields))) return 'other'
-  if (TRANSFER_WORDS.test(words)) return 'transfer'
-  const paidIn = saysPaidIn(words) || EARNED_WORDS.test(words)
-  return paidIn || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */

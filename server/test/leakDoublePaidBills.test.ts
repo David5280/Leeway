@@ -2,7 +2,8 @@
 // "Charged twice?" while that shows it, and never later as a bill change.
 
 import { describe, expect, it } from 'vitest'
-import type { BillChange, BillCharge, WatchedBill } from '../src/domain/billChanges.js'
+import type { BillChange, WatchedBill } from '../src/domain/billChanges.js'
+import type { BillCharge } from '../src/domain/billCycles.js'
 import { wasPaidTwice, withoutDoublePaid } from '../src/domain/leaks/doublePaidBills.js'
 import {
   DUPLICATE_DAYS,
@@ -20,6 +21,7 @@ const bill: WatchedBill = {
   cadence: 'month',
   trackedOn: '2026-01-01',
   amountVaries: false,
+  amountSetOn: null,
   charges: [],
 }
 
