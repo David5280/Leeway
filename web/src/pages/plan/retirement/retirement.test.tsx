@@ -2,11 +2,14 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { pension } from '../../../test/profile'
-import { account, failing, settingsHandlers, type Handlers } from '../../../test/fake'
+import { account, failing, settingsHandlers, settingsWith, type Handlers } from '../../../test/fake'
 import { planServer, renderPlan, retirementOf } from '../../../test/planning'
 import type { RetirementView } from './fields'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 /** Colorado PERA with the figures an owner reads off a statement and a paystub. */
 const PERA = pension(
@@ -429,19 +432,57 @@ describe('the birth year', () => {
     expect(server.actions('update_settings')[0]).toEqual({ retirement: { birthYear: 1986 } })
   })
 
-  it('refuses anything but a four-digit year gone by, and sends nothing', async () => {
+  it('refuses anything but four digits, or a year out of range, and sends nothing', async () => {
+    // Pinned to a day in 2026, so the years still to come stay the same.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-17T18:00:00Z'))
     const server = serve(retirementOf())
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
     const ask = within(await card('What year were you born?'))
     const field = ask.getByRole('textbox', { name: 'Year you were born' })
-    for (const typed of ['86', '3000', 'May 4 1986']) {
+    const refusals: [string, string][] = [
+      ['86', 'Enter the year as four digits, like 1986.'],
+      ['May 4 1986', 'Enter the year as four digits, like 1986.'],
+      ['2027', 'Use a birth year of 2026 or earlier, since 2027 is still to come.'],
+      ['1915', 'Use a birth year of 1916 or later.'],
+    ]
+    for (const [typed, message] of refusals) {
       await user.clear(field)
       await user.type(field, typed)
       await user.click(ask.getByRole('button', { name: 'Save' }))
-      expect(ask.getByRole('alert')).toHaveTextContent('Enter the year as four digits, like 1986.')
+      expect(ask.getByRole('alert')).toHaveTextContent(message)
     }
     expect(server.actions('update_settings')).toHaveLength(0)
+  })
+
+  it('is asked again, with the year saved, when that year is still to come', async () => {
+    const future = settingsWith({ retirement: { birthYear: 2090 } })
+    const server = serve(retirementOf({}, { birthYear: 2090 }), settingsHandlers(future))
+    renderPlan('/plan/retirement', future)
+    const user = userEvent.setup()
+    const ask = within(await card('What year were you born?'))
+    expect(ask.getByText(/The year saved, 2090, is still to come\./)).toBeVisible()
+    const field = ask.getByRole('textbox', { name: 'Year you were born' })
+    expect(field).toHaveValue('2090')
+    await user.click(ask.getByRole('button', { name: 'Save' }))
+    expect(ask.getByRole('alert')).toHaveTextContent(/since 2090 is still to come/)
+    await user.clear(field)
+    await user.type(field, '1986')
+    await user.click(ask.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('update_settings')).toEqual([{ retirement: { birthYear: 1986 } }]),
+    )
+  })
+
+  it('says why a save failed, under the year', async () => {
+    serve(retirementOf(), {}, { '/api/actions/update_settings': failing('Database is down', 500) })
+    renderPlan('/plan/retirement')
+    const user = userEvent.setup()
+    const ask = within(await card('What year were you born?'))
+    await user.type(ask.getByRole('textbox', { name: 'Year you were born' }), '1986')
+    await user.click(ask.getByRole('button', { name: 'Save' }))
+    expect(await ask.findByRole('alert')).toHaveTextContent('Database is down')
   })
 
   it('is not asked once it is known', async () => {

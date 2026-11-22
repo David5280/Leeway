@@ -11,7 +11,8 @@ export function PlanningSection() {
       title="Planning"
       hint="Your birth year, only the year. Retirement projections start from your age."
     >
-      <BirthYearForm />
+      {/* Settings shows every save's error at its top, so the form shows none of its own. */}
+      <BirthYearForm showSaveError={false} />
     </Section>
   )
 }

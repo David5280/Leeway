@@ -54,7 +54,7 @@ export async function setUpRetirement(page: Page): Promise<void> {
 
 /** Removes what setUpRetirement added, since later specs share the install. */
 export async function tearDownRetirement(page: Page): Promise<void> {
-  // The birth year is only ever set from a screen, never cleared, so it goes back here.
+  // Both go back in one call to the action, rather than through the two forms.
   await action(page, 'update_settings', {
     retirement: { birthYear: null, targetMonthlyIncomeCents: null },
   })
