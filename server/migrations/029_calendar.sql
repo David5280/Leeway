@@ -3,14 +3,17 @@
 
 -- At most one calendar. Its address is a secret (anyone with it can read the
 -- calendar), so only the encrypted form is kept; host is shown to say which
--- calendar is linked without the address itself.
+-- calendar is linked without the address itself. last_error says why the
+-- last read failed; read_note is a quiet note about the last good read, kept
+-- apart since that read worked (some repeating events were left out).
 CREATE TABLE calendar_feed (
   id boolean PRIMARY KEY DEFAULT true CHECK (id),
   url_encrypted text NOT NULL,
   host text NOT NULL,
   connected_at timestamptz NOT NULL DEFAULT now(),
   fetched_at timestamptz,
-  last_error text
+  last_error text,
+  read_note text
 );
 
 -- The calendar's events from the last read, a few years back and a year ahead.
