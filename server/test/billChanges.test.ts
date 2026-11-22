@@ -117,7 +117,7 @@ describe('billChangeOf', () => {
     })
   })
 
-  it('never alerts for a bill whose amount varies, such as power or water', () => {
+  it('never alerts for a bill whose amount varies, such as power or water, but follows it', () => {
     const power = comcast(
       [
         ['2026-11-16', 14000],
@@ -125,7 +125,8 @@ describe('billChangeOf', () => {
       ],
       { amountVaries: true },
     )
-    expect(billChangeOf(power, TODAY)).toBeNull()
+    // The latest $140 is above the $110 average, so it becomes the usual amount.
+    expect(billChangeOf(power, TODAY)).toMatchObject({ kind: 'settled', amountCents: 14000 })
   })
 
   it('never calls the first charge since tracking a change', () => {

@@ -6,8 +6,10 @@
 // A bill whose amount moves by nature, like power or water, is never news.
 // Its own charges say so: a steady bill's amount sits still between price
 // changes, while a utility's keeps moving from cycle to cycle. So a bill whose
-// earlier cycles moved in most steps is left quiet, however it was added (one
-// tap, the form or an assistant); see amountsVary.
+// earlier cycles moved in most steps raises no alert, however it was added
+// (one tap, the form or an assistant); see amountsVary. Its usual amount
+// still follows its recent cycles (varyingUsualCents), so the cash flow and
+// idle cash hold back what it costs now rather than what it cost when tracked.
 //
 // A change is an account alert of its own kind (bill_change), so it shows,
 // notifies, hides and dismisses as the other alerts do. Dismissing or hiding
@@ -51,6 +53,9 @@ export const CHARGES_READ = 12
 /** Moves needed before a bill's own history can say its amount varies, so three cycles at least. */
 export const VARIES_AFTER_MOVES = 2
 
+/** Recent cycles a varying bill's usual amount is read from (varyingUsualCents). */
+export const VARYING_CYCLES_READ = 3
+
 /** A posted charge that paid a bill. */
 export interface BillCharge {
   accountId: string
@@ -80,7 +85,10 @@ export interface WatchedBill {
 export type BillChange =
   /** The latest cycle is news: well off the usual amount. `charge` is its latest, with the cycle's total. */
   | { kind: 'changed'; bill: WatchedBill; charge: BillCharge }
-  /** Two charges in a row at the new amount: it is the usual one now. */
+  /**
+   * The bill's usual amount is `amountCents` now: a steady bill charged it two
+   * cycles in a row, or a varying bill's recent cycles say it costs that.
+   */
   | { kind: 'settled'; bill: WatchedBill; amountCents: number }
 
 /**
@@ -152,28 +160,86 @@ export function amountsVary(earlier: number[]): boolean {
 }
 
 /**
- * What a bill's latest cycle says about its amount, or null when nothing:
- * the bill's amount varies by nature, the cycle's total is near the usual
- * amount, a cycle was missed between charges or since the latest, or it is
- * the first charge since the bill was tracked, when the usual amount was only
- * an estimate from history.
+ * What a varying bill costs now: the higher of its latest cycle's total and
+ * the average of that and the cycles just before it. The latest follows a
+ * bill climbing into winter at once, while the average keeps one cheap month
+ * from dropping it too far. Either way the cash flow and idle cash hold back
+ * no less than the bill is likely to take.
  */
-export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
-  if (bill.amountVaries) return null
-  const cycle = CYCLE_DAYS[bill.cadence]
-  const [latest, previous, ...older] = cyclesOf(bill.charges, cycle)
-  if (!latest || latest.date <= bill.trackedOn) return null
-  if (!isAmountChange(bill.amountCents, latest.amountCents) || !previous) return null
-  const span = cycle * MISSED_CYCLES
-  if (daysBetween(previous.date, latest.date) > span || daysBetween(latest.date, today) > span) {
-    return null
+export function varyingUsualCents(latestCents: number, beforeCents: number[]): number {
+  const recent = [latestCents, ...beforeCents]
+  const average = Math.round(recent.reduce((sum, cents) => sum + cents, 0) / recent.length)
+  return Math.max(latestCents, average)
+}
+
+/**
+ * The cycles just before `latest` that varyingUsualCents reads, newest first:
+ * up to VARYING_CYCLES_READ with the latest, stopping at a missed cycle, so a
+ * bill paused over summer is read from this season only.
+ */
+function cyclesJustBefore(latest: BillCharge, earlier: BillCharge[], cycle: number): BillCharge[] {
+  const before: BillCharge[] = []
+  let newer = latest
+  for (const older of earlier.slice(0, VARYING_CYCLES_READ - 1)) {
+    if (daysBetween(older.date, newer.date) > cycle * MISSED_CYCLES) break
+    before.push(older)
+    newer = older
   }
-  if (amountsVary([previous, ...older].map((one) => one.amountCents))) return null
+  return before
+}
+
+/** A varying bill never alerts; its usual amount follows its recent cycles instead. */
+function followVaryingBill(
+  bill: WatchedBill,
+  latest: BillCharge,
+  earlier: BillCharge[],
+  cycle: number,
+): BillChange | null {
+  const before = cyclesJustBefore(latest, earlier, cycle).map((one) => one.amountCents)
+  const usualCents = varyingUsualCents(latest.amountCents, before)
+  // Already there: nothing to write, so refreshing again settles nothing.
+  if (usualCents === bill.amountCents) return null
+  return { kind: 'settled', bill, amountCents: usualCents }
+}
+
+/**
+ * A steady bill's latest cycle against its usual amount and the cycle before:
+ * settled when both sit at the new amount, changed when only the latest does.
+ */
+function steadyBillChange(
+  bill: WatchedBill,
+  latest: BillCharge,
+  previous: BillCharge | undefined,
+  cycle: number,
+): BillChange | null {
+  if (!previous || !isAmountChange(bill.amountCents, latest.amountCents)) return null
+  if (daysBetween(previous.date, latest.date) > cycle * MISSED_CYCLES) return null
   if (!isAmountChange(previous.amountCents, latest.amountCents)) {
     return { kind: 'settled', bill, amountCents: latest.amountCents }
   }
+  // The first charge since tracking: the usual amount was only an estimate from history.
   if (previous.date <= bill.trackedOn) return null
   return { kind: 'changed', bill, charge: latest }
+}
+
+/**
+ * What a bill's latest cycle says about its amount, or null when nothing:
+ * no charge since the bill was tracked or within the last cycle and a half,
+ * or, for a steady bill, a total near the usual amount, a missed cycle or no
+ * cycle before it, or a change on the first charge since tracking, when the
+ * usual amount was only an estimate from history. A bill whose amount varies
+ * (flagged when tracked, or by its own history) is never changed, only
+ * settled at what its recent cycles say it costs now.
+ */
+export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
+  const cycle = CYCLE_DAYS[bill.cadence]
+  const [latest, ...earlier] = cyclesOf(bill.charges, cycle)
+  if (!latest || latest.date <= bill.trackedOn) return null
+  if (daysBetween(latest.date, today) > cycle * MISSED_CYCLES) return null
+  // Judged by the cycles before the latest, so the latest's own change cannot hide itself.
+  const varies = bill.amountVaries || amountsVary(earlier.map((one) => one.amountCents))
+  if (varies) return followVaryingBill(bill, latest, earlier, cycle)
+  return steadyBillChange(bill, latest, earlier[0], cycle)
 }
 
 /**

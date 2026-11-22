@@ -1,6 +1,7 @@
 // Reads each bill's last few posted charges to see whether its amount
 // changed (billChanges.ts), and writes the new usual amount once the owner
-// dismisses the alert or the new amount comes twice in a row.
+// dismisses the alert, the new amount comes twice in a row, or a varying
+// bill's recent cycles say it costs something else now.
 
 import type { Db } from '../db/pool.js'
 import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
@@ -139,7 +140,11 @@ async function setUsual(db: Db, billId: string, amountCents: number): Promise<vo
   await db.query('UPDATE bills SET amount_cents = $2 WHERE id = $1', [billId, amountCents])
 }
 
-/** Takes the new amount as usual for bills charged it twice in a row, which clears their alerts. */
+/**
+ * Writes each settled bill's new usual amount: a steady bill charged it twice
+ * in a row, which clears its alert, or a varying bill following its recent
+ * cycles. Returns how many bills it wrote.
+ */
 export async function settleBillChanges(db: Db, timeZone: string, today: IsoDate): Promise<number> {
   const settled = (await listBillChanges(db, timeZone, today)).filter(
     (change) => change.kind === 'settled',
