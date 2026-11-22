@@ -10,6 +10,7 @@ import {
   namesOwnAppAccount,
   personInLine,
   personWords,
+  shownPerson,
   type PeopleContext,
 } from '../src/domain/betweenPeople.js'
 import { knownShops } from '../src/domain/knownShops.js'
@@ -42,12 +43,31 @@ describe('a payment through an app', () => {
     const transfer = { providerCategoryDetailed: ACCOUNT_TRANSFER }
     expect(paid('PAYPAL INST XFER', { ...transfer, merchantName: 'EBAY' })).toBeNull()
     expect(paid('PAYPAL INST XFER', { ...transfer, merchantName: 'Clara' })).toBe('')
-    // With no merchant there is no name to hide, and no transfer code is no transfer.
+    // With PayPal itself as the merchant, or none, what is left of the line says who.
     expect(paid('PAYPAL INST XFER', transfer)).toBeNull()
-    expect(paid('PAYPAL INST XFER', { merchantName: 'Clara' })).toBeNull()
+    expect(paid('PAYPAL INST XFER', { ...transfer, merchantName: 'PayPal' })).toBeNull()
+    expect(paid('PAYPAL INST XFER CORNELIUSFAIRFAX', { ...transfer, merchantName: 'PayPal' })).toBe(
+      '',
+    )
     expect(
       paid('PAYPAL INST XFER', { merchantName: 'eBay', providerCategoryDetailed: FROM_APPS }),
     ).toBe('')
+  })
+
+  it('with no code or as other income, is a person through an app that only pays people', () => {
+    const income = { providerCategoryDetailed: 'INCOME_OTHER_INCOME', amountCents: -5_000 }
+    expect(paid('VENMO PAYMENT JANE FOXHALL', income)).toBe('')
+    expect(paid('CASH APP*JANE FOXHALL')).toBe('')
+    expect(paid('APPLE CASH RECEIVED MONEY', income)).toBe('')
+    expect(paid('APPLE CASH SENT MONEY', { merchantName: 'Ottoline Grimsby' })).toBe('')
+    expect(paid('VENMO', { merchantName: 'Venmo', amountCents: -5_000 })).toBe('')
+    // PayPal pays shops too, so its line must name someone who is no known shop.
+    expect(paid('PAYPAL TRANSFER JANEFOXHALL', income)).toBe('')
+    expect(paid('PAYPAL INST XFER', { merchantName: 'Clara' })).toBe('')
+    expect(paid('PAYPAL INST XFER', { merchantName: 'Spotify' })).toBeNull()
+    // "SENT MONEY" alone is no app that only pays people, and other codes are no proof.
+    expect(paid('SENT MONEY JANE')).toBeNull()
+    expect(paid('VENMO PAYMENT', { providerCategoryDetailed: 'INCOME_DIVIDENDS' })).toBeNull()
   })
 
   it('is a person whom the line names, through any app, Zelle written short too', () => {
@@ -72,7 +92,6 @@ describe('a payment through an app', () => {
   it('through Venmo, Cash App or Zelle, takes any transfer code when no one is named', () => {
     for (const name of ['VENMO PAYMENT', 'CASH APP*PAYMENT', 'ZELLE PAYMENT']) {
       expect(paid(name, { providerCategoryDetailed: ACCOUNT_TRANSFER })).toBe('')
-      expect(paid(name, { providerCategoryDetailed: 'INCOME_OTHER_INCOME' })).toBeNull()
     }
   })
 
@@ -109,6 +128,26 @@ describe('a payment through an app', () => {
 
   it('never counts a zero amount', () => {
     expect(paid('Zelle payment to JANE DOE', { amountCents: 0 })).toBeNull()
+  })
+})
+
+describe('who a line is shown as paying', () => {
+  it("is the person paid, or whoever an app line names, the owner's own card too", () => {
+    const card = { providerCategoryDetailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' }
+    const shown = (name: string, fields: Partial<Movement> = {}) =>
+      shownPerson(movement({ name, ...fields }))
+    expect(shown('VENMO TO VENMO CREDIT CARD', card)).toEqual({
+      app: 'Venmo',
+      direction: 'out',
+      counterparty: 'Venmo Credit Card',
+    })
+    expect(shown('Zelle payment from JANE DOE', { amountCents: -10 })?.counterparty).toBe(
+      'Jane Doe',
+    )
+    // No app, no one named, or no money: no one.
+    expect(shown('ONLINE TRANSFER TO ALLY SAVINGS')).toBeNull()
+    expect(shown('VENMO *SPOTIFY', { providerCategoryDetailed: 'ENTERTAINMENT_MUSIC' })).toBeNull()
+    expect(shown('Zelle to Jane Doe', { amountCents: 0 })).toBeNull()
   })
 })
 

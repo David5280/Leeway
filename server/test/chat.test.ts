@@ -196,7 +196,10 @@ describe('answering a question', () => {
       merchantName: 'Spotify',
       detailed: 'ENTERTAINMENT_MUSIC',
     })
-    await pay('2026-11-17', 'PAYPAL *SPOTIFY', 1_199)
+    await pay('2026-11-17', 'PAYPAL *SPOTIFY', 1_199, {
+      merchantName: 'Spotify',
+      detailed: 'ENTERTAINMENT_MUSIC',
+    })
     const looks = ['list_transactions', 'top_merchants', 'summarize_accounts'].map((name) => ({
       id: name,
       name,

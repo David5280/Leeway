@@ -5,7 +5,7 @@ import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { accountMasks, accountNames } from './accounts.js'
-import { personPayment } from './betweenPeople.js'
+import { personPayment, shownPerson } from './betweenPeople.js'
 import { assertCategoryExists, type Category } from './categories.js'
 import { recategorize } from './categorize.js'
 import type { AccountMasks } from './safeName.js'
@@ -116,7 +116,9 @@ function present(row: StoredTransaction, { names, masks, partners }: Presenting)
         toAccount: row.amountCents > 0 ? transfer.accountName : accountName,
       }
     : null
-  const displayName = transactionDisplayName({ ...row, person }, accounts, {
+  // Named by whoever its line pays, a person or not (shownPerson).
+  const named = safePerson(shownPerson(row), masks)
+  const displayName = transactionDisplayName({ ...row, person: named }, accounts, {
     masks,
     fallback: categoryName ?? undefined,
   })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { personPayment } from '../src/domain/betweenPeople.js'
 import {
+  earlierPersonPayment,
   isTransfer,
   NO_ACCOUNTS,
   paysTrackedCard,
@@ -201,9 +202,10 @@ describe('reading a payment between people', () => {
 
   it('leaves the name out when the description does not give one', () => {
     const unnamed = movement('VENMO PAYMENT 1023456789', 'TRANSFER_OUT_ACCOUNT_TRANSFER')
-    expect(personPayment(unnamed)).toEqual({ app: 'Venmo', direction: 'out', counterparty: null })
-    // With no transfer code either, nothing says a person was paid.
-    expect(personPayment(movement('VENMO PAYMENT 1023456789', null))).toBeNull()
+    const unnamedVenmo = { app: 'Venmo', direction: 'out', counterparty: null }
+    expect(personPayment(unnamed)).toEqual(unnamedVenmo)
+    // With no code at all, a payment through a people app is still one to a person.
+    expect(personPayment(movement('VENMO PAYMENT 1023456789', null))).toEqual(unnamedVenmo)
   })
 
   it("reads no person on a purchase, a card payment or the owner's own app balance", () => {
@@ -226,5 +228,30 @@ describe('comparing tracked accounts', () => {
     expect(sameOwnAccounts({ cardMasks: ['1', '2'] }, { cardMasks: ['2', '1'] })).toBe(true)
     expect(sameOwnAccounts({ cardMasks: ['1'] }, { cardMasks: ['2'] })).toBe(false)
     expect(sameOwnAccounts({ cardMasks: [null] }, NO_ACCOUNTS)).toBe(false)
+  })
+})
+
+describe('a payment between people as the app read it before', () => {
+  it('took any app named, and the whole rest of the line after "to" or "from" as the person', () => {
+    const named = movement('Payment to Wilhelmina Ashcombe via Zelle', null)
+    expect(earlierPersonPayment(named)).toEqual({
+      app: 'Zelle',
+      direction: 'out',
+      counterparty: 'Wilhelmina Ashcombe via Zelle',
+    })
+    const back = movement('Zelle from JANE DOE', null, { amountCents: -500 })
+    expect(earlierPersonPayment(back)).toMatchObject({ direction: 'in', counterparty: 'Jane Doe' })
+  })
+
+  it('named no one when the line did not, or a reference was all there was', () => {
+    expect(earlierPersonPayment(movement('VENMO PAYMENT', null))).toMatchObject({
+      app: 'Venmo',
+      counterparty: null,
+    })
+    expect(
+      earlierPersonPayment(movement('Zelle payment to 1234567', null))?.counterparty,
+    ).toBeNull()
+    expect(earlierPersonPayment(movement('KING SOOPERS', null))).toBeNull()
+    expect(earlierPersonPayment(movement('VENMO PAYMENT', null, { amountCents: 0 }))).toBeNull()
   })
 })

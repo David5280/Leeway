@@ -20,8 +20,11 @@ export const GROCERIES = 'FOOD_AND_DRINK_GROCERIES'
 export interface PayFields {
   merchantName?: string
   detailed?: string
+  merchantEntityId?: string
   note?: string
   date?: string
+  /** Brought in from a statement file rather than synced, as a CSV row is. */
+  imported?: boolean
 }
 
 /** A transaction as the model reads it in list_transactions. */
@@ -48,6 +51,18 @@ export interface ChatProbe {
   merchants(): Promise<string[]>
 }
 
+/** Makes a row read as one a statement file brought in, as a CSV import does. */
+async function importRow(probe: ChatProbe, id: string): Promise<void> {
+  const { rows } = await probe.ctx.db.query<{ id: string }>(
+    `INSERT INTO imports (account_id, file_name, added) VALUES ($1, 'statement.csv', 1) RETURNING id`,
+    [probe.accountId],
+  )
+  await probe.ctx.db.query(
+    'UPDATE transactions SET provider_transaction_id = NULL, import_id = $2 WHERE id = $1',
+    [id, rows[0]!.id],
+  )
+}
+
 /** Sets up a probe for every test in the file that calls it. */
 export function useChatProbe(): ChatProbe {
   const probe = {} as ChatProbe
@@ -65,11 +80,12 @@ export function useChatProbe(): ChatProbe {
   })
 
   probe.pay = async (name, amountCents, fields = {}) => {
-    const { note, date = '2026-11-15', ...bank } = fields
+    const { note, date = '2026-11-15', imported, ...bank } = fields
     const row = { date, name, amountCents, ...bank }
     const id = await insertBankTransaction(probe.ctx.db, probe.accountId, row)
     if (note)
       await probe.ctx.db.query('UPDATE transactions SET note = $1 WHERE id = $2', [note, id])
+    if (imported) await importRow(probe, id)
     return id
   }
   probe.run = async (tool, input = {}) => {

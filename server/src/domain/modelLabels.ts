@@ -1,24 +1,41 @@
 // What a model is shown instead of a transaction's own name, when that name
-// could be a person's. Chat hides by default: a bank's line, or the name
-// cleaned from it, reaches the model only when it is surely a merchant. Pure.
+// could be a person's. Pure.
 //
-// Seven rounds of telling people from shops by their words showed there is
-// no end to how banks write a person's name. So no line is read for a person
-// here. A line is shown only when it names no payment app, does not read as
-// a transfer or payment to or from someone, and either Plaid gave it a code
-// that is no transfer or it is a shop the owner buys from (peopleContext.ts).
-// Anything else is shown by what kind of movement it is ("Zelle payment
-// (sent)", "Transfer to savings"), so nobody's name can be in it.
+// Why an allowlist: seven rounds of telling people from shops by their words
+// showed there is no end to how banks write a person's name, or the codes
+// Plaid files a payment to one under (a cleaner under services, a landlord
+// under rent, a friend under "other income"). So nothing is shown because
+// it looks safe. A row's bank line or merchant reaches a model only when all
+// of these hold:
+//
+// 1. Plaid gave it a code in SHOWN_CODES: a purchase from a business, an
+//    employer's pay, a card payment or a bank's own fee.
+// 2. It names no payment app, except a PayPal purchase at a merchant Plaid
+//    named (paysAShopThroughPayPal).
+// 3. It does not read as money moved or paid to someone (MOVED).
+// 4. What it would show has no person's shape ("Odalys Larkspur",
+//    personShape.ts), unless Plaid vouched for the merchant as a business.
+// 5. A medical one does not name a clinician ("DR. JANE DOE LCSW").
+//
+// Every other row is shown by what kind of movement it is (LABELS): "Zelle
+// payment (sent)", "Rent payment", "Service payment", "Purchase or payment".
+// To show a new code by name, add it to SHOWN_CODES only when Plaid files
+// nothing but businesses under it; when it can also be a person, give it a
+// label in LABELS instead, so its rows say what they were without a name.
+// A row the owner typed in shows: its name is their own words, like a
+// category's, and names in it are hidden as in theirs (chat/toolOutput.ts).
 
-import { appIn, merchantOf, paymentAppOf, personInLine } from './betweenPeople.js'
-import { isKnownShop, type KnownShops } from './knownShops.js'
+import { appIn, merchantOf, paymentAppOf } from './betweenPeople.js'
 import { cleanMerchantName } from './merchantName.js'
+import { hasAPersonsShape, namesAClinician } from './personShape.js'
 import { nameAfterToOrFrom, type Movement } from './transfers.js'
 
 /** A transaction as labelling reads it: its bank fields, and whether the owner typed it in. */
 export type LabelSubject = Movement & {
   /** Entered by hand: its name is the owner's own words, like a category's. */
   handEntered?: boolean
+  /** Plaid's id for the merchant, set only when it recognised a business. */
+  merchantEntityId?: string | null
 }
 
 /** The kind of row a label stands for, which decides what else of it is shown. */
@@ -30,8 +47,35 @@ export interface RowLabel {
   kind: LabelKind
 }
 
+// The codes whose rows may show their name: buying from a business, a bill
+// from a utility (not rent), paying a card, a bank's fee, a government or
+// charity, and an employer's pay. Matched at the start of the most specific
+// code Plaid gave; a code family without its detail (bare RENT_AND_UTILITIES)
+// does not count, since rent could be in it.
+const SHOWN_CODES = new RegExp(
+  `^(?:${[
+    'FOOD_AND_DRINK',
+    'GENERAL_MERCHANDISE',
+    'ENTERTAINMENT',
+    'TRAVEL',
+    'TRANSPORTATION',
+    'HOME_IMPROVEMENT',
+    'MEDICAL',
+    'RENT_AND_UTILITIES_(?!RENT$)',
+    'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT$',
+    'BANK_FEES',
+    'GOVERNMENT_AND_NON_PROFIT',
+    'INCOME_WAGES',
+    'INCOME_SALARY',
+  ].join('|')})`,
+)
+
 // Words a bank puts before "transfer" or "payment" ("ONLINE BANKING TRANSFER TO").
 const LEAD = '(?:(?:online|mobile|internet|web|bank|banking|external|wire|ach|instant|funds?)\\s+)*'
+// "BILL PAY JANE DOE", "ONLINE BILL PAYMENT TO ...": a bank paying someone for the owner.
+const BILL_PAY = /\bbill\s?pay(?:ment)?\b/i
+// "DEPOSIT FROM JANE DOE": money in from someone.
+const DEPOSIT_FROM = /\bdeposit\s+from\b/i
 // A line, or the name cleaned from it, that reads as money moved to or from someone.
 const MOVED = [
   new RegExp(
@@ -40,6 +84,12 @@ const MOVED = [
   ),
   /^\W*(?:to|from)\s+\p{L}/iu,
   /\b(?:transfer|xfer|trnsfr)\s+(?:to|from)\b/i,
+  BILL_PAY,
+  DEPOSIT_FROM,
+  // "ACH DEBIT JANE DOE", "ACH PMT ...": a payment by bank account, to anyone.
+  /\bach\s+(?:debit|credit|payment|pmt)\b/i,
+  // "ONLINE PMT JANE DOE".
+  /\bpmt\s+\p{L}/iu,
 ]
 
 /** The most specific code the bank gave, or an empty string. */
@@ -53,73 +103,111 @@ function readsAsMoved(line: string): boolean {
   return MOVED.some((pattern) => pattern.test(line) || pattern.test(cleaned))
 }
 
-// What kind of movement Plaid's code says a transfer or payment is, for its label.
-const KINDS: { code: RegExp; out: string; in: string }[] = [
-  { code: /^TRANSFER.*SAVINGS/, out: 'Transfer to savings', in: 'Transfer from savings' },
-  {
-    code: /^TRANSFER.*INVESTMENT/,
-    out: 'Transfer to investments',
-    in: 'Transfer from investments',
-  },
-  { code: /^TRANSFER.*WITHDRAWAL/, out: 'Cash withdrawal', in: 'Cash withdrawal returned' },
-  { code: /^TRANSFER.*DEPOSIT/, out: 'Deposit returned', in: 'Deposit' },
-  { code: /^TRANSFER/, out: 'Transfer to another account', in: 'Transfer from another account' },
-  { code: /^LOAN_PAYMENTS_CREDIT_CARD/, out: 'Card payment', in: 'Card payment received' },
-  { code: /^LOAN_PAYMENTS/, out: 'Loan payment', in: 'Loan payment received' },
-  { code: /^RENT_AND_UTILITIES_RENT/, out: 'Rent payment', in: 'Rent refund' },
-  { code: /(?:)/, out: 'Payment sent', in: 'Payment received' },
-]
-
 /** Whether money came in: a negative amount, as everywhere. */
 const isIn = (tx: Movement) => tx.amountCents < 0
 
-/** A transfer's or payment's label, by its code and direction. */
-function movedLabel(tx: Movement): string {
-  const kind = KINDS.find(({ code }) => code.test(codeOf(tx)))!
+/** What a labelled row is, by what it reads as or its code, first that fits. */
+const LABELS: { fits: (tx: Movement, moved: boolean) => boolean; out: string; in: string }[] = [
+  { fits: byCode(/^TRANSFER.*SAVINGS/), out: 'Transfer to savings', in: 'Transfer from savings' },
+  {
+    fits: byCode(/^TRANSFER.*INVESTMENT/),
+    out: 'Transfer to investments',
+    in: 'Transfer from investments',
+  },
+  { fits: byCode(/^TRANSFER.*WITHDRAWAL/), out: 'Cash withdrawal', in: 'Cash withdrawal returned' },
+  { fits: byCode(/^TRANSFER.*DEPOSIT/), out: 'Deposit returned', in: 'Deposit' },
+  {
+    fits: byCode(/^TRANSFER/),
+    out: 'Transfer to another account',
+    in: 'Transfer from another account',
+  },
+  { fits: byCode(/^LOAN_PAYMENTS_CREDIT_CARD/), out: 'Card payment', in: 'Card payment received' },
+  { fits: byCode(/^LOAN_PAYMENTS/), out: 'Loan payment', in: 'Loan payment received' },
+  { fits: byCode(/^RENT_AND_UTILITIES_RENT/), out: 'Rent payment', in: 'Rent refund' },
+  { fits: (tx) => BILL_PAY.test(tx.name), out: 'Bill payment', in: 'Bill payment returned' },
+  { fits: (tx) => DEPOSIT_FROM.test(tx.name), out: 'Deposit returned', in: 'Deposit' },
+  { fits: byCode(/^RENT_AND_UTILITIES/), out: 'Bill payment', in: 'Bill refund' },
+  { fits: byCode(/^MEDICAL/), out: 'Medical payment', in: 'Medical refund' },
+  {
+    fits: byCode(/^(?:GENERAL_SERVICES|PERSONAL_CARE)/),
+    out: 'Service payment',
+    in: 'Service refund',
+  },
+  { fits: byCode(/^INCOME/), out: 'Payment sent', in: 'Deposit' },
+  { fits: (_tx, moved) => moved, out: 'Payment sent', in: 'Payment received' },
+  { fits: () => true, out: 'Purchase or payment', in: 'Money received' },
+]
+
+/** A test of a row's code, for LABELS. */
+function byCode(code: RegExp): (tx: Movement) => boolean {
+  return (tx) => code.test(codeOf(tx))
+}
+
+/** A labelled row's label, by the first of LABELS it fits, and its direction. */
+function labelOf(tx: Movement, moved: boolean): string {
+  const kind = LABELS.find(({ fits }) => fits(tx, moved))!
   return isIn(tx) ? kind.in : kind.out
 }
 
-/**
- * Whether a payment app's line is only a purchase at a shop the owner buys
- * from: it names nobody after "to" or "from", and what is left of it, the
- * merchant or the line without the app ("PAYPAL *SPOTIFY"), is a known shop.
- */
-function paysAKnownShop(tx: Movement, shops: KnownShops): boolean {
-  if (nameAfterToOrFrom(tx.name) !== null) return false
-  const merchant = merchantOf(tx)
-  return isKnownShop(shops, merchant && !appIn(merchant) ? merchant : personInLine(tx.name))
+/** The name a row would show by: its merchant's, or the one cleaned from its line. */
+function shownMerchant(tx: Movement): string {
+  return merchantOf(tx) || cleanMerchantName(tx.name)
 }
 
-/** Whether a line with no app or transfer in it is surely a merchant. */
-function isSurelyAMerchant(tx: LabelSubject, shops: KnownShops): boolean {
-  if (codeOf(tx) !== '' || tx.handEntered) return true
-  return isKnownShop(shops, merchantOf(tx)) || isKnownShop(shops, cleanMerchantName(tx.name))
+/**
+ * Whether a row may show its own name: a shown code, no movement in its
+ * line, no person's shape unless Plaid vouched for the business, and no
+ * clinician named on a medical one (see the top of this file).
+ */
+function showsItsName(tx: LabelSubject): boolean {
+  const code = codeOf(tx)
+  if (!SHOWN_CODES.test(code) || readsAsMoved(tx.name)) return false
+  if (code.startsWith('MEDICAL') && [tx.name, merchantOf(tx)].some(namesAClinician)) return false
+  return Boolean(tx.merchantEntityId) || !hasAPersonsShape(shownMerchant(tx))
+}
+
+/**
+ * Whether a PayPal line is a purchase whose merchant may show ("PAYPAL
+ * *SPOTIFY", merchant Spotify): it names no one after "to" or "from", Plaid
+ * named a merchant that is no app, its code is a shop's but general goods,
+ * and the merchant may show by the rules for any row.
+ */
+function paysAShopThroughPayPal(tx: LabelSubject): boolean {
+  const merchant = merchantOf(tx)
+  if (nameAfterToOrFrom(tx.name) !== null || !merchant || appIn(merchant) !== null) return false
+  // Plaid files paying a person through PayPal as general goods too.
+  return !codeOf(tx).startsWith('GENERAL_MERCHANDISE') && showsItsName(tx)
+}
+
+/** A payment app's label: a card or loan payment by its code, otherwise the app and direction. */
+function appLabel(tx: Movement, app: string): string {
+  if (codeOf(tx).startsWith('LOAN_PAYMENTS')) return labelOf(tx, true)
+  const name = app === 'a payment app' ? 'Payment app' : `${app} payment`
+  return `${name} (${isIn(tx) ? 'received' : 'sent'})`
 }
 
 /**
  * The neutral label a model is shown instead of a transaction's own name, or
- * null when its name is surely a merchant's and may be shown:
+ * null when its name may be shown (see the top of this file):
  *
  * - through a payment app (named anywhere in its line or merchant), "Zelle
- *   payment (sent)" or "Payment app (received)", unless it only paid a known shop;
+ *   payment (sent)", or "Card payment" when its code is one;
  * - a transfer or payment to or from someone (a transfer code, or a line like
- *   "XFER TO ...", "Online Payment 18334 To ...", "To ..."), its kind by its
- *   code: "Transfer to savings", "Rent payment", "Transfer to another account";
- * - anything else with no code that is no known shop (an imported line, say),
- *   "Purchase or payment" or "Money received".
+ *   "XFER TO ...", "BILL PAY ...", "ACH DEBIT ..."), by its code or words:
+ *   "Transfer to savings", "Rent payment", "Bill payment", "Payment sent";
+ * - anything else not shown, by its code: "Service payment", "Deposit",
+ *   or "Purchase or payment" and "Money received" with none.
  */
-export function neutralLabel(tx: LabelSubject, shops: KnownShops): RowLabel | null {
+export function neutralLabel(tx: LabelSubject): RowLabel | null {
+  if (tx.handEntered) return null
   const app = paymentAppOf(tx)
   if (app) {
-    if (paysAKnownShop(tx, shops)) return null
-    const name = app === 'a payment app' ? 'Payment app' : `${app} payment`
-    return { label: `${name} (${isIn(tx) ? 'received' : 'sent'})`, kind: 'app' }
+    if (app === 'PayPal' && paysAShopThroughPayPal(tx)) return null
+    return { label: appLabel(tx, app), kind: 'app' }
   }
-  if (codeOf(tx).startsWith('TRANSFER') || readsAsMoved(tx.name)) {
-    return { label: movedLabel(tx), kind: 'transfer' }
-  }
-  if (isSurelyAMerchant(tx, shops)) return null
-  return { label: isIn(tx) ? 'Money received' : 'Purchase or payment', kind: 'unknown' }
+  if (showsItsName(tx)) return null
+  const moved = codeOf(tx).startsWith('TRANSFER') || readsAsMoved(tx.name)
+  return { label: labelOf(tx, moved), kind: moved ? 'transfer' : 'unknown' }
 }
 
 /** Whether a text, written as a bill's pattern or name, reads as a payment app's or a transfer's. */

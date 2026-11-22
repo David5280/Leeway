@@ -108,7 +108,7 @@ describe('a bank transfer', () => {
 })
 
 describe('a line with no code, as an import brings', () => {
-  it('reads as an app or a purchase unless it is a shop the owner buys from', async () => {
+  it('reads as an app or a purchase, but leaves the name of a shop the owner buys from', async () => {
     await pay('ZELLE SENT JANE PRYCEWOOD', 2_000, { note: 'Jane Prycewood dinner' })
     await pay('Venmo Jane Halloway', 1_500)
     await pay('PAYPAL *JANEFOXHALL', 1_000)
@@ -128,14 +128,14 @@ describe('a line with no code, as an import brings', () => {
     expect(transactions.map((tx) => tx.displayName).sort()).toEqual([
       'King Soopers',
       'Marigold Cafe',
-      'Marigold Cafe',
       'PayPal payment (sent)',
+      'Purchase or payment',
       'Purchase or payment',
       'Venmo payment (sent)',
       'Zelle payment (sent)',
     ])
-    // What a purchase with no code would have shown is replaced by its label wherever written.
-    expect(await probe.notes()).toEqual(['someone, someone and someone; Purchase or payment came'])
+    // A name read from a line with no code is hidden like any other.
+    expect(await probe.notes()).toEqual(['someone, someone and someone; someone came'])
     expect(JSON.stringify(transactions)).not.toMatch(/prycewood|halloway|foxhall|mossgiel/i)
   })
 

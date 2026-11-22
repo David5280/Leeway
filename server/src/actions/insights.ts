@@ -7,9 +7,9 @@ import {
   spendingPace,
   suggestBudgets,
   suggestForPlannedCategories,
-  topMerchants,
   trends,
 } from '../domain/insights.js'
+import { topMerchants } from '../domain/merchantTotals.js'
 import { monthlyTotals } from '../domain/monthlyTotals.js'
 import { RATE_GUARD_FOR_AI } from '../domain/savings/rate.js'
 import { savingsRates } from '../domain/savingsRates.js'

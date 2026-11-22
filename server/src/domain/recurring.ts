@@ -1,194 +1,29 @@
 // Finding charges and deposits that repeat on a schedule: subscriptions,
-// bills and paychecks, from transaction history alone.
+// bills and paychecks, from transaction history alone (recurringSeries.ts
+// finds them), less those the owner tracks as a bill or dismissed.
 //
 // A series' key is its merchant key, made from the bank's text. An assistant
 // is given one made from the shown name instead, since the bank's text may
 // hold an account's number (see ruleText.ts): it tracks or dismisses a series
-// by what it can see, and never learns what the bank wrote.
+// by what it can see, and never learns what the bank wrote. A key it was
+// given under a row's earlier shown name still finds it (shownNamesOf).
 
 import type { Db } from '../db/pool.js'
 import { notFound } from '../errors.js'
-import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
-import { addCadence, type Cadence } from '../lib/periods.js'
+import { addDays, type IsoDate } from '../lib/dates.js'
 import { accountMasks } from './accounts.js'
-import { betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { listBills, type Bill } from './bills.js'
-import { CADENCE_BANDS, type CadenceBand } from './cadenceBands.js'
 import { countedSql } from './counted.js'
-import { bankTextKey, merchantKey, textKey } from './merchantKey.js'
-import { neutralLabel } from './modelLabels.js'
-import { loadPeopleContext } from './peopleContext.js'
-import { shownNameOf } from './ruleText.js'
+import { bankTextKey, textKey } from './merchantKey.js'
+import { neutralLabel, type LabelSubject } from './modelLabels.js'
+import { findSeries, type PastTransaction, type RecurringSeries } from './recurringSeries.js'
+import { shownNameOf, shownNamesOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
-import { merchantDisplayName, transactionDisplayName } from './transactionName.js'
-import type { Movement } from './transfers.js'
 
-/** One past transaction, as detection needs it. Amounts are positive for money out. */
-export interface PastTransaction {
-  date: IsoDate
-  merchantName: string | null
-  name: string
-  amountCents: number
-  categoryId: string | null
-  /** The account it came out of or went into. */
-  accountId?: string
-}
+export { detectRecurring, type PastTransaction, type RecurringSeries } from './recurringSeries.js'
 
-/** A past transaction as stored, with its id and what its shown name is worked out from. */
-export type StoredTransaction = PastTransaction &
-  Movement & {
-    id: string
-    /** Entered by hand, so its name is the owner's own words (modelLabels.ts). */
-    handEntered?: boolean
-  }
-
-export interface RecurringSeries {
-  /** Stable key for the merchant, used to dismiss a suggestion and to match it again. */
-  key: string
-  /** The merchant name as it appeared most recently. */
-  name: string
-  direction: 'out' | 'in'
-  cadence: Cadence
-  /** The median amount, always positive. */
-  typicalAmountCents: number
-  /** False when every charge was within a few percent of the typical amount. */
-  amountVaries: boolean
-  count: number
-  lastDate: IsoDate
-  /** When the next one is expected. */
-  nextDate: IsoDate
-  /** The category most of them were filed under, if any. */
-  categoryId: string | null
-  /** The account most of them came out of or went into. */
-  accountId: string | null
-  /** A fixed monthly or yearly charge reads as a subscription; anything else as a bill. */
-  suggestedKind: 'bill' | 'subscription'
-  /** Set when the name could be anyone's: what a model is shown instead (modelLabels.ts). */
-  modelLabel?: string
-}
-
-/** Share of gaps that must fit the cadence. One skipped or doubled month is tolerated. */
-const REGULAR_SHARE = 0.75
-/** Amounts within this share of the median count as the same price. */
-const FIXED_AMOUNT_TOLERANCE = 0.05
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2
-    ? sorted[middle]!
-    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
-}
-
-/**
- * The cadence whose band most gaps fall in, if enough of them do. The bands
- * do not overlap, so at most one can hold the regular share of the gaps.
- */
-function cadenceOfGaps(gaps: number[]): CadenceBand | null {
-  for (const band of CADENCE_BANDS) {
-    const fitting = gaps.filter((gap) => gap >= band.min && gap <= band.max).length
-    if (gaps.length + 1 >= band.minCount && fitting / gaps.length >= REGULAR_SHARE) return band
-  }
-  return null
-}
-
-function mostCommon(values: (string | null)[]): string | null {
-  const counts = new Map<string, number>()
-  for (const value of values) if (value) counts.set(value, (counts.get(value) ?? 0) + 1)
-  let best: string | null = null
-  for (const [value, count] of counts) if (!best || count > counts.get(best)!) best = value
-  return best
-}
-
-/** Reads one merchant's charges (same direction, oldest first) as a series, if they repeat. */
-function seriesOf(
-  key: string,
-  direction: 'out' | 'in',
-  charges: PastTransaction[],
-  today: IsoDate,
-  masks: AccountMasks,
-): RecurringSeries | null {
-  // Two charges on the same day (a split payment) count as one occurrence.
-  const days = [...new Set(charges.map((c) => c.date))]
-  const gaps = days.slice(1).map((day, i) => daysBetween(days[i]!, day))
-  const band = gaps.length > 0 ? cadenceOfGaps(gaps) : null
-  if (!band) return null
-
-  const last = charges.at(-1)!
-  const nextDate = addCadence(last.date, band.cadence)
-  // A series that missed more than half a cycle past its next date has stopped.
-  if (daysBetween(nextDate, today) > band.max / 2) return null
-
-  const amounts = charges.map((c) => Math.abs(c.amountCents))
-  const typical = median(amounts)
-  const amountVaries = amounts.some((a) => Math.abs(a - typical) > typical * FIXED_AMOUNT_TOLERANCE)
-  const subscriptionLike =
-    direction === 'out' && !amountVaries && (band.cadence === 'month' || band.cadence === 'year')
-  return {
-    key,
-    name: merchantDisplayName(last, { masks }),
-    direction,
-    cadence: band.cadence,
-    typicalAmountCents: typical,
-    amountVaries,
-    count: days.length,
-    lastDate: last.date,
-    nextDate,
-    categoryId: mostCommon(charges.map((c) => c.categoryId)),
-    accountId: mostCommon(charges.map((c) => c.accountId ?? null)),
-    suggestedKind: subscriptionLike ? 'subscription' : 'bill',
-  }
-}
-
-/** A series found, with its transactions, oldest first, and the newest of them. */
-interface Found<T extends PastTransaction> {
-  series: RecurringSeries
-  charges: T[]
-  last: T
-}
-
-/**
- * Groups transactions by merchant and direction, and keeps the groups whose
- * dates repeat on a regular cadence and are still going. Sorted with the
- * soonest expected first. Names show none of the account masks given.
- */
-export function detectRecurring(
-  transactions: PastTransaction[],
-  today: IsoDate,
-  masks: AccountMasks,
-): RecurringSeries[] {
-  return findSeries(transactions, today, masks).map(({ series }) => series)
-}
-
-/** detectRecurring, keeping each series' newest transaction beside it. */
-function findSeries<T extends PastTransaction>(
-  transactions: T[],
-  today: IsoDate,
-  masks: AccountMasks,
-): Found<T>[] {
-  const groups = new Map<string, T[]>()
-  for (const tx of transactions) {
-    const key = merchantKey(tx)
-    if (!key || tx.amountCents === 0) continue
-    const direction = tx.amountCents > 0 ? 'out' : 'in'
-    const group = `${direction}:${key}`
-    const charges = groups.get(group)
-    if (charges) charges.push(tx)
-    else groups.set(group, [tx])
-  }
-  const found: Found<T>[] = []
-  for (const [group, charges] of groups) {
-    const [direction, key] = group.split(/:(.*)/s) as ['out' | 'in', string]
-    charges.sort((a, b) => a.date.localeCompare(b.date))
-    const series = seriesOf(key, direction, charges, today, masks)
-    if (series) found.push({ series, charges, last: charges.at(-1)! })
-  }
-  return found.sort(
-    (a, b) =>
-      a.series.nextDate.localeCompare(b.series.nextDate) ||
-      a.series.key.localeCompare(b.series.key),
-  )
-}
+/** A past transaction as stored, with its id and what its names are worked out from. */
+export type StoredTransaction = PastTransaction & LabelSubject & { id: string }
 
 /** How far back detection looks: long enough to see two yearly charges. */
 const HISTORY_DAYS = 400
@@ -204,6 +39,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTrans
        t.category_id AS "categoryId", t.account_id AS "accountId",
        t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
+       t.merchant_entity_id AS "merchantEntityId",
        (t.provider_transaction_id IS NULL AND t.import_id IS NULL) AS "handEntered"
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
@@ -228,10 +64,13 @@ interface Asker {
   forAssistant?: boolean
 }
 
-/** A series not tracked or dismissed yet, with the key made from its shown name. */
+/** A series not tracked or dismissed yet, with the keys made from its shown names. */
 export interface Untracked {
   series: RecurringSeries
+  /** The key made from its shown name now, which an assistant is given. */
   shownKey: string
+  /** Every key made from a name it has been shown under, shownKey first (shownNamesOf). */
+  shownKeys: string[]
 }
 
 /** A series found, with the keys a bill's pattern is looked for in. */
@@ -251,6 +90,7 @@ function keyedSeries<T extends StoredTransaction>(
     series,
     charges,
     shownKey: textKey(shownNameOf(last, masks)),
+    shownKeys: shownNamesOf(last, masks).map(textKey),
     bankKey: bankTextKey(last),
   }))
 }
@@ -260,31 +100,20 @@ function keyedSeries<T extends StoredTransaction>(
  * pattern, read as a merchant key, is part of the series' latest charge. A
  * bill that reads bank text looks in the merchant name and description
  * together, as its SQL does, so a pattern from the description ("spotify
- * usa") tracks too. A bill that reads shown names looks in the key made from
- * the shown name, never the bank's text.
+ * usa") tracks too. A bill that reads shown names looks in the keys made from
+ * the names it has been shown under, never the bank's text.
  */
-function tracks(bill: Bill, { bankKey, shownKey }: Keyed<PastTransaction>): boolean {
+function tracks(bill: Bill, { bankKey, shownKeys }: Keyed<PastTransaction>): boolean {
   const pattern = bill.matchPattern ? textKey(bill.matchPattern) : ''
   if (!pattern) return false
-  return (bill.reads === 'shown_name' ? shownKey : bankKey).includes(pattern)
+  const keys = bill.reads === 'shown_name' ? shownKeys : [bankKey]
+  return keys.some((key) => key.includes(pattern))
 }
 
-/**
- * A series as suggested. Payments to or from a person are named as the
- * activity list names them ("To Jane Doe"); the key stays, so bills keep
- * matching. One whose name could be anyone's carries the label a model is
- * shown instead, as merchant totals do.
- */
-function suggested(
-  series: RecurringSeries,
-  last: StoredTransaction,
-  masks: AccountMasks,
-  people: PeopleContext,
-): RecurringSeries {
-  const person = betweenPeople(last, people)
-  const name = person ? transactionDisplayName({ ...last, person }, null, { masks }) : series.name
-  const modelLabel = neutralLabel(last, people.shops)?.label
-  return modelLabel ? { ...series, name, modelLabel } : { ...series, name }
+/** A series with the label a model is shown instead when its name could be anyone's. */
+function labelled(series: RecurringSeries, last: StoredTransaction): RecurringSeries {
+  const modelLabel = neutralLabel(last)?.label
+  return modelLabel ? { ...series, modelLabel } : series
 }
 
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
@@ -295,12 +124,12 @@ export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
     listBills(db, today),
     accountMasks(db),
   ])
-  const people = await loadPeopleContext(db, history)
   return keyedSeries(history, today, masks)
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
-    .map(({ series, shownKey, charges }) => ({
-      series: suggested(series, charges.at(-1)!, masks, people),
+    .map(({ series, shownKey, shownKeys, charges }) => ({
+      series: labelled(series, charges.at(-1)!),
       shownKey,
+      shownKeys,
     }))
 }
 
@@ -320,7 +149,7 @@ export async function untrackedSeries(
   ])
   return keyedSeries(history, today, masks)
     .filter((found) => !bills.some((bill) => tracks(bill, found)))
-    .map(({ series, shownKey, charges }) => ({ series, shownKey, charges }))
+    .map(({ series, shownKey, shownKeys, charges }) => ({ series, shownKey, shownKeys, charges }))
 }
 
 /**
@@ -337,10 +166,16 @@ export async function untrackedRecurring(
   return found.map(({ series, shownKey }) => (forAssistant ? { ...series, key: shownKey } : series))
 }
 
+/** Whether a series is the one an asker named by key: its own, or, for an assistant, a shown one. */
+export function namedByKey(found: Untracked, key: string, forAssistant: boolean): boolean {
+  return forAssistant ? found.shownKeys.includes(key) : found.series.key === key
+}
+
 /**
  * Stops suggesting a series. The owner's app passes the series' own key. An
  * assistant passes the key it was given, which dismisses every series
- * suggested now under that shown name, and is not found when none is.
+ * suggested now under that shown name, now or earlier (namedByKey), and is
+ * not found when none is.
  */
 export async function dismissRecurring(
   db: Db,
@@ -349,7 +184,7 @@ export async function dismissRecurring(
   { forAssistant = false }: Asker = {},
 ): Promise<void> {
   const keys = forAssistant
-    ? (await untracked(db, today)).filter((f) => f.shownKey === key).map((f) => f.series.key)
+    ? (await untracked(db, today)).filter((f) => namedByKey(f, key, true)).map((f) => f.series.key)
     : [key]
   if (keys.length === 0) throw notFound('Recurring charge')
   await db.query(

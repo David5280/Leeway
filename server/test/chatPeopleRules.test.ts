@@ -51,8 +51,19 @@ describe('the names read from a labelled row', () => {
     ])
   })
 
-  it('are none from a line only labelled for having no code', () => {
-    expect(namesIn(movement({ name: 'JANE PRYCEWOOD' }), 'unknown', shops)).toEqual([])
+  it('are what is left of a line labelled for having no code, unless it is a shop', () => {
+    expect(namesIn(movement({ name: 'JANE PRYCEWOOD' }), 'unknown', shops)).toEqual([
+      { name: 'JANE PRYCEWOOD' },
+    ])
+    expect(namesIn(movement({ name: 'BILL PAY DR HALVORSEN/INGRID' }), 'unknown', shops)).toEqual([
+      { name: 'HALVORSEN INGRID' },
+    ])
+    // Look-alike letters and invisible characters read as the name they show.
+    expect(
+      namesIn(movement({ name: 'ACH DEBIT T\u0430m\u200bsin Penhallow' }), 'unknown', shops),
+    ).toEqual([{ name: 'Tamsin Penhallow' }])
+    const marigold = knownShops(['Marigold Cafe'])
+    expect(namesIn(movement({ name: 'MARIGOLD CAFE 0042' }), 'unknown', marigold)).toEqual([])
   })
 })
 
@@ -107,7 +118,8 @@ describe('the words of a name hidden alone', () => {
     const names = found('Marigold Pettiwhistle', 'Wendy Bakery', 'Clara Everyday')
     expect(loneNamesOf(names, shops, new Set(['everyday']))).toEqual({
       capital: [],
-      anyCase: ['Pettiwhistle', 'Wendy', 'Bakery', 'Clara'],
+      // "Bakery" is a business word, so never a name alone.
+      anyCase: ['Pettiwhistle', 'Wendy', 'Clara'],
       inNotes: [],
     })
   })

@@ -80,7 +80,7 @@ describe('a bill tracking labelled payments', () => {
     }
   })
 
-  it("keeps the owner's own name for it, and every other bill as it is", async () => {
+  it('keeps an everyday name for it, renames one that could name someone, and leaves the rest', async () => {
     await payMonthly('CLARA THORNBURY')
     await pay('Payment to Chase card ending in 4321', 5_000, {
       detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
@@ -112,8 +112,9 @@ describe('a bill tracking labelled payments', () => {
       bills: Record<string, unknown>[]
     }
     expect(bills.map(({ name, matchPattern }) => [name, matchPattern ?? null]).sort()).toEqual([
-      ['Ally Auto', 'ally auto'],
-      ['Chase card', null],
+      // Neither a loan's merchant nor "Chase" is surely no one's name.
+      ['Card payment', null],
+      ['Loan payment', null],
       ['Purchases', 'rent'],
       ['Rent', null],
     ])

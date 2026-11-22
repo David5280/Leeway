@@ -5,9 +5,12 @@
 // Privacy comes first: when in doubt, a name is hidden. The labelled rows
 // themselves never show their line, so the names read here are what to hide
 // everywhere else: who the line names after "to" or "from", Plaid's merchant
-// name unless the owner buys from it, and, on a payment app's line naming
-// neither, what is left of it once the app, the movement words and the codes
-// are gone. Account words stay in a name ("IRA ROTH" through Zelle is a person).
+// name unless the owner buys from it, and, on a line naming no one that way,
+// what is left of it once the app, the words for how money moved, a bank's
+// own words and the codes are gone. Account words stay in a name ("IRA ROTH"
+// through Zelle is a person). A line is read as it shows (plainLetters.ts),
+// so look-alike letters and invisible characters hide no name, and a name a
+// bank wrote "HALVORSEN/INGRID" reads as two words.
 
 import {
   appIn,
@@ -18,6 +21,7 @@ import {
 } from '../betweenPeople.js'
 import { isKnownShop, type KnownShops } from '../knownShops.js'
 import type { LabelKind } from '../modelLabels.js'
+import { plainLetters } from '../plainLetters.js'
 import { nameAfterToOrFrom, type Movement } from '../transfers.js'
 import { loneNamesOf, type NameSource } from './loneNames.js'
 
@@ -27,19 +31,46 @@ export interface FoundName extends NameSource {
   transfer?: boolean
 }
 
+// What banks write around a name on a line that is no app's, beyond the
+// words for how money moved: "BILL PAY", "BNF=", "ON-LINE", "CHECK 1043",
+// a clinician's title. None of them is a name to hide.
+const BANK_WORDS = new Set(
+  (
+    'autopay bill bnf check chk dds domestic dr lcsw lpc md mr mrs ms on-line online pay ' +
+    'phd psyd'
+  ).split(' '),
+)
+
+/** A bank's text as names are read from it: as it shows, with "/" between words ("DOE/JANE"). */
+function readable(text: string): string {
+  return plainLetters(text).replace(/(?<=\p{L})\/(?=\p{L})/gu, ' ')
+}
+
+/** The words of a line that is no app's that could be a name: personInLine, less a bank's words. */
+function nameInLine(line: string): string {
+  const words = personInLine(line).split(' ')
+  return personWords(words.filter((word) => !BANK_WORDS.has(word.toLowerCase())).join(' '))
+}
+
 /** The names one labelled row could show its person under. */
 export function namesIn(tx: Movement, kind: LabelKind, shops: KnownShops): FoundName[] {
-  if (kind === 'unknown') return []
-  const named = nameAfterToOrFrom(tx.name)
+  const line = readable(tx.name)
+  const merchant = merchantOf({ ...tx, merchantName: readable(tx.merchantName ?? '') })
+  const named = nameAfterToOrFrom(line)
   const paid = named && !namesOwnAppAccount(named) ? personWords(named) : ''
-  const merchant = merchantOf(tx)
   const shop = !merchant || appIn(merchant) !== null || isKnownShop(shops, merchant)
   const found: FoundName[] = [
     { name: paid, paid: kind === 'app' },
     { name: shop ? '' : personInLine(merchant) },
-  ].filter(({ name }) => name)
-  // A line naming no one after "to" or "from" may still hold them ("ZELLE; DOE, JANE").
-  if (found.length === 0 && kind === 'app' && !named) found.push({ name: personInLine(tx.name) })
+  ]
+  // A line naming no one after "to" or "from" may still hold them ("ZELLE; DOE, JANE",
+  // "BILL PAY JANE DOE"), unless it is a shop the owner buys from ("MARIGOLD CAFE
+  // 0042"); an app's is read only when nothing else named them.
+  const inLine = !named && kind !== 'app' ? nameInLine(line) : ''
+  if (inLine && !isKnownShop(shops, inLine)) found.push({ name: inLine })
+  if (!named && kind === 'app' && !found.some(({ name }) => name)) {
+    found.push({ name: personInLine(line) })
+  }
   return found
     .filter(({ name }) => name)
     .map((one) => (kind === 'transfer' ? { ...one, transfer: true } : one))

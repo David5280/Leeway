@@ -42,9 +42,35 @@ describe('a bill tracking labelled payments', () => {
       new Map([
         ['a', { label: 'Zelle payment (sent)', renamed: true }],
         ['b', { label: 'Transfer to another account', renamed: false }],
-        ['c', { label: 'Zelle payment (sent)', renamed: false }],
+        ['c', { label: 'Zelle payment (sent)', renamed: true }],
       ]),
     )
+  })
+
+  it('keeps its name only when every word is an everyday or business one', () => {
+    const bills = [
+      bill('a', 'Cleaner', 'thornbury'),
+      bill('b', 'House cleaning', 'thornbury'),
+      bill('c', 'Abercrombie loan', 'thornbury'),
+      bill('d', 'Hawthorne', 'thornbury'),
+      // A word that is hidden is renamed even when it is an everyday one.
+      bill('e', 'Rose', 'thornbury'),
+      // So is one holding a full name hidden, though its words are everyday ones.
+      bill('f', 'Ally Auto loan', 'thornbury'),
+      bill('g', 'Ally loan', 'thornbury'),
+    ]
+    const renamed = [...labelBills(bills, payments, new Set(['rose']), ['Ally Auto'])].map(
+      ([id, shown]) => [id, shown.renamed],
+    )
+    expect(renamed).toEqual([
+      ['a', false],
+      ['b', false],
+      ['c', true],
+      ['d', true],
+      ['e', true],
+      ['f', true],
+      ['g', false],
+    ])
   })
 
   it('takes none from a word inside another, or a payment it does not read', () => {

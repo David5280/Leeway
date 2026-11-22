@@ -201,11 +201,12 @@ describe('insights', () => {
     await spend('2026-11-06', 'APPLE.COM/BILL 866-712-7753 CA', 99)
     await spend('2026-11-06', 'APPLE.COM/BILL 866-712-7753 CA', -99)
     await recategorize()
+    // Two words that could be a person's, with no merchant id from Plaid, are labelled for a model.
     expect(await call('top_merchants', { limit: 1 })).toEqual([
-      { merchant: 'Blue Bottle', spentCents: 1600, count: 2 },
+      { merchant: 'Blue Bottle', spentCents: 1600, count: 2, modelLabel: 'Purchase or payment' },
     ])
     expect(await call('top_merchants')).toEqual([
-      { merchant: 'Blue Bottle', spentCents: 1600, count: 2 },
+      { merchant: 'Blue Bottle', spentCents: 1600, count: 2, modelLabel: 'Purchase or payment' },
       { merchant: 'Peets Coffee', spentCents: 1200, count: 1 },
       { merchant: 'Starbucks', spentCents: 1200, count: 2 },
     ])
@@ -301,11 +302,17 @@ describe('payments that could be between people', () => {
       detailed: ACCOUNT_TRANSFER,
     })
     await recategorize()
+    // A sole trader by name is labelled for the model too, though the owner sees the name.
     expect(await call('top_merchants')).toEqual([
-      { merchant: 'Rosalind Fairweather', spentCents: 4_000, count: 1 },
+      {
+        merchant: 'Rosalind Fairweather',
+        spentCents: 4_000,
+        count: 1,
+        modelLabel: 'Purchase or payment',
+      },
       { merchant: 'Clara', spentCents: 3_000, count: 1, modelLabel: 'PayPal payment (sent)' },
       {
-        merchant: 'To Rosalind Fairweather',
+        merchant: 'Zelle payment to Rosalind Fairweather',
         spentCents: 2_500,
         count: 1,
         modelLabel: 'Zelle payment (sent)',
@@ -323,7 +330,7 @@ describe('payments that could be between people', () => {
     }
     const found = (await call('find_recurring')) as { name: string; modelLabel?: string }[]
     expect(found.map(({ name, modelLabel }) => ({ name, modelLabel }))).toEqual([
-      { name: 'To Clara', modelLabel: 'Zelle payment (sent)' },
+      { name: 'Zelle payment to Clara', modelLabel: 'Zelle payment (sent)' },
       { name: 'Netflix', modelLabel: undefined },
     ])
   })

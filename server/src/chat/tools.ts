@@ -13,6 +13,7 @@ import { AppError } from '../errors.js'
 import { agentTools, UNEXPECTED_TOOL_ERROR } from '../mcp/server.js'
 import { checkPurchaseTool } from './afford.js'
 import { listRememberedTool, rememberTool } from './memory.js'
+import { byLabel } from './sameLabel.js'
 import { refusedSearch } from './searchGuard.js'
 import { chatToolText } from './toolOutput.js'
 import { withoutAbsentTools } from './toolWords.js'
@@ -51,9 +52,11 @@ export function toolTitle(name: string): string | null {
  * Runs one tool the model asked for, as an assistant over MCP would: with
  * the agent's view of the data, its input checked, and its output cleaned
  * (toolOutput.ts). A search that could confirm a hidden name is refused
- * before it runs (searchGuard.ts). A failure goes back to the model as the tool's answer, so
- * it can explain or try again; one that is not the caller's fault goes to
- * `onError` and the model only hears that something went wrong.
+ * before it runs (searchGuard.ts), and the charges like a labelled row are
+ * every row of its label (sameLabel.ts). A failure goes back to the model as
+ * the tool's answer, so it can explain or try again; one that is not the
+ * caller's fault goes to `onError` and the model only hears that something
+ * went wrong.
  */
 export async function runChatTool(
   ctx: AppContext,
@@ -66,9 +69,16 @@ export async function runChatTool(
   if (!action) return failed(`Unknown tool ${call.name}`)
   const refused = refusedSearch(call.name, call.input, people)
   if (refused) return failed(refused)
+  // Charges like a labelled row's are every row of its label, not its payee's (sameLabel.ts).
+  const grouped = byLabel(call.name, call.input, people)
   try {
-    const result: unknown = await runAction({ ...ctx, agent: true }, action, call.input)
-    return { id: call.id, content: chatToolText(result, people), isError: false }
+    const result: unknown = await runAction(
+      { ...ctx, agent: true },
+      action,
+      grouped?.input ?? call.input,
+    )
+    const shown = grouped ? grouped.page(result) : result
+    return { id: call.id, content: chatToolText(shown, people), isError: false }
   } catch (error) {
     if (error instanceof AppError) return failed(error.message)
     onError(error)

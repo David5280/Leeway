@@ -2,13 +2,15 @@
 // with Jane", "DOE, JANE", "lunch with jane", a category "Kettering loan"),
 // so Chat can hide those too. Pure.
 //
-// A part is never hidden when it is how a known shop is called. A longer
-// part is hidden in any case; a short one only as a name is written, with a
-// capital or in capitals. A common word ("Will", "May", "Rent") is a person
+// A part is never hidden when it is how a known shop is called, or a word
+// businesses are named with (businessWords.ts). A longer part is hidden in
+// any case; a short one only as a name is written, with a capital or in
+// capitals. A common word ("Will", "May", "Rent") is a person
 // only when an app's line named it as the person paid ("Zelle payment to
 // RENT"), and even then only in the owner's notes, where they write about
 // people: everywhere else it far more often means the word.
 
+import { isBusinessWord } from '../businessWords.js'
 import { isCommonWord } from './commonWords.js'
 import { startsAShop, type KnownShops } from '../knownShops.js'
 import { isMovementWord } from '../movementWords.js'
@@ -45,7 +47,8 @@ function hiddenAs(
   skip: ReadonlySet<string>,
 ): keyof LoneNames | null {
   if (!NAME_PART.test(part) || isMovementWord(part) || startsAShop(shops, part)) return null
-  if (skip.has(part.toLowerCase())) return null
+  // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
+  if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null
   if (isCommonWord(part)) return source.paid ? 'inNotes' : null
   return [...part].length >= ANY_CASE_LENGTH ? 'anyCase' : 'capital'
 }

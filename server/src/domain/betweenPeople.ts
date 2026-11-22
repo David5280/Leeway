@@ -101,18 +101,38 @@ function paysNoPerson(app: string, code: string): boolean {
   return LOAN_CODE.test(code) || (app !== 'Zelle' && PURCHASE_CODE.test(code))
 }
 
+// Apps that only ever pay people: through one, a row Plaid gave no code or
+// filed as other income is a person's. PayPal and Cash App's card pay shops too.
+const PEOPLE_APPS = new Set(['Zelle', 'Venmo', 'Cash App', 'Apple Cash'])
+// The codes Plaid gives a payment between people it did not recognise as one.
+const LOOSE_CODES = new Set(['', 'INCOME_OTHER_INCOME'])
+
+/**
+ * Whether a PayPal line naming no one after "to" or "from" paid a person:
+ * its merchant, or what is left of its line when the merchant is PayPal
+ * itself ("PAYPAL INST XFER JANEDOE"), could be one and is no shop the owner
+ * buys from ("PAYPAL INST XFER" to eBay is a purchase).
+ */
+function paysSomeoneThroughPayPal(tx: Movement, shops: KnownShops): boolean {
+  const merchant = merchantOf(tx)
+  const named = merchant && !appIn(merchant) ? merchant : personInLine(tx.name)
+  return namesSomeone(named) && !isKnownShop(shops, named)
+}
+
 /**
  * Through a payment app, with no person named: a person's when Plaid files
- * it as an app payment, or as any transfer through an app but PayPal. A bare
- * PayPal transfer is a person's when its merchant could be one and is no
- * shop the owner buys from ("PAYPAL INST XFER" to eBay is a purchase).
+ * it as an app payment, or as any transfer through an app but PayPal. With
+ * no code, or as other income, it is a person's through an app that only
+ * pays people ("VENMO PAYMENT JANE DOE", "APPLE CASH RECEIVED MONEY"). A
+ * PayPal one is a person's when paysSomeoneThroughPayPal says so.
  */
 function unnamedAppPayment(tx: Movement, app: string, shops: KnownShops): boolean {
   if (isAppTransfer(tx)) return true
-  if (!codeOf(tx).startsWith('TRANSFER')) return false
-  if (app !== 'PayPal') return true
-  const merchant = merchantOf(tx)
-  return namesSomeone(merchant) && !isKnownShop(shops, merchant)
+  const code = codeOf(tx)
+  const loose = LOOSE_CODES.has(code)
+  if (!code.startsWith('TRANSFER') && !loose) return false
+  if (app === 'PayPal') return paysSomeoneThroughPayPal(tx, shops)
+  return !loose || PEOPLE_APPS.has(app)
 }
 
 /**
@@ -146,6 +166,21 @@ export function betweenPeople(tx: Movement, context: PeopleContext): PersonPayme
  */
 export function personPayment(tx: Movement): PersonPayment | null {
   return betweenPeople(tx, { shops: NO_SHOPS })
+}
+
+/**
+ * Who a transaction is shown as paying or paid by, which is all a name needs:
+ * a payment between people (personPayment), or else whoever an app's line
+ * names after "to" or "from", the owner's own card or balance there too
+ * ("VENMO TO VENMO CREDIT CARD" shows "To Venmo Credit Card"), as the app
+ * always named them. Whether it is a person is personPayment's to say.
+ */
+export function shownPerson(tx: Movement): PersonPayment | null {
+  const person = personPayment(tx)
+  const app = paymentAppOf(tx)
+  const named = nameAfterToOrFrom(tx.name)
+  if (person || !app || !named || tx.amountCents === 0) return person
+  return { app, direction: tx.amountCents < 0 ? 'in' : 'out', counterparty: named }
 }
 
 /**

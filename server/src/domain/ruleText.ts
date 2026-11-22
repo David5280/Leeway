@@ -15,11 +15,11 @@
 //   "Checking to Savings", which it is shown under once filed as a transfer;
 // - a name with nothing readable left never takes the category's name.
 
-import { personPayment } from './betweenPeople.js'
+import { shownPerson } from './betweenPeople.js'
 import type { Rule } from './rules.js'
 import type { AccountMasks } from './safeName.js'
 import { safePerson, transactionDisplayName, type NameableTransaction } from './transactionName.js'
-import type { Movement } from './transfers.js'
+import { earlierPersonPayment, type Movement } from './transfers.js'
 
 /**
  * A transaction's own name as shown, before any category: '' where the app
@@ -35,22 +35,33 @@ export function shownName(tx: NameableTransaction, masks: AccountMasks): string 
  * paid by worked out from its bank fields, as the Activity list shows it.
  */
 export function shownNameOf(row: Movement, masks: AccountMasks): string {
-  return shownName({ ...row, person: safePerson(personPayment(row), masks) }, masks)
+  return shownName({ ...row, person: safePerson(shownPerson(row), masks) }, masks)
 }
 
 /**
- * Each stored row with the shown name a rule reads beside its bank text.
- * Worked out only when some rule reads it; with none, every shown name is ''
- * and no rule looks at it.
+ * Every name a stored row has been shown under: its name now (shownNameOf),
+ * and the one the app gave it before it read who was paid more closely
+ * ("To Jane Doe On Ref" is now "To Jane Doe"). A pattern or key an assistant
+ * saved from the earlier name still finds the row by it.
+ */
+export function shownNamesOf(row: Movement, masks: AccountMasks): string[] {
+  const earlier = shownName({ ...row, person: safePerson(earlierPersonPayment(row), masks) }, masks)
+  return [...new Set([shownNameOf(row, masks), earlier])]
+}
+
+/**
+ * Each stored row with the shown names a rule reads beside its bank text
+ * (shownNamesOf), its name now first. Worked out only when some rule reads
+ * them; with none, the shown name is '' and no rule looks at it.
  */
 export function withShownNames<T extends Movement>(
   rows: readonly T[],
   rules: readonly Rule[],
   masks: AccountMasks,
-): (T & { shownName: string })[] {
+): (T & { shownName: string; shownNames: string[] })[] {
   const needed = rules.some((rule) => rule.reads === 'shown_name')
-  return rows.map((row) => ({
-    ...row,
-    shownName: needed ? shownNameOf(row, masks) : '',
-  }))
+  return rows.map((row) => {
+    const shownNames = needed ? shownNamesOf(row, masks) : ['']
+    return { ...row, shownName: shownNames[0]!, shownNames }
+  })
 }

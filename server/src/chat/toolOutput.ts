@@ -10,20 +10,32 @@
 // bill tracking them loses its pattern, and its name when that could be a
 // person's (domain/chat/billLabels.ts). Then, as each string is walked, so
 // no escaping in the JSON can hide one, what those rows would have been shown
-// as is replaced by their label, and the names read from them by "someone",
-// full names and single words alike; a single word that is a common word or
-// one of the owner's account names' words only in their notes, so "Rent" and
-// account names stay.
+// as is replaced by their label (one word alone by "someone": "Brightwater
+// rent" is about a person), and the names read from them by "someone", full
+// names and single words alike; a single word that is a common word or one
+// of the owner's account names' words only in their notes, so "Rent" and
+// account names stay. What the owner writes (notes, and the names and
+// patterns of what they made) shows none of their account masks either.
 
+import { wordsOf } from '../domain/chat/billLabels.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 import type { RowLabel } from '../domain/modelLabels.js'
 import { agentJson } from '../mcp/agentOutput.js'
 import { withoutBankText } from '../mcp/withoutBankText.js'
 import { mergedByLabel } from './labelledRows.js'
-import { fullNamePattern, loneNamePattern, replacedIn, type Replacement } from './namePatterns.js'
+import {
+  fullNamePattern,
+  loneNamePattern,
+  maskPattern,
+  replacedIn,
+  type Replacement,
+} from './namePatterns.js'
 
 /** Stands in for a person's name wherever one would show. */
 export const SOMEONE = 'someone'
+
+/** Stands in for an account mask in what the owner wrote. */
+export const MASKED = '••••'
 
 /** What Chat hides in a tool's result. */
 interface Hidden {
@@ -33,9 +45,14 @@ interface Hidden {
    * by "someone", but a word of the owner's account names, which stay.
    */
   everywhere: Replacement[]
-  /** All of those, account words and common words of names too, for the owner's notes. */
+  /** All of those, account words, common words of names and account masks too, for notes. */
   inNotes: Replacement[]
+  /** Those of everywhere and account masks, for the names and patterns the owner wrote. */
+  inOwnerText: Replacement[]
 }
+
+// Fields whose text the owner wrote: a goal's, category's or bill's name, a rule's pattern.
+const OWNER_TEXT = new Set(['name', 'pattern', 'matchPattern'])
 
 type Row = Record<string, unknown>
 
@@ -103,8 +120,9 @@ function freeKey(key: string, taken: ReadonlySet<string>, hidden: Hidden): strin
 /** One field of an object, with anything hidden in it replaced. */
 function cleanField(key: string, value: unknown, hidden: Hidden): unknown {
   if (key === 'counterparty') return null
-  if (key === 'note' && typeof value === 'string') return replacedIn(value, hidden.inNotes)
-  return walked(value, hidden)
+  if (typeof value !== 'string') return walked(value, hidden)
+  if (key === 'note') return replacedIn(value, hidden.inNotes)
+  return replacedIn(value, OWNER_TEXT.has(key) ? hidden.inOwnerText : hidden.everywhere)
 }
 
 /** An object shown by its label where it has one, then with every key and field cleaned. */
@@ -129,10 +147,14 @@ function walked(value: unknown, hidden: Hidden): unknown {
 
 /** What replaces each hidden thing, in the order they are looked for. */
 function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
-  const phrases = people.phrases.map(([phrase, label]) => ({
-    pattern: fullNamePattern(phrase),
-    with: label,
-  }))
+  // A phrase of one word is a name alone ("Brightwater"), looked for after full names.
+  const oneWord = ([phrase]: readonly [string, string]) => wordsOf(phrase).length === 1
+  const phrases = people.phrases
+    .filter((phrase) => !oneWord(phrase))
+    .map(([phrase, label]) => ({ pattern: fullNamePattern(phrase), with: label }))
+  const words = people.phrases
+    .filter(oneWord)
+    .map(([phrase]) => ({ pattern: fullNamePattern(phrase), with: SOMEONE }))
   const names = people.names
     .filter((name) => name.trim())
     .sort((a, b) => b.length - a.length)
@@ -147,11 +169,13 @@ function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
   const everywhere = [
     ...phrases,
     ...names,
+    ...words,
     ...lone.filter((one) => !ofAccounts(one)).map(asSomeone),
   ]
   const common = people.noteNames.map((word) => ({ pattern: loneNamePattern(word), with: SOMEONE }))
-  const inNotes = [...everywhere, ...lone.filter(ofAccounts).map(asSomeone), ...common]
-  return { everywhere, inNotes }
+  const masks = people.masks.map((mask) => ({ pattern: maskPattern(mask), with: MASKED }))
+  const inNotes = [...everywhere, ...lone.filter(ofAccounts).map(asSomeone), ...common, ...masks]
+  return { everywhere, inNotes, inOwnerText: [...everywhere, ...masks] }
 }
 
 /**

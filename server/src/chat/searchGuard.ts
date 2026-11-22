@@ -6,6 +6,8 @@
 // is refused with a plain message: one that could find a hidden name, or text
 // only a labelled row's hidden name or line holds.
 
+import { wordsOf } from '../domain/chat/billLabels.js'
+import { isCommonWord } from '../domain/chat/commonWords.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 
 /** The tools that match a text, and the field of their input that holds it. */
@@ -22,14 +24,20 @@ export const HIDDEN_SEARCH_MESSAGE =
 // The shortest search looked for inside hidden text: "jo" would refuse too much.
 const PART_LENGTH = 3
 
-/** Whether a search could find a hidden name: it is a part of one, or holds one, accents aside. */
+/**
+ * Whether a search could find a hidden name, accents aside: it is one, or a
+ * part of one ("halvor"), or holds one as a whole word ("ingrid halvorsen").
+ * Only as a whole word, so "sam" hidden never refuses "samsung". A common
+ * word ("Max") is a name only alone, so "hbo max" is no search for one.
+ */
 function findsName(text: string, people: PaymentPeople): boolean {
   const search = text.normalize('NFKD').replace(/\p{M}/gu, '')
+  const words = new Set(wordsOf(search))
   return people.hiddenWords.some(
     (word) =>
       word === search ||
       (search.length >= PART_LENGTH && word.includes(search)) ||
-      (word.length >= PART_LENGTH && search.includes(word)),
+      (words.has(word) && !isCommonWord(word)),
   )
 }
 

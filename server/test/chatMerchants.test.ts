@@ -28,7 +28,10 @@ describe('real merchants', () => {
       detailed: 'FOOD_AND_DRINK_COFFEE',
     })
     await pay('SPOTIFY USA', 1_199, { merchantName: 'Spotify', detailed: 'ENTERTAINMENT_MUSIC' })
-    await pay('PAYPAL *SPOTIFY', 1_199)
+    await pay('PAYPAL *SPOTIFY', 1_199, {
+      merchantName: 'Spotify',
+      detailed: 'ENTERTAINMENT_MUSIC',
+    })
 
     expect((await probe.transactions()).map((tx) => tx.displayName).sort()).toEqual([
       'Amazon',

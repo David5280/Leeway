@@ -5,7 +5,7 @@
 // chatTransfers.test.ts. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
-import { NO_PEOPLE, paymentPeople } from '../src/domain/chat/people.js'
+import { paymentPeople } from '../src/domain/chat/people.js'
 import { ACCOUNT_TRANSFER, GROCERIES, useChatProbe } from './chatProbe.js'
 
 const FROM_APPS = 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS'
@@ -14,15 +14,30 @@ const probe = useChatProbe()
 const { pay } = probe
 
 describe('a shop paid through PayPal', () => {
-  it('keeps its name when the owner buys there, however Plaid filed the payment', async () => {
+  it('shows as the shop only when Plaid filed it as a purchase, and hides no name of it', async () => {
     await pay('PAYPAL INST XFER', 4_500, { merchantName: 'eBay', detailed: ACCOUNT_TRANSFER })
     await pay('PAYPAL INST XFER', 1_500, { merchantName: 'eBay', detailed: FROM_APPS })
-    await pay('EBAY O*12-34567', 2_999, { merchantName: 'eBay', detailed: MARKETPLACE })
+    await pay('PAYPAL *SPOTIFY', 1_199, {
+      merchantName: 'Spotify',
+      detailed: 'ENTERTAINMENT_MUSIC',
+    })
+    await pay('EBAY O*12-34567', 2_999, {
+      merchantName: 'eBay',
+      detailed: MARKETPLACE,
+      note: 'eBay and Spotify',
+    })
 
-    expect(await paymentPeople(probe.ctx.db)).toBe(NO_PEOPLE)
-    const transactions = await probe.sent('list_transactions')
-    expect(transactions).not.toMatch(/someone|payment \(sent\)/i)
-    expect(await probe.merchants()).toEqual([expect.stringMatching(/^ebay$/i)])
+    const people = await paymentPeople(probe.ctx.db)
+    expect(people).toMatchObject({ names: [], loneNames: [], loneAnyCase: [], phrases: [] })
+    expect((await probe.transactions()).map((tx) => tx.displayName).sort()).toEqual([
+      'PayPal payment (sent)',
+      'PayPal payment (sent)',
+      'Spotify',
+      'eBay',
+    ])
+    expect(await probe.notes()).toEqual(['eBay and Spotify'])
+    // The eBay total holds payments shown by their app, so it is too.
+    expect((await probe.merchants()).sort()).toEqual(['PayPal payment (sent)', 'Spotify'])
   })
 
   it('hides a person PayPal paid by bare transfer, whose merchant is no shop', async () => {
@@ -214,7 +229,7 @@ describe('the owner’s own labels', () => {
 })
 
 describe('a sole trader also paid through an app', () => {
-  it('reads as the shop the owner buys from, which shows no one new', async () => {
+  it("is hidden for a person's shape, unless Plaid vouched for the business", async () => {
     await pay('VENMO PAYMENT', 2_500, {
       merchantName: 'Rosalind Fairweather',
       detailed: ACCOUNT_TRANSFER,
@@ -222,16 +237,29 @@ describe('a sole trader also paid through an app', () => {
     await pay('SQ *ROSALIND FAIRWEATHER', 4_000, {
       merchantName: 'Rosalind Fairweather',
       detailed: 'FOOD_AND_DRINK_BAKERIES',
+      note: 'Rosalind Fairweather scones',
     })
 
-    expect(await paymentPeople(probe.ctx.db)).toBe(NO_PEOPLE)
-    const transactions = await probe.transactions()
-    expect(transactions.map((tx) => tx.displayName)).toEqual([
-      'Rosalind Fairweather',
-      'Rosalind Fairweather',
+    expect((await probe.transactions()).map((tx) => tx.displayName).sort()).toEqual([
+      'Purchase or payment',
+      'Venmo payment (sent)',
     ])
+    expect(await probe.notes()).toEqual(['someone scones'])
     expect(JSON.parse(await probe.sent('top_merchants'))).toEqual([
-      { merchant: 'Rosalind Fairweather', spentCents: 6_500, count: 2 },
+      { merchant: 'Purchase or payment', spentCents: 6_500, count: 2 },
+    ])
+
+    // Plaid's merchant id says it is a business, which the owner buys from.
+    await pay('SQ *ROSALIND FAIRWEATHER', 4_000, {
+      merchantName: 'Rosalind Fairweather',
+      detailed: 'FOOD_AND_DRINK_BAKERIES',
+      merchantEntityId: 'ent_fake_bakery',
+    })
+    expect(await paymentPeople(probe.ctx.db)).toMatchObject({ names: [], loneAnyCase: [] })
+    expect((await probe.transactions()).map((tx) => tx.displayName).sort()).toEqual([
+      'Purchase or payment',
+      'Rosalind Fairweather',
+      'Venmo payment (sent)',
     ])
   })
 })

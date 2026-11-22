@@ -5,6 +5,8 @@
 // after its letter, so each letter can take its accents or none. Only the
 // names found are replaced; the rest of the text stays as written. Pure.
 
+import { plainCharacter } from '../domain/plainLetters.js'
+
 // Not inside a longer word: no letter or accent mark either side. A digit
 // may touch it ("Jane Doe2" still names her).
 const WORD_START = '(?<![\\p{L}\\p{M}])'
@@ -15,51 +17,39 @@ function withoutAccents(word: string): string {
   return word.normalize('NFD').replace(/\p{M}/gu, '')
 }
 
-/** A RegExp source matching a word letter by letter, each with or without accents. */
-function lettersOf(word: string): string {
-  return [...withoutAccents(word)]
-    .map((letter) => `${letter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\p{M}*`)
-    .join('')
+/** Text as a RegExp source matching it literally. */
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+/**
+ * A RegExp source matching a word letter by letter, each with or without
+ * accents, and with a hyphen between any two ("Bright-water").
+ */
+function lettersOf(word: string): string {
+  return [...withoutAccents(word)].map((letter) => `${escaped(letter)}\\p{M}*`).join('-?')
+}
+
+// A name made plural: "BRIGHTWATERS", "the Prycewoods'". One owned
+// ("Brightwater's") is found without it, and keeps its "'s".
+const ENDING = '[sS]?'
 
 /**
  * A full name (or any phrase) as a whole, in any case, its words joined any
  * way or not at all: "Jane Doe" also matches "JANE_DOE", "jane-doe",
- * "Jane.Doe", "Jane/Doe", "Jane, Doe" and "JaneDoe".
+ * "Jane.Doe", "Jane/Doe", "Jane, Doe", "JaneDoe" and "Jane Does".
  */
 export function fullNamePattern(name: string): RegExp {
   const words = name.trim().split(/\s+/).map(lettersOf).join('[\\s._,/-]*')
-  return new RegExp(`${WORD_START}${words}${WORD_END}`, 'giu')
+  return new RegExp(`${WORD_START}${words}${ENDING}${WORD_END}`, 'giu')
 }
 
-/** A word as a name is written alone: with a capital ("Jane") or in capitals ("JANE"). */
+/** A word as a name is written alone: with a capital ("Jane") or in capitals ("JANE", "JANE'S"). */
 export function loneNamePattern(word: string): RegExp {
   const plain = withoutAccents(word)
   const rest = plain === plain.toUpperCase() ? plain.slice(1).toLowerCase() : plain.slice(1)
   const forms = [plain[0]!.toUpperCase() + rest, plain.toUpperCase()].map(lettersOf)
-  return new RegExp(`${WORD_START}(?:${forms.join('|')})${WORD_END}`, 'gu')
-}
-
-// Characters that show nothing (format characters like zero-width spaces and
-// joiners, the soft hyphen and direction marks, and the other ignorable ones,
-// like the combining grapheme joiner and Hangul fillers), searched as if
-// absent, since a full name may have its words joined (fullNamePattern).
-const INVISIBLE = /^[\p{Cf}\p{Default_Ignorable_Code_Point}]$/u
-
-// Cyrillic and Greek letters drawn like Latin ones, read as those ("Јane" reads "Jane").
-const LOOK_ALIKES = new Map(
-  [
-    ...['аa', 'сc', 'еe', 'һh', 'іi', 'јj', 'оo', 'рp', 'ѕs', 'хx', 'уy', 'ԁd', 'ԛq', 'ԝw'],
-    ...['АA', 'ВB', 'СC', 'ЕE', 'НH', 'ІI', 'ЈJ', 'КK', 'МM', 'ОO', 'РP', 'ЅS', 'ТT', 'ХX', 'УY'],
-    ...['οo', 'ιi', 'νv', 'ρp', 'ΑA', 'ΒB', 'ΕE', 'ΖZ', 'ΗH', 'ΙI', 'ΚK', 'ΜM', 'ΝN', 'ΟO'],
-    ...['ΡP', 'ΤT', 'ΥY', 'ΧX'],
-  ].map((pair) => [pair[0]!, pair[1]!]),
-)
-
-/** One character as searched: invisible ones dropped, look-alikes made plain, accents split off. */
-function folded(character: string): string {
-  if (INVISIBLE.test(character)) return ''
-  return [...character.normalize('NFKD')].map((one) => LOOK_ALIKES.get(one) ?? one).join('')
+  return new RegExp(`${WORD_START}(?:${forms.join('|')})${ENDING}${WORD_END}`, 'gu')
 }
 
 /** Text as names are searched in, and where each of its characters came from. */
@@ -73,10 +63,10 @@ interface Searchable {
 }
 
 /**
- * Text folded for searching, one character of the original at a time:
- * look-alike letters made plain and accents split off (NFKD, so "Ｊ" reads
- * "J" and "é" reads "e" and its mark, and LOOK_ALIKES), invisible characters
- * dropped. Plain ASCII, most of what is searched, has nothing to fold.
+ * Text folded for searching, one character of the original at a time, as
+ * domain/plainLetters.ts reads it: look-alike letters made plain, accents
+ * split off ("é" reads "e" and its mark) and invisible characters dropped.
+ * Plain ASCII, most of what is searched, has nothing to fold.
  */
 function searchable(original: string): Searchable {
   if (/^[\x20-\x7e]*$/.test(original)) return { text: original, from: null }
@@ -84,12 +74,17 @@ function searchable(original: string): Searchable {
   let start = 0
   for (const character of original) {
     const end = start + character.length
-    const plain = folded(character)
+    const plain = plainCharacter(character)
     search.text += plain
     for (let unit = 0; unit < plain.length; unit += 1) search.from.push({ start, end })
     start = end
   }
   return search
+}
+
+/** An account mask's digits as a whole number: "4417" in "acct 4417", never in "44170". */
+export function maskPattern(mask: string): RegExp {
+  return new RegExp(`(?<!\\p{N})${escaped(mask)}(?!\\p{N})`, 'gu')
 }
 
 /** What a pattern's matches are replaced with. */

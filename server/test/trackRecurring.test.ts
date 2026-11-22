@@ -3,6 +3,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { listBillChanges } from '../src/domain/billChangeSource.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -124,5 +125,67 @@ describe('track_recurring', () => {
     await owner.call('track_recurring', { key: 'comcast' })
     // Tracked once: a second tap finds nothing left to track.
     expect((await owner.callError('track_recurring', { key: 'comcast' })).code).toBe('not_found')
+  })
+})
+
+describe('a key an assistant was given before names were read more closely', () => {
+  // Shown as "To Wilhelmina Ashcombe" now, and "To Wilhelmina Ashcombe via Zelle" before.
+  const EARLIER = 'to wilhelmina ashcombe via zelle'
+
+  /** $25 to a friend through Zelle on the 5th of the last three months. */
+  async function zelleHistory(): Promise<void> {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Everyday', mask: '4417' })
+    for (const date of ['2026-08-05', '2026-09-05', '2026-10-05']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Payment to Wilhelmina Ashcombe via Zelle',
+        amountCents: 2500,
+        detailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      })
+    }
+  }
+
+  it('still tracks or dismisses the series it named', async () => {
+    await zelleHistory()
+    const [found] = await assistant.call('find_recurring')
+    expect(found!.key).toBe('to wilhelmina ashcombe')
+
+    const bill = await assistant.call('track_recurring', { key: EARLIER })
+    expect(bill).toMatchObject({ amountCents: 2500, reads: 'shown_name' })
+    await owner.call('delete_bill', { id: bill.id })
+    await assistant.call('dismiss_recurring', { key: EARLIER })
+    expect(await assistant.call('find_recurring')).toEqual([])
+  })
+
+  it('keeps a bill or a rule it saved from the earlier name matching', async () => {
+    await zelleHistory()
+    const bill = await assistant.call('create_bill', {
+      name: 'Wilhelmina',
+      kind: 'bill',
+      amountCents: 2000,
+      cadence: 'month',
+      anchorDate: '2026-11-05',
+      matchPattern: 'To Wilhelmina Ashcombe via Zelle',
+    })
+    expect(await assistant.call('find_recurring')).toEqual([])
+    // Its payments count as paid, and as charges its amount is checked against.
+    const {
+      bills: [listed],
+    } = await owner.call('list_bills', {})
+    expect(listed).toMatchObject({ lastPaidDate: '2026-10-05', lastPaidCents: 2500 })
+    await ctx.db.query(`UPDATE bills SET created_at = '2026-09-01' WHERE id = $1`, [bill.id])
+    expect(await listBillChanges(ctx.db, 'UTC', '2026-10-20')).toMatchObject([
+      { kind: 'settled', amountCents: 2500 },
+    ])
+
+    const pattern = { field: 'merchant', matchType: 'contains', pattern: 'Ashcombe via Zelle' }
+    expect(await assistant.call('preview_rule', pattern)).toMatchObject({ matchCount: 3 })
+    const { id: categoryId } = await owner.call('create_category', {
+      name: 'Gifts',
+      kind: 'expense',
+    })
+    await assistant.call('create_rule', { ...pattern, categoryId })
+    const { transactions } = await owner.call('list_transactions', {})
+    expect(transactions.map((tx) => tx.categoryId)).toEqual([categoryId, categoryId, categoryId])
   })
 })

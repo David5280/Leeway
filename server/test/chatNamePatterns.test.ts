@@ -87,4 +87,12 @@ describe('a word of a name alone', () => {
       "someone's; someone",
     )
   })
+
+  it("takes a name's plural or possessive and a hyphen inside it with it", () => {
+    expect(
+      hidden("the Prycewoods' cabin, Prycewood's dog", ['Jane Prycewood'], ['Prycewood']),
+    ).toBe("the someone' cabin, someone's dog")
+    expect(hidden('Bright-water and BRIGHTWATERS', [], ['Brightwater'])).toBe('someone and someone')
+    expect(hidden('Ysolde Bright-waters', ['Ysolde Brightwater'])).toBe('someone')
+  })
 })

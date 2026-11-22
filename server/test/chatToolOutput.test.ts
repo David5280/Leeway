@@ -234,3 +234,28 @@ describe('a hidden name anywhere else', () => {
     })
   })
 })
+
+describe('what the owner wrote', () => {
+  it('loses a one-word phrase a labelled row showed as "someone", and an account mask', () => {
+    const people = hiding({
+      phrases: [
+        ['Larkspur', 'Service payment'],
+        ['Odalys Larkspur', 'Service payment'],
+      ],
+      names: ['Aurelia Brightwater'],
+      masks: ['4417'],
+    })
+    const result = [
+      {
+        name: 'Larkspur wedding fund 4417',
+        note: 'Odalys Larkspur, acct 4417, Aurelia Brightwater',
+      },
+      { pattern: 'acct 4417', matchPattern: 'xfer 4417', label: 'Card 4417' },
+    ]
+    expect(sent(result, people)).toEqual([
+      { name: 'someone wedding fund ••••', note: 'Service payment, acct ••••, someone' },
+      // A mask is hidden only where the owner writes; other fields never carry one.
+      { pattern: 'acct ••••', matchPattern: 'xfer ••••', label: 'Card 4417' },
+    ])
+  })
+})

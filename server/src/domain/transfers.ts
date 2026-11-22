@@ -156,6 +156,24 @@ function tidyName(name: string): string {
   return name.toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())
 }
 
+/**
+ * A payment between people as the app read it before names were read more
+ * closely: any app named in the line, the whole rest of the line after "to"
+ * or "from" as the person. Names an assistant was given then, and patterns it
+ * saved from them, still match by it (ruleText.ts).
+ */
+export function earlierPersonPayment(tx: Movement): PersonPayment | null {
+  const app = personToPersonApp(tx)
+  if (!app || tx.amountCents === 0) return null
+  const named = NAMED_PAYMENT.exec(tx.name)?.[2]
+  const counterparty = named ? withoutReference(named) : ''
+  return {
+    app,
+    direction: tx.amountCents < 0 ? 'in' : 'out',
+    counterparty: counterparty ? tidyName(counterparty) : null,
+  }
+}
+
 /** The name a bank wrote after "to" or "from", without what it added after it, if any. */
 export function nameAfterToOrFrom(line: string): string | null {
   const [, word, rest] = NAMED_PAYMENT.exec(line) ?? []

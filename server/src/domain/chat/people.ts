@@ -3,11 +3,11 @@
 // could show a person under, and the bills that track them.
 //
 // Chat hides by default (modelLabels.ts): a row's own name reaches the model
-// only when it is surely a merchant. Every other row is labelled ("Zelle
-// payment (sent)", "Transfer to savings"), and what it would have been shown
-// as is replaced by that label wherever else it is written. The names read
-// from the rows paying or paid through an app or a transfer (personNames.ts)
-// are hidden everywhere too, and no search may find them (chat/searchGuard.ts).
+// only when it is surely a purchase from a business. Every other row is
+// labelled ("Zelle payment (sent)", "Service payment"), and what it would
+// have been shown as is replaced by that label wherever else it is written.
+// The names read from the labelled rows (personNames.ts) are hidden
+// everywhere too, and no search may find them (chat/searchGuard.ts).
 
 import type { Db } from '../../db/pool.js'
 import { accountMasks } from '../accounts.js'
@@ -15,7 +15,8 @@ import { GENERIC_NAME } from '../merchantName.js'
 import { bankTextKey, textKey } from '../merchantKey.js'
 import { neutralLabel, type LabelSubject, type RowLabel } from '../modelLabels.js'
 import { isMovementWord } from '../movementWords.js'
-import { CODE_SQL, loadPeopleContext, NAMES_AN_APP_SQL } from '../peopleContext.js'
+import { isKnownShop, type KnownShops } from '../knownShops.js'
+import { shopsIn } from '../peopleContext.js'
 import { shownNameOf } from '../ruleText.js'
 import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
@@ -48,6 +49,8 @@ export interface PaymentPeople extends HiddenNames {
    * a name that is one of these is hidden only in notes, so account names stay.
    */
   accountWords: readonly string[]
+  /** The owner's account masks, hidden in what they write (a note "acct 4417"). */
+  masks: readonly string[]
 }
 
 /** No row labelled, no name and no bill hidden: nothing is replaced. */
@@ -62,24 +65,25 @@ export const NO_PEOPLE: PaymentPeople = {
   hiddenWords: [],
   hiddenTexts: [],
   accountWords: [],
+  masks: [],
 }
 
 type Row = LabelSubject & { id: string; note: string | null }
 type Labelled = RowLabel & { tx: Row }
 
 /**
- * The rows that could be labelled: through a payment app, with no code, filed
- * as a transfer, or with a word a transfer or payment to someone is written with.
+ * Every transaction, as labelling reads it. Each one is labelled unless it
+ * may show its name, so none is left out by a guess at what it is: narrowing
+ * the scan by its words would be the list of a person's shapes this replaces.
  */
-async function labelCandidates(db: Db): Promise<Row[]> {
+async function allRows(db: Db): Promise<Row[]> {
   const { rows } = await db.query<Row>(
     `SELECT id::text, name, merchant_name AS "merchantName", amount_cents AS "amountCents",
        provider_category_primary AS "providerCategoryPrimary",
        provider_category_detailed AS "providerCategoryDetailed", note,
+       merchant_entity_id AS "merchantEntityId",
        (provider_transaction_id IS NULL AND import_id IS NULL) AS "handEntered"
-     FROM transactions
-     WHERE ${NAMES_AN_APP_SQL} OR ${CODE_SQL} = '' OR ${CODE_SQL} LIKE 'TRANSFER%'
-       OR name ~* '\\y(transfer|xfer|trnsfr|payment|pmt|sent|received|to|from)\\y'`,
+     FROM transactions`,
   )
   return rows
 }
@@ -111,19 +115,23 @@ interface PhraseContext {
   ownWords: ReadonlySet<string>
   /** Hidden names and words in lower case, which "someone" replaces instead. */
   names: ReadonlySet<string>
+  /** The shops the owner buys from, whose names show wherever they are written. */
+  shops: KnownShops
 }
 
 /**
  * Whether a shown name is worth replacing by its label: it has a word beyond
  * how money moved and the owner's own accounts ("Transfer to Ally Savings"
- * names no one, and account names stay), and it is neither the label nor a
- * hidden name already.
+ * names no one, and account names stay), and it is neither the label, a
+ * hidden name already, nor a shop the owner buys from (a "MARIGOLD CAFE 0042"
+ * with no code beside the café's coded purchases).
  */
 function worthReplacing(phrase: string, label: string, context: PhraseContext): boolean {
   const plain = phrase.toLowerCase()
   if (phrase === GENERIC_NAME || plain === label.toLowerCase() || context.names.has(plain)) {
     return false
   }
+  if (isKnownShop(context.shops, phrase)) return false
   return wordsOf(phrase).some((word) => !isMovementWord(word) && !context.ownWords.has(word))
 }
 
@@ -171,10 +179,10 @@ function hiddenSet(hidden: HiddenNames): Set<string> {
 
 /** Every labelled row, bill and name Chat hides from a model, and what it shows instead. */
 export async function paymentPeople(db: Db): Promise<PaymentPeople> {
-  const [rows, bills] = await Promise.all([labelCandidates(db), storedBills(db)])
-  const { shops } = await loadPeopleContext(db, rows)
+  const [rows, bills] = await Promise.all([allRows(db), storedBills(db)])
+  const shops = shopsIn(rows)
   const labelled = rows.flatMap((tx): Labelled[] => {
-    const label = neutralLabel(tx, shops)
+    const label = neutralLabel(tx)
     return label ? [{ tx, ...label }] : []
   })
   if (labelled.length === 0 && bills.length === 0) return NO_PEOPLE
@@ -192,14 +200,20 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
       bankKey: bankTextKey(tx),
       shownKey: textKey(shownNameOf(tx, masks)),
     }))
-  const shown = labelBills(bills, payments, new Set(hiddenWords))
+  const shown = labelBills(bills, payments, new Set(hiddenWords), hidden.names)
   return {
     ...hidden,
     rows: new Map(labelled.map(({ tx, label, kind }) => [tx.id, { label, kind }])),
     bills: shown,
-    phrases: phrasesOf(labelled, bills, shown, { masks, ownWords, names: hiddenSet(hidden) }),
+    phrases: phrasesOf(labelled, bills, shown, {
+      masks,
+      ownWords,
+      names: hiddenSet(hidden),
+      shops,
+    }),
     hiddenWords,
     hiddenTexts: hiddenTextsOf(labelled, masks),
     accountWords: [...ownWords],
+    masks,
   }
 }

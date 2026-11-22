@@ -7,7 +7,7 @@ import { notFound } from '../errors.js'
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
 import { billInputSchema, createBill, type Bill } from './bills.js'
-import { untracked, type Untracked } from './recurring.js'
+import { namedByKey, untracked, type Untracked } from './recurring.js'
 
 /** The longest bill name kept, as billInputSchema allows. */
 const NAME_LIMIT = 80
@@ -40,8 +40,7 @@ export async function trackRecurring(
   { forAssistant = false }: { forAssistant?: boolean } = {},
 ): Promise<Bill> {
   const found = (await untracked(db, today)).find(
-    (one) =>
-      one.series.direction === 'out' && (forAssistant ? one.shownKey : one.series.key) === key,
+    (one) => one.series.direction === 'out' && namedByKey(one, key, forAssistant),
   )
   if (!found) throw notFound('Recurring charge')
   return createBill(

@@ -217,15 +217,16 @@ async function upsertTransactions(
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO transactions (account_id, provider_transaction_id, pending_provider_transaction_id,
        date, name, merchant_name, amount_cents, currency, pending,
-       provider_category_primary, provider_category_detailed)
+       provider_category_primary, provider_category_detailed, merchant_entity_id)
      SELECT * FROM unnest($1::uuid[], $2::text[], $3::text[], $4::date[], $5::text[], $6::text[],
-       $7::bigint[], $8::text[], $9::boolean[], $10::text[], $11::text[])
+       $7::bigint[], $8::text[], $9::boolean[], $10::text[], $11::text[], $12::text[])
      ON CONFLICT (account_id, provider_transaction_id) DO UPDATE SET
        pending_provider_transaction_id = EXCLUDED.pending_provider_transaction_id,
        date = EXCLUDED.date, name = EXCLUDED.name, merchant_name = EXCLUDED.merchant_name,
        amount_cents = EXCLUDED.amount_cents, currency = EXCLUDED.currency, pending = EXCLUDED.pending,
        provider_category_primary = EXCLUDED.provider_category_primary,
        provider_category_detailed = EXCLUDED.provider_category_detailed,
+       merchant_entity_id = EXCLUDED.merchant_entity_id,
        updated_at = now()
      RETURNING id`,
     [
@@ -240,6 +241,7 @@ async function upsertTransactions(
       known.map((tx) => tx.pending),
       known.map((tx) => tx.categoryPrimary),
       known.map((tx) => tx.categoryDetailed),
+      known.map((tx) => tx.merchantEntityId ?? null),
     ],
   )
   return rows.map((row) => row.id)

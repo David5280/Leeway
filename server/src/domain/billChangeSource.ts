@@ -19,7 +19,7 @@ import {
   type WatchedBill,
 } from './billChanges.js'
 import { textKey } from './merchantKey.js'
-import { shownNameOf } from './ruleText.js'
+import { shownNamesOf } from './ruleText.js'
 import type { RuleReads } from './rules.js'
 import type { Movement } from './transfers.js'
 
@@ -91,12 +91,16 @@ async function byShownName(
     ),
     accountMasks(db),
   ])
-  const keyed = rows.map((payment) => ({ payment, key: textKey(shownNameOf(payment, masks)) }))
+  // Every name a payment was shown under, so a pattern saved from an earlier one still finds it.
+  const keyed = rows.map((payment) => ({
+    payment,
+    keys: shownNamesOf(payment, masks).map(textKey),
+  }))
   return bills.map((bill) => {
     if (bill.reads !== 'shown_name') return bill
     const pattern = textKey(bill.matchPattern)
     const charges = keyed
-      .filter(({ key }) => pattern && key.includes(pattern))
+      .filter(({ keys }) => pattern && keys.some((key) => key.includes(pattern)))
       .slice(0, CHARGES_READ)
       .map(({ payment: { accountId, date, amountCents } }) => ({ accountId, date, amountCents }))
     return { ...bill, charges }

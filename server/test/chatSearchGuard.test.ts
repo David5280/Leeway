@@ -7,7 +7,7 @@ import { NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
 
 const people: PaymentPeople = {
   ...NO_PEOPLE,
-  hiddenWords: ['prycewood', 'jane', 'bo'],
+  hiddenWords: ['prycewood', 'jane', 'bo', 'sam', 'max'],
   hiddenTexts: [
     { text: 'to jane prycewood', label: 'zelle payment (sent)' },
     { text: 'venmo for concert tickets', label: 'venmo payment (sent)' },
@@ -36,5 +36,14 @@ describe('a search for text', () => {
     expect(refusedSearch('list_transactions', { limit: 5 }, people)).toBeNull()
     expect(refusedSearch('list_transactions', null, people)).toBeNull()
     expect(refusedSearch('top_merchants', { search: 'jane' }, people)).toBeNull()
+  })
+
+  it('runs when a hidden word is only inside a longer one, or is a common word among others', () => {
+    for (const text of ['samsung', 'Samsung Galaxy', 'hbo max', 'janet']) {
+      expect([text, search(text)]).toEqual([text, null])
+    }
+    for (const text of ['sam', 'max', 'sam jones', 'jane doe']) {
+      expect([text, search(text)]).toEqual([text, HIDDEN_SEARCH_MESSAGE])
+    }
   })
 })
