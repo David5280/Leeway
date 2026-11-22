@@ -81,17 +81,19 @@ const ACCOUNT_NAMED_BY_PAY = new RegExp(
 )
 
 /**
- * A transfer the owner made in online or mobile banking, which only moves
- * money between their own accounts: whatever its "from" tail says, it names
- * one of them ("Online Transfer from Tax Refund").
+ * A transfer the owner made in online, web or mobile banking, which moves
+ * money between their own accounts, so its "from" tail names one of them
+ * even with no account word: "Online Transfer from Tax Refund". Unless the
+ * tail names a paycheck ("Online Transfer from ACME Payroll"): an employer's
+ * pay can arrive with words like these too, so pay words win there.
  */
 const OWN_TRANSFER = /\b(online|mobile|internet|web)\s+(transfer|xfer|trnsfr)\b/i
 
 /** A "to ..." tail, which names where the money of a move went, often an account. */
 const DESTINATION_TAIL = /\bto\b.*$/i
 
-/** Any "from ..." tail, dropped whole after an own transfer (OWN_TRANSFER). */
-const SOURCE_TAIL = /\bfrom\b.*$/i
+/** A "from ..." tail with no paycheck words, dropped after an own transfer (OWN_TRANSFER). */
+const OWN_SOURCE_TAIL = new RegExp(String.raw`\bfrom\b(?!.*${PAYCHECK_WORDS.source}).*$`, 'i')
 
 /**
  * A "from ..." tail that ends with a kind of account, perhaps with its last
@@ -109,14 +111,14 @@ const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
 
 /**
  * The tail of a field after a transfer word, less the parts that name an
- * account: a "to" tail always, then a "from" tail after an own transfer or
- * one that ends with a kind of account (SOURCE_ACCOUNT_TAIL). The "to" tail
- * goes first, so in "from ACME Payroll to Savings" the "from" tail is read
- * without the destination's name.
+ * account: a "to" tail always, then a "from" tail that ends with a kind of
+ * account (SOURCE_ACCOUNT_TAIL), then, after an own transfer, one with no
+ * paycheck words (OWN_SOURCE_TAIL). The "to" tail goes first, so in "from
+ * ACME Payroll to Savings" the "from" tail is read without the destination.
  */
 function withoutAccountTails(tail: string, ownTransfer: boolean): string {
-  const sentFrom = tail.replace(DESTINATION_TAIL, '')
-  return sentFrom.replace(ownTransfer ? SOURCE_TAIL : SOURCE_ACCOUNT_TAIL, '')
+  const sentFrom = tail.replace(DESTINATION_TAIL, '').replace(SOURCE_ACCOUNT_TAIL, '')
+  return ownTransfer ? sentFrom.replace(OWN_SOURCE_TAIL, '') : sentFrom
 }
 
 /**

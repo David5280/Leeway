@@ -33,6 +33,10 @@ describe('wordsHint', () => {
     'ACH Transfer from ACME Payroll Acct 5678',
     'Transfer from Paychex Payroll *1234',
     'Transfer from ACME Refund x1234',
+    // An own transfer from a paycheck is still pay.
+    'Online Transfer from ACME Payroll',
+    'Web Transfer from Paychex Payroll',
+    'Mobile Transfer from ACME Direct Deposit',
     // With no transfer word, a pay word anywhere is pay.
     'Payroll Account Services',
     'Direct Dep Savings Bank',
@@ -54,6 +58,9 @@ describe('wordsHint', () => {
     'Online Transfer from Tax Refund',
     'Online Transfer from PAYROLL SVGS',
     'Mobile Transfer from Refund Holding',
+    'Web Transfer from Rebate Stash',
+    // Ending with a kind of account wins over a paycheck word, own transfer or not.
+    'Online Transfer from ACME Payroll Savings',
     // A "to" tail always names where the money went.
     'Online Transfer to PAYROLL CHK',
     // An account's name standing alone, with a hyphen or a mask too.
