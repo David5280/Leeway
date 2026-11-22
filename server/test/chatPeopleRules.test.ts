@@ -96,9 +96,19 @@ describe('where each name is hidden', () => {
     })
   })
 
-  it("leaves out a business's name, which is no person", () => {
-    for (const business of ['Acme Plumbing LLC', 'Quorn & Sons Inc.', 'Vale Co']) {
-      expect(namesToHide([business, 'Jane Doe'], NO_SHOPS).names).toEqual(['Jane Doe'])
+  it("hides a business's name with and without its ending, which is never a name alone", () => {
+    // A practice can trade under a person's own name, and say what they treat.
+    expect(namesToHide(['Jane Doe Pc'], NO_SHOPS)).toEqual({
+      names: ['Jane Doe Pc', 'Jane Doe'],
+      loneNames: ['Jane', 'Doe'],
+    })
+    expect(namesToHide(['Vale Co'], NO_SHOPS)).toEqual({ names: ['Vale Co'], loneNames: ['Vale'] })
+  })
+
+  it('leaves a business the owner buys from its name, with or without its ending', () => {
+    const shops = knownShops(['Acme Plumbing', 'Quorn & Sons Inc.'])
+    for (const business of ['Acme Plumbing LLC', 'Quorn & Sons Inc.']) {
+      expect(namesToHide([business, 'Jane Doe'], shops).names).toEqual(['Jane Doe'])
     }
   })
 

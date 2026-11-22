@@ -311,4 +311,20 @@ describe('payments between people', () => {
       { name: 'Netflix', betweenPeople: undefined },
     ])
   })
+
+  it('keep a bank transfer apart, totalled and repeating with the label Chat shows', async () => {
+    for (const month of ['08', '09', '10', '11']) {
+      await bank(`2026-${month}-05`, 'Online Transfer to Pellworth Oda', 90_000, {
+        detailed: ACCOUNT_TRANSFER,
+      })
+    }
+    await recategorize()
+    const label = { transferLabel: 'Transfer to another account' }
+    expect(await call('top_merchants')).toEqual([
+      { merchant: 'Transfer to Pellworth Oda', spentCents: 90_000, count: 1, ...label },
+    ])
+    expect(await call('find_recurring')).toEqual([
+      expect.objectContaining({ name: 'Transfer to Pellworth Oda', ...label }),
+    ])
+  })
 })

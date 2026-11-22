@@ -5,6 +5,10 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { runChatTool } from '../src/chat/tools.js'
+import { recategorize } from '../src/domain/categorize.js'
+import { untrackedRecurring } from '../src/domain/recurring.js'
+import { trackRecurring } from '../src/domain/trackRecurring.js'
+import { categoryInputSchema, createCategory } from '../src/domain/categories.js'
 import { NO_PEOPLE, paymentPeople } from '../src/domain/chat/people.js'
 import {
   createTestContext,
@@ -79,7 +83,7 @@ describe('a shop paid through PayPal', () => {
     await pay('EBAY O*12-34567', 2_999, { merchantName: 'eBay', detailed: MARKETPLACE })
 
     // The app payment itself shows no one, but eBay is no person to hide elsewhere.
-    expect(await paymentPeople(ctx.db)).toEqual({
+    expect(await paymentPeople(ctx.db)).toMatchObject({
       names: [],
       loneNames: [],
       transactionIds: new Set([app]),
@@ -349,46 +353,87 @@ describe("a person's name alone in a note", () => {
   })
 })
 
-describe('a bank transfer to a person, with no app named', () => {
-  const transfer = { detailed: ACCOUNT_TRANSFER }
-
-  it('shows no person and drops its note, through any wording or a short Zelle', async () => {
-    await pay(
-      'ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX9081 REF #IBEXYZ ON 11/15/26',
-      60_000,
-      {
-        ...transfer,
-        note: 'Clara rent share',
-      },
-    )
-    await pay('Online Transfer to Clara Thornbury', 5_000, transfer)
+describe('a payment through a short or unnamed app', () => {
+  it('shows no person and drops its note', async () => {
+    const transfer = { detailed: ACCOUNT_TRANSFER, note: 'Lunch with Mirabel' }
     await pay('SENT MONEY TO PELLWORTH ODA', 2_000, transfer)
     await pay('ZEL TO MIRABEL QUINT', 3_000, transfer)
+
+    const transactions = await transactionsOf()
+    expect(JSON.stringify(transactions)).not.toMatch(/pellworth|oda\b|mirabel|quint/i)
+    expect(transactions.map((tx) => tx.displayName)).toEqual(['To someone', 'To someone'])
+    expect(await notesOf()).toEqual([])
+  })
+})
+
+describe('a bank transfer with no payment app', () => {
+  const transfer = { detailed: ACCOUNT_TRANSFER }
+  // The owner's own money, a landlord and a person, which a bank's line cannot tell apart.
+  const lines = [
+    'ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX9081 REF #IBEXYZ ON 11/15/26',
+    'Online Transfer to Clara Thornbury',
+    'ONLINE TRANSFER TO ALLY BANK SAVINGS',
+    'Transfer to FIDELITY',
+    'Transfer to Marcus by Goldman Sachs',
+    'ONLINE TRANSFER TO CHARLES SCHWAB',
+    'ONLINE TRANSFER TO LANDLORD PROPERTY MGMT',
+    'Online Transfer to Vacation Fund',
+    'ONLINE TRANSFER TO ENGEL D EVERYDAY CHECKING XXXXXX7777',
+    'Online Banking transfer to CHK 1234 Confirmation# 999',
+  ]
+
+  it('shows its kind, never its line, and keeps its note with names hidden', async () => {
+    for (const line of lines) await pay(line, 10_000, { ...transfer, note: 'Clara rent share' })
+    await pay('ONLINE TRANSFER TO WEALTHFRONT', 5_000, {
+      detailed: 'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS',
+    })
+    await pay('ONLINE TRANSFER FROM SAVINGS', -5_000, { detailed: 'TRANSFER_IN_SAVINGS' })
+    // Clara is someone the owner paid through Zelle, so her name goes from every note.
+    await pay('Zelle payment to CLARA JPM99A1B2C3', 2_000)
+
+    const transactions = await transactionsOf()
+    const shown = transactions.filter((tx) => tx.displayName !== 'To someone')
+    const named = /thornbury|clara|ally|fidelity|marcus|goldman|schwab|landlord|vacation|engel/i
+    expect(JSON.stringify(shown)).not.toMatch(named)
+    expect(JSON.stringify(shown)).not.toMatch(/chk|wealthfront|someone"/i)
+    expect(shown.map((tx) => tx.displayName).sort()).toEqual([
+      'Transfer from savings',
+      ...lines.map(() => 'Transfer to another account'),
+      'Transfer to investments',
+    ])
+    expect(await notesOf()).toEqual(lines.map(() => 'someone rent share'))
+  })
+
+  it('never makes its words names to hide elsewhere', async () => {
+    for (const line of lines) await pay(line, 10_000, transfer)
     await pay('KING SOOPERS', 900, {
       merchantName: 'King Soopers',
       detailed: GROCERIES,
-      note: 'With CLARA THORNBURY, Thornbury and Mirabel Quint',
+      note: 'Fidelity statement, Vacation plans with Charles Schwab and Engel D',
     })
 
-    const transactions = await transactionsOf()
-    expect(JSON.stringify(transactions)).not.toMatch(
-      /thornbury|clara|pellworth|oda\b|mirabel|quint/i,
+    const people = await paymentPeople(ctx.db)
+    expect(people).toMatchObject({ names: [], loneNames: [], transactionIds: new Set() })
+    expect(people.bankTransfers.size).toBe(lines.length)
+    expect(await notesOf()).toContain(
+      'Fidelity statement, Vacation plans with Charles Schwab and Engel D',
     )
-    expect(transactions.filter((tx) => tx.displayName === 'To someone')).toHaveLength(4)
-    expect(await notesOf()).toEqual(['With someone, someone and someone'])
   })
 
-  it("leaves a transfer to the owner's own account as it was", async () => {
-    await pay('ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX4417', 60_000, {
-      ...transfer,
-      note: 'moving savings',
+  it("keeps the names of a transfer paired between two of the owner's accounts", async () => {
+    await createCategory(ctx.db, categoryInputSchema.parse({ name: 'Transfers', kind: 'transfer' }))
+    const { accountId: savings } = await insertBankAccount(ctx.db, { name: 'Ally Savings' })
+    await pay('ONLINE TRANSFER TO ALLY BANK SAVINGS', 10_000, transfer)
+    await insertBankTransaction(ctx.db, savings, {
+      date: '2026-11-15',
+      name: 'ONLINE TRANSFER FROM CHASE',
+      amountCents: -10_000,
+      detailed: 'TRANSFER_IN_ACCOUNT_TRANSFER',
     })
-    await pay('Online Transfer to Wells Fargo Way2Save Savings', 10_000, transfer)
+    await recategorize(ctx.db)
 
-    expect(await paymentPeople(ctx.db)).toBe(NO_PEOPLE)
-    const transactions = await transactionsOf()
-    expect(transactions.some((tx) => tx.displayName === 'To someone')).toBe(false)
-    expect(await notesOf()).toEqual(['moving savings'])
+    const paired = 'Test Chase Total Checking to Test Ally Savings'
+    expect((await transactionsOf()).map((tx) => tx.displayName)).toEqual([paired, paired])
   })
 })
 
@@ -415,6 +460,55 @@ describe('a person named in one word, paid every month', () => {
   })
 })
 
+describe('a bill tracking a payment between people or a bank transfer', () => {
+  it("reads as a payment app or the transfer's kind, its stored name aside", async () => {
+    for (const month of ['08', '09', '10', '11']) {
+      const date = `2026-${month}-05`
+      await pay('Zelle payment to CLARA JPM99A1B2C3', 20_000, { date })
+      await pay('Online Transfer to Pellworth Oda', 90_000, { date, detailed: ACCOUNT_TRANSFER })
+    }
+    const recurring = JSON.parse(await sent('find_recurring')) as Record<string, unknown>[]
+    expect(recurring.map(({ name, key }) => [name, key]).sort()).toEqual([
+      ['Payment app', 'Payment app'],
+      ['Transfer to another account', 'Transfer to another account'],
+    ])
+
+    // The owner tracks one by its own key, an assistant the other by the key it was given.
+    const found = await untrackedRecurring(ctx.db, '2026-11-17')
+    await trackRecurring(ctx.db, found[0]!.key, '2026-11-17')
+    const [assistants] = await untrackedRecurring(ctx.db, '2026-11-17', { forAssistant: true })
+    await trackRecurring(ctx.db, assistants!.key, '2026-11-17', { forAssistant: true })
+
+    const { bills } = JSON.parse(await sent('list_bills')) as { bills: Record<string, unknown>[] }
+    expect(bills.map(({ name, matchPattern }) => [name, matchPattern]).sort()).toEqual([
+      ['Payment app', 'Payment app'],
+      ['Transfer to another account', 'Transfer to another account'],
+    ])
+    expect(JSON.stringify(bills)).not.toMatch(/clara|pellworth|oda\b/i)
+  })
+})
+
+describe('a name that reads as an account or a business', () => {
+  it('is a person through Zelle, hidden whole and without its ending', async () => {
+    await pay('Zelle payment to IRA ROTH JPM1', 3_000, {
+      detailed: ACCOUNT_TRANSFER,
+      note: 'Ira Roth lunch',
+    })
+    await pay('Zelle payment to DAVID CARD', 1_000, { detailed: ACCOUNT_TRANSFER })
+    await pay('Zelle payment to JANE DOE PC JPM2', 15_000, { detailed: ACCOUNT_TRANSFER })
+    await pay('KING SOOPERS', 900, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'Ira Roth and David Card, after Jane Doe Pc and Jane Doe',
+    })
+
+    const transactions = await transactionsOf()
+    expect(transactions.filter((tx) => tx.displayName === 'To someone')).toHaveLength(3)
+    expect(await notesOf()).toEqual(['someone and someone, after someone and someone'])
+    expect(JSON.stringify(transactions)).not.toMatch(/ira|roth|david|card|jane|doe/i)
+  })
+})
+
 describe('a payment app paying a shop, a card or the owner', () => {
   it('keeps its name and note, and hides nothing elsewhere', async () => {
     await pay('PAYPAL *FROM YOU FLOWERS', 6_500, {
@@ -438,7 +532,7 @@ describe('a payment app paying a shop, a card or the owner', () => {
     expect(await paymentPeople(ctx.db)).toBe(NO_PEOPLE)
     const transactions = await transactionsOf()
     expect(transactions.some((tx) => /someone/.test(tx.displayName))).toBe(false)
-    expect(JSON.stringify(transactions)).toMatch(/venmo credit card/i)
+    expect(JSON.stringify(transactions)).toMatch(/venmo credit/i)
     expect((await notesOf()).sort()).toEqual(['For June', 'cashout'])
   })
 })

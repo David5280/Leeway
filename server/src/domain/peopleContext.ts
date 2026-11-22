@@ -1,11 +1,12 @@
 // What telling a payment between people reads beyond the transaction itself
-// (betweenPeople.ts): the shops the owner buys from, and the owner's own
-// accounts, so a transfer to one of them is never read as paying a person.
+// (betweenPeople.ts): the shops the owner buys from, so a PayPal transfer to
+// one is never read as paying a person, nor a shop's name hidden as one.
 
 import type { Db } from '../db/pool.js'
 import type { PeopleContext } from './betweenPeople.js'
-import { knownShops } from './knownShops.js'
+import { knownShops, NO_SHOPS, type KnownShops } from './knownShops.js'
 import { tidyMerchantName } from './merchantName.js'
+import { personToPersonApp, type Movement } from './transfers.js'
 
 /** The most specific code the bank gave a row, or an empty string, in SQL. */
 export const CODE_SQL = `coalesce(provider_category_detailed, provider_category_primary, '')`
@@ -35,18 +36,17 @@ async function shopNames(db: Db): Promise<string[]> {
   return rows.map((row) => tidyMerchantName(row.merchantName))
 }
 
-/** Every word of the owner's account names, and each account's last four digits. */
-async function ownAccountNames(db: Db): Promise<PeopleContext['accounts']> {
-  const { rows } = await db.query<{ names: string; mask: string | null }>(
-    `SELECT concat_ws(' ', name, display_name, official_name) AS names, mask FROM accounts`,
-  )
-  const words = rows.flatMap((row) => row.names.toLowerCase().split(/[^\p{L}\p{N}]+/u))
-  const masks = rows.flatMap((row) => (row.mask ? [row.mask] : []))
-  return { words: new Set(words), masks: new Set(masks) }
+/** The shops the owner buys from, from every purchase (shopNames). */
+export async function loadKnownShops(db: Db): Promise<KnownShops> {
+  return knownShops(await shopNames(db))
 }
 
-/** The shops and own accounts betweenPeople reads. */
-export async function loadPeopleContext(db: Db): Promise<PeopleContext> {
-  const [merchants, accounts] = await Promise.all([shopNames(db), ownAccountNames(db)])
-  return { shops: knownShops(merchants), accounts }
+/**
+ * What betweenPeople reads to tell the payments among these rows. Only a
+ * PayPal transfer that names no one asks about shops, so the scan of every
+ * purchase is skipped when no row goes through PayPal.
+ */
+export async function loadPeopleContext(db: Db, rows: readonly Movement[]): Promise<PeopleContext> {
+  const asks = rows.some((tx) => personToPersonApp(tx) === 'PayPal')
+  return { shops: asks ? await loadKnownShops(db) : NO_SHOPS }
 }

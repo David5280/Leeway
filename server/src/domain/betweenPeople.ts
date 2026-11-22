@@ -1,18 +1,20 @@
 // Whether a transaction is money between the owner and another person, and
-// who: the one rule everything that keeps people apart reads, so Chat
-// (chat/people.ts), merchant totals (insights.ts) and repeating charges
-// (recurring.ts) always agree. Pure; peopleContext.ts loads what it reads.
+// who: the one rule everything that tells people apart reads, so Chat
+// (chat/people.ts), merchant totals (insights.ts), repeating charges
+// (recurring.ts) and the names the app shows (transactions.ts) always agree.
+// Pure; peopleContext.ts loads what it reads.
 //
-// It reads more than the spending rules do (transfers.ts), which only ask
-// whether a payment app was used. A bank transfer can go to a person too
-// ("ONLINE TRANSFER TO CLARA THORNBURY"), and a payment app can pay a shop,
-// a card or the owner's own bank. When in doubt, it is a person.
+// Only a payment app ("Zelle payment to JANE DOE") says a person was paid.
+// A plain bank transfer can go to a person, a landlord or another bank of
+// the owner's own, and its line ("ONLINE TRANSFER TO ALLY BANK SAVINGS")
+// cannot tell them apart, so it is never read as either: Chat shows it by
+// what kind of transfer Plaid says it is (bankTransferLabel), not by its line.
 
-import { isKnownShop, type KnownShops } from './knownShops.js'
+import { isKnownShop, NO_SHOPS, type KnownShops } from './knownShops.js'
 import { tidyMerchantName } from './merchantName.js'
 import { isMovementWord, namesSomeone } from './movementWords.js'
 import {
-  accountDigitsIn,
+  appNamedIn,
   isAppTransfer,
   nameAfterToOrFrom,
   personToPersonApp,
@@ -20,35 +22,11 @@ import {
   type PersonPayment,
 } from './transfers.js'
 
-/** The owner's own accounts, as a transfer's line could name them. */
-export interface OwnAccountNames {
-  /** Every word of every account's names, in lower case. */
-  words: ReadonlySet<string>
-  /** Each account's last four digits. */
-  masks: ReadonlySet<string>
-}
-
 /** What telling a payment between people reads beyond the transaction itself. */
 export interface PeopleContext {
+  /** The shops the owner buys from, for a PayPal transfer that names no one. */
   shops: KnownShops
-  accounts: OwnAccountNames
 }
-
-// Words for an account or a card, never a person: "to Venmo Credit Card",
-// "to Way2Save Savings".
-const ACCOUNT_WORDS = new Set(
-  (
-    'account acct advantage balance brokerage business card cd checking credit debit direct ' +
-    'everyday hsa ira joint line loan market mastercard money mortgage personal platinum plus ' +
-    'preferred premier primary reserve roth saving savings share shares spend visa way2save yield'
-  ).split(' '),
-)
-
-// Banks, which name no person beside an account word ("to Chase Checking"),
-// though alone they can be a person's name ("Zelle to CHASE").
-const BANK_WORDS = new Set(
-  'boa bofa capital chase citi fargo fidelity pnc schwab truist usaa vanguard wells'.split(' '),
-)
 
 // Money the owner moves between their own app balance and bank, never to anyone.
 const OWN_MONEY =
@@ -71,11 +49,14 @@ function codeOf(tx: Movement): string {
   return tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 }
 
-/** The payment app a line names, if any. */
-function appOf(tx: Movement): string | null {
-  return (
-    personToPersonApp(tx) ?? MORE_APPS.find(({ pattern }) => pattern.test(tx.name))?.app ?? null
-  )
+/** The payment app a text names, short forms ("ZEL", "SENT MONEY") included. */
+function appIn(text: string): string | null {
+  return appNamedIn(text) ?? MORE_APPS.find(({ pattern }) => pattern.test(text))?.app ?? null
+}
+
+/** The payment app a transaction went through, if any. */
+export function paymentAppOf(tx: Movement): string | null {
+  return personToPersonApp(tx) ?? appIn(tx.name)
 }
 
 /** Plaid's merchant name made readable, or an empty string when it gave none. */
@@ -83,37 +64,21 @@ export function merchantOf(tx: Movement): string {
   return tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : ''
 }
 
-/** A word of a name in lower case, letters and digits only. */
-function plainWord(word: string): string {
-  return word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-}
-
-/** Whether a word of a name could be a person's, given whether the name reads as an account. */
-function couldBeAPerson(plain: string, readsAsAccount: boolean): boolean {
+/** Whether a word of a name could be a person's: no movement word, no "XXXX". */
+function couldBeAPerson(word: string): boolean {
+  const plain = word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
   // "XXXX" is how some banks hide an account number, not a name.
-  if (!plain || /^x+$/.test(plain) || isMovementWord(plain)) return false
-  return !ACCOUNT_WORDS.has(plain) && !(readsAsAccount && BANK_WORDS.has(plain))
+  return plain !== '' && !/^x+$/.test(plain) && !isMovementWord(plain)
 }
 
 /**
- * The words of a name that could be a person's: no movement or account
- * word, no bank beside an account word, and no "XXXX". With the owner's
- * accounts given, a name made only of their accounts' words ("to Vacation
- * Fund") is theirs, so it names no one.
+ * The words of a name that could be a person's, or '' when none could.
+ * Account words stay: through Zelle, "IRA ROTH" and "DAVID CARD" are people,
+ * since no app pays an IRA or a card.
  */
-export function personWords(name: string, ownAccounts: OwnAccountNames | null): string {
-  const words = name.split(/\s+/).map((word) => ({ word, plain: plainWord(word) }))
-  const readsAsAccount = words.some(({ plain }) => ACCOUNT_WORDS.has(plain))
-  const kept = words.filter(({ plain }) => couldBeAPerson(plain, readsAsAccount))
-  if (ownAccounts && kept.every(({ plain }) => ownAccounts.words.has(plain))) return ''
-  const person = kept.map(({ word }) => word).join(' ')
+export function personWords(name: string): string {
+  const person = name.split(/\s+/).filter(couldBeAPerson).join(' ')
   return namesSomeone(person) ? person : ''
-}
-
-/** Whether a line names one of the owner's own accounts by its last four digits. */
-function namesOwnAccount(tx: Movement, accounts: OwnAccountNames): boolean {
-  const digits = accountDigitsIn(tx.name)
-  return digits !== null && accounts.masks.has(digits)
 }
 
 /**
@@ -141,43 +106,69 @@ function unnamedAppPayment(tx: Movement, app: string, shops: KnownShops): boolea
 
 /**
  * The payment between the owner and a person a transaction is, or null.
- * The counterparty is who the line names after "to" or "from", without
- * account words ("THORNBURY C EVERYDAY CHECKING" names "Thornbury C"):
- *
- * - Through a payment app, a named person always counts, unless the code is
- *   a loan, card or purchase one. A line that names only an account or the
- *   app ("to Venmo Credit Card", "from Venmo") pays no one, and money moved
- *   between the owner's app balance and bank ("VENMO CASHOUT") is their own.
- * - With no app, a transfer counts when it names a person, and neither one
- *   of the owner's own accounts by its digits nor only their accounts' words.
+ * Only a payment app pays a person, and never when the code is a loan, card
+ * or purchase one. The counterparty is who the line names after "to" or
+ * "from". A line that names the app there ("to Venmo Credit Card", "from
+ * Venmo") pays the owner's own card or balance, and so does money moved
+ * between their app balance and bank ("VENMO CASHOUT").
  */
 export function betweenPeople(tx: Movement, context: PeopleContext): PersonPayment | null {
-  if (tx.amountCents === 0) return null
+  const app = paymentAppOf(tx)
+  if (!app || tx.amountCents === 0 || paysNoPerson(app, codeOf(tx))) return null
   const named = nameAfterToOrFrom(tx.name)
-  const app = appOf(tx)
-  // Through an app, the one paid is never one of the owner's own accounts.
-  const counterparty = (named && personWords(named, app ? null : context.accounts)) || null
-  const payment = (via: string): PersonPayment => ({
-    app: via,
+  if (named !== null && appIn(named) !== null) return null
+  const counterparty = (named && personWords(named)) || null
+  const payment: PersonPayment = {
+    app,
     direction: tx.amountCents < 0 ? 'in' : 'out',
     counterparty,
-  })
-  if (!app) {
-    const toPerson = codeOf(tx).startsWith('TRANSFER') && counterparty !== null
-    return toPerson && !namesOwnAccount(tx, context.accounts) ? payment('a bank transfer') : null
   }
-  if (paysNoPerson(app, codeOf(tx)) || (named !== null && counterparty === null)) return null
-  if (counterparty !== null) return payment(app)
+  if (counterparty !== null) return payment
   if (OWN_MONEY.test(tx.name)) return null
-  return unnamedAppPayment(tx, app, context.shops) ? payment(app) : null
+  return unnamedAppPayment(tx, app, context.shops) ? payment : null
 }
 
 /**
- * What is left of a bank's line once the app, the words for how money moved,
- * account words and anything with a digit in it are gone: "Zelle Transfer
- * Conf# T0ABCD123; Jane Doe" and "CASH APP*JANE DOE" both leave "Jane Doe".
+ * A payment between people as the owner's own app shows it, with no shops
+ * read: it differs from betweenPeople only for a PayPal transfer that names
+ * no one, which then shows its merchant name either way.
+ */
+export function personPayment(tx: Movement): PersonPayment | null {
+  return betweenPeople(tx, { shops: NO_SHOPS })
+}
+
+/**
+ * What is left of a bank's line once the app, the words for how money moved
+ * and anything with a digit in it are gone: "Zelle Transfer Conf# T0ABCD123;
+ * Jane Doe" and "CASH APP*JANE DOE" both leave "Jane Doe".
  */
 export function personInLine(line: string): string {
   const words = line.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []
-  return personWords(words.filter((word) => !/\d/.test(word)).join(' '), null)
+  return personWords(words.filter((word) => !/\d/.test(word)).join(' '))
+}
+
+// A line that reads as a bank transfer whatever Plaid filed it as.
+const TRANSFER_LINE = /\btransfer\s+(?:to|from)\b/i
+
+// What kind of transfer Plaid's detailed code says it is, for its label.
+const TRANSFER_KINDS: { code: RegExp; out: string; in: string }[] = [
+  { code: /SAVINGS/, out: 'Transfer to savings', in: 'Transfer from savings' },
+  { code: /INVESTMENT/, out: 'Transfer to investments', in: 'Transfer from investments' },
+  { code: /WITHDRAWAL/, out: 'Cash withdrawal', in: 'Cash withdrawal returned' },
+  { code: /DEPOSIT/, out: 'Deposit returned', in: 'Deposit' },
+]
+
+/**
+ * How Chat names a bank transfer with no payment app, instead of its line:
+ * by the kind of transfer Plaid's code says it is ("Transfer to savings"),
+ * else "Transfer to another account" or "Transfer from another account".
+ * Null for anything else, a payment app's line included.
+ */
+export function bankTransferLabel(tx: Movement): string | null {
+  const code = codeOf(tx)
+  if (!code.startsWith('TRANSFER') && !TRANSFER_LINE.test(tx.name)) return null
+  if (paymentAppOf(tx) !== null) return null
+  const kind = TRANSFER_KINDS.find((one) => one.code.test(code))
+  const label = kind ?? { out: 'Transfer to another account', in: 'Transfer from another account' }
+  return tx.amountCents < 0 ? label.in : label.out
 }

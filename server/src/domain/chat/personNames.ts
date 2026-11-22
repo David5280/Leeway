@@ -24,9 +24,20 @@ export function namesIn(tx: Movement, person: PersonPayment, context: PeopleCont
   return [personInLine(tx.name)].filter(Boolean)
 }
 
-// A business, not a person: "ACME PLUMBING LLC". Paying one through Zelle
-// hides that payment, but its name stays on its own card purchases.
-const BUSINESS_END = /\s(?:llc|inc|co|corp|ltd|lp|pllc|pc|company)\.?$/i
+// A business's legal ending: "ACME PLUMBING LLC", or a practice's, "JANE DOE PC".
+const BUSINESS_END = /\s+(?:llc|inc|co|corp|ltd|lp|pllc|pc|company)\.?$/i
+
+/**
+ * A name as hidden: with and without a business ending it has ("Jane Doe
+ * Pc" and "Jane Doe"), since a person can trade under their own name. None
+ * when that business is a shop the owner buys from: paying it through Zelle
+ * hides only that payment, never its own purchases.
+ */
+function asHidden(name: string, shops: KnownShops): string[] {
+  const bare = name.trim().replace(BUSINESS_END, '')
+  if (bare === name.trim()) return [name]
+  return isKnownShop(shops, name) || isKnownShop(shops, bare) ? [] : [name, bare]
+}
 
 /** The names Chat hides outside the payment rows, and where. */
 export interface HiddenNames {
@@ -48,12 +59,15 @@ export interface HiddenNames {
  *   people, and only when it is no common word or shop (loneNames.ts). Labels
  *   keep it: they are the owner's own words, and "Jane's allowance" or a
  *   "Water bill" bill names a thing, not a person to keep from the model.
- * - A business's name ("Acme Plumbing LLC") is not hidden: it is no person.
+ *   A business ending ("Pc") is never one of them.
+ * - A business's name is hidden like a person's (asHidden), unless the
+ *   owner buys from it.
  */
 export function namesToHide(found: readonly string[], shops: KnownShops): HiddenNames {
-  const people = [...new Set(found)].filter((name) => !BUSINESS_END.test(name.trim()))
+  const people = [...new Set(found.flatMap((name) => asHidden(name, shops)))]
+  const bare = people.filter((name) => !BUSINESS_END.test(name.trim()))
   return {
     names: people.filter((name) => name.trim().split(/\s+/).length > 1),
-    loneNames: loneNamesOf(people, shops),
+    loneNames: loneNamesOf(bare, shops),
   }
 }

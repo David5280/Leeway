@@ -177,7 +177,7 @@ describe("a tool's output for Chat", () => {
     names: string[],
     transactionIds: string[] = [],
     loneNames: string[] = [],
-  ): PaymentPeople => ({ names, loneNames, transactionIds: new Set(transactionIds) })
+  ): PaymentPeople => ({ ...NO_PEOPLE, names, loneNames, transactionIds: new Set(transactionIds) })
 
   it('leaves out bank text, account masks and every person paid or paying', () => {
     const result = {
@@ -279,6 +279,7 @@ describe('a person in what a tool returns', () => {
     loneNames: string[] = [],
     ids: string[] = [],
   ): PaymentPeople => ({
+    ...NO_PEOPLE,
     names,
     loneNames,
     transactionIds: new Set(ids),
@@ -352,6 +353,79 @@ describe('a person in what a tool returns', () => {
       c: 'someone',
       d: 'Janet',
     })
+  })
+
+  it('finds a name joined, or through direction marks and word joiners, keeping the rest', () => {
+    const result = {
+      a: 'JaneDoe',
+      b: '\u200EJane\u2060 Doe\u200F paid',
+      c: '2² to \uFF2A\uFF41\uFF4E\uFF45 Doe, ＃1',
+      d: 'Café for Jane Doe',
+    }
+    expect(JSON.parse(chatToolText(result, people(['Jane Doe'])))).toEqual({
+      a: 'someone',
+      b: '\u200Esomeone\u200F paid',
+      c: '2² to someone, ＃1',
+      d: 'Café for someone',
+    })
+  })
+
+  it('shows a bank transfer by its kind, keeping its note with names hidden', () => {
+    const row = {
+      id: 'b',
+      displayName: 'Online Transfer To Clara Thornbury',
+      amountCents: 60_000,
+      note: 'Rent, Jane Doe and Clara',
+    }
+    const paired = { ...row, id: 'c', displayName: 'Checking to Savings', transfer: { id: 'd' } }
+    const found: PaymentPeople = {
+      ...people(['Jane Doe'], ['Jane']),
+      bankTransfers: new Map([
+        ['b', 'Transfer to another account'],
+        ['c', 'Transfer to savings'],
+      ]),
+    }
+    expect(JSON.parse(chatToolText([row, paired], found))).toEqual([
+      { ...row, displayName: 'Transfer to another account', note: 'Rent, someone and Clara' },
+      { ...paired, note: 'Rent, someone and Clara' },
+    ])
+  })
+
+  it('shows a series or merchant total of bank transfers by its kind alone', () => {
+    const transferLabel = 'Transfer to another account'
+    const result = [
+      { key: 'online transfer to clara', name: 'Online Transfer To Clara', transferLabel },
+      { merchant: 'Online Transfer To Clara', spentCents: 900, count: 1, transferLabel },
+    ]
+    expect(JSON.parse(chatToolText(result, NO_PEOPLE))).toEqual([
+      { key: transferLabel, name: transferLabel },
+      { merchant: transferLabel, spentCents: 900, count: 1 },
+    ])
+  })
+
+  it('shows a bill tracking a payment between people or a bank transfer by its label', () => {
+    const found: PaymentPeople = {
+      ...NO_PEOPLE,
+      billKeys: new Map([
+        ['zelle payment to clara jpm a b c', PAYMENT_APP],
+        ['online transfer to pellworth oda', 'Transfer to another account'],
+      ]),
+    }
+    const bill = (name: string, matchPattern: string | null) => ({ name, matchPattern })
+    const result = [
+      bill('To Clara', 'Zelle payment to CLARA'),
+      bill('Rent', 'TRANSFER TO PELLWORTH'),
+      bill('Netflix', 'NETFLIX'),
+      bill('Gym', '1234'),
+      bill('Water', null),
+    ]
+    expect(JSON.parse(chatToolText(result, found))).toEqual([
+      bill(PAYMENT_APP, PAYMENT_APP),
+      bill('Transfer to another account', 'Transfer to another account'),
+      bill('Netflix', 'NETFLIX'),
+      bill('Gym', '1234'),
+      bill('Water', null),
+    ])
   })
 
   it('shows a repeating series between people as a payment app, by name and key', () => {

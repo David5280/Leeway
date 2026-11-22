@@ -5,12 +5,13 @@ import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { accountMasks, accountNames } from './accounts.js'
+import { personPayment } from './betweenPeople.js'
 import { assertCategoryExists, type Category } from './categories.js'
 import { recategorize } from './categorize.js'
 import type { AccountMasks } from './safeName.js'
 import { safePerson, transactionDisplayName } from './transactionName.js'
 import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
-import { personPayment, type Movement, type PersonPayment } from './transfers.js'
+import type { Movement, PersonPayment } from './transfers.js'
 
 /** The other side of a transfer between two of the owner's accounts. */
 export interface TransferPartner {

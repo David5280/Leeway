@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { personPayment } from '../src/domain/betweenPeople.js'
 import {
   isTransfer,
   NO_ACCOUNTS,
   paysTrackedCard,
-  personPayment,
   personToPersonApp,
   sameOwnAccounts,
   type Movement,
@@ -200,11 +200,19 @@ describe('reading a payment between people', () => {
   })
 
   it('leaves the name out when the description does not give one', () => {
-    expect(personPayment(movement('VENMO PAYMENT 1023456789', null))).toEqual({
-      app: 'Venmo',
-      direction: 'out',
-      counterparty: null,
-    })
+    const unnamed = movement('VENMO PAYMENT 1023456789', 'TRANSFER_OUT_ACCOUNT_TRANSFER')
+    expect(personPayment(unnamed)).toEqual({ app: 'Venmo', direction: 'out', counterparty: null })
+    // With no transfer code either, nothing says a person was paid.
+    expect(personPayment(movement('VENMO PAYMENT 1023456789', null))).toBeNull()
+  })
+
+  it("reads no person on a purchase, a card payment or the owner's own app balance", () => {
+    const flowers = movement('PAYPAL *FROM YOU FLOWERS', 'GENERAL_MERCHANDISE_FLORISTS')
+    expect(personPayment(flowers)).toBeNull()
+    const card = movement('Online Payment to Venmo Credit Card', 'TRANSFER_OUT_ACCOUNT_TRANSFER')
+    expect(personPayment(card)).toBeNull()
+    const credit = movement('Online Payment to PayPal Credit', 'LOAN_PAYMENTS_OTHER_PAYMENT')
+    expect(personPayment(credit)).toBeNull()
   })
 
   it('reads nothing for ordinary transactions or a zero amount', () => {

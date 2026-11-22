@@ -66,12 +66,15 @@ export function isAppTransfer(tx: Movement): boolean {
   return APP_TRANSFER_CODES.has(codeOf(tx))
 }
 
+/** The payment app a text names, if any: "Zelle" for "Zelle payment to JANE DOE". */
+export function appNamedIn(text: string): string | null {
+  return PERSON_TO_PERSON_APPS.find(({ pattern }) => pattern.test(text))?.app ?? null
+}
+
 /** The payment app a transaction went through, if it looks like one person paying another. */
 export function personToPersonApp(tx: Movement): string | null {
-  const text = `${tx.name} ${tx.merchantName ?? ''}`
-  const found = PERSON_TO_PERSON_APPS.find(({ pattern }) => pattern.test(text))
-  if (found) return found.app
-  return isAppTransfer(tx) ? 'a payment app' : null
+  const app = appNamedIn(`${tx.name} ${tx.merchantName ?? ''}`)
+  return app ?? (isAppTransfer(tx) ? 'a payment app' : null)
 }
 
 // "ending in 1234", "x1234", "*1234" and "...1234": how banks write a card's
@@ -85,7 +88,7 @@ const CARD_DIGITS = /(?:ending in\s+|(?<![a-z])x+|\*+|\.{3})(\d{4})\b/i
  */
 export function paysTrackedCard(tx: Movement, accounts: OwnAccounts): boolean {
   if (accounts.cardMasks.length === 0) return false
-  const digits = accountDigitsIn(tx.name)
+  const digits = CARD_DIGITS.exec(tx.name)?.[1]
   if (!digits) return true
   return accounts.cardMasks.some((mask) => mask === null || mask === digits)
 }
@@ -148,29 +151,9 @@ function tidyName(name: string): string {
   return name.toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())
 }
 
-/**
- * Reads a payment between people. The direction always comes from the amount,
- * never from "to" or "from" in the description, so a bank's wording can never
- * turn money received into money sent.
- */
-export function personPayment(tx: Movement): PersonPayment | null {
-  const app = personToPersonApp(tx)
-  if (!app || tx.amountCents === 0) return null
-  return {
-    app,
-    direction: tx.amountCents < 0 ? 'in' : 'out',
-    counterparty: nameAfterToOrFrom(tx.name),
-  }
-}
-
 /** The name a bank wrote after "to" or "from", without what it added after it, if any. */
 export function nameAfterToOrFrom(line: string): string | null {
   const named = NAMED_PAYMENT.exec(line)?.[1]?.split(NAME_END)[0]
   const name = named ? withoutReference(named) : ''
   return name ? tidyName(name) : null
-}
-
-/** The last four digits of an account a bank's line names ("XXXXXX4417", "ending in 4417"), if any. */
-export function accountDigitsIn(line: string): string | null {
-  return CARD_DIGITS.exec(line)?.[1] ?? null
 }

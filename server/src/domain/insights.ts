@@ -15,7 +15,7 @@ import {
 import { shiftPeriod } from '../lib/periods.js'
 import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
 import { accountMasks } from './accounts.js'
-import { betweenPeople, type PeopleContext } from './betweenPeople.js'
+import { bankTransferLabel, betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
 import { spendingSql } from './counted.js'
@@ -191,6 +191,11 @@ export interface MerchantTotal {
   count: number
   /** Set on payments to a person through an app, kept apart from any shop of the same name. */
   betweenPeople?: true
+  /**
+   * Set on bank transfers with no payment app, kept apart too: the label Chat
+   * shows instead of their name, which may be anyone's (betweenPeople.ts).
+   */
+  transferLabel?: string
 }
 
 type MerchantRow = Pick<Movement, 'name' | 'merchantName'> &
@@ -203,7 +208,8 @@ type MerchantRow = Pick<Movement, 'name' | 'merchantName'> &
  * Which total a merchant row adds to. Payments between people
  * (betweenPeople.ts) are named as the activity list names them ("To Jane
  * Doe"), kept apart and flagged, so paying a person never adds to a shop
- * that goes by their name (a sole trader, say).
+ * that goes by their name (a sole trader, say). Bank transfers are kept
+ * apart and labelled the same way.
  */
 function merchantTotalOf(
   row: MerchantRow,
@@ -211,13 +217,16 @@ function merchantTotalOf(
   people: PeopleContext,
 ): MerchantTotal & { key: string } {
   const empty = { spentCents: 0, count: 0 }
-  const person = betweenPeople({ ...row, amountCents: row.spentCents }, people)
-  if (!person) {
-    const merchant = merchantDisplayName(row, { masks })
-    return { key: merchant, merchant, ...empty }
+  const tx = { ...row, amountCents: row.spentCents }
+  const person = betweenPeople(tx, people)
+  if (person) {
+    const merchant = transactionDisplayName({ ...row, person }, null, { masks })
+    return { key: `between people: ${merchant}`, merchant, ...empty, betweenPeople: true }
   }
-  const merchant = transactionDisplayName({ ...row, person }, null, { masks })
-  return { key: `between people: ${merchant}`, merchant, ...empty, betweenPeople: true }
+  const merchant = merchantDisplayName(row, { masks })
+  const transferLabel = bankTransferLabel(tx)
+  if (!transferLabel) return { key: merchant, merchant, ...empty }
+  return { key: `bank transfer: ${merchant}`, merchant, ...empty, transferLabel }
 }
 
 /**
@@ -251,7 +260,8 @@ export async function topMerchants(
     [period.start, period.end, settings.includePending],
   )
   // Merchant names go to assistants and the AI writer, so they show no account number.
-  const [masks, people] = await Promise.all([accountMasks(db), loadPeopleContext(db)])
+  const movements = rows.map((row) => ({ ...row, amountCents: row.spentCents }))
+  const [masks, people] = await Promise.all([accountMasks(db), loadPeopleContext(db, movements)])
   const byMerchant = new Map<string, MerchantTotal>()
   for (const row of rows) {
     const { key, ...found } = merchantTotalOf(row, masks, people)

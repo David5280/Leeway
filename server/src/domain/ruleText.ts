@@ -15,10 +15,11 @@
 //   "Checking to Savings", which it is shown under once filed as a transfer;
 // - a name with nothing readable left never takes the category's name.
 
+import { personPayment } from './betweenPeople.js'
 import type { Rule } from './rules.js'
 import type { AccountMasks } from './safeName.js'
 import { safePerson, transactionDisplayName, type NameableTransaction } from './transactionName.js'
-import { personPayment, type Movement } from './transfers.js'
+import type { Movement } from './transfers.js'
 
 /**
  * A transaction's own name as shown, before any category: '' where the app
