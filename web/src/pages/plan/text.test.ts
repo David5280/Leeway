@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monthYear } from '../../lib/format'
 import { bill } from '../../test/planning'
-import { parseRate } from './DebtTerms'
 import { billStatus, dueText, durationText } from './text'
 
 describe('dueText', () => {
@@ -48,15 +47,6 @@ describe('durationText', () => {
     expect(durationText(26)).toBe('2 years 2 months')
     expect(durationText(0)).toBe('Paid off')
     expect(durationText(null)).toBe('Never, at these payments')
-  })
-})
-
-describe('parseRate', () => {
-  it('reads a percentage to the hundredth, or nothing', () => {
-    expect(parseRate('24.99')).toBe(24.99)
-    expect(parseRate('19.999%')).toBe(20)
-    expect(parseRate('')).toBeNull()
-    expect(parseRate('abc')).toBeNull()
   })
 })
 

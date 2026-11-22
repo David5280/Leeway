@@ -1,16 +1,46 @@
-// Formatting for dates and reading typed amounts. Dates are YYYY-MM-DD.
-// Money is formatted in lib/money.ts, the one place amounts are written.
+// Formatting for dates, and reading typed amounts and rates. Dates are
+// YYYY-MM-DD. Money and rates are formatted in lib/money.ts, the one place
+// numbers are written.
 
 import { addDays, dateParts, daysBetween } from './dates'
 
 export { periodWord } from '../../../server/src/lib/words'
 
-/** Parses "12.50", "$1,200" or "1200" into cents; null if it is not a number. */
-export function parseMoney(text: string): number | null {
+/**
+ * Reads a typed number, ignoring a currency or percent sign: "$1,200" is
+ * 1200, and "12,5" is 12.5, since a comma before three digits groups
+ * thousands while any other comma is a decimal point, as many locales write
+ * it. Keeps a minus sign; null if it is not a number.
+ */
+function parseDecimal(text: string): number | null {
   const cleaned = text.replace(/[^0-9.,-]/g, '').replace(/,(?=\d{3}(\D|$))/g, '')
   if (!cleaned) return null
   const value = Number(cleaned.replace(',', '.'))
-  return Number.isFinite(value) ? Math.round(value * 100) : null
+  return Number.isFinite(value) ? value : null
+}
+
+/** Parses "12.50", "$1,200", "12,5" or "1200" into cents; null if it is not a number. */
+export function parseMoney(text: string): number | null {
+  const value = parseDecimal(text)
+  return value === null ? null : Math.round(value * 100)
+}
+
+/** The highest interest rate a card or loan takes, as the server allows. */
+export const MAX_RATE_PERCENT = 100
+
+/**
+ * "24.99", "24,99" or "24.99%" into 24.99, rounded to the hundredth; null
+ * when blank, not a number, negative or over MAX_RATE_PERCENT. No card or
+ * loan charges a negative rate, so a minus sign means a typo, not a rate to
+ * quietly turn positive; and "1,000" is a typo too, not a rate to send.
+ */
+export function parseRate(text: string): number | null {
+  // The true minus sign too, as a phone keyboard may type it.
+  if (/[-\u2212]/.test(text)) return null
+  const value = parseDecimal(text)
+  if (value === null) return null
+  const rate = Math.round(value * 100) / 100
+  return rate > MAX_RATE_PERCENT ? null : rate
 }
 
 function asDate(iso: string): Date {

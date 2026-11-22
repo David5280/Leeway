@@ -13,21 +13,21 @@ import { useActionMutation } from '../../api/hooks'
 import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
 import { ErrorNote } from '../../components/ui'
+import { cardInterest, cardInterestTotal, type CardInterestTotal } from '../../lib/accounts'
+import { useApp } from '../../lib/app'
 import { cardInterestDrill } from '../../lib/drills/cardInterest'
-import { parseRate } from '../plan/DebtTerms'
-import {
-  cardInterest,
-  cardInterestTotal,
-  type CardInterestTotal,
-} from '../../../../server/src/domain/cardInterest'
+import { parseRate } from '../../lib/format'
+import { percentText } from '../../lib/money'
 
 /** On a card's page: what its balance costs a month, or a way to add its APR. Nothing once paid off. */
 export function InterestCard({ account }: { account: Account }) {
+  const { settings } = useApp()
   const card = cardInterest(account)
   if (!card) return null
   if (card.aprPercent === null) return <AddApr account={account} />
+  const drill = cardInterestDrill(card, settings.locale)
   return (
-    <Card drill={cardInterestDrill(card)} label="Interest on this card" className="stack-sm">
+    <Card drill={drill} label="Interest on this card" className="stack-sm">
       <p style={{ fontSize: 17 }}>
         {card.aprPercent === 0 ? (
           'No interest at 0% APR'
@@ -39,7 +39,8 @@ export function InterestCard({ account }: { account: Account }) {
         )}
       </p>
       <span className="small muted">
-        On <Money cents={card.balanceCents} /> owed, at {card.aprPercent}% APR.
+        On <Money cents={card.balanceCents} /> owed, at{' '}
+        {percentText(card.aprPercent, settings.locale)} APR.
       </span>
     </Card>
   )

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   calendarDate,
   dayLabel,
+  MAX_RATE_PERCENT,
   parseMoney,
+  parseRate,
   periodBarLabel,
   periodLabel,
   periodWord,
@@ -16,6 +18,7 @@ describe('format', () => {
     expect(parseMoney('$1,200')).toBe(120000)
     expect(parseMoney('1200')).toBe(120000)
     expect(parseMoney('12,5')).toBe(1250)
+    expect(parseMoney('-12.50')).toBe(-1250)
     expect(parseMoney('')).toBeNull()
     expect(parseMoney('abc')).toBeNull()
   })
@@ -59,5 +62,47 @@ describe('format', () => {
     expect(relativeDay('2026-11-20', today)).toBe('Tomorrow')
     expect(relativeDay('2026-11-13', today)).toBe('Fri, Nov 13')
     expect(relativeDay('2025-12-31', today)).toBe('Wed, Dec 31, 2025')
+  })
+})
+
+// Reading a typed interest rate, shared by a debt's terms on Plan, Debts and
+// the APR prompt on a card's page.
+describe('parseRate', () => {
+  it('reads a dot decimal, with or without a percent sign, to the hundredth', () => {
+    expect(parseRate('24.99')).toBe(24.99)
+    expect(parseRate(' 19.5% ')).toBe(19.5)
+    expect(parseRate('0')).toBe(0)
+    expect(parseRate('7.125')).toBe(7.13)
+    expect(parseRate('19.999%')).toBe(20)
+  })
+
+  it('reads a comma decimal as many locales type it, never as more digits', () => {
+    expect(parseRate('7,5')).toBe(7.5)
+    expect(parseRate('9,9')).toBe(9.9)
+    expect(parseRate('24,99')).toBe(24.99)
+    expect(parseRate('24,99 %')).toBe(24.99)
+  })
+
+  it(`refuses a rate over ${MAX_RATE_PERCENT}%, which no card or loan charges`, () => {
+    expect(parseRate('100')).toBe(100)
+    expect(parseRate('100.01')).toBeNull()
+    expect(parseRate('150')).toBeNull()
+    // A comma before three digits groups thousands, so this is 1,000, not 1.
+    expect(parseRate('1,000')).toBeNull()
+  })
+
+  it('is null when blank or not a number', () => {
+    expect(parseRate('')).toBeNull()
+    expect(parseRate('   ')).toBeNull()
+    expect(parseRate('APR')).toBeNull()
+    expect(parseRate('%')).toBeNull()
+    expect(parseRate('.')).toBeNull()
+    expect(parseRate('1.2.3')).toBeNull()
+  })
+
+  it('refuses a negative rate rather than turning it positive', () => {
+    expect(parseRate('-5')).toBeNull()
+    // The true minus sign too, as a phone keyboard may type it.
+    expect(parseRate('\u22125')).toBeNull()
   })
 })
