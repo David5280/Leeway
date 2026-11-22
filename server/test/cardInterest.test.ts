@@ -14,7 +14,7 @@ import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 const card = (fields: Partial<InterestAccount> = {}): InterestAccount => ({
   id: 'card-1',
   name: 'Sapphire',
-  type: 'credit',
+  kind: 'credit_card',
   balanceCents: 240_000,
   aprPercent: 24.99,
   hidden: false,
@@ -28,6 +28,12 @@ describe('monthlyInterest', () => {
     expect(monthlyInterest(240_000, 24.99)).toBe(4_998)
     expect(monthlyInterest(100_000, 0)).toBe(0)
   })
+
+  it('rounds an exact half cent up, which float math would round down', () => {
+    // $200 at 24.99% is 416.5 cents; $1,800 at 19.99% is 2,998.5 cents.
+    expect(monthlyInterest(20_000, 24.99)).toBe(417)
+    expect(monthlyInterest(180_000, 19.99)).toBe(2_999)
+  })
 })
 
 describe('cardInterest', () => {
@@ -35,8 +41,12 @@ describe('cardInterest', () => {
     expect(cardInterest(card({ balanceCents: 0 }))).toBeNull()
     expect(cardInterest(card({ balanceCents: -500 }))).toBeNull()
     expect(cardInterest(card({ balanceCents: null }))).toBeNull()
-    expect(cardInterest(card({ type: 'loan' }))).toBeNull()
+    expect(cardInterest(card({ kind: 'loan' }))).toBeNull()
     expect(cardInterest(card({ unsharedAt: '2026-11-01' }))).toBeNull()
+  })
+
+  it('goes by the kind, so a card the owner calls a loan or other leaves the figure', () => {
+    expect(cardInterest(card({ kind: 'other' }))).toBeNull()
   })
 
   it('still counts a hidden card, which costs interest all the same', () => {
@@ -111,5 +121,19 @@ describe('get_card_interest', () => {
     expect(interest).toMatchObject({ monthlyInterestCents: 4_500, missingApr: 1 })
     expect(interest.cards).toHaveLength(2)
     expect(JSON.stringify(interest)).not.toContain('7781')
+  })
+
+  it('leaves out a card the owner re-kinded as a loan, as Accounts does', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, {
+      name: 'Line of credit',
+      type: 'credit',
+      balanceCents: 100_000,
+    })
+    await call('update_account', { id: accountId, aprPercent: 12, kind: 'loan' })
+    expect(await call('get_card_interest')).toEqual({
+      cards: [],
+      monthlyInterestCents: 0,
+      missingApr: 0,
+    })
   })
 })

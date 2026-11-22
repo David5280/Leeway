@@ -2,7 +2,7 @@
 // one-field prompt for its APR), under the cards on Accounts, and atop
 // Plan, Debts.
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,6 +18,10 @@ const quietBills = {
   list_categories: () => [],
   find_recurring: () => [],
 }
+
+/** The server's refusal of an APR over 100, as the HTTP API sends it. */
+const refuseRate = () =>
+  Response.json({ error: 'invalid_input', message: 'An APR is at most 100%.' }, { status: 400 })
 
 const owing = (fields: Partial<Account> = {}) =>
   account({ id: 'cc', name: 'Travel card', type: 'credit', balanceCents: 240_000, ...fields })
@@ -37,20 +41,48 @@ describe("a card's interest on its page", () => {
     )
   })
 
+  it("keeps Save off for a rate that can't be one, like a negative", async () => {
+    renderSignedIn(<InterestCard account={owing({ aprPercent: null })} />)
+    const prompt = screen.getByRole('region', { name: "Add this card's APR" })
+    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '-5')
+    expect(within(prompt).getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it("says why when the server won't take the APR", async () => {
+    // The server allows 0 to 100; anything over is refused with its reason.
+    fakeServer({}, { '/api/actions/update_account': refuseRate })
+    renderSignedIn(<InterestCard account={owing({ aprPercent: null })} />)
+    const prompt = screen.getByRole('region', { name: "Add this card's APR" })
+    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '250')
+    await userEvent.click(within(prompt).getByRole('button', { name: 'Save' }))
+    expect(await within(prompt).findByRole('alert')).toHaveTextContent('An APR is at most 100%.')
+  })
+
   it('says what the balance costs a month, and opens the math', async () => {
     renderSignedIn(<InterestCard account={owing({ aprPercent: 24.99 })} />)
     const card = within(screen.getByRole('region', { name: 'Interest on this card' })).getByRole(
       'button',
     )
     // $2,400 at 24.99% is $49.98 a month, shown to the dollar.
-    expect(card).toHaveTextContent('About $50 a month in interest')
+    expect(card).toHaveTextContent('If you carry this balance, about $50 a month in interest')
     expect(card).toHaveTextContent('On $2,400 owed, at 24.99% APR.')
     await userEvent.click(card)
     const drill = screen.getByRole('dialog', { name: 'Interest on this card' })
+    // The equation spelled out: owed times the APR, divided by a year's months.
+    expect(within(drill).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
+      'Interest a month, about $50 = Owed $2,400 times APR 24.99% divided by A year 12 months',
+    )
     expect(within(drill).getByRole('link', { name: /Change the APR/ })).toHaveAttribute(
       'href',
       '/plan/debts',
     )
+  })
+
+  it('says plainly that a 0% card costs nothing, rather than "about $0"', () => {
+    renderSignedIn(<InterestCard account={owing({ aprPercent: 0 })} />)
+    const card = screen.getByRole('region', { name: 'Interest on this card' })
+    expect(card).toHaveTextContent('No interest at 0% APR')
+    expect(card).not.toHaveTextContent('$0')
   })
 
   it('shows nothing once the card owes nothing', () => {
@@ -76,8 +108,27 @@ describe('the interest line under the cards on Accounts', () => {
     ])
     expect(link).toHaveAttribute('href', '/plan/debts')
     expect(link).toHaveTextContent(
-      'About $50 a month in interest, not counting 1 card with no APR yet.',
+      'Carrying these balances costs about $50 a month in interest, not counting 1 card with no APR yet.',
     )
+  })
+
+  it('speaks of one balance when there is one card, and counts several without an APR', () => {
+    expect(line([owing({ aprPercent: 24.99 })])).toHaveTextContent(
+      'Carrying this balance costs about $50 a month in interest.',
+    )
+    cleanup()
+    expect(
+      line([
+        owing({ aprPercent: 24.99 }),
+        owing({ id: 'b', name: 'Store card', aprPercent: null }),
+        owing({ id: 'c', name: 'Gas card', aprPercent: null }),
+      ]),
+    ).toHaveTextContent('not counting 2 cards with no APR yet.')
+  })
+
+  it('leaves out a card the owner re-kinded, as the Credit cards group does', () => {
+    // A card marked as a loan sits under Loans, so its interest is not the cards' either.
+    expect(line([owing({ aprPercent: 24.99, kind: 'loan' })])).toBeNull()
   })
 
   it('asks for the APRs when no card has one', () => {
@@ -99,7 +150,19 @@ describe('what the cards cost, atop Plan, Debts', () => {
     serve([owing({ aprPercent: 24.99 })])
     renderPlan('/plan/debts')
     expect(await screen.findByRole('region', { name: 'Your debts' })).toHaveTextContent(
-      'Your cards cost about $50 a month in interest.',
+      'Carrying this balance costs about $50 a month in interest.',
+    )
+  })
+
+  it('names the cards left out of the total, worded as on Accounts', async () => {
+    // $100 at 24.99% is about $2 a month; the $9,000 card has no APR, so it can't be counted.
+    serve([
+      owing({ balanceCents: 10_000, aprPercent: 24.99 }),
+      owing({ id: 'big', name: 'Store card', balanceCents: 900_000, aprPercent: null }),
+    ])
+    renderPlan('/plan/debts')
+    expect(await screen.findByRole('region', { name: 'Your debts' })).toHaveTextContent(
+      'Carrying these balances costs about $2 a month in interest, not counting 1 card with no APR yet.',
     )
   })
 
@@ -107,7 +170,7 @@ describe('what the cards cost, atop Plan, Debts', () => {
     serve([owing({ aprPercent: null })])
     renderPlan('/plan/debts')
     expect(await screen.findByRole('region', { name: 'Your debts' })).not.toHaveTextContent(
-      'Your cards cost',
+      'a month in interest',
     )
   })
 })

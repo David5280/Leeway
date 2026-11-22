@@ -29,15 +29,15 @@ test.describe('card interest', () => {
 
     // $2,400 at 24.99% is $49.98 a month, shown to the dollar.
     const interest = page.getByRole('region', { name: 'Interest on this card' })
-    await expect(interest).toContainText('About $50 a month in interest')
+    await expect(interest).toContainText('If you carry this balance, about $50 a month in interest')
     await expect(prompt).toHaveCount(0)
     await interest.getByRole('button').click()
     const drill = page.getByRole('dialog', { name: 'Interest on this card' })
-    await expect(drill).toContainText('Owed')
+    await expect(drill).toContainText('divided by A year 12 months')
     await drill.getByRole('link', { name: /Change the APR/ }).click()
     await expect(page).toHaveURL(/\/plan\/debts$/)
     await expect(page.getByRole('region', { name: 'Your debts' })).toContainText(
-      /Your cards cost about \$[\d,]+ a month in interest/,
+      /Carrying (this balance|these balances) costs about \$[\d,]+ a month in interest/,
     )
 
     await page.goto('/accounts')

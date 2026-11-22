@@ -28,8 +28,9 @@ bank, and nothing in Leeway can ever move money.
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI
   assistant can read all of it today.
-- **Credit card interest in dollars**: what each card's balance costs a month
-  at its APR, and all your cards together. Add a card's APR from its statement.
+- **Credit card interest in dollars**: what carrying each card's balance past
+  the due date costs a month at its APR, and all your cards together. Add a
+  card's APR from its statement.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or
   also change budgets.

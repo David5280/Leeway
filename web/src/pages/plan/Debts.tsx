@@ -14,6 +14,7 @@ import { useDebounced } from '../../lib/useDebounced'
 import { DebtTerms } from './DebtTerms'
 import { durationText } from './text'
 import { Money } from '../../components/design/Money'
+import { CardsCostSentence } from '../accounts/CardInterest'
 import { cardInterestTotal } from '../../../../server/src/domain/cardInterest'
 
 type Strategy = 'avalanche' | 'snowball' | 'minimumsOnly'
@@ -91,14 +92,13 @@ function PayoffPlan({ extraCents }: { extraCents: number }) {
   )
 }
 
-/** What the cards cost in interest a month, once at least one has its APR. */
+/** What carrying the cards' balances costs a month, once at least one has its APR. */
 function CardsCost({ accounts }: { accounts: Account[] }) {
-  const { monthlyInterestCents, missingApr, cards } = cardInterestTotal(accounts)
-  if (cards.length === missingApr) return null
+  const total = cardInterestTotal(accounts)
+  if (total.cards.length === total.missingApr) return null
   return (
     <p style={{ fontSize: 17 }}>
-      Your cards cost about <Money cents={monthlyInterestCents} className="mid-number" /> a month in
-      interest.
+      <CardsCostSentence total={total} figureClassName="mid-number" />
     </p>
   )
 }
