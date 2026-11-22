@@ -9,7 +9,7 @@ import type { CashFlow } from './cashFlow.js'
 import type { Connection } from './connections.js'
 import type { DebtGap } from './debts.js'
 import { MIN_RECENT_DAYS } from './goalHistory.js'
-import type { Goal } from './goals.js'
+import type { Goal } from './goalProgress.js'
 
 /** now: act today. soon: this week. fyi: worth a mention, nothing urgent. */
 export type Priority = 'now' | 'soon' | 'fyi'

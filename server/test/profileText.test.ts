@@ -9,6 +9,7 @@ import {
   spendingWindow,
 } from '../src/domain/profile/income.js'
 import { addDays } from '../src/lib/dates.js'
+import { averageEssentials, wholeMonthsBefore } from '../src/domain/monthlyEssentials.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
 import { RATE_GUARD_FOR_AI, savingsRate } from '../src/domain/savings/rate.js'
 import {
@@ -135,25 +136,58 @@ describe('typical spending window', () => {
     expect(spendingWindow(TODAY, null, addDays(TODAY, -27))).toBeNull()
     expect(spendingWindow(TODAY, null, null)).toBeNull()
   })
+})
 
-  it('counts the essential categories that still exist, or all spending', () => {
-    const category = (id: string, kind: Category['kind']) => ({ id, kind }) as Category
-    const categories = [
-      category('rent', 'expense'),
-      category('fun', 'expense'),
-      category('pay', 'income'),
-    ]
-    const totals = [
-      { categoryId: 'rent', amountCents: 200_000, count: 1 },
-      { categoryId: 'fun', amountCents: 50_000, count: 1 },
-      { categoryId: null, amountCents: 1_000, count: 1 },
-    ]
-    expect(essentialSpending(categories, totals, null, 251_000)).toBe(251_000)
+describe('essential spending', () => {
+  const category = (id: string, kind: Category['kind'], name: string) =>
+    ({ id, kind, name, providerCategories: [] }) as unknown as Category
+  const categories = [
+    category('rent', 'expense', 'Rent'),
+    category('fun', 'expense', 'Fun'),
+    category('pay', 'income', 'Paycheck'),
+  ]
+  /** A month of $2,000 rent, `fun` of fun, $10 unfiled and `pay` of pay. */
+  const month = (fun: number, pay: number) => [
+    { categoryId: 'rent', amountCents: 200_000, count: 1 },
+    { categoryId: 'fun', amountCents: fun, count: 1 },
+    { categoryId: 'pay', amountCents: -pay, count: 1 },
+    { categoryId: null, amountCents: 1_000, count: 1 },
+  ]
+
+  it('counts the essential categories that still exist, found by name without a pick', () => {
+    const totals = month(50_000, 600_000)
+    // With no essentials picked, they are found by name (essentials.ts): Rent, not Fun.
+    expect(essentialSpending(categories, totals, null, 251_000)).toBe(200_000)
     // Picks that are no longer expense categories (income, or deleted) are ignored,
-    // and none left means all spending, as if nothing had been picked.
-    expect(essentialSpending(categories, totals, ['pay', 'gone'], 251_000)).toBe(251_000)
+    // and none left means the essentials are found, as if nothing had been picked.
+    expect(essentialSpending(categories, totals, ['pay', 'gone'], 251_000)).toBe(200_000)
+    // When none reads as essential, all spending counts, uncategorized included.
+    const plain = categories.map((one, index) => ({ ...one, name: `Group ${index + 1}` }))
+    expect(essentialSpending(plain, totals, null, 251_000)).toBe(251_000)
     // A partly stale pick keeps the categories that still exist.
     expect(essentialSpending(categories, totals, ['rent', 'gone'], 251_000)).toBe(200_000)
+  })
+
+  it('takes the last three whole months that history fully covers, for the fund', () => {
+    expect(wholeMonthsBefore(TODAY, '2026-01-01')).toEqual([
+      { start: '2026-08-01', end: '2026-09-01' },
+      { start: '2026-09-01', end: '2026-10-01' },
+      { start: '2026-10-01', end: '2026-11-01' },
+    ])
+    // History from Sep 12 leaves October as the only whole month.
+    expect(wholeMonthsBefore(TODAY, '2026-09-12')).toEqual([
+      { start: '2026-10-01', end: '2026-11-01' },
+    ])
+    expect(wholeMonthsBefore(TODAY, '2026-11-02')).toEqual([])
+    expect(wholeMonthsBefore(TODAY, null)).toEqual([])
+  })
+
+  it('averages the essentials over whole months, and knows nothing without one', () => {
+    const months = [month(50_000, 600_000), month(30_001, 600_000)]
+    expect(averageEssentials(categories, months, ['rent'])).toBe(200_000)
+    // Rent and Fun picked, the unfiled $10 left out: (250,000 + 230,001) / 2, rounded.
+    expect(averageEssentials(categories, months, ['rent', 'fun'])).toBe(240_001)
+    expect(averageEssentials(categories, [], null)).toBeNull()
   })
 })
 

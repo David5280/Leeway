@@ -18,6 +18,7 @@ import type { Cadence } from '../../lib/periods.js'
 import { accountMasks } from '../accounts.js'
 import type { CategoryTotal } from '../budget.js'
 import { listCategories, type Category } from '../categories.js'
+import { essentialIdsOf } from '../essentials.js'
 import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
 import type { CurrentPay } from '../pay/current.js'
 import { readCurrentPay } from '../pay/source.js'
@@ -83,7 +84,10 @@ export interface MonthlyAverages {
   incomeEstimated: boolean
   /** Spending a month, transfers and card payments left out; null with too little history. */
   spendingCents: number | null
-  /** Spending in the categories the owner counts as essential (all spending by default). */
+  /**
+   * Spending in the essential categories: the owner's pick, or the ones found
+   * by their codes and names (essentials.ts), or all spending when none are.
+   */
   essentialSpendingCents: number | null
   /** The first day spending was measured from, or null with too little history. */
   spendingSince: IsoDate | null
@@ -120,9 +124,10 @@ export function spendingWindow(
 
 /**
  * The essential categories the owner picked that still exist as spending
- * categories, or null for every spending category. Settings can hold ids of
+ * categories, or null when there is no pick to go by, so the essentials are
+ * found instead (essentialIdsOf in essentials.ts). Settings can hold ids of
  * categories since deleted or replaced, so only current ones count, and a
- * pick with none left counts all spending rather than none.
+ * pick with none left is no pick rather than no essentials.
  */
 export function currentEssentials(
   categories: Category[],
@@ -134,14 +139,18 @@ export function currentEssentials(
   return current.length ? new Set(current.map((c) => c.id)) : null
 }
 
-/** Spending in the essential categories, or all of `spentCents` when none are picked. */
+/**
+ * Spending in the essential categories. Without a pick, the essentials found
+ * by their codes and names count (essentials.ts), and all of `spentCents`
+ * counts when none are found.
+ */
 export function essentialSpending(
   categories: Category[],
   totals: CategoryTotal[],
   essentialIds: string[] | null,
   spentCents: number,
 ): number {
-  const essentials = currentEssentials(categories, essentialIds)
+  const essentials = essentialIdsOf(categories, currentEssentials(categories, essentialIds))
   if (essentials === null) return spentCents
   return totals
     .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
