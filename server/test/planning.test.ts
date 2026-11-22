@@ -312,6 +312,59 @@ describe('get_cash_flow', () => {
     })
   })
 
+  it('never takes money from a person as pay, however regular', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Zelle payment from Jane Doughty',
+        amountCents: -200_000,
+      })
+    }
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-12-01',
+      paydaySource: 'period_end',
+      expectedPayCents: null,
+    })
+  })
+
+  it('takes payday from the payroll, not larger money from a person', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    const deposit = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents })
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03'])
+      await deposit(date, 'Zelle payment from Jane Doughty', -200_000)
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'])
+      await deposit(date, 'ACME PAYROLL', -150_000)
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-11-20',
+      paydaySource: 'detected_income',
+      expectedPayCents: 150_000,
+    })
+  })
+
+  it('takes payday from a paycheck budget period over regular deposits that disagree', async () => {
+    // Pay found in history says Nov 20, but the owner budgets every paycheck from Nov 17.
+    await call('update_settings', {
+      period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-17' },
+    })
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'ACME PAYROLL',
+        amountCents: -250000,
+      })
+    }
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-12-01',
+      paydaySource: 'pay_period',
+      // The paychecks still say how much comes, whichever says when.
+      expectedPayCents: 250000,
+      daysUntilPayday: 14,
+    })
+  })
+
   it('counts an overdue bill and every bill due before payday, in date then name order', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 500000 })
     await insertBankTransaction(ctx.db, accountId, {

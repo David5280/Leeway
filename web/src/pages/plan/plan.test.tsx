@@ -339,6 +339,20 @@ describe('Debts', () => {
     )
   })
 
+  it("won't save a rate that can't be one, which would clear the saved rate", async () => {
+    serve([rewards, loan])
+    renderPlan('/plan/debts')
+    const user = userEvent.setup()
+    const terms = within(await screen.findByRole('form', { name: 'Rewards card terms' }))
+    const rate = terms.getByRole('textbox', { name: 'Rewards card interest rate' })
+    await user.clear(rate)
+    await user.type(rate, '-5')
+    expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Blank still clears it on purpose.
+    await user.clear(rate)
+    expect(terms.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
   it('compares the strategies and lists the payoff order', async () => {
     serve([rewards, loan])
     renderPlan('/plan/debts')
@@ -440,10 +454,9 @@ describe('Net worth', () => {
     fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
     expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
     vi.restoreAllMocks()
-    // A house or a car counts once it is added by hand, in Settings.
-    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
-      'href',
-      '/settings/accounts',
+    // A house or a car counts once it is added by hand, right here.
+    expect(await screen.findByRole('region', { name: 'Entered by you' })).toHaveTextContent(
+      'Add a home, a car or a loan your bank link does not cover',
     )
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))

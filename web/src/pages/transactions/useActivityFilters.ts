@@ -1,7 +1,9 @@
 // What the transaction list is narrowed to: a search, a date range, a
-// category and an account. The range, category and account live in the
-// address (?range=, ?category=, ?account=), so other screens can link
-// straight to them and a reload or Back keeps them.
+// category, an account and a merchant. All but the search live in the
+// address (?range=, ?category=, ?account=, ?merchant=), so other screens can
+// link straight to them and a reload or Back keeps them. A leak alert links
+// to one merchant's charges that way: ?merchant= is one of its charges, and
+// ?merchantName= the name its chip shows.
 
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -16,8 +18,8 @@ export const MAX_SHOWN = 500
 /** The category filter's value for transactions that still need a category. */
 export const UNCATEGORIZED = 'uncategorized'
 
-/** The filters kept in the address. */
-type AddressFilter = 'category' | 'account' | 'range'
+/** The filters kept in the address, and the merchant's name for its chip. */
+type AddressFilter = 'category' | 'account' | 'range' | 'merchant' | 'merchantName'
 
 /**
  * Filters kept in the address, replaced in place so Back leaves the screen.
@@ -42,6 +44,8 @@ function useAddressFilters() {
     category: params.get('category'),
     account: params.get('account'),
     range: parseRange(params.get('range')),
+    merchant: params.get('merchant'),
+    merchantName: params.get('merchantName'),
     set,
   }
 }
@@ -59,6 +63,7 @@ export function useActivityFilters({
   const range = address.range
   const categoryId = address.category
   const accountId = address.account
+  const merchantId = address.merchant
   const [limit, setLimit] = useState(PAGE)
   const query = useDebounced(search.trim())
 
@@ -74,6 +79,7 @@ export function useActivityFilters({
     search: query || undefined,
     categoryId: categoryId ?? undefined,
     accountId: accountId ?? undefined,
+    sameMerchantAs: merchantId ?? undefined,
     start: rangeStart(range, periodStart, timeZone),
     // Transactions left out of totals are still listed, marked, so they can be put back.
     includeExcluded: true,
@@ -85,20 +91,29 @@ export function useActivityFilters({
     range,
     categoryId,
     accountId,
+    /** The merchant the list is narrowed to, by one of its charges, and the name it shows as. */
+    merchant: merchantId ? { id: merchantId, name: address.merchantName } : null,
     limit,
     input,
     /** "This period" cannot be asked for until the period's start is known. */
     ready: range !== 'period' || periodStart !== undefined,
     /** Whether anything narrows the list, so an empty list says "Nothing matches". */
-    filtered: Boolean(query || categoryId || accountId || range !== 'all'),
+    filtered: Boolean(query || categoryId || accountId || merchantId || range !== 'all'),
     setSearch: restart(setSearchText),
     setRange: restart((value: Range) => address.set({ range: rangeParam(value) })),
     setCategoryId: restart((category: string | null) => address.set({ category })),
     setAccountId: restart((account: string | null) => address.set({ account })),
+    clearMerchant: restart<void>(() => address.set({ merchant: null, merchantName: null })),
     showMore: () => setLimit((shown) => Math.min(MAX_SHOWN, shown + PAGE)),
     clear: () => {
       setSearchText('')
-      address.set({ category: null, account: null, range: rangeParam('all') })
+      address.set({
+        category: null,
+        account: null,
+        merchant: null,
+        merchantName: null,
+        range: rangeParam('all'),
+      })
       setLimit(PAGE)
     },
   }
