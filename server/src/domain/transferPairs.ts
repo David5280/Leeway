@@ -53,11 +53,21 @@ const TRANSFER_WORDS =
 /**
  * Words for pay or money paid back in a line with no code: a paycheck, a
  * payout, a refund. Such a line is money coming in from outside, so it never
- * pairs, even beside an equal purchase on another account. Interest and
- * dividends only in their paid forms: "Interest Savings" names an account.
+ * pairs, even beside an equal purchase on another account, and even when it
+ * also says "transfer", as in "Payroll transfer ACME" (see wordsHint).
  */
 const PAY_WORDS =
-  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate|cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate)\b/i
+
+/**
+ * Words for money a bank pays in, which can also be part of an account's
+ * name, so transfer words win over them: "Online Transfer to Interest
+ * Savings" is a move. Interest and dividends only in their paid forms.
+ */
+const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+
+/** A "to ..." or "from ..." tail, which can name the other side of a move, often an account. */
+const COUNTERPARTY_TAIL = /\b(to|from)\b.*$/i
 
 /** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
 const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
@@ -81,13 +91,42 @@ export function transferHint(tx: Movement): TransferHint {
   return code ? 'other' : wordsHint(tx)
 }
 
-/** What a line with no code says by its words. */
+/**
+ * The words of a line read for pay: all of it but a "to" or "from" tail after
+ * a transfer word, which names the other account ("Transfer from Tax Refund
+ * Savings"). A "to" or "from" before any transfer word is part of a name
+ * ("Back To Basics Payroll transfer"). The name is read before the merchant,
+ * and a tail ends with its field, so one field's tail never hides the other's
+ * pay words.
+ */
+function wordsReadForPay(fields: string[]): string {
+  const read: string[] = []
+  let afterTransfer = false
+  for (const field of fields) {
+    const transfer = TRANSFER_WORDS.exec(field)
+    // Where in this field a tail may start: anywhere once a transfer word has come.
+    let tailFrom = field.length
+    if (afterTransfer) tailFrom = 0
+    else if (transfer) tailFrom = transfer.index + transfer[0].length
+    read.push(field.slice(0, tailFrom) + field.slice(tailFrom).replace(COUNTERPARTY_TAIL, ''))
+    afterTransfer ||= transfer !== null
+  }
+  return read.join(' ')
+}
+
+/**
+ * What a line with no code says by its words. Pay words win over transfer
+ * words, except in a tail naming the other account (see wordsReadForPay):
+ * "Payroll transfer from ACME" is pay, "Online Transfer to PAYROLL CHK" is a
+ * move. With no transfer word, a pay word anywhere still says pay.
+ */
 function wordsHint(tx: Movement): TransferHint {
-  const words = `${tx.name} ${tx.merchantName ?? ''}`
-  // Transfer words win: an account's name can hold a pay word, as in
-  // "Online Transfer to Interest Savings".
+  const fields = [tx.name, tx.merchantName ?? '']
+  const words = fields.join(' ')
+  if (PAY_WORDS.test(wordsReadForPay(fields))) return 'other'
   if (TRANSFER_WORDS.test(words)) return 'transfer'
-  return PAY_WORDS.test(words) || PAID_ALONE.test(tx.name) ? 'other' : 'none'
+  const paidIn = [PAY_WORDS, EARNED_WORDS].some((paid) => paid.test(words))
+  return paidIn || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */
