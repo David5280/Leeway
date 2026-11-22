@@ -13,7 +13,8 @@ import {
   type IsoDate,
 } from '../lib/dates.js'
 import { shiftPeriod } from '../lib/periods.js'
-import { categoryTotals, categoryTotalsByRange, currentPeriod, sumTotals } from './budgetReport.js'
+import { currentPeriod } from './budgetReport.js'
+import { categoryTotals, categoryTotalsByRange, sumTotals } from './categoryTotals.js'
 import { accountMasks } from './accounts.js'
 import { betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
