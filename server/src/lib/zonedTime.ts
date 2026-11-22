@@ -49,20 +49,38 @@ function readOffsetMs(whole: number, timeZone: string): number {
   return readWallClockMs(whole, timeZone) - whole
 }
 
-/** Midnights remembered per zone before its map is emptied, so a calendar spanning centuries cannot fill memory. */
-const MAX_MIDNIGHTS = 50_000
+/**
+ * Midnights remembered across all zones before they are all let go, so a
+ * calendar spanning centuries in hundreds of zones cannot fill memory: at
+ * most a few tens of megabytes.
+ */
+export const MAX_MIDNIGHTS = 200_000
 
-/** Each zone's offset at the UTC midnights asked about, by day number. */
+/** Each zone's offset at the UTC midnights asked about, by day number, and how many in all. */
 const midnights = new Map<string, Map<number, number>>()
+let midnightsKept = 0
+
+/** How many midnights are remembered across all zones: never more than MAX_MIDNIGHTS. */
+export function midnightsRemembered(): number {
+  return midnightsKept
+}
 
 function offsetAtMidnight(day: number, timeZone: string): number {
-  const known = perZone(midnights, timeZone, () => new Map<number, number>())
-  let offset = known.get(day)
-  if (offset === undefined) {
-    if (known.size >= MAX_MIDNIGHTS) known.clear()
-    offset = readOffsetMs(day * DAY_MS, timeZone)
-    known.set(day, offset)
+  let known = midnights.get(timeZone)
+  let offset = known?.get(day)
+  if (offset !== undefined) return offset
+  if (midnightsKept >= MAX_MIDNIGHTS) {
+    midnights.clear()
+    midnightsKept = 0
+    known = undefined
   }
+  if (!known) {
+    known = new Map()
+    midnights.set(timeZone, known)
+  }
+  offset = readOffsetMs(day * DAY_MS, timeZone)
+  known.set(day, offset)
+  midnightsKept++
   return offset
 }
 

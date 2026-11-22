@@ -1,6 +1,7 @@
 // mergeSpans for trips written mostly as travel: a hotel booked around the
-// trip, a flight out and a flight back with nothing between, an early flight
-// after a night at the airport, and a stay somewhere else right after a trip.
+// trip, the flight home a few days after it, an early flight after a night
+// at the airport, and a stay somewhere else right after a trip. Trips written
+// only as flights are in calendarFlights.test.ts.
 
 import { describe, expect, it } from 'vitest'
 import { mergeSpans, type KindedEvent } from '../src/domain/calendar/spans.js'
@@ -57,65 +58,41 @@ describe('trips booked around their hotel', () => {
       ['Hotel Chicago', '2027-02-01', '2027-02-02'],
       ['Maui vacation', '2027-02-03', '2027-02-08'],
     ])
-  })
-})
-
-describe('trips written only as flights', () => {
-  it('makes one trip of a flight out and the flight back, whatever the second names', () => {
+    // Nor is it a night on the way when the flight leaves the day after it ends.
     expect(
       merged(
-        trip('Flight to NYC', '2027-03-01'),
-        trip('Flight to DEN', '2027-03-04'),
-        trip('Flight', '2027-05-01'),
-        trip('Flight', '2027-05-04'),
-        trip('Flight to Boston', '2027-07-01'),
-        trip('Flight home', '2027-07-04'),
+        trip('Hotel Chicago', '2027-02-01', '2027-02-02'),
+        trip('Flight to Maui', '2027-02-03'),
+        trip('Maui vacation', '2027-02-04', '2027-02-08'),
       ),
     ).toEqual([
-      ['Flight to NYC', '2027-03-01', '2027-03-04'],
-      ['Flight', '2027-05-01', '2027-05-04'],
-      ['Flight to Boston', '2027-07-01', '2027-07-04'],
+      ['Hotel Chicago', '2027-02-01', '2027-02-03'],
+      ['Maui vacation', '2027-02-04', '2027-02-08'],
     ])
   })
 
-  it('leaves a lone flight a day’s trip, and a flight back over 30 days later apart', () => {
+  it('keeps a trip starting days into a long stay apart from it', () => {
+    // A month's rental at home base, with weekends away from it.
     expect(
       merged(
-        trip('Flight to NYC', '2027-03-01'),
-        trip('Flight to Austin', '2027-06-01'),
-        trip('Flight home', '2027-07-02'),
+        trip('Airbnb Denver', '2027-06-01', '2027-06-30'),
+        trip('Vegas trip', '2027-06-10', '2027-06-12'),
+        trip('Austin trip', '2027-06-20', '2027-06-22'),
       ),
     ).toEqual([
-      ['Flight to NYC', '2027-03-01', '2027-03-01'],
-      ['Flight to Austin', '2027-06-01', '2027-06-01'],
-      ['Flight home', '2027-07-02', '2027-07-02'],
+      ['Airbnb Denver', '2027-06-01', '2027-06-30'],
+      ['Vegas trip', '2027-06-10', '2027-06-12'],
+      ['Austin trip', '2027-06-20', '2027-06-22'],
     ])
-  })
-
-  it('stops waiting for the flight back once another trip comes', () => {
-    // The flight home after Rome is Rome's, not the flight to New York's return.
+    // A trip starting the day a stay ends, somewhere else, is its own too.
     expect(
       merged(
-        trip('Flight to NYC', '2027-03-01'),
-        trip('Rome trip', '2027-03-10', '2027-03-15'),
-        trip('Flight home', '2027-03-16'),
+        trip('Hotel Austin', '2027-08-01', '2027-08-03'),
+        trip('Dallas trip', '2027-08-03', '2027-08-06'),
       ),
     ).toEqual([
-      ['Flight to NYC', '2027-03-01', '2027-03-01'],
-      ['Rome trip', '2027-03-10', '2027-03-16'],
-    ])
-  })
-
-  it('never takes the way out to a trip as the flight back from an earlier one', () => {
-    expect(
-      merged(
-        trip('Flight to NYC', '2027-03-01'),
-        trip('Flight', '2027-03-09'),
-        trip('Ski trip', '2027-03-10', '2027-03-12'),
-      ),
-    ).toEqual([
-      ['Flight to NYC', '2027-03-01', '2027-03-01'],
-      ['Ski trip', '2027-03-09', '2027-03-12'],
+      ['Hotel Austin', '2027-08-01', '2027-08-03'],
+      ['Dallas trip', '2027-08-03', '2027-08-06'],
     ])
   })
 })

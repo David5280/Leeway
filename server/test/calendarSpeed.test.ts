@@ -197,6 +197,21 @@ describe('a file naming zones thousands of ways', () => {
     expect(kept.length).toBeGreaterThan(0)
   })
 
+  it('reads 16,000 events cycling through every zone Intl lists well under two seconds', () => {
+    // Hundreds of zones in turn, each on its own days: no cache may run out and start again.
+    const zones = Intl.supportedValuesOf('timeZone')
+    const { ms, kept } = read(
+      Array.from({ length: 16_000 }, (_, i) => [
+        `UID:${i}`,
+        'SUMMARY:Trip',
+        `DTSTART;TZID=${zones[i % zones.length]}:${icsDay(2900 + ((i * 7) % 1400))}T100000`,
+      ]),
+    )
+    expect(zones.length).toBeGreaterThan(400)
+    expect(ms).toBeLessThan(BIG_FILE_MS)
+    expect(kept.length).toBeGreaterThan(0)
+  })
+
   it('reads 20,000 made-up zones well under two seconds, as floating', () => {
     const { ms, kept } = read(
       Array.from({ length: 20_000 }, (_, i) => [

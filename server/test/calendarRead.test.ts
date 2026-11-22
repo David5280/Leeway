@@ -220,5 +220,17 @@ describe('invitations the calendar’s owner declined', () => {
     expect(calendarAddressOf('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Work\r\nBEGIN:VEVENT')).toBeNull()
     const inEvent = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nX-WR-CALNAME:me@example.com\r\nEND:VEVENT'
     expect(calendarAddressOf(inEvent)).toBeNull()
+    // With a parameter, or written as a mailto: link, it is the same address.
+    const spelled = ['X-WR-CALNAME;VALUE=TEXT:me@example.com', 'X-WR-CALNAME:MAILTO:me@example.com']
+    for (const line of spelled) expect(calendarAddressOf(`${line}\r\n`)).toBe('me@example.com')
+  })
+
+  it('knows the owner’s answer however either side writes the address', () => {
+    const bare = ['UID:bare', 'SUMMARY:Trip', 'DTSTART;VALUE=DATE:20261212']
+    const declined = [...bare, 'ATTENDEE;PARTSTAT=DECLINED:Me@Example.com']
+    expect(eventsIn(named('me@example.com', declined), 'UTC', WINDOW)).toEqual([])
+    expect(
+      eventsIn(named('mailto:me@example.com', wedding('no', 'DECLINED')), 'UTC', WINDOW),
+    ).toEqual([])
   })
 })

@@ -125,7 +125,7 @@ interface Identified {
   component: Component
 }
 
-/** An event kept, waiting for its repeats to be worked out: null `job` when it does not repeat. */
+/** An event kept, waiting for its repeats to be worked out: null `job` when it has no work to share. */
 interface Planned {
   event: Measured
   exceptions: Exceptions
@@ -142,20 +142,11 @@ function keptEvent({ uid, component }: Identified, read: Reading): Measured | nu
   return read.keep.keeps(occurrence(event, base.start.date, read.timeZone)) ? event : null
 }
 
-/** Takes `units` from the budget, or says it ran out and takes none. */
-function pay(budget: WorkBudget, units: number): boolean {
-  if (units > budget.unitsLeft) {
-    budget.ranOut = true
-    return false
-  }
-  budget.unitsLeft -= units
-  return true
-}
-
 /**
- * What an event needs for its repeats, or null when it is left out (cancelled,
- * not kept, or its exceptions cost more than is left). A repeating event pays
- * for its exceptions with its rule (expandAll); one that does not, at once.
+ * What an event needs for its repeats, or null when it is left out (cancelled
+ * or not kept). Its exceptions are paid for with its rule (expandAll), cheapest
+ * first among the file's events; an event that neither repeats nor has any
+ * to pay for needs no job.
  */
 function planOf(master: Identified, overrides: Component[], read: Reading): Planned | null {
   const event = keptEvent(master, read)
@@ -165,7 +156,7 @@ function planOf(master: Identified, overrides: Component[], read: Reading): Plan
   const bounds = boundsOf(event, until, read.window)
   const exceptions = exceptionsNear(master.component, event.start.zone, overrides, bounds)
   const upfrontUnits = placingUnits(exceptions)
-  if (!rule) return pay(read.budget, upfrontUnits) ? { event, exceptions, until, job: null } : null
+  if (!rule && upfrontUnits === 0) return { event, exceptions, until, job: null }
   const job = {
     first: event.start.date,
     rule,
@@ -250,7 +241,7 @@ export function parseCalendar(
   )
   let next = 0
   for (const plan of plans) {
-    // An event that does not repeat starts once, on its first day; a rule left out, never.
+    // An event with no job starts once, on its first day; one left out, never.
     const starts = plan.job ? repeats[next++] : [plan.event.start.date]
     if (starts) add(eventsOf(plan, starts, timeZone))
   }

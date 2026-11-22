@@ -121,6 +121,15 @@ export function uidOf(component: Component): string | null {
 /** An email address, as a calendar's name may be one. */
 const ADDRESS = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/
 
+/** An address as written, in lower case and without "mailto:", so either spelling compares equal. */
+function bareAddress(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^mailto:/, '')
+    .trim()
+}
+
 /**
  * Whose calendar the file is, as an email address, when its name is one, as
  * Google names a person's main calendar; null for any other name. Only the
@@ -129,9 +138,11 @@ const ADDRESS = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/
 export function calendarAddressOf(text: string): string | null {
   const firstEvent = text.search(/BEGIN:VEVENT/i)
   const head = firstEvent < 0 ? text : text.slice(0, firstEvent)
-  const line = unfold(head).find((line) => line.toUpperCase().startsWith('X-WR-CALNAME:'))
-  const name = line?.slice('X-WR-CALNAME:'.length).trim().toLowerCase()
-  return name && ADDRESS.test(name) ? name : null
+  const name = unfold(head)
+    .map(propertyOf)
+    .find((property) => property?.name === 'X-WR-CALNAME')
+  const address = name ? bareAddress(name.value) : ''
+  return ADDRESS.test(address) ? address : null
 }
 
 /** True when the calendar's own `address` is invited to the event and said no. */
@@ -140,7 +151,7 @@ export function isDeclinedBy(component: Component, address: string | null): bool
   return (component.get('ATTENDEE') ?? []).some(
     (attendee) =>
       attendee.params.PARTSTAT?.toUpperCase() === 'DECLINED' &&
-      attendee.value.trim().toLowerCase() === `mailto:${address}`,
+      bareAddress(attendee.value) === address,
   )
 }
 

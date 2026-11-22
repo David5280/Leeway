@@ -135,6 +135,8 @@ describe('reading a calendar while it changes', () => {
     const held = holdReads('', 503)
     const refreshes = [call('refresh_calendar'), call('refresh_calendar')]
     await held.asked
+    // Let the second refresh reach the read under way before the first ends.
+    await poolAtRest()
     held.release()
     for (const status of await Promise.all(refreshes)) {
       expect(status).toMatchObject({ eventCount: 1, lastError: expect.stringMatching(/read/) })

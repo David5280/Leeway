@@ -7,6 +7,7 @@
 // dinner") always joins one of them rather than make a third. Pure.
 
 import { addDays, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
+import { returnDays } from './flightPairs.js'
 import { daysOf, type EventKind } from './kinds.js'
 import {
   holidayNames,
@@ -59,6 +60,8 @@ interface Piece {
   travel: boolean
   /** True for travel on the day a trip starts or the day before: the way out to it. */
   leadsIntoTrip: boolean
+  /** For a flight, the day of the flight back paired with it (flightPairs.ts); else null. */
+  returnOn: IsoDate | null
 }
 
 /** A span being built, with what its pieces say about it so far. */
@@ -79,7 +82,18 @@ function pieceOf(event: KindedEvent, tripStarts: Set<IsoDate>): Piece {
   const travel = role !== 'own'
   const { startsOn } = event
   const leadsIntoTrip = travel && (tripStarts.has(startsOn) || tripStarts.has(addDays(startsOn, 1)))
-  return { event, words, role, travel, leadsIntoTrip }
+  return { event, words, role, travel, leadsIntoTrip, returnOn: null }
+}
+
+/** Gives each flight the day of its flight back, where one pairs with it. */
+function pairFlights(pieces: Piece[], tripStarts: Set<IsoDate>): void {
+  const flights = pieces.filter((piece) => piece.role === 'transport')
+  const named = flights.map(({ event, words }) => ({
+    startsOn: event.startsOn,
+    named: words.size > 0,
+  }))
+  const backOn = returnDays(named, tripStarts)
+  for (const flight of flights) flight.returnOn = backOn.get(flight.event.startsOn) ?? null
 }
 
 /** The days a trip's own event (not its travel) starts on. */
@@ -143,7 +157,7 @@ function startSpan(piece: Piece): Building {
     stayEnd: piece.role === 'transport' ? null : event.endsOn,
     stayFrom: piece.role === 'lodging' ? event.startsOn : null,
     leftOn: piece.role === 'transport' ? event.startsOn : null,
-    awaitsReturn: piece.role === 'transport',
+    returnOn: piece.returnOn,
     namedDays: daysOf(event),
     namedForTravel: piece.travel,
   }
@@ -156,8 +170,10 @@ function markTripDays(building: Building, { event, role }: Piece): void {
   if (role !== 'transport') building.stayEnd = maxDate(building.stayEnd ?? endsOn, endsOn)
   if (role === 'lodging') building.stayFrom = minDate(building.stayFrom ?? startsOn, startsOn)
   if (role === 'transport') building.leftOn = maxDate(building.leftOn ?? startsOn, startsOn)
-  // A lone flight out waits for nothing more once anything joins it: the flight back, a stay or the trip.
-  building.awaitsReturn = false
+  // A lone flight out waits until its flight back, a stay or the trip itself
+  // joins it; another flight (a connection's next leg) leaves it waiting.
+  const anotherFlight = role === 'transport' && startsOn !== building.returnOn
+  if (!anotherFlight) building.returnOn = null
 }
 
 function addPiece(building: Building, piece: Piece): void {
@@ -205,6 +221,7 @@ function byPlacing(a: Piece, b: Piece): number {
 export function mergeSpans(events: KindedEvent[]): EventSpan[] {
   const tripStarts = tripStartsOf(events)
   const pieces = events.map((event) => pieceOf(event, tripStarts)).sort(byPlacing)
+  pairFlights(pieces, tripStarts)
   const spans: Building[] = []
   // Spans a later piece can still reach: since pieces come soonest first, one
   // whose reach is behind the piece being placed is finished for good.
@@ -220,7 +237,7 @@ export function mergeSpans(events: KindedEvent[]): EventSpan[] {
     }
     // The next trip of its own ends any lone flight's wait for its flight back.
     if (piece.event.kind === 'trip' && !piece.travel) {
-      for (const building of open) building.awaitsReturn = false
+      for (const building of open) building.returnOn = null
     }
   }
   return spans

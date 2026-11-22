@@ -5,7 +5,7 @@
 import { addDays, fromDayNumber, makeDate, toDayNumber, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '../../lib/time.js'
 import { wallClockMs, zonedInstant } from '../../lib/zonedTime.js'
-import { listedZone } from './zoneNames.js'
+import { knownZone } from './zoneNames.js'
 
 export interface Moment {
   /** The day as written, on the clock of the zone it is written in. */
@@ -26,13 +26,13 @@ const VALUE = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/
 const DURATION = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/
 
 /**
- * A TZID Intl lists, by Intl's own name, or null. A file's links (US/Eastern)
- * are already read to a listed zone (componentsOf). A Windows name ("Eastern
- * Standard Time") or a calendar's own made-up id is read as floating, which
- * is right to the day for anyone living in that zone.
+ * A TZID Intl knows, by Intl's own name, or null. A file's names are already
+ * read to Intl's (componentsOf), which makes each one known here. A Windows
+ * name ("Eastern Standard Time") or a calendar's own made-up id is read as
+ * floating, which is right to the day for anyone living in that zone.
  */
 function zoneOf(tzid: string | undefined): string | null {
-  return tzid ? listedZone(tzid) : null
+  return tzid ? knownZone(tzid) : null
 }
 
 /** A DTSTART, DTEND, EXDATE, RECURRENCE-ID or UNTIL value, with its TZID if any. */

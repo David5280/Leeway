@@ -20,9 +20,6 @@ export type Fit = 'none' | 'fits' | 'named'
  */
 const RETURN_DAYS = 2
 
-/** How long a trip that is only a flight out waits for the flight back. */
-const RETURN_WAIT_DAYS = 30
-
 /** What a trip being built says about itself so far. */
 export interface TripSoFar {
   span: { startsOn: IsoDate; endsOn: IsoDate }
@@ -40,8 +37,8 @@ export interface TripSoFar {
   stayFrom: IsoDate | null
   /** The day its latest flight leaves, null with none: a flight after its stays leaves it. */
   leftOn: IsoDate | null
-  /** True while it is one flight out and nothing else, waiting for the flight back. */
-  awaitsReturn: boolean
+  /** While it is a flight out and nothing else, the day of its flight back (flightPairs.ts). */
+  returnOn: IsoDate | null
 }
 
 /** A trip's piece being placed. */
@@ -55,13 +52,13 @@ export interface TripPiece {
 
 /**
  * The last day any piece could still join a trip: the day after it, a few
- * days after its stays for the flight home, or weeks after a lone flight out
- * for the flight back. Past it, the trip is finished.
+ * days after its stays for the flight home, or the day of a lone flight
+ * out's flight back. Past it, the trip is finished.
  */
 export function tripReach(trip: TripSoFar): IsoDate {
   let reach = addDays(trip.span.endsOn, 1)
   if (trip.stayEnd !== null) reach = maxDate(reach, addDays(trip.stayEnd, RETURN_DAYS))
-  if (trip.awaitsReturn) reach = maxDate(reach, addDays(trip.span.startsOn, RETURN_WAIT_DAYS))
+  if (trip.returnOn !== null) reach = maxDate(reach, trip.returnOn)
   return reach
 }
 
@@ -75,19 +72,22 @@ function hasLeft(trip: TripSoFar): boolean {
  * the way to one starting on `start`: getting there alone, or an airport
  * hotel. A one-night stay is written either as one whole day (the night
  * before the trip) or as a timed booking over two days, checking out the
- * day the trip starts; a flight after it (an early flight out) moves the
- * trip's start up to the day after that flight. A longer stay, or one
- * ending before the trip, is a trip of its own ("Hotel Chicago" before
- * "Maui vacation").
+ * day the trip starts. An early flight out on the morning the stay ends
+ * moves the trip's start up to the day after that flight. A longer stay, or
+ * one ending before the trip or its flight, is a trip of its own ("Hotel
+ * Chicago" before "Maui vacation").
  */
 function onTheWay(trip: TripSoFar, start: IsoDate): boolean {
   if (trip.stayFrom === null || trip.stayEnd === null) return true
   const stayDays = daysBetween(trip.stayFrom, trip.stayEnd) + 1
   if (stayDays > 2) return false
-  if (trip.leftOn !== null && trip.leftOn >= trip.stayEnd) {
+  // The morning a stay ends: the day after a night written as one day, else its last day.
+  const checkout = stayDays === 1 ? addDays(trip.stayEnd, 1) : trip.stayEnd
+  const { leftOn } = trip
+  if (leftOn !== null && leftOn >= trip.stayEnd && leftOn <= checkout) {
     return start <= addDays(trip.span.endsOn, 1)
   }
-  return start <= (stayDays === 1 ? addDays(trip.stayEnd, 1) : trip.stayEnd)
+  return start <= checkout
 }
 
 /**
@@ -95,22 +95,22 @@ function onTheWay(trip: TripSoFar, start: IsoDate): boolean {
  * day after them: its own flights, and the flight home wherever it says it
  * goes ("Flight to Denver" after Rome). It also joins:
  *
- * - as the way home, naming nowhere, a few days after the trip's stays;
- * - as the flight back, a trip that is only a flight out, within weeks;
+ * - as the way home, naming nowhere, a few days after the trip's stays,
+ *   unless it is the way out to a trip starting that day or the next;
+ * - as the flight back paired with a trip that is only a flight out, or
+ *   another leg on the day of its latest flight (a connection);
  * - any trip within reach of its days, when `nameFits`.
- *
- * The first two never take the way out to a trip starting that day or the
- * next, which belongs to that trip instead.
  */
 function flightFits(trip: TripSoFar, piece: TripPiece, nameFits: boolean): boolean {
   const start = piece.event.startsOn
   const { stayEnd } = trip
   if (stayEnd !== null && start <= addDays(stayEnd, 1)) return true
-  if (!piece.leadsIntoTrip) {
-    const wayHome = stayEnd !== null && !piece.words.size
-    if (wayHome && start <= addDays(stayEnd, RETURN_DAYS)) return true
-    if (trip.awaitsReturn && start <= addDays(trip.span.startsOn, RETURN_WAIT_DAYS)) return true
-  }
+  const wayHome = stayEnd !== null && !piece.words.size && !piece.leadsIntoTrip
+  if (wayHome && start <= addDays(stayEnd, RETURN_DAYS)) return true
+  if (trip.returnOn === start) return true
+  // Another leg of a connection, on the day of a trip that is only flights.
+  const onlyFlights = trip.ownEnd === null && stayEnd === null
+  if (onlyFlights && start === trip.leftOn) return true
   return start <= addDays(trip.span.endsOn, 1) && nameFits
 }
 
@@ -131,6 +131,18 @@ function stayFits(trip: TripSoFar, piece: TripPiece, nameFits: boolean): boolean
 }
 
 /**
+ * True when the travel's stay began the day a trip starting on `start` does,
+ * or the day before, and lasts into it: the trip's own hotel, booked from
+ * the night before. A trip starting later in a long stay (a week away from a
+ * month's rental) is a trip of its own.
+ */
+function checkedInBefore(trip: TripSoFar, start: IsoDate): boolean {
+  const { stayFrom, stayEnd } = trip
+  if (stayFrom === null || stayEnd === null) return false
+  return start <= stayEnd && start <= addDays(stayFrom, 1)
+}
+
+/**
  * A trip's own piece joins:
  *
  * - a span that is only travel so far, whatever either names, when it starts
@@ -147,8 +159,7 @@ function ownFits(trip: TripSoFar, piece: TripPiece, named: boolean, unnamed: boo
   const { startsOn: start, endsOn } = piece.event
   if (trip.ownEnd === null) {
     if (start > addDays(trip.span.endsOn, 1)) return false
-    const duringStay = trip.stayEnd !== null && start <= trip.stayEnd
-    return duringStay || onTheWay(trip, start) || named || unnamed
+    return checkedInBefore(trip, start) || onTheWay(trip, start) || named || unnamed
   }
   if (start >= trip.span.startsOn && endsOn <= trip.ownEnd) return true
   if (start > addDays(trip.ownEnd, 1)) return false

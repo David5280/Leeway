@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CalendarEvent } from '../src/domain/calendar/ics.js'
 import { durationMs, momentOf } from '../src/domain/calendar/moments.js'
-import { listedZone, MAX_ZONE_LOOKUPS, zoneReader } from '../src/domain/calendar/zoneNames.js'
+import { knownZone, MAX_ZONE_LOOKUPS, zoneReader } from '../src/domain/calendar/zoneNames.js'
 import { eventsIn, ics } from './fixtures/calendarFile.js'
 
 const spans = (events: CalendarEvent[]) => events.map((e) => [e.startsOn, e.endsOn])
@@ -103,10 +103,31 @@ describe('zone names', () => {
   })
 
   it('knows every zone Intl lists without asking it, in any case', () => {
-    expect(listedZone('america/denver')).toBe('America/Denver')
-    expect(listedZone(' UTC ')).toBe('UTC')
-    expect(listedZone('US/Eastern')).toBeNull()
-    expect(listedZone('Bogus/Zone')).toBeNull()
+    expect(knownZone('america/denver')).toBe('America/Denver')
+    expect(knownZone(' UTC ')).toBe('UTC')
+    expect(knownZone('US/Eastern')).toBeNull()
+    expect(knownZone('Bogus/Zone')).toBeNull()
+  })
+
+  it('reads zones Intl places but does not list, such as Etc/GMT-9 and EST5EDT', () => {
+    const window = { from: '2027-02-01', to: '2027-03-31' }
+    const dayOf = (tzid: string, time: string) =>
+      spans(
+        eventsIn(
+          ics(['UID:z', 'SUMMARY:Trip', `DTSTART;TZID=${tzid}:${time}`]),
+          'America/Denver',
+          window,
+        ),
+      )
+    // 8 AM nine hours ahead of UTC is 4 PM the day before in Denver.
+    expect(dayOf('Etc/GMT-9', '20270301T080000')).toEqual([['2027-02-28', '2027-02-28']])
+    expect(dayOf('etc/gmt-9', '20270301T080000')).toEqual([['2027-02-28', '2027-02-28']])
+    // 1 AM on New York's clock is 11 PM the night before in Denver.
+    expect(dayOf('EST5EDT', '20270301T010000')).toEqual([['2027-02-28', '2027-02-28']])
+    expect(dayOf('PST8PDT', '20270301T230000')).toEqual([['2027-03-02', '2027-03-02']])
+    // Once resolved, the name is known by its resolved spelling, as moments read it.
+    expect(knownZone('ETC/GMT-9')).toBe('Etc/GMT-9')
+    expect(momentOf('20270301T080000', 'Etc/GMT-9')?.zone).toBe('Etc/GMT-9')
   })
 
   it('looks up names Intl does not list a bounded number of times per file', () => {

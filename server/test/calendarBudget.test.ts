@@ -184,33 +184,39 @@ describe('sharing the budget among many rules', () => {
     expect(budget.unitsLeft).toBeGreaterThan(900)
   })
 
-  it('leaves out the event whose skipped days cost most to place, wherever it is listed', () => {
-    // 12,500 skipped moments in UTC on a New York event: 150,000 units to place, listed first.
-    const skipped = Array.from({ length: 12_500 }, (_, i) => {
-      const minutes = i % 1440
-      const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}${String(minutes % 60).padStart(2, '0')}00`
-      return `202${4 + Math.floor(i / 1440 / 366)}${String(1 + (Math.floor(i / 1440) % 12)).padStart(2, '0')}15T${time}Z`
-    })
-    const listed = [
-      'UID:costly',
-      'SUMMARY:Camping trip',
-      'DTSTART;TZID=America/New_York:20240101T090000',
-      'RRULE:FREQ=DAILY;COUNT=40',
-      `EXDATE:${skipped.join(',')}`,
-    ]
-    // Forty daily trips across the window, about 3,000 units each: all fit if worked out first.
-    const daily = Array.from({ length: 40 }, (_, i) => [
-      `UID:daily-${i}`,
-      `SUMMARY:Trip ${i}`,
-      'DTSTART;VALUE=DATE:20231101',
-      'RRULE:FREQ=DAILY',
-    ])
-    const budget = workBudget()
-    const kept = new Set(
-      eventsIn(ics(listed, ...daily), 'UTC', window, { budget }).map((e) => e.uid),
-    )
-    expect(kept.size).toBe(40)
-    expect(kept.has('costly')).toBe(false)
-    expect(budget.ranOut).toBe(true)
-  })
+  it.each([
+    ['repeating', ['RRULE:FREQ=DAILY;COUNT=40']],
+    ['not repeating', []],
+  ])(
+    'leaves out the event whose skipped days cost most to place, %s, wherever it is listed',
+    (_, rule) => {
+      // 12,500 skipped moments in UTC on a New York event: 150,000 units to place, listed first.
+      const skipped = Array.from({ length: 12_500 }, (_, i) => {
+        const minutes = i % 1440
+        const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}${String(minutes % 60).padStart(2, '0')}00`
+        return `202${4 + Math.floor(i / 1440 / 366)}${String(1 + (Math.floor(i / 1440) % 12)).padStart(2, '0')}15T${time}Z`
+      })
+      const listed = [
+        'UID:costly',
+        'SUMMARY:Camping trip',
+        'DTSTART;TZID=America/New_York:20240101T090000',
+        ...rule,
+        `EXDATE:${skipped.join(',')}`,
+      ]
+      // Forty daily trips across the window, about 3,000 units each: all fit if worked out first.
+      const daily = Array.from({ length: 40 }, (_, i) => [
+        `UID:daily-${i}`,
+        `SUMMARY:Trip ${i}`,
+        'DTSTART;VALUE=DATE:20231101',
+        'RRULE:FREQ=DAILY',
+      ])
+      const budget = workBudget()
+      const kept = new Set(
+        eventsIn(ics(listed, ...daily), 'UTC', window, { budget }).map((e) => e.uid),
+      )
+      expect(kept.size).toBe(40)
+      expect(kept.has('costly')).toBe(false)
+      expect(budget.ranOut).toBe(true)
+    },
+  )
 })
