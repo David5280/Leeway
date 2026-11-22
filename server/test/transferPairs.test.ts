@@ -82,6 +82,7 @@ describe('transferHint', () => {
       'INT PD 11/30',
       'Dividend paid',
       'Interest',
+      'CASH BACK REWARD',
     ]) {
       expect(transferHint(tx('x', { accountId: 'a', amountCents: -2000, name }))).toBe('other')
     }
@@ -104,6 +105,55 @@ describe('transferHint', () => {
     expect(transferHint({ ...base, name: 'CHASE CREDIT CRD AUTOPAY' })).toBe('transfer')
     expect(transferHint({ ...base, name: 'x', merchantName: 'Funds transfer' })).toBe('transfer')
     expect(transferHint({ ...base, name: 'KING SOOPERS' })).toBe('none')
+  })
+
+  it('lets pay words win over transfer words, but not words an account can be named by', () => {
+    const base = tx('a', { accountId: 'x', amountCents: -100 })
+    for (const name of ['Payroll transfer ACME', 'DIR DEP XFER', 'Refund transfer']) {
+      expect(transferHint({ ...base, name })).toBe('other')
+    }
+    for (const name of [
+      'Online Transfer from Interest Checking',
+      'Transfer to Cash Back Savings',
+      'Transfer from Dividend Paid Account',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('transfer')
+    }
+  })
+
+  it('reads pay words only before a "to" or "from" tail, which names an account', () => {
+    const base = tx('a', { accountId: 'x', amountCents: -100 })
+    for (const name of [
+      'Online Transfer to PAYROLL CHK 1234',
+      'Transfer from Tax Refund Savings',
+      'Transfer to Rebate account',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('transfer')
+    }
+    // The name is read before the merchant, and a tail ends with its field.
+    expect(transferHint({ ...base, name: 'Transfer', merchantName: 'From Refund Savings' })).toBe(
+      'transfer',
+    )
+    expect(transferHint({ ...base, name: 'Payroll transfer', merchantName: 'to ACME' })).toBe(
+      'other',
+    )
+    expect(
+      transferHint({ ...base, name: 'Transfer to Savings', merchantName: 'ACME Payroll' }),
+    ).toBe('other')
+    // Pay words ahead of the tail still win, a "to" or "from" before any
+    // transfer word is no tail, and a pay word in a tail with no transfer word
+    // still says the line is pay.
+    for (const name of [
+      'Payroll transfer ACME',
+      'Payroll transfer from ACME',
+      'Back To Basics Payroll transfer',
+      'From The Ground Up LLC payroll transfer',
+      'DIR DEP XFER',
+      'Refund transfer',
+      'ACH Deposit from ACME PAYROLL',
+    ]) {
+      expect(transferHint({ ...base, name })).toBe('other')
+    }
   })
 })
 
@@ -179,6 +229,35 @@ describe('pairTransfers', () => {
         }),
       ]),
     ).toEqual(['out:in'])
+  })
+
+  it('pairs a move to or from an own account named for pay', () => {
+    expect(
+      pairsOf([
+        tx('out', {
+          accountId: 'checking',
+          amountCents: 2500,
+          name: 'Online Transfer to PAYROLL CHK 1234',
+        }),
+        tx('in', {
+          accountId: 'savings',
+          amountCents: -2500,
+          name: 'Transfer from Tax Refund Savings',
+        }),
+      ]),
+    ).toEqual(['out:in'])
+  })
+
+  it('does not pair a payroll deposit that says transfer with an equal silent withdrawal', () => {
+    expect(
+      pairsOf(
+        [
+          tx('out', { accountId: 'savings', amountCents: 300000, name: 'WITHDRAWAL' }),
+          tx('pay', { accountId: 'checking', amountCents: -300000, name: 'Payroll transfer ACME' }),
+        ],
+        unfiledLeg,
+      ),
+    ).toEqual([])
   })
 
   it('does not pair a direct deposit with a card purchase of the same amount', () => {
