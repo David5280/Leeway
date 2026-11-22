@@ -1,7 +1,8 @@
 // The Plan screen: bills, goals, debts, net worth or retirement, one section
 // at a time. Cash until payday leads the bills, the section it answers for,
-// and stays off the others so each opens on its own subject. With a calendar
-// linked, Coming up shows the weeks ahead; without one it stays out of sight.
+// with any cash that could earn more in savings under it, and both stay off
+// the others so each opens on its own subject. With a calendar linked, Coming
+// up shows the weeks ahead; without one it stays out of sight.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAction } from '../api/hooks'
@@ -12,6 +13,7 @@ import { AheadSection } from './plan/Ahead'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
+import { IdleCashCard } from './plan/IdleCash'
 import { GoalsSection } from './plan/goals/GoalsSection'
 import { NetWorthSection } from './plan/NetWorth'
 import { RetirementSection } from './plan/retirement/RetirementSection'
@@ -61,7 +63,12 @@ export function Plan() {
         options={options}
         onChange={(next) => navigate(`/plan/${next}`)}
       />
-      {current === 'bills' && <CashFlowCard />}
+      {current === 'bills' && (
+        <>
+          <CashFlowCard />
+          <IdleCashCard />
+        </>
+      )}
       <Content />
     </Shell>
   )

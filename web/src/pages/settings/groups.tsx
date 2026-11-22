@@ -14,6 +14,7 @@ import { EmailSection } from './Email'
 import { LayoutSection } from './Layout'
 import { LookSection } from './Look'
 import { NotificationsSection } from './Notifications'
+import { PlanningSection } from './Planning'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
 import { WidgetSection } from './Widget'
@@ -41,6 +42,12 @@ export const SETTINGS_GROUPS = [
     title: 'Budgeting',
     description: 'When a period starts, when warnings show, and your currency and time zone.',
     sections: [BudgetingSection, RegionSection],
+  },
+  {
+    id: 'planning',
+    title: 'Planning',
+    description: 'Your birth year, for retirement projections.',
+    sections: [PlanningSection],
   },
   {
     id: 'accounts',

@@ -1,11 +1,11 @@
 // Net worth: the figure first, with what is owned and owed under it, which
 // opens its drill-down; then "Is your net worth growing?" over a range,
 // against where it started, a chart whose tapped day reads out what was owned
-// and owed that day; then how much of each month's pay goes to savings.
+// and owed that day; then what the owner entered by hand (a home, a car, a
+// loan), marked as theirs; then how much of each month's pay goes to savings.
 
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAction } from '../../api/hooks'
 import { LineChart } from '../../components/charts/LineChart'
 import { Card } from '../../components/design/Card'
@@ -18,7 +18,7 @@ import { netWorthDrill } from '../../lib/drills/plan'
 import { longDate, shortDate } from '../../lib/format'
 import { isoDaysAgo } from '../../lib/dates'
 import { historyNote, rangesWithMore, startReference, worthChange } from '../../lib/worth'
-import { settingsPath } from '../settings/paths'
+import { OwnedCard } from './owned/OwnedCard'
 import { SavingsRateCard } from './SavingsRate'
 
 const RANGES = [
@@ -100,11 +100,8 @@ export function NetWorthSection() {
           <p className="empty">History builds as balances change. Check back after a few syncs.</p>
         )}
         {change && note && <p className="small muted">{note}</p>}
-        <p className="small muted">
-          Add a house, car or other account by hand in{' '}
-          <Link to={settingsPath('accounts')}>Settings, then Accounts</Link> to count it here.
-        </p>
       </Card>
+      <OwnedCard />
       <SavingsRateCard />
     </>
   )

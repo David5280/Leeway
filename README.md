@@ -21,9 +21,11 @@ bank, and nothing in Leeway can ever move money.
 - **An accounts dashboard** for one account or several: balances, money in and
   out, spending by category and recent transactions.
 - **Account alerts** when an account is overdrawn, a card is over its limit, a
-  balance is low or an overdraft fee was charged.
+  balance is low or an overdraft fee was charged, and for money leaking away:
+  a charge that went through twice, or a repeating charge that went up in price.
 - **Planning**: bills and subscriptions, recurring charges found for you,
-  savings goals, debt payoff plans, cash until payday and net worth.
+  savings goals, debt payoff plans, cash until payday (and cash in checking
+  that could earn more in savings, at a stated rate) and net worth.
 - **Coming up**, if you connect a calendar by its private link: six weeks of
   paydays, bills and events like trips and weddings, with what to set aside
   for each from what past ones cost. Only events likely to cost money are
@@ -32,6 +34,9 @@ bank, and nothing in Leeway can ever move money.
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI
   assistant can read all of it today.
+- **Credit card interest in dollars**: what carrying each card's balance past
+  the due date costs a month at its APR, and all your cards together. Add a
+  card's APR from its statement.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or
   also change budgets.
@@ -356,6 +361,11 @@ sync, and tells you about:
 - a bill not on autopay coming due (2 days before, by default), until it is
   paid;
 - a single charge of at least an amount you choose ($500 by default);
+- the same charge at one place twice within 3 days (not a habit there, and not
+  refunded since; cash, checks, payments to people and bank fees aside), or a
+  repeating charge that isn't a bill yet going up in price on its usual cycle
+  (a bill's own change alert covers a tracked bill, and a bill paid twice is
+  told once, as the charge made twice);
 - a bank that needs you to sign in again;
 - AI spending near or at this month's limit, once each as it happens (see
   [AI models](#ai-models-and-the-monthly-limit)).

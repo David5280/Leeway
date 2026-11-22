@@ -279,6 +279,27 @@ describe('get_cash_flow', () => {
     })
   })
 
+  it('takes payday from a paycheck budget period over regular deposits that disagree', async () => {
+    // Pay found in history says Nov 20, but the owner budgets every paycheck from Nov 17.
+    await call('update_settings', {
+      period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-17' },
+    })
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'ACME PAYROLL',
+        amountCents: -250000,
+      })
+    }
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-12-01',
+      paydaySource: 'pay_period',
+      expectedPayCents: null,
+      daysUntilPayday: 14,
+    })
+  })
+
   it('counts an overdue bill and every bill due before payday, in date then name order', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 500000 })
     await insertBankTransaction(ctx.db, accountId, {
