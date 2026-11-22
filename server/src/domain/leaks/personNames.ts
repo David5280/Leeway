@@ -5,6 +5,9 @@
 // "DOE/JANE", "Doe, Jane", "John & Jane Doe", "Jane Doe2"), so the words
 // that only say money moved are dropped before the rest is judged. Pure.
 //
+// Small connecting words ("for", "of", "the") are dropped too, so "Payment for
+// Jane Doe" and "The Doe Family" are judged on the names they hold.
+//
 // Missing a merchant's name costs a word ("A payment went out twice"), while
 // showing a person's costs their privacy, so a doubtful name reads as a person.
 
@@ -40,13 +43,19 @@ const PAYMENT_WORDS = new Set(
 )
 
 /**
+ * Small words that join a name's parts ("Jane Doe for babysitting", "The Doe
+ * Family"), never a mark of a business by themselves: dropped before judging.
+ * A brand holding one still carries a business word ("Bank of America").
+ */
+const CONNECTING_WORDS = new Set(['the', 'of', 'at', 'on', 'for'])
+
+/**
  * Words that mark a business, so a name holding one is never read as a
  * person's: "Planet Fitness", "Corner Hardware", "Acme Insurance Co".
  */
 const BUSINESS_WORDS = new Set(
   [
-    'inc llc ltd lp llp co corp corporation company group holdings',
-    'the of at on for',
+    'inc llc ltd lp llp co corp corporation company group holdings usa',
     'store stores shop shops market mart supermarket grocery foods food',
     'fitness gym club yoga pilates studio salon spa barber',
     'cafe coffee bar grill kitchen restaurant pizza bakery diner deli',
@@ -68,32 +77,40 @@ const BUSINESS_WORDS = new Set(
  */
 const NAME_WORD = /^[\p{L}\p{N}'.-]+$/u
 
-/** The most and fewest words a person's name takes here: "Jane Doe" up to "Maria De Los Santos Garcia Lopez". */
-const NAME_WORDS = { fewest: 2, most: 6 } as const
+/**
+ * The fewest words a person's name takes: "Jane Doe". There is no most, since
+ * a long name ("Maria Del Carmen De Los Santos Garcia") is still a person's.
+ */
+const FEWEST_NAME_WORDS = 2
 
 /** A word as compared with the word lists: lower case, without periods or apostrophes. */
 const bare = (word: string) => word.toLowerCase().replace(/[.']/g, '')
 
+/** Whether a word is dropped before judging: it only says money moved, or only joins a name's parts. */
+const dropped = (word: string) => PAYMENT_WORDS.has(bare(word)) || CONNECTING_WORDS.has(bare(word))
+
 /**
  * The words of a name as they are judged: split at WORD_BREAKS (and at any
- * invisible character), with no word that holds no letter (a dash, a date)
- * and none that only says money moved (PAYMENT_WORDS).
+ * invisible character), with no word that holds no letter (a dash, a date),
+ * none that only says money moved (PAYMENT_WORDS) and no connecting word
+ * (CONNECTING_WORDS).
  */
 export function nameWords(name: string): string[] {
   return judgedText(name)
     .split(WORD_BREAKS)
-    .filter((word) => /\p{L}/u.test(word) && !PAYMENT_WORDS.has(bare(word)))
+    .filter((word) => /\p{L}/u.test(word) && !dropped(word))
 }
 
 /**
- * Whether a name reads as a person's: two to six plain words once the
- * payment words are gone, none of them a business word, like "Jane Doe",
- * "John and Jane Doe" or "Doe, Jane". A two-word brand with no business word
- * ("Taco Bell") reads so too; leakNames.ts lets the bank's codes vouch for it.
+ * Whether a name reads as a person's: two or more plain words once the
+ * payment and connecting words are gone, none of them a business word, like
+ * "Jane Doe", "John and Jane Doe" or "Doe, Jane". A two-word brand with no
+ * business word ("Taco Bell") reads so too; leakNames.ts lets the bank's
+ * codes or the known brands (knownBrands.ts) vouch for it.
  */
 export function looksLikePerson(name: string): boolean {
   const words = nameWords(name)
-  if (words.length < NAME_WORDS.fewest || words.length > NAME_WORDS.most) return false
+  if (words.length < FEWEST_NAME_WORDS) return false
   if (!words.every((word) => NAME_WORD.test(word))) return false
   return !words.some((word) => BUSINESS_WORDS.has(bare(word)))
 }

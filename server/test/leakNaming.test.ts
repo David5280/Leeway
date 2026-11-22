@@ -2,14 +2,17 @@
 // merchant, from the bank's merchant name or its text alone (as a hand-entered
 // or imported line has), unless it is rent, a payment app line with no
 // merchant named, or a name that reads as a person's however a bank dresses
-// it up. Those are told with no name, still opening their charges.
+// it up (on a payment app's line, even one the bank coded as a store). Those
+// are told with no name, still opening their charges.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { actionCaller } from './actionCaller.js'
 import {
+  APP_PEOPLE,
   DOE_TWICE,
   DRESSED_UP_NAMES,
   leaksOf,
+  MONTHS,
   PERSON,
   RENT,
   repeat,
@@ -75,6 +78,33 @@ describe('a leak whose name may be a person’s', () => {
   it('charged twice in a day as personal care, is told with no name', async () => {
     await twiceOnNov3(ctx.db, await everyday(), DOE_TWICE)
     expect(toldAs(await alerts())).toEqual([['A payment of $40 went out twice on Nov 3.', null]])
+  })
+
+  it.each(APP_PEOPLE.map((line) => [line.name, line.primary, line] as const))(
+    'paid through an app as %s (%s), named by the bank as the merchant, is told with no name',
+    async (_name, _code, line) => {
+      await twiceOnNov3(ctx.db, await everyday(), line)
+      expect(toldAs(await alerts())).toEqual([['A payment of $40 went out twice on Nov 3.', null]])
+    },
+  )
+
+  it('entered by hand each month, with words between the names, is told with no name', async () => {
+    const babysitting = await call('create_account', {
+      name: 'Wallet',
+      type: 'depository',
+      balanceCents: 400_000,
+    })
+    for (const date of MONTHS) {
+      await call('create_transaction', {
+        accountId: babysitting.id,
+        date,
+        name: 'Jane Doe for babysitting',
+        amountCents: date === MONTHS.at(-1) ? 45_000 : 40_000,
+      })
+    }
+    expect(toldAs(await alerts())).toEqual([
+      ['A repeating payment went up to $450, from $400.', null],
+    ])
   })
 })
 
@@ -161,7 +191,14 @@ describe('a merchant', () => {
     ],
     ['Taco Bell', { name: 'TACO BELL 031', merchantName: 'Taco Bell', primary: 'FOOD_AND_DRINK' }],
     ['Corner Hardware', { name: 'Corner Hardware' }],
-  ] as const)('is still named when it charges twice: %s', async (merchant, fields) => {
+    // A real merchant paid through PayPal, which the bank named.
+    ['Spotify', { name: 'PAYPAL *SPOTIFY', merchantName: 'Spotify', primary: 'ENTERTAINMENT' }],
+    // Lines imported from a CSV: no merchant name and no codes.
+    ['Taco Bell', { name: 'TACO BELL #031' }],
+    ['Spotify USA', { name: 'SPOTIFY USA' }],
+    ['Bank of America', { name: 'BANK OF AMERICA' }],
+    ['The Home Depot', { name: 'THE HOME DEPOT #123' }],
+  ] as const)('is still named when it charges twice: %s, as %o', async (merchant, fields) => {
     await twiceOnNov3(ctx.db, await everyday(), { ...fields, fromCents: 0, toCents: 0 })
     expect(toldAs(await alerts())).toEqual([[`${merchant} charged $40 twice on Nov 3.`, merchant]])
   })

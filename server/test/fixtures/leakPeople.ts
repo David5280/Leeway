@@ -112,6 +112,10 @@ export const DRESSED_UP_NAMES: Repeating[] = [
   { name: 'JANE DOE SR', merchantName: 'Doe,Jane', ...SMALL },
   { name: 'John & Jane Doe', ...SMALL },
   { name: 'Maria De Los Santos Garcia', ...SMALL },
+  { name: 'Maria Del Carmen De Los Santos Garcia', ...SMALL },
+  { name: 'PAYMENT FOR JANE DOE', ...SMALL },
+  { name: 'THE DOE FAMILY', ...SMALL },
+  { name: 'JANE OF DOE', ...SMALL },
   { name: 'Jane​Doe', ...SMALL },
   { name: 'Jane Doe2', ...SMALL },
   { name: 'JANE DOE', ...RENT },
@@ -122,6 +126,49 @@ export const DRESSED_UP_NAMES: Repeating[] = [
     primary: 'RENT_AND_UTILITIES',
     detailed: 'RENT_AND_UTILITIES_RENT',
     ...RENT,
+  },
+]
+
+/**
+ * A person paid through a payment app, whom the bank names as the merchant
+ * and codes as a kind of business people rarely are: the bank's code must
+ * not vouch for the name. Each is told with no name.
+ */
+export const APP_PEOPLE: Repeating[] = [
+  {
+    name: 'VENMO PAYMENT 1234',
+    merchantName: 'Jane Doe',
+    primary: 'FOOD_AND_DRINK',
+    fromCents: 0,
+    toCents: 0,
+  },
+  {
+    name: 'PAYPAL *JANE DOE',
+    merchantName: 'Jane Doe',
+    primary: 'GENERAL_MERCHANDISE',
+    fromCents: 0,
+    toCents: 0,
+  },
+  {
+    name: 'PAYPAL *JANE DOE',
+    merchantName: 'Jane Doe',
+    primary: 'ENTERTAINMENT',
+    fromCents: 0,
+    toCents: 0,
+  },
+  {
+    name: 'CASH APP*JANE DOE',
+    merchantName: 'Jane Doe',
+    primary: 'GENERAL_MERCHANDISE',
+    fromCents: 0,
+    toCents: 0,
+  },
+  {
+    name: 'VENMO',
+    merchantName: 'JANE DOE',
+    primary: 'GENERAL_MERCHANDISE',
+    fromCents: 0,
+    toCents: 0,
   },
 ]
 

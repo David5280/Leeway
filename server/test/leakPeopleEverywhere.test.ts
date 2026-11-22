@@ -12,6 +12,7 @@ import type { SummaryFacts, SummaryText } from '../src/domain/summaryText.js'
 import type { EmailMessage, EmailSender } from '../src/mail/sender.js'
 import { actionCaller } from './actionCaller.js'
 import {
+  APP_PEOPLE,
   DOE_TWICE,
   DRESSED_UP_NAMES,
   leaksOf,
@@ -83,6 +84,11 @@ async function everyProbe() {
   }
   const spare = await insertBankAccount(ctx.db, { name: 'Spare', mask: '6610' })
   await twiceOnNov3(ctx.db, spare.accountId, DOE_TWICE)
+  // A person paid through an app, each charged twice on an account of its own.
+  for (const [index, line] of APP_PEOPLE.entries()) {
+    const app = await insertBankAccount(ctx.db, { name: `App ${index}`, mask: `${6700 + index}` })
+    await twiceOnNov3(ctx.db, app.accountId, line)
+  }
 }
 
 describe('a person paid every way the reviewers probed', () => {
@@ -95,6 +101,12 @@ describe('a person paid every way the reviewers probed', () => {
     // The merchant by name, and the dressed-up names worked out too, with none.
     expect(told).toContainEqual(['Spotify went up to $11.99, from $10.99.', 'Spotify'])
     expect(told).toContainEqual(['A payment of $40 went out twice on Nov 3.', null])
+    // Every app probe is really told (with no name), beside the personal care one.
+    const twiceUnnamed = told.filter(
+      ([message, merchant]) =>
+        message === 'A payment of $40 went out twice on Nov 3.' && merchant === null,
+    )
+    expect(twiceUnnamed).toHaveLength(APP_PEOPLE.length + 1)
     expect(told.filter(([, merchant]) => merchant === null).length).toBeGreaterThanOrEqual(8)
     expect(told.filter(([, merchant]) => merchant !== null)).toHaveLength(1)
     expect(JSON.stringify(alerts)).not.toMatch(PERSON)
@@ -130,5 +142,6 @@ describe('a person paid every way the reviewers probed', () => {
     expect(mailer.sent).toHaveLength(1)
     const { subject, text, html } = mailer.sent[0]!
     expect(`${subject} ${text} ${html}`).not.toMatch(PERSON)
-  })
+    // Every probe is inserted and every output read, so this runs longer than most.
+  }, 20_000)
 })

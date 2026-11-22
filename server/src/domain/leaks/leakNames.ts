@@ -5,10 +5,13 @@
 // - the bank coded it as rent, so often paid to a person or a landlord;
 // - it went through a payment app and the bank named no merchant, since the
 //   app's own text names whoever was paid ("PAYPAL *JANEDOE");
-// - the name reads as a person's (personNames.ts). A merchant the bank named
-//   and coded as a kind of business people rarely are (a restaurant, a store,
-//   an airline, an insurer, a gym) is taken at the bank's word, so "Taco
-//   Bell" and "State Farm" still show.
+// - the name reads as a person's (personNames.ts). Two things vouch for a
+//   name that only reads like one: it is a known national brand
+//   (knownBrands.ts), or the bank named the merchant and coded it as a kind
+//   of business people rarely are (a restaurant, a store, an airline, an
+//   insurer, a gym), so "Taco Bell" and "State Farm" still show. A payment
+//   app's line never gets the bank's word: the bank names whoever was paid
+//   through the app as its merchant ("VENMO" with the merchant "Jane Doe").
 // Otherwise the alert names no one ("A repeating payment went up"), and the
 // owner still finds the charges by tapping through to their own activity.
 // Pure.
@@ -16,6 +19,7 @@
 import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
 import { personToPersonApp } from '../transfers.js'
+import { isKnownBrand } from './knownBrands.js'
 import type { CodedLine } from './merchantCharges.js'
 import { judgedText, looksLikePerson, plainText } from './personNames.js'
 
@@ -63,10 +67,14 @@ function shownName(line: CodedLine, plain: (text: string) => string, masks: Acco
 export function leakName(line: CodedLine, masks: AccountMasks): string | null {
   if (line.providerCategoryDetailed === RENT_CODE) return null
   const merchantNamed = plainText(line.merchantName ?? '').trim() !== ''
-  if (personToPersonApp(line) !== null && !merchantNamed) return null
+  const throughApp = personToPersonApp(line) !== null
+  if (throughApp && !merchantNamed) return null
   const name = shownName(line, plainText, masks)
-  if (merchantNamed && rarelyAPerson(line)) return name
-  return looksLikePerson(shownName(line, judgedText, masks)) ? null : name
+  const judged = shownName(line, judgedText, masks)
+  if (isKnownBrand(judged)) return name
+  // Never on a payment app's line, where the bank's "merchant" may be the person paid.
+  if (merchantNamed && !throughApp && rarelyAPerson(line)) return name
+  return looksLikePerson(judged) ? null : name
 }
 
 /** The name each charge may show (leakName), by the charge's id. */

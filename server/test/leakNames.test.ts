@@ -41,6 +41,12 @@ describe('looksLikePerson', () => {
       'Jane Doe2',
       `Jane${ZERO_WIDTH}Doe`,
       'Maria De Los Santos Garcia',
+      'Maria Del Carmen De Los Santos Garcia',
+      'Jane Doe for babysitting',
+      'PAYMENT FOR JANE DOE',
+      'THE DOE FAMILY',
+      'JANE OF DOE',
+      'Jane Doe on Elm',
       'BILL PAYMENT - JANE DOE',
       'WEB AUTHORIZED PMT JANE DOE',
       'ONLINE PMT JANE DOE',
@@ -59,17 +65,25 @@ describe('looksLikePerson', () => {
       'Planet Fitness',
       'Acme Insurance Co',
       'The Home Depot',
+      'Bank of America',
+      'Spotify USA',
       'AMAZON.COM*AB12CD',
       'Sweet Cow Ice Cream Shop Downtown',
-      'One Two Three Four Five Six Seven',
     ]) {
       expect(looksLikePerson(name), name).toBe(false)
     }
   })
 
-  it('judges the words left once the payment words and marks are gone', () => {
+  it('judges the words left once the payment words, connecting words and marks are gone', () => {
     expect(nameWords('BILL PAYMENT - JANE DOE 11/04')).toEqual(['JANE', 'DOE'])
     expect(nameWords('Online Payment To Comcast')).toEqual(['Comcast'])
+    expect(nameWords('Payment for Jane Doe')).toEqual(['Jane', 'Doe'])
+    expect(nameWords('The Doe Family')).toEqual(['Doe', 'Family'])
+    expect(nameWords('Bank of America')).toEqual(['Bank', 'America'])
+  })
+
+  it('reads one name word left once the connecting words are gone as no person', () => {
+    expect(looksLikePerson('The Container')).toBe(false)
   })
 
   it('makes text plain: look-alike letters plain, invisible marks gone', () => {
@@ -111,6 +125,55 @@ describe('leakName', () => {
     const app = { name: 'PAYPAL *JANEDOE', providerCategoryPrimary: 'GENERAL_MERCHANDISE' }
     expect(leakName(line(app), NO_MASKS)).toBeNull()
     expect(leakName(line({ ...app, merchantName: 'Etsy' }), NO_MASKS)).toBe('Etsy')
+  })
+
+  it.each([
+    ['VENMO PAYMENT 1234', 'Jane Doe', 'FOOD_AND_DRINK'],
+    ['PAYPAL *JANE DOE', 'Jane Doe', 'GENERAL_MERCHANDISE'],
+    ['PAYPAL *JANE DOE', 'Jane Doe', 'ENTERTAINMENT'],
+    ['CASH APP*JANE DOE', 'Jane Doe', 'GENERAL_MERCHANDISE'],
+    ['VENMO', 'JANE DOE', 'GENERAL_MERCHANDISE'],
+  ])(
+    'never takes the bank at its word for a payment app line: %s as %s (%s)',
+    (name, merchantName, primary) => {
+      const app = line({ name, merchantName, providerCategoryPrimary: primary })
+      expect(leakName(app, NO_MASKS)).toBeNull()
+    },
+  )
+
+  it('still names a real merchant paid through a payment app', () => {
+    const spotify = line({
+      name: 'PAYPAL *SPOTIFY',
+      merchantName: 'Spotify',
+      providerCategoryPrimary: 'ENTERTAINMENT',
+    })
+    expect(leakName(spotify, NO_MASKS)).toBe('Spotify')
+  })
+
+  it('names a known national brand from its text alone, as a CSV line has', () => {
+    expect(leakName(line({ name: 'TACO BELL #031' }), NO_MASKS)).toBe('Taco Bell')
+    expect(leakName(line({ name: "Trader Joe's" }), NO_MASKS)).toBe("Trader Joe's")
+    expect(leakName(line({ name: 'SPOTIFY USA' }), NO_MASKS)).toBe('Spotify USA')
+  })
+
+  it('names no one for a person whose name only starts like a brand', () => {
+    expect(leakName(line({ name: 'TACO BELL JANE' }), NO_MASKS)).toBeNull()
+    expect(leakName(line({ name: 'JANE BELL' }), NO_MASKS)).toBeNull()
+  })
+
+  it.each([
+    'Jane Doe for babysitting',
+    'PAYMENT FOR JANE DOE',
+    'THE DOE FAMILY',
+    'JANE OF DOE',
+    'Maria Del Carmen De Los Santos Garcia',
+  ])('names no one from text that reads as a person: %s', (name) => {
+    expect(leakName(line({ name }), NO_MASKS)).toBeNull()
+  })
+
+  it('still names a brand whose connecting words sit beside a business word', () => {
+    expect(leakName(line({ name: 'BANK OF AMERICA' }), NO_MASKS)).toBe('Bank of America')
+    expect(leakName(line({ name: 'THE HOME DEPOT #123' }), NO_MASKS)).toBe('The Home Depot')
   })
 
   it.each([
