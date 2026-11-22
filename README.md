@@ -33,6 +33,13 @@ bank, and nothing in Leeway can ever move money.
 - **Credit card interest in dollars**: what carrying each card's balance past
   the due date costs a month at its APR, and all your cards together. Add a
   card's APR from its statement.
+- **A tax-ready export**: a year of transactions from every account, hidden
+  ones included, as a CSV grouped by category with totals. A summary at the
+  end gives pay by source, interest, dividends, benefits, tax refunds and
+  rewards, and "Money in, not categorized" for deposits still to sort.
+  Transfers between your own accounts are left out, and categories that may
+  be deductible are flagged for you to check with a tax pro (Settings, then
+  Data). It is a summary, not tax advice.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or
   also change budgets.
