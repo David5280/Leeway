@@ -3,12 +3,19 @@
 // through the app's own actions: checking well past its needs, a card
 // balance, rent due before a payday found from regular pay, and three whole
 // months of spending. The browser test and the screenshots both read it, so
-// every figure on the cards is the server's own. fakeIdleCash stands the
+// every figure on the cards is the server's own.
+//
+// The shared install budgets every paycheck from the day setup ran, and a
+// paycheck period sets payday ahead of any pay found in history. Left that
+// way, payday would fall 14 days after the run began, whatever the seed
+// says, so the seed budgets by month while it stands and puts the install's
+// own period back on removal. fakeIdleCash stands the
 // answer in only for the layout guard, whose shared install holds an
 // overdrawn account.
 
 import type { APIRequestContext, Page } from '@playwright/test'
 import { checkIdleCash } from '../server/src/domain/idleCash'
+import type { Settings } from '../server/src/domain/settings'
 import { action } from './seed'
 
 /** What seedIdleCash added, by the action that deletes it, in the order to delete. */
@@ -16,7 +23,12 @@ export interface IdleCashSeed {
   bills: string[]
   /** Deleting an account deletes its transactions. */
   accounts: string[]
+  /** The install's own budget period, put back on removal; null until the seed replaced it. */
+  period: Settings['period'] | null
 }
+
+/** A seed with nothing added yet, filled in as seedIdleCash goes. */
+export const emptyIdleCashSeed = (): IdleCashSeed => ({ bills: [], accounts: [], period: null })
 
 /** An ISO date as a moment at noon UTC, so shifting it by days never crosses a date line. */
 const noon = (iso: string) => new Date(`${iso}T12:00:00Z`)
@@ -27,8 +39,7 @@ const isoOf = (date: Date) => date.toISOString().slice(0, 10)
  * zone (from settings), not the test machine's or UTC, so a run near
  * midnight puts each one on the day meant.
  */
-async function ownerCalendar(request: APIRequestContext) {
-  const { timeZone } = await action<{ timeZone: string }>(request, 'get_settings')
+function ownerCalendar(timeZone: string) {
   // en-CA writes dates as YYYY-MM-DD.
   const today = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date())
   return {
@@ -43,7 +54,14 @@ async function ownerCalendar(request: APIRequestContext) {
 }
 
 /** Pay lands every other week, last 5 days ago, so the next payday is 9 days off. */
-const PAY_DAYS_AGO = [5, 19, 33, 47, 61, 75]
+const PAY_EVERY_DAYS = 14
+const LAST_PAY_DAYS_AGO = 5
+const NEXT_PAY_IN_DAYS = PAY_EVERY_DAYS - LAST_PAY_DAYS_AGO
+/** Six paychecks back, enough history for the server to call the pay regular. */
+const PAY_DAYS_AGO = Array.from({ length: 6 }, (_, i) => LAST_PAY_DAYS_AGO + i * PAY_EVERY_DAYS)
+
+/** Budgeting by month leaves the payday to the regular pay above. */
+const MONTHLY: Settings['period'] = { kind: 'monthly', startDay: 1 }
 
 /** Each finished month's everyday spending: [day of the month, name, cents, category]. */
 const MONTH_OF_SPENDING: [number, string, number, string][] = [
@@ -55,9 +73,19 @@ const MONTH_OF_SPENDING: [number, string, number, string][] = [
 /** Rent: due in 4 days, before payday, and paid on the 1st of each past month. */
 const RENT = { name: 'Rent', amountCents: 145_000, matchPattern: 'parkview' }
 
-/** Adds the household, filing each new id in `seed` as soon as it exists. */
-export async function seedIdleCash(request: APIRequestContext, seed: IdleCashSeed) {
-  const { fromToday, dayOfMonthBefore } = await ownerCalendar(request)
+/**
+ * Adds the household, filing each new id (and the period it replaced) in
+ * `seed` as soon as it exists, and returns the payday its pay sets.
+ */
+export async function seedIdleCash(
+  request: APIRequestContext,
+  seed: IdleCashSeed,
+): Promise<{ nextPayday: string }> {
+  const settings = await action<Settings>(request, 'get_settings')
+  const { fromToday, dayOfMonthBefore } = ownerCalendar(settings.timeZone)
+  seed.period = settings.period
+  await action(request, 'update_settings', { period: MONTHLY })
+
   const categories = await action<{ id: string; name: string }[]>(request, 'list_categories')
   const categoryId = (name: string) => categories.find((one) => one.name === name)!.id
   const account = async (input: object) => {
@@ -101,10 +129,12 @@ export async function seedIdleCash(request: APIRequestContext, seed: IdleCashSee
     anchorDate: fromToday(4),
   })
   seed.bills.push(rent.id)
+  return { nextPayday: fromToday(NEXT_PAY_IN_DAYS) }
 }
 
-/** Removes everything seedIdleCash added, however far it got. */
+/** Removes everything seedIdleCash added, however far it got, and puts the period back. */
 export async function removeIdleCash(request: APIRequestContext, seed: IdleCashSeed) {
+  if (seed.period) await action(request, 'update_settings', { period: seed.period })
   for (const id of seed.bills) await action(request, 'delete_bill', { id })
   for (const id of seed.accounts) await action(request, 'delete_account', { id })
 }

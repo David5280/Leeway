@@ -5,7 +5,7 @@
 
 import { expect, test } from '@playwright/test'
 import type { IdleCash } from '../server/src/domain/idleCash'
-import { removeIdleCash, seedIdleCash, type IdleCashSeed } from './idleCash'
+import { emptyIdleCashSeed, removeIdleCash, seedIdleCash } from './idleCash'
 import { action } from './seed'
 
 const NAME = 'Cash that could earn more'
@@ -14,10 +14,12 @@ const NAME = 'Cash that could earn more'
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString('en-US')}`
 
 test.describe('cash that could earn more', () => {
-  const seed: IdleCashSeed = { bills: [], accounts: [] }
+  const seed = emptyIdleCashSeed()
+  /** The payday the seeded pay sets, which every figure below counts to. */
+  let nextPayday = ''
 
   test.beforeAll(async ({ request }) => {
-    await seedIdleCash(request, seed)
+    nextPayday = (await seedIdleCash(request, seed)).nextPayday
   })
   test.afterAll(async ({ request }) => {
     await removeIdleCash(request, seed)
@@ -34,10 +36,13 @@ test.describe('cash that could earn more', () => {
       billsCents: 145_000,
       // $412.30 owed, rounded up as every need is.
       cardsOwedCents: 41_300,
-      // About $40 a day of everyday spending, whatever the months' lengths,
-      // keeps $2,800 or so back, leaving $7,000 and some dollars to round off.
+      // About $40 a day of everyday spending over the 9 days to payday and a
+      // 14-day cushion, whatever the months' lengths, keeps $2,800 or so
+      // back, leaving $7,000 and some dollars to round off.
       idleCents: 700_000,
       apyPercent: 4,
+      // From the regular pay, not the install's own budget period.
+      nextPayday,
     })
     expect(idle.roundedOffCents).toBeGreaterThan(0)
     const kept =
