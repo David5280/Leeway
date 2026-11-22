@@ -118,6 +118,18 @@ function Suggestions() {
   )
 }
 
+/**
+ * What saving an existing bill sends: every field, but the amount only when
+ * the owner changed it. The server takes a sent amount as one the owner set,
+ * and a form opened before Leeway settled a new amount would send the old one
+ * back with a rename.
+ */
+function billUpdate(fields: BillFields, opened: BillFields): Partial<BillFields> {
+  if (fields.amountCents !== opened.amountCents) return fields
+  const { amountCents: _unchanged, ...rest } = fields
+  return rest
+}
+
 /** The open form, with the changes it can save. */
 function BillEditor({
   editing,
@@ -133,8 +145,10 @@ function BillEditor({
   const remove = useActionMutation('delete_bill')
   const { bill } = editing
   const close = { onSuccess: onClose }
-  const save = (fields: BillFields) =>
-    bill ? update.mutate({ id: bill.id, ...fields }, close) : create.mutate(fields, close)
+  const save = (fields: BillFields) => {
+    if (bill) update.mutate({ id: bill.id, ...billUpdate(fields, editing.initial) }, close)
+    else create.mutate(fields, close)
+  }
   return (
     <FormCard title={bill ? bill.name : 'New bill'}>
       <BillForm

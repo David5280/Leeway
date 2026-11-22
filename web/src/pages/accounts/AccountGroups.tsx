@@ -14,6 +14,7 @@ import {
   groupTotal,
   type GroupTotal,
 } from '../../lib/accountCards'
+import { useApp } from '../../lib/app'
 import { AccountCard, PickCard } from './AccountCard'
 import { CardsInterestLine } from './CardInterest'
 
@@ -36,6 +37,7 @@ export function AccountGroups({
   /** Set in Select mode; null when each card opens its account. */
   picking: Picking | null
 }) {
+  const { settings } = useApp()
   return (
     <>
       {groupAccounts(accounts).map((group) => (
@@ -53,6 +55,7 @@ export function AccountGroups({
               const facts = accountFacts(account, {
                 balances: balances.get(account.id),
                 goals: goalsOn(account, goals),
+                locale: settings.locale,
               })
               return picking ? (
                 <PickCard

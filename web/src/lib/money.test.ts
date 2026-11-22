@@ -4,6 +4,7 @@ import {
   currencySample,
   formatMoney,
   money,
+  percentText,
   signedAmount,
   toneOf,
   typedAmount,
@@ -85,5 +86,14 @@ describe('typedAmount', () => {
     expect(typedAmount(7)).toBe('0.07')
     expect(typedAmount(0)).toBe('0.00')
     expect(typedAmount(-5)).toBe('-0.05')
+  })
+})
+
+describe('percentText', () => {
+  it('writes a rate as the locale does, to the hundredth', () => {
+    expect(percentText(24.99, 'en-US')).toBe('24.99%')
+    expect(percentText(7.5, 'en-US')).toBe('7.5%')
+    expect(percentText(0, 'en-US')).toBe('0%')
+    expect(percentText(24.99, 'de-DE')).toBe('24,99\u00a0%')
   })
 })

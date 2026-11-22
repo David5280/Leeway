@@ -1,14 +1,18 @@
 // The drill-down for what a credit card's balance costs in interest. Pure.
 
 import type { DrillDown } from '../drill'
+import { percentText } from '../money'
 
-/** A card's interest: what is owed, times the APR, over twelve months. */
-export function cardInterestDrill(card: {
-  name: string
-  balanceCents: number
-  aprPercent: number
-  monthlyInterestCents: number
-}): DrillDown {
+/** A card's interest: what is owed, times the APR (written as `locale` writes it), over twelve months. */
+export function cardInterestDrill(
+  card: {
+    name: string
+    balanceCents: number
+    aprPercent: number
+    monthlyInterestCents: number
+  },
+  locale: string,
+): DrillDown {
   return {
     title: 'Interest on this card',
     subtitle: card.name,
@@ -16,7 +20,7 @@ export function cardInterestDrill(card: {
     math: {
       terms: [
         { label: 'Owed', value: { cents: card.balanceCents } },
-        { label: 'APR', value: { text: `${card.aprPercent}%` }, op: 'times' },
+        { label: 'APR', value: { text: percentText(card.aprPercent, locale) }, op: 'times' },
         { label: 'A year', value: { text: '12 months' }, op: 'dividedBy' },
       ],
       result: { label: 'Interest a month, about', value: { cents: card.monthlyInterestCents } },

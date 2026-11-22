@@ -1,6 +1,7 @@
 // The Goals section of the Plan tab, most general first: the emergency fund
-// offer while there is none, then each goal (purchases being saved for among
-// them) with what each budget period needs and whether recent progress makes it.
+// offer while there is none, then which goal comes first and when each lands,
+// then each goal (purchases being saved for among them) with what each budget
+// period needs and whether recent progress makes it.
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here; Coming up adds the
 // event's name, price and day (&name=, &price= in cents, &by=) to start from.
@@ -16,6 +17,7 @@ import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
 import type { EmergencyView } from '../../../lib/emergencyText'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalDraft, type GoalFields, type GoalKind } from './GoalForm'
+import { GoalOrderCard } from './GoalOrder'
 
 /** What the form is open on: a new goal of a kind, or an existing goal. */
 interface Editing {
@@ -116,6 +118,10 @@ function GoalCards({
   )
 }
 
+/** Goals still being saved for compete for the same money; two or more make an order worth setting. */
+const competing = (goals: Goal[]) =>
+  goals.filter((goal) => goal.status === 'in_progress' || goal.status === 'past_due').length >= 2
+
 /**
  * How a first goal starts: the emergency fund offer when there is one,
  * otherwise, with no goals yet, a line on what to save for.
@@ -186,6 +192,7 @@ export function GoalsSection() {
         </div>
       </div>
       <GoalsStart goals={goals.data} emergency={emergency.data} />
+      {competing(goals.data) && <GoalOrderCard today={cash.data.today} />}
       <GoalCards
         goals={goals.data}
         emergency={emergency.data}

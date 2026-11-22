@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account } from '../../api/client'
-import { fakeServer, renderSignedIn } from '../../test/fake'
+import { fakeServer, renderSignedIn, settingsWith } from '../../test/fake'
 import { account, planServer, renderPlan } from '../../test/planning'
 import { CardsInterestLine, InterestCard } from './CardInterest'
 
@@ -19,9 +19,9 @@ const quietBills = {
   find_recurring: () => [],
 }
 
-/** The server's refusal of an APR over 100, as the HTTP API sends it. */
-const refuseRate = () =>
-  Response.json({ error: 'invalid_input', message: 'An APR is at most 100%.' }, { status: 400 })
+/** The server's refusal for a card removed meanwhile, as the HTTP API sends it. */
+const refuseGone = () =>
+  Response.json({ error: 'not_found', message: 'Account not found' }, { status: 404 })
 
 const owing = (fields: Partial<Account> = {}) =>
   account({ id: 'cc', name: 'Travel card', type: 'credit', balanceCents: 240_000, ...fields })
@@ -41,21 +41,39 @@ describe("a card's interest on its page", () => {
     )
   })
 
-  it("keeps Save off for a rate that can't be one, like a negative", async () => {
+  it('reads a comma decimal as the rate it is', async () => {
+    const server = fakeServer({ update_account: (input) => ({ ...owing(), ...input }) })
     renderSignedIn(<InterestCard account={owing({ aprPercent: null })} />)
     const prompt = screen.getByRole('region', { name: "Add this card's APR" })
-    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '-5')
+    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '24,99')
+    await userEvent.click(within(prompt).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([{ id: 'cc', aprPercent: 24.99 }]),
+    )
+  })
+
+  it.each(['-5', '250'])("keeps Save off for a rate that can't be one, like %s", async (typed) => {
+    renderSignedIn(<InterestCard account={owing({ aprPercent: null })} />)
+    const prompt = screen.getByRole('region', { name: "Add this card's APR" })
+    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), typed)
     expect(within(prompt).getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
   it("says why when the server won't take the APR", async () => {
-    // The server allows 0 to 100; anything over is refused with its reason.
-    fakeServer({}, { '/api/actions/update_account': refuseRate })
+    fakeServer({}, { '/api/actions/update_account': refuseGone })
     renderSignedIn(<InterestCard account={owing({ aprPercent: null })} />)
     const prompt = screen.getByRole('region', { name: "Add this card's APR" })
-    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '250')
+    await userEvent.type(within(prompt).getByRole('textbox', { name: 'APR' }), '24.99')
     await userEvent.click(within(prompt).getByRole('button', { name: 'Save' }))
-    expect(await within(prompt).findByRole('alert')).toHaveTextContent('An APR is at most 100%.')
+    expect(await within(prompt).findByRole('alert')).toHaveTextContent('Account not found')
+  })
+
+  it("writes the APR as the owner's locale does", async () => {
+    renderSignedIn(<InterestCard account={owing({ aprPercent: 24.99 })} />, {
+      settings: settingsWith({ locale: 'de-DE' }),
+    })
+    const card = screen.getByRole('region', { name: 'Interest on this card' })
+    expect(card).toHaveTextContent('at 24,99 % APR.')
   })
 
   it('says what the balance costs a month, and opens the math', async () => {
