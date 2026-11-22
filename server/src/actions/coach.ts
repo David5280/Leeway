@@ -5,6 +5,7 @@ import { affordability } from '../domain/afford.js'
 import { budgetSummary, recentSurplus } from '../domain/budgetReport.js'
 import { getCashFlow } from '../domain/cashFlow.js'
 import { getCheckin } from '../domain/checkin.js'
+import { goalReading } from '../domain/goalProgress.js'
 import { listGoals } from '../domain/goals.js'
 import { planPurchase } from '../domain/purchasePlan.js'
 import { periodConfig, type Settings } from '../domain/settings.js'
@@ -78,7 +79,7 @@ export const whenCanIAffordAction = defineAction({
     const [check, surplus, goals] = await Promise.all([
       checkToday(ctx, settings, today, input),
       recentSurplus(ctx.db, settings, ctx.now()),
-      listGoals(ctx.db, { today, period: config }),
+      listGoals(ctx.db, goalReading(settings, today)),
     ])
     return planPurchase({
       amountCents: input.amountCents,

@@ -1,5 +1,6 @@
 // What was put toward each goal and when: the contributions recorded by hand,
-// or a linked account's balance history. It feeds each goal's plan (see
+// a linked account's balance history, or for the emergency fund the history
+// of the accounts it counts, added up. It feeds each goal's plan (see
 // goalPlan.ts). Recording a contribution only keeps count; no money moves.
 
 import type { Db } from '../db/pool.js'
@@ -16,10 +17,18 @@ const RECENT_DAYS = 90
  */
 export const MIN_RECENT_DAYS = 30
 
+/** An account the emergency fund counts, with its balance now. */
+export interface FollowedAccount {
+  id: string
+  balanceCents: number
+}
+
 /** The parts of a goal its history depends on. */
 export interface GoalHistorySubject {
   id: string
   accountId: string | null
+  /** The accounts the emergency fund counts; null for any other goal. */
+  followedAccounts: FollowedAccount[] | null
   /** The day the goal was made, which bounds how long its recent window can be. */
   createdOn: IsoDate
   /** Progress today, as goals.ts counts it. */
@@ -42,6 +51,34 @@ const clampDays = (days: number) => Math.min(RECENT_DAYS, Math.max(MIN_RECENT_DA
 export function balanceGoingInto(points: BalancePoint[], day: IsoDate): BalancePoint | null {
   const before = points.filter((p) => p.day < day)
   return before.at(-1) ?? points[0] ?? null
+}
+
+/**
+ * Several accounts' histories as one: on each day any of them changed, what
+ * they held together, each overdrawn one counting as nothing (as it does for
+ * the fund's progress). An account first seen later counts its first balance
+ * from the start, and one with no history at all its balance now, so neither
+ * reads as money saved just because Leeway began watching it.
+ */
+export function combinedHistory(
+  accounts: FollowedAccount[],
+  history: Map<string, BalancePoint[]>,
+  today: IsoDate,
+): BalancePoint[] {
+  const series = accounts.map((account) => {
+    const points = history.get(account.id) ?? []
+    return points.length > 0 ? points : [{ day: today, cents: account.balanceCents }]
+  })
+  const days = [...new Set(series.flatMap((points) => points.map((p) => p.day)))].sort()
+  return days.map((day) => ({
+    day,
+    cents: series.reduce((sum, points) => {
+      // Before an account's first point, it counts that first balance. A series
+      // is never empty: an account with no history got today's balance above.
+      const held = points.filter((p) => p.day <= day).at(-1) ?? points[0]!
+      return sum + Math.max(0, held.cents)
+    }, 0),
+  }))
 }
 
 /** Progress for a goal that follows an account, from its balance history. */
@@ -114,6 +151,18 @@ async function balanceHistory(
   return byAccount
 }
 
+/**
+ * The accounts whose balances make a goal's progress: the one it links, or
+ * the ones the emergency fund counts. Null for a goal counted by hand.
+ */
+function accountsBehind(goal: GoalHistorySubject): FollowedAccount[] | null {
+  // The fund's own list comes first: it is empty when another goal follows
+  // the one account the fund links, so that account's savings count once.
+  if (goal.followedAccounts !== null) return goal.followedAccounts
+  if (goal.accountId !== null) return [{ id: goal.accountId, balanceCents: goal.currentCents }]
+  return null
+}
+
 /** Recent progress for every goal given, in two queries however many there are. */
 export async function progressFacts(
   db: Db,
@@ -121,35 +170,35 @@ export async function progressFacts(
   today: IsoDate,
   period: Period,
 ): Promise<Map<string, GoalProgressFacts>> {
-  const byHand = goals.filter((g) => g.accountId === null)
-  const linked = goals.filter((g) => g.accountId !== null)
+  const subjects = goals.map((goal) => ({ goal, accounts: accountsBehind(goal) }))
   // A budget period is a month at most, so it starts inside the 90-day window.
   const windowStart = addDays(today, -(RECENT_DAYS - 1))
   // One at a time: db may be a transaction's client, which runs one query at once.
   const sums = await contributionSums(
     db,
-    byHand.map((g) => g.id),
+    subjects.filter((s) => s.accounts === null).map((s) => s.goal.id),
     today,
     period,
   )
   const balances = await balanceHistory(
     db,
-    linked.map((g) => g.accountId!),
+    subjects.flatMap((s) => s.accounts ?? []).map((account) => account.id),
     windowStart,
   )
   const facts = new Map<string, GoalProgressFacts>()
-  for (const goal of byHand) {
-    const sum = sums.get(goal.id)
-    facts.set(goal.id, {
-      savedThisPeriodCents: sum?.thisPeriod ?? 0,
-      recentSavedCents: sum?.recent ?? 0,
-      // A goal made last month has only had a month to make progress in.
-      recentDays: clampDays(daysBetween(goal.createdOn, today) + 1),
-    })
-  }
-  for (const goal of linked) {
-    const points = balances.get(goal.accountId!) ?? []
-    facts.set(goal.id, linkedFacts(points, goal.currentCents, today, period))
+  for (const { goal, accounts } of subjects) {
+    if (accounts === null) {
+      const sum = sums.get(goal.id)
+      facts.set(goal.id, {
+        savedThisPeriodCents: sum?.thisPeriod ?? 0,
+        recentSavedCents: sum?.recent ?? 0,
+        // A goal made last month has only had a month to make progress in.
+        recentDays: clampDays(daysBetween(goal.createdOn, today) + 1),
+      })
+    } else {
+      const points = combinedHistory(accounts, balances, today)
+      facts.set(goal.id, linkedFacts(points, goal.currentCents, today, period))
+    }
   }
   return facts
 }
