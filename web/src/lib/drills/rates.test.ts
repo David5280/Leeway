@@ -19,7 +19,11 @@ const rate = (start: string, percent: number | null, current = false): MonthRate
 })
 
 const drillOf = (months: MonthRate[], targetPercent: number | null = null) =>
-  savingsRateDrill({ months, targetPercent, note: 'Counts transfers.' }, label, money)
+  savingsRateDrill(
+    { months, targetPercent, note: 'Counts transfers.', payEstimated: false },
+    label,
+    money,
+  )
 
 describe('savingsRateDrill', () => {
   it('answers with the usual month, halfway between two middles, and lists each month', () => {

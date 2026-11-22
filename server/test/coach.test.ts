@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { carriesMask } from '../src/domain/accountNumber.js'
+import { ESTIMATE_CAVEAT } from '../src/domain/purchasePlan.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -51,7 +52,8 @@ describe('get_checkin', () => {
       today: '2026-11-17',
       attention: [],
       budget: { periodStart: '2026-11-01', periodEnd: '2026-11-30', spentCents: 0 },
-      cashFlow: { cashCents: 0, leftAfterBillsCents: 0 },
+      cashFlow: { cashCents: 0, safeCents: 0, shortfallCents: 0, paydaySource: 'period_end' },
+      pay: { monthlyCents: null, estimate: false },
       bills: { count: 0, monthlyCents: 0 },
       goals: [],
       debts: null,
@@ -282,8 +284,9 @@ describe('can_i_afford', () => {
     await paidBiweekly(150000)
     expect(await call('can_i_afford', { amountCents: 10000 })).toEqual({
       verdict: 'yes',
-      reasons: ['It fits: $140 a day would be left until payday on 2026-11-27.'],
+      reasons: ['It fits: you would still have about $140 a day to spend.'],
       amountCents: 10000,
+      cashKnown: true,
       leftAfterBillsCents: 140000,
       goalsSetAsideCents: 0,
       perDayBeforeCents: 15000,
@@ -297,9 +300,7 @@ describe('can_i_afford', () => {
     await paidBiweekly(150000)
     const result = await call('can_i_afford', { amountCents: 100000 })
     expect(result).toMatchObject({ verdict: 'tight', perDayAfterCents: 5000 })
-    expect(result.reasons).toEqual([
-      'Spending money until payday would drop from $150 to $50 a day.',
-    ])
+    expect(result.reasons).toEqual(['What you can spend a day would drop from $150 to $50.'])
   })
 
   it('says no when the bills before payday would not be covered', async () => {
@@ -336,7 +337,10 @@ describe('can_i_afford', () => {
     await spend(accountId, 'Steakhouse', 50000, dining.id)
     const overall = await call('can_i_afford', { amountCents: 5000, categoryId: groceries.id })
     expect(overall).toMatchObject({ verdict: 'tight', categoryLeftCents: 45000 })
-    expect(overall.reasons).toEqual(['Budgets overall would go $30 over this period.'])
+    expect(overall.reasons).toEqual([
+      'Budgets overall would go $30 over this period.',
+      'What you can spend a day would drop from $1.42 to $0.',
+    ])
 
     // Without a category, only the cash and the overall room are weighed, unchanged by it.
     const loose = await call('can_i_afford', { amountCents: 5000 })
@@ -358,13 +362,17 @@ describe('can_i_afford', () => {
       setAside: true,
     })
     const result = await call('can_i_afford', { amountCents: 140000 })
+    // Nothing is budgeted, so a day's money is the cash's, as the hero says it.
     expect(result).toMatchObject({
       verdict: 'tight',
       goalsSetAsideCents: 16667,
-      perDayBeforeCents: 13333,
-      perDayAfterCents: 0,
+      perDayBeforeCents: 15000,
+      perDayAfterCents: 1000,
     })
-    expect(result.reasons).toEqual(['It would dip into the $166.67 set aside for Bike.'])
+    expect(result.reasons).toEqual([
+      'It would dip into the $166.67 set aside for Bike.',
+      'What you can spend a day would drop from $150 to $10.',
+    ])
   })
 
   it('says when a purchase fits the budgets only by using money set aside', async () => {
@@ -379,13 +387,16 @@ describe('can_i_afford', () => {
     // $100 held this month, of the $500 Fun budget.
     const one = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
     expect(one).toMatchObject({ verdict: 'tight', categoryLeftCents: 5000, budgetLeftCents: -5000 })
-    expect(one.reasons).toEqual(['It fits the budgets only by using the $100 set aside for Bike.'])
+    expect(one.reasons).toEqual([
+      'It fits the budgets only by using the $100 set aside for Bike.',
+      'What you can spend a day would drop from $28.57 to $0.',
+    ])
 
     await call('create_goal', { ...goal, name: 'Trip' })
     const two = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
-    expect(two.reasons).toEqual([
+    expect(two.reasons[0]).toBe(
       'It fits the budgets only by using the $200 set aside for your goals.',
-    ])
+    )
   })
 })
 
@@ -432,32 +443,83 @@ describe('when_can_i_afford', () => {
     )
   })
 
-  it('uses the recent surplus, after what goals in progress need', async () => {
+  it('uses a typical month of pay less spending, after what goals in progress need', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
     const pay = await call('create_category', { name: 'Pay', kind: 'income' })
     const home = await call('create_category', { name: 'Home' })
-    for (const date of ['2026-08-10', '2026-09-10', '2026-10-10']) {
+    for (const date of ['2026-08-10', '2026-09-10', '2026-10-10', '2026-11-10']) {
       await month(accountId, date, pay.id, home.id)
+    }
+    // Filed as income, but never pay: money from family and a tax refund.
+    for (const [name, cents, detailed] of [
+      ['VENMO FROM MOM', -80000, 'TRANSFER_IN_TRANSFER_IN_FROM_APPS'],
+      ['IRS TREAS 310 TAX REF', -140000, 'INCOME_TAX_REFUND'],
+    ] as const) {
+      const id = await insertBankTransaction(ctx.db, accountId, {
+        date: '2026-10-20',
+        name,
+        amountCents: cents,
+        detailed,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [id, pay.id])
     }
     await call('create_goal', { name: 'Trip', targetCents: 120000, targetDate: '2027-04-30' })
     // A goal with no date needs nothing in particular each period.
     await call('create_goal', { name: 'Someday', targetCents: 90000 })
 
-    // $1,000 left over a month, $200 of it for the trip: $5,000 takes seven months.
+    // $3,000 of pay a month, less $6,000 of rent over the last 91 days (about
+    // $2,007 a month): about $993 left a month, $200 of it for the trip.
+    const spending = Math.round((600000 * 365.25) / 12 / 91)
     const plan = await call('when_can_i_afford', { amountCents: 500000 })
     expect(plan).toMatchObject({
-      surplusPerPeriodCents: 100000,
+      surplusPerPeriodCents: 300000 - spending,
       goalsNeedPerPeriodCents: 20000,
-      perPeriodCents: 80000,
+      perPeriodCents: 300000 - spending - 20000,
       basis: 'recent_surplus',
       periodsNeeded: 7,
       affordableBy: '2027-05-31',
     })
-    expect(plan.message).toContain('At the recent surplus of $800 each budget period')
+    expect(plan.message).toContain('At your usual surplus of $793.13 each budget period')
+    // Four months of pay is enough to be sure, so the date carries no caveat.
+    expect(plan.surplusEstimated).toBe(false)
+    expect(plan.message).not.toContain(ESTIMATE_CAVEAT)
   })
 
-  it('has no date when nothing was left over lately, or there is no history', async () => {
+  it('says the date is an estimate while one paycheck is all there is to go on', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    const home = await call('create_category', { name: 'Home' })
+    for (const date of ['2026-09-10', '2026-10-10', '2026-11-10']) {
+      const rent = await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Rent',
+        amountCents: 50000,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [rent, home.id])
+    }
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'ACME PAYROLL',
+      amountCents: -300000,
+      detailed: 'INCOME_SALARY',
+    })
+    const plan = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(plan).toMatchObject({ basis: 'recent_surplus', surplusEstimated: true })
+    expect(plan.message.endsWith(` ${ESTIMATE_CAVEAT}`)).toBe(true)
+    // A savings amount the owner gives is theirs, so it needs no caveat.
+    const given = await call('when_can_i_afford', { amountCents: 500000, perPeriodCents: 50000 })
+    expect(given.message).not.toContain(ESTIMATE_CAVEAT)
+  })
+
+  it('has no date with no employer paying, or when nothing is left over', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
+    // Money from people, filed as income, is no surplus to save from.
+    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    const gift = await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-10-20',
+      name: 'ZELLE FROM A FRIEND',
+      amountCents: -500000,
+    })
+    await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [gift, pay.id])
     const empty = await call('when_can_i_afford', { amountCents: 500000 })
     expect(empty).toMatchObject({
       surplusPerPeriodCents: null,
@@ -465,15 +527,22 @@ describe('when_can_i_afford', () => {
       periodsNeeded: null,
       affordableBy: null,
     })
-    expect(empty.message).toMatch(/^Not today, and recent periods left nothing over/)
+    expect(empty.message).toMatch(/^Not today, and a typical period leaves nothing over/)
 
-    const pay = await call('create_category', { name: 'Pay', kind: 'income' })
+    // Paid $3,000 a month, but rent of $3,500 takes it all and more.
     const home = await call('create_category', { name: 'Home' })
-    await month(accountId, '2026-10-10', pay.id, home.id)
-    // $1,000 left over in October is $333 a month on average, all of it needed by the trip.
-    await call('create_goal', { name: 'Trip', targetCents: 400000, targetDate: '2027-04-30' })
-    const spoken = await call('when_can_i_afford', { amountCents: 500000 })
-    expect(spoken).toMatchObject({ surplusPerPeriodCents: 33333, affordableBy: null })
+    for (const date of ['2026-09-10', '2026-10-10', '2026-11-10']) {
+      await month(accountId, date, pay.id, home.id)
+      const rent = await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Rent top-up',
+        amountCents: 150000,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = $2 WHERE id = $1', [rent, home.id])
+    }
+    const short = await call('when_can_i_afford', { amountCents: 500000 })
+    expect(short.surplusPerPeriodCents).toBeLessThan(0)
+    expect(short).toMatchObject({ perPeriodCents: null, affordableBy: null })
   })
 
   it('refuses a missing or non-positive amount to save each period', async () => {

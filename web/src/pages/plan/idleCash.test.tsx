@@ -15,6 +15,7 @@ const NAME = 'Cash that could earn more'
 /** $8,059.99 in checking (shown as $8,059, rounded down), $1,200 of bills and $50 a day for 10 days to payday. */
 const flush = {
   checkingCents: 805_999,
+  cashKnown: true,
   billsCents: 120_000,
   cardsOwedCents: 0,
   dailySpendCents: 5_000,
@@ -66,11 +67,11 @@ describe('cash that could earn more on Plan, Bills', () => {
     expect(within(drill).getByText('In a month, about')).toBeInTheDocument()
   })
 
-  it('says nothing when no cash is spare, or it is not the time', async () => {
-    const server = planServer({
-      ...quietBills,
-      get_idle_cash: () => checkIdleCash({ ...flush, paydayKnown: false }),
-    })
+  it.each([
+    ['no payday is known', { ...flush, paydayKnown: false }],
+    ['no checking balance is known', { ...flush, checkingCents: 0, cashKnown: false }],
+  ])('says nothing when %s', async (_, inputs) => {
+    const server = planServer({ ...quietBills, get_idle_cash: () => checkIdleCash(inputs) })
     renderPlan('/plan/bills')
     await waitFor(() => expect(server.actions('get_idle_cash')).toHaveLength(1))
     await screen.findByRole('region', { name: 'Until payday' })

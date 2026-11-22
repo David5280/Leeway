@@ -1,19 +1,30 @@
 // Essential spending in a typical month, read from stored data: recent whole
 // months of the essential categories, or the tracked bills before those say
 // anything (savings/emergency.ts holds the rule). The emergency fund is sized
-// by it, on its card, in its goal's target and in the financial profile. With
-// it comes the owner's own pick of essentials, kept even when bills size the
-// fund or nothing does, so the pick can always be changed or handed back.
+// by it, on its card, in its goal's target, in the financial profile and in
+// the check-in, so all of them say the same. With it comes the owner's own
+// pick of essentials, kept even when bills size the fund or nothing does, so
+// the pick can always be changed or handed back.
+//
+// Whole calendar months, unlike the typical month's spending (profile/
+// income.ts), which runs over the stretch since the current job's first
+// paycheck: rent and groceries come every month whatever the job, so a job
+// change says nothing about them.
 
 import type { Db } from '../db/pool.js'
-import type { IsoDate } from '../lib/dates.js'
+import { addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
 import type { CategoryTotal } from './budget.js'
 import { listBills } from './bills.js'
-import type { Category } from './categories.js'
+import { listCategories, type Category } from './categories.js'
+import { categoryTotalsByRange, sumTotals, type DateRange } from './categoryTotals.js'
 import { essentialIdsOf } from './essentials.js'
-import { averageMonths, currentEssentials, recentMonths } from './profile/income.js'
+import { firstTransactionDay } from './monthlyTotals.js'
+import { currentEssentials, essentialSpending } from './profile/income.js'
 import { essentialsFrom, type EssentialsMeasure } from './savings/emergency.js'
 import type { Settings } from './settings.js'
+
+/** How many recent whole months essential spending is averaged over. */
+export const ESSENTIAL_MONTHS = 3
 
 /** What essential spending a month comes to, how Leeway knows, and what it counts. */
 export interface MonthlyEssentials extends EssentialsMeasure {
@@ -37,6 +48,46 @@ export interface EssentialsChoice {
 export interface EssentialsReading {
   essentials: MonthlyEssentials | null
   choice: EssentialsChoice
+}
+
+/**
+ * The last whole calendar months before today's month, oldest first, that
+ * begin on or after the first day Leeway holds data for.
+ */
+export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null): DateRange[] {
+  if (firstDataDay === null) return []
+  const { year, month } = dateParts(today)
+  const thisMonth = makeDate(year, month, 1)
+  const ranges: DateRange[] = []
+  for (let back = ESSENTIAL_MONTHS; back >= 1; back--) {
+    const start = addMonths(thisMonth, -back)
+    if (start >= firstDataDay) ranges.push({ start, end: addMonths(start, 1) })
+  }
+  return ranges
+}
+
+/** Essential spending averaged over each month's totals, or null without a whole month. */
+export function averageEssentials(
+  categories: Category[],
+  totalsByMonth: CategoryTotal[][],
+  essentialIds: string[] | null,
+): number | null {
+  if (totalsByMonth.length === 0) return null
+  const essential = totalsByMonth.reduce((sum, totals) => {
+    const { spentCents } = sumTotals(categories, totals)
+    return sum + essentialSpending(categories, totals, essentialIds, spentCents)
+  }, 0)
+  return Math.round(essential / totalsByMonth.length)
+}
+
+/** The categories, and each of the last whole months' totals by category. */
+async function recentMonths(db: Db, today: IsoDate) {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
+  const categories = await listCategories(db)
+  // Posted transactions only: a month already over has nothing left pending that matters.
+  const totalsByMonth = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
+  return { categories, totalsByMonth }
 }
 
 /** The spending categories that had any spending across the months given. */
@@ -63,7 +114,7 @@ export async function readEssentials(
     spentIds: spentIn(categories, totalsByMonth),
   }
   const measure = essentialsFrom(
-    averageMonths(categories, totalsByMonth, picked).essentialSpendingCents,
+    averageEssentials(categories, totalsByMonth, picked),
     bills.reduce((sum, bill) => sum + bill.monthlyCents, 0),
   )
   if (measure === null) return { essentials: null, choice }
