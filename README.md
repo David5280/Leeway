@@ -339,8 +339,9 @@ How the limit works:
   A single call turned away while some of the limit is left only says so
   where it was asked for. Either alert can be dismissed, and a new limit
   starts the month's alerts over.
-- Each record holds token counts and a cost, never what was asked or
-  answered.
+- Each usage record holds token counts and a cost, never what was asked or
+  answered. Chat keeps its own conversation in your database until you tap
+  Start over.
 
 `SUMMARY_MODEL`, `PAYSTUB_MODEL` or `CHAT_MODEL` fixes that job's model on the server, and
 Settings then shows it locked. When Anthropic says it has no such model

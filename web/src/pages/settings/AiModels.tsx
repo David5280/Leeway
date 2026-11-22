@@ -45,8 +45,8 @@ function AiModels({ usage }: { usage: AiUsage }) {
       ))}
       <span className="small muted">
         Costs are worked out from Anthropic&apos;s list prices as each call is made, so your
-        Anthropic bill is the final word. Leeway keeps only the token counts and the cost of each
-        call, never what was asked or answered.
+        Anthropic bill is the final word. The usage record keeps only the token counts and the cost
+        of each call. Chat keeps its conversation on your server until you start over.
       </span>
     </div>
   )
