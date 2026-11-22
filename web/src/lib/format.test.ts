@@ -25,6 +25,17 @@ describe('format', () => {
     expect(parseMoney('abc')).toBeNull()
   })
 
+  it('refuses a typed number with any letter, never reading round it', () => {
+    // Dropping the letter would read "5e1" as 51 and "1O0" as 10.
+    for (const text of ['5e1', '1O0', '12 USD', '12abc', '\u00e912']) {
+      expect(parseMoney(text)).toBeNull()
+      expect(readRate(text)).toBeNull()
+    }
+    // A currency or percent sign is no letter.
+    expect(parseMoney('\u20ac12,50')).toBe(1250)
+    expect(readRate('5%')).toBe(5)
+  })
+
   it('names periods plainly', () => {
     expect(periodLabel('2026-11-01', '2026-11-30')).toBe('November 2026')
     expect(periodLabel('2026-11-14', '2026-11-27')).toBe('Nov 14 to Nov 27')

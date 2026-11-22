@@ -26,17 +26,19 @@ function item(extra: Partial<OwnedItem> = {}): OwnedItem {
 
 describe('a row under its name', () => {
   it('says the kind, and the loan against it or its rate', () => {
-    expect(itemDetail(item())).toBe('Home')
-    expect(itemDetail(item({ loanId: 'm', loanName: 'Mortgage' }))).toBe('Home, with Mortgage')
+    expect(itemDetail(item(), 'en-US')).toBe('Home')
+    expect(itemDetail(item({ loanId: 'm', loanName: 'Mortgage' }), 'en-US')).toBe(
+      'Home, with Mortgage',
+    )
     const loan = item({ kind: 'loan', side: 'owed', aprPercent: 6.5 })
-    expect(itemDetail(loan)).toBe('Loan at 6.5%')
-    expect(itemDetail(item({ kind: 'other' }))).toBe('Something you own')
+    expect(itemDetail(loan, 'en-US')).toBe('Loan at 6.5%')
+    expect(itemDetail(item({ kind: 'other' }), 'en-US')).toBe('Something you own')
   })
 
   it('says when it is hidden from net worth, after its terms', () => {
-    expect(itemDetail(item({ inNetWorth: false }))).toBe('Home, hidden from net worth')
+    expect(itemDetail(item({ inNetWorth: false }), 'en-US')).toBe('Home, hidden from net worth')
     const loan = item({ kind: 'loan', aprPercent: 4, inNetWorth: false })
-    expect(itemDetail(loan)).toBe('Loan at 4%, hidden from net worth')
+    expect(itemDetail(loan, 'en-US')).toBe('Loan at 4%, hidden from net worth')
   })
 
   it("writes a rate as the owner's locale does", () => {

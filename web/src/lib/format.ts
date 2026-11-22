@@ -10,9 +10,11 @@ export { periodWord } from '../../../server/src/lib/words'
  * Reads a typed number, ignoring a currency or percent sign: "$1,200" is
  * 1200, and "12,5" is 12.5, since a comma before three digits groups
  * thousands while any other comma is a decimal point, as many locales write
- * it. Keeps a minus sign; null if it is not a number.
+ * it. Keeps a minus sign; null if it is not a number, or holds any letter.
  */
 function parseDecimal(text: string): number | null {
+  // Dropping a letter would read "5e1" as 51 and "1O0" as 10, so any letter refuses it.
+  if (/\p{L}/u.test(text)) return null
   const cleaned = text.replace(/[^0-9.,-]/g, '').replace(/,(?=\d{3}(\D|$))/g, '')
   if (!cleaned) return null
   const value = Number(cleaned.replace(',', '.'))

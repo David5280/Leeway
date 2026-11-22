@@ -41,7 +41,7 @@ function termsOf(item: OwnedItem, locale: string): string {
 }
 
 /** What a row says under the name, and when it is left out of net worth. */
-export function itemDetail(item: OwnedItem, locale = 'en-US'): string {
+export function itemDetail(item: OwnedItem, locale: string): string {
   const terms = termsOf(item, locale)
   return item.inNetWorth ? terms : `${terms}, hidden from net worth`
 }

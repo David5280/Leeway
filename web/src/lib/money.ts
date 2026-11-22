@@ -155,7 +155,7 @@ export function currencySample(options: MoneyOptions): string {
 }
 
 /** A rate as the locale writes it, to the hundredth: "24.99%", or "24,99 %" in German. */
-export function percentText(percent: number, locale = 'en-US'): string {
+export function percentText(percent: number, locale: string): string {
   return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(
     percent / 100,
   )
