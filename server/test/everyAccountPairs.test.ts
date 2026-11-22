@@ -106,14 +106,56 @@ describe('pairing every account', () => {
     expect(paysCard(leg({ id: 'n', amountCents: 1, name: 'XCEL ENERGY AUTOPAY' }))).toBe(false)
   })
 
-  it('reads e-payments, mobile payments and an ACH payment only beside a card issuer', () => {
+  it('reads e-payments, mobile and ACH payments only beside a card issuer', () => {
     const says = (name: string) => paysCard(leg({ id: 'w', amountCents: 1, name }))
-    expect(says('CITI AUTOPAY EPAYMENT')).toBe(true)
-    expect(says('DISCOVER E-PAYMENT')).toBe(true)
-    expect(says('BARCLAYCARD MOBILE PMT')).toBe(true)
-    expect(says('CHASE ACH PMT')).toBe(true)
-    expect(says('AMERICAN EXPRESS ACH PMT')).toBe(true)
-    expect(says('CITY WATER ACH PMT')).toBe(false)
+    for (const name of [
+      'CITI EPAYMENT',
+      'DISCOVER E-PAYMENT',
+      'CAPITAL ONE MOBILE PMT',
+      'BARCLAYCARD MOBILE PMT',
+      'CHASE ACH PMT',
+      'AMERICAN EXPRESS ACH PMT',
+    ]) {
+      expect(says(name), name).toBe(true)
+    }
+    for (const name of [
+      'VERIZON WIRELESS EPAYMENT',
+      'XCEL ENERGY E-PAYMENT',
+      'STATE FARM EPAYMENT',
+      'NAVIENT EPAYMENT',
+      'CITY OF DENVER EPAYMENT',
+      'COMCAST MOBILE PMT',
+      'T-MOBILE PMT',
+      'CITY WATER ACH PMT',
+      // An issuer's mortgage or loan is not a card.
+      'CHASE MORTGAGE ACH PMT',
+      'DISCOVER STUDENT LOAN ACH PMT',
+      'CAPITAL ONE AUTO EPAYMENT',
+    ]) {
+      expect(says(name), name).toBe(false)
+    }
+  })
+
+  it('never pairs a bill paid with e-payment or mobile words with a hidden card', () => {
+    const hiddenCard = { ...cardSide, name: 'PAYMENT THANK YOU' }
+    const bill = (name: string, code: string | null = null) =>
+      leg({
+        id: 'bill',
+        amountCents: 50000,
+        name,
+        providerCategoryDetailed: code,
+        categoryKind: 'expense',
+        filedElsewhere: true,
+      })
+    const bills = [
+      bill('LANDLORD MOBILE PMT'),
+      bill('T-MOBILE PMT'),
+      bill('LANDLORD EPAYMENT'),
+      bill('CO DEPT REVENUE EPAYMENT', 'TRANSFER_OUT_ACCOUNT_TRANSFER'),
+    ]
+    const paired = bills.filter((spent) => pairEveryAccount([spent, hiddenCard]).size > 0)
+    expect(paired.map((spent) => spent.name)).toEqual([])
+    expect(pairEveryAccount([bill('CITI MOBILE PMT'), hiddenCard]).get('bill')?.id).toBe('card')
   })
 
   it('reads a leg in round one as firm when it says transfer or is filed as one', () => {

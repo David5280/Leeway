@@ -50,9 +50,11 @@ interface Payer {
 // only removed in a form that cannot be part of a name, so "STATE OF CO
 // PAYROLL" and "STATE OF ID PAYROLL" stay apart and "CO-OP FOODS" stays whole.
 const PAYROLL_NOISE = [
-  // An id after an "ID" or "CO ID" label, holding a digit or a masked run:
-  // "ID 123", "ID:AB12CD", "CO ID:XXXXX5678".
-  /\b(co\s+)?id\s*[:#]?\s*[a-z0-9]*(\d|xxx)[a-z0-9]*\b/gi,
+  // Any id after a written label: "ID:AB12CD", "ID#123", "CO ID:XXXXX5678".
+  /\b(co\s+)?id\s*[:#]\s*[a-z0-9]+\b/gi,
+  // An id after "ID" beside an ACH code or "CO", holding a digit or a masked
+  // run: "PPD ID 123", "CO ID XXXXX5678". A lone "ID 0115" may be Idaho's.
+  /\b(co|ppd|ccd|ctx|web|ach)\s+id\s+[a-z0-9]*(\d|xxx)[a-z0-9]*\b/gi,
   // Who received it, as Bank of America writes it: "INDN:JANE DOE", up to the next label.
   /\bindn\s*:.*?(?=\s+(co\s+id|[a-z]+\s*:)|$)/gi,
   // Labels before a value: "DES:PAYROLL" keeps "PAYROLL".

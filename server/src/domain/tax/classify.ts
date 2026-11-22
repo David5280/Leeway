@@ -36,20 +36,20 @@ export function mayBeDeductible(name: string): boolean {
   return DEDUCTIBLE_NAMES.test(name) && !EVERYDAY_NAMES.test(name)
 }
 
+/** A pattern for any of these alternatives as whole words, in any case. */
+const anyOf = (...alternatives: string[]) =>
+  new RegExp(alternatives.map((words) => String.raw`\b(${words})\b`).join('|'), 'i')
+
 /**
  * Words a card or loan account uses for a payment received toward it. An
- * autopay discount or credit is money back, not a payment.
+ * autopay discount or credit ("AUTOPAY-DISCOUNT", "AUTOPAY DISC") is money
+ * back, not a payment.
  */
-const PAYMENT_IN_WORDS = new RegExp(
-  [
-    PAYMENT_THANK_YOU,
-    String.raw`payment\s+received|automatic\s+payment|e-?payment|pymt`,
-    String.raw`autopay(?!\s+(discount|credit|rebate|bonus))`,
-    String.raw`(online|mobile)\s+(payment|pmt)`,
-  ]
-    .map((words) => String.raw`\b(${words})\b`)
-    .join('|'),
-  'i',
+const PAYMENT_IN_WORDS = anyOf(
+  PAYMENT_THANK_YOU,
+  String.raw`payment\s+received|automatic\s+payment|e-?payment|pymt`,
+  String.raw`autopay(?!\W*(disc(ount)?|credit|rebate|bonus)\b)`,
+  String.raw`(online|mobile)\s+(payment|pmt)`,
 )
 
 /** Words for money back, which count even beside a payment word or code: "ESCROW REFUND". */
@@ -121,14 +121,34 @@ const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 //    Wash" paying by direct deposit is still pay.
 // What none of them names, a bare direct deposit included, is pay.
 
-/** Tier one: agency texts, read in the description and the merchant name. */
+/**
+ * "TAX REF" or "TAX RFND", but not a shop's "SALES TAX REF" or a preparer's
+ * "TAX REFUND ADVANCE", which is a loan against the refund.
+ */
+const taxRefund = (ref: string) => String.raw`(?<!sales\s+)tax\s?${ref}(?!\W*adv)`
+
+/** Tier one: agency texts and names, read in the description and the merchant name. */
 const AGENCY_WORDS: [RegExp, IncomeLine][] = [
-  [/\b(soc\s+sec|ssa\s+treas)\b/i, 'social_security'],
   [
-    /\b(irs\s+treas|tax\s?ref|\w*taxrfd|tax\s+rfnd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund)\b/i,
+    anyOf(String.raw`soc\s+sec|ssa\s+treas|social\s+security\s+admin(istration)?`),
+    'social_security',
+  ],
+  [
+    anyOf(
+      String.raw`irs|internal\s+revenue\s+service`,
+      taxRefund('(ref|rfnd)'),
+      String.raw`\w*taxrfd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund`,
+    ),
     'tax_refund',
   ],
-  [/\bui\s+benefits?\b/i, 'unemployment'],
+  [
+    anyOf(
+      String.raw`ui\s+benefits?|unemployment\s+(insurance|assistance|benefits?|comp(ensation)?)`,
+      String.raw`employment\s+development\s+dep(ar)?t(ment)?|dep(ar)?t(ment)?\.?\s+of\s+unemployment`,
+      String.raw`workforce\s+commission`,
+    ),
+    'unemployment',
+  ],
 ]
 
 /** Tier two: an employer paying, by any route. */
@@ -137,7 +157,7 @@ const EMPLOYER_WORDS = /\b(payroll|salary|wages?|paycheck)\b/i
 /** Tier three: looser words, read in the description only. */
 const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [/\bsocial\s+security\b/i, 'social_security'],
-  [/\btax\s?refund\b/i, 'tax_refund'],
+  [anyOf(taxRefund('refund')), 'tax_refund'],
   [/\bunemployment\b/i, 'unemployment'],
   [/\b(pension|annuity)\b/i, 'retirement'],
   [/\b(cash\s?back|rewards?|statement\s+credit\s+redemption)\b/i, 'rewards'],

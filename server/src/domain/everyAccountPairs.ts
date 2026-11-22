@@ -50,18 +50,27 @@ export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
 
 /** Clear words for a credit card payment, as a bank writes one out of checking. */
 const CARD_PAYMENT_WORDS =
-  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt)|e-?payment|mobile\s+pmt)\b/i
+  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt))\b/i
 
-/** Card issuers, so a bare "ACH PMT" counts only beside one: "CHASE CREDIT ACH PMT". */
+/** Payment words any biller uses ("T-MOBILE PMT", "XCEL ENERGY EPAYMENT"), so they need an issuer. */
+const BILL_PAYMENT_WORDS = /\b(e-?payment|mobile\s+pmt|ach\s+pmt)\b/i
+
+/** Card issuers, whose name beside a biller's payment words says it pays a card. */
 const CARD_ISSUER_WORDS =
-  /\b(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclays?|synchrony|apple\s+card)\b/i
+  /\b(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclay(s|card)?|synchrony|apple\s+card)\b/i
+
+/** An issuer's other debts, paid with the same words: "CHASE MORTGAGE ACH PMT". */
+const ISSUER_LOAN_WORDS = /\b(mortgage|loan|auto|student)\b/i
+
+/** Whether a biller's payment words come with an issuer's name and no word of a loan. */
+const paysIssuerCard = (words: string) =>
+  BILL_PAYMENT_WORDS.test(words) && CARD_ISSUER_WORDS.test(words) && !ISSUER_LOAN_WORDS.test(words)
 
 /** Whether a leg shows it pays a credit card: Plaid's card payment code, or clear words. */
 export function paysCard(leg: StoredLeg): boolean {
   const code = leg.providerCategoryDetailed ?? leg.providerCategoryPrimary
   const words = `${leg.name} ${leg.merchantName ?? ''}`
-  const issuerAch = /\bach\s+pmt\b/i.test(words) && CARD_ISSUER_WORDS.test(words)
-  return code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(words) || issuerAch
+  return code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(words) || paysIssuerCard(words)
 }
 
 /** Whether a leg is on a credit card hidden from budgets, whose purchases this view counts. */

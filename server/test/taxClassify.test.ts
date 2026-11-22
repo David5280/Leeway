@@ -94,6 +94,29 @@ describe('the income line of money filed as income', () => {
     )
   })
 
+  it('reads an agency named in full in the merchant name, whatever the description says', () => {
+    const fromAgency = (merchantName: string) => lineOf({ name: 'ACH CREDIT', merchantName })
+    expect(fromAgency('Social Security Administration')).toBe('social_security')
+    expect(fromAgency('Internal Revenue Service')).toBe('tax_refund')
+    expect(fromAgency('IRS')).toBe('tax_refund')
+    expect(fromAgency('Employment Development Department')).toBe('unemployment')
+    expect(fromAgency('Texas Workforce Commission')).toBe('unemployment')
+    expect(fromAgency('Unemployment Insurance')).toBe('unemployment')
+  })
+
+  it("never reads a shop's sales tax refund or a preparer's refund advance as a tax refund", () => {
+    for (const name of [
+      'SALES TAX REF',
+      'SALES TAX RFND',
+      'SALES TAX REFUND',
+      'TAX REFUND ADVANCE',
+      'HRB TAX REFUND ADV',
+      'TAX REF ADV',
+    ]) {
+      expect(lineOf({ name }), name).toBe('pay')
+    }
+  })
+
   it('reads a state income tax refund only where the words say so', () => {
     expect(lineOf({ name: 'SMOKE PIT REFUND' })).toBe('pay')
     expect(lineOf({ name: 'STATE PIT REFUND' })).toBe('tax_refund')
@@ -162,6 +185,13 @@ describe('the payer key', () => {
     expect(keyOf('STATE OF CO PAYROLL')).toBe('state of co payroll')
     expect(keyOf('STATE OF ID PAYROLL')).toBe('state of id payroll')
     expect(keyOf('CO-OP FOODS PAYROLL')).toBe('co op foods payroll')
+    expect(keyOf('STATE OF ID 0115 PAYROLL')).toBe('state of id payroll')
+    expect(keyOf('IDX2 PAYROLL')).toBe('idx payroll')
+  })
+
+  it('drops a letters only id only after a written "ID:" label', () => {
+    expect(keyOf('ACME PAYROLL ID:ABCDEF')).toBe('acme payroll')
+    expect(keyOf('ACME ID ABCDEF PAYROLL')).toBe('acme id abcdef payroll')
   })
 
   it('reads the merchant name the bank gave, and falls back to the merchant key when nothing is left', () => {
@@ -206,6 +236,8 @@ describe('a payment into a card or loan', () => {
   it('leaves an autopay discount alone, and lets refund words beat a loan payment code', () => {
     expect(credit({ name: 'AUTOPAY DISCOUNT' })).toBe(false)
     expect(credit({ name: 'AUTOPAY CREDIT' })).toBe(false)
+    expect(credit({ name: 'AUTOPAY-DISCOUNT' })).toBe(false)
+    expect(credit({ name: 'AUTOPAY DISC' })).toBe(false)
     expect(credit({ name: 'ESCROW REFUND', bankCategory: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT' })).toBe(
       false,
     )
