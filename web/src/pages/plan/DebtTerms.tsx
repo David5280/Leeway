@@ -8,10 +8,23 @@ import { ErrorNote } from '../../components/ui'
 import { parseMoney } from '../../lib/format'
 import { Money } from '../../components/design/Money'
 
-/** "24.99" into 24.99, rounded to the hundredth; null when blank or not a number. */
+/**
+ * "24.99" (or "24.99%") into 24.99, rounded to the hundredth; null when blank,
+ * not a number, or negative. No card or loan charges a negative rate, so a
+ * minus sign means a typo, not a rate to quietly turn positive.
+ */
 export function parseRate(text: string): number | null {
+  if (/[-−]/.test(text)) return null
   const value = Number.parseFloat(text.replace(/[^0-9.]/g, ''))
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
+}
+
+/**
+ * Whether a rate was typed that cannot be read ("-5", "abc"). A blank one
+ * clears the rate on purpose; an unreadable one must not quietly clear it.
+ */
+export function isUnreadableRate(text: string): boolean {
+  return parseRate(text) === null && text.trim() !== ''
 }
 
 export function DebtTerms({ account }: { account: Account }) {
@@ -24,6 +37,7 @@ export function DebtTerms({ account }: { account: Account }) {
   const minimumPaymentCents = parseMoney(minimum)
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
+  const badRate = isUnreadableRate(rate)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -60,7 +74,7 @@ export function DebtTerms({ account }: { account: Account }) {
         value={minimum}
         onChange={(e) => setMinimum(e.target.value)}
       />
-      <button type="submit" className="btn" disabled={unchanged || save.isPending}>
+      <button type="submit" className="btn" disabled={unchanged || badRate || save.isPending}>
         Save
       </button>
       <ErrorNote error={save.error} />

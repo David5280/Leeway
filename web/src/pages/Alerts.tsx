@@ -11,6 +11,8 @@ import { Icon, LoadingOrError } from '../components/ui'
 import { settingsPath } from './settings/paths'
 import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../../../server/src/domain/accountAlerts'
 import { BILL_CHANGE_THRESHOLD } from '../../../server/src/domain/billChanges'
+import { DUPLICATE_DAYS } from '../../../server/src/domain/leaks/duplicates'
+import { PRICE_RISE } from '../../../server/src/domain/leaks/priceRises'
 import { Money } from '../components/design/Money'
 import { AiSpendAlert } from '../components/AiSpendAlert'
 import { useApp } from '../lib/app'
@@ -44,6 +46,14 @@ export function Alerts() {
             the same new amount twice in a row, makes that the usual amount.
           </li>
           <li>Overdraft and insufficient funds fees in the last {FEE_DAYS} days.</li>
+          <li>
+            The same charge at one place more than once within {DUPLICATE_DAYS} days, unless you buy
+            it there often or one was refunded.
+          </li>
+          <li>
+            A repeating charge, not yet one of your bills, whose price went up by at least{' '}
+            {PRICE_RISE.share * 100}% and <Money cents={PRICE_RISE.cents} />.
+          </li>
           <li>
             Money available below your warning: <Money cents={DEFAULT_LOW_BALANCE_CENTS} /> for
             checking accounts unless you set another amount, and off for other accounts until you

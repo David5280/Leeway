@@ -1,9 +1,9 @@
 // The retirement lens: "Can I retire at 65?" answered from the projection
 // (retirement/plan.ts), with meters for the savings range and the monthly
-// income it gives, and a card per pension. Without a birth year it shows what
-// is held and asks for one. Every figure is a range or says where it came
-// from, and none tells the owner to save more: a gap is shown with a choice
-// that closes it, and a pension always counts as retirement saving.
+// income it gives, and a card per pension. Without an age it shows what is
+// held and asks for the birth year. Every figure is a range or says where it
+// came from, and none tells the owner to save more: a gap is shown with a
+// choice that closes it, and a pension always counts as retirement saving.
 
 import { FORMULA_NOTE } from '../retirement/pensions.js'
 import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
@@ -275,9 +275,19 @@ function incomeMeter(
   }
 }
 
-/** Before a birth year: what is held, if anything, and a request for the year. */
+/**
+ * What to ask for while no age is known: the birth year, or, when the one
+ * stored is still to come (saved before years ahead were refused), a fix to it.
+ */
+export function birthYearAsk(birthYear: number | null): string {
+  const toSee = 'to see what your savings and any pension could pay.'
+  if (birthYear === null) return `Add your birth year ${toSee}`
+  return `Your birth year is saved as ${birthYear}, which is still to come. Correct it ${toSee}`
+}
+
+/** Before an age is known: what is held, if anything, and a request for the year. */
 function waitingAnswer({ profile, report, format }: LensInput): LensAnswer {
-  const ask = 'Add your birth year to see what your savings and any pension could pay.'
+  const ask = birthYearAsk(profile.retirement.assumptions.birthYear)
   if (report.accounts.length === 0) {
     return { headline: null, detail: ask, tone: 'neutral', progress: null }
   }

@@ -20,6 +20,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
+import { getCardInterestAction } from './cardInterest.js'
 import { hideHomeAlertAction, listHomeAlertsAction } from './homeAlerts.js'
 import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
@@ -70,6 +71,8 @@ import {
   listRecentBalancesAction,
   planDebtPayoffAction,
 } from './planning.js'
+import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
+import { getIdleCashAction } from './idleCash.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -179,6 +182,7 @@ export const actionList = [
   hideHomeAlertAction,
   createAccountAction,
   updateAccountAction,
+  getCardInterestAction,
   deleteAccountAction,
   summarizeSavingsAction,
   getFinancialProfileAction,
@@ -203,9 +207,13 @@ export const actionList = [
   listGoalContributionsAction,
   deleteGoalAction,
   getNetWorthAction,
+  listOwnedAndOwedAction,
+  addOwnedOrOwedAction,
+  updateOwnedOrOwedAction,
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
+  getIdleCashAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

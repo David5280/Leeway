@@ -114,6 +114,40 @@ describe('deviceLabel', () => {
   })
 })
 
+describe('currentEndpoint', () => {
+  it('reads the address of the subscription this browser holds', async () => {
+    fakePushBrowser({ permission: 'granted', subscribed: true })
+    expect(await currentEndpoint()).toBe(ENDPOINT)
+  })
+
+  it('is null when notifications are allowed but nothing is subscribed or registered', async () => {
+    fakePushBrowser({ permission: 'granted' })
+    expect(await currentEndpoint()).toBeNull()
+    forgetPushBrowser()
+    fakePushBrowser({ permission: 'granted', registered: false })
+    expect(await currentEndpoint()).toBeNull()
+  })
+
+  it('never asks the push manager until notifications are allowed', async () => {
+    // No subscription can exist yet, and in the WebKit that the browser tests
+    // run, getSubscription() blocks the page for good.
+    for (const permission of ['default', 'denied'] as const) {
+      const browser = fakePushBrowser({ permission, subscribed: true })
+      expect(await currentEndpoint()).toBeNull()
+      expect(browser.serviceWorker.getRegistration).not.toHaveBeenCalled()
+      expect(browser.pushManager.getSubscription).not.toHaveBeenCalled()
+      forgetPushBrowser()
+    }
+  })
+
+  it('is null in a browser without notifications at all', async () => {
+    const browser = fakePushBrowser({ subscribed: true })
+    vi.stubGlobal('Notification', undefined)
+    expect(await currentEndpoint()).toBeNull()
+    expect(browser.pushManager.getSubscription).not.toHaveBeenCalled()
+  })
+})
+
 describe('subscribing', () => {
   it('asks permission, then subscribes with the server key', async () => {
     const browser = fakePushBrowser()

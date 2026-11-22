@@ -29,6 +29,16 @@
   gap: var(--space-3);
 }
 
+/* A line under a group's heading, like what the credit cards cost in
+   interest: a link with a finger's full height, close under the heading. */
+.group-note {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: calc(var(--space-3) * -1);
+  text-decoration: none;
+}
+
 .acct-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));

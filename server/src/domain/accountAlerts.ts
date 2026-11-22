@@ -1,6 +1,8 @@
 // Account alerts: an overdrawn account, a card over its limit, a balance below
 // the owner's warning, and overdraft fees the bank charged lately; a bill that
-// cost more or less than usual is one too (billChanges.ts). Pure: the
+// cost more or less than usual is one too (billChanges.ts), and so are money
+// leaks: a charge made twice and a repeating charge whose price went up
+// (leaks/). Pure: the
 // accounts and recent charges come in, alerts come out, nothing is read here.
 // Alerts are worked out fresh from current balances, never stored.
 
@@ -20,9 +22,14 @@ export const ALERT_KINDS = [
   'overdraft_fee',
   'low_balance',
   'bill_change',
+  'duplicate_charge',
+  'price_rise',
 ] as const
 
 export type AlertKind = (typeof ALERT_KINDS)[number]
+
+/** The money leaks: each about one charge, and news once per charge. */
+export const LEAK_KINDS: readonly AlertKind[] = ['duplicate_charge', 'price_rise']
 
 /** urgent: money is going wrong now. warning: worth a look soon. info: worth knowing. */
 export type AlertSeverity = 'urgent' | 'warning' | 'info'
@@ -34,12 +41,13 @@ export interface AccountAlert {
   accountName: string
   /**
    * The amount the alert is about: how far overdrawn or over the limit, the
-   * balance left for a low balance, the fees charged, or what a changed bill cost.
+   * balance left for a low balance, the fees charged, what a changed bill
+   * cost, what a duplicated charge was for each time, or a risen price.
    */
   amountCents: number
-  /** Fees counted, for an overdraft fee alert; 1 for every other kind. */
+  /** Fees counted, or times a duplicated charge was made; 1 for every other kind. */
   count: number
-  /** The latest fee's date, or the changed charge's; null for every other kind. */
+  /** The latest fee's date, or the changed or leaking charge's; null for every other kind. */
   date: IsoDate | null
   /** The alert in a sentence, for the app and assistants. */
   message: string
@@ -50,6 +58,11 @@ export interface AccountAlert {
   summary: string
   /** For a bill change: the bill, and what it usually costs. */
   bill?: { id: string; name: string; usualCents: number }
+  /**
+   * For a leak: the latest charge it is about (its transaction's id), the
+   * merchant as the app shows it, and for a price rise what it cost before.
+   */
+  charge?: { id: string; merchant: string; previousCents: number | null }
 }
 
 /** What an alert needs to know about an account. */
