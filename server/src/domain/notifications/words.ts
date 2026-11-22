@@ -8,7 +8,7 @@
 // bill) and never an amount, an account number or a bank's own text.
 
 import type { IsoDate } from '../../lib/dates.js'
-import { LEAK_KINDS, type AccountAlert, type AlertFormat } from '../accountAlerts.js'
+import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
 import type { SpendAlertLevel } from '../ai/alerts.js'
 import type { CategoryBudget } from '../budgetCategory.js'
 import type { NotificationKind } from './settings.js'
@@ -53,16 +53,33 @@ const ALERT_WORDS: Record<
 }
 
 /**
+ * What a price rise is about: the charge on its account at the merchant, and
+ * the move from the old price to the new one. Not the charge's id, which can
+ * change when another charge posts the same day, so the same rise is never
+ * pushed or brought back twice. The merchant is the name the app shows, never
+ * the bank's text.
+ */
+function priceRiseSubject({
+  accountId,
+  amountCents,
+  charge,
+}: Pick<AccountAlert, 'accountId' | 'amountCents' | 'charge'>): string {
+  return `rise:${accountId}:${charge?.merchant}:${charge?.previousCents}:${amountCents}`
+}
+
+/**
  * What an account alert is about, as its notification and its hide on the
- * home screen both key it. A fee is news once per latest fee date, a
- * bill's change once per bill and charge date, and a leak once per charge;
- * the others are conditions, kept once per account while they last.
+ * home screen both key it. A fee is news once per latest fee date, a bill's
+ * change once per bill and charge date, a charge made twice once per charge,
+ * and a price rise once per merchant and price (priceRiseSubject); the others
+ * are conditions, kept once per account while they last.
  */
 export function accountAlertSubject(
-  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date' | 'bill' | 'charge'>,
+  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'amountCents' | 'date' | 'bill' | 'charge'>,
 ): string {
   if (alert.kind === 'bill_change') return `${alert.bill?.id}:${alert.date}`
-  if (LEAK_KINDS.includes(alert.kind)) return `charge:${alert.charge?.id}`
+  if (alert.kind === 'price_rise') return priceRiseSubject(alert)
+  if (alert.kind === 'duplicate_charge') return `charge:${alert.charge?.id}`
   return alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId
 }
 

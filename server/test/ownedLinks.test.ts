@@ -129,6 +129,17 @@ describe('what a loan can be tied to', () => {
       { loanName: 'Mortgage' },
     )
   })
+
+  it('has the database refuse a second tie too, past the app', async () => {
+    const { mortgage } = await homeWithMortgage()
+    const cabin = await call('add_owned_or_owed', { kind: 'home', name: 'Cabin', amountCents: 1 })
+    await expect(
+      ctx.db.query('UPDATE accounts SET loan_account_id = $1 WHERE id = $2', [
+        mortgage.id,
+        cabin.id,
+      ]),
+    ).rejects.toThrow(/accounts_loan_account_unique/)
+  })
 })
 
 describe('a tie that stops fitting', () => {

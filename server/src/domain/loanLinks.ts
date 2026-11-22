@@ -16,6 +16,15 @@ export async function loanLinks(db: Db): Promise<Map<string, string>> {
   return new Map(rows.map((row) => [row.id, row.loanId]))
 }
 
+/** The loan a thing is tied to now, or null for none. */
+export async function loanOf(db: Db, itemId: string): Promise<string | null> {
+  const { rows } = await db.query<{ loanId: string | null }>(
+    'SELECT loan_account_id AS "loanId" FROM accounts WHERE id = $1',
+    [itemId],
+  )
+  return rows[0]?.loanId ?? null
+}
+
 /** The thing other than `itemId` that a loan is already tied to, if any. */
 export async function loanHolder(db: Db, loanId: string, itemId: string): Promise<string | null> {
   const { rows } = await db.query<{ id: string }>(

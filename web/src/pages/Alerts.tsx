@@ -51,8 +51,9 @@ export function Alerts() {
             it there often or one was refunded.
           </li>
           <li>
-            A repeating charge, not yet one of your bills, whose price went up by at least{' '}
-            {PRICE_RISE.share * 100}% and <Money cents={PRICE_RISE.cents} />.
+            A charge that repeats quarterly or more often, not yet one of your bills, whose price
+            went up by at least {PRICE_RISE.share * 100}% and <Money cents={PRICE_RISE.cents} />. A
+            yearly charge has too little history to tell.
           </li>
           <li>
             Money available below your warning: <Money cents={DEFAULT_LOW_BALANCE_CENTS} /> for

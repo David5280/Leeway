@@ -19,7 +19,7 @@ import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import { billChangeAlerts, listBillChanges } from './billChangeSource.js'
 import { withoutDoublePaid } from './leaks/doublePaidBills.js'
-import { leakAlerts, listLeaks } from './leaks/leakSource.js'
+import { leakAlerts, listLeaks, type LeakReader } from './leaks/leakSource.js'
 import type { Settings } from './settings.js'
 
 /**
@@ -40,6 +40,16 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
   return rows
 }
 
+/** What listAlerts reads beyond balances and fees, and how a bill paid twice is told. */
+export interface AlertReads {
+  /** Whether to read bills' changes. */
+  bills?: boolean
+  /** Whether to read leaks, or a LeakReader that shares one read between lists. */
+  leaks?: boolean | LeakReader
+  /** Whether a bill paid twice is told as a charge made twice (doublePaidBills.ts). */
+  doublesTold?: boolean
+}
+
 /**
  * The alerts for these accounts, or for every account when none are given.
  * Hidden accounts are included: they stay out of budget totals, but an
@@ -51,24 +61,21 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
  * (doublePaidBills.ts). With `doublesTold` false, as when charges made twice
  * notify no one, the bill's change tells it instead. Without `bills` or
  * `leaks`, those are not read, so a problem reading them never stands in the
- * way of the rest.
+ * way of the rest. A caller that lists alerts more than once in a request
+ * passes a LeakReader as `leaks`, so the leaks are read once for all of them.
  */
 export async function listAlerts(
   db: Db,
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
   accountIds: string[] = [],
-  {
-    bills = true,
-    leaks = true,
-    doublesTold = true,
-  }: { bills?: boolean; leaks?: boolean; doublesTold?: boolean } = {},
+  { bills = true, leaks = true, doublesTold = true }: AlertReads = {},
 ): Promise<AccountAlert[]> {
   const [accounts, charges, changes, found] = await Promise.all([
     listAccounts(db),
     recentCharges(db, today),
     bills ? listBillChanges(db, settings.timeZone, today) : [],
-    leaks ? listLeaks(db, today) : null,
+    readLeaks(db, today, leaks),
   ])
   const picked = selectAccounts(accounts, accountIds)
   const names = new Map(picked.filter(isShared).map((account) => [account.id, account.name]))
@@ -83,6 +90,12 @@ export async function listAlerts(
     ...billChangeAlerts(told, names, format),
     ...(found ? leakAlerts(found, names, format) : []),
   ]
+}
+
+/** The leaks as asked for: none, a fresh read, or the read a LeakReader shares. */
+function readLeaks(db: Db, today: IsoDate, leaks: boolean | LeakReader) {
+  if (leaks === false) return null
+  return leaks === true ? listLeaks(db, today) : leaks()
 }
 
 /**

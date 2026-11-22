@@ -1,8 +1,12 @@
-// Which posted lines a merchant charged, the only ones a duplicate is looked
-// for among. The rest are lines the owner made or the bank charged, where two
-// alike within a few days are ordinary: two cash withdrawals, the same share
-// paid to two friends through Venmo or Zelle, two checks written for the same
-// amount, and bank fees (the fee alert already counts the overdraft ones).
+// Which posted lines a merchant charged, the only ones a leak is looked for
+// among: a duplicate (duplicates.ts) or a price rise (priceRises.ts). The rest
+// are lines the owner made or the bank charged, where two alike within a few
+// days are ordinary and a new amount is no price: two cash withdrawals, the
+// same share paid to two friends through Venmo or Zelle, two checks written
+// for the same amount, money moved to another account, and bank fees (the fee
+// alert already counts the overdraft ones). A payment to a person is also
+// named after that person, so leaving it out keeps their name out of every
+// alert, and so out of the AI summary, the weekly email and assistants.
 // Pure.
 //
 // Without the bank's codes, only the words decide, so they must be a whole
@@ -72,6 +76,16 @@ const FEE_WORDS = new RegExp(
  */
 const CHECK_WORDS = /\b(?:check|chk|cheque)\s*(?:paid\s*)?#?\s*\d+\b/i
 
+/** Plaid's primary category for money sent out to an account: a transfer, not a purchase. */
+const TRANSFER_OUT = 'TRANSFER_OUT'
+
+/**
+ * Money moved to an account, in the words of a bank that sends no codes:
+ * "ONLINE TRANSFER TO SAV", "XFER TO CHECKING". "Transfer" must be followed by
+ * "to", so a merchant with the word in its name ("TRANSFERWISE") is kept.
+ */
+const TRANSFER_WORDS = /\b(?:transfer|xfer)\s+to\b/i
+
 /** The line's words: the bank's text and the merchant name it gave. */
 const wordsOf = (line: CodedLine) => `${line.name} ${line.merchantName ?? ''}`
 
@@ -107,15 +121,27 @@ function isCashWithdrawal(line: CodedLine): boolean {
 }
 
 /**
+ * Whether it moved money out to an account, by its code or its words. Cash
+ * and payments to people are transfers by code too, and are told apart above.
+ */
+function isTransferOut(line: CodedLine): boolean {
+  const code = line.providerCategoryDetailed ?? line.providerCategoryPrimary ?? ''
+  if (code === TRANSFER_OUT || code.startsWith(`${TRANSFER_OUT}_`)) return true
+  return TRANSFER_WORDS.test(line.name)
+}
+
+/**
  * Whether a merchant charged this line, so two alike close together may be
- * one charge made twice: not cash taken out, a check, a payment to a person
- * through an app, or a bank fee.
+ * one charge made twice, and a new amount a new price: not cash taken out, a
+ * check, a payment to a person through an app, money moved to an account, or
+ * a bank fee.
  */
 export function isMerchantCharge(line: CodedLine): boolean {
   return (
     !isCashWithdrawal(line) &&
     !CHECK_WORDS.test(line.name) &&
     !paidAPerson(line) &&
+    !isTransferOut(line) &&
     !isBankFee(line)
   )
 }

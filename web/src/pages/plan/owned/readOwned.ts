@@ -23,7 +23,7 @@ export interface OwnedFields {
   loanId?: string | null
 }
 
-/** What an edit sends: the same, but the amount only when it changed. */
+/** What an edit sends: the same, but the amount and the loan only when they changed. */
 export type OwnedEdit = Omit<OwnedFields, 'amountCents'> & { amountCents?: number }
 
 /** A value read from the form, or the sentence that says what to fix. */
@@ -56,19 +56,18 @@ function readTerms(text: OwnedText): Read<Terms> {
   return { ok: true, value: { aprPercent, monthlyPaymentCents } }
 }
 
-/**
- * The form's text as what to save for a thing of `kind`, or the first thing
- * to fix. Nothing is ever changed quietly: an amount below zero that the kind
- * can't hold, or a rate or payment that can't be read, is refused with a
- * sentence rather than saved as something else.
- */
-export function readOwned(text: OwnedText, kind: OwnedItem['kind']): OwnedRead {
-  const amountCents = parseMoney(text.amount)
+/** The amount typed, or the sentence that says why a thing of `kind` can't hold it. */
+function readAmount(typed: string, kind: OwnedItem['kind']): Read<number> {
+  const amountCents = parseMoney(typed)
   if (amountCents === null) return refuse('Enter an amount, like 450,000.')
   if (Math.abs(amountCents) > MAX_AMOUNT_CENTS) return refuse(TOO_MUCH)
   const problem = amountProblem(kind, amountCents)
-  if (problem) return refuse(problem)
-  const fields = { name: text.name, amountCents }
+  return problem ? refuse(problem) : { ok: true, value: amountCents }
+}
+
+/** Everything but the amount: the name, and a loan's terms or a home or car's loan. */
+function readDetails(text: OwnedText, kind: OwnedItem['kind']): Read<OwnedEdit> {
+  const fields = { name: text.name }
   if (isOwedKind(kind)) {
     const terms = readTerms(text)
     return terms.ok ? { ok: true, value: { ...fields, ...terms.value } } : terms
@@ -78,13 +77,48 @@ export function readOwned(text: OwnedText, kind: OwnedItem['kind']): OwnedRead {
 }
 
 /**
- * What saving an edit sends: the amount only when it changed, so a new name
- * alone leaves the day the amount was entered as it was.
+ * The form's text as what to save for a new thing of `kind`, or the first
+ * thing to fix. Nothing is ever changed quietly: an amount below zero that
+ * the kind can't hold, or a rate or payment that can't be read, is refused
+ * with a sentence rather than saved as something else.
  */
-export function editOf(fields: OwnedFields, item: OwnedItem): OwnedEdit {
-  if (fields.amountCents !== item.amountCents) return fields
-  const { amountCents: _unchanged, ...rest } = fields
-  return rest
+export function readOwned(text: OwnedText, kind: OwnedItem['kind']): OwnedRead {
+  const amount = readAmount(text.amount, kind)
+  if (!amount.ok) return amount
+  const details = readDetails(text, kind)
+  return details.ok ? { ok: true, value: { ...details.value, amountCents: amount.value } } : details
+}
+
+/**
+ * Whether the amount typed is the one the item has: the same cents, or still
+ * blank on an older entry kept with no amount at all.
+ */
+function keepsAmount(typed: string, amountCents: number | null): boolean {
+  if (typed.trim() === '') return amountCents === null
+  return parseMoney(typed) === amountCents
+}
+
+/**
+ * The form's text as what saving an edit of `item` sends, or the first thing
+ * to fix, read as readOwned reads a new one. The amount and the loan are sent
+ * only when they changed:
+ * - an amount left as it was is not read again, so a new name alone keeps
+ *   the day the amount was entered, and an older entry can still be renamed
+ *   when it holds no amount or one the rules no longer allow (an "other"
+ *   thing kept at -$500 from before them);
+ * - a loan left as it was is not sent, so a tie made before the rules (one
+ *   loan on two homes) never stands in the way of saving the rest.
+ */
+export function readEdit(text: OwnedText, item: OwnedItem): Read<OwnedEdit> {
+  const amount = keepsAmount(text.amount, item.amountCents)
+    ? null
+    : readAmount(text.amount, item.kind)
+  if (amount && !amount.ok) return amount
+  const details = readDetails(text, item.kind)
+  if (!details.ok) return details
+  const { loanId, ...rest } = details.value
+  const edit: OwnedEdit = loanId === undefined || loanId === item.loanId ? rest : details.value
+  return { ok: true, value: amount ? { ...edit, amountCents: amount.value } : edit }
 }
 
 /** A loan the form offers, by id, with the words its option shows. */
@@ -94,13 +128,22 @@ export interface LoanChoice {
 }
 
 /**
- * The loans a home or car can be tied to: every counted loan (never a card),
- * and always the one it is tied to now, even when hidden, so the form shows
- * the truth and None really unties it.
+ * The loans a home or car can be tied to: every counted loan (never a card)
+ * not tied to another of the things `owned`, since the server ties a loan to
+ * one thing only, and always the one it is tied to now, even when hidden, so
+ * the form shows the truth and None really unties it.
  */
-export function loanChoices(accounts: Account[], item?: OwnedItem): LoanChoice[] {
+export function loanChoices(
+  accounts: Account[],
+  item?: OwnedItem,
+  owned: OwnedItem[] = [],
+): LoanChoice[] {
+  const tiedElsewhere = new Set(
+    owned.filter((thing) => thing.id !== item?.id).map((thing) => thing.loanId),
+  )
   const open = accounts
     .filter((account) => isLoan(account) && !account.hidden && account.id !== item?.id)
+    .filter((account) => !tiedElsewhere.has(account.id))
     .map((account) => ({ id: account.id, label: account.name }))
   const tiedId = item?.loanId ?? null
   if (tiedId === null || open.some((choice) => choice.id === tiedId)) return open

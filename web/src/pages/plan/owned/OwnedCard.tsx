@@ -79,7 +79,11 @@ export function OwnedCard() {
           key={editing.item?.id ?? 'new'}
           title={editing.item?.name ?? 'Add something you own or owe'}
         >
-          <OwnedForm item={editing.item ?? undefined} onClose={() => setEditing(null)} />
+          <OwnedForm
+            item={editing.item ?? undefined}
+            owned={owned}
+            onClose={() => setEditing(null)}
+          />
         </FormCard>
       )}
       <Card static="list" label="Entered by you" className="stack">

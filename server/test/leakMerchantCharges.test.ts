@@ -1,6 +1,6 @@
 // Which posted lines a merchant charged (leaks/merchantCharges.ts): the only
-// ones a duplicate is looked for among. Cash, checks, payments to people and
-// bank fees are the owner's own or the bank's, so two alike are ordinary.
+// ones a leak is looked for among. Cash, checks, payments to people, transfers
+// and bank fees are the owner's own or the bank's, so two alike are ordinary.
 
 import { describe, expect, it } from 'vitest'
 import { findDuplicates } from '../src/domain/leaks/duplicates.js'
@@ -105,6 +105,24 @@ describe('isMerchantCharge', () => {
     ]) {
       expect(isMerchantCharge(line({ name })), name).toBe(false)
     }
+  })
+
+  it('leaves out money moved to an account, by its code or a bank’s words', () => {
+    for (const code of [
+      'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      'TRANSFER_OUT_SAVINGS',
+      'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS',
+    ]) {
+      expect(isMerchantCharge(line({ providerCategoryDetailed: code })), code).toBe(false)
+    }
+    expect(isMerchantCharge(line({ providerCategoryPrimary: 'TRANSFER_OUT' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'ONLINE TRANSFER TO SAV XXXXXX1234' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'XFER TO CHECKING' }))).toBe(false)
+  })
+
+  it('keeps a merchant whose name only holds the word transfer', () => {
+    expect(isMerchantCharge(line({ name: 'TRANSFERWISE INC' }))).toBe(true)
+    expect(isMerchantCharge(line({ name: 'BALANCE TRANSFER PILATES' }))).toBe(true)
   })
 
   it('keeps a purchase through a payment app the bank coded as one', () => {

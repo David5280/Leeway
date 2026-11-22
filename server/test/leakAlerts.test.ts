@@ -2,7 +2,7 @@
 // gone up, read from stored charges, worded with no account number, and
 // shown, notified, hidden and dismissed like the other account alerts.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { duplicateAlert, priceRiseAlert } from '../src/domain/leaks/leakAlerts.js'
 import { leakAlerts } from '../src/domain/leaks/leakSource.js'
 import { listAlerts } from '../src/domain/alerts.js'
@@ -117,14 +117,28 @@ describe('leak wording', () => {
     expect(named.map((alert) => alert.kind)).toEqual(['duplicate_charge', 'price_rise'])
   })
 
-  it('keys each leak by its charge, so the same charge is news once', () => {
+  it('keys a charge made twice by its charge, so the same charge is news once', () => {
+    const alert = {
+      kind: 'duplicate_charge' as const,
+      accountId: 'x',
+      amountCents: 1549,
+      date: '2026-11-04',
+      charge: { id: 'c', merchant: 'Netflix', previousCents: null },
+    }
+    expect(accountAlertSubject(alert)).toBe('charge:c')
+  })
+
+  it('keys a price rise by its merchant and prices, never the charge standing for its day', () => {
     const alert = {
       kind: 'price_rise' as const,
       accountId: 'x',
+      amountCents: 1199,
       date: '2026-11-12',
-      charge: { id: 'c', merchant: 'S', previousCents: 1 },
+      charge: { id: 'c', merchant: 'Spotify', previousCents: 1099 },
     }
-    expect(accountAlertSubject(alert)).toBe('charge:c')
+    expect(accountAlertSubject(alert)).toBe('rise:x:Spotify:1099:1199')
+    const sameDayLater = { ...alert, charge: { ...alert.charge, id: 'later' } }
+    expect(accountAlertSubject(sameDayLater)).toBe(accountAlertSubject(alert))
   })
 })
 
@@ -141,6 +155,9 @@ describe('leak alerts', () => {
   beforeEach(async () => {
     await resetData(ctx.db)
     ctx.setNow(new Date('2026-11-17T18:00:00Z'))
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   /** An account whose number ends 4417, which the bank also writes in its text. */
@@ -345,6 +362,100 @@ describe('leak alerts', () => {
     const [rise] = await leaks()
     // The day's charges are read in id order, and the last stands for the day.
     expect(rise!.charge!.id).toBe(ids.sort().at(-1))
+  })
+
+  it('tells a subscription no bill tracks, charged twice on its day, only as charged twice', async () => {
+    const { accountId } = await everyday()
+    // Netflix at $15.49 on the 3rd since July, and a second $15.49 on Nov 3.
+    for (const date of ['2026-07-03', '2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'NETFLIX.COM 4417',
+        merchantName: 'Netflix',
+        amountCents: 1549,
+      })
+    }
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-03',
+      name: 'NETFLIX.COM 4417',
+      merchantName: 'Netflix',
+      amountCents: 1549,
+    })
+    expect((await leaks()).map((alert) => alert.message)).toEqual([
+      'Netflix charged $15.49 twice on Nov 3.',
+    ])
+  })
+
+  /**
+   * Spotify's new price posts again on Nov 12, with an id that sorts before
+   * the first one's, so it is the charge that now stands for the day.
+   */
+  async function postsAgainFirstInOrder(accountId: string) {
+    const id = await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-12',
+      name: 'SPOTIFY USA 4417',
+      merchantName: 'Spotify',
+      amountCents: 1199,
+    })
+    await ctx.db.query(
+      `UPDATE transactions SET id = '00000000-0000-4000-8000-000000000000' WHERE id = $1`,
+      [id],
+    )
+  }
+
+  it('pushes a rise once, even when another charge posts on its day later', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    await refreshInbox(ctx)
+    await postsAgainFirstInOrder(accountId)
+    await refreshInbox(ctx)
+    const { rows } = await ctx.db.query<{ subject: string }>(
+      `SELECT subject FROM notifications WHERE kind = 'price_rise'`,
+    )
+    expect(rows).toEqual([{ subject: `rise:${accountId}:Spotify:1099:1199` }])
+  })
+
+  it('keeps a hidden rise hidden when another charge posts on its day later', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    const [rise] = await leaks()
+    await call('hide_home_alert', { kind: 'price_rise', accountId, chargeId: rise!.charge!.id })
+    await postsAgainFirstInOrder(accountId)
+    // The charge standing for the day is now the new one, yet the rise is the same.
+    const risen = (await leaks()).find((alert) => alert.kind === 'price_rise')
+    expect(risen!.charge!.id).not.toBe(rise!.charge!.id)
+    const home = (await call('list_home_alerts')).alerts.map((alert) => alert.kind)
+    expect(home).not.toContain('price_rise')
+  })
+
+  /**
+   * Counts the reads of the recurring finder's history (recentHistory's SQL),
+   * the costly part of the leak alerts: about 400 days of transactions.
+   */
+  function countHistoryReads(): () => number {
+    const query = vi.spyOn(ctx.db, 'query')
+    return () =>
+      query.mock.calls.filter(([sql]) => /NOT a\.hidden AND t\.date BETWEEN/.test(String(sql)))
+        .length
+  }
+
+  it('reads the history once for the suggestions and the leak alerts of a check-in', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    const reads = countHistoryReads()
+    const checkin = await call('get_checkin')
+    expect(checkin.alerts.map((alert) => alert.kind)).toContain('price_rise')
+    // Two find the next payday (cash flow and the pay schedule each look it up),
+    // and one is shared by the suggestions and the leaks, which read it apart before.
+    expect(reads()).toBe(3)
+  })
+
+  it('reads the history once in a notifier run, for its notifications and home hides', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    const reads = countHistoryReads()
+    await refreshInbox(ctx)
+    expect(reads()).toBe(1)
   })
 
   it('still says a rise on a charge the owner chose not to track', async () => {

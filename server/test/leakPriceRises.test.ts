@@ -11,6 +11,7 @@ import {
   isPriceRise,
   PRICE_RISE,
   priceRiseOf,
+  RISE_CADENCES,
   RISE_NEWS_DAYS,
   type RepeatingCharge,
 } from '../src/domain/leaks/priceRises.js'
@@ -113,6 +114,32 @@ describe('priceRiseOf', () => {
       ['2026-11-12', 499],
     ])
     expect(priceRiseOf(split, TODAY)).toBeNull()
+  })
+
+  it('never reads the same charge made twice on a day as the price doubling', () => {
+    // Netflix at $15.49 on the 3rd, charged twice on Nov 3: "Charged twice?" tells that.
+    const doubled = spotify([
+      ['2026-08-03', 1549],
+      ['2026-09-03', 1549],
+      ['2026-10-03', 1549],
+      ['2026-11-03', 1549],
+      ['2026-11-03', 1549],
+    ])
+    expect(priceRiseOf(doubled, TODAY)).toBeNull()
+  })
+
+  it('still finds a rise on a day that also holds a repeat of the new price', () => {
+    const roseTwice = spotify([
+      ['2026-09-12', 1099],
+      ['2026-10-12', 1099],
+      ['2026-11-12', 1199],
+      ['2026-11-12', 1199],
+    ])
+    // The first charge of the day stands for it, so a repeat posting later changes nothing.
+    expect(priceRiseOf(roseTwice, TODAY)).toMatchObject({
+      previousCents: 1099,
+      charge: { id: 'tx-2', amountCents: 1199 },
+    })
   })
 
   it(`stops being news ${RISE_NEWS_DAYS} days after the charge`, () => {
@@ -301,6 +328,34 @@ describe('priceRiseOf on a charge off the cycle', () => {
     expect(priceRiseOf(spotify(weekly, 'week'), TODAY)).toMatchObject({ previousCents: 1000 })
     // The same dates are no monthly cycle.
     expect(priceRiseOf(spotify(weekly, 'month'), TODAY)).toBeNull()
+  })
+})
+
+describe('the cadences a rise is looked for on', () => {
+  it('are quarterly and more often, so a quarterly charge can rise', () => {
+    expect(RISE_CADENCES).toEqual(['week', 'biweek', 'semimonth', 'month', 'quarter'])
+    const quarterly = spotify(
+      [
+        ['2026-02-10', 6000],
+        ['2026-05-10', 6000],
+        ['2026-08-10', 6000],
+        ['2026-11-10', 6600],
+      ],
+      'quarter',
+    )
+    expect(priceRiseOf(quarterly, TODAY)).toMatchObject({ previousCents: 6000 })
+  })
+
+  it('leave out a yearly charge, whose history never holds a steady price', () => {
+    const yearly = spotify(
+      [
+        ['2024-11-10', 9900],
+        ['2025-11-10', 9900],
+        ['2026-11-10', 11900],
+      ],
+      'year',
+    )
+    expect(priceRiseOf(yearly, TODAY)).toBeNull()
   })
 })
 

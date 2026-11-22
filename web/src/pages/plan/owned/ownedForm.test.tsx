@@ -5,6 +5,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { failing } from '../../../test/fake'
 import { account, renderPlan } from '../../../test/planning'
 import {
   BOTH,
@@ -87,6 +88,62 @@ describe('saving never changes an amount quietly', () => {
   })
 })
 
+describe('an older entry from before the rules', () => {
+  it('renames a thing kept below zero, sending its name alone', async () => {
+    const fund = { ...checking, id: 'acct-fund', name: 'Old fund', kind: 'other' as const }
+    const server = serve({ ...NOTHING, owned: [{ ...fund, amountCents: -50_000 }] })
+    renderPlan('/plan/net-worth')
+    const { user, form } = await openRow(/^Old fund/, 'Edit Old fund')
+    const name = form.getByRole('textbox', { name: 'Name' })
+    await user.clear(name)
+    await user.type(name, 'Rainy day')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    expect(form.queryByRole('alert')).toBeNull()
+    await waitFor(() =>
+      expect(server.actions('update_owned_or_owed')).toEqual([{ id: fund.id, name: 'Rainy day' }]),
+    )
+  })
+
+  it('renames a thing kept with no amount, leaving the amount blank', async () => {
+    const brokerage = {
+      ...checking,
+      id: 'acct-brokerage',
+      name: 'Brokerage',
+      kind: 'investment' as const,
+      amountCents: null,
+    }
+    const server = serve({ ...NOTHING, owned: [brokerage] })
+    renderPlan('/plan/net-worth')
+    const { user, form } = await openRow(/^Brokerage/, 'Edit Brokerage')
+    expect(form.getByRole('textbox', { name: 'Worth about' })).toHaveValue('')
+    await user.type(form.getByRole('textbox', { name: 'Name' }), ' account')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('update_owned_or_owed')).toEqual([
+        { id: brokerage.id, name: 'Brokerage account' },
+      ]),
+    )
+  })
+})
+
+describe('what went wrong', () => {
+  it('shows only the latest try’s error, never one an earlier try left', async () => {
+    serve(BOTH, {
+      '/api/actions/update_owned_or_owed': failing('That name is taken.'),
+      '/api/actions/delete_account': failing('That account is in use.'),
+    })
+    renderPlan('/plan/net-worth')
+    const { user, form } = await openRow(/^House/, 'Edit House')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    expect(await form.findByRole('alert')).toHaveTextContent('That name is taken.')
+    await user.click(form.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(form.getByRole('alert')).toHaveTextContent('That account is in use.'),
+    )
+    expect(form.getAllByRole('alert')).toHaveLength(1)
+  })
+})
+
 describe("a loan's rate", () => {
   it('reads a rate typed with a percent sign', async () => {
     const server = serve(BOTH)
@@ -158,6 +215,23 @@ describe('the loan on a home or car', () => {
       expect(server.actions('update_owned_or_owed')).toEqual([
         { id: house.id, name: 'House', loanId: null },
       ]),
+    )
+  })
+
+  it('never offers a loan tied to another home', async () => {
+    const cabin = { ...house, id: 'acct-cabin', name: 'Cabin', loanId: null, loanName: null }
+    const withCabin: OwnedAndOwed = { ...BOTH, owned: [house, cabin] }
+    const autoLoan = account({ id: 'acct-auto', name: 'Auto loan', type: 'loan' })
+    serve(withCabin, {}, { list_accounts: () => [...accounts(), autoLoan] })
+    renderPlan('/plan/net-worth')
+    const { form } = await openRow(/^Cabin/, 'Edit Cabin')
+    const select = form.getByRole('combobox', { name: 'Loan on it' })
+    await waitFor(() =>
+      expect(
+        within(select)
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['None', 'Auto loan']),
     )
   })
 
