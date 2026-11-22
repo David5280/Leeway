@@ -3,6 +3,7 @@
 
 import type { Output } from '../../../api/client'
 import { relativeDay } from '../../../lib/format'
+import { percentText } from '../../../lib/money'
 
 export type OwnedAndOwed = Output<'list_owned_and_owed'>
 export type OwnedItem = OwnedAndOwed['owned'][number]
@@ -28,17 +29,20 @@ const KIND_WORDS: Record<OwnedItem['kind'], string> = {
   card: 'Card',
 }
 
-/** The kind, with the loan against it or its rate: "Home, with Mortgage", "Loan at 6.5%". */
-function termsOf(item: OwnedItem): string {
+/**
+ * The kind, with the loan against it or its rate as `locale` writes it:
+ * "Home, with Mortgage", "Loan at 6.5%".
+ */
+function termsOf(item: OwnedItem, locale: string): string {
   const kind = KIND_WORDS[item.kind]
   if (item.loanName) return `${kind}, with ${item.loanName}`
-  if (item.aprPercent !== null) return `${kind} at ${item.aprPercent}%`
+  if (item.aprPercent !== null) return `${kind} at ${percentText(item.aprPercent, locale)}`
   return kind
 }
 
 /** What a row says under the name, and when it is left out of net worth. */
-export function itemDetail(item: OwnedItem): string {
-  const terms = termsOf(item)
+export function itemDetail(item: OwnedItem, locale: string): string {
+  const terms = termsOf(item, locale)
   return item.inNetWorth ? terms : `${terms}, hidden from net worth`
 }
 

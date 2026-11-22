@@ -5,27 +5,8 @@ import { useState, type FormEvent } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { parseMoney } from '../../lib/format'
+import { parseMoney, parseRate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
-
-/**
- * "24.99" (or "24.99%") into 24.99, rounded to the hundredth; null when blank,
- * not a number, or negative. No card or loan charges a negative rate, so a
- * minus sign means a typo, not a rate to quietly turn positive.
- */
-export function parseRate(text: string): number | null {
-  if (/[-−]/.test(text)) return null
-  const value = Number.parseFloat(text.replace(/[^0-9.]/g, ''))
-  return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
-}
-
-/**
- * Whether a rate was typed that cannot be read ("-5", "abc"). A blank one
- * clears the rate on purpose; an unreadable one must not quietly clear it.
- */
-export function isUnreadableRate(text: string): boolean {
-  return parseRate(text) === null && text.trim() !== ''
-}
 
 export function DebtTerms({ account }: { account: Account }) {
   const [rate, setRate] = useState(account.aprPercent === null ? '' : String(account.aprPercent))
@@ -37,7 +18,8 @@ export function DebtTerms({ account }: { account: Account }) {
   const minimumPaymentCents = parseMoney(minimum)
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
-  const badRate = isUnreadableRate(rate)
+  // A blank rate clears it, but one typed that cannot be a rate ("-5", "150") must not.
+  const badRate = aprPercent === null && rate.trim() !== ''
 
   function submit(event: FormEvent) {
     event.preventDefault()

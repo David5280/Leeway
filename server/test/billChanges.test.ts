@@ -4,13 +4,8 @@
 // account alerts.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import {
-  billChangeAlert,
-  billChangeOf,
-  BILL_CHANGE_THRESHOLD,
-  isAmountChange,
-  type WatchedBill,
-} from '../src/domain/billChanges.js'
+import { BILL_CHANGE_THRESHOLD, isAmountChange } from '../src/domain/billAmountChange.js'
+import { billChangeAlert, billChangeOf, type WatchedBill } from '../src/domain/billChanges.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { formatCents } from '../src/lib/money.js'
 import { actionCaller } from './actionCaller.js'
@@ -30,6 +25,7 @@ const comcast = (charges: [string, number][], fields: Partial<WatchedBill> = {})
   cadence: 'month',
   trackedOn: '2026-09-25',
   amountVaries: false,
+  amountSetOn: null,
   charges: charges.map(([date, amountCents]) => ({ accountId: 'checking', date, amountCents })),
   ...fields,
 })
@@ -117,7 +113,7 @@ describe('billChangeOf', () => {
     })
   })
 
-  it('never alerts for a bill whose amount varies, such as power or water', () => {
+  it('never alerts for a bill whose amount varies, such as power or water, but follows it', () => {
     const power = comcast(
       [
         ['2026-11-16', 14000],
@@ -125,7 +121,8 @@ describe('billChangeOf', () => {
       ],
       { amountVaries: true },
     )
-    expect(billChangeOf(power, TODAY)).toBeNull()
+    // The latest $140 is above the $110 average, so it becomes the usual amount.
+    expect(billChangeOf(power, TODAY)).toMatchObject({ kind: 'settled', amountCents: 14000 })
   })
 
   it('never calls the first charge since tracking a change', () => {

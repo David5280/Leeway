@@ -302,6 +302,20 @@ describe('Debts', () => {
     )
   })
 
+  it('saves a rate typed with a comma decimal as that rate, never as more digits', async () => {
+    const server = serve([rewards, loan])
+    renderPlan('/plan/debts')
+    const user = userEvent.setup()
+    const terms = within(await screen.findByRole('form', { name: 'Personal loan terms' }))
+    await user.type(terms.getByRole('textbox', { name: 'Personal loan interest rate' }), '9,9')
+    await user.click(terms.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([
+        { id: loan.id, aprPercent: 9.9, minimumPaymentCents: null },
+      ]),
+    )
+  })
+
   it("won't save a rate that can't be one, which would clear the saved rate", async () => {
     serve([rewards, loan])
     renderPlan('/plan/debts')
@@ -310,6 +324,10 @@ describe('Debts', () => {
     const rate = terms.getByRole('textbox', { name: 'Rewards card interest rate' })
     await user.clear(rate)
     await user.type(rate, '-5')
+    expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Nor one over 100%, which the server would refuse.
+    await user.clear(rate)
+    await user.type(rate, '150')
     expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
     // Blank still clears it on purpose.
     await user.clear(rate)

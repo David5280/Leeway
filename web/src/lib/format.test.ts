@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   calendarDate,
   dayLabel,
+  isUnreadableRate,
+  MAX_RATE_PERCENT,
   parseMoney,
+  parseRate,
+  readRate,
   periodBarLabel,
   periodLabel,
   periodWord,
@@ -16,8 +20,54 @@ describe('format', () => {
     expect(parseMoney('$1,200')).toBe(120000)
     expect(parseMoney('1200')).toBe(120000)
     expect(parseMoney('12,5')).toBe(1250)
+    expect(parseMoney('-12.50')).toBe(-1250)
     expect(parseMoney('')).toBeNull()
     expect(parseMoney('abc')).toBeNull()
+  })
+
+  it.each([
+    // Letters typed for digits, which reading round would make far smaller amounts.
+    '5e1',
+    '1O0',
+    '1,2OO',
+    '1OOO',
+    '5OO',
+    'l00',
+    'I50',
+    '12e3',
+    // Thousands shorthand, which is not a currency.
+    '1.2k',
+    '10K',
+    // Nothing to read.
+    'abc',
+    '',
+    '   ',
+  ])('refuses %j rather than read a smaller amount', (text) => {
+    expect(parseMoney(text)).toBeNull()
+  })
+
+  it.each([
+    ['$1,200', 120000],
+    ['-$5', -500],
+    ['5 eur', 500],
+    ['EUR 5', 500],
+    ['12,50 \u20ac', 1250],
+    ['R$ 12,50', 1250],
+    ['CHF 12.50', 1250],
+    ['12 USD', 1200],
+    ['USD1,200', 120000],
+    ['120kr', 12000],
+    ['US$5', 500],
+    ['12 z\u0142', 1200],
+    ['Rs. 500', 50000],
+    ['Fr. 12.50', 1250],
+  ])('reads %j, its currency in letters or signs, as %i cents', (text, cents) => {
+    expect(parseMoney(text)).toBe(cents)
+  })
+
+  it('refuses any letter in a rate, which takes no currency', () => {
+    for (const text of ['5e1', '1O0', '12 USD', 'APR 5']) expect(readRate(text)).toBeNull()
+    expect(readRate('5%')).toBe(5)
   })
 
   it('names periods plainly', () => {
@@ -59,5 +109,68 @@ describe('format', () => {
     expect(relativeDay('2026-11-20', today)).toBe('Tomorrow')
     expect(relativeDay('2026-11-13', today)).toBe('Fri, Nov 13')
     expect(relativeDay('2025-12-31', today)).toBe('Wed, Dec 31, 2025')
+  })
+})
+
+// Reading a typed interest rate, shared by a debt's terms on Plan, Debts and
+// the APR prompt on a card's page.
+describe('parseRate', () => {
+  it('reads a dot decimal, with or without a percent sign, to the hundredth', () => {
+    expect(parseRate('24.99')).toBe(24.99)
+    expect(parseRate(' 19.5% ')).toBe(19.5)
+    expect(parseRate('0')).toBe(0)
+    expect(parseRate('7.125')).toBe(7.13)
+    expect(parseRate('19.999%')).toBe(20)
+  })
+
+  it('reads a comma decimal as many locales type it, never as more digits', () => {
+    expect(parseRate('7,5')).toBe(7.5)
+    expect(parseRate('9,9')).toBe(9.9)
+    expect(parseRate('24,99')).toBe(24.99)
+    expect(parseRate('24,99 %')).toBe(24.99)
+  })
+
+  it(`refuses a rate over ${MAX_RATE_PERCENT}%, which no card or loan charges`, () => {
+    expect(parseRate('100')).toBe(100)
+    expect(parseRate('100.01')).toBeNull()
+    expect(parseRate('150')).toBeNull()
+    // A comma before three digits groups thousands, so this is 1,000, not 1.
+    expect(parseRate('1,000')).toBeNull()
+  })
+
+  it('is null when blank or not a number', () => {
+    expect(parseRate('')).toBeNull()
+    expect(parseRate('   ')).toBeNull()
+    expect(parseRate('APR')).toBeNull()
+    expect(parseRate('%')).toBeNull()
+    expect(parseRate('.')).toBeNull()
+    expect(parseRate('1.2.3')).toBeNull()
+  })
+
+  it('refuses a negative rate rather than turning it positive', () => {
+    expect(parseRate('-5')).toBeNull()
+    // The true minus sign too, as a phone keyboard may type it.
+    expect(parseRate('\u22125')).toBeNull()
+  })
+})
+
+describe('readRate', () => {
+  it('reads a rate as parseRate does, but over 100% too, for a form that explains it', () => {
+    expect(readRate('24,99')).toBe(24.99)
+    expect(readRate('150')).toBe(150)
+    expect(readRate('-5')).toBeNull()
+    expect(readRate('APR')).toBeNull()
+  })
+})
+
+describe('isUnreadableRate', () => {
+  it('is true for a rate typed that cannot be read', () => {
+    for (const text of ['-5', '\u22125', 'APR', 'six']) expect(isUnreadableRate(text)).toBe(true)
+  })
+
+  it('is false for a blank field, which clears the rate on purpose, and any readable rate', () => {
+    for (const text of ['', '  ', '6.5', '19.5%', '0', '7,5', '150']) {
+      expect(isUnreadableRate(text)).toBe(false)
+    }
   })
 })
