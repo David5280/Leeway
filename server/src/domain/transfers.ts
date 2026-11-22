@@ -130,8 +130,10 @@ export interface PersonPayment {
 const NAMED_PAYMENT = /\b(?:to|from)\s+(.+)$/i
 
 // Where the name ends when a bank adds more after it: a date ("ZELLE TO JANE
-// DOE ON 11/15") or a reference ("... REF # PP0ABC", "... CONF 12AB").
-const NAME_END = /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf)\b)/i
+// DOE ON 11/15"), a reference ("... REF # PP0ABC", "... CONF 12AB", "... #4471")
+// or the sender's memo ("... FOR RENT", '... "dinner"', "...; dinner").
+const NAME_END =
+  /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf|for)\b)|\s*[;#"\u201C\u201D]/i
 
 /** Drops trailing reference codes (any word with a digit in it) from a name. */
 function withoutReference(text: string): string {
@@ -144,6 +146,19 @@ function withoutReference(text: string): string {
 function tidyName(name: string): string {
   if (name !== name.toUpperCase()) return name
   return name.toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())
+}
+
+/**
+ * Whether a transaction is one person paying another, as far as the
+ * transaction alone can tell: through a payment app, naming the person or
+ * filed by Plaid as an app payment. Through any app but PayPal, a transfer
+ * code also does; PayPal pays shops by transfer too ("PAYPAL INST XFER" to eBay).
+ */
+export function isPaymentBetweenPeople(tx: Movement): boolean {
+  const person = personPayment(tx)
+  if (!person) return false
+  if (person.counterparty !== null || isAppTransfer(tx)) return true
+  return person.app !== 'PayPal' && codeOf(tx).startsWith('TRANSFER')
 }
 
 /**

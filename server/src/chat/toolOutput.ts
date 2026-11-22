@@ -4,16 +4,17 @@
 // Anthropic, and the people they pay never chose that. Pure.
 //
 // People are kept out two ways. Structurally first: a payment between people
-// is shown as "To someone" or "From someone", and a merchant total that is a
-// person reads "Payment app", whatever names the bank used. Then every name
-// that could be a person's is replaced wherever else it is written, as in a
-// summary's sentence or the owner's own note. A person's given name or
-// surname alone ("Dinner with Jane") is replaced only in a note, where the
-// owner writes about people, and only as written with a capital.
+// shows no person at all. It reads "To someone" or "From someone", its note
+// is dropped, and a merchant total of such payments reads "Payment app",
+// whatever names the bank used. Then the names read from those payments are
+// replaced wherever else they are written, as each string is walked, so no
+// escaping in the JSON can hide one: full names in every field, and single
+// words of names only alone in the owner's notes (domain/chat/personNames.ts).
 
 import { agentJson } from '../mcp/agentOutput.js'
 import { withoutBankText } from '../mcp/withoutBankText.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
+import { foundIn, fullNamePattern, loneNamePattern, replacedIn } from './namePatterns.js'
 
 /** Stands in for a person's name wherever one would show. */
 export const SOMEONE = 'someone'
@@ -21,46 +22,13 @@ export const SOMEONE = 'someone'
 /** Stands in for a person in a list of merchants. */
 export const PAYMENT_APP = 'Payment app'
 
-/** Text that matches itself literally in a RegExp. */
-function escaped(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-// Not inside a longer word, accented letters and digits included.
-const WORD_START = '(?<![\\p{L}\\p{N}])'
-const WORD_END = '(?![\\p{L}\\p{N}])'
-
-/**
- * The name as a whole word, in any case, with its words apart however they
- * are joined: "Jane Doe" also matches "JANE_DOE", "jane-doe" and "Jane.Doe".
- */
-function wholeName(name: string): RegExp {
-  const words = name.trim().split(/\s+/).map(escaped).join('[\\s._-]+')
-  return new RegExp(`${WORD_START}${words}${WORD_END}`, 'giu')
-}
-
-/** One word exactly as written, capital included, as a whole word. */
-function loneWord(word: string): RegExp {
-  return new RegExp(`${WORD_START}${escaped(word)}${WORD_END}`, 'gu')
-}
-
-/** What Chat replaces in a tool's result: full names anywhere, lone names in notes. */
+/** What Chat hides in a tool's result. */
 interface Hidden {
   people: PaymentPeople
-  /** Each full name, longest first, for testing a whole field (no global state). */
-  names: RegExp[]
-  /** Each full name, longest first, for replacing every match. */
+  /** Full names, longest first, so "Jane Doe" goes before a "Jane" alone. */
   everywhere: RegExp[]
-  /** Each given name or surname, for replacing where written alone in a note. */
-  alone: RegExp[]
-}
-
-/** A note with every person in it replaced: full names first, so "Jane Doe" goes before "Jane". */
-function hiddenInNote(note: string, hidden: Hidden): string {
-  return [...hidden.everywhere, ...hidden.alone].reduce(
-    (text, name) => text.replace(name, SOMEONE),
-    note,
-  )
+  /** Full names, then single words of names, for the owner's notes. */
+  inNotes: RegExp[]
 }
 
 type Row = Record<string, unknown>
@@ -75,52 +43,56 @@ function isPersonPaymentRow(row: Row, people: PaymentPeople): boolean {
   )
 }
 
+/** A merchant total (top_merchants and the like) that is payments to a person. */
+function isPersonTotal(row: Row, hidden: Hidden): boolean {
+  if (typeof row.merchant !== 'string') return false
+  return row.betweenPeople === true || foundIn(row.merchant, hidden.everywhere)
+}
+
 /** One field of an object, with any person in it taken out. */
 function cleanField(key: string, value: unknown, hidden: Hidden): unknown {
   if (key === 'counterparty') return null
-  if (typeof value === 'string') {
-    // A merchant total (top_merchants and the like) that is really a person.
-    if (key === 'merchant' && hidden.names.some((name) => name.test(value))) return PAYMENT_APP
-    if (key === 'note') return hiddenInNote(value, hidden)
-  }
+  if (key === 'note' && typeof value === 'string') return replacedIn(value, hidden.inNotes, SOMEONE)
   return withoutPeople(value, hidden)
 }
 
-/** The result with every payment between people shown without the person. */
-function withoutPeople(value: unknown, hidden: Hidden): unknown {
-  if (Array.isArray(value)) return value.map((item) => withoutPeople(item, hidden))
-  if (value === null || typeof value !== 'object' || value instanceof Date) return value
-  const row = value as Row
+/** An object with every key and field cleaned, then shown without its person if it pays one. */
+function cleanRow(row: Row, hidden: Hidden): Row {
   const cleaned = Object.fromEntries(
-    Object.entries(row).map(([key, field]) => [key, cleanField(key, field, hidden)]),
+    Object.entries(row).map(([key, field]) => [
+      replacedIn(key, hidden.everywhere, SOMEONE),
+      cleanField(key, field, hidden),
+    ]),
   )
+  if (isPersonTotal(row, hidden)) return { ...cleaned, merchant: PAYMENT_APP }
   if (!isPersonPaymentRow(row, hidden.people)) return cleaned
   // The direction comes from the amount, as everywhere: positive is money out.
-  return {
-    ...cleaned,
-    displayName: (row.amountCents as number) > 0 ? 'To someone' : 'From someone',
-  }
+  const displayName = (row.amountCents as number) > 0 ? 'To someone' : 'From someone'
+  return 'note' in row ? { ...cleaned, displayName, note: null } : { ...cleaned, displayName }
+}
+
+/** The result with no person from a payment between people left in it. */
+function withoutPeople(value: unknown, hidden: Hidden): unknown {
+  if (typeof value === 'string') return replacedIn(value, hidden.everywhere, SOMEONE)
+  if (Array.isArray(value)) return value.map((item) => withoutPeople(item, hidden))
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value
+  return cleanRow(value as Row, hidden)
 }
 
 /**
  * A tool's result as compact JSON for the chat model (every byte is paid
- * for, on every step). Payments between people lose their person, notes lose
- * a person's given name or surname alone, then every name in `people` is
- * replaced wherever it appears, longest first so "Jane Doe" goes before a
- * "Jane" on its own.
+ * for, on every step), with every payment between people shown without its
+ * person and every name in `people` replaced as each string is walked.
  */
 export function chatToolText(result: unknown, people: PaymentPeople): string {
-  const longestFirst = people.names
+  const everywhere = people.names
     .filter((name) => name.trim())
     .sort((a, b) => b.length - a.length)
-  const everywhere = longestFirst.map(wholeName)
+    .map(fullNamePattern)
   const hidden: Hidden = {
     people,
-    names: everywhere.map((name) => new RegExp(name.source, 'iu')),
     everywhere,
-    alone: people.loneNames.map(loneWord),
+    inNotes: [...everywhere, ...people.loneNames.map(loneNamePattern)],
   }
-  let text = agentJson(withoutBankText(withoutPeople(result, hidden)), { compact: true })
-  for (const name of everywhere) text = text.replace(name, SOMEONE)
-  return text
+  return agentJson(withoutBankText(withoutPeople(result, hidden)), { compact: true })
 }

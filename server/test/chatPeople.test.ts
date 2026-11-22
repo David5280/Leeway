@@ -1,6 +1,7 @@
 // What Chat sends a model about payments between people, read from real
-// rows: a person is hidden everywhere, alone in a note too, and a shop keeps
-// its name, even one paid through PayPal. Every name here is made up.
+// rows through the tools: a payment row shows no person, the person's names
+// are hidden everywhere else as the rules say, and shops, banks and the
+// owner's own labels keep their names. Every name here is made up.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { runChatTool } from '../src/chat/tools.js'
@@ -15,6 +16,7 @@ import {
 const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
 const FROM_APPS = 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS'
 const MARKETPLACE = 'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES'
+const GROCERIES = 'FOOD_AND_DRINK_GROCERIES'
 
 let ctx: Awaited<ReturnType<typeof createTestContext>>
 let accountId: string
@@ -28,7 +30,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetData(ctx.db)
   ctx.setNow(new Date('2026-11-17T18:00:00Z'))
-  ;({ accountId } = await insertBankAccount(ctx.db, { name: 'Checking' }))
+  ;({ accountId } = await insertBankAccount(ctx.db, { name: 'Chase Total Checking' }))
 })
 
 /** Adds a transaction this month, with an optional note from the owner. */
@@ -58,12 +60,12 @@ async function sent(tool: string): Promise<string> {
   return result.content
 }
 
-const merchantsOf = (content: string) =>
-  (JSON.parse(content) as { merchant: string }[]).map((total) => total.merchant)
-const notesOf = (content: string) =>
-  (JSON.parse(content) as { transactions: { note: string | null }[] }).transactions.flatMap((tx) =>
-    tx.note ? [tx.note] : [],
-  )
+type SentTransaction = { displayName: string; note: string | null }
+const transactionsOf = async () =>
+  (JSON.parse(await sent('list_transactions')) as { transactions: SentTransaction[] }).transactions
+const notesOf = async () => (await transactionsOf()).flatMap((tx) => (tx.note ? [tx.note] : []))
+const merchantsOf = async () =>
+  (JSON.parse(await sent('top_merchants')) as { merchant: string }[]).map((total) => total.merchant)
 
 describe('a shop paid through PayPal', () => {
   it('keeps eBay eBay everywhere when PayPal paid it by transfer', async () => {
@@ -74,9 +76,7 @@ describe('a shop paid through PayPal', () => {
     const transactions = await sent('list_transactions')
     expect(transactions).not.toMatch(/someone/i)
     expect(transactions.match(/ebay/gi)!.length).toBeGreaterThanOrEqual(2)
-    expect(merchantsOf(await sent('top_merchants'))).toContainEqual(
-      expect.stringMatching(/^ebay$/i),
-    )
+    expect(await merchantsOf()).toEqual([expect.stringMatching(/^ebay$/i)])
   })
 
   it('keeps a shop its name even when Plaid files a payment to it as from an app', async () => {
@@ -89,22 +89,24 @@ describe('a shop paid through PayPal', () => {
       loneNames: [],
       transactionIds: new Set([app]),
     })
-    expect(merchantsOf(await sent('top_merchants'))).toContainEqual(
-      expect.stringMatching(/^ebay$/i),
-    )
+    expect(await merchantsOf()).toContainEqual(expect.stringMatching(/^ebay$/i))
   })
 
   it('hides a person PayPal paid by bare transfer, whose merchant is no shop', async () => {
     await pay('PAYPAL INST XFER', 6_000, {
       merchantName: 'Quillon Marsh',
       detailed: ACCOUNT_TRANSFER,
-      note: 'owed Quillon Marsh, Quillon says thanks',
+      note: 'owed Quillon Marsh',
+    })
+    await pay('KING SOOPERS', 3_000, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'QUILLON came too',
     })
 
     const transactions = await sent('list_transactions')
     expect(transactions).not.toMatch(/quillon|marsh/i)
-    expect(notesOf(transactions)).toEqual(['owed someone, someone says thanks'])
-    expect(transactions).toContain('"To someone"')
+    expect(await notesOf()).toEqual(['someone came too'])
   })
 })
 
@@ -127,7 +129,7 @@ describe('a person paid through an app', () => {
     expect(transactions.match(/"To someone"/g)).toHaveLength(4)
     expect(transactions).toMatch(/spotify/i)
     expect(transactions).toMatch(/payroll/i)
-    const merchants = merchantsOf(await sent('top_merchants'))
+    const merchants = await merchantsOf()
     expect(merchants).toContain('Payment app')
     expect(merchants).toContainEqual(expect.stringMatching(/spotify/i))
   })
@@ -141,64 +143,171 @@ describe('a person paid through an app', () => {
       merchantName: 'Maria Silva',
       detailed: 'INCOME_OTHER_INCOME',
     })
+    await pay('KING SOOPERS', 3_000, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'Lunch with Maria Silva',
+    })
 
-    const transactions = await sent('list_transactions')
-    expect(transactions).not.toMatch(/maria|silva/i)
-    expect(notesOf(transactions)).toEqual(['Help from someone'])
+    expect(await sent('list_transactions')).not.toMatch(/maria|silva/i)
+    // The payment's own note is dropped; a note elsewhere loses the name.
+    expect(await notesOf()).toEqual(['Lunch with someone'])
   })
 
   it('stays hidden when rent paid by check is filed under their name', async () => {
-    await pay('Zelle payment to JOHN SMITH JPM1', 150_000, {
-      detailed: ACCOUNT_TRANSFER,
-      note: 'Rent to John Smith',
-    })
+    await pay('Zelle payment to JOHN SMITH JPM1', 150_000, { detailed: ACCOUNT_TRANSFER })
     await pay('CHECK 1043', 150_000, {
       merchantName: 'John Smith',
       detailed: 'RENT_AND_UTILITIES_RENT',
+      note: 'Rent to John Smith',
     })
 
-    const transactions = await sent('list_transactions')
-    expect(transactions).not.toMatch(/john|smith/i)
-    expect(notesOf(transactions)).toEqual(['Rent to someone'])
-    expect(merchantsOf(await sent('top_merchants'))).not.toContainEqual(
-      expect.stringMatching(/john|smith/i),
-    )
+    expect(await sent('list_transactions')).not.toMatch(/john|smith/i)
+    expect(await notesOf()).toEqual(['Rent to someone'])
+    expect(await merchantsOf()).not.toContainEqual(expect.stringMatching(/john|smith/i))
   })
 
   it('stays hidden when a Venmo payment is filed under their name as a service', async () => {
     await pay('VENMO 1234567', 4_000, {
       merchantName: 'Tobias Fennwick',
       detailed: 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES',
+      note: 'Tobias Fennwick and Tobias',
     })
-    await pay('Zelle payment to TOBIAS FENNWICK', 2_000, { note: 'Tobias Fennwick and Tobias' })
+    await pay('Zelle payment to TOBIAS FENNWICK', 2_000)
 
-    const transactions = await sent('list_transactions')
-    expect(transactions).not.toMatch(/tobias|fennwick/i)
-    expect(notesOf(transactions)).toEqual(['someone and someone'])
-    expect(merchantsOf(await sent('top_merchants'))).not.toContainEqual(
-      expect.stringMatching(/tobias|fennwick/i),
-    )
+    expect(await sent('list_transactions')).not.toMatch(/tobias|fennwick/i)
+    expect(await notesOf()).toEqual(['someone and someone'])
+    expect(await merchantsOf()).not.toContainEqual(expect.stringMatching(/tobias|fennwick/i))
+  })
+
+  it('is hidden when named only in the bank line, or before a memo', async () => {
+    await pay('Zelle Transfer Conf# T0ABCD123; Jane Doe', 2_000, { detailed: ACCOUNT_TRANSFER })
+    await pay('Zelle payment to ILSABET QUORN for "concert tickets"', 4_000)
+    await pay('ZELLE TO VANTERPOOL SKYE FOR DINNER', 3_000)
+    await pay('KING SOOPERS', 3_000, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'Snacks for Jane Doe, Ilsabet Quorn and SKYE',
+    })
+
+    const transactions = await transactionsOf()
+    expect(JSON.stringify(transactions)).not.toMatch(/jane|doe|ilsabet|quorn|vanterpool|skye/i)
+    expect(transactions.filter((tx) => tx.displayName === 'To someone')).toHaveLength(3)
+    expect(await notesOf()).toEqual(['Snacks for someone, someone and someone'])
   })
 })
 
-describe("a person's name alone", () => {
-  it('is hidden in a note by given name or surname, however the full name is written', async () => {
-    await pay('Zelle payment to JANE DOE 4417', 5_000, { note: 'Dinner with Jane Doe and Jane' })
-    await pay('Zelle payment to WENDY PARK', 2_000, { note: "JANE DOE's; jane-doe; Doe, Jane" })
+describe('a name of one word', () => {
+  it('never blanks out a bill, a category, an account or a merchant that shares it', async () => {
+    for (const person of ['BILL', 'RENT', 'WILL', 'CHASE'])
+      await pay(`Zelle payment to ${person}`, 1_000)
+    await pay('CHASE CREDIT CRD AUTOPAY', 30_000, { detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' })
+    await ctx.db.query(
+      `INSERT INTO categories (name, color, kind, position) VALUES ('Rent', '#000000', 'expense', 90)`,
+    )
+    await ctx.db.query(
+      `INSERT INTO bills (name, amount_cents, cadence, anchor_date, match_pattern)
+       VALUES ('Water bill', 4000, 'month', '2026-11-20', 'denver water')`,
+    )
+
+    const transactions = await sent('list_transactions')
+    expect(transactions.match(/"To someone"/g)).toHaveLength(4)
+    expect(transactions).toMatch(/"Chase[^"]*Autopay"/i)
+    expect(await sent('list_categories')).toContain('"Rent"')
+    expect(await sent('list_bills')).toContain('"Water bill"')
+    expect(await sent('summarize_accounts')).toContain('Chase Total Checking')
+    const merchants = await merchantsOf()
+    expect(merchants.filter((merchant) => merchant === 'Payment app')).toHaveLength(4)
+    expect(merchants).toContainEqual(expect.stringMatching(/^chase/i))
+  })
+})
+
+describe('the owner’s own labels', () => {
+  it('lose a full name, but keep a single word of it', async () => {
+    await pay('Zelle payment to JANE DOE', 5_000)
+    const { rows } = await ctx.db.query<{ id: string }>(
+      `INSERT INTO categories (name, color, kind, position) VALUES
+         ('Gifts for Jane Doe', '#000000', 'expense', 90), ('Jane allowance', '#000000', 'expense', 91)
+       RETURNING id`,
+    )
+    await ctx.db.query(
+      `INSERT INTO goals (name, target_cents) VALUES ('Trip with JANE DOE', 90000), ('Jane''s party', 5000)`,
+    )
+    await ctx.db.query(
+      `INSERT INTO rules (field, match_type, pattern, category_id, position)
+       VALUES ('description', 'contains', 'jane doe', $1, 0), ('description', 'contains', 'Jane', $1, 1)`,
+      [rows[0]!.id],
+    )
+
+    const categories = await sent('list_categories')
+    expect(categories).toContain('"Gifts for someone"')
+    expect(categories).toContain('"Jane allowance"')
+    const goals = await sent('list_goals')
+    expect(goals).toContain('"Trip with someone"')
+    expect(goals).toContain(`"Jane's party"`)
+    const rules = await sent('list_rules')
+    expect(rules).not.toMatch(/jane doe/i)
+    expect(rules).toContain('"Jane"')
+  })
+})
+
+describe('a sole trader also paid through an app', () => {
+  it('keeps the shop its purchases, never merged with the payment to the person', async () => {
+    const payment = await pay('VENMO PAYMENT', 2_500, {
+      merchantName: 'Rosalind Fairweather',
+      detailed: ACCOUNT_TRANSFER,
+      note: 'Rosalind for the cake',
+    })
+    await pay('SQ *ROSALIND FAIRWEATHER', 4_000, {
+      merchantName: 'Rosalind Fairweather',
+      detailed: 'FOOD_AND_DRINK_BAKERIES',
+    })
+
+    const transactions = await transactionsOf()
+    expect(transactions).toContainEqual(
+      expect.objectContaining({ displayName: 'To someone', note: null }),
+    )
+    expect(transactions).toContainEqual(
+      expect.objectContaining({ displayName: 'Rosalind Fairweather' }),
+    )
+    expect((await paymentPeople(ctx.db)).transactionIds).toEqual(new Set([payment]))
+    const totals = JSON.parse(await sent('top_merchants')) as {
+      merchant: string
+      spentCents: number
+    }[]
+    expect(totals).toEqual([
+      expect.objectContaining({ merchant: 'Rosalind Fairweather', spentCents: 4_000 }),
+      expect.objectContaining({ merchant: 'Payment app', spentCents: 2_500, betweenPeople: true }),
+    ])
+  })
+})
+
+describe("a person's name alone in a note", () => {
+  it('is hidden by any word of the name, with a capital or in capitals, accents aside', async () => {
+    await pay('Zelle payment to JANE DOE 4417', 5_000)
+    await pay('Zelle payment to José María Núñez', 2_000)
+    await pay('Zelle payment to WENDY PARK', 2_000)
+    const shop = { merchantName: 'King Soopers', detailed: GROCERIES }
+    await pay('KING SOOPERS', 100, { ...shop, note: "JANE DOE's; jane-doe; Doe, Jane; DOE; Q" })
+    await pay('KING SOOPERS', 200, {
+      ...shop,
+      note: 'Dinner with NUNEZ JOSE and María; jane stays',
+    })
     await pay("WENDY'S #812", 1_100, {
       merchantName: "Wendy's",
       detailed: 'FOOD_AND_DRINK_FAST_FOOD',
       note: 'Paid Wendy back',
     })
 
-    const notes = notesOf(await sent('list_transactions'))
-    expect(notes).toContain('Dinner with someone and someone')
-    expect(notes).toContain("someone's; someone; someone, someone")
-    // "Wendy's" has more attached, so it is not how the person is called.
-    expect(notes).toContain('Paid someone back')
+    expect((await notesOf()).sort()).toEqual([
+      'Dinner with someone someone and someone; jane stays',
+      // "Wendy's" has more attached, so it is not how the person is called.
+      'Paid someone back',
+      "someone's; someone; someone, someone; someone; Q",
+    ])
   })
 
-  it('never hides an everyday word, a month or a bank, in a note or anywhere else', async () => {
+  it('never hides an everyday word, a month or a bank', async () => {
     for (const person of ['BILL JONES', 'WILL TURNER', 'MAY CHEN', 'CHASE MILLER']) {
       await pay(`Zelle payment to ${person}`, 1_000)
     }
@@ -209,38 +318,38 @@ describe("a person's name alone", () => {
     })
     await pay('CHASE CREDIT CRD AUTOPAY', 30_000, {
       detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-      note: 'Chase card, Bill it',
+      note: 'Chase card, Bill it, JONES too',
     })
 
     const transactions = await sent('list_transactions')
-    expect(notesOf(transactions).sort()).toEqual([
-      'Chase card, Bill it',
+    expect((await notesOf()).sort()).toEqual([
+      'Chase card, Bill it, someone too',
       'Electric bill, will pay May 3',
     ])
-    expect(transactions).toMatch(/"Chase[^"]*"/)
     expect(transactions).not.toMatch(/jones|turner|chen|miller/i)
-    const merchants = merchantsOf(await sent('top_merchants'))
-    // One total for each person paid, and the card payment and the bill keep their names.
+    const merchants = await merchantsOf()
     expect(merchants.filter((merchant) => merchant === 'Payment app')).toHaveLength(4)
     expect(merchants).toContainEqual(expect.stringMatching(/^chase/i))
     expect(merchants).toContainEqual(expect.stringMatching(/^xcel energy$/i))
   })
 
   it('stays when a shop is called by it', async () => {
-    await pay('Zelle payment to MARIGOLD PETTIWHISTLE', 2_000, {
-      note: 'Marigold Pettiwhistle lunch, then Pettiwhistle left',
-    })
+    await pay('Zelle payment to MARIGOLD PETTIWHISTLE', 2_000)
     await pay('MARIGOLD BAKERY', 1_800, {
       merchantName: 'Marigold Bakery',
       detailed: 'FOOD_AND_DRINK_BAKERIES',
-      note: 'Cake from Marigold',
+      note: 'Cake from Marigold for Pettiwhistle',
+    })
+    // A check card purchase is a real purchase, so it vouches for its shop.
+    await pay('VENMO PAYMENT', 700, { merchantName: 'Quorn Florist', detailed: ACCOUNT_TRANSFER })
+    await pay('CHECK CARD PURCHASE QUORN FLORIST', 900, {
+      merchantName: 'Quorn Florist',
+      detailed: 'GENERAL_MERCHANDISE_OTHER',
     })
 
     const transactions = await sent('list_transactions')
-    expect(notesOf(transactions).sort()).toEqual([
-      'Cake from Marigold',
-      'someone lunch, then someone left',
-    ])
+    expect(await notesOf()).toEqual(['Cake from Marigold for someone'])
     expect(transactions).toContain('Marigold Bakery')
+    expect(transactions).toContain('Quorn Florist')
   })
 })

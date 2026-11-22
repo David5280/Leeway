@@ -20,7 +20,6 @@ import { CHAT_TOOLS, chatToolList, toolTitle } from '../src/chat/tools.js'
 import { withoutAbsentTools } from '../src/chat/toolWords.js'
 import { estimateChatTokens, FRAMING_TOKENS, type AiChatAsk } from '../src/domain/ai/gateway.js'
 import { NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
-import { namesSomeone } from '../src/domain/chat/movementWords.js'
 import { MESSAGE_MAX_LENGTH, type ChatMessage } from '../src/domain/chat/store.js'
 
 const message = (role: ChatMessage['role'], text: string, id = '1'): ChatMessage => ({
@@ -274,13 +273,72 @@ describe("a tool's output for Chat", () => {
   })
 })
 
-describe('the names that could be a person', () => {
-  it('are names with a word beyond how money moved', () => {
-    expect(namesSomeone('Ilsabet Quorn')).toBe(true)
-    expect(namesSomeone('Zelle to Ilsabet Quorn')).toBe(true)
-    for (const name of ['Venmo Payment', 'Online transfer', 'Zelle', 'Cash App', 'X', '']) {
-      expect(namesSomeone(name)).toBe(false)
+describe('a person in what a tool returns', () => {
+  const people = (
+    names: string[],
+    loneNames: string[] = [],
+    ids: string[] = [],
+  ): PaymentPeople => ({
+    names,
+    loneNames,
+    transactionIds: new Set(ids),
+  })
+
+  it('shows a payment between people with no person and no note', () => {
+    const row = { id: 'p', displayName: 'To Bill', amountCents: 900, note: 'Bill for pizza' }
+    const result = [row, { id: 'q', displayName: 'From Bill', amountCents: -900 }]
+    expect(JSON.parse(chatToolText(result, people([], [], ['p', 'q'])))).toEqual([
+      { id: 'p', displayName: 'To someone', amountCents: 900, note: null },
+      { id: 'q', displayName: 'From someone', amountCents: -900 },
+    ])
+  })
+
+  it('finds a name behind a newline, tab or quote, in keys too', () => {
+    const result = {
+      summary: 'Paid\nJane Doe,\tthen "Jane\nDoe"',
+      byPerson: { 'Jane Doe': 100 },
     }
+    expect(JSON.parse(chatToolText(result, people(['Jane Doe'])))).toEqual({
+      summary: 'Paid\nsomeone,\tthen "someone"',
+      byPerson: { someone: 100 },
+    })
+  })
+
+  it('matches names accents aside, and a word alone with a capital or in capitals', () => {
+    const result = {
+      note: 'NUNEZ JOSE, José, MARÍA, maría and Josefina',
+      summary: 'Jose Nunez and Jose',
+    }
+    const text = chatToolText(
+      result,
+      people(['José María Núñez', 'Jose Nunez'], ['José', 'María', 'Núñez']),
+    )
+    expect(JSON.parse(text)).toEqual({
+      note: 'someone someone, someone, someone, maría and Josefina',
+      summary: 'someone and Jose',
+    })
+  })
+
+  it("keeps a single word out of the owner's labels, while a full name goes from them too", () => {
+    const result = {
+      categories: [{ name: 'Gifts for Jane Doe' }, { name: 'Jane allowance' }],
+      bills: [{ name: 'Water bill', matchPattern: 'JANE DOE' }],
+    }
+    expect(JSON.parse(chatToolText(result, people(['Jane Doe'], ['Jane', 'Bill'])))).toEqual({
+      categories: [{ name: 'Gifts for someone' }, { name: 'Jane allowance' }],
+      bills: [{ name: 'Water bill', matchPattern: 'someone' }],
+    })
+  })
+
+  it('shows a merchant total of payments between people as a payment app', () => {
+    const result = [
+      { merchant: 'To Bill', spentCents: 900, count: 1, betweenPeople: true },
+      { merchant: 'Bill Hardware', spentCents: 500, count: 1 },
+    ]
+    expect(JSON.parse(chatToolText(result, people([], ['Bill'])))).toEqual([
+      { merchant: PAYMENT_APP, spentCents: 900, count: 1, betweenPeople: true },
+      { merchant: 'Bill Hardware', spentCents: 500, count: 1 },
+    ])
   })
 })
 

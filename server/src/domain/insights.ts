@@ -21,7 +21,9 @@ import { spendingSql } from './counted.js'
 import { GENERIC_NAME } from './merchantName.js'
 import { withShownNames } from './ruleText.js'
 import { periodConfig, type Settings } from './settings.js'
-import { merchantDisplayName } from './transactionName.js'
+import type { AccountMasks } from './safeName.js'
+import { merchantDisplayName, transactionDisplayName } from './transactionName.js'
+import { isPaymentBetweenPeople, personPayment, type Movement } from './transfers.js'
 
 export interface PeriodTrend {
   offset: number
@@ -185,6 +187,31 @@ export interface MerchantTotal {
   merchant: string
   spentCents: number
   count: number
+  /** Set on payments to a person through an app, kept apart from any shop of the same name. */
+  betweenPeople?: true
+}
+
+type MerchantRow = Pick<Movement, 'name' | 'merchantName'> &
+  Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'> & {
+    spentCents: number
+    count: number
+  }
+
+/**
+ * Which total a merchant row adds to. Payments between people are named as
+ * the activity list names them ("To Jane Doe") and kept apart, so paying a
+ * person never adds to a shop that goes by their name (a sole trader, say).
+ */
+function merchantTotalOf(row: MerchantRow, masks: AccountMasks): MerchantTotal & { key: string } {
+  const empty = { spentCents: 0, count: 0 }
+  const movement = { ...row, amountCents: row.spentCents }
+  if (!isPaymentBetweenPeople(movement)) {
+    const merchant = merchantDisplayName(row, { masks })
+    return { key: merchant, merchant, ...empty }
+  }
+  const person = personPayment(movement)
+  const merchant = transactionDisplayName({ ...row, person }, null, { masks })
+  return { key: `between people: ${merchant}`, merchant, ...empty, betweenPeople: true }
 }
 
 /**
@@ -193,7 +220,7 @@ export interface MerchantTotal {
  * transactionName.ts), so "STARBUCKS #123" and "STARBUCKS #456" add up as one
  * Starbucks. Lines with nothing readable in them are left out: under their
  * shared "Bank transaction" they would add up unrelated spending as if it
- * were one merchant.
+ * were one merchant. Payments to people are kept apart (merchantTotalOf).
  */
 export async function topMerchants(
   db: Db,
@@ -203,8 +230,10 @@ export async function topMerchants(
   limit: number,
 ): Promise<MerchantTotal[]> {
   const { period } = currentPeriod(settings, now, offset)
-  const { rows } = await db.query<{ name: string; merchantName: string | null } & MerchantTotal>(
+  const { rows } = await db.query<MerchantRow>(
     `SELECT t.name, t.merchant_name AS "merchantName",
+            t.provider_category_primary AS "providerCategoryPrimary",
+            t.provider_category_detailed AS "providerCategoryDetailed",
             sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
@@ -212,20 +241,20 @@ export async function topMerchants(
      WHERE t.date >= $1 AND t.date < $2
        AND NOT t.excluded AND NOT a.hidden AND ($3 OR NOT t.pending)
        AND ${spendingSql()}
-     GROUP BY 1, 2`,
+     GROUP BY 1, 2, 3, 4`,
     [period.start, period.end, settings.includePending],
   )
   // Merchant names go to assistants and the AI writer, so they show no account number.
   const masks = await accountMasks(db)
   const byMerchant = new Map<string, MerchantTotal>()
   for (const row of rows) {
-    const merchant = merchantDisplayName(row, { masks })
-    const total = byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 }
+    const { key, ...found } = merchantTotalOf(row, masks)
+    if (found.merchant === GENERIC_NAME) continue
+    const total = byMerchant.get(key) ?? found
     total.spentCents += row.spentCents
     total.count += row.count
-    byMerchant.set(merchant, total)
+    byMerchant.set(key, total)
   }
-  byMerchant.delete(GENERIC_NAME)
   return [...byMerchant.values()]
     .filter((total) => total.spentCents > 0)
     .sort((a, b) => b.spentCents - a.spentCents || a.merchant.localeCompare(b.merchant))

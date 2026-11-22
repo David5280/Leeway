@@ -2,24 +2,22 @@
 // the way the app reads them (transfers.ts), so Chat can keep them out of
 // everything it sends a model (chat/toolOutput.ts).
 //
-// A person can show up in three places: the name the bank wrote after "to"
-// or "from", the merchant name Plaid gave (Plaid often puts the person
-// there, under a bank line like "Online transfer"), and the readable name
-// made from the bank's line. All three are collected, along with which
-// transactions are such payments, so their names can be replaced outright.
-// Which names are hidden, and why a shop's never is, is in personNames.ts.
+// The payment rows themselves are shown without their person. Their names
+// are collected so they can be hidden everywhere else too, as a merchant, in
+// a summary or in the owner's notes. Which names are read, and why a shop's
+// never is, is in personNames.ts.
 
 import type pg from 'pg'
 import { tidyMerchantName } from '../merchantName.js'
 import type { Movement } from '../transfers.js'
 import { knownShops } from './knownShops.js'
-import { isPersonPayment, namesIn, namesToHide, type PaymentNames } from './personNames.js'
+import { isPersonPayment, namesIn, namesToHide } from './personNames.js'
 
 /** Who to keep out of Chat, and where they appear. */
 export interface PaymentPeople {
-  /** Every name that could be a person's, to replace wherever it is written. */
+  /** Full names to replace wherever they are written. */
   names: string[]
-  /** Given names and surnames to replace where written alone, capitalized, in a note. */
+  /** Single words of names, to replace where written alone, with a capital, in a note. */
   loneNames: string[]
   /** The ids of transactions that are payments between people. */
   transactionIds: ReadonlySet<string>
@@ -53,7 +51,8 @@ async function possiblePayments(db: pg.Pool): Promise<(Movement & { id: string }
  * The merchants of the owner's real purchases: money out, with a merchant
  * Plaid named and a code it gave. Anything that could be paying a person is
  * left out, so it can never vouch for a shop: transfers, income, loan and
- * rent payments, checks, and anything through a payment app.
+ * rent payments, numbered checks ("CHECK 1043"; a "CHECK CARD" purchase
+ * still counts), and anything through a payment app.
  */
 async function shopNames(db: pg.Pool): Promise<string[]> {
   const { rows } = await db.query<{ merchantName: string }>(
@@ -63,7 +62,7 @@ async function shopNames(db: pg.Pool): Promise<string[]> {
        AND trim(coalesce(merchant_name, '')) <> ''
        AND ${CODE} <> ''
        AND ${CODE} !~ '^(TRANSFER|INCOME|LOAN_PAYMENTS|RENT_AND_UTILITIES_RENT)'
-       AND name !~* '^\\s*check\\y'
+       AND name !~* '^\\s*check\\s*#?\\s*\\d'
        AND NOT (${NAMES_AN_APP})`,
   )
   return rows.map((row) => tidyMerchantName(row.merchantName))
@@ -73,16 +72,8 @@ async function shopNames(db: pg.Pool): Promise<string[]> {
 export async function paymentPeople(db: pg.Pool): Promise<PaymentPeople> {
   const [rows, merchants] = await Promise.all([possiblePayments(db), shopNames(db)])
   const shops = knownShops(merchants)
-  const found: PaymentNames = { counterparty: [], merchant: [], line: [] }
-  const transactionIds = new Set<string>()
-  for (const tx of rows) {
-    if (!isPersonPayment(tx, shops)) continue
-    transactionIds.add(tx.id)
-    const names = namesIn(tx)
-    found.counterparty.push(...names.counterparty)
-    found.merchant.push(...names.merchant)
-    found.line.push(...names.line)
-  }
-  if (transactionIds.size === 0) return NO_PEOPLE
-  return { ...namesToHide(found, shops), transactionIds }
+  const payments = rows.filter((tx) => isPersonPayment(tx, shops))
+  if (payments.length === 0) return NO_PEOPLE
+  const found = payments.flatMap((tx) => namesIn(tx, shops))
+  return { ...namesToHide(found, shops), transactionIds: new Set(payments.map((tx) => tx.id)) }
 }
