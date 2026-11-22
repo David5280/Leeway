@@ -302,6 +302,20 @@ describe('Debts', () => {
     )
   })
 
+  it("won't save a rate that can't be one, which would clear the saved rate", async () => {
+    serve([rewards, loan])
+    renderPlan('/plan/debts')
+    const user = userEvent.setup()
+    const terms = within(await screen.findByRole('form', { name: 'Rewards card terms' }))
+    const rate = terms.getByRole('textbox', { name: 'Rewards card interest rate' })
+    await user.clear(rate)
+    await user.type(rate, '-5')
+    expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Blank still clears it on purpose.
+    await user.clear(rate)
+    expect(terms.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
   it('compares the strategies and lists the payoff order', async () => {
     serve([rewards, loan])
     renderPlan('/plan/debts')

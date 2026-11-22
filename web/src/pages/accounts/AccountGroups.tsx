@@ -1,7 +1,8 @@
 // The Accounts screen's cards, grouped by kind (checking, credit cards,
 // savings, investments, retirement, loans, other), each group under its
-// icon and title, with the group's total at the end of its heading. In
-// Select mode every card is a tick box, and the totals still count the group.
+// icon and title, with the group's total at the end of its heading, and
+// under the credit cards what they cost in interest a month. In Select mode
+// every card is a tick box, and the totals still count the group.
 
 import type { Account, Goal } from '../../api/client'
 import { SectionHead } from '../../components/design/SectionHead'
@@ -14,6 +15,7 @@ import {
   type GroupTotal,
 } from '../../lib/accountCards'
 import { AccountCard, PickCard } from './AccountCard'
+import { CardsInterestLine } from './CardInterest'
 
 /** Select mode: which accounts are ticked, and how to tick or untick one. */
 export interface Picking {
@@ -43,6 +45,9 @@ export function AccountGroups({
             title={group.title}
             aside={<GroupTotalFigure total={groupTotal(group.kind, group.accounts)} />}
           />
+          {group.kind === 'credit_card' && !picking && (
+            <CardsInterestLine accounts={group.accounts} />
+          )}
           <div className="acct-grid">
             {group.accounts.map((account) => {
               const facts = accountFacts(account, {

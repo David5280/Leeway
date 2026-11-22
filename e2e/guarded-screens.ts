@@ -56,6 +56,18 @@ async function stillOn(locator: ReturnType<Page['getByRole']>) {
   await expect.poll(() => locator.evaluate((element) => element.getAnimations().length)).toBe(0)
 }
 
+/** Every account as the server lists it, with no APR, as a card is before one is added. */
+async function withoutAprs(page: Page) {
+  await page.route('**/api/actions/list_accounts', async (route) => {
+    const response = await route.fetch()
+    const { result } = (await response.json()) as { result: { aprPercent: number | null }[] }
+    await route.fulfill({
+      response,
+      json: { result: result.map((account) => ({ ...account, aprPercent: null })) },
+    })
+  })
+}
+
 /** The seeded transaction with the longest name, as its row and its sheet are named. */
 const LONG_TRANSACTION = /^Amazon Marketplace/i
 
@@ -124,6 +136,14 @@ export const SCREENS: Screen[] = [
     ...at('account', `the ${kind} account page`),
     path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
   })),
+  {
+    name: "the credit card account page asking for the card's APR",
+    route: 'account',
+    path: (seeded: Seeded) =>
+      `/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
+    // The seeded card has an APR; the prompt shows in its place without one.
+    before: withoutAprs,
+  },
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
   at('transactions', '/transactions'),
