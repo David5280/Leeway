@@ -5,15 +5,41 @@
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-/** The pages with switches, and where they sit. */
-const PAGES = [
-  '/settings/appearance',
-  '/settings/notifications',
-  '/settings/budgeting',
-  '/settings/email',
-  '/settings/accounts',
-  '/settings/assistant',
+/** A Settings page with switches, and what shows once its switches are all in. */
+interface SwitchPage {
+  path: string
+  loaded: (page: Page) => Locator
+}
+
+/**
+ * The pages with switches. Some sections fetch their own data after the page
+ * opens (notifications, email, accounts), so each page names what shows once
+ * that data is in, and the sweep never measures a page that is still loading.
+ */
+const PAGES: SwitchPage[] = [
+  { path: '/settings/appearance', loaded: (page) => named(page, 'Show Money in and out') },
+  { path: '/settings/notifications', loaded: (page) => named(page, 'Notify me: Overdrawn') },
+  { path: '/settings/budgeting', loaded: (page) => named(page, 'Count pending transactions') },
+  { path: '/settings/email', loaded: (page) => named(page, 'Send me a weekly email') },
+  {
+    path: '/settings/accounts',
+    // Accounts come and go with the specs before this one, so either will do.
+    loaded: (page) =>
+      page
+        .getByRole('switch', { name: /^Count / })
+        .or(page.getByText(/^No accounts yet/))
+        .first(),
+  },
+  {
+    path: '/settings/assistant',
+    loaded: (page) => named(page, 'Have Claude write the dashboard summary'),
+  },
 ]
+
+/** The switch with this name. */
+function named(page: Page, name: string): Locator {
+  return page.getByRole('switch', { name })
+}
 
 /** A box on the page, in CSS pixels. */
 interface Box {
@@ -103,15 +129,26 @@ test('a switch keeps its knob inside its track, off and on, centred on its row',
 })
 
 test('every switch in Settings is drawn the same way', async ({ page }) => {
+  // Open Settings as anyone who has been here before does, with the service
+  // worker running (it registers on every page load), rather than with
+  // whatever part of its install finished before the next page opened.
+  await page.goto(PAGES[0]!.path)
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+
   let seen = 0
-  for (const path of PAGES) {
-    await page.goto(path)
-    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
-    for (const control of await page.getByRole('switch').all()) {
-      if (!(await control.isVisible())) continue
-      await expectWellPlaced(control)
-      seen += 1
-    }
+  for (const { path, loaded } of PAGES) {
+    // One step per page, so a failure names the page it happened on.
+    await test.step(path, async () => {
+      await page.goto(path)
+      await expect(loaded(page)).toBeVisible()
+      for (const control of await page.getByRole('switch').all()) {
+        if (!(await control.isVisible())) continue
+        await expectWellPlaced(control)
+        seen += 1
+      }
+    })
   }
   // Settings has switches on several pages; finding none would mean the test checked nothing.
   expect(seen).toBeGreaterThan(4)

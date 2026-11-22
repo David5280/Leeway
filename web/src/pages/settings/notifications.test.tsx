@@ -281,11 +281,24 @@ describe('NotificationsSection: push on this device', () => {
     expect(turnOn()).toBeDisabled()
   })
 
+  it('opens without asking the push manager while notifications are not yet allowed', async () => {
+    // The worker registers on every page load, so it is there before the owner
+    // ever turns push on. Asking it for a subscription then finds none, and
+    // blocked WebKit's page for good in the browser tests.
+    const server = serve()
+    const browser = await renderSection({ subscribed: true })
+    expect(turnOn()).toBeEnabled()
+    expect(browser?.pushManager.getSubscription).not.toHaveBeenCalled()
+    expect(server.actions('get_notification_settings')).toEqual([{}])
+  })
+
   it('goes on without this device when the worker cannot be asked', async () => {
-    const browser = fakePushBrowser()
+    // Allowed, so the worker is asked for this device's subscription.
+    const browser = fakePushBrowser({ permission: 'granted' })
     browser.serviceWorker.getRegistration.mockRejectedValue(new Error('no worker'))
     serve()
     renderSignedIn(<NotificationsSection />)
     expect(await screen.findByRole('button', { name: 'Turn on' })).toBeEnabled()
+    expect(browser.serviceWorker.getRegistration).toHaveBeenCalled()
   })
 })
