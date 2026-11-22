@@ -14,12 +14,17 @@ export function daysFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
 }
 
+/** What the server notes when some repeating events were left out of a read. */
+export const LEFT_OUT =
+  'Some repeating events had too many repeats to work out, so they were left out.'
+
 const LINKED = {
   connected: true,
   host: 'p142-caldav.icloud.com.example-calendar-host.org',
   connectedAt: new Date().toISOString(),
   fetchedAt: new Date().toISOString(),
   lastError: 'The calendar could not be read just now. Try again later.',
+  note: LEFT_OUT,
   eventCount: 1234,
 }
 
@@ -41,6 +46,7 @@ function forecast() {
   return {
     connected: true,
     today,
+    note: LEFT_OUT,
     weeks: [
       week(
         0,
@@ -96,7 +102,10 @@ async function answer(page: Page, action: string, result: unknown) {
   await page.route(`**/api/actions/${action}`, (route) => route.fulfill({ json: { result } }))
 }
 
-/** A linked calendar whose last read failed, with the weeks ahead it brings. */
+/**
+ * A linked calendar whose last read failed, and whose good read before it
+ * left some repeating events out, with the weeks ahead it brings.
+ */
 export async function pretendCalendar(page: Page) {
   await answer(page, 'calendar_status', LINKED)
   await answer(page, 'get_forecast', forecast())

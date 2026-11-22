@@ -259,7 +259,7 @@ export const SCREENS: Screen[] = [
   at('planSection', '/plan/net-worth'),
   // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
   at('planSection', '/plan/ahead', {
-    name: '/plan/ahead with a calendar linked',
+    name: '/plan/ahead with a calendar linked, noting events left out',
     before: (page) => pretendCalendar(page),
   }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
@@ -288,7 +288,7 @@ export const SCREENS: Screen[] = [
     then: revealWidgetToken,
   }),
   at('settings', '/settings/calendar', {
-    name: '/settings/calendar linked, its last read failed',
+    name: '/settings/calendar linked, its last read failed, noting events left out',
     before: (page) => pretendCalendar(page),
   }),
   ...BANK_SCREENS,

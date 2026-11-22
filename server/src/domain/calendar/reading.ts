@@ -20,8 +20,8 @@ export interface CalendarDeps {
   /** The clock, asked when a read is saved, so a read that took a while is dated when it lands. */
   now: () => Date
   fetcher?: Fetcher
-  /** Periods walked at most working out repeats (recurrence.ts); tests give a small number. */
-  periodsPerRead?: number
+  /** The work allowed for working out repeats (recurrence.ts); tests give a small number. */
+  unitsPerRead?: number
 }
 
 function windowFor(today: IsoDate): Window {
@@ -46,7 +46,7 @@ export interface Read {
 export async function readEvents(url: URL, deps: CalendarDeps): Promise<Read> {
   const text = await fetchCalendar(url, deps.fetcher)
   const window = windowFor(todayIn(deps.timeZone, deps.now()))
-  const budget = workBudget(deps.periodsPerRead)
+  const budget = workBudget(deps.unitsPerRead)
   const events = parseCalendar(
     text,
     deps.timeZone,

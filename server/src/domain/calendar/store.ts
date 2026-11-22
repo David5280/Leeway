@@ -31,6 +31,8 @@ export interface CalendarStatus {
   fetchedAt: string | null
   /** Why the last read failed, in plain words; null when it worked. */
   lastError: string | null
+  /** What to note about the last good read (repeating events left out); null when nothing. */
+  note: string | null
   eventCount: number
 }
 
@@ -40,6 +42,7 @@ interface FeedRow {
   connected_at: Date
   fetched_at: Date | null
   last_error: string | null
+  read_note: string | null
 }
 
 /** The stored events, all swapped for the new read at once. */
@@ -72,6 +75,7 @@ export async function calendarStatus(db: Db): Promise<CalendarStatus> {
       connectedAt: null,
       fetchedAt: null,
       lastError: null,
+      note: null,
       eventCount: 0,
     }
   }
@@ -81,6 +85,7 @@ export async function calendarStatus(db: Db): Promise<CalendarStatus> {
     connectedAt: row.connected_at.toISOString(),
     fetchedAt: row.fetched_at?.toISOString() ?? null,
     lastError: row.last_error,
+    note: row.read_note,
     eventCount: Number(row.events),
   }
 }
@@ -99,10 +104,10 @@ export async function connectCalendar(
   await withTransaction(pool, async (db) => {
     const now = deps.now()
     await db.query(
-      `INSERT INTO calendar_feed (id, url_encrypted, host, connected_at, fetched_at, last_error)
+      `INSERT INTO calendar_feed (id, url_encrypted, host, connected_at, fetched_at, read_note)
        VALUES (true, $1, $2, $3, $3, $4)
        ON CONFLICT (id) DO UPDATE SET url_encrypted = $1, host = $2, connected_at = $3,
-         fetched_at = $3, last_error = $4`,
+         fetched_at = $3, last_error = NULL, read_note = $4`,
       [encrypt(url.href, deps.key), url.hostname, now, note],
     )
     await saveEvents(db, events)
@@ -165,7 +170,7 @@ async function saveRead(
     const current = rows[0]
     if (!current) return 'none'
     if (!unchanged(current, found)) return 'fresh'
-    await db.query('UPDATE calendar_feed SET fetched_at = $1, last_error = $2', [
+    await db.query('UPDATE calendar_feed SET fetched_at = $1, last_error = NULL, read_note = $2', [
       deps.now(),
       read.note,
     ])
@@ -177,8 +182,9 @@ async function saveRead(
 /**
  * Reads the calendar found linked and saves what it holds. Any failure keeps
  * the last read's events and is noted, in words without the address, for
- * Settings to show, unless the calendar was linked anew meanwhile; one that
- * is not the calendar's own is a bug, so it is thrown on as well.
+ * Settings to show, unless the calendar was linked anew or read by another
+ * server meanwhile, whose good read a late failure must not mark as failed.
+ * One that is not the calendar's own is a bug, so it is thrown on as well.
  */
 async function readAndSave(
   pool: pg.Pool,
@@ -190,10 +196,11 @@ async function readAndSave(
     return await saveRead(pool, found, read, deps)
   } catch (error) {
     const reason = error instanceof AppError ? error.message : UNEXPECTED
-    await pool.query('UPDATE calendar_feed SET last_error = $1 WHERE url_encrypted = $2', [
-      reason,
-      found.url_encrypted,
-    ])
+    await pool.query(
+      `UPDATE calendar_feed SET last_error = $1
+       WHERE url_encrypted = $2 AND connected_at = $3 AND fetched_at IS NOT DISTINCT FROM $4`,
+      [reason, found.url_encrypted, found.connected_at, found.fetched_at],
+    )
     if (!(error instanceof AppError)) throw error
     return 'read'
   }

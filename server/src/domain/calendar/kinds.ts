@@ -17,6 +17,10 @@ export interface Classifiable {
   allDay: boolean
 }
 
+/** The holidays a title may name; occasions.ts reads which one from it. */
+export const HOLIDAYS =
+  /\b(christmas|xmas|thanksgiving|hanukkah|chanukah|diwali|easter|eid|new year'?s)\b/i
+
 /** Words in a title that say what an event is, checked in this order. */
 const WORDS: [EventKind, RegExp][] = [
   ['wedding', /\b(wedding|bridal shower|bachelor(ette)? party|stag do|hen do)\b/i],
@@ -26,7 +30,7 @@ const WORDS: [EventKind, RegExp][] = [
     'trip',
     /\b(trip|flight|fly(ing)? to|vacation|getaway|hotel|airbnb|vrbo|cruise|road trip|camping|travel(l?ing)?)\b|✈/i,
   ],
-  ['holiday', /\b(christmas|xmas|thanksgiving|hanukkah|chanukah|diwali|easter|eid|new year'?s)\b/i],
+  ['holiday', HOLIDAYS],
 ]
 
 /** An all-day event this many days long, somewhere named, is a trip. */

@@ -46,6 +46,8 @@ export interface Forecast {
   connected: boolean
   today: IsoDate
   weeks: ForecastWeek[]
+  /** What to note about the calendar's last read (repeating events left out); null when nothing. */
+  note: string | null
 }
 
 /** Items sorted into weeks of seven days from today. */

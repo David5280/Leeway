@@ -158,9 +158,15 @@ function runsOf(weeks: Week[]): [number, Week[]][] {
 export function AheadSection() {
   const forecast = useAction('get_forecast')
   if (!forecast.data) return <LoadingOrError error={forecast.error} />
-  const { today, weeks } = forecast.data
+  const { today, weeks, note } = forecast.data
   return (
     <>
+      {/* Some events may be missing from the weeks below, so they say so, quietly. */}
+      {note && (
+        <p className="notice" role="status">
+          {note}
+        </p>
+      )}
       {runsOf(weeks).map(([first, run]) =>
         run[0]!.items.length === 0 ? (
           <QuietWeeks key={run[0]!.start} first={first} weeks={run} />

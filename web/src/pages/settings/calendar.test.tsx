@@ -4,7 +4,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn } from '../../test/fake'
-import { linked, unlinked } from '../../test/calendar'
+import { INCOMPLETE, linked, unlinked } from '../../test/calendar'
 import { CalendarSection } from './Calendar'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -40,6 +40,19 @@ describe('Calendar', () => {
     await user.click(screen.getByRole('button', { name: 'Connect a calendar' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('That link is not a calendar.')
     expect(screen.getByRole('textbox', { name: 'Calendar link' })).toHaveValue(SECRET)
+  })
+
+  it('notes repeating events left out quietly, apart from a failed read', async () => {
+    fakeServer({
+      calendar_status: () =>
+        linked({ note: INCOMPLETE, lastError: 'The calendar did not answer.' }),
+    })
+    renderSignedIn(<CalendarSection />)
+    const note = await screen.findByText(INCOMPLETE)
+    expect(note).toHaveAttribute('role', 'status')
+    expect(note).toHaveClass('notice')
+    expect(note).not.toHaveClass('error')
+    expect(screen.getByText('The calendar did not answer.')).toHaveClass('notice', 'error')
   })
 
   it('reads it again, shows why a read failed, and unlinks', async () => {

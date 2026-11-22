@@ -100,6 +100,12 @@ export function CalendarSection() {
             </span>
           </div>
           {calendar.lastError && <p className="notice error">{calendar.lastError}</p>}
+          {/* The read worked, so this is said quietly, not as a failure. */}
+          {calendar.note && (
+            <p className="notice" role="status">
+              {calendar.note}
+            </p>
+          )}
           <div className="row wrap">
             <button
               type="button"

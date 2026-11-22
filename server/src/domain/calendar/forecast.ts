@@ -150,13 +150,16 @@ async function billItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastI
 
 /** The forecast, or nothing when no calendar is linked: it then stays out of the way. */
 export async function getForecast(db: Db, settings: Settings, today: IsoDate): Promise<Forecast> {
-  const { rowCount } = await db.query('SELECT 1 FROM calendar_feed')
-  if (!rowCount) return { connected: false, today, weeks: [] }
+  const { rows } = await db.query<{ read_note: string | null }>(
+    'SELECT read_note FROM calendar_feed',
+  )
+  const feed = rows[0]
+  if (!feed) return { connected: false, today, weeks: [], note: null }
   const to = addDays(today, FORECAST_WEEKS * 7 - 1)
   const items = [
     ...(await paydayItems(db, settings, today, to)),
     ...(await billItems(db, today, to)),
     ...(await eventItems(db, today, to)),
   ]
-  return { connected: true, today, weeks: intoWeeks(items, today) }
+  return { connected: true, today, weeks: intoWeeks(items, today), note: feed.read_note }
 }

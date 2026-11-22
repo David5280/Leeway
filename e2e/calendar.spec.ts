@@ -4,7 +4,7 @@
 // that does not answer, are stood in for (calendar.ts).
 
 import { expect, test } from '@playwright/test'
-import { calendarNotAnswering, LONG_EVENT, LONG_TRIP, pretendCalendar } from './calendar'
+import { calendarNotAnswering, LEFT_OUT, LONG_EVENT, LONG_TRIP, pretendCalendar } from './calendar'
 import { action } from './seed'
 
 test('with no calendar linked, it is one quiet entry in Settings and nowhere else', async ({
@@ -55,6 +55,8 @@ test('the weeks ahead show paydays, bills and events from the calendar', async (
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText(LONG_TRIP)
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText('to set aside')
   await expect(page.getByText(LONG_EVENT)).toBeVisible()
+  // Events left out of the read are noted above the weeks.
+  await expect(page.getByRole('status').filter({ hasText: LEFT_OUT })).toBeVisible()
   // Weeks with nothing in them fold into one quiet line.
   await expect(page.getByText(/^Nothing due .+ to .+\.$/)).toHaveCount(1)
   // A bill opens its own form; an event, a purchase to save for it.

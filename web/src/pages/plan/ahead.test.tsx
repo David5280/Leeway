@@ -4,7 +4,7 @@ import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastItem } from '../../api/client'
 import { failing, holdRequest } from '../../test/fake'
-import { forecastOf, ITEMS, linked, unlinked } from '../../test/calendar'
+import { forecastOf, INCOMPLETE, ITEMS, linked, unlinked } from '../../test/calendar'
 import { planServer, renderPlan } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -166,6 +166,26 @@ describe('Coming up', () => {
     expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
       '$60 in bills, $60 to set aside',
     )
+  })
+
+  it('notes quietly when some repeating events were left out of the weeks', async () => {
+    planServer({
+      calendar_status: () => linked({ note: INCOMPLETE }),
+      get_forecast: () => forecastOf(ITEMS, INCOMPLETE),
+    })
+    renderPlan('/plan/ahead')
+    await screen.findByRole('region', { name: 'This week' })
+    const note = screen.getByRole('status')
+    expect(note).toHaveTextContent(INCOMPLETE)
+    expect(note).toHaveClass('notice')
+    expect(note).not.toHaveClass('error')
+  })
+
+  it('notes nothing when every event was read', async () => {
+    planServer({ calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) })
+    renderPlan('/plan/ahead')
+    await screen.findByRole('region', { name: 'This week' })
+    expect(screen.queryByText(INCOMPLETE)).not.toBeInTheDocument()
   })
 
   it('says why the weeks ahead could not be read', async () => {

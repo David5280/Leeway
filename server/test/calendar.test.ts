@@ -117,6 +117,7 @@ describe('linking a calendar', () => {
       connectedAt: null,
       fetchedAt: null,
       lastError: null,
+      note: null,
       eventCount: 0,
     })
   })
@@ -131,6 +132,7 @@ describe('linking a calendar', () => {
       connectedAt: NOW.toISOString(),
       fetchedAt: NOW.toISOString(),
       lastError: null,
+      note: null,
       eventCount: 1,
     })
     expect(JSON.stringify(status)).not.toContain('private-abc123')
@@ -329,6 +331,21 @@ describe('linking a calendar', () => {
     })
   })
 
+  it('never marks another server’s good read as failed when this read fails late', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads('', 503)
+    const refresh = call('refresh_calendar')
+    await held.asked
+    // Another server reads the calendar while this read is still fetching.
+    await ctx.db.query(`UPDATE calendar_feed SET fetched_at = fetched_at + interval '1 minute'`)
+    held.release()
+    expect(await refresh).toMatchObject({
+      lastError: null,
+      fetchedAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    })
+  })
+
   it('makes one fetch for many reads asked at once, holding no connection while it fetches', async () => {
     serving(ics([LISBON]))
     await call('connect_calendar', { url: SECRET })
@@ -374,15 +391,25 @@ describe('linking a calendar', () => {
     expect((await refresh).fetchedAt).toBe(later.toISOString())
   })
 
-  it('notes when some repeating events were too costly to work out, keeping the rest', async () => {
+  it('notes when some repeating events were too costly to work out, as a note and not a failure', async () => {
     const fetcher = serving(
       ics([LISBON, ['camp', 'Camping trip', '2000-01-01', '2000-01-01', 'FREQ=DAILY;COUNT=99999']]),
     )
     const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: () => NOW, fetcher }
-    const status = await connectCalendar(ctx.db, SECRET, { ...deps, periodsPerRead: 100 })
-    expect(status).toMatchObject({ eventCount: 1, lastError: INCOMPLETE })
-    // A read that works everything out clears the note.
-    expect(await refreshCalendar(ctx.db, deps)).toMatchObject({ lastError: null })
+    const status = await connectCalendar(ctx.db, SECRET, { ...deps, unitsPerRead: 100 })
+    expect(status).toMatchObject({ eventCount: 1, lastError: null, note: INCOMPLETE })
+    // Coming up says so too, since what it lists may be missing those events.
+    expect(await call('get_forecast')).toMatchObject({ connected: true, note: INCOMPLETE })
+    // A failed read keeps the events and the note on them, and says why it failed.
+    ctx.fetchCalendar = async () => new Response('', { status: 503 })
+    expect(await call('refresh_calendar')).toMatchObject({
+      eventCount: 1,
+      lastError: expect.stringMatching(/read/),
+      note: INCOMPLETE,
+    })
+    // A read that works everything out clears both.
+    expect(await refreshCalendar(ctx.db, deps)).toMatchObject({ lastError: null, note: null })
+    expect(await call('get_forecast')).toMatchObject({ note: null })
   })
 
   it('reads once when the schedule and a second check ask together', async () => {
@@ -433,7 +460,12 @@ describe('the forecast', () => {
   }
 
   it('stays out of the way with no calendar linked', async () => {
-    expect(await call('get_forecast')).toEqual({ connected: false, today: '2026-11-17', weeks: [] })
+    expect(await call('get_forecast')).toEqual({
+      connected: false,
+      today: '2026-11-17',
+      weeks: [],
+      note: null,
+    })
   })
 
   it('lays out paydays, bills and events by week, suggesting what to set aside from past ones', async () => {

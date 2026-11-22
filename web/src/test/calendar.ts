@@ -11,6 +11,7 @@ export const unlinked: CalendarStatus = {
   connectedAt: null,
   fetchedAt: null,
   lastError: null,
+  note: null,
   eventCount: 0,
 }
 
@@ -21,15 +22,20 @@ export function linked(fields: Partial<CalendarStatus> = {}): CalendarStatus {
     connectedAt: '2026-11-17T17:00:00.000Z',
     fetchedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     lastError: null,
+    note: null,
     eventCount: 48,
     ...fields,
   }
 }
 
 /** The forecast of these items, sorted into weeks by the server's own code. */
-export function forecastOf(items: ForecastItem[]): Forecast {
-  return { connected: true, today: TODAY, weeks: intoWeeks(items, TODAY) }
+export function forecastOf(items: ForecastItem[], note: string | null = null): Forecast {
+  return { connected: true, today: TODAY, weeks: intoWeeks(items, TODAY), note }
 }
+
+/** What the server notes when some repeating events were left out of a read. */
+export const INCOMPLETE =
+  'Some repeating events had too many repeats to work out, so they were left out.'
 
 export const ITEMS: ForecastItem[] = [
   { type: 'payday', date: '2026-11-20', amountCents: 250000 },

@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { parseCalendar, type CalendarEvent } from '../src/domain/calendar/ics.js'
 import { kindOf } from '../src/domain/calendar/kinds.js'
 import { durationMs, momentOf } from '../src/domain/calendar/moments.js'
-import { expandRule, parseRule, workBudget, type Rule } from '../src/domain/calendar/recurrence.js'
+import { expandRule, workBudget } from '../src/domain/calendar/recurrence.js'
+import { parseRule, type Rule } from '../src/domain/calendar/rule.js'
 
 /** A calendar file holding these events, each given as its lines. */
 function ics(...events: string[][]): string {
@@ -477,7 +478,7 @@ describe('expandRule', () => {
     const window = { from: '2023-11-01', to: '2027-11-23', until: null }
     expect(expandRule('1900-01-01', never, window, budget)).toEqual([])
     // The years from 1900 are skipped, and the walk ends with the window's last year.
-    const walked = workBudget().periodsLeft - budget.periodsLeft
+    const walked = workBudget().unitsLeft - budget.unitsLeft
     expect(walked).toBeGreaterThan(0)
     expect(walked).toBeLessThanOrEqual(6)
     expect(budget.ranOut).toBe(false)
@@ -489,7 +490,8 @@ describe('expandRule', () => {
     expect(expandRule('2026-01-01', counted, { ...all, to: '2026-12-31' }, budget)).toEqual([
       '2026-01-01',
     ])
-    expect(workBudget().periodsLeft - budget.periodsLeft).toBe(365)
+    // A unit for each of the year's 365 days looked at, and one for the first day picked.
+    expect(workBudget().unitsLeft - budget.unitsLeft).toBe(366)
   })
 
   it('still finds the right days for rules begun long before the window', () => {
@@ -509,7 +511,7 @@ describe('expandRule', () => {
     expect(
       expandRule('1950-01-27', rule('FREQ=MONTHLY;BYDAY=-1FR'), { ...june, to: '2026-07-31' }),
     ).toEqual(['2026-06-26', '2026-07-31'])
-    // A count is walked from the first day: 3,000 days from 2020 runs to 2028-03-18.
+    // A count from long before: 3,000 days from 2020 runs to 2028-03-18.
     expect(
       expandRule('2020-01-01', rule('FREQ=DAILY;COUNT=3000'), { ...june, to: '2026-06-03' }),
     ).toEqual(['2026-06-01', '2026-06-02', '2026-06-03'])
@@ -522,11 +524,43 @@ describe('expandRule', () => {
     ).toEqual(['2028-03-17', '2028-03-18'])
   })
 
+  it('counts a COUNT without walking when each period picks the same number of days', () => {
+    const budget = workBudget()
+    const window = { from: '2023-11-01', to: '2027-11-23', until: null }
+    // 40,000 days from 1900 end in 2009, long before the window: nothing, at once.
+    expect(expandRule('1900-01-01', rule('FREQ=DAILY;COUNT=40000'), window, budget)).toEqual([])
+    expect(workBudget().unitsLeft - budget.unitsLeft).toBeLessThanOrEqual(2)
+  })
+
+  it('finds the same days skipping ahead as walking from the first day', () => {
+    // Each count runs past the window's start and ends within or after it.
+    const cases: [string, string][] = [
+      ['2000-01-03', 'FREQ=DAILY;COUNT=4000'],
+      ['2000-01-03', 'FREQ=DAILY;INTERVAL=3;COUNT=1300'],
+      ['2001-05-02', 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH,MO;COUNT=500'],
+      ['2001-05-02', 'FREQ=WEEKLY;COUNT=500'],
+      ['2002-01-15', 'FREQ=MONTHLY;BYMONTHDAY=1,15;COUNT=200'],
+      ['2002-01-31', 'FREQ=MONTHLY;COUNT=60'],
+      ['2002-01-12', 'FREQ=MONTHLY;BYDAY=2SU;COUNT=100'],
+      ['2003-03-10', 'FREQ=YEARLY;BYMONTH=3,9;BYMONTHDAY=10;COUNT=16'],
+      ['2003-03-10', 'FREQ=YEARLY;BYMONTHDAY=10,20;COUNT=16'],
+      ['2004-02-29', 'FREQ=YEARLY;COUNT=8'],
+    ]
+    const window = { from: '2010-01-01', to: '2011-12-31', until: null }
+    for (const [first, text] of cases) {
+      const walked = expandRule(first, rule(text), { ...window, from: first })
+      const inWindow = walked.filter((date) => date >= window.from)
+      expect(expandRule(first, rule(text), window), text).toEqual(inWindow)
+      expect(inWindow.length, text).toBeGreaterThan(0)
+    }
+  })
+
   it('stops where its budget runs out, and says so', () => {
+    // Each day costs two units: one to look at it, one for picking it.
     const budget = workBudget(10)
     const days = expandRule('2026-01-01', rule('FREQ=DAILY'), all, budget)
-    expect(days).toHaveLength(10)
-    expect(budget).toEqual({ periodsLeft: 0, ranOut: true })
+    expect(days).toHaveLength(5)
+    expect(budget).toEqual({ unitsLeft: 0, ranOut: true })
     // A rule with nothing left to spend gives nothing.
     expect(expandRule('2026-01-01', rule('FREQ=YEARLY'), all, budget)).toEqual([])
   })
@@ -550,19 +584,84 @@ describe('a file built to keep the server busy', () => {
     expect(parseCalendar(text, 'UTC', window, () => true, budget)).toEqual([])
     // Before, each walked 20,000 years: seconds on end. Now a few years each.
     expect(performance.now() - started).toBeLessThan(1000)
-    expect(workBudget().periodsLeft - budget.periodsLeft).toBeLessThanOrEqual(200 * 6)
+    expect(workBudget().unitsLeft - budget.unitsLeft).toBeLessThanOrEqual(200 * 6)
   })
 
-  it('leaves out the repeating events past its budget, keeping the rest', () => {
+  it('reads rules counted from a century ago in a moment', () => {
+    const counted = Array.from({ length: 25 }, (_, i) => [
+      `UID:counted-${i}`,
+      `SUMMARY:Birthday ${i}`,
+      'DTSTART;VALUE=DATE:19000101',
+      'RRULE:FREQ=DAILY;COUNT=40000',
+    ])
+    const budget = workBudget()
+    const started = performance.now()
+    expect(parseCalendar(ics(...counted), 'UTC', window, () => true, budget)).toEqual([])
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(budget).toMatchObject({ ranOut: false })
+    expect(workBudget().unitsLeft - budget.unitsLeft).toBeLessThanOrEqual(25 * 2)
+  })
+
+  it('leaves out only the rules that cost too much, within a fraction of a second', () => {
+    // Every Monday for 40,000 Mondays from 1900: walked day by day, far past any fair share.
+    const greedy = Array.from({ length: 25 }, (_, i) => [
+      `UID:greedy-${i}`,
+      `SUMMARY:Camp ${i}`,
+      'DTSTART;VALUE=DATE:19000101',
+      'RRULE:FREQ=DAILY;BYDAY=MO;COUNT=40000',
+    ])
     const text = ics(
-      // Counted from 2000, so walked day by day from then: more than the budget.
-      ['UID:greedy', 'SUMMARY:Camp', 'DTSTART;VALUE=DATE:20000101', 'RRULE:FREQ=DAILY;COUNT=99999'],
+      ...greedy,
       ['UID:mom', "SUMMARY:Mom's birthday", 'DTSTART;VALUE=DATE:20200301', 'RRULE:FREQ=YEARLY'],
       ['UID:rome', 'SUMMARY:Rome trip', 'DTSTART;VALUE=DATE:20261210'],
     )
-    const budget = workBudget(1000)
+    const budget = workBudget()
+    const started = performance.now()
     const events = parseCalendar(text, 'UTC', window, () => true, budget)
+    expect(performance.now() - started).toBeLessThan(1000)
     expect(budget.ranOut).toBe(true)
-    expect(events.map((event) => event.uid)).toEqual(['rome'])
+    expect(budget.unitsLeft).toBeGreaterThanOrEqual(0)
+    // The birthday listed after them is kept, every year of the window.
+    expect(events.map((event) => [event.uid, event.startsOn])).toEqual([
+      ['mom', '2024-03-01'],
+      ['mom', '2025-03-01'],
+      ['mom', '2026-03-01'],
+      ['rome', '2026-12-10'],
+      ['mom', '2027-03-01'],
+    ])
+  })
+
+  it.each([
+    'FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;COUNT=40000',
+    'FREQ=YEARLY;BYMONTH=1,2,3,4,5,6,7,8,9,10,11,12;BYDAY=MO,TU,WE,TH,FR,SA,SU;COUNT=40000',
+    'FREQ=WEEKLY;BYMONTH=1;COUNT=40000',
+    'FREQ=DAILY;BYMONTHDAY=-1;COUNT=40000',
+  ])('stops %s from a century ago within a fraction of a second', (rule) => {
+    // Rules whose count cannot be skipped, each made to cost the most per period it can.
+    const costly = Array.from({ length: 25 }, (_, i) => [
+      `UID:costly-${i}`,
+      `SUMMARY:Camp ${i}`,
+      'DTSTART;VALUE=DATE:19000101',
+      `RRULE:${rule}`,
+    ])
+    const budget = workBudget()
+    const started = performance.now()
+    parseCalendar(ics(...costly), 'UTC', window, () => true, budget)
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(budget.ranOut).toBe(true)
+  })
+
+  it('shares what one rule leaves among the rest, so a few costly ones can still finish', () => {
+    // Each needs about 3,000 units: more than a first share, well within what is left.
+    const daily = (i: number) => [
+      `UID:daily-${i}`,
+      `SUMMARY:Camp ${i}`,
+      'DTSTART;VALUE=DATE:20231101',
+      'RRULE:FREQ=DAILY',
+    ]
+    const budget = workBudget()
+    const events = parseCalendar(ics(daily(1), daily(2)), 'UTC', window, () => true, budget)
+    expect(budget.ranOut).toBe(false)
+    expect(events.filter((event) => event.uid === 'daily-2')).toHaveLength(1484)
   })
 })

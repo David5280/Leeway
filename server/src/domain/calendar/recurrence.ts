@@ -1,253 +1,119 @@
-// Repeating events (RFC 5545 RRULE) as the days each repeat starts on. Covers
-// what calendars write for people's lives: daily, weekly, monthly and yearly
-// rules with INTERVAL, COUNT, UNTIL, BYDAY (with "2nd Sunday" or "last
-// Friday" in a month), BYMONTHDAY, BYMONTH and WKST. A rule using parts it
-// does not cover (BYSETPOS, BYWEEKNO, BYYEARDAY, hourly and finer) is not
-// guessed at: the event is kept once, on its first day. Works on days as
-// written in the event's own zone; the caller moves them to the owner's. Pure.
+// Repeating events as the days each repeat starts on, from a rule read by
+// rule.ts. Works on days as written in the event's own zone; the caller moves
+// them to the owner's. Each rule spends from a work budget, so no calendar
+// file can keep the server busy for long. Pure.
 
+import { fromDayNumber, toDayNumber, type IsoDate } from '../../lib/dates.js'
 import {
-  addDays,
-  addMonths,
-  dateParts,
-  dayOfWeek,
-  daysBetween,
-  daysInMonth,
-  makeDate,
-  type IsoDate,
-} from '../../lib/dates.js'
-
-const FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const
-type Frequency = (typeof FREQUENCIES)[number]
-
-/** Two-letter day names, in dayOfWeek's order: 0 is Sunday. */
-const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
-
-/** Parts that change which days a rule picks in ways not covered here. */
-const UNCOVERED = ['BYSETPOS', 'BYWEEKNO', 'BYYEARDAY']
+  anchorOf,
+  DAYS_OF_PERIOD,
+  periodStart,
+  periodsUntil,
+  type Anchor,
+  type Day,
+} from './periods.js'
+import type { Bounds, Frequency, Rule } from './rule.js'
 
 /**
- * Periods (days, weeks, months or years) walked at most for one whole file,
- * shared by all its rules. A rule is walked only up to the window's end, so
- * a calendar of people's lives needs a small share of this; it is the stop
- * for a file built to keep the server busy, such as thousands of daily rules
- * counted from a century ago. Walking a period takes a microsecond or two.
+ * Work done for one whole file, shared by all its rules: one unit for each
+ * month a period looks at (a weekly or daily period counts as one) and one
+ * for each day it picks. A rule is walked only across the window, or from its
+ * first day when it has a COUNT that cannot be skipped, so a calendar of
+ * people's lives needs a small share of this: a daily rule across the window
+ * is about 3,000. It is the stop for a file built to keep the server busy. A
+ * unit takes around a microsecond, so the whole budget is a fraction of a second.
  */
-export const PERIODS_PER_FILE = 1_000_000
+export const UNITS_PER_FILE = 200_000
 
-/** What is left of a file's periods, spent by every rule expanded for it. */
+/** What is left of the work a rule, or a file's rules, may still do. */
 export interface WorkBudget {
-  periodsLeft: number
-  /** True once a rule was cut short for want of periods: the read is incomplete. */
+  unitsLeft: number
+  /** True once a rule was cut short for want of work: its repeats are incomplete. */
   ranOut: boolean
 }
 
-export function workBudget(periods = PERIODS_PER_FILE): WorkBudget {
-  return { periodsLeft: periods, ranOut: false }
+export function workBudget(units = UNITS_PER_FILE): WorkBudget {
+  return { unitsLeft: units, ranOut: false }
 }
 
-/** A BYDAY entry: a weekday, and in a month or year which one of them ("2SU", "-1FR"). */
-interface ByDay {
-  weekday: number
-  nth: number | null
+/** The work of looking at one period of the rule: a yearly one looks at each of its months. */
+function costOfPeriod(rule: Rule): number {
+  return rule.frequency === 'YEARLY' ? Math.max(1, rule.byMonth.length) : 1
 }
 
-export interface Rule {
-  frequency: Frequency
-  interval: number
-  count: number | null
-  /** UNTIL as written; the caller reads it in the event's zone. */
-  until: string | null
-  byDay: ByDay[]
-  byMonthDay: number[]
-  byMonth: number[]
-  /** The day weeks start on, for weekly rules: Monday unless WKST says. */
-  weekStart: number
+/**
+ * How many days a monthly or yearly rule picks in each month it looks at,
+ * when that never varies: its days of the month (or the first day's), with
+ * no BYDAY, and all of them days every month has. Null otherwise.
+ */
+function sameDaysEachMonth(anchor: Anchor, rule: Rule): number | null {
+  if (rule.byDay.length) return null
+  const days = rule.byMonthDay.length ? rule.byMonthDay : [anchor.date]
+  return days.every((day) => day >= 1 && day <= 28) ? new Set(days).size : null
 }
 
-/** The days a rule is asked for: repeats starting from..to, and none after until. */
-export interface Bounds {
-  from: IsoDate
-  to: IsoDate
-  until: IsoDate | null
+/**
+ * How many days every period after the first picks, when it is always the
+ * same, so a COUNT can be counted without walking: a plain daily rule picks
+ * one a day, a weekly one its weekdays, a monthly or yearly one its days of
+ * the month when every month has them. Null when it varies (BYDAY in a month,
+ * a 31st, BYMONTH narrowing a daily or weekly rule).
+ */
+const DAYS_PER_PERIOD: Record<Frequency, (anchor: Anchor, rule: Rule) => number | null> = {
+  DAILY: (_, rule) =>
+    rule.byMonth.length || rule.byMonthDay.length || rule.byDay.length ? null : 1,
+  WEEKLY: (_, rule) =>
+    rule.byMonth.length ? null : new Set(rule.byDay.map((d) => d.weekday)).size || 1,
+  MONTHLY: (anchor, rule) => (rule.byMonth.length ? null : sameDaysEachMonth(anchor, rule)),
+  YEARLY: (anchor, rule) => {
+    // Without BYMONTH or BYMONTHDAY a yearly rule keeps its day, Feb 29 on the 28th.
+    if (!rule.byMonth.length && !rule.byMonthDay.length) return 1
+    const perMonth = sameDaysEachMonth(anchor, rule)
+    // Without BYMONTH, only the first day's month.
+    return perMonth === null ? null : (new Set(rule.byMonth).size || 1) * perMonth
+  },
 }
 
-/** A comma list of whole numbers each within min..max and not 0, or null when one is not. */
-function numbers(text: string | undefined, min: number, max: number): number[] | null {
-  if (!text) return []
-  const values = text.split(',').map(Number)
-  const valid = values.every((n) => Number.isInteger(n) && n !== 0 && n >= min && n <= max)
-  return valid ? values : null
+/** One period's days, the first day itself counted as the first repeat. */
+function daysIn(anchor: Anchor, rule: Rule, period: number): Day[] {
+  const days = DAYS_OF_PERIOD[rule.frequency](anchor, rule, period)
+  const picked = period === 0 ? [...new Set([anchor.day, ...days])].sort((a, b) => a - b) : days
+  return picked.filter((day) => day >= anchor.day)
 }
 
-/** BYDAY's entries, or null when one cannot be read. */
-function byDays(text: string | undefined): ByDay[] | null {
-  if (!text) return []
-  const days: ByDay[] = []
-  for (const entry of text.split(',')) {
-    const match = /^([+-]?\d{1,2})?([A-Z]{2})$/.exec(entry)
-    const weekday = WEEKDAYS.indexOf(match?.[2] ?? '')
-    const nth = match?.[1] ? Number(match[1]) : null
-    if (weekday < 0 || nth === 0 || (nth !== null && Math.abs(nth) > 5)) return null
-    days.push({ weekday, nth })
-  }
-  return days
+/** Where a walk starts: the period, and how many repeats come before it. */
+interface Start {
+  period: number
+  seen: number
 }
 
-/** True when the rule asks for something not covered here, so it is not expanded. */
-function uncovered(parts: Map<string, string>, rule: Omit<Rule, 'until'>): boolean {
-  if (UNCOVERED.some((name) => parts.has(name))) return true
-  const counted = rule.byDay.some((day) => day.nth !== null)
-  // "The 2nd Monday" means something only within a month or a year.
-  if (counted && (rule.frequency === 'DAILY' || rule.frequency === 'WEEKLY')) return true
-  // "The 20th Monday of the year" is rare enough to leave alone.
-  return rule.frequency === 'YEARLY' && rule.byDay.length > 0 && rule.byMonth.length === 0
-}
-
-/** An RRULE's value as a rule to expand, or null when it is broken or not covered. */
-export function parseRule(text: string | undefined): Rule | null {
-  if (!text) return null
-  const parts = new Map(
-    text.split(';').map((part) => {
-      const [name = '', value = ''] = part.split('=')
-      return [name.trim().toUpperCase(), value.trim().toUpperCase()] as const
-    }),
-  )
-  const frequency = FREQUENCIES.find((name) => name === parts.get('FREQ'))
-  const byDay = byDays(parts.get('BYDAY'))
-  const byMonthDay = numbers(parts.get('BYMONTHDAY'), -31, 31)
-  const byMonth = numbers(parts.get('BYMONTH'), 1, 12)
-  if (!frequency || !byDay || !byMonthDay || !byMonth) return null
-  const count = parts.has('COUNT') ? Number(parts.get('COUNT')) : null
-  const interval = Number(parts.get('INTERVAL') ?? 1)
-  const weekStart = WEEKDAYS.indexOf(parts.get('WKST') ?? 'MO')
-  const valid = [interval, count ?? 1].every((n) => Number.isInteger(n) && n > 0)
-  if (!valid || weekStart < 0) return null
-  const rule = { frequency, interval, count, byDay, byMonthDay, byMonth, weekStart }
-  if (uncovered(parts, rule)) return null
-  return { ...rule, until: parts.get('UNTIL') ?? null }
-}
-
-/** True when the day is the nth (from the end when negative) of its weekday in a span of `length` days. */
-function isNth(day: number, length: number, nth: number): boolean {
-  return nth > 0 ? Math.ceil(day / 7) === nth : Math.ceil((length - day + 1) / 7) === -nth
-}
-
-/** The days of one month the rule picks. */
-function daysOfMonth(year: number, month: number, rule: Rule, first: IsoDate): IsoDate[] {
-  const length = daysInMonth(year, month)
-  let days: number[]
-  if (rule.byMonthDay.length) {
-    // A negative day counts back from the month's end: -1 is its last day.
-    days = rule.byMonthDay.map((n) => (n > 0 ? n : length + n + 1))
-  } else if (rule.byDay.length) {
-    days = Array.from({ length }, (_, i) => i + 1)
-  } else {
-    days = [dateParts(first).day]
-  }
-  return [...new Set(days)]
-    .filter((day) => day >= 1 && day <= length)
-    .sort((a, b) => a - b)
-    .map((day) => makeDate(year, month, day))
-    .filter((date) => matchesByDay(date, rule.byDay, length))
-}
-
-/** True when the date fits BYDAY, or there is no BYDAY. */
-function matchesByDay(date: IsoDate, byDay: ByDay[], monthLength: number): boolean {
-  if (!byDay.length) return true
-  const weekday = dayOfWeek(date)
-  const { day } = dateParts(date)
-  return byDay.some(
-    (entry) =>
-      entry.weekday === weekday && (entry.nth === null || isNth(day, monthLength, entry.nth)),
-  )
-}
-
-/** True when the date is in one of BYMONTH's months, or there is no BYMONTH. */
-function inMonths(date: IsoDate, rule: Rule): boolean {
-  return !rule.byMonth.length || rule.byMonth.includes(dateParts(date).month)
-}
-
-/** The same day in another year; February 29 falls on the 28th, as a birthday is kept. */
-function inYear(first: IsoDate, year: number): IsoDate {
-  const { month, day } = dateParts(first)
-  return makeDate(year, month, Math.min(day, daysInMonth(year, month)))
-}
-
-/** The first day of the period `period` periods after the first day's: no day it picks is earlier. */
-function periodStart(first: IsoDate, rule: Rule, period: number): IsoDate {
-  const { year } = dateParts(first)
-  if (rule.frequency === 'DAILY') return addDays(first, period)
-  if (rule.frequency === 'WEEKLY') {
-    const sinceWeekStart = (dayOfWeek(first) - rule.weekStart + 7) % 7
-    return addDays(first, 7 * period - sinceWeekStart)
-  }
-  if (rule.frequency === 'MONTHLY') return addMonths(first, period, 1)
-  return makeDate(year + period, 1, 1)
-}
-
-/** A daily rule's day, when BYMONTH, BYMONTHDAY and BYDAY (which only narrow it) let it through. */
-function dailyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
-  const date = addDays(first, period)
-  const { year, month } = dateParts(date)
-  // Checked as a month's own days, so BYMONTHDAY=-1 still means the last one.
-  const fits = daysOfMonth(year, month, { ...rule, byDay: [] }, date).includes(date)
-  // A daily rule has no counted BYDAY entries ("2MO"), so the month's length is never asked.
-  return fits && inMonths(date, rule) && matchesByDay(date, rule.byDay, 0) ? [date] : []
-}
-
-/** A weekly rule's days: each BYDAY weekday (or the first day's) in the week, moved on by period weeks. */
-function weeklyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
-  const sinceWeekStart = (weekday: number) => (weekday - rule.weekStart + 7) % 7
-  const weekStart = periodStart(first, rule, period)
-  const weekdays = rule.byDay.length ? rule.byDay.map((d) => d.weekday) : [dayOfWeek(first)]
-  return weekdays
-    .map((weekday) => addDays(weekStart, sinceWeekStart(weekday)))
-    .filter((date) => inMonths(date, rule))
-    .sort()
-}
-
-/** A monthly rule's days in the month `period` months after the first day's. */
-function monthlyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
-  const monthStart = periodStart(first, rule, period)
-  const { year, month } = dateParts(monthStart)
-  return inMonths(monthStart, rule) ? daysOfMonth(year, month, rule, first) : []
-}
-
-/** A yearly rule's days in the year `period` years after the first day's. */
-function yearlyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
-  const start = dateParts(first)
-  const year = start.year + period
-  if (!rule.byMonth.length && !rule.byMonthDay.length) return [inYear(first, year)]
-  const months = rule.byMonth.length ? [...rule.byMonth].sort((a, b) => a - b) : [start.month]
-  return months.flatMap((month) => daysOfMonth(year, month, rule, first))
-}
-
-const DAYS_OF_PERIOD: Record<Frequency, typeof dailyDays> = {
-  DAILY: dailyDays,
-  WEEKLY: weeklyDays,
-  MONTHLY: monthlyDays,
-  YEARLY: yearlyDays,
-}
-
-/** Periods between the first day and `date`, in the rule's unit. */
-function periodsUntil(first: IsoDate, date: IsoDate, frequency: Frequency): number {
-  const a = dateParts(first)
-  const b = dateParts(date)
-  if (frequency === 'DAILY') return daysBetween(first, date)
-  if (frequency === 'WEEKLY') return Math.floor(daysBetween(first, date) / 7)
-  if (frequency === 'MONTHLY') return (b.year - a.year) * 12 + b.month - a.month
-  return b.year - a.year
+/**
+ * Where to start walking: periods long before the window are skipped rather
+ * than walked. With a COUNT they can be skipped only when each period picks
+ * the same number of days, counted without walking; otherwise the walk
+ * starts at the first day so the count comes out right.
+ */
+function startOf(anchor: Anchor, rule: Rule, from: IsoDate, budget: WorkBudget): Start {
+  // A period before the one holding `from`, so none of the days skipped is in the window.
+  const ahead = Math.floor(periodsUntil(anchor, from, rule.frequency) / rule.interval) - 1
+  if (ahead <= 0) return { period: 0, seen: 0 }
+  if (rule.count === null) return { period: ahead * rule.interval, seen: 0 }
+  const perPeriod = DAYS_PER_PERIOD[rule.frequency](anchor, rule)
+  if (perPeriod === null) return { period: 0, seen: 0 }
+  // The first period may pick fewer (days before the first day do not count).
+  const firstDays = daysIn(anchor, rule, 0).length
+  budget.unitsLeft -= costOfPeriod(rule) + firstDays
+  const seen = firstDays + perPeriod * (ahead - 1)
+  return { period: ahead * rule.interval, seen }
 }
 
 /**
  * The days the event starts on within the bounds, soonest first. The first
- * day always counts as the first repeat, as the format says. Without a COUNT,
- * the periods long before the window are skipped rather than walked. The walk
- * ends at the first period starting after the bounds, so a rule that never
- * picks a day (BYMONTHDAY=30 in February) costs only the window's periods.
- * Each period walked is taken from `budget`; when it runs out the rule stops
- * where it is and the budget says so.
+ * day always counts as the first repeat, as the format says. The walk ends
+ * at the first period starting after the bounds, so a rule that never picks
+ * a day (BYMONTHDAY=30 in February) costs only the window's periods. Each
+ * period walked, and each day it picks, is taken from `budget`; when it runs
+ * out the rule stops where it is and the budget says so.
  */
 export function expandRule(
   first: IsoDate,
@@ -255,24 +121,24 @@ export function expandRule(
   bounds: Bounds,
   budget: WorkBudget = workBudget(),
 ): IsoDate[] {
-  const stop = bounds.until && bounds.until < bounds.to ? bounds.until : bounds.to
-  const ahead = Math.floor(periodsUntil(first, bounds.from, rule.frequency) / rule.interval) - 1
-  let period = rule.count === null ? Math.max(0, ahead) * rule.interval : 0
+  const anchor = anchorOf(first)
+  const from = toDayNumber(bounds.from)
+  const stop = toDayNumber(bounds.until && bounds.until < bounds.to ? bounds.until : bounds.to)
+  let { period, seen } = startOf(anchor, rule, bounds.from, budget)
   const starts: IsoDate[] = []
-  let seen = 0
-  for (; periodStart(first, rule, period) <= stop; period += rule.interval) {
-    if (budget.periodsLeft <= 0) {
+  if (rule.count !== null && seen >= rule.count) return starts
+  for (; periodStart(anchor, rule, period) <= stop; period += rule.interval) {
+    const days = daysIn(anchor, rule, period)
+    const cost = costOfPeriod(rule) + days.length
+    if (budget.unitsLeft < cost) {
       budget.ranOut = true
       return starts
     }
-    budget.periodsLeft--
-    const days = DAYS_OF_PERIOD[rule.frequency](first, rule, period)
-    const picked = period === 0 ? [...new Set([first, ...days])].sort() : days
-    for (const date of picked) {
-      if (date < first) continue
-      if (date > stop) return starts
+    budget.unitsLeft -= cost
+    for (const day of days) {
+      if (day > stop) return starts
       seen++
-      if (date >= bounds.from) starts.push(date)
+      if (day >= from) starts.push(fromDayNumber(day))
       if (seen === rule.count) return starts
     }
   }
