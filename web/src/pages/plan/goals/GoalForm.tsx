@@ -36,13 +36,34 @@ const WORDING = {
   },
 } as const
 
-/** The form's starting text in each field, from a goal or blank for a new one. */
-function startingValues(goal?: Goal) {
+/** What a new goal can start from: an event coming up, say. */
+export interface GoalDraft {
+  name: string
+  targetCents: number | null
+  targetDate: string
+}
+
+/** The name, price and date to start from: the goal's own, or a draft's (or blank) for a new one. */
+function startingText(goal?: Goal, draft?: GoalDraft) {
+  if (goal) {
+    return {
+      name: goal.name,
+      target: String(goal.targetCents / 100),
+      targetDate: goal.targetDate ?? '',
+    }
+  }
   return {
-    name: goal?.name ?? '',
-    target: goal ? String(goal.targetCents / 100) : '',
+    name: draft?.name ?? '',
+    target: draft?.targetCents ? String(draft.targetCents / 100) : '',
+    targetDate: draft?.targetDate ?? '',
+  }
+}
+
+/** The form's starting text in each field, from a goal, a draft, or blank for a new one. */
+function startingValues(goal?: Goal, draft?: GoalDraft) {
+  return {
+    ...startingText(goal, draft),
     saved: goal?.savedCents ? String(goal.savedCents / 100) : '',
-    targetDate: goal?.targetDate ?? '',
     accountId: goal?.accountId ?? BY_HAND,
     color: goal?.color ?? CATEGORY_COLORS[0][1],
     setAside: goal?.setAside ?? false,
@@ -52,6 +73,7 @@ function startingValues(goal?: Goal) {
 export function GoalForm({
   goal,
   kind,
+  draft,
   accounts,
   busy,
   error,
@@ -62,6 +84,8 @@ export function GoalForm({
   goal?: Goal
   /** The kind of a new goal; an existing goal keeps its own. */
   kind: GoalKind
+  /** What a new goal starts from, instead of blank. */
+  draft?: GoalDraft
   accounts: Account[]
   busy: boolean
   error: unknown
@@ -70,7 +94,7 @@ export function GoalForm({
   onDelete?: () => void
 }) {
   const { settings } = useApp()
-  const [start] = useState(() => startingValues(goal))
+  const [start] = useState(() => startingValues(goal, draft))
   const [name, setName] = useState(start.name)
   const [target, setTarget] = useState(start.target)
   const [saved, setSaved] = useState(start.saved)

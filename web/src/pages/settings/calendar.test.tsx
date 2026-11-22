@@ -25,7 +25,7 @@ describe('Calendar', () => {
     await user.type(screen.getByRole('textbox', { name: 'Calendar link' }), SECRET)
     await user.click(button)
     expect(await screen.findByText('Linked to calendar.google.com')).toBeVisible()
-    expect(screen.getByText('48 events, read 12 min ago')).toBeVisible()
+    expect(screen.getByText('48 events that may cost money, read 12 min ago')).toBeVisible()
     expect(server.actions('connect_calendar')).toEqual([{ url: SECRET }])
   })
 
@@ -51,11 +51,16 @@ describe('Calendar', () => {
     })
     renderSignedIn(<CalendarSection />)
     const user = userEvent.setup()
-    expect(await screen.findByText(/1 event, read/)).toBeVisible()
+    expect(await screen.findByText(/1 event that may cost money, read/)).toBeVisible()
     expect(screen.getByText('The calendar did not answer.')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Read it now' }))
     await waitFor(() => expect(server.actions('refresh_calendar')).toHaveLength(1))
+    // Unlinking asks once more, and can be called off.
     await user.click(screen.getByRole('button', { name: 'Unlink' }))
+    await user.click(screen.getByRole('button', { name: 'Keep it' }))
+    expect(server.actions('disconnect_calendar')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: 'Unlink' }))
+    await user.click(screen.getByRole('button', { name: 'Unlink the calendar' }))
     expect(await screen.findByRole('button', { name: 'Connect a calendar' })).toBeVisible()
   })
 

@@ -1,6 +1,7 @@
 // Linking a calendar by its private address, so trips, weddings and other
 // events that cost money show in Plan next to bills and paydays. The address
-// is a secret: it goes to the server once and is never shown again.
+// is a secret: it goes to the server once and is never shown again. Only
+// events likely to cost money are kept, and unlinking asks once more.
 
 import { useState } from 'react'
 import { useAction, useActionMutation } from '../../api/hooks'
@@ -47,10 +48,38 @@ function ConnectForm() {
   )
 }
 
+/** Unlinking asks once more, since the calendar's link has to be found and pasted again. */
+function Unlink() {
+  const disconnect = useActionMutation('disconnect_calendar')
+  const [confirming, setConfirming] = useState(false)
+  if (!confirming) {
+    return (
+      <button type="button" className="btn" onClick={() => setConfirming(true)}>
+        Unlink
+      </button>
+    )
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn danger"
+        disabled={disconnect.isPending}
+        onClick={() => disconnect.mutate({})}
+      >
+        Unlink the calendar
+      </button>
+      <button type="button" className="btn ghost" onClick={() => setConfirming(false)}>
+        Keep it
+      </button>
+      <ErrorNote error={disconnect.error} />
+    </>
+  )
+}
+
 export function CalendarSection() {
   const status = useAction('calendar_status')
   const refresh = useActionMutation('refresh_calendar')
-  const disconnect = useActionMutation('disconnect_calendar')
   if (!status.data) {
     return (
       <Section id="calendar" title="Calendar">
@@ -66,8 +95,8 @@ export function CalendarSection() {
           <div className="stack-sm" style={{ gap: 2 }}>
             <span style={{ fontWeight: 500 }}>Linked to {calendar.host}</span>
             <span className="small muted">
-              {calendar.eventCount} {calendar.eventCount === 1 ? 'event' : 'events'}, read{' '}
-              {timeAgo(calendar.fetchedAt)}
+              {calendar.eventCount} {calendar.eventCount === 1 ? 'event' : 'events'} that may cost
+              money, read {timeAgo(calendar.fetchedAt)}
             </span>
           </div>
           {calendar.lastError && <p className="notice error">{calendar.lastError}</p>}
@@ -80,16 +109,9 @@ export function CalendarSection() {
             >
               Read it now
             </button>
-            <button
-              type="button"
-              className="btn danger"
-              disabled={disconnect.isPending}
-              onClick={() => disconnect.mutate({})}
-            >
-              Unlink
-            </button>
+            <Unlink />
           </div>
-          <ErrorNote error={refresh.error ?? disconnect.error} />
+          <ErrorNote error={refresh.error} />
         </>
       ) : (
         <ConnectForm />

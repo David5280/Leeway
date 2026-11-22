@@ -99,3 +99,20 @@ export async function pretendCalendar(page: Page) {
   await answer(page, 'calendar_status', LINKED)
   await answer(page, 'get_forecast', forecast())
 }
+
+/**
+ * A calendar link that does not answer, as the server says it, without a
+ * real lookup: the tests have no network, and a made-up host would still
+ * ask the machine's DNS.
+ */
+export async function calendarNotAnswering(page: Page) {
+  await page.route('**/api/actions/connect_calendar', (route) =>
+    route.fulfill({
+      status: 502,
+      json: {
+        error: 'calendar_error',
+        message: 'The calendar did not answer. Check the link, or try again later.',
+      },
+    }),
+  )
+}
