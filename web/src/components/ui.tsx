@@ -224,6 +224,21 @@ export function ErrorNote({ error }: { error: unknown }) {
   )
 }
 
+/** Why something could not load, with a way to ask for it again. */
+export function RetryNote({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  if (!error) return null
+  return (
+    <div className="stack-sm">
+      <ErrorNote error={error} />
+      <div className="row">
+        <button type="button" className="btn" onClick={onRetry}>
+          Try again
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Loading({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="row muted" role="status">

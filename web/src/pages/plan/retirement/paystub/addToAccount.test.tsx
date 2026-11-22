@@ -6,15 +6,15 @@ import { noPensionRead, reads } from '../../../../test/paystub'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('a new pension from a paystub, on an account Leeway has', () => {
-  /** A plan linked from the bank, which the new pension could be. */
-  const STATE_PLAN = account({
-    id: '5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
-    name: 'State Plan',
-    type: 'investment',
-    subtype: 'other',
-  })
+/** A plan linked from the bank, which a new pension could be. */
+const STATE_PLAN = account({
+  id: '5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  name: 'State Plan',
+  type: 'investment',
+  subtype: 'other',
+})
 
+describe('a new pension from a paystub, on an account Leeway has', () => {
   it('offers no account to add it to when Leeway has none that could be a pension', async () => {
     serve({ accounts: [account({ id: 'acct-checking', name: 'Checking' })] })
     await fromPaystub()
@@ -60,6 +60,29 @@ describe('a new pension from a paystub, on an account Leeway has', () => {
       newPension: { name: 'PERA', balanceCents: null },
       attachAccountId: null,
     })
+  })
+})
+
+describe('a pension typed in, on an account Leeway has', () => {
+  it("shows the server's word when the account turned out to be a pension already", async () => {
+    // Made a pension elsewhere, after this form listed it, so attach_pension turns it away.
+    const kept = 'Test State Plan is a pension already. Update it instead.'
+    const server = serve({
+      accounts: [STATE_PLAN],
+      routes: { '/api/actions/attach_pension': failing(kept) },
+    })
+    const { user, choosing } = await addPension()
+    await user.click(await choosing.findByRole('button', { name: 'Enter it myself' }))
+    const form = within(await screen.findByRole('form', { name: 'New pension' }))
+    await user.selectOptions(await form.findByRole('combobox', { name: 'Add it to' }), 'State Plan')
+    await user.click(form.getByRole('button', { name: 'Add pension' }))
+
+    expect(await form.findByRole('alert')).toHaveTextContent(kept)
+    expect(server.actions('attach_pension')).toEqual([
+      expect.objectContaining({ accountId: STATE_PLAN.id }),
+    ])
+    // The form stays open, so the owner can choose another account or a new pension.
+    expect(form.getByRole('button', { name: 'Add pension' })).toBeEnabled()
   })
 })
 
@@ -137,6 +160,44 @@ describe('saving the new pension', () => {
     expect(await form.findByText('Leeway could not load your accounts.')).toBeVisible()
     expect(form.getByRole('button', { name: 'Add pension' })).toBeDisabled()
     expect(server.actions('save_paystub')).toEqual([])
+  })
+
+  it('loads the accounts again on Try again, then offers them and Add pension', async () => {
+    // The first load fails and the next one works, as after a dropped connection.
+    let loads = 0
+    const accounts = () =>
+      loads++ === 0
+        ? failing('Leeway could not load your accounts.')()
+        : Response.json({ result: [STATE_PLAN] })
+    const server = serve({ routes: { '/api/actions/list_accounts': accounts } })
+    const { user } = await fromPaystub()
+    const form = await review()
+    expect(await form.findByText('Leeway could not load your accounts.')).toBeVisible()
+    expect(form.getByRole('button', { name: 'Add pension' })).toBeDisabled()
+
+    await user.click(form.getByRole('button', { name: 'Try again' }))
+    expect(await form.findByRole('combobox', { name: 'Add it to' })).toBeVisible()
+    expect(form.queryByText('Leeway could not load your accounts.')).toBeNull()
+    expect(form.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(form.getByRole('button', { name: 'Add pension' })).toBeEnabled()
+    expect(server.actions('list_accounts')).toHaveLength(2)
+  })
+
+  it('holds Add pension back while the accounts load again, and offers another try if they fail', async () => {
+    serve({
+      routes: { '/api/actions/list_accounts': failing('Leeway could not load your accounts.') },
+    })
+    const { user } = await fromPaystub()
+    const form = await review()
+    const release = holdRequest('/api/actions/list_accounts')
+    await user.click(await form.findByRole('button', { name: 'Try again' }))
+    // Loading again: the old error is gone, and nothing can be saved without the accounts.
+    expect(form.queryByText('Leeway could not load your accounts.')).toBeNull()
+    expect(form.getByRole('button', { name: 'Add pension' })).toBeDisabled()
+    release()
+    expect(await form.findByText('Leeway could not load your accounts.')).toBeVisible()
+    expect(form.getByRole('button', { name: 'Try again' })).toBeEnabled()
+    expect(form.getByRole('button', { name: 'Add pension' })).toBeDisabled()
   })
 
   it('saves once however quickly it is sent twice', async () => {

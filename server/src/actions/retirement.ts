@@ -42,7 +42,7 @@ export const createPensionAction = defineAction({
 export const attachPensionAction = defineAction({
   name: 'attach_pension',
   title: 'Record a pension on an existing account',
-  description: `Records a pension's plan on an account Leeway already has (accountId), such as a pension linked from the bank or one listed under retirement or investing, instead of adding a second account. The account becomes a pension, and its balance is then what pays the benefit, not savings. The plan given replaces any already there. ${PLAN_FIELDS}`,
+  description: `Records a pension's plan on an account Leeway already has (accountId), such as a pension linked from the bank or one listed under retirement or investing, instead of adding a second account. The account becomes a pension, and its balance is then what pays the benefit, not savings. An account that is a pension already is refused, so its figures are never replaced; change them with update_pension. ${PLAN_FIELDS}`,
   input: attachPensionSchema,
   scope: 'write',
   surface: 'all',

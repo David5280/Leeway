@@ -115,9 +115,10 @@ export async function createPension(
 
 /**
  * The kinds of account that may turn out to be a pension: a bank may report
- * one as retirement or investing, or as something Leeway cannot place.
+ * one as retirement or investing, or as something Leeway cannot place. One
+ * that is a pension already is refused before this is asked.
  */
-const MAY_BE_PENSION: readonly AccountKind[] = ['retirement', 'investment', 'other', 'pension']
+const MAY_BE_PENSION: readonly AccountKind[] = ['retirement', 'investment', 'other']
 
 /** Attaching a plan to an account Leeway already has. */
 export const attachPensionSchema = pensionPlanSchema.extend({ accountId: z.uuid() })
@@ -129,20 +130,20 @@ export type AttachPension = z.infer<typeof attachPensionSchema>
  * transaction the caller holds, such as saving a paystub, instead of adding a
  * second account for it. The account becomes a pension, so its balance pays
  * the benefit and is not counted again as savings. Takes the pensions lock
- * and, for an account not yet a pension, a free place. The plan given
- * replaces any kept; with keptPension, an account that is a pension already
- * is refused in those words instead, so its plan is never lost.
+ * and a free place. An account that is a pension already is refused in the
+ * caller's words from keptPension, since the plan given would replace its
+ * kept figures; those change through updating the pension instead.
  */
 export async function attachPlan(
   db: Db,
   input: AttachPension,
-  { keptPension }: { keptPension?: (name: string) => string } = {},
+  { keptPension }: { keptPension: (name: string) => string },
 ): Promise<Pension> {
   await lockPensions(db)
   const { accountId, ...plan } = input
   const account = await getAccount(db, accountId)
   // Checked under the lock, so no other request can make it a pension in between.
-  if (keptPension && account.kind === 'pension') {
+  if (account.kind === 'pension') {
     throw new AppError('invalid_input', keptPension(account.name))
   }
   if (!MAY_BE_PENSION.includes(account.kind) || !kindFitsType('pension', account.type)) {
@@ -159,17 +160,21 @@ export async function attachPlan(
       `${account.name} is hidden, so a pension on it would not count. Show it under Settings, Accounts first.`,
     )
   }
-  if (account.kind !== 'pension') {
-    checkRoomForPension(await listAccounts(db))
-    await updateAccount(db, accountId, { kind: 'pension' })
-  }
+  checkRoomForPension(await listAccounts(db))
+  await updateAccount(db, accountId, { kind: 'pension' })
   await savePlan(db, accountId, plan)
   return getPension(db, accountId)
 }
 
-/** Records a pension's plan on an account Leeway already has, all or nothing. */
+/** Turning attach_pension away from a pension kept already, pointing to updating it instead. */
+export const pensionAlready = (name: string) => `${name} is a pension already. Update it instead.`
+
+/**
+ * Records a pension's plan on an account Leeway already has, all or nothing.
+ * One that is a pension already is refused, so its plan is never wiped.
+ */
 export async function attachPension(pool: pg.Pool, input: AttachPension): Promise<Pension> {
-  return withTransaction(pool, (db) => attachPlan(db, input))
+  return withTransaction(pool, (db) => attachPlan(db, input, { keptPension: pensionAlready }))
 }
 
 /**

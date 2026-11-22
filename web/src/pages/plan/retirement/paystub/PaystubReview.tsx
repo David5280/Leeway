@@ -3,7 +3,7 @@
 // the figures should go: a kept pension, or the new pension being added from
 // this paystub. Nothing is saved until the owner confirms.
 
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Input } from '../../../../api/client'
 import { ErrorNote } from '../../../../components/ui'
 import {
@@ -30,6 +30,7 @@ export function PaystubReview({
   candidates = [],
   busy,
   error,
+  loadProblem,
   onSave,
   onCancel,
 }: {
@@ -43,6 +44,8 @@ export function PaystubReview({
   candidates?: Candidate[]
   busy: boolean
   error: unknown
+  /** Why something the save needs could not load, such as the accounts, with a way to try again. */
+  loadProblem: ReactNode
   onSave: (input: Input<'save_paystub'>) => void
   onCancel: () => void
 }) {
@@ -129,6 +132,7 @@ export function PaystubReview({
         </p>
       )}
       <ErrorNote error={error} />
+      {loadProblem}
       <div className="row wrap">
         <button type="submit" className="btn primary" disabled={busy}>
           {confirm}

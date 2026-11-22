@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { paystubs, type Input } from '../../../../api/client'
 import { useAction, useActionMutation } from '../../../../api/hooks'
-import { ErrorNote, Loading } from '../../../../components/ui'
+import { ErrorNote, Loading, RetryNote } from '../../../../components/ui'
 import { pensionCandidates } from '../fields'
 import { PaystubReview } from './PaystubReview'
 import { ACCEPT, fileProblem, readsPension, type PensionChoice } from './review'
@@ -160,7 +160,9 @@ export function PaystubImport({
   // Whether the owner chose to review a paystub that seemed to show no pension.
   const [reviewAnyway, setReviewAnyway] = useState(false)
 
-  // Until the accounts are known, a new pension could not be offered the one it belongs on.
+  // Until the accounts are known, a new pension could not be offered the one it belongs on;
+  // when they fail to load, the review says why and offers to load them again, and while
+  // they load again they are pending once more, so Add pension waits for them.
   const accountsPending = adding && accounts.isPending
   const accountsError = adding ? accounts.error : null
 
@@ -214,7 +216,8 @@ export function PaystubImport({
       adding={adding}
       candidates={pensionCandidates(accounts.data ?? [])}
       busy={save.isPending || accountsPending || accountsError !== null}
-      error={save.error ?? accountsError}
+      error={save.error}
+      loadProblem={<RetryNote error={accountsError} onRetry={() => void accounts.refetch()} />}
       onSave={saveOnce}
       onCancel={onCancel}
     />
