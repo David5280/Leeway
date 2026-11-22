@@ -18,20 +18,17 @@ describe('Data', () => {
     rules: [],
   }
   let downloads: { name: string; blob: Blob }[]
-  let revoked: string[]
 
   beforeEach(() => {
     downloads = []
-    revoked = []
     // jsdom has neither object URLs nor downloads; record what would be saved.
     let blob: Blob | null = null
     URL.createObjectURL = (b: Blob | MediaSource) => {
       blob = b as Blob
       return 'blob:leeway-export'
     }
-    URL.revokeObjectURL = (url: string) => {
-      revoked.push(url)
-    }
+    // Freeing the file is the download helper's to test (see lib/download.test.ts).
+    URL.revokeObjectURL = () => {}
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
@@ -55,7 +52,7 @@ describe('Data', () => {
     )
   })
 
-  it('downloads everything as leeway.json and frees the file afterwards', async () => {
+  it('downloads everything as leeway.json', async () => {
     const server = fakeServer({ export_config: () => exported })
     renderSignedIn(<DataSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Export leeway.json' }))
@@ -63,7 +60,6 @@ describe('Data', () => {
     expect(downloads[0]!.name).toBe('leeway.json')
     expect(downloads[0]!.blob.type).toBe('application/json')
     expect(JSON.parse(await downloads[0]!.blob.text())).toEqual(exported)
-    expect(revoked).toEqual(['blob:leeway-export'])
     expect(server.actions('export_config')).toEqual([{}])
   })
 
