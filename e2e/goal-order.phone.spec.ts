@@ -24,7 +24,9 @@ for (const [name, phone] of [
       expect(up.x + up.width).toBeLessThanOrEqual(phone.viewport.width)
 
       await card.getByRole('button', { name: 'Change' }).click()
-      await expect(card.getByRole('textbox', { name: 'Each month for goals' })).toBeVisible()
+      await expect(
+        card.getByRole('textbox', { name: 'How much can you put toward goals each month?' }),
+      ).toBeVisible()
       expect(await overflow(page)).toBeLessThanOrEqual(0)
     })
   })

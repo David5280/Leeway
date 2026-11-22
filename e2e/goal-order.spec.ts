@@ -19,7 +19,7 @@ test('goals are ranked with up and down, and the dates follow', async ({ page })
   await page.goto('/plan/goals')
   const card = page.getByRole('region', { name: 'Which goal comes first?' })
   await expect(card).toContainText(
-    'Filling them one at a time with $300 a month, the amount you set.',
+    'Your $300 a month goes to the top goal until it’s done, then the next.',
   )
   const list = card.getByRole('list', { name: 'Goals in order' })
   await expect(list.getByRole('listitem').filter({ hasText: TRIP })).toContainText(
@@ -41,7 +41,9 @@ test('goals are ranked with up and down, and the dates follow', async ({ page })
 
   // A new monthly amount moves every date.
   await card.getByRole('button', { name: 'Change' }).click()
-  await card.getByRole('textbox', { name: 'Each month for goals' }).fill('600')
+  await card
+    .getByRole('textbox', { name: 'How much can you put toward goals each month?' })
+    .fill('600')
   await card.getByRole('button', { name: 'Save' }).click()
-  await expect(card).toContainText('with $600 a month')
+  await expect(card).toContainText('Your $600 a month')
 })

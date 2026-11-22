@@ -43,6 +43,9 @@ export interface OrderBar {
   endPercent: number
 }
 
+/** The least of the timeline a dated goal fills, so every one shows, even at the right edge. */
+const SLIVER_PERCENT = 2
+
 /**
  * Each goal's stretch on a shared timeline from today to the last landing:
  * it starts where the goal before it lands, since goals fill one after
@@ -59,12 +62,29 @@ export function orderBars(goals: Landing[], today: string): (OrderBar | null)[] 
   let start = 0
   return goals.map((goal) => {
     if (!goal.landsOn) return null
-    // At least a sliver, so a goal reached the same month as the one before still shows.
-    const bar = {
-      startPercent: start,
-      endPercent: Math.min(100, Math.max(start + 2, at(goal.landsOn))),
-    }
-    start = bar.endPercent
+    const endPercent = Math.min(100, Math.max(start + SLIVER_PERCENT, at(goal.landsOn)))
+    // A goal reached the same month as the one before still gets its sliver,
+    // drawn just before the right edge when there is no room after it.
+    const bar = { startPercent: Math.min(start, endPercent - SLIVER_PERCENT), endPercent }
+    start = endPercent
     return bar
   })
+}
+
+/**
+ * What an order's dates hang on: the amount and each goal's place and month.
+ * Two orders with the same key say the same thing, so a sentence about one
+ * still holds for the other.
+ */
+export function orderKey(order: GoalOrder): string {
+  return JSON.stringify([order.monthlyCents, order.goals.map((goal) => [goal.id, goal.landsOn])])
+}
+
+/** The trade-off worth saying first: the first goal whose move up has one to weigh. */
+export function firstTradeOff(goals: Landing[], locale: string): string | null {
+  for (const goal of goals) {
+    const text = moveUpText(goal, locale)
+    if (text) return text
+  }
+  return null
 }

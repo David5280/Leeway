@@ -1,10 +1,12 @@
 // "Which goal comes first?": the owner's goals in order, each with the month
 // it lands in when the monthly amount fills them one after another, and up and
 // down buttons to change the order. Under the list, the trade-off of the next
-// move said plainly, and after a move, what it did to the dates.
+// move said plainly, and after a move, what it did to the dates. A move shows
+// at once and keeps focus on the goal that moved, so moves can be repeated
+// from the keyboard.
 
-import { useState } from 'react'
-import { useAction, useActionMutation } from '../../../api/hooks'
+import { useEffect, useRef, useState } from 'react'
+import { useAction } from '../../../api/hooks'
 import { Card } from '../../../components/design/Card'
 import { ErrorNote, Icon } from '../../../components/ui'
 import { landingChanges, moveId } from '../../../../../server/src/domain/goalOrder'
@@ -12,13 +14,18 @@ import { useApp } from '../../../lib/app'
 import { GoalAmount } from './GoalAmount'
 import {
   changesText,
+  firstTradeOff,
   landingText,
-  moveUpText,
   orderBars,
+  orderKey,
   type GoalOrder,
   type Landing,
   type OrderBar,
 } from './orderText'
+import { useReorderGoals } from './useReorderGoals'
+
+/** A step through the order: up one place (-1) or down one (+1). */
+type Step = -1 | 1
 
 /** One goal's row: its place, name, landing month, stretch on the timeline and move buttons. */
 function OrderRow({
@@ -26,15 +33,13 @@ function OrderRow({
   index,
   count,
   bar,
-  busy,
   onMove,
 }: {
   goal: Landing
   index: number
   count: number
   bar: OrderBar | null
-  busy: boolean
-  onMove: (step: -1 | 1) => void
+  onMove: (step: Step) => void
 }) {
   const { settings } = useApp()
   return (
@@ -65,7 +70,9 @@ function OrderRow({
           type="button"
           className="iconbtn"
           aria-label={`Move ${goal.name} up`}
-          disabled={index === 0 || busy}
+          data-goal={goal.id}
+          data-step={-1}
+          disabled={index === 0}
           onClick={() => onMove(-1)}
         >
           <Icon name="up" size={16} />
@@ -74,7 +81,9 @@ function OrderRow({
           type="button"
           className="iconbtn"
           aria-label={`Move ${goal.name} down`}
-          disabled={index === count - 1 || busy}
+          data-goal={goal.id}
+          data-step={1}
+          disabled={index === count - 1}
           onClick={() => onMove(1)}
         >
           <Icon name="down" size={16} />
@@ -84,34 +93,85 @@ function OrderRow({
   )
 }
 
+/** Where focus goes once the order shows a goal at `index`: its button for `step`. */
+interface FocusTarget {
+  id: string
+  step: Step
+  index: number
+}
+
+/** The moved goal's same button, or its other one at an end, where the same one is off. */
+function buttonFor(list: HTMLElement, { id, step }: FocusTarget): HTMLButtonElement | null {
+  const button = (s: Step) =>
+    list.querySelector<HTMLButtonElement>(`button[data-goal="${id}"][data-step="${s}"]`)
+  const same = button(step)
+  return same && !same.disabled ? same : button(step === -1 ? 1 : -1)
+}
+
+/** What the last move did to the dates, and the order it was said of. */
+interface Moved {
+  text: string | null
+  key: string
+}
+
 /** The list and its move buttons, with what the last move did to the dates. */
 function OrderList({ order, today }: { order: GoalOrder; today: string }) {
   const { settings } = useApp()
-  const reorder = useActionMutation('reorder_goals')
-  const [moved, setMoved] = useState<string | null>(null)
+  const [moved, setMoved] = useState<Moved | null>(null)
+  const listRef = useRef<HTMLOListElement>(null)
+  // Kept in refs, not state: focusing needs no render of its own. backRef
+  // is where the goal being moved goes back to, should the server refuse.
+  const focusRef = useRef<FocusTarget | null>(null)
+  const backRef = useRef<FocusTarget | null>(null)
+  // The move was put back, so focus follows the goal back to where it was.
+  const reorder = useReorderGoals(today, () => (focusRef.current = backRef.current))
   const goals = order.goals
   const bars = orderBars(goals, today)
-  // The trade-off worth saying first: moving the second goal ahead of the first.
-  const hint = goals[1] ? moveUpText(goals[1], settings.locale) : null
 
-  function move(index: number, step: -1 | 1) {
+  // Moving a row in the page drops focus from it, so once the order shows
+  // the moved goal where it was headed (or back, when refused), its button
+  // gets focus again, unless the owner has since gone elsewhere on the page.
+  useEffect(() => {
+    const target = focusRef.current
+    const list = listRef.current
+    if (!target || !list || goals[target.index]?.id !== target.id) return
+    focusRef.current = null
+    const active = document.activeElement
+    if (active === document.body || list.contains(active)) buttonFor(list, target)?.focus()
+  }, [goals])
+
+  function move(index: number, step: Step) {
+    // One move at a time: a second press while one is saving does nothing.
+    if (reorder.isPending) return
+    const goal = goals[index]!
     const ids = moveId(
-      goals.map((goal) => goal.id),
+      goals.map((one) => one.id),
       index,
       step,
     )
+    focusRef.current = { id: goal.id, step, index: index + step }
+    backRef.current = { id: goal.id, step, index }
     reorder.mutate(
       { ids },
       {
         onSuccess: (next) =>
-          setMoved(changesText(landingChanges(goals, next.goals), settings.locale)),
+          setMoved({
+            text: changesText(landingChanges(goals, next.goals), settings.locale),
+            key: orderKey(next),
+          }),
       },
     )
   }
 
+  // Said only while the order still reads as the move left it: a new amount
+  // or target since then changes the dates it names.
+  const movedText = moved?.key === orderKey(order) ? moved.text : null
+  const hint = firstTradeOff(goals, settings.locale)
+
   return (
     <>
-      <ol className="order-list" aria-label="Goals in order">
+      {/* role="list" keeps the list, and so each goal's place, read out where styles hide markers. */}
+      <ol ref={listRef} className="order-list" role="list" aria-label="Goals in order">
         {goals.map((goal, index) => (
           <OrderRow
             key={goal.id}
@@ -119,14 +179,13 @@ function OrderList({ order, today }: { order: GoalOrder; today: string }) {
             index={index}
             count={goals.length}
             bar={bars[index]!}
-            busy={reorder.isPending}
             onMove={(step) => move(index, step)}
           />
         ))}
       </ol>
-      {moved ? (
+      {movedText ? (
         <p className="small" role="status">
-          {moved}
+          {movedText}
         </p>
       ) : (
         hint && <p className="small muted">{hint}</p>

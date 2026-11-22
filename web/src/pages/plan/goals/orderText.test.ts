@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { changesText, landingText, moveUpText, orderBars, type Landing } from './orderText'
+import {
+  changesText,
+  firstTradeOff,
+  landingText,
+  moveUpText,
+  orderBars,
+  orderKey,
+  type Landing,
+} from './orderText'
 
 /** A goal in the order, still being saved for, landing on the day given. */
 function landing(name: string, landsOn: string | null, extra: Partial<Landing> = {}): Landing {
@@ -75,17 +83,63 @@ describe('the timeline bars', () => {
     expect(bars[1]).toEqual({ startPercent: 17, endPercent: 100 })
   })
 
-  it('gives a goal reached the same month a sliver, and none to a goal with no date', () => {
+  it('gives a goal reached the same month a sliver at the right edge, and none with no date', () => {
     const bars = orderBars(
       [landing('Trip', '2027-01-01'), landing('Gift', '2027-01-01'), landing('Car', null)],
       '2026-11-01',
     )
-    expect(bars[1]).toEqual({ startPercent: 100, endPercent: 100 })
+    expect(bars[0]).toEqual({ startPercent: 0, endPercent: 100 })
+    expect(bars[1]).toEqual({ startPercent: 98, endPercent: 100 })
     expect(bars[2]).toBeNull()
-    expect(bars[0]!.endPercent).toBe(100)
+  })
+
+  it('gives a goal reached the same month a sliver after the one before, where there is room', () => {
+    const bars = orderBars(
+      [landing('Trip', '2027-01-01'), landing('Gift', '2027-01-01'), landing('Car', '2027-11-01')],
+      '2026-11-01',
+    )
+    expect(bars[1]).toEqual({ startPercent: 17, endPercent: 19 })
+    expect(bars[2]).toEqual({ startPercent: 19, endPercent: 100 })
   })
 
   it('draws nothing when no goal has a date', () => {
     expect(orderBars([landing('Trip', null)], '2026-11-01')).toEqual([null])
+  })
+})
+
+describe('the trade-off said first', () => {
+  const passed = { passedId: 'Trip', passedName: 'Trip', passedLandsOn: '2027-08-01' }
+
+  it('skips goals with nothing to weigh, down to the first that has one', () => {
+    const goals = [
+      landing('Trip', '2027-03-01'),
+      landing('Gift', null, { status: 'reached' }),
+      landing('Car', '2027-08-01', { ifMovedUp: { landsOn: '2027-05-01', ...passed } }),
+    ]
+    expect(firstTradeOff(goals, 'en-US')).toBe(
+      'Moving Car ahead of Trip lands it in May 2027 and pushes Trip to Aug 2027.',
+    )
+  })
+
+  it('says nothing when no move has one', () => {
+    expect(firstTradeOff([landing('Trip', null)], 'en-US')).toBeNull()
+  })
+})
+
+describe('what an order says', () => {
+  const order = (monthlyCents: number, carLands: string) => ({
+    monthlyCents,
+    source: 'entered' as const,
+    goals: [landing('Trip', '2027-03-01'), landing('Car', carLands)],
+  })
+
+  it('reads the same for the same amount, places and months', () => {
+    expect(orderKey(order(50_000, '2027-08-01'))).toBe(orderKey(order(50_000, '2027-08-01')))
+  })
+
+  it('changes with the amount or a month', () => {
+    const key = orderKey(order(50_000, '2027-08-01'))
+    expect(orderKey(order(60_000, '2027-08-01'))).not.toBe(key)
+    expect(orderKey(order(50_000, '2027-09-01'))).not.toBe(key)
   })
 })
