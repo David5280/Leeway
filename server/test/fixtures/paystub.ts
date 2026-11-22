@@ -69,6 +69,7 @@ export const CITY_READING: PaystubReading = {
     grossPay: readFigure('80,745.00', 'YTD Gross 80,745.00 Employee ID 004417'),
     pension: readFigure('8,881.95', 'YTD PERA 8,881.95'),
   },
+  pensionPlanName: 'PERA',
 }
 
 /** A reading of something that is not a paystub. */
@@ -82,6 +83,7 @@ export const NOT_A_PAYSTUB: PaystubReading = {
   payFrequency: { value: null, confidence: 'low', source: null },
   current: noneShown(CURRENT_FIELDS),
   yearToDate: noneShown(YEAR_TO_DATE_FIELDS),
+  pensionPlanName: null,
 }
 
 export const USAGE: ReaderUsage = {

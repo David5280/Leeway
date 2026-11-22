@@ -62,7 +62,7 @@ export interface WeeklyEmailContent {
 export const MAX_LIST_ITEMS = 8
 
 /** The subject: an urgent account alert, or else where the period stands, in one short phrase. */
-function subjectLine({ budget, alerts }: Checkin, money: Money, word: string): string {
+function subjectLine({ budget, alerts, spendable }: Checkin, money: Money, word: string): string {
   const kinds = new Set(alerts.map((alert) => alert.kind))
   if (kinds.has('overdrawn')) return 'Your week in Leeway: an account is overdrawn'
   if (kinds.has('over_limit')) return 'Your week in Leeway: a card is over its limit'
@@ -70,16 +70,24 @@ function subjectLine({ budget, alerts }: Checkin, money: Money, word: string): s
   if (budget.leewayCents < 0) {
     return `Your week in Leeway: ${money(-budget.leewayCents)} over this ${word}`
   }
+  // Checking holds less than the budgets have room for, so the cash leads.
+  if (spendable?.limitedBy === 'cash') {
+    return `Your week in Leeway: ${money(spendable.safeCents)} safe to spend`
+  }
   return `Your week in Leeway: ${money(budget.leewayCents)} left this ${word}`
 }
 
-function periodFigures({ budget }: Checkin, money: Money, locale: string): EmailItem[] {
+function periodFigures({ budget, spendable }: Checkin, money: Money, locale: string): EmailItem[] {
   const ends = { text: 'Period ends', detail: shortDate(budget.periodEnd, locale) }
   if (budget.budgetedCents === 0) {
     return [{ text: 'Spent so far', detail: money(budget.spentCents) }, ends]
   }
   // What is left after money set aside for goals, as the dashboard's Leeway card shows it.
   const figures: EmailItem[] = [{ text: 'Left to spend', detail: money(budget.leewayCents) }]
+  if (spendable?.limitedBy === 'cash') {
+    figures.push({ text: 'Safe to spend before payday', detail: money(spendable.safeCents) })
+  }
+  // Held to the cash, as everywhere (spendable.ts).
   if (budget.safePerDayCents !== null) {
     figures.push({ text: 'Per day', detail: money(budget.safePerDayCents) })
   }

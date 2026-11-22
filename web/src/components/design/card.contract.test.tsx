@@ -161,6 +161,7 @@ function serve() {
     get_idle_cash: () =>
       checkIdleCash({
         checkingCents: 800_000,
+        cashKnown: true,
         billsCents: 180_000,
         cardsOwedCents: 62_830,
         dailySpendCents: 5_000,
