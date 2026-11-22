@@ -21,9 +21,16 @@ function parseDecimal(text: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
-/** Parses "12.50", "$1,200", "12,5" or "1200" into cents; null if it is not a number. */
+/** A currency written in letters at either end of an amount: "R$ 12", "CHF 12", "12 USD", "12kr". */
+const CURRENCY_LETTERS = /^\s*\p{L}{1,3}|\p{L}{1,3}\s*$/gu
+
+/**
+ * Parses "12.50", "$1,200", "12,5", "1200" or "CHF 12" into cents; null if it
+ * is not a number. A currency in letters may come before or after it, but a
+ * letter inside the number ("5e1", "1O0") still refuses it.
+ */
 export function parseMoney(text: string): number | null {
-  const value = parseDecimal(text)
+  const value = parseDecimal(text.replace(CURRENCY_LETTERS, ''))
   return value === null ? null : Math.round(value * 100)
 }
 

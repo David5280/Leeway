@@ -25,15 +25,25 @@ describe('format', () => {
     expect(parseMoney('abc')).toBeNull()
   })
 
-  it('refuses a typed number with any letter, never reading round it', () => {
+  it('refuses a typed number with a letter inside it, never reading round it', () => {
     // Dropping the letter would read "5e1" as 51 and "1O0" as 10.
-    for (const text of ['5e1', '1O0', '12 USD', '12abc', '\u00e912']) {
+    for (const text of ['5e1', '1O0', '12e3', 'abc']) {
       expect(parseMoney(text)).toBeNull()
       expect(readRate(text)).toBeNull()
     }
     // A currency or percent sign is no letter.
     expect(parseMoney('\u20ac12,50')).toBe(1250)
     expect(readRate('5%')).toBe(5)
+  })
+
+  it('reads an amount with a currency written in letters before or after it', () => {
+    expect(parseMoney('R$ 12,50')).toBe(1250)
+    expect(parseMoney('CHF 12.50')).toBe(1250)
+    expect(parseMoney('12 USD')).toBe(1200)
+    expect(parseMoney('USD1,200')).toBe(120000)
+    expect(parseMoney('120kr')).toBe(12000)
+    // A rate takes no currency, so letters there still refuse it.
+    expect(readRate('12 USD')).toBeNull()
   })
 
   it('names periods plainly', () => {
