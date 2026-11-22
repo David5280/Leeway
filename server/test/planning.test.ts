@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { AppContext } from '../src/context.js'
 import { netWorthSeries } from '../src/domain/netWorth.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -10,7 +9,8 @@ import {
 } from './helpers.js'
 
 // The test clock reads 2026-11-17, in UTC, and the database's own date is the real one.
-let ctx: AppContext
+const NOW = new Date('2026-11-17T18:00:00Z')
+let ctx: Awaited<ReturnType<typeof createTestContext>>
 const { call } = actionCaller(() => ctx)
 
 beforeAll(async () => {
@@ -21,6 +21,7 @@ afterAll(async () => {
 })
 beforeEach(async () => {
   await resetData(ctx.db)
+  ctx.setNow(NOW)
 })
 
 describe('netWorthSeries', () => {
@@ -258,7 +259,8 @@ describe('get_cash_flow', () => {
 
   it('finds payday from regular deposits, and never goes below zero per day', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
-    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06']) {
+    // Five Fridays, enough to settle every two weeks.
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
       await insertBankTransaction(ctx.db, accountId, {
         date,
         name: 'ACME PAYROLL',
@@ -281,6 +283,32 @@ describe('get_cash_flow', () => {
       safeCents: 0,
       shortfallCents: 8000,
       perDayCents: 0,
+    })
+  })
+
+  it('keeps a paycheck that has not posted yet as payday, never a small payout after it', async () => {
+    ctx.setNow(new Date('2026-11-20T18:00:00Z'))
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1_000_000 })
+    const deposit = (date: string, name: string, amountCents: number, pending = false) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents, pending })
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'])
+      await deposit(date, 'ACME PAYROLL', -250_000)
+    // Today's paycheck is still pending, and $30 from Etsy lands on the 22nd each month.
+    await deposit('2026-11-20', 'ACME PAYROLL', -250_000, true)
+    for (const date of ['2026-08-22', '2026-09-22', '2026-10-22'])
+      await deposit(date, 'ETSY PAYOUT', -3_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 200_000,
+      cadence: 'month',
+      anchorDate: '2026-12-01',
+    })
+    const flow = await call('get_cash_flow')
+    expect(flow).toMatchObject({
+      nextPayday: '2026-12-04',
+      expectedPayCents: 250_000,
+      billsDue: [{ name: 'Rent', dueDate: '2026-12-01' }],
+      safeCents: 800_000,
     })
   })
 
@@ -355,9 +383,9 @@ describe('get_cash_flow', () => {
     await deposit('2026-11-13', 'NEW CO PAYROLL', -210000, 'INCOME_SALARY')
     const flow = await call('get_cash_flow')
     // One paycheck cannot show how often pay comes, so the cautious monthly guess
-    // projects the latest payday: a month on, Sunday Dec 13, so the Friday before.
+    // projects the latest payday: Friday Nov 13 may be the 15th paid early, so Dec 15.
     expect(flow).toMatchObject({
-      nextPayday: '2026-12-11',
+      nextPayday: '2026-12-15',
       paydaySource: 'detected_income',
       paydayEstimate: true,
       expectedPayCents: 210000,
@@ -378,12 +406,12 @@ describe('get_cash_flow', () => {
       cadence: 'month',
       anchorDate: '2026-12-01',
     })
-    // Rent falls before the guessed payday of Dec 11, but pay may well come first.
+    // Rent falls before the guessed payday of Dec 15, but pay may well come first.
     const flow = await call('get_cash_flow')
     expect(flow).toMatchObject({ paydayEstimate: true, shortfallCents: 132_200 })
     expect(flow.spendable).toMatchObject({
       problem: false,
-      note: 'Checking may be $1,322 short of the bills before payday, best guess Dec 11.',
+      note: 'Checking may be $1,322 short of the bills before payday, best guess Dec 15.',
     })
   })
 

@@ -19,7 +19,10 @@ import type { Settings } from './settings.js'
 /** Bills listed at most: the large widget's short list. */
 export const WIDGET_BILLS = 3
 
-/** The summary's shape version; the widget script refuses any other and asks to be updated. */
+/**
+ * The summary's shape version. The widget script refuses any other: an older
+ * script asks to be updated, and a newer one asks for Leeway to be updated.
+ */
 export const SUMMARY_VERSION = 2
 
 /**

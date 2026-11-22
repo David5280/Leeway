@@ -70,12 +70,13 @@ async function checking(balanceCents: number | null, availableCents: number | nu
 
 /**
  * A $2,100 paycheck every other Friday into the account; the last of `dates` is
- * the newest. Four checks, since three that land near the 15th and month end
- * could be either cadence and would leave payday a guess.
+ * the newest. Five checks, since four that land near the 15th and month end
+ * still fit some schedule of two days, could be either cadence and would
+ * leave payday a guess.
  */
 async function paidBiweekly(
   accountId: string,
-  dates = ['2026-10-02', '2026-10-16', '2026-10-30', '2026-11-13'],
+  dates = ['2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30', '2026-11-13'],
 ) {
   for (const date of dates) {
     await insertBankTransaction(ctx.db, accountId, {
@@ -283,7 +284,13 @@ describe('safe to spend agrees everywhere', () => {
     // Paid Nov 6, so next on Nov 20, 3 days counting today. $300 safe would be $100
     // a day, but the $1,000 budget over 14 days allows $71: the lesser leads everywhere.
     const accountId = await checking(30_000)
-    await paidBiweekly(accountId, ['2026-10-09', '2026-10-23', '2026-11-06'])
+    await paidBiweekly(accountId, [
+      '2026-09-11',
+      '2026-09-25',
+      '2026-10-09',
+      '2026-10-23',
+      '2026-11-06',
+    ])
     await budgeted(100_000)
     const surfaces = await everySurface()
     expect(surfaces.cashFlow).toMatchObject({ nextPayday: '2026-11-20', perDayCents: 10_000 })

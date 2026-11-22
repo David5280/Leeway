@@ -1,8 +1,10 @@
 // Paydays as a payroll really pays them, for tests of how often pay comes:
-// two weeks apart, each moved to the business day before when it falls on
-// a bank holiday. The holidays are the US federal ones banks close for.
+// two weeks apart, or on two days of the month, each moved to the business
+// day before (or, for some payrolls, after) when banks are closed. The
+// holidays are the US federal ones banks close for.
 
-import { addDays, dayOfWeek, makeDate, type IsoDate } from '../../src/lib/dates.js'
+import { addDays, clampedDate, dayOfWeek, makeDate, type IsoDate } from '../../src/lib/dates.js'
+import type { SemimonthSchedule } from '../../src/domain/pay/semimonthly.js'
 
 const isWeekend = (date: IsoDate) => dayOfWeek(date) === 0 || dayOfWeek(date) === 6
 
@@ -55,7 +57,31 @@ export function paidOnBusinessDay(date: IsoDate): IsoDate {
   return day
 }
 
+/** The date, or the business day after it when banks are closed: how some payrolls pay. */
+export function paidOnBusinessDayAfter(date: IsoDate): IsoDate {
+  let day = date
+  while (isWeekend(day) || BANK_HOLIDAYS.has(day)) day = addDays(day, 1)
+  return day
+}
+
 /** `count` biweekly paydays from `start`, each holiday one paid the business day before. */
 export function biweeklyPaid(start: IsoDate, count: number): IsoDate[] {
   return Array.from({ length: count }, (_, i) => paidOnBusinessDay(addDays(start, 14 * i)))
+}
+
+/**
+ * `count` paydays on a schedule, from its first day in `month` of `year`
+ * (or its second, from `half` 1), each moved by `pay`.
+ */
+export function semimonthlyPaid(
+  schedule: SemimonthSchedule,
+  [year, month, half]: [number, number, 0 | 1],
+  count: number,
+  pay: (date: IsoDate) => IsoDate = paidOnBusinessDay,
+): IsoDate[] {
+  return Array.from({ length: count }, (_, i) => {
+    const nth = half + i
+    const day = nth % 2 === 0 ? schedule.first : schedule.second
+    return pay(clampedDate(year, month + Math.floor(nth / 2), day))
+  })
 }

@@ -17,9 +17,9 @@
 // The next payday is the main employer's: safe to spend counts the bills due
 // before it, and a side job's smaller paycheck may not cover them first.
 
-import { maxDate, type IsoDate } from '../../lib/dates.js'
+import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
-import { nextPaydayAfter } from './cadence.js'
+import { laterNextPayday, nextPaydayAfter } from './cadence.js'
 import { depositKind, type Deposit, type DepositKind } from './deposits.js'
 import {
   groupPaychecks,
@@ -122,10 +122,7 @@ function cautiousReading(run: EmployerRun, today: IsoDate) {
   }
   return {
     perYear: Math.min(PER_YEAR.biweek, PER_YEAR.semimonth),
-    nextPayday: maxDate(
-      nextPaydayAfter(paydays, 'biweek', today),
-      nextPaydayAfter(paydays, 'semimonth', today, run.schedule!),
-    ),
+    nextPayday: laterNextPayday(paydays, today, run.schedule!),
   }
 }
 

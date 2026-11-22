@@ -215,12 +215,12 @@ describe('currentPay', () => {
       employer: { firstPaycheck: '2026-11-13', lastPaycheck: '2026-11-13', paychecks: 1 },
       // One paycheck cannot show how often pay comes, so it is read as monthly,
       // the guess that projects the least pay and the latest next payday:
-      // a month on is Sunday Dec 13, so the Friday before, as payrolls pay.
+      // Friday Nov 13 may be the 15th paid early, so Tuesday Dec 15.
       cadence: 'month',
       estimate: true,
       paycheckCents: 210_000,
       monthlyCents: 210_000,
-      nextPayday: '2026-12-11',
+      nextPayday: '2026-12-15',
     })
     expect(pay.employer!.newest.name).toBe('INITECH PAYROLL')
   })
@@ -257,13 +257,16 @@ describe('currentPay', () => {
     const second = [...history(), salary('2026-11-30', 'INITECH PAYROLL', 210_000)]
     // Nov 13 and Nov 30 fit the 15th and the month's end, and a 14-day grid with a late posting.
     expect(currentPay(second, '2026-12-02')).toMatchObject({ cadence: 'biweek', estimate: true })
-    // Tuesday Dec 15 is two business days off the grid: twice a month it is.
+    // Tuesday Dec 15 is two business days off the grid, but three paydays settle nothing.
     const third = [...second, salary('2026-12-15', 'INITECH PAYROLL', 210_000)]
-    expect(currentPay(third, '2026-12-16')).toMatchObject({
+    expect(currentPay(third, '2026-12-16')).toMatchObject({ cadence: 'biweek', estimate: true })
+    // The fourth, on the month's end, does: twice a month it is.
+    const fourth = [...third, salary('2026-12-31', 'INITECH PAYROLL', 210_000)]
+    expect(currentPay(fourth, '2027-01-02')).toMatchObject({
       cadence: 'semimonth',
       estimate: false,
       monthlyCents: 420_000,
-      nextPayday: '2026-12-31',
+      nextPayday: '2027-01-15',
     })
   })
 
@@ -278,8 +281,9 @@ describe('currentPay', () => {
       estimate: true,
       // Twice a month is the fewer paychecks a year: $4,800, not about $5,218.
       monthlyCents: 480_000,
-      // Every two weeks is the later payday: Dec 11, not Nov 30, so bills before it count.
-      nextPayday: '2026-12-11',
+      // The later payday of the two readings: both Fridays fit the 15th and the 28th
+      // exactly too (a Sunday and a Saturday), so Tuesday Dec 15, not Dec 11 or Nov 30.
+      nextPayday: '2026-12-15',
     })
   })
 
@@ -345,8 +349,9 @@ describe('currentPay', () => {
     const main = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'].map(
       (date) => salary(date, 'INITECH PAYROLL', 200_000),
     )
-    const side = ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'].map((date) =>
-      salary(date, 'BLUTH CO PAYROLL', 60_000),
+    // Five Fridays: four could still be a schedule of two days, read cautiously.
+    const side = ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'].map(
+      (date) => salary(date, 'BLUTH CO PAYROLL', 60_000),
     )
     const pay = currentPay([...main, ...side], TODAY)
     expect(pay).toMatchObject({

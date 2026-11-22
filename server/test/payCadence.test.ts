@@ -8,14 +8,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { addDays, dayOfWeek, type IsoDate } from '../src/lib/dates.js'
-import {
-  cadenceOfDates,
-  GRID_SLACK,
-  gridOffBy,
-  nextPaydayAfter,
-  offGridAllowed,
-  payPattern,
-} from '../src/domain/pay/cadence.js'
+import { cadenceOfDates, nextPaydayAfter, payPattern } from '../src/domain/pay/cadence.js'
+import { GRID_SLACK, gridOffBy } from '../src/domain/pay/fortnight.js'
 import {
   bestSchedule,
   businessDayOnOrBefore,
@@ -146,22 +140,19 @@ describe('cadenceOfDates', () => {
 
 describe('paydays that fit both cadences', () => {
   it('reads a biweekly job paid Nov 13 and Nov 27 as every two weeks, not yet settled', () => {
-    // Both Fridays sit on the 15th-and-end schedule too (the 15th is a Sunday,
-    // the 30th a Monday), but nothing yet rules out a 14-day grid.
+    // Both Fridays sit on the 15th and the 28th too (a Sunday and a
+    // Saturday), the later of the schedules that take both exactly, but
+    // nothing yet rules out a 14-day grid.
     expect(payPattern(['2026-11-13', '2026-11-27'])).toEqual({
       cadence: 'biweek',
-      schedule: { first: 15, second: MONTH_END },
+      schedule: { first: 15, second: 28 },
       ambiguous: true,
     })
   })
 
   it('reads Jan 31, Feb 14 and Feb 28 as either, until a payday leaves the grid', () => {
     const both = ['2025-01-31', '2025-02-14', '2025-02-28']
-    expect(payPattern(both)).toEqual({
-      cadence: 'biweek',
-      schedule: { first: 15, second: MONTH_END },
-      ambiguous: true,
-    })
+    expect(payPattern(both)).toMatchObject({ cadence: 'biweek', ambiguous: true })
     // Mar 14 and Mar 31 stay within a business day of the grid; Tuesday Apr 15 leaves it.
     const march = [...both, '2025-03-14', '2025-03-31']
     expect(payPattern(march)?.ambiguous).toBe(true)
@@ -172,11 +163,12 @@ describe('paydays that fit both cadences', () => {
     expect(payPattern(['2026-10-15', '2026-10-30', '2026-11-13'])?.ambiguous).toBe(true)
   })
 
-  it('reads two paydays off any common schedule as every two weeks, settled', () => {
+  it('never settles two paydays, which some schedule of two days always takes', () => {
+    // Fridays Oct 2 and Oct 16 sit off every common schedule, but on the 4th and the 18th.
     expect(payPattern(['2026-10-02', '2026-10-16'])).toEqual({
       cadence: 'biweek',
-      schedule: null,
-      ambiguous: false,
+      schedule: { first: 4, second: 18 },
+      ambiguous: true,
     })
   })
 
@@ -200,17 +192,17 @@ describe('paydays that fit both cadences', () => {
     expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-11-02'])).toBe(1)
     // Tuesday Nov 3 is two business days off Friday Oct 30.
     expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-11-03'])).toBeNull()
-    // Two moved in four, whichever payday the grid is read from, is more than holidays move.
-    expect(gridOffBy(['2026-10-01', '2026-10-16', '2026-10-29', '2026-11-13'])).toBeNull()
+    // Each payday a holiday moves adds its business day.
+    expect(gridOffBy(['2026-10-01', '2026-10-16', '2026-10-29', '2026-11-13'])).toBe(2)
   })
 
-  it('lets a longer run move one payday in four off its grid, as holidays do', () => {
-    expect([2, 4, 7, 8, 15, 24, 26].map(offGridAllowed)).toEqual([1, 1, 1, 2, 3, 6, 6])
-    // Two Thursdays for Friday holidays in eight paydays fit one grid; in four they do not.
-    const eight = biweeklyPaid('2026-05-08', 8)
-    expect(eight.filter((date) => dayOfWeek(date) === 4)).toEqual(['2026-06-18', '2026-07-02'])
-    expect(gridOffBy(eight)).toBe(2)
-    expect(gridOffBy(eight.slice(2, 6))).toBeNull()
+  it('lets one payday in a run of four or more stray off the grid, counted as a holiday', () => {
+    // Tuesday Nov 3, posted two business days late, is let off in four, not in three.
+    expect(gridOffBy(['2026-10-02', '2026-10-16', '2026-11-03', '2026-11-13'])).toBe(1)
+    // So is Wednesday Nov 25, paid two days early for Thanksgiving and the day after.
+    expect(gridOffBy(['2026-10-30', '2026-11-13', '2026-11-25', '2026-12-11'])).toBe(1)
+    // Two strays are no grid.
+    expect(gridOffBy(['2026-10-02', '2026-10-20', '2026-11-03', '2026-11-13'])).toBeNull()
   })
 
   it('settles on every two weeks once the grid fits clearly closer than any schedule', () => {
@@ -269,16 +261,19 @@ describe('long biweekly runs through holidays', () => {
   })
 
   it('reads paydays near a grid, more of them moved than holidays explain, by the schedules', () => {
-    // A common schedule takes every one and fits clearly closer: twice a month.
-    expect(payPattern(['2024-03-29', '2024-04-15', '2024-04-30'])).toEqual({
+    // A common schedule takes every one of four and fits clearly closer: twice a month.
+    expect(payPattern(['2024-03-29', '2024-04-15', '2024-04-30', '2024-05-15'])).toEqual({
       cadence: 'semimonth',
       schedule: { first: 15, second: MONTH_END },
       ambiguous: false,
     })
-    // One takes every one about as closely, common or not: either, read cautiously.
+    // Three are never enough, nor is an uncommon schedule as close: either, read cautiously.
+    expect(payPattern(['2024-03-29', '2024-04-15', '2024-04-30'])).toMatchObject({
+      ambiguous: true,
+    })
     expect(payPattern(['2024-11-01', '2024-11-18', '2024-12-03'])).toEqual({
       cadence: 'biweek',
-      schedule: { first: 1, second: 15 },
+      schedule: { first: 3, second: 18 },
       ambiguous: true,
     })
     expect(payPattern(['2024-01-19', '2024-02-05', '2024-02-20'])).toEqual({
@@ -312,11 +307,11 @@ describe('real twice-a-month payrolls', () => {
     expect(late).toEqual([])
   })
 
-  it('reads a run off any grid but loose on every schedule as every two weeks', () => {
-    // Fridays two weeks apart, one moved two business days, sit up to three days off any schedule.
+  it('keeps a long run every two weeks with one payday paid two days early', () => {
+    // Fridays two weeks apart, one paid on the Wednesday, sit up to three days off any schedule.
     const fridays = Array.from({ length: 12 }, (_, i) => addDays('2026-01-02', 14 * i))
     const moved = fridays.map((date, i) => (i === 6 ? addDays(date, -2) : date))
-    expect(gridOffBy(moved)).toBeNull()
+    expect(gridOffBy(moved)).toBe(1)
     expect(semimonthlyFit(moved)).not.toBeNull()
     expect(payPattern(moved)).toEqual({ cadence: 'biweek', schedule: null, ambiguous: false })
   })
@@ -333,11 +328,17 @@ describe('nextPaydayAfter', () => {
     expect(nextPaydayAfter(['2026-11-13'], 'week', TODAY)).toBe('2026-11-20')
   })
 
-  it('moves a monthly payday off a weekend to the Friday before, as a payroll does', () => {
-    // A month on from Friday Nov 13 is Sunday Dec 13.
-    expect(nextPaydayAfter(['2026-11-13'], 'month', TODAY)).toBe('2026-12-11')
-    // Each month counts from the usual day, so January is the 13th again.
-    expect(nextPaydayAfter(['2026-11-13'], 'month', '2026-12-12')).toBe('2027-01-13')
+  it('reads a lone Friday payday as the latest weekend day it may have been moved from', () => {
+    // Friday Nov 13 may be the 13th, or the 14th or the 15th paid early: the 15th, the cautious one.
+    expect(nextPaydayAfter(['2026-11-13'], 'month', TODAY)).toBe('2026-12-15')
+    expect(nextPaydayAfter(['2026-11-13'], 'month', '2026-12-15')).toBe('2027-01-15')
+  })
+
+  it('moves a monthly payday off a weekend to the Friday before, as most payrolls do', () => {
+    // On the 13th: Sunday Dec 13 is paid on Friday Dec 11.
+    const thirteenth = ['2026-08-13', '2026-09-11', '2026-10-13']
+    expect(nextPaydayAfter(thirteenth, 'month', '2026-11-14')).toBe('2026-12-11')
+    expect(nextPaydayAfter(thirteenth, 'month', '2026-12-12')).toBe('2027-01-13')
   })
 
   it("projects from the payroll's usual day, never from a payday already moved", () => {

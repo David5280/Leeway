@@ -239,20 +239,21 @@ describe('getFinancialProfile', () => {
     for (const date of ['2026-10-15', '2026-10-30', '2026-11-13']) {
       await pay(date, 'INITECH PAYROLL', 200_000)
     }
-    for (const date of ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
       await pay(date, 'BLUTH CO PAYROLL ACCT 4821', 60_000)
     }
     const result = await profile()
     // $4,000 a month plus $600 every two weeks.
     expect(result.monthly.incomeCents).toBe(400_000 + 130_446)
     // Three checks near the 15th and month end could be either cadence: the
-    // cautious reading counts the lower monthly pay and the later payday, and
-    // ends the period at the main job's payday, not the side job's.
+    // cautious reading counts the lower monthly pay and the later payday (the
+    // 1st, since Friday Oct 30 fits a Sunday the 1st too), and ends the period
+    // at the main job's payday, not the side job's.
     expect(result.pay).toMatchObject({
       cadence: 'biweek',
       employer: 'Initech Payroll',
-      nextPayday: '2026-11-30',
-      since: '2026-09-25',
+      nextPayday: '2026-12-01',
+      since: '2026-09-11',
       estimate: true,
     })
     expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
