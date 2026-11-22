@@ -105,11 +105,12 @@ describe('getFinancialProfile', () => {
   it('works out a typical month, the emergency fund and the savings rate', async () => {
     await steadyOwner()
     const result = await profile()
+    // Rent reads as essential by its name; Fun does not.
     expect(result.monthly).toEqual({
       months: 3,
       incomeCents: 500_000,
       spendingCents: 300_000,
-      essentialSpendingCents: 300_000,
+      essentialSpendingCents: 200_000,
     })
     expect(result.accounts.map((k) => [k.kind, k.totalCents])).toEqual([
       ['checking', 400_000],
@@ -118,9 +119,9 @@ describe('getFinancialProfile', () => {
     ])
     expect(result.emergencyFund).toMatchObject({
       savedCents: 900_000,
-      monthlyEssentialsCents: 300_000,
+      monthlyEssentialsCents: 200_000,
       essentialsFrom: 'spending',
-      monthsCovered: 3,
+      monthsCovered: 4.5,
       targetMonths: 6,
       status: 'building',
     })
@@ -140,21 +141,21 @@ describe('getFinancialProfile', () => {
     expect(emergencyFund).toMatchObject({ monthsCovered: 4.5, targetMonths: 4, status: 'met' })
   })
 
-  it('counts every spending category as essential when the pick is an empty list', async () => {
+  it('finds the essential categories again when the pick is an empty list', async () => {
     await steadyOwner()
     // An empty pick would make essentials zero, and any savings endless cover.
     await call('update_settings', { savingsPlan: { essentialCategoryIds: [] } })
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
     const { monthly, emergencyFund } = await profile()
-    expect(monthly.essentialSpendingCents).toBe(300_000)
-    expect(emergencyFund).toMatchObject({ monthsCovered: 3 })
+    expect(monthly.essentialSpendingCents).toBe(200_000)
+    expect(emergencyFund).toMatchObject({ monthsCovered: 4.5 })
 
     // A list stored that way by an earlier version reads the same.
     await ctx.db.query(`UPDATE settings SET data = '{"savingsPlan": {"essentialCategoryIds": []}}'`)
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
   })
 
-  it('takes a deleted category out of the essentials, and counts all spending once none is left', async () => {
+  it('takes a deleted category out of the essentials, and counts all spending once none reads as essential', async () => {
     const { rent, fun } = await steadyOwner()
     await call('update_settings', { savingsPlan: { essentialCategoryIds: [rent.id, fun.id] } })
     expect((await profile()).monthly.essentialSpendingCents).toBe(300_000)
@@ -164,7 +165,8 @@ describe('getFinancialProfile', () => {
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toEqual([rent.id])
     expect((await profile()).monthly.essentialSpendingCents).toBe(200_000)
 
-    // Deleting the last one goes back to all spending, rather than essentials of zero.
+    // Deleting the last one leaves nothing that reads as essential (Fun went
+    // first), so all spending counts, rather than essentials of zero.
     await call('delete_category', { id: rent.id })
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
     expect((await profile()).monthly.essentialSpendingCents).toBe(300_000)
@@ -185,9 +187,10 @@ describe('getFinancialProfile', () => {
       jsonb_build_object('essentialCategoryIds', jsonb_build_array($1::text)))`,
       [gone],
     )
+    // With no pick left, the essentials are found again: Rent.
     const { monthly, emergencyFund } = await profile()
-    expect(monthly.essentialSpendingCents).toBe(300_000)
-    expect(emergencyFund).toMatchObject({ monthsCovered: 3 })
+    expect(monthly.essentialSpendingCents).toBe(200_000)
+    expect(emergencyFund).toMatchObject({ monthsCovered: 4.5 })
   })
 
   it('refuses an emergency fund target outside one to 24 whole months', async () => {
@@ -279,10 +282,10 @@ describe('get_financial_profile', () => {
     const { asOf, digest } = await call('get_financial_profile')
     expect(asOf).toBe(TODAY)
     expect(digest).toContain(
-      'Typical month (last 3 whole months): $5,000 take-home pay in, $3,000 spent.',
+      'Typical month (last 3 whole months): $5,000 take-home pay in, $3,000 spent, $2,000 of it essential.',
     )
     expect(digest).toContain(
-      'Emergency fund: savings cover 3 months of essentials ($3,000 a month)',
+      'Emergency fund: savings cover 4.5 months of essentials ($2,000 a month)',
     )
     // The guard travels with the number, on the same line.
     expect(digest).toMatch(
@@ -335,11 +338,11 @@ describe('summarize_savings', () => {
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({
       kind: 'savings',
-      emergencyFund: { monthsCovered: 3 },
+      emergencyFund: { monthsCovered: 4.5 },
       goals: [{ name: 'Rainy day' }],
     })
     expect(cash!.insights[0]!.text).toBe(
-      'Your savings of $9,000 cover 3 months of $3,000 a month of essential spending. Your target of 6 months is $18,000, $9,000 to go.',
+      'Your savings of $9,000 cover 4.5 months of $2,000 a month of essential spending. Your target of 6 months is $12,000, $3,000 to go.',
     )
     expect(retirement).toMatchObject({ kind: 'retirement', emergencyFund: null, goals: [] })
   })

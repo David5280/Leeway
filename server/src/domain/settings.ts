@@ -121,9 +121,13 @@ const savingsPlanFields = {
     .min(1, 'Aim for at least one month')
     .max(24, 'Use 24 months or fewer'),
   /**
-   * Spending categories that count as essential. Null counts every spending
-   * category, and so does an empty list: no essentials at all would make any
-   * savings balance look like endless cover.
+   * Spending categories that count as essential, as the owner picked them.
+   * Null (and an empty list) has Leeway find them from each category's bank
+   * codes and name (essentials.ts), counting every spending category when none
+   * read as essential: no essentials at all would make any savings balance
+   * look like endless cover. Before the emergency fund, null counted every
+   * spending category; existing installs move to the found ones, which the
+   * owner sees and can change from the fund's card.
    */
   essentialCategoryIds: z
     .array(z.uuid())
@@ -257,7 +261,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
 /**
  * Takes deleted categories out of the essential ones the owner picked, so the
  * stored pick never points at a category that is gone. A pick left empty goes
- * back to counting every spending category.
+ * back to the essentials Leeway finds itself (essentials.ts).
  */
 export async function forgetEssentialCategories(db: Db, deletedIds: string[]): Promise<void> {
   const settings = await getSettings(db)

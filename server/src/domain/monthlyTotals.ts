@@ -21,14 +21,14 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
+import { currentPeriod } from './budgetReport.js'
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
-  currentPeriod,
   rangeParams,
   sumTotals,
   type DateRange,
-} from './budgetReport.js'
+} from './categoryTotals.js'
 import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
 import { firstTransactionDay } from './profile/income.js'

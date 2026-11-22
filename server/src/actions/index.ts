@@ -53,6 +53,11 @@ import {
   listGoalsAction,
   updateGoalAction,
 } from './goals.js'
+import {
+  changeEmergencyFundAction,
+  getEmergencyFundAction,
+  startEmergencyFundAction,
+} from './goalPlans.js'
 import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
 import {
   countNotificationsAction,
@@ -206,6 +211,9 @@ export const actionList = [
   addToGoalAction,
   listGoalContributionsAction,
   deleteGoalAction,
+  getEmergencyFundAction,
+  startEmergencyFundAction,
+  changeEmergencyFundAction,
   getNetWorthAction,
   listOwnedAndOwedAction,
   addOwnedOrOwedAction,

@@ -2,7 +2,8 @@
 
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
-import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
+import { goalOf } from '../../../server/src/domain/goalProgress'
+import { goalInputSchema } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { retirementView } from '../../../server/src/domain/profile/views'
 import type { RetirementPatch } from '../../../server/src/domain/retirement/assumptions'
@@ -77,7 +78,16 @@ export function goal(
   fields: { name: string; targetCents: number } & Partial<Goal>,
   facts: GoalProgressFacts = NO_PROGRESS,
 ): Goal {
-  const { id, accountName, accountBalanceCents, balanceAsOf, createdOn, ...input } = fields
+  const {
+    id,
+    accountName,
+    accountBalanceCents,
+    balanceAsOf,
+    createdOn,
+    emergencyMonths,
+    followedAccountIds,
+    ...input
+  } = fields
   return goalOf(
     {
       // Test account ids are not UUIDs, so the account is checked apart from the schema.
@@ -88,6 +98,8 @@ export function goal(
       accountBalanceCents: accountBalanceCents ?? null,
       balanceAsOf: balanceAsOf ?? null,
       createdOn: createdOn ?? '2026-09-01',
+      emergencyMonths: emergencyMonths ?? null,
+      followedAccountIds: followedAccountIds ?? null,
     },
     facts,
     { today: TODAY, period: { kind: 'monthly', startDay: 1 } },
@@ -152,13 +164,15 @@ export function debtPlans(
 }
 
 /**
- * The server for the Plan screen: cash flow is always there, with nothing
- * entered by hand unless a test says otherwise; the rest per test.
+ * The server for the Plan screen: cash flow is always there, with no
+ * emergency fund to offer and nothing entered by hand unless a test says
+ * otherwise; the rest per test.
  */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
   return fakeServer(
     {
       get_cash_flow: () => cashFlow(),
+      get_emergency_fund: () => null,
       list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       ...handlers,
     },
