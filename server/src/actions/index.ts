@@ -20,6 +20,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
+import { getCardInterestAction } from './cardInterest.js'
 import { hideHomeAlertAction, listHomeAlertsAction } from './homeAlerts.js'
 import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
@@ -178,6 +179,7 @@ export const actionList = [
   hideHomeAlertAction,
   createAccountAction,
   updateAccountAction,
+  getCardInterestAction,
   deleteAccountAction,
   summarizeSavingsAction,
   getFinancialProfileAction,

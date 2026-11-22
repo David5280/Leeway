@@ -1,6 +1,7 @@
 // One account's own page (/accounts/:id), from the most general to the most
 // detail: its balance and the math behind it (or, for one the bank no longer
-// shares, when it was last read and the ways on), any alerts and the summary,
+// shares, when it was last read and the ways on), any alerts, what a card's
+// balance costs in interest (or a way to add its APR) and the summary,
 // the balance over the last 30 days against where it should be, money in and
 // out, spending, bills and repeating charges paid from it, fees, its goals,
 // then recent activity.
@@ -24,6 +25,7 @@ import { isoDaysAgo } from '../lib/dates'
 import { trendDescription } from '../lib/drill'
 import { accountDrill, balanceTrend } from '../lib/drills/accounts'
 import { shortDate } from '../lib/format'
+import { InterestCard } from './accounts/CardInterest'
 import { BillsCard, FeesCard, GoalsCard, RecurringCard } from './accounts/DetailLists'
 import { RecentCard, SummaryCard, ViewBreakdowns } from './accounts/ViewParts'
 
@@ -100,6 +102,7 @@ function DetailBody({ account }: { account: Account }) {
         <NoLongerShared account={account} />
       )}
       <AlertsCard alerts={view.data?.alerts ?? []} label="Alerts for this account" />
+      <InterestCard account={account} />
       {view.data ? (
         <SummaryCard summary={view.data.summary} />
       ) : (

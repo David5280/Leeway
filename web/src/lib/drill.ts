@@ -16,8 +16,8 @@ import type { MoneySign, MoneyTone } from './money'
 export type DrillValue =
   { cents: number; sign?: MoneySign; tone?: MoneyTone } | { text: string; tone?: MoneyTone }
 
-/** How a term joins what came before: added, taken away, or listed beside it. */
-export type MathOp = 'plus' | 'minus' | 'and'
+/** How a term joins what came before: added, taken away, multiplied, divided, or listed beside it. */
+export type MathOp = 'plus' | 'minus' | 'times' | 'dividedBy' | 'and'
 
 /** One term of the math, joined to what came before by its operation; the first has none. */
 export interface MathTerm {
@@ -31,6 +31,8 @@ export const MATH_OPS: Record<MathOp, { sign: string; words: string }> = {
   plus: { sign: '+', words: 'plus' },
   // The true minus sign, not a hyphen.
   minus: { sign: '−', words: 'minus' },
+  times: { sign: '×', words: 'times' },
+  dividedBy: { sign: '÷', words: 'divided by' },
   // One of several values a figure is picked from, like the months a middle is taken of.
   and: { sign: '·', words: 'and' },
 }
