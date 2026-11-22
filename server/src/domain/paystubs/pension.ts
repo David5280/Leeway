@@ -88,13 +88,23 @@ export async function applyToPension(
   return patchPension(db, made.accountId, patch)
 }
 
-/** A new pension with an empty plan: on the account given, or else as a new account. */
+/** Turning a pension kept already away from being made again, pointing to updating it instead. */
+export const keptPension = (name: string) =>
+  `${name} is a pension already. Update it with this paystub instead.`
+
+/**
+ * A new pension with an empty plan: on the account given, unless it is a
+ * pension already, or else as a new account.
+ */
 async function makePension(
   db: Db,
   newPension: NewPaystubPension | null,
   attachAccountId: string | null,
 ): Promise<Pension> {
-  if (attachAccountId !== null) return attachPlan(db, { ...EMPTY_PLAN, accountId: attachAccountId })
+  if (attachAccountId !== null) {
+    // An empty plan would wipe a kept pension's benefit figures, so one is refused.
+    return attachPlan(db, { ...EMPTY_PLAN, accountId: attachAccountId }, { keptPension })
+  }
   const { currency } = await getSettings(db)
   // The schema lets only one of the two through, and the caller checked there is one.
   return insertPension(db, { ...EMPTY_PLAN, ...newPension! }, currency)

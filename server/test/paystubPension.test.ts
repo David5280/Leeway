@@ -4,7 +4,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { NO_PENSION_CONTRIBUTION } from '../src/domain/paystubs/pension.js'
+import { keptPension, NO_PENSION_CONTRIBUTION } from '../src/domain/paystubs/pension.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
 import { actionCaller } from './actionCaller.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
@@ -222,6 +222,39 @@ describe('save_paystub making an account Leeway has the new pension', () => {
     expect(empty.message).toBe(NO_PENSION_CONTRIBUTION)
     expect(await pensionAccounts()).toEqual([])
     expect((await call('get_paystub')).latest).toBeNull()
+  })
+
+  it("refuses a pension kept already, leaving its plan's figures as they were", async () => {
+    const kept = await call('create_pension', {
+      name: 'Colorado PERA',
+      serviceYears: 12,
+      multiplierPercent: 2.5,
+      statementBenefitMonthlyCents: 300_000,
+      salaryBasisMonthlyCents: 700_000,
+      benefitAge: 60,
+      checkedOn: '2026-10-01',
+    })
+    const refused = await callError('save_paystub', {
+      paystub: confirmedPaystub(),
+      attachAccountId: kept.accountId,
+    })
+    expect(refused).toMatchObject({ code: 'invalid_input', message: keptPension('Colorado PERA') })
+    expect(refused.message).toBe(
+      'Colorado PERA is a pension already. Update it with this paystub instead.',
+    )
+    const [pension] = (await call('project_retirement')).plan.pensions
+    expect(pension!.plan).toEqual(kept.plan)
+    expect((await call('get_paystub')).latest).toBeNull()
+    // Updating it, as the message says, keeps the benefit figures and adds the paystub's.
+    const updated = await call('save_paystub', {
+      paystub: confirmedPaystub(),
+      pensionAccountId: kept.accountId,
+    })
+    expect(updated.pension!.plan).toMatchObject({
+      serviceYears: 12,
+      statementBenefitMonthlyCents: 300_000,
+      contribution: { kind: 'amount', cents: 42_295 },
+    })
   })
 
   it('leaves the account as it was when a later step fails', async () => {

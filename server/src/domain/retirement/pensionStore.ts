@@ -129,12 +129,22 @@ export type AttachPension = z.infer<typeof attachPensionSchema>
  * transaction the caller holds, such as saving a paystub, instead of adding a
  * second account for it. The account becomes a pension, so its balance pays
  * the benefit and is not counted again as savings. Takes the pensions lock
- * and, for an account not yet a pension, a free place.
+ * and, for an account not yet a pension, a free place. The plan given
+ * replaces any kept; with keptPension, an account that is a pension already
+ * is refused in those words instead, so its plan is never lost.
  */
-export async function attachPlan(db: Db, input: AttachPension): Promise<Pension> {
+export async function attachPlan(
+  db: Db,
+  input: AttachPension,
+  { keptPension }: { keptPension?: (name: string) => string } = {},
+): Promise<Pension> {
   await lockPensions(db)
   const { accountId, ...plan } = input
   const account = await getAccount(db, accountId)
+  // Checked under the lock, so no other request can make it a pension in between.
+  if (keptPension && account.kind === 'pension') {
+    throw new AppError('invalid_input', keptPension(account.name))
+  }
   if (!MAY_BE_PENSION.includes(account.kind) || !kindFitsType('pension', account.type)) {
     throw new AppError(
       'invalid_input',

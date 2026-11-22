@@ -4,8 +4,8 @@
 // keeps it; only the figures the owner saves are kept.
 
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
-import { paystubs } from '../../../../api/client'
+import { useRef, useState } from 'react'
+import { paystubs, type Input } from '../../../../api/client'
 import { useAction, useActionMutation } from '../../../../api/hooks'
 import { ErrorNote, Loading } from '../../../../components/ui'
 import { pensionCandidates } from '../fields'
@@ -154,9 +154,26 @@ export function PaystubImport({
   const save = useActionMutation('save_paystub')
   // A new pension may belong on an account Leeway already has, such as one linked from the bank.
   const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: adding })
+  // Set the moment a save starts, before React shows it as busy, so a double click saves once.
+  const saving = useRef(false)
   const [problem, setProblem] = useState<string | null>(null)
   // Whether the owner chose to review a paystub that seemed to show no pension.
   const [reviewAnyway, setReviewAnyway] = useState(false)
+
+  // Until the accounts are known, a new pension could not be offered the one it belongs on.
+  const accountsPending = adding && accounts.isPending
+  const accountsError = adding ? accounts.error : null
+
+  function saveOnce(input: Input<'save_paystub'>) {
+    if (saving.current) return
+    saving.current = true
+    save.mutate(input, {
+      onSuccess: ({ paystub }) => onSaved(paystub.payDate),
+      onSettled: () => {
+        saving.current = false
+      },
+    })
+  }
 
   function choose(file: File) {
     const found = fileProblem(file)
@@ -196,11 +213,9 @@ export function PaystubImport({
       pensionAccountId={pensionAccountId}
       adding={adding}
       candidates={pensionCandidates(accounts.data ?? [])}
-      busy={save.isPending}
-      error={save.error}
-      onSave={(input) =>
-        save.mutate(input, { onSuccess: ({ paystub }) => onSaved(paystub.payDate) })
-      }
+      busy={save.isPending || accountsPending || accountsError !== null}
+      error={save.error ?? accountsError}
+      onSave={saveOnce}
       onCancel={onCancel}
     />
   )

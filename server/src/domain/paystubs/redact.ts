@@ -112,9 +112,14 @@ export function redactEmployer(text: string | null): string | null {
 /** A word that is no part of a plan's name: one holding a digit, #, % or $, like a rate or an ID. */
 const NOT_A_NAME_WORD = /[\d#%$]/
 
-/** Words a pension line prints after the plan's name, which name the deduction, not the plan. */
-const DEDUCTION_WORDS = new Set([
+/**
+ * Words a pension line prints after the plan's name, which name the
+ * deduction or label a member number, not the plan. Compared without case or
+ * a closing "." or ":", so "No." and "ID:" count.
+ */
+const LABEL_WORDS = new Set([
   'member',
+  'mbr',
   'employee',
   'ee',
   'pre-tax',
@@ -123,13 +128,18 @@ const DEDUCTION_WORDS = new Set([
   'contrib',
   'deduction',
   'ded',
+  'no',
+  'id',
 ])
+
+/** A word as LABEL_WORDS holds it: lower case, with no closing "." or ":". */
+const labelForm = (word: string) => word.toLowerCase().replace(/[.:]$/, '')
 
 /**
  * The pension plan's name only, like "PERA", short enough to name a pension
  * by: everything from the first word holding a digit, #, % or $ on is dropped,
- * then any deduction words left at its end ("PERA Member 11.00% 422.95" is
- * "PERA").
+ * then any label words left at its end and a trailing colon ("PERA Member
+ * 11.00% 422.95" and "PERA No. 4417" are both "PERA").
  */
 export function redactPlanName(text: string | null): string | null {
   const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
@@ -137,6 +147,8 @@ export function redactPlanName(text: string | null): string | null {
   const words = name.split(' ')
   const cut = words.findIndex((word) => NOT_A_NAME_WORD.test(word))
   const kept = cut === -1 ? words : words.slice(0, cut)
-  while (kept.length > 0 && DEDUCTION_WORDS.has(kept.at(-1)!.toLowerCase())) kept.pop()
-  return kept.length === 0 ? null : kept.join(' ')
+  while (kept.length > 0 && LABEL_WORDS.has(labelForm(kept.at(-1)!))) kept.pop()
+  // A label's colon may be left on the name itself, as in "PERA: 422.95".
+  const named = kept.join(' ').replace(/:$/, '')
+  return named === '' ? null : named
 }
