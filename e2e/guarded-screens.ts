@@ -225,8 +225,9 @@ export const SCREENS: Screen[] = [
   },
   at('plan', '/plan'),
   at('plan', '/plan', {
-    name: '/plan with spare cash in checking',
-    // The shared install can't promise spare cash, so the answer is stood in for.
+    name: '/plan with cash that could earn more',
+    // The shared install holds an overdrawn account, which hides the card, so
+    // the answer is stood in for (idle-cash.spec.ts reads the server's own).
     before: fakeSpareCash,
   }),
   at('plan', '/plan', {

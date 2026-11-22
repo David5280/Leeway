@@ -1,6 +1,6 @@
 // The Plan screen: bills, goals, debts, net worth or retirement, one section
 // at a time. Cash until payday leads the bills, the section it answers for,
-// with any spare cash that could sit in savings under it, and both stay off
+// with any cash that could earn more in savings under it, and both stay off
 // the others so each opens on its own subject.
 
 import { useNavigate, useParams } from 'react-router-dom'
