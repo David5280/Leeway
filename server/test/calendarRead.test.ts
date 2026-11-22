@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_EVENTS, parseCalendar } from '../src/domain/calendar/ics.js'
 import { daysOf, kindOf } from '../src/domain/calendar/kinds.js'
+import { mergeSpans, type KindedEvent } from '../src/domain/calendar/spans.js'
 
 const WINDOW = { from: '2026-01-01', to: '2027-12-31' }
 
@@ -88,10 +89,8 @@ describe('parseCalendar', () => {
         'DTSTART;VALUE=DATE:20200301',
         'RRULE:FREQ=YEARLY;UNTIL=20261231',
       ],
-      ['UID:weekly', 'SUMMARY:Gym', 'DTSTART:20260105T070000', 'RRULE:FREQ=WEEKLY'],
     )
     expect(parseCalendar(text, 'UTC', WINDOW).map((e) => [e.uid, e.startsOn])).toEqual([
-      ['weekly', '2026-01-05'],
       ['mom', '2026-02-28'],
       ['old', '2026-03-01'],
       ['mom', '2027-02-28'],
@@ -138,7 +137,7 @@ describe('parseCalendar', () => {
     ])
   })
 
-  it('keeps only events touching the window, once each, at most MAX_EVENTS', () => {
+  it('keeps only events touching the window, once each', () => {
     const inside = ['UID:in', 'SUMMARY:In', 'DTSTART;VALUE=DATE:20260601']
     const text = ics(
       ['UID:before', 'SUMMARY:Old', 'DTSTART;VALUE=DATE:20200601'],
@@ -153,13 +152,56 @@ describe('parseCalendar', () => {
       ],
     )
     expect(parseCalendar(text, 'UTC', WINDOW).map((e) => e.uid)).toEqual(['span', 'in'])
-    const many = ics(
-      ...Array.from({ length: MAX_EVENTS + 5 }, (_, i) => [
-        `UID:e${i}`,
-        'DTSTART;VALUE=DATE:20260601',
-      ]),
-    )
-    expect(parseCalendar(many, 'UTC', WINDOW)).toHaveLength(MAX_EVENTS)
+  })
+
+  it('past MAX_EVENTS, drops the far past first, so what is coming up stays', () => {
+    const past = Array.from({ length: MAX_EVENTS + 1 }, (_, i) => [
+      `UID:p${String(i).padStart(5, '0')}`,
+      'SUMMARY:Weekend trip',
+      'DTSTART;VALUE=DATE:20260101',
+    ])
+    const coming = ['UID:rome', 'SUMMARY:Rome trip', 'DTSTART;VALUE=DATE:20261210']
+    const events = parseCalendar(ics(...past, coming), 'UTC', WINDOW)
+    expect(events).toHaveLength(MAX_EVENTS)
+    expect(events.at(-1)!.uid).toBe('rome')
+    expect(events.map((e) => e.uid)).not.toContain('p00000')
+  })
+
+  it('asks what to keep before the cap, so everyday events never crowd out a trip', () => {
+    const meetings = Array.from({ length: MAX_EVENTS + 1 }, (_, i) => [
+      `UID:m${i}`,
+      'SUMMARY:Standup',
+      'DTSTART;VALUE=DATE:20261220',
+    ])
+    const trip = ['UID:rome', 'SUMMARY:Rome trip', 'DTSTART;VALUE=DATE:20261210']
+    const keep = (event: { title: string }) => event.title !== 'Standup'
+    expect(parseCalendar(ics(...meetings, trip), 'UTC', WINDOW, keep)).toMatchObject([
+      { uid: 'rome' },
+    ])
+  })
+
+  it('stays within MAX_EVENTS while reading many repeating events, keeping the latest', () => {
+    const daily = Array.from({ length: 15 }, (_, i) => [
+      `UID:d${String(i).padStart(2, '0')}`,
+      'SUMMARY:Camp',
+      'DTSTART;VALUE=DATE:20260101',
+      'RRULE:FREQ=DAILY',
+    ])
+    const events = parseCalendar(ics(...daily), 'UTC', WINDOW)
+    expect(events).toHaveLength(MAX_EVENTS)
+    expect(events.at(-1)!.startsOn).toBe('2027-12-31')
+  })
+
+  it('drops control characters from text and ids, which Postgres would refuse', () => {
+    const text = ics([
+      'UID:a\u0001b',
+      'SUMMARY:Rome\u0000 trip\u001F',
+      'LOCATION:\u0007',
+      'DTSTART;VALUE=DATE:20260601',
+    ])
+    expect(parseCalendar(text, 'UTC', WINDOW)).toMatchObject([
+      { uid: 'ab', title: 'Rome trip', location: null },
+    ])
   })
 
   it('reads nothing from a file with no events', () => {
@@ -203,5 +245,64 @@ describe('kindOf', () => {
   it('counts both ends of an event', () => {
     expect(daysOf({ startsOn: '2026-06-01', endsOn: '2026-06-01' })).toBe(1)
     expect(daysOf({ startsOn: '2026-06-01', endsOn: '2026-06-05' })).toBe(5)
+  })
+})
+
+describe('mergeSpans', () => {
+  const event = (
+    kind: KindedEvent['kind'],
+    title: string,
+    startsOn: string,
+    endsOn = startsOn,
+  ) => ({
+    kind,
+    title,
+    startsOn,
+    endsOn,
+  })
+
+  it('merges a trip with its flight and hotel, named for its longest event', () => {
+    expect(
+      mergeSpans([
+        event('trip', 'Flight to Rome', '2026-12-09'),
+        event('trip', 'Hotel Rome', '2026-12-10', '2026-12-13'),
+        event('trip', 'Rome trip', '2026-12-10', '2026-12-14'),
+        event('trip', 'Flight home', '2026-12-15'),
+        event('trip', 'Ski weekend', '2026-12-20', '2026-12-21'),
+      ]),
+    ).toEqual([
+      event('trip', 'Rome trip', '2026-12-09', '2026-12-15'),
+      event('trip', 'Ski weekend', '2026-12-20', '2026-12-21'),
+    ])
+  })
+
+  it('merges back-to-back days only for kinds that run over days', () => {
+    expect(
+      mergeSpans([
+        event('wedding', 'Rehearsal dinner', '2026-06-05'),
+        event('wedding', "Sam's wedding", '2026-06-06'),
+        event('holiday', 'Christmas Eve', '2026-12-24'),
+        event('holiday', 'Christmas', '2026-12-25'),
+        event('birthday', "Jo's birthday", '2026-03-01'),
+        event('birthday', "Al's birthday", '2026-03-02'),
+        event('birthday', "Jo's bday dinner", '2026-03-01'),
+        event('show', 'Concert', '2026-03-01'),
+      ]).map((span) => [span.kind, span.title, span.startsOn, span.endsOn]),
+    ).toEqual([
+      ['birthday', "Jo's birthday", '2026-03-01', '2026-03-01'],
+      ['show', 'Concert', '2026-03-01', '2026-03-01'],
+      ['birthday', "Al's birthday", '2026-03-02', '2026-03-02'],
+      ['wedding', 'Rehearsal dinner', '2026-06-05', '2026-06-06'],
+      ['holiday', 'Christmas Eve', '2026-12-24', '2026-12-25'],
+    ])
+  })
+
+  it('leaves the events given as they were', () => {
+    const events = [
+      event('trip', 'A', '2026-01-01'),
+      event('trip', 'B', '2026-01-02', '2026-01-05'),
+    ]
+    mergeSpans(events)
+    expect(events[0]).toEqual(event('trip', 'A', '2026-01-01'))
   })
 })

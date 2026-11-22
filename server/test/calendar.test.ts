@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { findAction } from '../src/actions/index.js'
 import type { AppContext } from '../src/context.js'
-import { median } from '../src/domain/calendar/forecast.js'
+import { median, setAsideFor } from '../src/domain/calendar/forecast.js'
 import type { Fetcher } from '../src/domain/calendar/feed.js'
+import { MAX_EVENTS } from '../src/domain/calendar/ics.js'
 import { refreshCalendar, refreshIfStale, REFRESH_HOURS } from '../src/domain/calendar/store.js'
 import { decrypt } from '../src/lib/crypto.js'
 import { HOUR_MS } from '../src/lib/time.js'
@@ -79,6 +80,7 @@ describe('linking a calendar', () => {
   })
 
   it('reads it at once, keeps the address sealed, and shows only its host', async () => {
+    // Only events likely to cost money are kept; the standup is never stored.
     serving(ics([LISBON, ['standup', 'Standup', '2026-11-18']]))
     const status = await call('connect_calendar', { url: SECRET.replace('https', 'webcal') })
     expect(status).toEqual({
@@ -87,7 +89,7 @@ describe('linking a calendar', () => {
       connectedAt: NOW.toISOString(),
       fetchedAt: NOW.toISOString(),
       lastError: null,
-      eventCount: 2,
+      eventCount: 1,
     })
     expect(JSON.stringify(status)).not.toContain('private-abc123')
     const { rows } = await ctx.db.query<{ url_encrypted: string }>('SELECT * FROM calendar_feed')
@@ -142,13 +144,46 @@ describe('linking a calendar', () => {
     expect((await call('refresh_calendar')).lastError).toMatch(/Link the calendar again/)
   })
 
-  it('reads nothing with no calendar linked, and lets other failures through', async () => {
+  it('reads nothing with no calendar linked', async () => {
     const fetcher = serving(ics([LISBON]))
     expect(await call('refresh_calendar')).toMatchObject({ connected: false })
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('notes any failure for Settings, and lets one that is not the calendar’s own through', async () => {
+    const fetcher = serving(ics([LISBON]))
     await call('connect_calendar', { url: SECRET })
     const deps = { key: ctx.config.encryptionKey, timeZone: 'Not/A_Zone', now: NOW, fetcher }
     await expect(refreshCalendar(ctx.db, deps)).rejects.toThrow(RangeError)
+    expect(await call('calendar_status')).toMatchObject({
+      eventCount: 1,
+      lastError: 'The calendar could not be read just now. Try again later.',
+    })
+    // The scheduled read notes it the same way.
+    await ctx.db.query('UPDATE calendar_feed SET last_error = NULL, fetched_at = NULL')
+    await expect(refreshIfStale(ctx.db, deps)).rejects.toThrow(RangeError)
+    expect((await call('calendar_status')).lastError).toMatch(/could not be read just now/)
+  })
+
+  it('reads a calendar whose text holds control characters, which Postgres refuses', async () => {
+    serving(ics([['nul', 'Rome\u0000 trip', '2026-12-10']]))
+    expect(await call('connect_calendar', { url: SECRET })).toMatchObject({ eventCount: 1 })
+    const { rows } = await ctx.db.query<{ title: string }>('SELECT title FROM calendar_events')
+    expect(rows).toEqual([{ title: 'Rome trip' }])
+  })
+
+  it('stores what is coming up even behind more past events than it keeps', async () => {
+    const past = Array.from({ length: MAX_EVENTS + 1 }, (_, i): [string, string, string] => [
+      `p${i}`,
+      'Weekend trip',
+      '2025-01-04',
+    ])
+    serving(ics([...past, LISBON]))
+    expect(await call('connect_calendar', { url: SECRET })).toMatchObject({
+      eventCount: MAX_EVENTS,
+    })
+    const { rowCount } = await ctx.db.query(`SELECT 1 FROM calendar_events WHERE uid = 'lisbon'`)
+    expect(rowCount).toBe(1)
   })
 
   it('reads again on the schedule only once the last read is a few hours old', async () => {
@@ -172,6 +207,39 @@ describe('linking a calendar', () => {
     expect(await call('disconnect_calendar')).toMatchObject({ connected: false, eventCount: 0 })
     const { rowCount } = await ctx.db.query('SELECT 1 FROM calendar_events')
     expect(rowCount).toBe(0)
+  })
+
+  it('reads one at a time, so an unlink waits for a read under way and wins', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let asked!: () => void
+    const reading = new Promise<void>((resolve) => (asked = resolve))
+    ctx.fetchCalendar = async () => {
+      asked()
+      await gate
+      return new Response(ics([LISBON, ['bday', 'Birthday', '2026-12-01']]))
+    }
+    const refresh = call('refresh_calendar')
+    await reading
+    let unlinked = false
+    const unlink = call('disconnect_calendar').then(() => (unlinked = true))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(unlinked).toBe(false)
+    release()
+    await Promise.all([refresh, unlink])
+    expect(await call('calendar_status')).toMatchObject({ connected: false, eventCount: 0 })
+  })
+
+  it('reads once when the schedule and a second check ask together', async () => {
+    const fetcher = serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    await ctx.db.query('UPDATE calendar_feed SET fetched_at = NULL')
+    const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: NOW, fetcher }
+    const results = await Promise.all([refreshIfStale(ctx.db, deps), refreshIfStale(ctx.db, deps)])
+    expect(results.sort()).toEqual(['fresh', 'read'])
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
   it('stays in the app: no agent can link, read or see the calendar', () => {
@@ -265,15 +333,81 @@ describe('the forecast', () => {
       week.billsCents,
       week.setAsideCents,
     ])
-    // Trips run $250 a day as the middle of $300 and $200 (the empty one tells nothing).
+    // Past trips booked $600 and $400 ahead (the middle, $500, once a trip) and
+    // spent $100 a day while away; the empty one tells nothing. The conference
+    // is under way: it is booked, and two days are left at $100.
     expect(lines).toEqual([
-      ['2026-11-17', ['Conference trip 2026-11-15 trip 100000 2', 'pay 2026-11-20'], 0, 100000],
+      ['2026-11-17', ['Conference trip 2026-11-15 trip 20000 2', 'pay 2026-11-20'], 0, 20000],
       ['2026-11-24', ['Rent 2026-11-25 150000'], 150000, 0],
       ['2026-12-01', ["Sam's birthday 2026-12-01 birthday 6000 2", 'pay 2026-12-04'], 0, 6000],
-      ['2026-12-08', ['Lisbon trip 2026-12-10 trip 125000 2'], 0, 125000],
+      ['2026-12-08', ['Lisbon trip 2026-12-10 trip 100000 2'], 0, 100000],
       ['2026-12-15', ['pay 2026-12-18', 'Comedy show 2026-12-18 show null 0'], 0, 0],
       ['2026-12-22', ['Rent 2026-12-25 150000'], 150000, 0],
     ])
+  })
+
+  it('costs a trip written as several events once, never stretching its flight into a day rate', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    // Two past trips, each $1,000 in flights booked ahead and $500 while away.
+    await spend(accountId, '2025-04-01', 100000, { primary: 'TRAVEL' })
+    await spend(accountId, '2025-05-11', 25000)
+    await spend(accountId, '2025-05-13', 25000)
+    await spend(accountId, '2026-02-01', 100000, { primary: 'TRAVEL' })
+    await spend(accountId, '2026-03-12', 50000)
+    serving(
+      ics([
+        ['paris', 'Paris trip', '2025-05-10', '2025-05-14'],
+        ['paris-flight', 'Flight to Paris', '2025-05-10'],
+        ['tokyo', 'Tokyo trip', '2026-03-10', '2026-03-14'],
+        ['tokyo-flight', 'Flight to Tokyo', '2026-03-10'],
+        ['rome', 'Rome trip', '2026-12-10', '2026-12-14'],
+        ['rome-flight', 'Flight to Rome', '2026-12-10'],
+        ['rome-hotel', 'Hotel Rome', '2026-12-10', '2026-12-14'],
+      ]),
+    )
+    await call('connect_calendar', { url: SECRET })
+    const weeks = (await call('get_forecast')).weeks
+    expect(weeks.flatMap((week) => week.items)).toEqual([
+      {
+        type: 'event',
+        date: '2026-12-10',
+        endsOn: '2026-12-14',
+        title: 'Rome trip',
+        kind: 'trip',
+        suggestedCents: 150000,
+        basedOn: 2,
+      },
+    ])
+    expect(weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(150000)
+  })
+
+  it('suggests nothing for a trip until past trips show what one costs', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const items = (await call('get_forecast')).weeks.flatMap((week) => week.items)
+    expect(items).toMatchObject([{ title: 'Lisbon trip', suggestedCents: null, basedOn: 0 }])
+  })
+
+  it('shows a bill overdue at the head of the first week rather than drop it', async () => {
+    await call('create_bill', {
+      name: 'Phone',
+      amountCents: 6000,
+      cadence: 'month',
+      anchorDate: '2026-10-10',
+      matchPattern: 'VERIZON',
+    })
+    serving(ics([]))
+    await call('connect_calendar', { url: SECRET })
+    const [first] = (await call('get_forecast')).weeks
+    expect(first!.items[0]).toEqual({
+      type: 'bill',
+      date: '2026-11-10',
+      billId: expect.any(String),
+      name: 'Phone',
+      amountCents: 6000,
+      overdue: true,
+    })
+    expect(first!.billsCents).toBe(6000)
   })
 
   it('shows no payday when pay is unknown, rather than the budget period’s end', async () => {
@@ -282,6 +416,23 @@ describe('the forecast', () => {
     // A monthly budget with no regular deposit has no payday to show.
     const forecast = await call('get_forecast')
     expect(forecast.weeks.flatMap((week) => week.items)).toEqual([])
+  })
+
+  it('sets aside the booking once and each day for a trip, only the days left once under way', () => {
+    const usual = { perEventCents: 50000, perDayCents: 10000, basedOn: 2 }
+    const trip = {
+      kind: 'trip' as const,
+      title: 'Rome trip',
+      startsOn: '2026-11-15',
+      endsOn: '2026-11-19',
+    }
+    expect(setAsideFor(trip, usual, '2026-11-10')).toBe(100000)
+    expect(setAsideFor(trip, usual, '2026-11-17')).toBe(30000)
+    // A wedding's gift is the same whether it has started or not.
+    const gift = { perEventCents: 7000, perDayCents: 0, basedOn: 3 }
+    const wedding = { ...trip, kind: 'wedding' as const, title: 'Wedding weekend' }
+    expect(setAsideFor(wedding, gift, '2026-11-17')).toBe(7000)
+    expect(setAsideFor(wedding, gift, '2026-11-10')).toBe(7000)
   })
 
   it('takes the middle value of an even count as the mean of the two middle ones', () => {

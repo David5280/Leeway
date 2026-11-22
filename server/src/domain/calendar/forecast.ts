@@ -3,13 +3,14 @@
 // the same kind show what they usually cost.
 
 import type { Db } from '../../db/pool.js'
-import { addDays, type IsoDate } from '../../lib/dates.js'
+import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
 import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
 import { nextPayday } from '../cashFlow.js'
 import type { Settings } from '../settings.js'
-import { costsOf } from './costs.js'
+import { costsOf, tripCostsOf, type TripCost } from './costs.js'
 import { daysOf, kindOf, type EventKind } from './kinds.js'
+import { mergeSpans, type KindedEvent } from './spans.js'
 import { eventsBetween } from './store.js'
 import { FORECAST_WEEKS, intoWeeks, type Forecast, type ForecastItem } from './weeks.js'
 
@@ -30,60 +31,76 @@ function roundUp(cents: number): number {
   return Math.ceil(cents / 1000) * 1000
 }
 
-interface Typical {
-  /** Per day for a trip (trips scale with their length); per event otherwise. */
-  cents: number
+/** What past events of a kind usually cost, when enough of them show spending to tell. */
+export interface Typical {
+  /** Paid once per event: a trip's travel booked ahead, a wedding's gift, a show's tickets. */
+  perEventCents: number
+  /** Paid for each day on top: a trip's spending while away; 0 for the other kinds. */
+  perDayCents: number
   basedOn: number
 }
 
-/** What past events of a kind usually cost, when there are enough with spending to tell. */
-async function typicalCost(
-  db: Db,
-  kind: EventKind,
-  past: { startsOn: IsoDate; endsOn: IsoDate }[],
-): Promise<Typical | null> {
-  const costs = await costsOf(db, kind, past)
-  const spent = past
-    .map((event, i) => (kind === 'trip' ? costs[i]! / daysOf(event) : costs[i]!))
-    .filter((cents) => cents > 0)
-  if (spent.length < MIN_PAST_EVENTS) return null
-  return { cents: median(spent), basedOn: spent.length }
+/** What past trips usually cost: the booking once, the days by the day. */
+function typicalTrip(past: KindedEvent[], costs: TripCost[]): Typical | null {
+  const trips = past
+    .map((trip, i) => ({ ...costs[i]!, days: daysOf(trip) }))
+    .filter((trip) => trip.bookedCents + trip.onTripCents > 0)
+  if (trips.length < MIN_PAST_EVENTS) return null
+  return {
+    perEventCents: median(trips.map((trip) => trip.bookedCents)),
+    perDayCents: median(trips.map((trip) => trip.onTripCents / trip.days)),
+    basedOn: trips.length,
+  }
 }
 
-/** Money relevant events from the calendar, with what to set aside for each. */
+async function typicalCost(db: Db, kind: EventKind, past: KindedEvent[]): Promise<Typical | null> {
+  if (kind === 'trip') return typicalTrip(past, await tripCostsOf(db, past))
+  const spent = (await costsOf(db, kind, past)).filter((cents) => cents > 0)
+  if (spent.length < MIN_PAST_EVENTS) return null
+  return { perEventCents: median(spent), perDayCents: 0, basedOn: spent.length }
+}
+
+/**
+ * What to set aside for an event coming up. A trip already under way is
+ * booked already, so only the days it has left are still to pay for.
+ */
+export function setAsideFor(event: KindedEvent, usual: Typical, today: IsoDate): number {
+  const underWay = event.startsOn < today
+  const daysLeft = daysOf({ startsOn: maxDate(event.startsOn, today), endsOn: event.endsOn })
+  const once = underWay && event.kind === 'trip' ? 0 : usual.perEventCents
+  return once + usual.perDayCents * daysLeft
+}
+
+/**
+ * Money relevant events from the calendar, with what to set aside for each.
+ * Events that are one thing (a trip, its flight and its hotel) are merged
+ * first, coming and past alike, so each is costed and listed once.
+ */
 async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
-  const upcoming = (await eventsBetween(db, today, to)).flatMap((event) => {
-    const kind = kindOf(event)
-    return kind ? [{ ...event, kind }] : []
-  })
-  if (!upcoming.length) return []
-  const past = (await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), addDays(today, -1)))
-    .filter((event) => event.endsOn < today)
-    .flatMap((event) => {
+  const events = await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
+  const spans = mergeSpans(
+    events.flatMap((event) => {
       const kind = kindOf(event)
       return kind ? [{ ...event, kind }] : []
-    })
+    }),
+  )
+  const upcoming = spans.filter((span) => span.endsOn >= today)
+  if (!upcoming.length) return []
+  const past = spans.filter((span) => span.endsOn < today)
   const typical = new Map<EventKind, Typical | null>()
-  for (const kind of new Set(upcoming.map((event) => event.kind))) {
-    typical.set(
-      kind,
-      await typicalCost(
-        db,
-        kind,
-        past.filter((event) => event.kind === kind),
-      ),
-    )
+  for (const kind of new Set(upcoming.map((span) => span.kind))) {
+    const sameKind = past.filter((span) => span.kind === kind)
+    typical.set(kind, await typicalCost(db, kind, sameKind))
   }
-  return upcoming.map((event) => {
-    const usual = typical.get(event.kind)
-    const cents = usual && (event.kind === 'trip' ? usual.cents * daysOf(event) : usual.cents)
+  return upcoming.map((span) => {
+    const usual = typical.get(span.kind)
     return {
       type: 'event' as const,
-      date: event.startsOn,
-      endsOn: event.endsOn,
-      title: event.title,
-      kind: event.kind,
-      suggestedCents: cents ? roundUp(cents) : null,
+      date: span.startsOn,
+      endsOn: span.endsOn,
+      title: span.title,
+      kind: span.kind,
+      suggestedCents: usual ? roundUp(setAsideFor(span, usual, today)) : null,
       basedOn: usual?.basedOn ?? 0,
     }
   })
@@ -106,16 +123,22 @@ async function paydayItems(
   }))
 }
 
+/**
+ * Bills due in the window. One overdue (its due day passed with no payment
+ * found) is shown too, on its due day, so it leads the first week rather
+ * than drop out of sight.
+ */
 async function billItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
   return (await listBills(db, today)).flatMap((bill) =>
     dueBefore(bill, addDays(to, 1))
-      .filter((date) => date >= today)
+      .filter((date) => date >= today || bill.status === 'overdue')
       .map((date) => ({
         type: 'bill' as const,
         date,
         billId: bill.id,
         name: bill.name,
         amountCents: bill.amountCents,
+        ...(date < today && { overdue: true }),
       })),
   )
 }

@@ -71,3 +71,34 @@ export async function costsOf(db: Db, kind: EventKind, spans: Span[]): Promise<n
   )
   return rows.map((row) => Number(row.cents))
 }
+
+/** What a trip cost, in its two parts. */
+export interface TripCost {
+  /** Travel booked in the weeks before: paid once per trip, however long. */
+  bookedCents: number
+  /** Spent on its own days: grows with the trip's length. */
+  onTripCents: number
+}
+
+/**
+ * What each trip cost, split into travel booked ahead and spending on its
+ * days, in the order given, in one query. Split so a short trip's flight is
+ * never stretched into a daily rate.
+ */
+export async function tripCostsOf(db: Db, spans: Span[]): Promise<TripCost[]> {
+  if (!spans.length) return []
+  const { rows } = await db.query<{ booked: string; on_trip: string }>(
+    `SELECT w.i,
+       coalesce(sum(t.amount_cents) FILTER (WHERE t.date < w.from_day), 0) AS booked,
+       coalesce(sum(t.amount_cents) FILTER (WHERE t.date >= w.from_day), 0) AS on_trip
+     FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS w(from_day, to_day, i)
+     LEFT JOIN (transactions t
+       JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN categories c ON c.id = t.category_id)
+       ON t.date >= w.from_day - $3::int AND t.date <= w.to_day
+         AND ${belongsSql('trip', 'w.from_day', 'w.to_day')}
+     GROUP BY w.i ORDER BY w.i`,
+    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), COST_RULES.trip.aheadDays],
+  )
+  return rows.map((row) => ({ bookedCents: Number(row.booked), onTripCents: Number(row.on_trip) }))
+}

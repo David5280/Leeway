@@ -5,7 +5,7 @@ import type { IsoDate } from './dates.js'
 import { DAY_MS } from './time.js'
 
 /** The wall clock of `timeZone` at `instant`, read as if it were UTC, in milliseconds. */
-function wallClockMs(instant: number, timeZone: string): number {
+export function wallClockMs(instant: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hourCycle: 'h23',

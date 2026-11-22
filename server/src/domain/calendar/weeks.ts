@@ -9,7 +9,16 @@ export const FORECAST_WEEKS = 6
 
 export type ForecastItem =
   | { type: 'payday'; date: IsoDate; amountCents: number | null }
-  | { type: 'bill'; date: IsoDate; billId: string; name: string; amountCents: number }
+  | {
+      type: 'bill'
+      /** The day it is due; before today when it is overdue. */
+      date: IsoDate
+      billId: string
+      name: string
+      amountCents: number
+      /** Its due day passed with no payment found. */
+      overdue?: true
+    }
   | {
       type: 'event'
       date: IsoDate
@@ -46,7 +55,7 @@ export function intoWeeks(items: ForecastItem[], today: IsoDate): ForecastWeek[]
   return Array.from({ length: FORECAST_WEEKS }, (_, i) => {
     const start = addDays(today, i * 7)
     const end = addDays(start, 6)
-    // An event already under way on the first day belongs to the first week.
+    // An event already under way, or a bill overdue, belongs to the first week.
     const inWeek = sorted.filter((item) =>
       i === 0 ? item.date <= end : item.date >= start && item.date <= end,
     )
