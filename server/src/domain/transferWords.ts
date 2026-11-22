@@ -9,23 +9,29 @@
 // from Payroll Savings": the account names are taken out before the line is
 // read for pay (wordsReadForPay).
 
+import { PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
 import type { Movement } from './transfers.js'
 
 /** What a transaction says about itself: a transfer, something else, or nothing either way. */
 export type TransferHint = 'transfer' | 'other' | 'none'
 
 /** Words a bank uses for a transfer or a card payment in a line with no category code. */
-const TRANSFER_WORDS =
-  /\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|payment\W*thank you|online pmt|mobile pmt)\b/i
+const TRANSFER_WORDS = new RegExp(
+  String.raw`\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|${PAYMENT_THANK_YOU}|online pmt|mobile pmt)\b`,
+  'i',
+)
+
+/** Words for money paid out or paid back to the owner: a payout, a refund. */
+const PAID_BACK_WORDS = /\b(payout|refund|reimburs\w*|rebate)\b/i
 
 /**
- * Words for pay or money paid back in a line with no code: a paycheck, a
- * payout, a refund. Such a line is money coming in from outside, so it never
- * pairs, even beside an equal purchase on another account, and even when it
- * also says "transfer", as in "Payroll transfer ACME" (see wordsHint).
+ * Words for pay or money paid back in a line with no code: a paycheck
+ * (PAYCHECK_WORDS) or money paid back. Such a line is money coming in from
+ * outside, so it never pairs, even beside an equal purchase on another
+ * account, and even when it also says "transfer", as in "Payroll transfer
+ * ACME" (see wordsHint).
  */
-const PAY_WORDS =
-  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate)\b/i
+const PAY_WORDS = new RegExp(`(${PAYCHECK_WORDS.source}|${PAID_BACK_WORDS.source})`, 'i')
 
 /**
  * Words for money a bank pays in, which can also be part of an account's
