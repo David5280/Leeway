@@ -19,7 +19,8 @@ import { chatToolText, PAYMENT_APP } from '../src/chat/toolOutput.js'
 import { CHAT_TOOLS, chatToolList, toolTitle } from '../src/chat/tools.js'
 import { withoutAbsentTools } from '../src/chat/toolWords.js'
 import { estimateChatTokens, FRAMING_TOKENS, type AiChatAsk } from '../src/domain/ai/gateway.js'
-import { namesSomeone, NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
+import { NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
+import { namesSomeone } from '../src/domain/chat/personNames.js'
 import { MESSAGE_MAX_LENGTH, type ChatMessage } from '../src/domain/chat/store.js'
 
 const message = (role: ChatMessage['role'], text: string, id = '1'): ChatMessage => ({

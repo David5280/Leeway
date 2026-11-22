@@ -61,12 +61,17 @@ function codeOf(tx: Movement): string {
   return tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 }
 
+/** Whether Plaid filed a transaction as money sent or received through an app. */
+export function isAppTransfer(tx: Movement): boolean {
+  return APP_TRANSFER_CODES.has(codeOf(tx))
+}
+
 /** The payment app a transaction went through, if it looks like one person paying another. */
 export function personToPersonApp(tx: Movement): string | null {
   const text = `${tx.name} ${tx.merchantName ?? ''}`
   const found = PERSON_TO_PERSON_APPS.find(({ pattern }) => pattern.test(text))
   if (found) return found.app
-  return APP_TRANSFER_CODES.has(codeOf(tx)) ? 'a payment app' : null
+  return isAppTransfer(tx) ? 'a payment app' : null
 }
 
 // "ending in 1234", "x1234", "*1234" and "...1234": how banks write a card's

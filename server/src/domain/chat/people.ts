@@ -7,10 +7,12 @@
 // there, under a bank line like "Online transfer"), and the readable name
 // made from the bank's line. All three are collected, along with which
 // transactions are such payments, so their names can be replaced outright.
+// Which names are hidden, and why a shop's never is, is in personNames.ts.
 
 import type pg from 'pg'
-import { cleanMerchantName, tidyMerchantName } from '../merchantName.js'
-import { personPayment, type Movement } from '../transfers.js'
+import { tidyMerchantName } from '../merchantName.js'
+import type { Movement } from '../transfers.js'
+import { isPersonPayment, namesIn, namesToHide, type PaymentNames } from './personNames.js'
 
 /** Who to keep out of Chat, and where they appear. */
 export interface PaymentPeople {
@@ -24,52 +26,10 @@ export interface PaymentPeople {
 export const NO_PEOPLE: PaymentPeople = { names: [], transactionIds: new Set() }
 
 /**
- * Words that say how money moved, never who it moved to. A name made only
- * of these ("Venmo Payment", "Online transfer") names nobody, so it stays.
+ * The rows that could be a payment between people: those naming a payment
+ * app, and the bank's transfers, which is where it files money sent through one.
  */
-const MOVEMENT_WORDS = new Set(
-  (
-    'a ach add apple app bank cash cashout credit debit deposit from fund funds inst instant ' +
-    'mobile money online p2p payment payments paypal quickpay received recurring request sent ' +
-    'standard the to transaction transfer transfers venmo web with withdrawal xfer zelle'
-  ).split(' '),
-)
-
-/** Whether a name has a word beyond how money moved, so it could be a person. */
-export function namesSomeone(name: string): boolean {
-  const words = name.toLowerCase().match(/\p{L}+/gu) ?? []
-  return words.some((word) => word.length > 1 && !MOVEMENT_WORDS.has(word))
-}
-
-/**
- * Whether a transaction is one person paying another. A payment app alone
- * is not enough: "PAYPAL *SPOTIFY" is a shop paid through PayPal. It also
- * needs the bank's line to name the person, or Plaid to file it as a
- * transfer, which is where it files money sent to people.
- */
-function isPersonPayment(tx: Movement): boolean {
-  const person = personPayment(tx)
-  if (!person) return false
-  const code = tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
-  return person.counterparty !== null || code.startsWith('TRANSFER')
-}
-
-/** The names one payment between people could show its person under. */
-function namesIn(tx: Movement): string[] {
-  const candidates = [
-    personPayment(tx)?.counterparty ?? '',
-    tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : '',
-    cleanMerchantName(tx.name),
-  ]
-  return candidates.filter(namesSomeone)
-}
-
-/**
- * Every payment between people, and every name they could show under. Only
- * rows that could be one are read: those naming a payment app, and the
- * bank's transfers, which is where it files money sent through one.
- */
-export async function paymentPeople(db: pg.Pool): Promise<PaymentPeople> {
+async function possiblePayments(db: pg.Pool): Promise<(Movement & { id: string })[]> {
   const { rows } = await db.query<Movement & { id: string }>(
     `SELECT id::text, name, merchant_name AS "merchantName", amount_cents AS "amountCents",
        provider_category_primary AS "providerCategoryPrimary",
@@ -78,13 +38,40 @@ export async function paymentPeople(db: pg.Pool): Promise<PaymentPeople> {
      WHERE name || ' ' || coalesce(merchant_name, '') ~* '(zelle|venmo|cash ?app|paypal|apple cash)'
        OR coalesce(provider_category_detailed, provider_category_primary, '') LIKE 'TRANSFER%'`,
   )
-  const names = new Set<string>()
+  return rows.map((row) => ({ ...row, amountCents: Number(row.amountCents) }))
+}
+
+/**
+ * The merchants of the owner's purchases: every merchant Plaid named on a
+ * row it gave a code other than a transfer, leaving out the payments between
+ * people. A transfer's merchant is often a person, and a row without a code
+ * could be anything, so neither can vouch for a shop.
+ */
+async function shopNames(db: pg.Pool, paymentIds: ReadonlySet<string>): Promise<string[]> {
+  const { rows } = await db.query<{ merchantName: string }>(
+    `SELECT DISTINCT merchant_name AS "merchantName"
+     FROM transactions
+     WHERE trim(coalesce(merchant_name, '')) <> ''
+       AND coalesce(provider_category_detailed, provider_category_primary, '') <> ''
+       AND coalesce(provider_category_detailed, provider_category_primary, '') NOT LIKE 'TRANSFER%'
+       AND NOT (id::text = ANY($1::text[]))`,
+    [[...paymentIds]],
+  )
+  return rows.map((row) => tidyMerchantName(row.merchantName))
+}
+
+/** Every payment between people, and every name its person could show under. */
+export async function paymentPeople(db: pg.Pool): Promise<PaymentPeople> {
+  const found: PaymentNames = { person: [], line: [] }
   const transactionIds = new Set<string>()
-  for (const row of rows) {
-    const tx = { ...row, amountCents: Number(row.amountCents) }
+  for (const tx of await possiblePayments(db)) {
     if (!isPersonPayment(tx)) continue
-    transactionIds.add(row.id)
-    for (const name of namesIn(tx)) names.add(name)
+    transactionIds.add(tx.id)
+    const names = namesIn(tx)
+    found.person.push(...names.person)
+    found.line.push(...names.line)
   }
-  return { names: [...names], transactionIds }
+  if (transactionIds.size === 0) return NO_PEOPLE
+  const names = namesToHide(found, await shopNames(db, transactionIds))
+  return { names, transactionIds }
 }
