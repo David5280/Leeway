@@ -4,7 +4,13 @@
 // and the upload route says why.
 
 import { expect, test } from '@playwright/test'
-import { deletePaystubs, importPaystub, mockReader, PAYSTUB_PDF } from './paystub'
+import {
+  addPensionFromPaystub,
+  deletePaystubs,
+  importPaystub,
+  mockReader,
+  PAYSTUB_PDF,
+} from './paystub'
 import { addPension, PENSION, tearDownRetirement } from './retirement'
 
 test.afterEach(async ({ page }) => {
@@ -97,6 +103,29 @@ test("imports from a pension's own form, with that pension chosen", async ({ pag
   await review.getByRole('button', { name: 'Save' }).click()
   await expect(review).toBeHidden()
   await expect(page.getByRole('group', { name: PENSION })).toContainText('$423 a paycheck')
+})
+
+test('adds a pension from a paystub, named by the owner, in one step', async ({ page }) => {
+  await mockReader(page)
+  await page.goto('/plan/retirement')
+  await addPensionFromPaystub(page)
+
+  const review = page.getByRole('form', { name: 'Review the paystub' })
+  const name = review.getByRole('textbox', { name: 'Pension name' })
+  // Offered from the paystub's pension line, for the owner to keep or change.
+  await expect(name).toHaveValue('PERA')
+  await name.fill(PENSION)
+  await review.getByRole('button', { name: 'Add pension' }).click()
+
+  await expect(review).toBeHidden()
+  const pension = page.getByRole('group', { name: PENSION })
+  await expect(pension).toContainText('$423 a paycheck')
+  // The paystub was saved with it, in the same step.
+  await expect(
+    page
+      .getByRole('region', { name: 'Paystub' })
+      .getByText('From City of Example, paid Nov 13, 2026'),
+  ).toBeVisible()
 })
 
 test('refuses an iPhone HEIC photo before sending it', async ({ page }) => {

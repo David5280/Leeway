@@ -259,11 +259,19 @@ describe('the savings lens', () => {
     expect(lens.answer.detail).toMatch(/^Once Leeway has a whole month of spending/)
     expect(lens.meters[1]).toMatchObject({
       headline: null,
-      detail: 'Leeway needs a whole month of pay to work out your savings rate.',
+      detail:
+        'Leeway works out your savings rate once a paycheck from your current employer arrives.',
     })
     const paid = lensOf({
       savings: savingsReport([kindReport('savings', 100)]),
-      monthly: { months: 3, incomeCents: 500_000, spendingCents: 1, essentialSpendingCents: 1 },
+      monthly: {
+        incomeCents: 500_000,
+        incomeEstimated: false,
+        spendingCents: 1,
+        essentialSpendingCents: 1,
+        spendingSince: '2026-08-20',
+        spendingDays: 91,
+      },
     })
     expect(paid.meters[1]!.detail).toMatch(/has not seen a month of transfers/)
   })

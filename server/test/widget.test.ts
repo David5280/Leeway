@@ -247,7 +247,7 @@ describe('GET /api/widget: what it says', () => {
       'version',
     ])
     expect(summary).toMatchObject({
-      version: 1,
+      version: 2,
       asOf: NOW.toISOString(),
       currency: 'USD',
       appearance: { theme: 'night', mode: 'theme' },

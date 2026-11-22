@@ -155,9 +155,9 @@ describe('leaks in the inbox and on home', () => {
     const reads = countHistoryReads()
     const checkin = await call('get_checkin')
     expect(checkin.alerts.map((alert) => alert.kind)).toContain('price_rise')
-    // Two find the next payday (cash flow and the pay schedule each look it up),
-    // and one is shared by the suggestions and the leaks, which read it apart before.
-    expect(reads()).toBe(3)
+    // One read, shared by the suggestions and the leaks, which read it apart before.
+    // Payday now comes from paychecks, so it no longer reads this history.
+    expect(reads()).toBe(1)
   })
 
   it('reads the history once in a notifier run, for its notifications and home hides', async () => {

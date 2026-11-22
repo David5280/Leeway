@@ -148,6 +148,7 @@ export const IDLE_CASH = checkIdleCash({
   daysUntilPayday: 10,
   nextPayday: '2026-12-01',
   paydayKnown: true,
+  cashKnown: true,
   overdrawn: false,
   tight: false,
 })

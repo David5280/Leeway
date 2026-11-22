@@ -1,7 +1,7 @@
 // Saving a paystub the owner reviewed: the figures they confirmed, and, when
-// they choose, those figures applied to a pension and to the monthly
-// retirement contribution. Nothing is saved until the owner says so, and the
-// file itself never is.
+// they choose, those figures applied to a pension (pension.ts) and to the
+// monthly retirement contribution. Nothing is saved until the owner says so,
+// and the file itself never is.
 
 import type pg from 'pg'
 import { z } from 'zod'
@@ -11,9 +11,9 @@ import { formatWholeCents } from '../../lib/money.js'
 import { convertCadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
 import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
-import { PAY_CADENCES, type Pension, type PensionPlanPatch } from '../retirement/pensions.js'
-import { patchPension } from '../retirement/pensionStore.js'
+import { PAY_CADENCES, type Pension } from '../retirement/pensions.js'
 import { getSettings, mergeSettings, saveSettings } from '../settings.js'
+import { applyToPension, newPaystubPensionSchema } from './pension.js'
 import { MAX_EMPLOYER_LENGTH } from './redact.js'
 import {
   CURRENT_FIELDS,
@@ -69,13 +69,29 @@ export const paystubSchema = z
 export type Paystub = z.infer<typeof paystubSchema>
 
 /** Saving a paystub, and where else its figures go. */
-export const savePaystubSchema = z.object({
-  paystub: paystubSchema,
-  /** The pension to update with this paystub's pension figures; null leaves every pension as it is. */
-  pensionAccountId: z.uuid().nullable().default(null),
-  /** Whether the 401(k), 457 and 403(b) figures become the monthly retirement contribution. */
-  setRetirementContribution: z.boolean().default(false),
-})
+export const savePaystubSchema = z
+  .object({
+    paystub: paystubSchema,
+    /** The pension to update with this paystub's pension figures; null leaves every pension as it is. */
+    pensionAccountId: z.uuid().nullable().default(null),
+    /** A pension to add as a new account with this paystub's pension figures, in the same step. */
+    newPension: newPaystubPensionSchema.nullable().default(null),
+    /** An account Leeway already has to become a pension with these figures, so it counts once. */
+    attachAccountId: z.uuid().nullable().default(null),
+    /** Whether the 401(k), 457 and 403(b) figures become the monthly retirement contribution. */
+    setRetirementContribution: z.boolean().default(false),
+  })
+  // At most one place for the pension figures: a kept pension, a new account or an account Leeway has.
+  .refine(
+    ({ pensionAccountId, newPension, attachAccountId }) =>
+      [pensionAccountId, newPension, attachAccountId].filter((target) => target !== null).length <=
+      1,
+    {
+      message:
+        'Choose one pension for these figures: one you keep, a new one, or an account you have.',
+      path: ['newPension'],
+    },
+  )
 
 export type SavePaystub = z.infer<typeof savePaystubSchema>
 
@@ -89,7 +105,7 @@ export interface SavedPaystub extends Paystub {
 /** What saving changed besides the paystub itself. */
 export interface PaystubSaved {
   paystub: SavedPaystub
-  /** The pension as it now stands, when one was chosen. */
+  /** The pension as it now stands, when one was chosen or added. */
   pension: Pension | null
   /** The monthly retirement contribution now set, when it was. */
   retirementMonthlyContributionCents: number | null
@@ -125,29 +141,6 @@ export function planYearToDateCents(paystub: Paystub): number | null {
     (cents) => cents !== null,
   )
   return shown.length === 0 ? null : shown.reduce((sum, cents) => sum + cents, 0)
-}
-
-/** A share of gross pay in percent, to two places, as the pension form takes it. */
-function percentOfPay(cents: number, grossCents: number): number {
-  return Math.min(100, Math.round((cents / grossCents) * 10_000) / 100)
-}
-
-/**
- * The pension details this paystub shows: what was paid in, gross pay, how
- * often pay comes, and the employer's share as a percent of gross pay. A
- * figure the paystub did not show leaves the pension's own as it is.
- */
-export function pensionPatchFrom(paystub: Paystub): PensionPlanPatch {
-  const { grossPay, pension, pensionEmployer } = paystub.current
-  const patch: PensionPlanPatch = {}
-  if (pension !== null) patch.contribution = { kind: 'amount', cents: pension }
-  const hasGross = grossPay !== null && grossPay > 0
-  if (hasGross) patch.grossPayCents = grossPay
-  if (paystub.payCadence !== null) patch.payCadence = paystub.payCadence
-  if (hasGross && pensionEmployer !== null) {
-    patch.employerContributionPercent = percentOfPay(pensionEmployer, grossPay)
-  }
-  return patch
 }
 
 /**
@@ -267,19 +260,17 @@ async function setRetirementContribution(db: Db, monthlyCents: number): Promise<
 
 /**
  * Saves a paystub the owner confirmed and, as they chose, applies it to a
- * pension and to the monthly retirement contribution, all or nothing.
+ * pension kept already or to a new one, and to the monthly retirement
+ * contribution, all or nothing.
  */
 export async function savePaystub(pool: pg.Pool, input: SavePaystub): Promise<PaystubSaved> {
   return withTransaction(pool, async (db) => {
-    const { paystub, pensionAccountId } = input
+    const { paystub } = input
     const contribution = input.setRetirementContribution ? monthlyPlanContribution(paystub) : null
-    const pension =
-      pensionAccountId === null
-        ? null
-        : await patchPension(db, pensionAccountId, pensionPatchFrom(paystub))
+    const pension = await applyToPension(db, paystub, input)
     if (contribution !== null) await setRetirementContribution(db, contribution)
     return {
-      paystub: await insertPaystub(db, paystub, pensionAccountId),
+      paystub: await insertPaystub(db, paystub, pension?.accountId ?? null),
       pension,
       retirementMonthlyContributionCents: contribution,
     }
