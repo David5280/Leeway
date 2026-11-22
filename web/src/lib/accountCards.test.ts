@@ -159,6 +159,14 @@ describe('accountFacts', () => {
     expect(accountFacts({ ...loan, aprPercent: null, minimumPaymentCents: null })).toEqual([])
   })
 
+  it("writes a loan's rate as the owner's locale does", () => {
+    expect(accountFacts(loan, { locale: 'de-DE' })[0]).toEqual({
+      kind: 'text',
+      label: 'rate',
+      text: '4,9\u00a0% APR',
+    })
+  })
+
   it('gives any other account its change', () => {
     const house = account({ id: 'h', name: 'House', type: 'property' })
     expect(accountFacts(house, { balances: [10, 20] })[0]).toMatchObject({ cents: 10 })

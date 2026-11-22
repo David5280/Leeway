@@ -3,7 +3,7 @@
 // card balance left out so the math stays short.
 
 import { describe, expect, it } from 'vitest'
-import { checkIdleCash, type IdleCashInputs } from '../../../../server/src/domain/idleCash'
+import { checkIdleCash, type IdleCashInputs } from '../idleCash'
 import { mathSentence, type DrillMath } from '../drill'
 import { formatMoney } from '../money'
 import { IDLE_CASH_TITLE, idleCashDrill } from './idleCash'

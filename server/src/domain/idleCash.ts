@@ -7,9 +7,10 @@
 // everyday spending until then, what the counted credit cards owe (checking
 // pays them), and a cushion on top. Only what is left past all of that,
 // rounded down, is called idle. Every amount is in whole dollars, rounded
-// the careful way, so the math shown adds up exactly. Nothing is suggested while any account is
-// overdrawn, safe to spend is tight, no payday is known or there is no
-// spending to go by, since a guess then could leave checking short.
+// the careful way, so the math shown adds up exactly. Nothing is suggested
+// while any account is overdrawn, safe to spend is tight, no payday is
+// known or there is no spending to go by, since a guess then could leave
+// checking short.
 
 import type { IsoDate } from '../lib/dates.js'
 

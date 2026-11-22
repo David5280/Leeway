@@ -20,6 +20,7 @@ type Editing = { item: OwnedItem | null }
 function ItemRow({ item, onOpen }: { item: OwnedItem; onOpen: () => void }) {
   const { settings } = useApp()
   const updated = updatedWords(item.updatedOn, isoDaysAgo(0, settings.timeZone), settings.locale)
+  const detail = itemDetail(item, settings.locale)
   return (
     <button type="button" className="clickrow owned-row" onClick={onOpen}>
       <span className="row-between wrap">
@@ -27,7 +28,7 @@ function ItemRow({ item, onOpen }: { item: OwnedItem; onOpen: () => void }) {
         {item.amountCents !== null && <Money cents={item.amountCents} className="num" />}
       </span>
       <span className="row-between wrap small muted">
-        <span>{updated ? `${itemDetail(item)}. ${updated}` : itemDetail(item)}</span>
+        <span>{updated ? `${detail}. ${updated}` : detail}</span>
         {item.equityCents !== null && (
           <span>
             Yours after the loan:{' '}

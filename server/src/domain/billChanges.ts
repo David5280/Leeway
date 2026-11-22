@@ -1,13 +1,22 @@
 // A bill that cost more or less than usual: its latest cycle's charges,
-// added up, compared with the amount the bill expects. Pure: the bills and
-// their last few charges come in, changes come out; billChangeSource.ts reads
-// and writes them.
+// added up (billCycles.ts), compared with the amount the bill expects. Pure:
+// the bills and their last few charges come in, changes come out;
+// billChangeSource.ts reads and writes them.
 //
 // A bill whose amount moves by nature, like power or water, is never news.
 // Its own charges say so: a steady bill's amount sits still between price
 // changes, while a utility's keeps moving from cycle to cycle. So a bill whose
-// earlier cycles moved in most steps is left quiet, however it was added (one
-// tap, the form or an assistant); see amountsVary.
+// earlier cycles moved in most steps raises no alert, however it was added
+// (one tap, the form or an assistant); see amountsVary. Its usual amount
+// still follows its recent cycles (varyingUsualCents), so the cash flow and
+// idle cash hold back what it costs now rather than what it cost when tracked
+// (varyingBills.ts).
+//
+// An amount the owner sets stands: no cycle with a charge on or before the day
+// they set it says anything about it (postedSinceOwnerSet), so following
+// resumes only with a cycle that came after. A steady bill charged its old
+// price again after the owner set a new one is news, not a settling: their
+// change did not take.
 //
 // A change is an account alert of its own kind (bill_change), so it shows,
 // notifies, hides and dismisses as the other alerts do. Dismissing or hiding
@@ -15,50 +24,18 @@
 // charge in a row at the new amount: either way the alert clears, and the
 // same charge is never news twice.
 
-import { daysBetween, type IsoDate } from '../lib/dates.js'
+import type { IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
-import { DUPLICATE_DAYS } from './leaks/duplicates.js'
-
-/**
- * How far a charge must be from the usual amount to be news: at least this
- * share of it and at least this many cents, so a $1 change on a $5 plan or a
- * few cents of tax on a big bill stay quiet.
- */
-export const BILL_CHANGE_THRESHOLD = { share: 0.1, cents: 300 } as const
-
-/** Whether `amountCents` is far enough from `usualCents` to be a change. */
-export function isAmountChange(usualCents: number, amountCents: number): boolean {
-  const gap = Math.abs(amountCents - usualCents)
-  return gap >= BILL_CHANGE_THRESHOLD.cents && gap >= usualCents * BILL_CHANGE_THRESHOLD.share
-}
-
-/** About how many days apart each cadence's charges come. */
-const CYCLE_DAYS: Record<Cadence, number> = {
-  week: 7,
-  biweek: 14,
-  semimonth: 15,
-  month: 31,
-  quarter: 92,
-  year: 366,
-}
-
-/** A gap past this many cycles between charges means one was missed. */
-const MISSED_CYCLES = 1.5
+import { isAmountChange } from './billAmountChange.js'
+import { CYCLE_DAYS, cycleCharges, cyclesOf, missedBetween, type BillCharge } from './billCycles.js'
+import { followVaryingBill } from './varyingBills.js'
 
 /** Charges read per bill: about a year of monthly cycles, fewer when cycles are paid in parts. */
 export const CHARGES_READ = 12
 
 /** Moves needed before a bill's own history can say its amount varies, so three cycles at least. */
 export const VARIES_AFTER_MOVES = 2
-
-/** A posted charge that paid a bill. */
-export interface BillCharge {
-  accountId: string
-  date: IsoDate
-  /** Positive: what the charge cost. */
-  amountCents: number
-}
 
 /** A bill as watching its amount needs it. */
 export interface WatchedBill {
@@ -74,6 +51,12 @@ export interface WatchedBill {
    * the bill was tracked. Its own charges can say so too (see amountsVary).
    */
   amountVaries: boolean
+  /**
+   * The day the owner last set its amount (update_bill), in their time zone,
+   * or null when they never have since tracking it. Settling waits for a cycle
+   * that posted after it, so the owner's figure stands until then.
+   */
+  amountSetOn: IsoDate | null
   /** Its last few posted charges (CHARGES_READ), newest first. */
   charges: BillCharge[]
 }
@@ -84,65 +67,14 @@ export type BillChange =
    * latest, with the cycle's total; `cycle` the charges added up, newest first.
    */
   | { kind: 'changed'; bill: WatchedBill; charge: BillCharge; cycle: BillCharge[] }
-  /** Two charges in a row at the new amount: it is the usual one now. */
+  /**
+   * The bill's usual amount is `amountCents` now: a steady bill charged it two
+   * cycles in a row, or a varying bill's recent cycles say it costs that.
+   */
   | { kind: 'settled'; bill: WatchedBill; amountCents: number }
 
 /** A cycle that is news (BillChange's 'changed'). */
 export type ChangedBill = Extract<BillChange, { kind: 'changed' }>
-
-/**
- * A cycle's charges (newest first) less the repeats: of the charges of one
- * amount on one account within DUPLICATE_DAYS of each other, only the oldest,
- * as duplicates.ts reads a charge made twice.
- */
-export function withoutRepeats(cycle: BillCharge[]): BillCharge[] {
-  const kept: BillCharge[] = []
-  // Oldest first, so the first of each run is the one kept.
-  for (const charge of [...cycle].reverse()) {
-    const repeats = kept.some(
-      (one) =>
-        one.accountId === charge.accountId &&
-        one.amountCents === charge.amountCents &&
-        daysBetween(one.date, charge.date) <= DUPLICATE_DAYS,
-    )
-    if (!repeats) kept.push(charge)
-  }
-  return kept.reverse()
-}
-
-/** What a cycle cost paid once: its charges added up, the repeats left out (withoutRepeats). */
-export function paidOnceCents(cycle: BillCharge[]): number {
-  return withoutRepeats(cycle).reduce((sum, charge) => sum + charge.amountCents, 0)
-}
-
-/**
- * One cycle's charges from `first` (newest first) on: those within half a
- * cycle before it, as a split or second payment is.
- */
-function cycleCharges(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge[] {
-  return charges.filter(
-    (charge) => charge.date <= first.date && daysBetween(charge.date, first.date) < cycle / 2,
-  )
-}
-
-/** One cycle's charges from `first` on (cycleCharges), added up as one. */
-function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
-  const within = cycleCharges(charges, first, cycle)
-  return { ...first, amountCents: within.reduce((sum, charge) => sum + charge.amountCents, 0) }
-}
-
-/** Every cycle in `charges` (newest first), each added up as one charge, newest first. */
-function cyclesOf(charges: BillCharge[], cycle: number): BillCharge[] {
-  const cycles: BillCharge[] = []
-  let rest = charges
-  while (rest[0]) {
-    const first = rest[0]
-    cycles.push(cycleFrom(rest, first, cycle))
-    // The next cycle starts at the first charge at least half a cycle older.
-    rest = rest.filter((charge) => daysBetween(charge.date, first.date) >= cycle / 2)
-  }
-  return cycles
-}
 
 /**
  * How near two cycles must be to sit at one level: a steady bill repeats to
@@ -198,28 +130,67 @@ export function amountsVary(earlier: number[]): boolean {
 }
 
 /**
- * What a bill's latest cycle says about its amount, or null when nothing:
- * the bill's amount varies by nature, the cycle's total is near the usual
- * amount, a cycle was missed between charges or since the latest, or it is
- * the first charge since the bill was tracked, when the usual amount was only
- * an estimate from history.
+ * Whether every charge in the cycle from `first` posted after the day the
+ * owner last set the bill's amount. A charge on that very day may have come
+ * before the edit, so it does not count: the owner's figure stands.
  */
-export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
-  if (bill.amountVaries) return null
-  const cycle = CYCLE_DAYS[bill.cadence]
-  const [latest, previous, ...older] = cyclesOf(bill.charges, cycle)
-  if (!latest || latest.date <= bill.trackedOn) return null
-  if (!isAmountChange(bill.amountCents, latest.amountCents) || !previous) return null
-  const span = cycle * MISSED_CYCLES
-  if (daysBetween(previous.date, latest.date) > span || daysBetween(latest.date, today) > span) {
-    return null
+function postedSinceOwnerSet(bill: WatchedBill, first: BillCharge, cycle: number): boolean {
+  const setOn = bill.amountSetOn
+  if (setOn === null) return true
+  return cycleCharges(bill.charges, first, cycle).every((charge) => charge.date > setOn)
+}
+
+/**
+ * A steady bill's latest cycle against its usual amount and the cycle before:
+ * settled when both sit at the new amount, changed when only the latest does.
+ * Two in a row settle only when both came after the owner last set the
+ * amount; with the first from before, the owner's figure did not take (a
+ * downgrade still charged at the old price), so it is changed: news to them.
+ */
+function steadyBillChange(
+  bill: WatchedBill,
+  latest: BillCharge,
+  previous: BillCharge | undefined,
+  cycle: number,
+): BillChange | null {
+  if (!previous || !isAmountChange(bill.amountCents, latest.amountCents)) return null
+  if (missedBetween(previous.date, latest.date, cycle)) return null
+  const changed: ChangedBill = {
+    kind: 'changed',
+    bill,
+    charge: latest,
+    cycle: cycleCharges(bill.charges, latest, cycle),
   }
-  if (amountsVary([previous, ...older].map((one) => one.amountCents))) return null
   if (!isAmountChange(previous.amountCents, latest.amountCents)) {
+    if (!postedSinceOwnerSet(bill, previous, cycle)) return changed
     return { kind: 'settled', bill, amountCents: latest.amountCents }
   }
+  // The first charge since tracking: the usual amount was only an estimate from history.
   if (previous.date <= bill.trackedOn) return null
-  return { kind: 'changed', bill, charge: latest, cycle: cycleCharges(bill.charges, latest, cycle) }
+  return changed
+}
+
+/**
+ * What a bill's latest cycle says about its amount, or null when nothing:
+ * no charge since the bill was tracked or within the last cycle and a half,
+ * or, for a steady bill, a total near the usual amount, a missed cycle or no
+ * cycle before it, or a change on the first charge since tracking, when the
+ * usual amount was only an estimate from history. A bill whose amount varies
+ * (flagged when tracked, or by its own history) is never changed, only
+ * settled at what its recent cycles say it costs now. A latest cycle with a
+ * charge on or before the day the owner last set the amount says nothing.
+ */
+export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | null {
+  const cycle = CYCLE_DAYS[bill.cadence]
+  const [latest, ...earlier] = cyclesOf(bill.charges, cycle)
+  if (!latest || latest.date <= bill.trackedOn) return null
+  if (missedBetween(latest.date, today, cycle)) return null
+  // The owner set the amount after this cycle came: their figure is newer than it.
+  if (!postedSinceOwnerSet(bill, latest, cycle)) return null
+  // Judged by the cycles before the latest, so the latest's own change cannot hide itself.
+  const varies = bill.amountVaries || amountsVary(earlier.map((one) => one.amountCents))
+  if (varies) return followVaryingBill(bill, latest, earlier, cycle)
+  return steadyBillChange(bill, latest, earlier[0], cycle)
 }
 
 /**
