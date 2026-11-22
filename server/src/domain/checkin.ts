@@ -11,6 +11,8 @@ import { getCashFlow } from './cashFlow.js'
 import { attentionItems, type AttentionItem } from './coach.js'
 import { listConnections } from './connections.js'
 import { debtPlans } from './debts.js'
+import { fundSaved } from './emergencyPlan.js'
+import { goalReading } from './goalProgress.js'
 import { listGoals } from './goals.js'
 import { latestPaystub } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
@@ -26,7 +28,7 @@ import { pensionsOf } from './retirement/pensionStore.js'
 import { paystubPlan } from './savings/payrollMonths.js'
 import { bankSeenRate, countedNote, countsPayroll, type SavingsRate } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
-import { periodConfig, type Settings } from './settings.js'
+import type { Settings } from './settings.js'
 
 /** How far back the net worth change is measured. */
 export const NET_WORTH_DAYS = 30
@@ -42,7 +44,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     recurring,
     worth,
     alerts,
-    { savings, pensions },
+    { accounts, savings, pensions },
     monthly,
     pay,
     paystub,
@@ -50,7 +52,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     budgetReport(db, settings, now),
     getCashFlow(db, settings, today),
     listBills(db, today),
-    listGoals(db, { today, period: periodConfig(settings) }),
+    listGoals(db, goalReading(settings, today)),
     debtPlans(db, 0, today),
     listConnections(db),
     untrackedRecurring(db, today),
@@ -58,6 +60,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     listAlerts(db, settings, today),
     // Only what the savings glance needs beyond the reads above, not the whole profile.
     listAccounts(db, false).then(async (accounts) => ({
+      accounts,
       savings: await getSavingsGlance(db, settings, today, accounts),
       pensions: await pensionsOf(db, accounts),
     })),
@@ -147,7 +150,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       savings,
       { pensions, pensionPay },
       savingsMeasures({
-        cashCents: savings.cashCents,
+        fundSavedCents: fundSaved(goals, accounts, settings.currency, savings.cashCents !== null),
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
         planMonthlyCents: plan.monthlyCents,

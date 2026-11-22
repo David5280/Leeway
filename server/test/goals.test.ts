@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { progressOf } from '../src/domain/goals.js'
+import { progressOf } from '../src/domain/goalProgress.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 

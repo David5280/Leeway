@@ -26,6 +26,11 @@ export const KIND_TEXT: Record<NotificationKind, { label: string; hint: string }
     label: 'Bill amount changes',
     hint: 'A bill that cost well more or less than usual',
   },
+  duplicate_charge: {
+    label: 'Charged twice',
+    hint: 'The same charge at one place more than once in a few days',
+  },
+  price_rise: { label: 'Price rises', hint: 'A repeating charge, not yet a bill, that went up' },
   large_transaction: {
     label: 'Large charges',
     hint: 'A single charge of at least the amount below',

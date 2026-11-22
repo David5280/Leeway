@@ -1,17 +1,20 @@
 // The card contract (Card.tsx), checked on the screens that promise it: with
 // real-looking data on Overview (every widget shown), Accounts, an account's
-// page and Activity, every card is a drill-down that opens its math, a link
-// to its own page, or static for a stated reason other than "pending".
+// page, Activity and Plan's bills (with cash that could earn more), every
+// card is a drill-down that opens its math, a link to its own page, or
+// static for a stated reason other than "pending".
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { checkIdleCash } from '../../../../server/src/domain/idleCash'
 import { settingsSchema } from '../../../../server/src/domain/settings'
 import type { Settings } from '../../api/client'
 import { AccountDetail } from '../../pages/AccountDetail'
 import { Accounts } from '../../pages/Accounts'
 import { Overview } from '../../pages/Overview'
+import { Plan } from '../../pages/Plan'
 import { Transactions } from '../../pages/Transactions'
 import { SCREEN_ROUTES } from '../../routes'
 import { everyAccount } from '../../test/accounts'
@@ -154,6 +157,19 @@ function serve() {
       history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
     }),
     get_cash_flow: () => cashFlow(),
+    // Checking well past what it needs before payday, so the card shows.
+    get_idle_cash: () =>
+      checkIdleCash({
+        checkingCents: 800_000,
+        billsCents: 180_000,
+        cardsOwedCents: 62_830,
+        dailySpendCents: 5_000,
+        daysUntilPayday: 10,
+        nextPayday: '2026-11-27',
+        paydayKnown: true,
+        overdrawn: false,
+        tight: false,
+      }),
     list_bills: () => ({
       bills: [bill({ name: 'Rent', amountCents: 180000, anchorDate: '2026-12-01' })],
     }),
@@ -248,5 +264,18 @@ describe('every card on the redesigned screens keeps the card contract', () => {
     renderSignedIn(<Transactions />, { route: '/transactions' })
     await screen.findByRole('region', { name: 'Spent this month' })
     expect((await checkEveryCard()).drill).toBeGreaterThan(0)
+  })
+
+  it('on Plan, Bills, with cash that could earn more', async () => {
+    serve()
+    renderSignedIn(
+      <Routes>
+        <Route path="/plan/:section" element={<Plan />} />
+      </Routes>,
+      { route: '/plan/bills' },
+    )
+    await screen.findByRole('region', { name: 'Cash that could earn more' })
+    // Cash until payday and cash that could earn more each open their math.
+    expect((await checkEveryCard()).drill).toBeGreaterThanOrEqual(2)
   })
 })

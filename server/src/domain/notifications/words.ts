@@ -8,7 +8,7 @@
 // bill) and never an amount, an account number or a bank's own text.
 
 import type { IsoDate } from '../../lib/dates.js'
-import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
+import { LEAK_KINDS, type AccountAlert, type AlertFormat } from '../accountAlerts.js'
 import type { SpendAlertLevel } from '../ai/alerts.js'
 import type { CategoryBudget } from '../budgetCategory.js'
 import type { NotificationKind } from './settings.js'
@@ -44,18 +44,25 @@ const ALERT_WORDS: Record<
     push: (a) =>
       `${a.bill?.name ?? 'A bill'} cost ${a.amountCents > (a.bill?.usualCents ?? 0) ? 'more' : 'less'} than usual.`,
   },
+  // A merchant's name comes from the bank's text, so a locked screen shows none.
+  duplicate_charge: {
+    title: 'Charged twice?',
+    push: () => 'A charge may have gone through twice.',
+  },
+  price_rise: { title: 'Price went up', push: () => 'A repeating charge went up in price.' },
 }
 
 /**
  * What an account alert is about, as its notification and its hide on the
- * home screen both key it. A fee is news once per latest fee date, and a
- * bill's change once per bill and charge date; the others are conditions,
- * kept once per account while they last.
+ * home screen both key it. A fee is news once per latest fee date, a
+ * bill's change once per bill and charge date, and a leak once per charge;
+ * the others are conditions, kept once per account while they last.
  */
 export function accountAlertSubject(
-  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date' | 'bill'>,
+  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date' | 'bill' | 'charge'>,
 ): string {
   if (alert.kind === 'bill_change') return `${alert.bill?.id}:${alert.date}`
+  if (LEAK_KINDS.includes(alert.kind)) return `charge:${alert.charge?.id}`
   return alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId
 }
 

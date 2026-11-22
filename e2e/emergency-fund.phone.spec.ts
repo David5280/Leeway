@@ -27,7 +27,7 @@ for (const [name, phone] of [
       await expect(fund).toContainText('1 month of essentials')
       expect(await overflow(page)).toBeLessThanOrEqual(0)
 
-      await fund.getByRole('button', { name: 'Change' }).click()
+      await fund.getByRole('button', { name: 'Change accounts' }).click()
       await expect(
         fund.getByRole('form', { name: 'Accounts for the emergency fund' }),
       ).toBeVisible()

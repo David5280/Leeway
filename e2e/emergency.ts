@@ -14,9 +14,8 @@ interface Made {
 }
 
 /**
- * The emergency fund's own card. An ordinary goal may share the name (the
- * plan spec saves one called "Emergency fund"), so it is told apart by what
- * only the fund says: how many months of essentials it holds.
+ * The emergency fund's own card, told apart from any other card of the same
+ * name by what only the fund says: how many months of essentials it holds.
  */
 export const emergencyCard = (page: Page): Locator =>
   page

@@ -33,6 +33,21 @@
   overflow-wrap: anywhere;
 }
 
+/* A heading of the essentials picker and its ticks, with no box drawn round it. */
+.essential-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.essential-group legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+}
+
 /* Goals in order --------------------------------------------------------- */
 
 .order-list {

@@ -16,6 +16,7 @@ export const IPHONE_SAFARI =
 /**
  * Fakes push in the page before it loads: notification permission is granted
  * when asked, and a service worker whose push manager subscribes at once.
+ * Already subscribed, notifications are already allowed, as in a browser.
  * What the page asked for is kept on window.pushCalls.
  */
 export async function fakePushBrowser(page: Page, options: { subscribed?: boolean } = {}) {
@@ -41,7 +42,7 @@ export async function fakePushBrowser(page: Page, options: { subscribed?: boolea
         },
       }
       const registration = { pushManager }
-      let permission = 'default'
+      let permission = subscribed ? 'granted' : 'default'
       Object.assign(window, { pushCalls: calls, PushManager: function PushManager() {} })
       Object.defineProperty(window, 'Notification', {
         value: {

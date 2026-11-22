@@ -20,6 +20,7 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
+import { getCardInterestAction } from './cardInterest.js'
 import { hideHomeAlertAction, listHomeAlertsAction } from './homeAlerts.js'
 import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
@@ -77,6 +78,8 @@ import {
   listRecentBalancesAction,
   planDebtPayoffAction,
 } from './planning.js'
+import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
+import { getIdleCashAction } from './idleCash.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -109,6 +112,7 @@ import {
   importConfigAction,
   starterCategoriesAction,
 } from './setup.js'
+import { exportTaxYearAction } from './taxExport.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
@@ -185,6 +189,7 @@ export const actionList = [
   hideHomeAlertAction,
   createAccountAction,
   updateAccountAction,
+  getCardInterestAction,
   deleteAccountAction,
   summarizeSavingsAction,
   getFinancialProfileAction,
@@ -214,9 +219,13 @@ export const actionList = [
   startEmergencyFundAction,
   changeEmergencyFundAction,
   getNetWorthAction,
+  listOwnedAndOwedAction,
+  addOwnedOrOwedAction,
+  updateOwnedOrOwedAction,
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
+  getIdleCashAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,
@@ -238,6 +247,7 @@ export const actionList = [
   disconnectAppAction,
   getConnectRequestAction,
   answerConnectRequestAction,
+  exportTaxYearAction,
 ] as const
 
 export type Actions = (typeof actionList)[number]

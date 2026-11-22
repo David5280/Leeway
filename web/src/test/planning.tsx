@@ -2,14 +2,23 @@
 
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
-import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
+import { goalOf } from '../../../server/src/domain/goalProgress'
+import { goalInputSchema } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { retirementView } from '../../../server/src/domain/profile/views'
 import type { RetirementPatch } from '../../../server/src/domain/retirement/assumptions'
 import type { RetirementInput } from '../../../server/src/domain/retirement/plan'
 import { formatWholeCents } from '../../../server/src/lib/money'
 import { Route, Routes } from 'react-router-dom'
-import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '../api/client'
+import type {
+  Account,
+  Bill,
+  CashFlow,
+  DebtPlans,
+  Goal,
+  RecurringSeries,
+  Settings,
+} from '../api/client'
 import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
@@ -156,8 +165,8 @@ export function debtPlans(
 
 /**
  * The server for the Plan screen: cash flow is always there, with no
- * emergency fund to offer and no goal order unless a test says otherwise;
- * the rest per test.
+ * emergency fund to offer, no goal order and nothing entered by hand unless
+ * a test says otherwise; the rest per test.
  */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
   return fakeServer(
@@ -165,20 +174,21 @@ export function planServer(handlers: Handlers, routes: Record<string, () => Resp
       get_cash_flow: () => cashFlow(),
       get_emergency_fund: () => null,
       get_goal_order: () => ({ monthlyCents: 0, source: 'none', goals: [] }),
+      list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       ...handlers,
     },
     routes,
   )
 }
 
-/** The Plan screen at an address, with its routes, as the app has them. */
-export function renderPlan(path = '/plan') {
+/** The Plan screen at an address, with its routes, as the app has them, and the settings given. */
+export function renderPlan(path = '/plan', settings?: Settings) {
   return renderSignedIn(
     <Routes>
       <Route path="/plan" element={<Plan />} />
       <Route path="/plan/:section" element={<Plan />} />
     </Routes>,
-    { route: path },
+    { route: path, settings },
   )
 }
 

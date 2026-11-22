@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
-import { detectEssentials, essentialIdsOf, looksEssential } from '../src/domain/essentials.js'
+import {
+  detectEssentials,
+  essentialIdsOf,
+  looksEssential,
+  nameIsEssential,
+} from '../src/domain/essentials.js'
 import { STARTER_CATEGORIES } from '../src/domain/starters.js'
 
 /** A spending category with only the fields the rules read. */
@@ -13,39 +18,88 @@ function category(
 }
 
 describe('looksEssential', () => {
-  it('finds the essentials among the starter categories by their bank codes', () => {
-    const essential = STARTER_CATEGORIES.filter((c) => looksEssential(c)).map((c) => c.name)
-    expect(essential).toEqual(
-      expect.arrayContaining([
-        'Groceries',
-        'Gas',
-        'Transportation',
-        'Car payment',
-        'Health',
-        'Insurance',
-      ]),
-    )
-    for (const want of ['Dining out', 'Coffee', 'Shopping', 'Entertainment', 'Travel']) {
-      expect(essential).not.toContain(want)
-    }
+  it('finds exactly the essentials among the starter categories by their bank codes', () => {
+    const essential = STARTER_CATEGORIES.filter((c) => c.kind === 'expense' && looksEssential(c))
+    expect(essential.map((c) => c.name)).toEqual([
+      'Groceries',
+      'Rent and mortgage',
+      'Utilities',
+      'Gas',
+      'Transportation',
+      'Car payment',
+      'Health',
+      'Insurance',
+    ])
   })
 
-  it('counts housing, utilities and every loan payment, the minimum payments on debt', () => {
+  it('leaves out the starter "Debt payments": card payoffs are not a minimum that keeps coming due', () => {
+    const debt = STARTER_CATEGORIES.find((c) => c.name === 'Debt payments')!
+    expect(looksEssential(debt)).toBe(false)
+    expect(looksEssential(category('Card', ['LOAN_PAYMENTS_CREDIT_CARD_PAYMENT']))).toBe(false)
+    expect(looksEssential(category('Later', ['LOAN_PAYMENTS_BNPL']))).toBe(false)
+    expect(looksEssential(category('Loans', ['LOAN_PAYMENTS']))).toBe(false)
+  })
+
+  it('counts housing, utilities and fixed loan installments', () => {
     expect(looksEssential(category('Home', ['RENT_AND_UTILITIES_RENT']))).toBe(true)
     expect(looksEssential(category('Bills', ['RENT_AND_UTILITIES']))).toBe(true)
     expect(looksEssential(category('Debt', ['LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT']))).toBe(true)
+    expect(looksEssential(category('Loan', ['LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT']))).toBe(true)
   })
 
-  it('reads a category made by hand by its name, as whole words', () => {
-    expect(looksEssential(category('Mortgage'))).toBe(true)
-    expect(looksEssential(category('Child care'))).toBe(true)
-    expect(looksEssential(category('Electricity and water'))).toBe(true)
-    expect(looksEssential(category('Gaming'))).toBe(false)
-    expect(looksEssential(category('Healthy snacks'))).toBe(false)
+  it('takes a mixed category as not essential: "Pets" holds vet bills and supplies', () => {
+    const pets = STARTER_CATEGORIES.find((c) => c.name === 'Pets')!
+    expect(looksEssential(pets)).toBe(false)
+    expect(looksEssential(category('Vet', ['MEDICAL_VETERINARY_SERVICES']))).toBe(false)
+  })
+
+  it('goes by the bank codes over the name when a category has both', () => {
+    expect(looksEssential(category('Rent', ['ENTERTAINMENT']))).toBe(false)
   })
 
   it('does not take a code that only starts with the same letters', () => {
     expect(looksEssential(category('Odd', ['MEDICALISH']))).toBe(false)
+  })
+})
+
+describe('nameIsEssential', () => {
+  it('reads a category made by hand by its name, every word essential', () => {
+    for (const name of [
+      'Mortgage',
+      'Child care',
+      'Electricity and water',
+      'Gas & electric bill',
+      'Car payment',
+      'Student loans',
+      'Power',
+      'Phone bill',
+      'Health insurance',
+      'Auto insurance',
+      'Car loan',
+      'Auto loan payments',
+    ]) {
+      expect(nameIsEssential(name), name).toBe(true)
+    }
+  })
+
+  it('refuses a name with any word that is not essential', () => {
+    for (const name of [
+      'Power tools',
+      'Phone accessories',
+      'Water park',
+      'Health food',
+      'Gas station snacks',
+      'Healthy snacks',
+      'Gaming',
+      'Loans to friends',
+      'Auto parts',
+      'Car wash',
+      'Debts',
+      'Bills',
+      '',
+    ]) {
+      expect(nameIsEssential(name), name).toBe(false)
+    }
   })
 })
 
@@ -54,7 +108,7 @@ describe('detectEssentials and essentialIdsOf', () => {
     category('Rent'),
     category('Fun'),
     category('Pay', [], 'income'),
-    category('Moving money', ['LOAN_PAYMENTS'], 'transfer'),
+    category('Moving money', ['LOAN_PAYMENTS_MORTGAGE_PAYMENT'], 'transfer'),
   ]
 
   it('finds only spending categories, never income or transfers', () => {

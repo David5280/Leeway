@@ -7,7 +7,7 @@ import { addDays, todayIn, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
-import type { AlertFormat } from '../accountAlerts.js'
+import { ALERT_KINDS, type AlertFormat } from '../accountAlerts.js'
 import { listAccounts } from '../accounts.js'
 import { listAlerts } from '../alerts.js'
 import { listBills } from '../bills.js'
@@ -89,8 +89,11 @@ export async function gatherCandidates(
   const on = choices.kinds
   const found: Candidate[][] = []
 
-  if (on.overdrawn || on.over_limit || on.overdraft_fee || on.low_balance) {
-    const alerts = await listAlerts(db, settings, today)
+  // Any account alert turned on reads them all, then keeps the kinds that are on.
+  // A bill paid twice is pushed as a charge made twice only while that kind is on.
+  if (ALERT_KINDS.some((kind) => on[kind])) {
+    const doublesTold = on.duplicate_charge
+    const alerts = await listAlerts(db, settings, today, [], { doublesTold })
     found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }
   if (on.over_budget) {

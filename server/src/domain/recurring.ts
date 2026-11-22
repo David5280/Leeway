@@ -12,8 +12,9 @@ import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { accountMasks } from './accounts.js'
 import { listBills, type Bill } from './bills.js'
+import { CADENCE_BANDS, type CadenceBand } from './cadenceBands.js'
 import { countedSql } from './counted.js'
-import { merchantKey, textKey } from './merchantKey.js'
+import { bankTextKey, merchantKey, textKey } from './merchantKey.js'
 import { shownNameOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
 import { merchantDisplayName } from './transactionName.js'
@@ -30,8 +31,8 @@ export interface PastTransaction {
   accountId?: string
 }
 
-/** A past transaction as stored, with what its shown name is worked out from. */
-export type StoredTransaction = PastTransaction & Movement
+/** A past transaction as stored, with its id and what its shown name is worked out from. */
+export type StoredTransaction = PastTransaction & Movement & { id: string }
 
 export interface RecurringSeries {
   /** Stable key for the merchant, used to dismiss a suggestion and to match it again. */
@@ -56,18 +57,6 @@ export interface RecurringSeries {
   suggestedKind: 'bill' | 'subscription'
 }
 
-/**
- * The gap in days each cadence allows between two charges. Banks post a day
- * or two late and months differ in length, so each band has some slack.
- */
-const CADENCE_BANDS: { cadence: Cadence; min: number; max: number; minCount: number }[] = [
-  { cadence: 'week', min: 6, max: 8, minCount: 4 },
-  { cadence: 'biweek', min: 12, max: 16, minCount: 3 },
-  { cadence: 'month', min: 27, max: 33, minCount: 3 },
-  { cadence: 'quarter', min: 85, max: 97, minCount: 2 },
-  { cadence: 'year', min: 355, max: 375, minCount: 2 },
-]
-
 /** Share of gaps that must fit the cadence. One skipped or doubled month is tolerated. */
 const REGULAR_SHARE = 0.75
 /** Amounts within this share of the median count as the same price. */
@@ -85,7 +74,7 @@ function median(values: number[]): number {
  * The cadence whose band most gaps fall in, if enough of them do. The bands
  * do not overlap, so at most one can hold the regular share of the gaps.
  */
-function cadenceOfGaps(gaps: number[]): (typeof CADENCE_BANDS)[number] | null {
+function cadenceOfGaps(gaps: number[]): CadenceBand | null {
   for (const band of CADENCE_BANDS) {
     const fitting = gaps.filter((gap) => gap >= band.min && gap <= band.max).length
     if (gaps.length + 1 >= band.minCount && fitting / gaps.length >= REGULAR_SHARE) return band
@@ -141,9 +130,10 @@ function seriesOf(
   }
 }
 
-/** A series found, with the newest transaction in it. */
+/** A series found, with its transactions, oldest first, and the newest of them. */
 interface Found<T extends PastTransaction> {
   series: RecurringSeries
+  charges: T[]
   last: T
 }
 
@@ -181,7 +171,7 @@ function findSeries<T extends PastTransaction>(
     const [direction, key] = group.split(/:(.*)/s) as ['out' | 'in', string]
     charges.sort((a, b) => a.date.localeCompare(b.date))
     const series = seriesOf(key, direction, charges, today, masks)
-    if (series) found.push({ series, last: charges.at(-1)! })
+    if (series) found.push({ series, charges, last: charges.at(-1)! })
   }
   return found.sort(
     (a, b) =>
@@ -200,7 +190,7 @@ const HISTORY_DAYS = 400
  */
 export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTransaction[]> {
   const { rows } = await db.query<StoredTransaction>(
-    `SELECT t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
+    `SELECT t.id, t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
        t.category_id AS "categoryId", t.account_id AS "accountId",
        t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
@@ -209,7 +199,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTrans
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE NOT t.pending AND NOT t.excluded AND NOT a.hidden AND t.date BETWEEN $1 AND $2
        AND ${countedSql()}
-     ORDER BY t.date`,
+     ORDER BY t.date, t.id`,
     [addDays(today, -HISTORY_DAYS), today],
   )
   return rows
@@ -233,15 +223,39 @@ export interface Untracked {
   shownKey: string
 }
 
+/** A series found, with the keys a bill's pattern is looked for in. */
+interface Keyed<T extends PastTransaction> extends Untracked {
+  /** Its latest charge's merchant name and description together (bankTextKey). */
+  bankKey: string
+  charges: T[]
+}
+
+/** Every series found, keyed by its latest charge as a bill would read it. */
+function keyedSeries<T extends StoredTransaction>(
+  history: T[],
+  today: IsoDate,
+  masks: AccountMasks,
+): Keyed<T>[] {
+  return findSeries(history, today, masks).map(({ series, charges, last }) => ({
+    series,
+    charges,
+    shownKey: textKey(shownNameOf(last, masks)),
+    bankKey: bankTextKey(last),
+  }))
+}
+
 /**
- * Whether a bill tracks a series: its pattern, read as a merchant key, is
- * part of the series' key. A bill that reads shown names is compared with the
- * key made from the shown name, never the bank's text.
+ * Whether a bill tracks a series, judged as the bill finds its payments: its
+ * pattern, read as a merchant key, is part of the series' latest charge. A
+ * bill that reads bank text looks in the merchant name and description
+ * together, as its SQL does, so a pattern from the description ("spotify
+ * usa") tracks too. A bill that reads shown names looks in the key made from
+ * the shown name, never the bank's text.
  */
-function tracks(bill: Bill, { series, shownKey }: Untracked): boolean {
+function tracks(bill: Bill, { bankKey, shownKey }: Keyed<PastTransaction>): boolean {
   const pattern = bill.matchPattern ? textKey(bill.matchPattern) : ''
   if (!pattern) return false
-  return (bill.reads === 'shown_name' ? shownKey : series.key).includes(pattern)
+  return (bill.reads === 'shown_name' ? shownKey : bankKey).includes(pattern)
 }
 
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
@@ -252,9 +266,28 @@ export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
     listBills(db, today),
     accountMasks(db),
   ])
-  return findSeries(history, today, masks)
-    .map(({ series, last }) => ({ series, shownKey: textKey(shownNameOf(last, masks)) }))
+  return keyedSeries(history, today, masks)
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
+    .map(({ series, shownKey }) => ({ series, shownKey }))
+}
+
+/**
+ * Charges still repeating that no bill tracks, dismissed suggestions too, each
+ * with its transactions, oldest first. Leak checks read these: a price rise is
+ * news whether or not the owner wants the charge suggested as a bill.
+ */
+export async function untrackedSeries(
+  db: Db,
+  today: IsoDate,
+): Promise<(Untracked & { charges: StoredTransaction[] })[]> {
+  const [history, bills, masks] = await Promise.all([
+    recentHistory(db, today),
+    listBills(db, today),
+    accountMasks(db),
+  ])
+  return keyedSeries(history, today, masks)
+    .filter((found) => !bills.some((bill) => tracks(bill, found)))
+    .map(({ series, shownKey, charges }) => ({ series, shownKey, charges }))
 }
 
 /**
