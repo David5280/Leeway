@@ -38,7 +38,8 @@ export interface Movement {
 }
 
 export const CARD_PAYMENT_CODE = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
+/** Plaid's code for cash taken out at an ATM or a teller. */
+export const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
 
 // Apps people use to pay each other. Matched as whole words, so "paypal" in
 // "PAYPAL *ETSY" counts but a merchant that merely contains the letters does not.

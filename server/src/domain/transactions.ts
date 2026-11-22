@@ -141,6 +141,11 @@ export const transactionFilterSchema = z.object({
   accountIds: z.array(z.uuid()).min(1).max(100).optional(),
   /** Matches the description, merchant or note. */
   search: z.string().trim().min(1).max(100).optional(),
+  /**
+   * Only charges from the same merchant as this transaction, as repeat
+   * charges are grouped (merchantKey.ts): how a leak alert shows its charges.
+   */
+  sameMerchantAs: z.uuid().optional(),
   minAmountCents: z.number().int().optional(),
   maxAmountCents: z.number().int().optional(),
   includeExcluded: z.boolean().default(false),
@@ -215,6 +220,16 @@ function filterSql(filter: TransactionFilter, withSearch = true) {
     add(
       `(t.name ILIKE ? OR t.merchant_name ILIKE $${params.length + 1} OR t.note ILIKE $${params.length + 1})`,
       `%${filter.search.replace(/[%_\\]/g, '\\$&')}%`,
+    )
+  }
+  if (filter.sameMerchantAs) {
+    // merchantKey() in SQL. The key keeps no digits, so it never matches on an
+    // account number, and a transaction with no key (all digits) matches nothing.
+    add(
+      `merchant_key(coalesce(t.merchant_name, t.name)) = (
+        SELECT nullif(merchant_key(coalesce(s.merchant_name, s.name)), '')
+        FROM transactions s WHERE s.id = ?)`,
+      filter.sameMerchantAs,
     )
   }
   if (filter.minAmountCents !== undefined) add('t.amount_cents >= ?', filter.minAmountCents)
