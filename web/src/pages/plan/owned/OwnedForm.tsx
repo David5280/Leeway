@@ -1,12 +1,12 @@
 // The form for something owned or owed by hand: what it is (for a new one),
-// its name and amount, a loan's rate and monthly payment, and for something
-// owned the loan against it. Removing one deletes the manual account.
+// its name and amount, a loan's rate and monthly payment, and for a home or
+// car the loan against it. Removing one deletes the manual account. What is
+// typed is read back by readOwned.ts, which refuses rather than changes it.
 
 import { useState, type FormEvent } from 'react'
+import { carriesLoan } from '../../../../../server/src/domain/ownedRules'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Segmented, Setting } from '../../../components/ui'
-import { isOwed } from '../../../lib/accounts'
-import { parseMoney } from '../../../lib/format'
 import {
   isOwedKind,
   NEW_KINDS,
@@ -15,59 +15,52 @@ import {
   type OwnedItem,
   type OwnedText,
 } from './ownedText'
+import { editOf, loanChoices, readOwned, type LoanChoice, type OwnedFields } from './readOwned'
 
-/** A typed number, or null for a blank field or one that is not a number. */
-function percentOf(text: string): number | null {
-  const value = Number(text.trim())
-  return text.trim() === '' || !Number.isFinite(value) ? null : Math.round(value * 100) / 100
-}
-
-/** The loans something owned can name: every counted card or loan but itself. */
-function useLoanChoices(itemId: string | undefined) {
-  const accounts = useAction('list_accounts')
-  return (accounts.data ?? []).filter(
-    (account) => isOwed(account) && !account.hidden && account.id !== itemId,
+/** A loan's rate and monthly payment. */
+function TermsFields({
+  text,
+  onChange,
+}: {
+  text: OwnedText
+  onChange: (change: Partial<OwnedText>) => void
+}) {
+  return (
+    <>
+      <Setting label="Rate, %" hint="Optional. For debt payoff plans">
+        <input
+          className="input num"
+          style={{ width: 100 }}
+          inputMode="decimal"
+          aria-label="Rate, %"
+          value={text.rate}
+          onChange={(e) => onChange({ rate: e.target.value })}
+        />
+      </Setting>
+      <Setting label="Monthly payment" hint="Optional">
+        <input
+          className="input num"
+          style={{ width: 130 }}
+          inputMode="decimal"
+          aria-label="Monthly payment"
+          value={text.payment}
+          onChange={(e) => onChange({ payment: e.target.value })}
+        />
+      </Setting>
+    </>
   )
 }
 
-/** The fields that change with what it is: a loan's terms, or the loan against a thing owned. */
-function KindFields({
-  owed,
-  text,
+/** The loan against a home or car, or None to untie it. */
+function LoanField({
+  loanId,
   loans,
   onChange,
 }: {
-  owed: boolean
-  text: OwnedText
-  loans: { id: string; name: string }[]
+  loanId: string
+  loans: LoanChoice[]
   onChange: (change: Partial<OwnedText>) => void
 }) {
-  if (owed) {
-    return (
-      <>
-        <Setting label="Rate, %" hint="Optional. For debt payoff plans">
-          <input
-            className="input num"
-            style={{ width: 100 }}
-            inputMode="decimal"
-            aria-label="Rate, %"
-            value={text.rate}
-            onChange={(e) => onChange({ rate: e.target.value })}
-          />
-        </Setting>
-        <Setting label="Monthly payment" hint="Optional">
-          <input
-            className="input num"
-            style={{ width: 130 }}
-            inputMode="decimal"
-            aria-label="Monthly payment"
-            value={text.payment}
-            onChange={(e) => onChange({ payment: e.target.value })}
-          />
-        </Setting>
-      </>
-    )
-  }
   if (loans.length === 0) return null
   return (
     <Setting label="Loan on it" hint="Optional. Shows what is yours after it">
@@ -75,13 +68,13 @@ function KindFields({
         className="input"
         aria-label="Loan on it"
         style={{ width: 'auto' }}
-        value={text.loanId}
+        value={loanId}
         onChange={(e) => onChange({ loanId: e.target.value })}
       >
         <option value="">None</option>
         {loans.map((loan) => (
           <option key={loan.id} value={loan.id}>
-            {loan.name}
+            {loan.label}
           </option>
         ))}
       </select>
@@ -89,28 +82,41 @@ function KindFields({
   )
 }
 
-export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => void }) {
+/** Adding, changing and deleting one, each closing the form once it is done. */
+function useOwnedActions(item: OwnedItem | undefined, onClose: () => void) {
   const add = useActionMutation('add_owned_or_owed')
   const update = useActionMutation('update_owned_or_owed')
   const remove = useActionMutation('delete_account')
-  const loans = useLoanChoices(item?.id)
-  const [kind, setKind] = useState<NewKind>('home')
+  const close = { onSuccess: onClose }
+  return {
+    save(kind: NewKind, fields: OwnedFields) {
+      if (item) update.mutate({ id: item.id, ...editOf(fields, item) }, close)
+      else add.mutate({ kind, ...fields }, close)
+    },
+    remove: (id: string) => remove.mutate({ id }, close),
+    busy: add.isPending || update.isPending || remove.isPending,
+    error: add.error ?? update.error ?? remove.error,
+  }
+}
+
+export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => void }) {
+  const actions = useOwnedActions(item, onClose)
+  const accounts = useAction('list_accounts')
+  const [newKind, setNewKind] = useState<NewKind>('home')
   const [text, setText] = useState<OwnedText>(() => ownedText(item))
-  const owed = item ? isOwedKind(item.kind) : kind === 'loan'
-  const amountCents = parseMoney(text.amount)
-  const busy = add.isPending || update.isPending || remove.isPending
-  const change = (next: Partial<OwnedText>) => setText((now) => ({ ...now, ...next }))
+  const [problem, setProblem] = useState<string | null>(null)
+  const kind = item ? item.kind : newKind
+  const owed = isOwedKind(kind)
+  const change = (next: Partial<OwnedText>) => {
+    setProblem(null)
+    setText((now) => ({ ...now, ...next }))
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (amountCents === null) return
-    const terms = owed
-      ? { aprPercent: percentOf(text.rate), monthlyPaymentCents: parseMoney(text.payment) }
-      : { loanId: text.loanId || null }
-    const fields = { name: text.name, amountCents: Math.max(0, amountCents), ...terms }
-    const close = { onSuccess: onClose }
-    if (item) update.mutate({ id: item.id, ...fields }, close)
-    else add.mutate({ kind, ...fields }, close)
+    const read = readOwned(text, kind)
+    if (read.ok) actions.save(newKind, read.value)
+    else setProblem(read.error)
   }
 
   return (
@@ -118,9 +124,18 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
       className="stack"
       onSubmit={submit}
       aria-label={item ? `Edit ${item.name}` : 'Add something'}
+      noValidate
     >
       {!item && (
-        <Segmented label="What is it?" value={kind} options={NEW_KINDS} onChange={setKind} />
+        <Segmented
+          label="What is it?"
+          value={newKind}
+          options={NEW_KINDS}
+          onChange={(next) => {
+            setProblem(null)
+            setNewKind(next)
+          }}
+        />
       )}
       <label className="field">
         Name
@@ -144,10 +159,22 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
           onChange={(e) => change({ amount: e.target.value })}
         />
       </Setting>
-      <KindFields owed={owed} text={text} loans={loans} onChange={change} />
-      <ErrorNote error={add.error ?? update.error ?? remove.error} />
+      {owed && <TermsFields text={text} onChange={change} />}
+      {carriesLoan(kind) && (
+        <LoanField
+          loanId={text.loanId}
+          loans={loanChoices(accounts.data ?? [], item)}
+          onChange={change}
+        />
+      )}
+      {problem && (
+        <p className="notice error" role="alert">
+          {problem}
+        </p>
+      )}
+      <ErrorNote error={actions.error} />
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy || amountCents === null}>
+        <button type="submit" className="btn primary" disabled={actions.busy}>
           {item ? 'Save' : 'Add'}
         </button>
         <button type="button" className="btn" onClick={onClose}>
@@ -157,8 +184,8 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
           <button
             type="button"
             className="btn danger"
-            disabled={busy}
-            onClick={() => remove.mutate({ id: item.id }, { onSuccess: onClose })}
+            disabled={actions.busy}
+            onClick={() => actions.remove(item.id)}
           >
             Delete
           </button>

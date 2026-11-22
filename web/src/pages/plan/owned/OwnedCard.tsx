@@ -7,15 +7,19 @@ import { useAction } from '../../../api/hooks'
 import { Card } from '../../../components/design/Card'
 import { Money } from '../../../components/design/Money'
 import { LoadingOrError } from '../../../components/ui'
+import { useApp } from '../../../lib/app'
+import { isoDaysAgo } from '../../../lib/dates'
 import { FormCard } from '../FormCard'
 import { OwnedForm } from './OwnedForm'
-import { itemDetail, type OwnedItem } from './ownedText'
+import { itemDetail, updatedWords, type OwnedItem } from './ownedText'
 
 /** What the form is open on: an item, or a new one. */
 type Editing = { item: OwnedItem | null }
 
-/** One thing entered by hand, as a row that opens its form. */
+/** One thing entered by hand, as a row that opens its form, saying how old its amount is. */
 function ItemRow({ item, onOpen }: { item: OwnedItem; onOpen: () => void }) {
+  const { settings } = useApp()
+  const updated = updatedWords(item.updatedOn, isoDaysAgo(0, settings.timeZone), settings.locale)
   return (
     <button type="button" className="clickrow owned-row" onClick={onOpen}>
       <span className="row-between wrap">
@@ -23,7 +27,7 @@ function ItemRow({ item, onOpen }: { item: OwnedItem; onOpen: () => void }) {
         {item.amountCents !== null && <Money cents={item.amountCents} className="num" />}
       </span>
       <span className="row-between wrap small muted">
-        <span>{itemDetail(item)}</span>
+        <span>{updated ? `${itemDetail(item)}. ${updated}` : itemDetail(item)}</span>
         {item.equityCents !== null && (
           <span>
             Yours after the loan:{' '}
@@ -70,12 +74,12 @@ export function OwnedCard() {
   return (
     <>
       {editing && (
-        <FormCard title={editing.item?.name ?? 'Add something you own or owe'}>
-          <OwnedForm
-            key={editing.item?.id ?? 'new'}
-            item={editing.item ?? undefined}
-            onClose={() => setEditing(null)}
-          />
+        // Keyed by what is open, so moving to another row brings the form into view again.
+        <FormCard
+          key={editing.item?.id ?? 'new'}
+          title={editing.item?.name ?? 'Add something you own or owe'}
+        >
+          <OwnedForm item={editing.item ?? undefined} onClose={() => setEditing(null)} />
         </FormCard>
       )}
       <Card static="list" label="Entered by you" className="stack">

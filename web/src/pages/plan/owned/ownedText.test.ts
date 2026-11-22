@@ -1,5 +1,8 @@
+// Words for what is entered by hand: each row's detail and age, and the
+// form's starting text.
+
 import { describe, expect, it } from 'vitest'
-import { isOwedKind, itemDetail, ownedText, type OwnedItem } from './ownedText'
+import { isOwedKind, itemDetail, ownedText, updatedWords, type OwnedItem } from './ownedText'
 
 /** A home worth $300,000 entered by hand, counted in net worth. */
 function item(extra: Partial<OwnedItem> = {}): OwnedItem {
@@ -34,6 +37,19 @@ describe('a row under its name', () => {
     expect(itemDetail(item({ inNetWorth: false }))).toBe('Home, hidden from net worth')
     const loan = item({ kind: 'loan', aprPercent: 4, inNetWorth: false })
     expect(itemDetail(loan)).toBe('Loan at 4%, hidden from net worth')
+  })
+})
+
+describe('how old a row is', () => {
+  it('says today and yesterday in lower case, and other days as dates', () => {
+    expect(updatedWords('2026-11-17', '2026-11-17')).toBe('Updated today')
+    expect(updatedWords('2026-11-16', '2026-11-17')).toBe('Updated yesterday')
+    expect(updatedWords('2026-11-01', '2026-11-17')).toBe('Updated Sun, Nov 1')
+  })
+
+  it('names the year for a day in another year, and says nothing when never entered', () => {
+    expect(updatedWords('2025-12-24', '2026-11-17')).toBe('Updated Wed, Dec 24, 2025')
+    expect(updatedWords(null, '2026-11-17')).toBeNull()
   })
 })
 

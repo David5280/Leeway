@@ -3,7 +3,8 @@
 // account (accounts.ts), so it counts in net worth, debt plans and anywhere
 // else accounts do; this module only reads them as one list and adds and
 // changes them in the words a person uses. A home or car can name the loan
-// against it, to show what it is worth to the owner after that loan.
+// against it, to show what it is worth to the owner after that loan. The
+// rules for amounts and ties are in ownedRules.ts, the ties in loanLinks.ts.
 
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
@@ -19,6 +20,15 @@ import {
   type Account,
   type AccountType,
 } from './accounts.js'
+import { loanHolder, loanLinks, saveLoanLink } from './loanLinks.js'
+import {
+  amountProblem,
+  canCarryLoan,
+  isLoan,
+  kindOfItem,
+  MAX_AMOUNT_CENTS,
+  type ItemKind,
+} from './ownedRules.js'
 
 /** What a thing entered by hand is, in everyday words. */
 export const HAND_ENTERED_KINDS = ['home', 'vehicle', 'other', 'loan'] as const
@@ -32,12 +42,21 @@ const STORED_AS: Record<HandEnteredKind, { type: AccountType; subtype: string | 
   loan: { type: 'loan', subtype: null },
 }
 
+const TOO_MUCH = 'Use $1,000,000,000 or less'
+
+/** An amount in cents, within $1 billion either way; whether it may be negative depends on the kind. */
+const amountField = z
+  .number()
+  .int('Use whole cents')
+  .min(-MAX_AMOUNT_CENTS, TOO_MUCH)
+  .max(MAX_AMOUNT_CENTS, TOO_MUCH)
+
 const termsFields = {
   /** Yearly interest rate of a loan, such as 6.5. */
   aprPercent: z.number().min(0).max(100).multipleOf(0.01).nullable(),
   /** What a loan takes each month. */
-  monthlyPaymentCents: z.number().int().min(0).nullable(),
-  /** For a home, car or other thing owned: the loan against it, or null for none. */
+  monthlyPaymentCents: z.number().int().min(0).max(MAX_AMOUNT_CENTS, TOO_MUCH).nullable(),
+  /** For a home or car: the loan against it, or null for none. */
   loanId: z.uuid().nullable(),
 }
 
@@ -45,7 +64,7 @@ export const handEnteredInputSchema = z.object({
   kind: z.enum(HAND_ENTERED_KINDS),
   name: z.string().trim().min(1).max(80),
   /** What it is worth, or for a loan what is still owed. */
-  amountCents: z.number().int().min(0),
+  amountCents: amountField,
   aprPercent: termsFields.aprPercent.default(null),
   monthlyPaymentCents: termsFields.monthlyPaymentCents.default(null),
   loanId: termsFields.loanId.default(null),
@@ -67,13 +86,14 @@ export interface HandEnteredItem {
   id: string
   name: string
   /** What it is: home, vehicle, other or loan; also cash, investment or card for older entries. */
-  kind: HandEnteredKind | 'cash' | 'investment' | 'card'
+  kind: ItemKind
   side: 'owned' | 'owed'
   /** What it is worth, or for a loan or card what is owed; null when not known. */
   amountCents: number | null
+  /** A loan or card's terms; always null for something owned. */
   aprPercent: number | null
   monthlyPaymentCents: number | null
-  /** For something owned: the loan against it, and that loan's name. */
+  /** For a home or car: the loan against it, and that loan's name. */
   loanId: string | null
   loanName: string | null
   /** For something owned with a loan: its value less what the loan owes. */
@@ -95,29 +115,6 @@ export interface OwnedAndOwed {
   owedCents: number
 }
 
-/** The everyday kind of a manual account. */
-function kindOfItem(account: Account): HandEnteredItem['kind'] {
-  if (account.type === 'property') {
-    return account.subtype === 'home' || account.subtype === 'vehicle' ? account.subtype : 'other'
-  }
-  const byType: Partial<Record<AccountType, HandEnteredItem['kind']>> = {
-    loan: 'loan',
-    credit: 'card',
-    depository: 'cash',
-    investment: 'investment',
-  }
-  return byType[account.type] ?? 'other'
-}
-
-/** The loan each owned thing names, by the thing's id. */
-async function loanLinks(db: Db): Promise<Map<string, string>> {
-  const { rows } = await db.query<{ id: string; loanId: string }>(
-    `SELECT id, loan_account_id AS "loanId" FROM accounts
-     WHERE connection_id IS NULL AND loan_account_id IS NOT NULL`,
-  )
-  return new Map(rows.map((row) => [row.id, row.loanId]))
-}
-
 /** The owner's calendar day a balance was entered; pg reads the time as a Date, typed as text. */
 function enteredOn(account: Account, timeZone: string): IsoDate | null {
   return account.balanceUpdatedAt === null
@@ -125,8 +122,18 @@ function enteredOn(account: Account, timeZone: string): IsoDate | null {
     : todayIn(timeZone, new Date(account.balanceUpdatedAt))
 }
 
-function itemOf(account: Account, loan: Account | undefined, timeZone: string): HandEnteredItem {
+/**
+ * The loan tied to an account, while the tie still fits the rules. Ties are
+ * undone when an account changes (loanLinks.ts), but a bank can change a
+ * linked loan's type on its own, so the rules are read again here.
+ */
+function tiedLoan(account: Account, loan: Account | undefined): Account | undefined {
+  return loan && isLoan(loan) && canCarryLoan(account) ? loan : undefined
+}
+
+function itemOf(account: Account, tied: Account | undefined, timeZone: string): HandEnteredItem {
   const owed = LIABILITY_TYPES.includes(account.type)
+  const loan = tiedLoan(account, tied)
   const loanOwes = loan && isCounted(loan) ? loan.balanceCents : null
   return {
     id: account.id,
@@ -134,8 +141,8 @@ function itemOf(account: Account, loan: Account | undefined, timeZone: string): 
     kind: kindOfItem(account),
     side: owed ? 'owed' : 'owned',
     amountCents: account.balanceCents,
-    aprPercent: account.aprPercent,
-    monthlyPaymentCents: account.minimumPaymentCents,
+    aprPercent: owed ? account.aprPercent : null,
+    monthlyPaymentCents: owed ? account.minimumPaymentCents : null,
     loanId: loan?.id ?? null,
     loanName: loan?.name ?? null,
     equityCents:
@@ -173,21 +180,43 @@ async function itemById(db: Db, id: string, timeZone: string): Promise<HandEnter
   return [...owned, ...owed].find((item) => item.id === id)!
 }
 
-/** Names the loan against something owned; the loan must be one owed, and not the thing itself. */
+/** Refuses a change that does not fit what the item is, before anything is written. */
+function assertFits(item: Pick<Account, 'type' | 'subtype'>, change: HandEnteredPatch): void {
+  const kind = kindOfItem(item)
+  const problem = change.amountCents === undefined ? null : amountProblem(kind, change.amountCents)
+  if (problem) throw new AppError('invalid_input', problem)
+  const owed = LIABILITY_TYPES.includes(item.type)
+  const givesTerms =
+    (change.aprPercent ?? null) !== null || (change.monthlyPaymentCents ?? null) !== null
+  if (!owed && givesTerms) {
+    throw new AppError('invalid_input', 'Only a loan or a card has a rate and a monthly payment')
+  }
+  if ((change.loanId ?? null) !== null && !canCarryLoan(item)) {
+    throw new AppError('invalid_input', 'Only a home or a car can have a loan tied to it')
+  }
+}
+
+/** Ties a loan to a home or car, or unties it with null: only a loan, and only to one thing. */
 async function linkLoan(db: Db, item: Account, loanId: string | null): Promise<void> {
   if (loanId !== null) {
-    if (LIABILITY_TYPES.includes(item.type)) {
-      throw new AppError('invalid_input', 'Only something you own can have a loan against it')
-    }
     const loan = await getAccount(db, loanId)
-    if (!LIABILITY_TYPES.includes(loan.type)) {
+    if (!isLoan(loan)) {
       throw new AppError(
         'invalid_input',
-        `${loan.name} is not a loan, so it cannot be tied to this`,
+        `${loan.name} is not a loan, so it cannot be tied to ${item.name}`,
+      )
+    }
+    // Two homes each subtracting the whole of one loan would count it twice.
+    const holder = await loanHolder(db, loanId, item.id)
+    if (holder !== null) {
+      const { name } = await getAccount(db, holder)
+      throw new AppError(
+        'invalid_input',
+        `${loan.name} is already tied to ${name}. Untie it there first.`,
       )
     }
   }
-  await db.query('UPDATE accounts SET loan_account_id = $2 WHERE id = $1', [item.id, loanId])
+  await saveLoanLink(db, item.id, loanId)
 }
 
 /** Sets a loan's rate and payment, when the change gives them. */
@@ -199,12 +228,26 @@ async function setTerms(db: Db, id: string, terms: HandEnteredPatch): Promise<vo
   })
 }
 
+/** Dates an amount entered by the install's own clock, so the day shown is the owner's. */
+async function stampAmount(db: Db, id: string, now: Date): Promise<void> {
+  await db.query('UPDATE accounts SET balance_updated_at = $2 WHERE id = $1', [id, now])
+}
+
+/** Where the change is made: the install's currency, time zone and clock. */
+export interface OwnedPlace {
+  currency: string
+  timeZone: string
+  now: Date
+}
+
 /** Adds a thing owned or a loan by hand. Run it in a transaction, so it lands whole. */
 export async function addHandEntered(
   db: Db,
   input: HandEnteredInput,
-  { currency, timeZone }: { currency: string; timeZone: string },
+  { currency, timeZone, now }: OwnedPlace,
 ): Promise<HandEnteredItem> {
+  // Checked against what it will be stored as, before anything is written.
+  assertFits(STORED_AS[input.kind], input)
   const account = await insertManualAccount(db, {
     name: input.name,
     ...STORED_AS[input.kind],
@@ -213,6 +256,7 @@ export async function addHandEntered(
     currency,
     kind: null,
   })
+  await stampAmount(db, account.id, now)
   await setTerms(db, account.id, input)
   if (input.loanId !== null) await linkLoan(db, account, input.loanId)
   return itemById(db, account.id, timeZone)
@@ -223,7 +267,7 @@ export async function updateHandEntered(
   db: Db,
   id: string,
   patch: HandEnteredPatch,
-  timeZone: string,
+  { timeZone, now }: Omit<OwnedPlace, 'currency'>,
 ): Promise<HandEnteredItem> {
   const account = await getAccount(db, id)
   if (!account.manual) {
@@ -233,7 +277,10 @@ export async function updateHandEntered(
     )
   }
   if (account.kind === 'pension') throw notFound('Hand-entered item')
+  assertFits(account, patch)
   await updateAccount(db, id, { displayName: patch.name, balanceCents: patch.amountCents })
+  // Only an amount given moves the day it was entered; a new name alone does not.
+  if (patch.amountCents !== undefined) await stampAmount(db, id, now)
   await setTerms(db, id, patch)
   if (patch.loanId !== undefined) await linkLoan(db, account, patch.loanId)
   return itemById(db, id, timeZone)

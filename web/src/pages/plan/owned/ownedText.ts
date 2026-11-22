@@ -2,6 +2,7 @@
 // starting text. Pure, so each wording is tested alone.
 
 import type { Output } from '../../../api/client'
+import { relativeDay } from '../../../lib/format'
 
 export type OwnedAndOwed = Output<'list_owned_and_owed'>
 export type OwnedItem = OwnedAndOwed['owned'][number]
@@ -39,6 +40,22 @@ function termsOf(item: OwnedItem): string {
 export function itemDetail(item: OwnedItem): string {
   const terms = termsOf(item)
   return item.inNetWorth ? terms : `${terms}, hidden from net worth`
+}
+
+/**
+ * When its amount was last entered: "Updated today", "Updated Tue, Nov 17".
+ * Nothing keeps these current but the owner, so each row says how old it is.
+ */
+export function updatedWords(
+  updatedOn: string | null,
+  today: string,
+  locale?: string,
+): string | null {
+  if (updatedOn === null) return null
+  const day = relativeDay(updatedOn, today, locale)
+  // "Today" and "Yesterday" read mid-sentence in lower case; a date keeps its capitals.
+  const said = day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day
+  return `Updated ${said}`
 }
 
 /** The form's text fields for an item, or blank for a new one. */

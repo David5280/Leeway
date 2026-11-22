@@ -1,85 +1,34 @@
 // "Entered by you" on the Net worth section: a home, a car and loans kept by
 // hand, added, changed and removed here, and marked as the owner's own figures.
+// What the form refuses, and the loans it offers, are in ownedForm.test.tsx.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, sentence } from '../../../test/fake'
-import { account, planServer, renderPlan } from '../../../test/planning'
-import type { OwnedAndOwed, OwnedItem } from './ownedText'
+import { renderPlan } from '../../../test/planning'
+import { BOTH, house, mortgage, NOTHING, ownedCard, serveOwned as serve } from '../../../test/owned'
 
-afterEach(() => vi.unstubAllGlobals())
-
-const mortgage: OwnedItem = {
-  id: 'acct-mortgage',
-  name: 'Mortgage',
-  kind: 'loan',
-  side: 'owed',
-  amountCents: 25_000_000,
-  aprPercent: 6.5,
-  monthlyPaymentCents: 180_000,
-  loanId: null,
-  loanName: null,
-  equityCents: null,
-  updatedOn: '2026-11-01',
-  inNetWorth: true,
-  enteredByYou: true,
-}
-
-const house: OwnedItem = {
-  ...mortgage,
-  id: 'acct-house',
-  name: 'House',
-  kind: 'home',
-  side: 'owned',
-  amountCents: 32_000_000,
-  aprPercent: null,
-  monthlyPaymentCents: null,
-  loanId: mortgage.id,
-  loanName: mortgage.name,
-  equityCents: 7_000_000,
-}
-
-const BOTH: OwnedAndOwed = {
-  owned: [house],
-  owed: [mortgage],
-  ownedCents: 32_000_000,
-  owedCents: 25_000_000,
-}
-
-const NOTHING: OwnedAndOwed = { owned: [], owed: [], ownedCents: 0, owedCents: 0 }
-
-function serve(list: OwnedAndOwed, routes = {}) {
-  return planServer(
-    {
-      list_bills: () => ({ bills: [], monthlyCents: 0, subscriptionsMonthlyCents: 0 }),
-      list_categories: () => [],
-      find_recurring: () => [],
-      get_net_worth: () => ({ assetsCents: 0, liabilitiesCents: 0, netWorthCents: 0, history: [] }),
-      list_accounts: () => [account({ id: mortgage.id, name: mortgage.name, type: 'loan' })],
-      list_owned_and_owed: () => list,
-      add_owned_or_owed: (input) => ({ ...house, ...input }),
-      update_owned_or_owed: (input) => ({ ...house, ...input }),
-      delete_account: (input) => ({ deleted: input.id }),
-    },
-    routes,
-  )
-}
-
-const ownedCard = () => screen.findByRole('region', { name: 'Entered by you' })
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 describe('things entered by hand', () => {
   it('groups what is owned and owed, with totals and what is yours after the loan', async () => {
+    // Pinned, so the day each was entered reads the same whenever this runs.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-17T18:00:00Z'))
     serve(BOTH)
     renderPlan('/plan/net-worth')
     const card = within(await ownedCard())
     expect(card.getByText('Not from your bank. Update them now and then.')).toBeVisible()
     expect(card.getByRole('group', { name: 'You own' })).toHaveTextContent(/^You own\$320,000/)
     const owned = within(card.getByRole('group', { name: 'You own' }))
-    expect(owned.getByText('Home, with Mortgage')).toBeVisible()
+    expect(owned.getByText('Home, with Mortgage. Updated Sun, Nov 1')).toBeVisible()
     expect(owned.getByText(sentence('Yours after the loan: $70,000'))).toBeVisible()
     const owed = within(card.getByRole('group', { name: 'You owe' }))
-    expect(owed.getByText('Loan at 6.5%')).toBeVisible()
+    expect(owed.getByText('Loan at 6.5%. Updated Sun, Nov 1')).toBeVisible()
   })
 
   it('invites a first one when there is none', async () => {
