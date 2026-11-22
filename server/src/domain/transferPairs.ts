@@ -30,7 +30,7 @@ import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { accountMasks } from './accounts.js'
 import type { Category } from './categories.js'
 import { withShownNames } from './ruleText.js'
-import { PAYCHECK_WORDS } from './payWords.js'
+import { PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
 import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
 import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
 
@@ -48,8 +48,10 @@ export interface PairCandidate extends Movement {
 export type TransferHint = 'transfer' | 'other' | 'none'
 
 /** Words a bank uses for a transfer or a card payment in a line with no category code. */
-const TRANSFER_WORDS =
-  /\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|payment\W*thank you|online pmt|mobile pmt)\b/i
+const TRANSFER_WORDS = new RegExp(
+  String.raw`\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|${PAYMENT_THANK_YOU}|online pmt|mobile pmt)\b`,
+  'i',
+)
 
 /** Words for money paid out or paid back to the owner: a payout, a refund. */
 const PAID_BACK_WORDS = /\b(payout|refund|reimburs\w*|rebate)\b/i

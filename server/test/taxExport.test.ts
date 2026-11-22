@@ -183,7 +183,7 @@ describe('the tax export', () => {
     expect(summary.income).toEqual([
       { key: 'acme corp', source: 'Acme Corp', cents: 600000 },
       { key: 'side gig', source: 'Side Gig', cents: 50000 },
-      { key: 'clawback', source: 'Clawback Co', cents: -1000 },
+      { key: 'clawback co', source: 'Clawback Co', cents: -1000 },
     ])
     expect(summary).toMatchObject({ payCents: 649000, interestCents: 1500, dividendsCents: 2500 })
     expect(summary.income.reduce((sum, source) => sum + source.cents, 0)).toBe(summary.payCents)

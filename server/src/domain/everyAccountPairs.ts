@@ -50,14 +50,18 @@ export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
 
 /** Clear words for a credit card payment, as a bank writes one out of checking. */
 const CARD_PAYMENT_WORDS =
-  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt))\b/i
+  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt)|e-?payment|mobile\s+pmt)\b/i
+
+/** Card issuers, so a bare "ACH PMT" counts only beside one: "CHASE CREDIT ACH PMT". */
+const CARD_ISSUER_WORDS =
+  /\b(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclays?|synchrony|apple\s+card)\b/i
 
 /** Whether a leg shows it pays a credit card: Plaid's card payment code, or clear words. */
 export function paysCard(leg: StoredLeg): boolean {
   const code = leg.providerCategoryDetailed ?? leg.providerCategoryPrimary
-  return (
-    code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(`${leg.name} ${leg.merchantName ?? ''}`)
-  )
+  const words = `${leg.name} ${leg.merchantName ?? ''}`
+  const issuerAch = /\bach\s+pmt\b/i.test(words) && CARD_ISSUER_WORDS.test(words)
+  return code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(words) || issuerAch
 }
 
 /** Whether a leg is on a credit card hidden from budgets, whose purchases this view counts. */

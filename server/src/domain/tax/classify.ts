@@ -2,7 +2,7 @@
 // and whether a category is one that often matters on a return. Pure.
 
 import type { Transaction } from '../transactions.js'
-import { PAYCHECK_WORDS } from '../payWords.js'
+import { PAYMENT_THANK_YOU } from '../payWords.js'
 
 /**
  * Category names that clearly cover costs a return often asks about: medical
@@ -36,25 +36,36 @@ export function mayBeDeductible(name: string): boolean {
   return DEDUCTIBLE_NAMES.test(name) && !EVERYDAY_NAMES.test(name)
 }
 
-/** Words a card or loan account uses for a payment received toward it. */
-const PAYMENT_IN_WORDS =
-  /\b(payment\s+(thank\s+you|received)|autopay|online\s+(payment|pmt)|mobile\s+(payment|pmt)|e-?payment)\b/i
+/**
+ * Words a card or loan account uses for a payment received toward it. An
+ * autopay discount or credit is money back, not a payment.
+ */
+const PAYMENT_IN_WORDS = new RegExp(
+  [
+    PAYMENT_THANK_YOU,
+    String.raw`payment\s+received|automatic\s+payment|e-?payment|pymt`,
+    String.raw`autopay(?!\s+(discount|credit|rebate|bonus))`,
+    String.raw`(online|mobile)\s+(payment|pmt)`,
+  ]
+    .map((words) => String.raw`\b(${words})\b`)
+    .join('|'),
+  'i',
+)
 
-/** Words for money back from a merchant, which counts even when it also says payment. */
+/** Words for money back, which count even beside a payment word or code: "ESCROW REFUND". */
 const REFUND_WORDS = /\b(refund|return(ed)?)\b/i
 
 /**
  * Whether money into a card or loan account is a payment toward it: Plaid's
- * loan payment codes, or payment words with no word of a refund. A card's
+ * loan payment codes or payment words, with no word of a refund. A card's
  * refund, return or merchant credit is not, and counts as money back.
  */
 export function paysDownDebt(
   tx: Pick<Transaction, 'amountCents' | 'bankCategory' | 'name' | 'merchantName'>,
 ): boolean {
-  if (tx.amountCents >= 0) return false
-  if (tx.bankCategory?.startsWith('LOAN_PAYMENTS')) return true
   const words = `${tx.name} ${tx.merchantName ?? ''}`
-  return PAYMENT_IN_WORDS.test(words) && !REFUND_WORDS.test(words)
+  if (tx.amountCents >= 0 || REFUND_WORDS.test(words)) return false
+  return tx.bankCategory?.startsWith('LOAN_PAYMENTS') === true || PAYMENT_IN_WORDS.test(words)
 }
 
 /** Which line money filed under an income category adds to. */
@@ -99,23 +110,51 @@ const LINE_BY_CODE: Record<string, IncomeLine> = {
 /** Codes that say only that money came in, not what kind, so a line's words may say more. */
 const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 
-/**
- * Words that name a kind of money in, for a line with no code or only a
- * broad one, as banks and agencies write them: "SOC SEC 310 SSA TREAS",
- * "IRS TREAS 310 TAX REF", a state's "MNTAXRFD" or "NYS DTF PIT REFUND",
- * "EDD UI BENEFIT", "STATEMENT CREDIT REDEMPTION". Read only after the pay
- * words, so a payer whose name holds one of them is still pay.
- */
-const LINE_BY_WORDS: [RegExp, IncomeLine][] = [
-  [/\b(soc\s+sec|social\s+security|ssa\s+treas)\b/i, 'social_security'],
+// For a line with no code or only a broad one, its words are read in three
+// tiers, surest first:
+// 1. An agency's own text says exactly what the money is, whatever else the
+//    line says: "DIR DEP IRS TREAS 310 TAX REF" is a refund that came by
+//    direct deposit, which says only how it arrived.
+// 2. An employer's words say pay: "REWARDS NETWORK INC PAYROLL" is pay.
+// 3. Looser words name a kind, read in the bank's description only: a
+//    merchant name is the payer's own, so a business called "Cash Back Car
+//    Wash" paying by direct deposit is still pay.
+// What none of them names, a bare direct deposit included, is pay.
+
+/** Tier one: agency texts, read in the description and the merchant name. */
+const AGENCY_WORDS: [RegExp, IncomeLine][] = [
+  [/\b(soc\s+sec|ssa\s+treas)\b/i, 'social_security'],
   [
-    /\b(tax\s?(ref(und)?|rfnd)|\w*taxrfd|irs\s+treas|pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund)\b/i,
+    /\b(irs\s+treas|tax\s?ref|\w*taxrfd|tax\s+rfnd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund)\b/i,
     'tax_refund',
   ],
-  [/\b(unemployment|ui\s+benefits?)\b/i, 'unemployment'],
+  [/\bui\s+benefits?\b/i, 'unemployment'],
+]
+
+/** Tier two: an employer paying, by any route. */
+const EMPLOYER_WORDS = /\b(payroll|salary|wages?|paycheck)\b/i
+
+/** Tier three: looser words, read in the description only. */
+const LOOSE_WORDS: [RegExp, IncomeLine][] = [
+  [/\bsocial\s+security\b/i, 'social_security'],
+  [/\btax\s?refund\b/i, 'tax_refund'],
+  [/\bunemployment\b/i, 'unemployment'],
   [/\b(pension|annuity)\b/i, 'retirement'],
   [/\b(cash\s?back|rewards?|statement\s+credit\s+redemption)\b/i, 'rewards'],
 ]
+
+/** The first line a list of words names in this text, if any. */
+const firstNamed = (list: [RegExp, IncomeLine][], text: string) =>
+  list.find(([pattern]) => pattern.test(text))?.[1]
+
+/** What a line's words say it is, in the tiers above. */
+function lineFromWords({ name, merchantName }: Pick<Transaction, 'name' | 'merchantName'>) {
+  const allWords = `${name} ${merchantName ?? ''}`
+  const agency = firstNamed(AGENCY_WORDS, allWords)
+  if (agency) return agency
+  if (EMPLOYER_WORDS.test(allWords)) return 'pay'
+  return firstNamed(LOOSE_WORDS, name) ?? 'pay'
+}
 
 /**
  * Reads money filed as income by its bank code, the payment app it went
@@ -132,9 +171,5 @@ export function incomeLine(
   if (tx.person) return 'person'
   // The bank says the money moved in from another account, not that it was earned.
   if (code.startsWith('TRANSFER_IN')) return 'moved_in'
-  if (!BROAD_CODES.has(code)) return 'pay'
-  const words = `${tx.name} ${tx.merchantName ?? ''}`
-  // A paycheck's words win: "REWARDS NETWORK PAYROLL" is pay, not rewards.
-  if (PAYCHECK_WORDS.test(words)) return 'pay'
-  return LINE_BY_WORDS.find(([pattern]) => pattern.test(words))?.[1] ?? 'pay'
+  return BROAD_CODES.has(code) ? lineFromWords(tx) : 'pay'
 }

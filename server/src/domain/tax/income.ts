@@ -2,7 +2,7 @@
 // then interest, dividends, benefits, refunds and rewards, each on its own
 // line since none of them is wages. Pure.
 
-import { merchantKey } from '../merchantKey.js'
+import { merchantKey, textKey } from '../merchantKey.js'
 import type { Transaction } from '../transactions.js'
 import { incomeLine, type IncomeLine } from './classify.js'
 
@@ -27,7 +27,7 @@ export const SUMMED_LINES: readonly SummedLine[] = [
 
 /** One payer's net pay for the year. */
 export interface PaySource {
-  /** What groups the payer's lines: its merchant key (see merchantKey). */
+  /** What groups the payer's lines (see payerKey). */
   key: string
   source: string
   cents: number
@@ -46,19 +46,33 @@ interface Payer {
   cents: number
 }
 
-/**
- * Words banks add to a payroll deposit that say nothing of who paid: ACH
- * entry codes and the labels before ids, as in "ACME PAYROLL PPD ID 123".
- */
-const PAYROLL_NOISE = /\b(ppd|ccd|ctx|ach|web|id|co|entry|descr|des|indn|orig|trace)\b/g
+// What banks add to a payroll deposit that says nothing of who paid. Each is
+// only removed in a form that cannot be part of a name, so "STATE OF CO
+// PAYROLL" and "STATE OF ID PAYROLL" stay apart and "CO-OP FOODS" stays whole.
+const PAYROLL_NOISE = [
+  // An id after an "ID" or "CO ID" label, holding a digit or a masked run:
+  // "ID 123", "ID:AB12CD", "CO ID:XXXXX5678".
+  /\b(co\s+)?id\s*[:#]?\s*[a-z0-9]*(\d|xxx)[a-z0-9]*\b/gi,
+  // Who received it, as Bank of America writes it: "INDN:JANE DOE", up to the next label.
+  /\bindn\s*:.*?(?=\s+(co\s+id|[a-z]+\s*:)|$)/gi,
+  // Labels before a value: "DES:PAYROLL" keeps "PAYROLL".
+  /\b(des|descr|entry|orig|trace)\s*:/gi,
+  // ACH entry codes, with a bare "ID" label after one: "PPD ID".
+  /\b(ppd|ccd|ctx|ach|web)(\s+id)?\b/gi,
+]
 
 /**
- * What groups one payer's deposits: its merchant key (digits and symbols
- * already gone) less ACH noise, so "ACME PAYROLL PPD ID 123" and "ACME
- * PAYROLL" are one source.
+ * What groups one payer's deposits: the payer's text less bank noise,
+ * reduced as merchant keys are (see textKey), so "ACME PAYROLL PPD ID 123"
+ * and "ACME PAYROLL" are one source. Falls back to the plain merchant key
+ * when nothing is left.
  */
 export function payerKey(tx: Pick<Transaction, 'merchantName' | 'name'>): string {
-  return merchantKey(tx).replace(PAYROLL_NOISE, ' ').replace(/\s+/g, ' ').trim()
+  const text = PAYROLL_NOISE.reduce(
+    (rest, noise) => rest.replace(noise, ' '),
+    tx.merchantName ?? tx.name,
+  )
+  return textKey(text) || merchantKey(tx)
 }
 
 /** Adds up money in filed under income categories (pass only those transactions). */

@@ -106,6 +106,16 @@ describe('pairing every account', () => {
     expect(paysCard(leg({ id: 'n', amountCents: 1, name: 'XCEL ENERGY AUTOPAY' }))).toBe(false)
   })
 
+  it('reads e-payments, mobile payments and an ACH payment only beside a card issuer', () => {
+    const says = (name: string) => paysCard(leg({ id: 'w', amountCents: 1, name }))
+    expect(says('CITI AUTOPAY EPAYMENT')).toBe(true)
+    expect(says('DISCOVER E-PAYMENT')).toBe(true)
+    expect(says('BARCLAYCARD MOBILE PMT')).toBe(true)
+    expect(says('CHASE ACH PMT')).toBe(true)
+    expect(says('AMERICAN EXPRESS ACH PMT')).toBe(true)
+    expect(says('CITY WATER ACH PMT')).toBe(false)
+  })
+
   it('reads a leg in round one as firm when it says transfer or is filed as one', () => {
     expect(firmLeg('transfer', leg({ id: 'a', amountCents: 1 }))).toBe(true)
     expect(firmLeg('none', leg({ id: 'b', amountCents: 1, categoryKind: 'transfer' }))).toBe(true)
