@@ -128,6 +128,9 @@ describe('depositKind', () => {
     expect(kind('STORE REFUND')).toBe('refund')
     expect(kind('INTEREST')).toBe('interest')
     expect(kind('DEPOSIT')).toBe('other')
+    // A line that says who sent it is a person passing money on, not a payroll.
+    expect(kind('From Jane Doe paycheck share')).toBe('deposit')
+    expect(kind('Transfer from Jane Doe salary')).toBe('deposit')
   })
 
   it('reads the words of a line filed under a broad income code', () => {
@@ -209,6 +212,27 @@ describe('paychecks', () => {
 })
 
 describe('currentPay', () => {
+  it('never counts a share of someone else’s paycheck as a second employer', () => {
+    const deposits = biweeklyPaid('2026-09-11', 5).map((date) =>
+      deposit(date, 'ACME PAYROLL', 250_000),
+    )
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03'])
+      deposits.push(deposit(date, 'From Jane Doe paycheck share', 300_000))
+    const pay = currentPay(deposits, TODAY)
+    expect(pay.employers.map((employer) => employer.paycheckCents)).toEqual([250_000])
+  })
+
+  it('reads a payroll on the 29th as the 29th, never a day early', () => {
+    // The 29th, moved back off weekends: Fri Sep 29, not Thu Sep 28.
+    const paydays = ['2023-01-27', '2023-02-28', '2023-03-29', '2023-04-28']
+    paydays.push('2023-05-29', '2023-06-29', '2023-07-28', '2023-08-29')
+    const pay = currentPay(
+      paydays.map((date) => salary(date, 'ACME PAYROLL', 300_000)),
+      '2023-08-29',
+    )
+    expect(pay).toMatchObject({ cadence: 'month', estimate: false, nextPayday: '2023-09-29' })
+  })
+
   it('takes pay from the new job only, projected cautiously from its one paycheck', () => {
     const pay = currentPay(history(), TODAY)
     expect(pay).toMatchObject({

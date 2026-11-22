@@ -103,13 +103,12 @@ describe('anyOverdrawn', () => {
 })
 
 describe('isTight', () => {
-  const cash = { checkingCents: 100_000, billsCents: 50_000 }
+  const cash = { shortfallCents: 0 }
   const totals = { budgetedCents: 80_000, leewayCents: 1 }
 
-  it('is tight when the bills by payday outrun the cash in checking', () => {
+  it('is tight when the cash flow is short of the bills by payday', () => {
     expect(isTight(cash, totals)).toBe(false)
-    expect(isTight({ ...cash, billsCents: 100_000 }, totals)).toBe(false)
-    expect(isTight({ ...cash, billsCents: 100_001 }, totals)).toBe(true)
+    expect(isTight({ shortfallCents: 1 }, totals)).toBe(true)
   })
 
   it('is tight when the budgets are spent to what they allow, or past it', () => {

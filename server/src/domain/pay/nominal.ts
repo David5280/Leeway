@@ -25,13 +25,15 @@ import {
   businessDayOnOrAfter,
   businessDayOnOrBefore,
   businessDaysApart,
+  type Roll,
+  weekdaysApart,
+} from './businessDays.js'
+import {
   LATE_DAY,
   MONTH_END,
   nearestScheduleDay,
   nextScheduleDay,
-  type Roll,
   type SemimonthSchedule,
-  weekdaysApart,
 } from './semimonthly.js'
 
 /** A payroll's usual payday nearest its newest one, and how it repeats and moves. */
@@ -108,8 +110,8 @@ function nearestDayOfMonth(payday: IsoDate, dayOfMonth: number): IsoDate {
  */
 const ROLL_SHIFT = { before: 0, after: 1 } as const
 
-/** The days a monthly payroll may keep: the 1st to LATE_DAY, or the month's end. */
-const MONTH_DAYS = [...Array.from({ length: LATE_DAY }, (_, index) => index + 1), MONTH_END]
+/** The days a monthly payroll may keep: the 1st to the 30th, or the month's end. */
+const MONTH_DAYS = Array.from({ length: MONTH_END }, (_, index) => index + 1)
 
 /**
  * How far a payday lies from a day of the month, in business days counted
@@ -123,13 +125,22 @@ function weightedOff(payday: IsoDate, dayOfMonth: number, shift: number): number
 }
 
 /**
+ * How much closer a 29th or 30th must fit than the month's end to read as
+ * itself, in business days: a holiday on a month's last day makes a
+ * month-end payroll look like one on the 30th, and the month's end is the
+ * later, cautious reading.
+ */
+const MONTH_END_SLACK = 1
+
+/**
  * The day of the month the paydays sit fewest business days off in all,
  * counted `shift` days earlier (ROLL_SHIFT), late ones weighing more, and
  * that total. On a tie, the day that comes later after the newest payday,
  * since a payday lands on or before its day: Aug 14, Sep 15, Oct 15 and
  * Nov 13 are the 15th; Oct 30 for a Sunday the 1st is the 1st; a last
- * business day paid early for Memorial Day is still the month's end. A
- * 29th or 30th reads as the month's end, the later.
+ * business day paid early for Memorial Day is still the month's end. Days
+ * that land on the same date, as a 30th and the month's end do in a short
+ * month, go to the later, and so does a 29th or 30th within MONTH_END_SLACK.
  */
 function closestDayOfMonth(paydays: IsoDate[], shift: number): { dayOfMonth: number; off: number } {
   const newest = paydays.at(-1)!
@@ -137,7 +148,11 @@ function closestDayOfMonth(paydays: IsoDate[], shift: number): { dayOfMonth: num
   for (const day of MONTH_DAYS) {
     const off = paydays.reduce((sum, payday) => sum + weightedOff(payday, day, shift), 0)
     const date = nearestDayOfMonth(newest, day)
-    if (off < closest.off || (off === closest.off && date > closest.date)) {
+    const nearMonthEnd =
+      day === MONTH_END && closest.dayOfMonth > LATE_DAY && off <= closest.off + MONTH_END_SLACK
+    // Taken as the month's end, a 29th or 30th keeps its own fit, to weigh one roll against the other.
+    if (nearMonthEnd) closest = { dayOfMonth: day, off: Math.min(off, closest.off), date }
+    else if (off < closest.off || (off === closest.off && date >= closest.date)) {
       closest = { dayOfMonth: day, off, date }
     }
   }

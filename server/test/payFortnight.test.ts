@@ -7,7 +7,16 @@
 // up; the holidays are real (fixtures/paydays.ts).
 
 import { describe, expect, it } from 'vitest'
-import { addDays, daysBetween, dayOfWeek, type IsoDate } from '../src/lib/dates.js'
+import {
+  addDays,
+  addMonths,
+  clampedDate,
+  dateParts,
+  daysBetween,
+  dayOfWeek,
+  makeDate,
+  type IsoDate,
+} from '../src/lib/dates.js'
 import {
   laterNextPayday,
   nextPaydayAfter,
@@ -15,12 +24,8 @@ import {
   type PayPattern,
 } from '../src/domain/pay/cadence.js'
 import { CONFIRM_FROM } from '../src/domain/pay/fortnight.js'
-import {
-  businessDayOnOrAfter,
-  businessDayOnOrBefore,
-  MONTH_END,
-  type SemimonthSchedule,
-} from '../src/domain/pay/semimonthly.js'
+import { businessDayOnOrAfter, businessDayOnOrBefore } from '../src/domain/pay/businessDays.js'
+import { MONTH_END, type SemimonthSchedule } from '../src/domain/pay/semimonthly.js'
 import {
   biweeklyPaid,
   paidOnBusinessDay,
@@ -177,6 +182,37 @@ describe('the day a monthly payroll keeps', () => {
     expect(nextPaydayAfter(['2026-12-01', '2026-12-31'], 'month', '2027-01-01')).toBe('2027-02-01')
     // Fridays Feb 13 and Mar 13, each for a Sunday the 15th: Wednesday Apr 15.
     expect(nextPaydayAfter(['2026-02-13', '2026-03-13'], 'month', '2026-03-14')).toBe('2026-04-15')
+  })
+
+  /** Runs of 2 to 8 paydays on `day` from `first`, paid the business day before, shown a payday early. */
+  function shownEarly(day: number, first: IsoDate): IsoDate[][] {
+    const { year, month } = dateParts(first)
+    const due = Array.from({ length: 9 }, (_, i) => clampedDate(year, month + i, day))
+    const paid = due.map(paidOnBusinessDay)
+    // Holidays are not known ahead, so the next is due the business day before its day.
+    return [2, 3, 4, 5, 6, 7, 8]
+      .map((n) => paid.slice(0, n))
+      .filter(
+        (run) =>
+          nextPaydayAfter(run, 'month', run.at(-1)!) < businessDayOnOrBefore(due[run.length]!),
+      )
+  }
+
+  /** Whether a payday landed on `day` itself, not moved off it. */
+  const onItsDay = (day: number) => (date: IsoDate) => {
+    const { year, month } = dateParts(date)
+    return date === clampedDate(year, month, day)
+  }
+
+  it('never reads a 29th or a 30th as an earlier day, unless every payday came early', () => {
+    const failed: string[] = []
+    for (const day of [29, 30]) {
+      for (let first = makeDate(2023, 1, 1); first < '2027-05-01'; first = addMonths(first, 1)) {
+        const early = shownEarly(day, first).filter((run) => run.some(onItsDay(day)))
+        failed.push(...early.map((run) => run.join(',')))
+      }
+    }
+    expect(failed).toEqual([])
   })
 
   it('moves a weekend payday after for a payroll whose paydays show it does', () => {

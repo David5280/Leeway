@@ -20,11 +20,11 @@
 
 import { toDayNumber, type IsoDate } from '../../lib/dates.js'
 import type { PayPattern } from './cadence.js'
+import { weekdaysApart } from './businessDays.js'
 import {
   bestSchedule,
   COMMON_SCHEDULES,
   semimonthlyFit,
-  weekdaysApart,
   type ScheduleFit,
   type SemimonthSchedule,
 } from './semimonthly.js'

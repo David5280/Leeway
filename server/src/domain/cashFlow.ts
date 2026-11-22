@@ -5,9 +5,10 @@
 // out its own.
 //
 // It is the cash in checking (each account at the lower of its balance and
-// available balance; never savings, investments or retirement), less the bills due by payday, less what an overdrawn
-// account needs to get back to zero, and never below zero: what those
-// outrun the cash by is the shortfall, a figure of its own.
+// available balance; never savings, investments or retirement), less the
+// bills due by payday, less what an overdrawn account needs to get back to
+// zero, and never below zero: what those outrun the cash by is the
+// shortfall, a figure of its own.
 
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'

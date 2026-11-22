@@ -257,6 +257,20 @@ describe('get_cash_flow', () => {
     expect((await call('get_cash_flow')).cashCents).toBe(90_000)
   })
 
+  it('adds up counted checking only, leaving hidden and unshared accounts out', async () => {
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 10_000 })
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 20_000 })
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 1_000_000, hidden: true })
+    const unshared = await insertBankAccount(ctx.db, {
+      subtype: 'checking',
+      balanceCents: 1_000_000,
+    })
+    await ctx.db.query("UPDATE accounts SET unshared_at = '2026-11-01' WHERE id = $1", [
+      unshared.accountId,
+    ])
+    expect((await call('get_cash_flow')).cashCents).toBe(30_000)
+  })
+
   it('finds payday from regular deposits, and never goes below zero per day', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
     // Five Fridays, enough to settle every two weeks.

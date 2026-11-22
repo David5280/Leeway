@@ -10,10 +10,9 @@ import { describe, expect, it } from 'vitest'
 import { addDays, dayOfWeek, type IsoDate } from '../src/lib/dates.js'
 import { cadenceOfDates, nextPaydayAfter, payPattern } from '../src/domain/pay/cadence.js'
 import { GRID_SLACK, gridOffBy } from '../src/domain/pay/fortnight.js'
+import { businessDayOnOrBefore, businessDaysApart } from '../src/domain/pay/businessDays.js'
 import {
   bestSchedule,
-  businessDayOnOrBefore,
-  businessDaysApart,
   COMMON_SCHEDULES,
   MONTH_END,
   nextSemimonthlyPayday,

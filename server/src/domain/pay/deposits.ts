@@ -48,6 +48,8 @@ const INTEREST_CODES = new Set(['INCOME_INTEREST_EARNED', 'INCOME_DIVIDENDS'])
 const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?)\b/i
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
+/** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe": a person, not a payroll. */
+const FROM_SOMEONE = /^\s*(transfer\s+)?from\s+\S/i
 
 /** A line's code, most specific first, or '' without one. */
 const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
@@ -55,6 +57,8 @@ const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCateg
 /** What a line is from its words alone, when it has no bank code or only a broad income one. */
 function kindFromWords(tx: Deposit): DepositKind {
   const words = `${tx.name} ${tx.merchantName ?? ''}`
+  // "From Jane Doe paycheck share" is money someone passed on, whatever it was to them.
+  if (FROM_SOMEONE.test(tx.name)) return 'deposit'
   if (PAYROLL_WORDS.test(words)) return 'payroll'
   if (REFUND_WORDS.test(words)) return 'refund'
   if (INTEREST_WORDS.test(words)) return 'interest'
