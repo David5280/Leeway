@@ -14,26 +14,34 @@ const exported: TaxExport = {
     year: 2025,
     categories: [
       {
+        id: 'cat-health',
         name: 'Health',
         group: null,
         kind: 'expense',
+        moneyIn: false,
         totalCents: 12000,
         count: 1,
         mayBeDeductible: true,
       },
       {
+        id: 'cat-groceries',
         name: 'Groceries',
         group: null,
         kind: 'expense',
+        moneyIn: false,
         totalCents: 8000,
         count: 1,
         mayBeDeductible: false,
       },
     ],
-    income: [{ source: 'Acme Corp', cents: 600000 }],
-    payCents: 600000,
+    income: [
+      { source: 'Acme Corp', cents: 600000 },
+      { source: 'Clawback Co', cents: -1000 },
+    ],
+    payCents: 599000,
     interestCents: 1500,
     dividendsCents: 0,
+    unfiledInCents: 0,
   },
 }
 
@@ -73,6 +81,12 @@ describe('Tax export', () => {
     expect(downloads[0]!.blob.type).toBe('text/csv')
     expect(server.actions('export_tax_year')).toEqual([{ year: 2025 }])
     expect(await screen.findByText('Acme Corp')).toBeVisible()
+    // Every figure to the cent, and each source's net, so the sources add up to Pay.
+    expect(screen.getByText('$5,990.00')).toBeVisible()
+    expect(screen.getByText('$15.00')).toBeVisible()
+    expect(screen.getByText('$0.00')).toBeVisible()
+    expect(screen.getByText('−$10.00')).toBeVisible()
+    expect(screen.queryByText('Money in, not categorized')).not.toBeInTheDocument()
     expect(screen.getByText('May be deductible, check with a tax pro:')).toBeVisible()
     expect(screen.getByText('Health')).toBeVisible()
     expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
@@ -97,6 +111,20 @@ describe('Tax export', () => {
     await waitFor(() =>
       expect(server.actions('export_tax_year')).toEqual([{ year: 2025 }, { year: 2026 }]),
     )
+  })
+
+  it('shows money in with no category, and how to make it count as pay', async () => {
+    fakeServer({
+      export_tax_year: () => ({
+        ...exported,
+        summary: { ...exported.summary, unfiledInCents: 300000 },
+      }),
+    })
+    renderSignedIn(<TaxSection />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
+    expect(await screen.findByText('Money in, not categorized')).toBeVisible()
+    expect(screen.getByText('$3,000.00')).toBeVisible()
+    expect(screen.getByText(/Categorize those rows as income so they count as pay/)).toBeVisible()
   })
 
   it('says why an export failed', async () => {

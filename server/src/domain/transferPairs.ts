@@ -241,11 +241,14 @@ export function filedElsewhere(
  * nor do those filed as something else (see filedElsewhere). Nor does a card
  * or loan hidden from budgets: its purchases are not counted, so paying it is
  * the only trace of that spending, and must count (as in loadOwnAccounts).
+ * A view that counts every account's purchases, hidden ones too, reads them
+ * with `everyAccount` (see PairReading).
  */
 export async function loadTransferPairs(
   db: Db,
   start: IsoDate,
   end: IsoDate,
+  { everyAccount = false }: PairReading = {},
 ): Promise<Map<string, PairCandidate>> {
   // One query at a time: db may be a transaction's client.
   const rules = await listRules(db)
@@ -262,11 +265,41 @@ export async function loadTransferPairs(
      FROM transactions t JOIN accounts a ON a.id = t.account_id
        LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.date BETWEEN $1 AND $2 AND t.amount_cents <> 0 AND NOT t.excluded
-       AND NOT (a.hidden AND a.type IN ('credit', 'loan'))`,
-    [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS)],
+       AND ($3 OR NOT (a.hidden AND a.type IN ('credit', 'loan')))`,
+    [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS), everyAccount],
   )
-  const candidates: PairCandidate[] = withShownNames(rows, rules, masks)
-    .filter((row) => !filedElsewhere(row, rules, kinds))
-    .map(({ categorySource: _s, categoryKind: _k, shownName: _n, ...candidate }) => candidate)
-  return pairTransfers(candidates)
+  const kept = withShownNames(rows, rules, masks).filter(
+    (row) => !filedElsewhere(row, rules, kinds),
+  )
+  const candidates: PairCandidate[] = kept.map(
+    ({ categorySource: _s, categoryKind: _k, shownName: _n, ...candidate }) => candidate,
+  )
+  return pairTransfers(candidates, everyAccount ? asFiled(kept) : saysTransfer)
+}
+
+/** How loadTransferPairs reads: as budgets do (the default), or every account as filed. */
+export interface PairReading {
+  /**
+   * Every account, cards and loans hidden from budgets too, with each leg
+   * read as it is filed (see asFiled): for a view that counts every
+   * account's money, like the tax export, where a payment to a hidden card
+   * is a move, since the card's own purchases count.
+   */
+  everyAccount?: boolean
+}
+
+/**
+ * Reads each leg as monthly totals do (see unfiledFlows in monthlyTotals.ts):
+ * one the owner filed as a transfer pairs whatever its line says, one nobody
+ * has filed pairs as unfiledLeg allows, and any other only when it says it is
+ * a transfer.
+ */
+function asFiled(legs: readonly (PairCandidate & Filing)[]): HintTest {
+  const kinds = new Map(legs.map((leg) => [leg.id, leg.categoryKind]))
+  return (hint, tx) => {
+    const kind = kinds.get(tx.id)
+    if (kind === 'transfer') return true
+    if (kind === null) return unfiledLeg(hint, tx)
+    return saysTransfer(hint, tx)
+  }
 }

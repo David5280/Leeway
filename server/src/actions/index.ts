@@ -20,7 +20,6 @@ import {
   updateBillAction,
 } from './bills.js'
 import { getBudgetAction } from './budget.js'
-import { exportTaxYearAction } from './taxExport.js'
 import { hideHomeAlertAction, listHomeAlertsAction } from './homeAlerts.js'
 import { canIAffordAction, getCheckinAction, whenCanIAffordAction } from './coach.js'
 import {
@@ -103,6 +102,7 @@ import {
   importConfigAction,
   starterCategoriesAction,
 } from './setup.js'
+import { exportTaxYearAction } from './taxExport.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
