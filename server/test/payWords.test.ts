@@ -45,7 +45,12 @@ const PAYROLL_FROM_SENDER = [
 ]
 
 /** Lines a person sends on with a share of their own pay. */
-const FROM_A_PERSON = ['Transfer from Jane Doe salary', 'From Jane Doe paycheck share']
+const FROM_A_PERSON = [
+  'Transfer from Jane Doe salary',
+  'From Jane Doe paycheck share',
+  // "co" in "co-worker" is no "Co" ending a business's name.
+  'From Jane Doe co-worker paycheck',
+]
 
 describe('a deposit read by its words', () => {
   it('reads a line with no code by its words', () => {
@@ -78,6 +83,7 @@ describe('a deposit read by its words', () => {
 
   it('reads pay words from a business as pay', () => {
     expect(kind('Transfer From ACME Corp Salary')).toBe('payroll')
+    expect(kind('From ACME Co Salary')).toBe('payroll')
     expect(kind('From Initech Inc. paycheck')).toBe('payroll')
     expect(kind('From Globex LLC wages', BROAD_INCOME)).toBe('payroll')
     // A business sending money with no pay words is still only a deposit.

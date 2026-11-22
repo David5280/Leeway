@@ -29,7 +29,6 @@ import {
   weekdaysApart,
 } from './businessDays.js'
 import {
-  LATE_DAY,
   MONTH_END,
   nearestScheduleDay,
   nextScheduleDay,
@@ -140,13 +139,6 @@ const MOVED_MONTH_END = 30
 const MONTH_END_SLACK = 1
 
 /**
- * A 29th or 30th lands on the same business day as the 28th in many months,
- * so it reads as itself only by fitting strictly closer: on a tie, nothing
- * says it is not the 28th.
- */
-const keptOnlyOnCloserFit = (day: number) => day > LATE_DAY && day < MONTH_END
-
-/**
  * The day of the month the paydays sit fewest business days off in all,
  * counted `shift` days earlier (ROLL_SHIFT), late ones weighing more, and
  * that total. On a tie, the day that comes later after the newest payday,
@@ -154,24 +146,33 @@ const keptOnlyOnCloserFit = (day: number) => day > LATE_DAY && day < MONTH_END
  * Nov 13 are the 15th; Oct 30 for a Sunday the 1st is the 1st; a last
  * business day paid early for Memorial Day is still the month's end. Days
  * that land on the same date, as a 30th and the month's end do in a short
- * month, go to the later. Two exceptions: a 29th or 30th never wins a tie
- * (keptOnlyOnCloserFit), and a 30th that won goes to the month's end when
- * that fits within MONTH_END_SLACK.
+ * month, go to the later. A 29th or 30th wins a tie with the 28th too:
+ * safe-to-spend is spread over the days until payday, so reading payday
+ * early inflates each day's share and can miss bills due before the money
+ * lands, while reading it late only errs cautious. Only a 30th that fit
+ * strictly closer (outright) goes to the month's end within
+ * MONTH_END_SLACK, so slack never chains onto a tie.
  */
 function closestDayOfMonth(paydays: IsoDate[], shift: number): { dayOfMonth: number; off: number } {
   const newest = paydays.at(-1)!
-  let closest = { dayOfMonth: 1, off: Infinity, date: '' }
+  let closest = { dayOfMonth: 1, off: Infinity, date: '', outright: false }
   for (const day of MONTH_DAYS) {
     const off = paydays.reduce((sum, payday) => sum + weightedOff(payday, day, shift), 0)
     const date = nearestDayOfMonth(newest, day)
-    const wonTie = off === closest.off && date >= closest.date && !keptOnlyOnCloserFit(day)
+    const outright = off < closest.off
+    // A tie goes to the later day: an early payday is the riskier mistake.
+    const wonTie = off === closest.off && date >= closest.date
     const movedMonthEnd =
       day === MONTH_END &&
       closest.dayOfMonth === MOVED_MONTH_END &&
+      closest.outright &&
       off <= closest.off + MONTH_END_SLACK
     // Taken as the month's end, the 30th keeps its own fit, to weigh one roll against the other.
-    if (movedMonthEnd) closest = { dayOfMonth: day, off: Math.min(off, closest.off), date }
-    else if (off < closest.off || wonTie) closest = { dayOfMonth: day, off, date }
+    if (movedMonthEnd) {
+      closest = { dayOfMonth: day, off: Math.min(off, closest.off), date, outright }
+    } else if (outright || wonTie) {
+      closest = { dayOfMonth: day, off, date, outright }
+    }
   }
   return closest
 }

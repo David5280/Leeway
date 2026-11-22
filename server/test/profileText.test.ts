@@ -287,7 +287,7 @@ describe('profileDigest', () => {
     expect(digest.split('\n')).toEqual([
       'Financial profile as of 2026-11-19. Amounts in USD.',
       'Pay: every 2 weeks from Acme Payroll since Jun 5, about $2,400 each, next on Dec 4.',
-      'Typical month (spending since Aug 20, pay from paychecks only): $5,200 take-home pay in from the current employer, $4,100 spent, $3,000 of it essential.',
+      'Typical month (spending since Aug 20, pay from paychecks only): $5,200 take-home pay in from the current employer, $4,100 spent.',
       'Bills: 9 tracked bills, $2,150 a month.',
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19, 2026.',

@@ -48,8 +48,11 @@ const INTEREST_CODES = new Set(['INCOME_INTEREST_EARNED', 'INCOME_DIVIDENDS'])
 const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?)\b/i
 /** Words for pay that a person passing on a share of theirs may write too: "paycheck share". */
 const PAY_WORDS = /\b(salary|paycheck|wages?)\b/i
-/** Words that end a business's name, "ACME Corp" or "Initech LLC", and never a person's. */
-const BUSINESS_WORDS = /\b(inc|corp|corporation|llc|ltd|co|company)\b/i
+/**
+ * Words that end a business's name, "ACME Corp" or "Initech LLC", and never a
+ * person's. A hyphen ends no word here, so "co-worker" is not "Co".
+ */
+const BUSINESS_WORDS = /(?<![\w-])(inc|corp|corporation|llc|ltd|co|company)(?![\w-])/i
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
 /** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe", and the sender. */

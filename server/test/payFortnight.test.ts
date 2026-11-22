@@ -219,11 +219,17 @@ describe('the day a monthly payroll keeps', () => {
     SWEEP_TIMEOUT,
   )
 
-  it('reads a 29th or 30th that only ties the 28th as the 28th', () => {
-    // Fri Feb 28 and Fri Mar 28 fit the 28th, 29th and 30th alike: Monday Apr 28.
-    expect(nextPaydayAfter(['2025-02-28', '2025-03-28'], 'month', '2025-03-28')).toBe('2025-04-28')
-    // Fri Feb 27 and Fri Mar 27 fit the 27th to the 29th alike: the 28th, the later of the two.
-    expect(nextPaydayAfter(['2026-02-27', '2026-03-27'], 'month', '2026-03-27')).toBe('2026-04-28')
+  it('reads a 29th or 30th that ties the 28th as the later day, never a day early', () => {
+    // Fri Jan 27 for Sunday Jan 29, then Tue Feb 28 for a short month: the 29th, Wed Mar 29.
+    expect(nextPaydayAfter(['2023-01-27', '2023-02-28'], 'month', '2023-02-28')).toBe('2023-03-29')
+    // Fri Feb 27 and Fri Mar 27 fit the 27th to the 29th alike: the 29th, Wed Apr 29.
+    expect(nextPaydayAfter(['2026-02-27', '2026-03-27'], 'month', '2026-03-27')).toBe('2026-04-29')
+  })
+
+  it('reads a tie that only won the 30th as the 30th, never as the month end', () => {
+    // Fri Feb 28 and Fri Mar 28 fit the 28th, 29th and 30th alike: Wed Apr 30, on time
+    // for a 30th payroll and a day late for a 29th, never two days early on Mon Apr 28.
+    expect(nextPaydayAfter(['2025-02-28', '2025-03-28'], 'month', '2025-03-28')).toBe('2025-04-30')
   })
 
   it('reads a 29th that fits closest as the 29th, never as the month end', () => {

@@ -422,7 +422,7 @@ describe('get_financial_profile', () => {
     const { asOf, digest } = await call('get_financial_profile')
     expect(asOf).toBe(TODAY)
     expect(digest).toContain(
-      'Typical month (spending since Aug 20, pay from paychecks only): $5,000 take-home pay in from the current employer, $3,010 spent, $2,007 of it essential.',
+      'Typical month (spending since Aug 20, pay from paychecks only): $5,000 take-home pay in from the current employer, $3,010 spent.',
     )
     // The fund is sized by whole months of essentials, as its card is.
     expect(digest).toContain(

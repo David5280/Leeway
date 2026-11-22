@@ -70,10 +70,6 @@ function employersWord({ employers }: FinancialProfile['pay']): string {
 
 function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): string | null {
   if (monthly.spendingCents === null) return null
-  const essential =
-    monthly.essentialSpendingCents === monthly.spendingCents
-      ? ''
-      : `, ${money(monthly.essentialSpendingCents!)} of it essential`
   // Pay not seen is left out here and listed as not known, never shown as $0.
   const estimated = monthly.incomeEstimated ? ' (estimated until more paychecks confirm it)' : ''
   const payIn =
@@ -81,7 +77,8 @@ function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): st
       ? ''
       : `${money(monthly.incomeCents)} take-home pay in from the ${employersWord(pay)}${estimated}, `
   const since = shortDate(monthly.spendingSince!, locale)
-  return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent${essential}.`
+  // Essentials are left to the emergency fund line, so the digest gives one figure to quote.
+  return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent.`
 }
 
 function accountsLine({ accounts }: FinancialProfile, money: Money): string | null {
