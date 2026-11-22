@@ -71,6 +71,7 @@ import {
   listRecentBalancesAction,
   planDebtPayoffAction,
 } from './planning.js'
+import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
 import { getIdleCashAction } from './idleCash.js'
 import {
   createRuleAction,
@@ -205,6 +206,9 @@ export const actionList = [
   listGoalContributionsAction,
   deleteGoalAction,
   getNetWorthAction,
+  listOwnedAndOwedAction,
+  addOwnedOrOwedAction,
+  updateOwnedOrOwedAction,
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,

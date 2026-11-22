@@ -29,18 +29,31 @@ export function parseMoney(text: string): number | null {
 export const MAX_RATE_PERCENT = 100
 
 /**
- * "24.99", "24,99" or "24.99%" into 24.99, rounded to the hundredth; null
- * when blank, not a number, negative or over MAX_RATE_PERCENT. No card or
- * loan charges a negative rate, so a minus sign means a typo, not a rate to
- * quietly turn positive; and "1,000" is a typo too, not a rate to send.
+ * A typed interest rate: "24.99", "24,99" or "24.99%" into 24.99, rounded to
+ * the hundredth; null when blank, not a number, or negative. No card or loan
+ * charges a negative rate, so a minus sign means a typo, not a rate to
+ * quietly turn positive. A form that explains a rate too high reads with
+ * this; one that only enables Save uses parseRate.
  */
-export function parseRate(text: string): number | null {
+export function readRate(text: string): number | null {
   // The true minus sign too, as a phone keyboard may type it.
   if (/[-\u2212]/.test(text)) return null
   const value = parseDecimal(text)
-  if (value === null) return null
-  const rate = Math.round(value * 100) / 100
-  return rate > MAX_RATE_PERCENT ? null : rate
+  return value === null ? null : Math.round(value * 100) / 100
+}
+
+/** A typed rate that can be saved: readRate's, and null over MAX_RATE_PERCENT too. */
+export function parseRate(text: string): number | null {
+  const rate = readRate(text)
+  return rate !== null && rate > MAX_RATE_PERCENT ? null : rate
+}
+
+/**
+ * Whether a rate was typed that cannot be read ("-5", "abc"). A blank one
+ * clears the rate on purpose; an unreadable one must not quietly clear it.
+ */
+export function isUnreadableRate(text: string): boolean {
+  return readRate(text) === null && text.trim() !== ''
 }
 
 function asDate(iso: string): Date {

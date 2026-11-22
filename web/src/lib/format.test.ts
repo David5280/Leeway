@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   calendarDate,
   dayLabel,
+  isUnreadableRate,
   MAX_RATE_PERCENT,
   parseMoney,
   parseRate,
+  readRate,
   periodBarLabel,
   periodLabel,
   periodWord,
@@ -104,5 +106,26 @@ describe('parseRate', () => {
     expect(parseRate('-5')).toBeNull()
     // The true minus sign too, as a phone keyboard may type it.
     expect(parseRate('\u22125')).toBeNull()
+  })
+})
+
+describe('readRate', () => {
+  it('reads a rate as parseRate does, but over 100% too, for a form that explains it', () => {
+    expect(readRate('24,99')).toBe(24.99)
+    expect(readRate('150')).toBe(150)
+    expect(readRate('-5')).toBeNull()
+    expect(readRate('APR')).toBeNull()
+  })
+})
+
+describe('isUnreadableRate', () => {
+  it('is true for a rate typed that cannot be read', () => {
+    for (const text of ['-5', '\u22125', 'APR', 'six']) expect(isUnreadableRate(text)).toBe(true)
+  })
+
+  it('is false for a blank field, which clears the rate on purpose, and any readable rate', () => {
+    for (const text of ['', '  ', '6.5', '19.5%', '0', '7,5', '150']) {
+      expect(isUnreadableRate(text)).toBe(false)
+    }
   })
 })

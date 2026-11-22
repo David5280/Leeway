@@ -435,10 +435,9 @@ describe('Net worth', () => {
     fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
     expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
     vi.restoreAllMocks()
-    // A house or a car counts once it is added by hand, in Settings.
-    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
-      'href',
-      '/settings/accounts',
+    // A house or a car counts once it is added by hand, right here.
+    expect(await screen.findByRole('region', { name: 'Entered by you' })).toHaveTextContent(
+      'Add a home, a car or a loan your bank link does not cover',
     )
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
