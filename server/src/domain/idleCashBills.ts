@@ -20,7 +20,7 @@ import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import { occurrences } from '../lib/schedule.js'
-import { isAmountChange } from './billChanges.js'
+import { isAmountChange } from './billAmountChange.js'
 import { COUNTED_IN_RANGES_SQL, rangeParams, type DateRange } from './budgetReport.js'
 
 /** A bill that finds its payments by a pattern in the bank's text. */

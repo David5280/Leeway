@@ -1,6 +1,7 @@
-// Following a varying bill's amount (billChanges.ts) without ever taking the
-// wrong figure: a cycle paid twice by mistake is read paid once, and an
-// amount the owner sets stands until a cycle posts after they set it.
+// Following a varying bill's amount (varyingBills.ts) without ever taking the
+// wrong figure: a cycle paid twice by mistake is read paid once, or not read
+// at all when the two charges are on two accounts, and an amount the owner
+// sets stands until a cycle posts after they set it (billChanges.ts).
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { billChangeOf, type WatchedBill } from '../src/domain/billChanges.js'
@@ -69,6 +70,45 @@ describe('billChangeOf following a varying bill paid twice in a cycle', () => {
     })
   })
 
+  it('settles nothing from a cycle charged twice from two accounts, the probe that doubled', () => {
+    // $110 from checking on Nov 15, and $110 again by card on Nov 16.
+    const twoAccounts = cityPower([
+      { accountId: 'card', date: '2026-11-16', amountCents: 11000 },
+      paid('2026-11-15', 11000),
+      ...SWINGS,
+    ])
+    // $220 is well above the $110 average of the cycles before: the amount stays at $110.
+    expect(billChangeOf(twoAccounts, TODAY)).toBeNull()
+    expect(billChangeOf({ ...twoAccounts, amountCents: 9500 }, TODAY)).toBeNull()
+  })
+
+  it('leaves a cycle charged twice from two accounts out of a later average', () => {
+    const later = cityPower([
+      paid('2026-12-16', 10000),
+      { accountId: 'card', date: '2026-11-16', amountCents: 11000 },
+      paid('2026-11-15', 11000),
+      ...SWINGS,
+    ])
+    // $100 and $130 average $115; the doubled $220 would make it $150.
+    expect(billChangeOf(later, '2026-12-17')).toMatchObject({
+      kind: 'settled',
+      amountCents: 11500,
+    })
+  })
+
+  it('still follows an even split across two accounts at the usual level', () => {
+    // $55 from checking and $55 by card make the usual $110: a split, read whole.
+    const split = cityPower(
+      [
+        { accountId: 'card', date: '2026-11-16', amountCents: 5500 },
+        paid('2026-11-15', 5500),
+        ...SWINGS,
+      ],
+      { amountCents: 9500 },
+    )
+    expect(billChangeOf(split, TODAY)).toMatchObject({ kind: 'settled', amountCents: 11000 })
+  })
+
   it('still adds up a cycle paid in two different parts', () => {
     // $60 and $50 a week apart are one $110 cycle paid in parts, not a repeat.
     const split = cityPower([paid('2026-11-16', 6000), paid('2026-11-09', 5000), ...SWINGS], {
@@ -120,9 +160,22 @@ describe('billChangeOf after the owner set the amount', () => {
     const steady = [paid('2026-11-16', 8000), paid('2026-10-16', 8000), paid('2026-09-16', 8000)]
     const notVarying = { amountVaries: false }
     expect(setByOwner(steady, '2026-11-16', notVarying)).toBeNull()
-    expect(setByOwner(steady, '2026-11-01', notVarying)).toMatchObject({
+    // Both cycles after the edit: the old price is the price again.
+    expect(setByOwner(steady, '2026-10-01', notVarying)).toMatchObject({
       kind: 'settled',
       amountCents: 8000,
+    })
+  })
+
+  it('tells the owner when a steady bill is still charged its old price after they set a new one', () => {
+    // Netflix at $22.99; the owner sets $15.49 on Nov 10, and Nov 16 still charges $22.99.
+    const netflix = cityPower(
+      [paid('2026-11-16', 2299), paid('2026-10-16', 2299), paid('2026-09-16', 2299)],
+      { name: 'Netflix', amountCents: 1549, amountVaries: false, amountSetOn: '2026-11-10' },
+    )
+    expect(billChangeOf(netflix, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { date: '2026-11-16', amountCents: 2299 },
     })
   })
 })
@@ -206,6 +259,14 @@ describe('following a varying bill, end to end', () => {
     expect(kinds).not.toContain('bill_change')
   })
 
+  it('keeps a bill charged twice from two accounts at the single amount', async () => {
+    const { billId } = await cityPowerCharged([...SWUNG, ['2026-11-15', 11000]])
+    const card = await insertBankAccount(ctx.db, { name: 'Card', type: 'credit' })
+    await addCharges(card.accountId, [['2026-11-16', 11000]])
+    await refreshInbox(ctx)
+    expect(await usual(billId)).toBe(11000)
+  })
+
   it('keeps an amount the owner sets through a refresh, with no message', async () => {
     const { billId } = await cityPowerCharged([...SWUNG, ['2026-11-16', 9000]])
     await refreshInbox(ctx)
@@ -241,6 +302,33 @@ describe('following a varying bill, end to end', () => {
     // $60, $90 and $130 average $93.33.
     expect(await usual(billId)).toBe(9333)
     expect(await amountSetAt(billId)).toBeNull()
+  })
+
+  it('alerts, and keeps the amount, when a downgrade the owner set did not take', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Everyday' })
+    const bill = await call('create_bill', {
+      name: 'Netflix',
+      amountCents: 2299,
+      cadence: 'month',
+      anchorDate: '2026-11-16',
+      matchPattern: 'netflix',
+    })
+    await ctx.db.query(`UPDATE bills SET created_at = '2026-06-25' WHERE id = $1`, [bill.id])
+    for (const date of ['2026-09-16', '2026-10-16']) {
+      await insertBankTransaction(ctx.db, accountId, { date, name: 'NETFLIX', amountCents: 2299 })
+    }
+    ctx.setNow(new Date('2026-11-10T18:00:00Z'))
+    await call('update_bill', { id: bill.id, amountCents: 1549 })
+    ctx.setNow(new Date('2026-11-17T18:00:00Z'))
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-16',
+      name: 'NETFLIX',
+      amountCents: 2299,
+    })
+    await refreshInbox(ctx)
+    expect(await usual(bill.id)).toBe(1549)
+    const messages = (await call('list_alerts', {})).map((alert) => alert.message)
+    expect(messages).toContain('Netflix was $22.99, usually $15.49.')
   })
 
   it('records the time the owner set the amount, from the app clock', async () => {

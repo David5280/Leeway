@@ -53,6 +53,24 @@ export function withoutRepeats(cycle: BillCharge[]): BillCharge[] {
   return kept.reverse()
 }
 
+/**
+ * Whether a cycle's charges hold two of one amount within DUPLICATE_DAYS of
+ * each other, on any accounts. On two accounts that may be a charge made
+ * twice (autopay from checking, a manual payment by card) or an even split:
+ * withoutRepeats cannot tell, since a repeat must be on one account.
+ */
+export function holdsEqualPair(cycle: BillCharge[]): boolean {
+  return cycle.some((charge, i) =>
+    cycle
+      .slice(i + 1)
+      .some(
+        (other) =>
+          other.amountCents === charge.amountCents &&
+          daysBetween(other.date, charge.date) <= DUPLICATE_DAYS,
+      ),
+  )
+}
+
 /** What a cycle cost paid once: its charges added up, the repeats left out (withoutRepeats). */
 export function paidOnceCents(cycle: BillCharge[]): number {
   return withoutRepeats(cycle).reduce((sum, charge) => sum + charge.amountCents, 0)
@@ -72,14 +90,6 @@ export function cycleCharges(
   )
 }
 
-/**
- * One cycle's charges from `first` on (cycleCharges), added up paid once
- * (paidOnceCents): what the cycle cost, a charge made twice counted once.
- */
-export function paidOnceCycle(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
-  return { ...first, amountCents: paidOnceCents(cycleCharges(charges, first, cycle)) }
-}
-
 /** One cycle's charges from `first` on (cycleCharges), added up as one. */
 function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
   const within = cycleCharges(charges, first, cycle)
@@ -89,8 +99,8 @@ function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): Bil
 /**
  * Every cycle in `charges` (newest first), each added up as one charge,
  * newest first. A charge made twice counts twice here, so a doubled cycle
- * shows as a change (leaks/doublePaidBills.ts); paidOnceCycle reads a cycle
- * paid once.
+ * shows as a change (leaks/doublePaidBills.ts); varyingBills.ts reads each
+ * cycle paid once.
  */
 export function cyclesOf(charges: BillCharge[], cycle: number): BillCharge[] {
   const cycles: BillCharge[] = []

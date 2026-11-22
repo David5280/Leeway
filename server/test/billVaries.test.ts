@@ -10,10 +10,10 @@ import {
   amountsVary,
   billChangeOf,
   VARIES_AFTER_MOVES,
-  varyingUsualCents,
   type BillChange,
   type WatchedBill,
 } from '../src/domain/billChanges.js'
+import { varyingUsualCents } from '../src/domain/varyingBills.js'
 import { settleBillChanges } from '../src/domain/billChangeSource.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { addDays } from '../src/lib/dates.js'

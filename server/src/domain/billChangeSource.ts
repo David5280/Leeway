@@ -10,12 +10,12 @@ import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
 import { accountMasks } from './accounts.js'
+import { isAmountChange } from './billAmountChange.js'
 import { PAYMENT } from './billPayments.js'
 import {
   billChangeAlert,
   billChangeOf,
   CHARGES_READ,
-  isAmountChange,
   type BillChange,
   type WatchedBill,
 } from './billChanges.js'

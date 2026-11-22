@@ -15,7 +15,8 @@
 // - no longer news: left out, so an old mistake never comes back as a change.
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
-import { isAmountChange, type BillChange, type ChangedBill } from '../billChanges.js'
+import { isAmountChange } from '../billAmountChange.js'
+import type { BillChange, ChangedBill } from '../billChanges.js'
 import { paidOnceCents, withoutRepeats } from '../billCycles.js'
 import { DUPLICATE_NEWS_DAYS, type DuplicateCharge } from './duplicates.js'
 

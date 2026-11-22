@@ -4,13 +4,8 @@
 // account alerts.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import {
-  billChangeAlert,
-  billChangeOf,
-  BILL_CHANGE_THRESHOLD,
-  isAmountChange,
-  type WatchedBill,
-} from '../src/domain/billChanges.js'
+import { BILL_CHANGE_THRESHOLD, isAmountChange } from '../src/domain/billAmountChange.js'
+import { billChangeAlert, billChangeOf, type WatchedBill } from '../src/domain/billChanges.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { formatCents } from '../src/lib/money.js'
 import { actionCaller } from './actionCaller.js'
