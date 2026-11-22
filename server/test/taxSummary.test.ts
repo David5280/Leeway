@@ -2,7 +2,7 @@
 // writing the CSV, without a database.
 
 import { describe, expect, it } from 'vitest'
-import { incomeLine, mayBeDeductible } from '../src/domain/tax/classify.js'
+import { incomeLine, mayBeDeductible, paysDownDebt } from '../src/domain/tax/classify.js'
 import { csvCell, taxCsv } from '../src/domain/tax/csv.js'
 import { withTransactions } from '../src/domain/tax/export.js'
 import { summarize, type TaxRow, type TaxRowCategory } from '../src/domain/tax/summary.js'
@@ -270,9 +270,54 @@ describe('joining the rows to their transactions', () => {
   it('skips a row whose transaction was deleted between the two reads', () => {
     const kept = transaction({ id: 'kept' })
     const rows = [
-      { id: 'gone', category: null },
-      { id: 'kept', category: income },
+      { id: 'gone', category: null, onDebtAccount: false },
+      { id: 'kept', category: income, onDebtAccount: false },
     ]
     expect(withTransactions(rows, [kept])).toEqual([{ tx: kept, category: income }])
+  })
+
+  it('skips an unfiled payment into a card or loan, and nothing else on one', () => {
+    const payment = transaction({ id: 'pay', name: 'PAYMENT THANK YOU', amountCents: -5000 })
+    const refund = transaction({ id: 'refund', name: 'IKEA REFUND', amountCents: -5000 })
+    const filedPayment = transaction({ id: 'filed', name: 'PAYMENT THANK YOU', amountCents: -5000 })
+    const onChecking = transaction({ id: 'checking', name: 'ONLINE PAYMENT', amountCents: -5000 })
+    const rows = [
+      { id: 'pay', category: null, onDebtAccount: true },
+      { id: 'refund', category: null, onDebtAccount: true },
+      { id: 'filed', category: income, onDebtAccount: true },
+      { id: 'checking', category: null, onDebtAccount: false },
+    ]
+    const joined = withTransactions(rows, [payment, refund, filedPayment, onChecking])
+    expect(joined.map((row) => row.tx.id)).toEqual(['refund', 'filed', 'checking'])
+  })
+})
+
+describe('a payment into a card or loan', () => {
+  const credit = (fields: Partial<Transaction>) =>
+    paysDownDebt(transaction({ amountCents: -5000, ...fields }))
+
+  it('reads loan payment codes and the words cards use for a payment received', () => {
+    expect(credit({ name: 'PAYMENT', bankCategory: 'LOAN_PAYMENTS_CAR_PAYMENT' })).toBe(true)
+    expect(credit({ name: 'X', bankCategory: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' })).toBe(true)
+    for (const name of [
+      'PAYMENT THANK YOU',
+      'AUTOPAY PAYMENT',
+      'ONLINE PAYMENT',
+      'PAYMENT RECEIVED',
+      'MOBILE PAYMENT',
+      'EPAYMENT',
+    ]) {
+      expect(credit({ name }), name).toBe(true)
+    }
+  })
+
+  it('leaves refunds, returns, merchant credits and charges alone', () => {
+    expect(credit({ name: 'IKEA REFUND' })).toBe(false)
+    expect(credit({ name: 'AMAZON RETURN' })).toBe(false)
+    expect(
+      credit({ name: 'BEST BUY CREDIT', bankCategory: 'GENERAL_MERCHANDISE_ELECTRONICS' }),
+    ).toBe(false)
+    expect(credit({ name: 'ONLINE PAYMENT REFUND' })).toBe(false)
+    expect(credit({ name: 'PAYMENT THANK YOU', amountCents: 5000 })).toBe(false)
   })
 })

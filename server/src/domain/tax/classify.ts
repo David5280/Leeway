@@ -36,6 +36,27 @@ export function mayBeDeductible(name: string): boolean {
   return DEDUCTIBLE_NAMES.test(name) && !EVERYDAY_NAMES.test(name)
 }
 
+/** Words a card or loan account uses for a payment received toward it. */
+const PAYMENT_IN_WORDS =
+  /\b(payment\s+(thank\s+you|received)|autopay|online\s+(payment|pmt)|mobile\s+(payment|pmt)|e-?payment)\b/i
+
+/** Words for money back from a merchant, which counts even when it also says payment. */
+const REFUND_WORDS = /\b(refund|return(ed)?)\b/i
+
+/**
+ * Whether money into a card or loan account is a payment toward it: Plaid's
+ * loan payment codes, or payment words with no word of a refund. A card's
+ * refund, return or merchant credit is not, and counts as money back.
+ */
+export function paysDownDebt(
+  tx: Pick<Transaction, 'amountCents' | 'bankCategory' | 'name' | 'merchantName'>,
+): boolean {
+  if (tx.amountCents >= 0) return false
+  if (tx.bankCategory?.startsWith('LOAN_PAYMENTS')) return true
+  const words = `${tx.name} ${tx.merchantName ?? ''}`
+  return PAYMENT_IN_WORDS.test(words) && !REFUND_WORDS.test(words)
+}
+
 /** Which line money filed under an income category adds to. */
 export type IncomeLine =
   | 'pay'

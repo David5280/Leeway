@@ -331,11 +331,28 @@ describe('the tax export', () => {
     await transaction(card, '2026-05-02', 'PAYMENT THANK YOU', -150000, null)
     await transaction(card, '2026-04-20', 'IKEA', 150000, shopping)
     const { summary } = await call('export_tax_year', { year: 2026 })
-    const spending = summary.categories.filter((c) => c.kind === 'expense')
-    expect(spending.map((c) => [c.name, c.totalCents])).toEqual([
+    expect(summary.categories.map((c) => [c.name, c.totalCents])).toEqual([
       ['Rent', 150000],
       ['Shopping', 150000],
     ])
+    // The card's payment from an account Leeway cannot see is not money in.
+    expect(summary.unfiledInCents).toBe(0)
+  })
+
+  it("still counts a card's refund as money in, and leaves out an unfiled loan payment", async () => {
+    const { card } = await checkingAndHiddenCard()
+    const loan = (await insertBankAccount(ctx.db, { name: 'Car loan', type: 'loan', hidden: true }))
+      .accountId
+    await transaction(card, '2026-03-02', 'IKEA REFUND', -5000, null)
+    await transaction(card, '2026-03-03', 'BEST BUY CREDIT', -2000, null, {
+      detailed: 'GENERAL_MERCHANDISE_ELECTRONICS',
+    })
+    await transaction(loan, '2026-03-04', 'PAYMENT', -30000, null, {
+      detailed: 'LOAN_PAYMENTS_CAR_PAYMENT',
+    })
+    const { summary, csv } = await call('export_tax_year', { year: 2026 })
+    expect(summary.unfiledInCents).toBe(7000)
+    expect(csv).not.toContain('Test Car loan')
   })
 
   it('keeps a real deposit that a closer date would have paired with a card payment', async () => {
