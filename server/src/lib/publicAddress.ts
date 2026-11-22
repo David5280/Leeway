@@ -59,25 +59,48 @@ type LookupCallback = (
   family?: number,
 ) => void
 
+/** A dns.lookup asked for every address of a host; tests stand in their own. */
+export type Resolver = (
+  hostname: string,
+  options: { all: true },
+  callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void,
+) => void
+
 /**
  * A drop-in for dns.lookup that refuses any host resolving to a non-public
  * address. Used as the connection's own lookup, so the address checked is the
- * address connected to, with no gap for DNS rebinding in between.
+ * address connected to, with no gap for DNS rebinding in between. `resolve`
+ * is the real DNS unless a test stands in its own.
  */
-export function publicOnlyLookup(
-  hostname: string,
-  options: { all?: boolean },
-  callback: LookupCallback,
-): void {
-  dnsLookup(hostname, { all: true }, (error, addresses) => {
-    if (error) return callback(error, [])
-    const blocked = addresses.find((entry) => !isPublicAddress(entry.address))
-    if (blocked) {
-      const refused: NodeJS.ErrnoException = new Error(`${hostname} is not a public address`)
-      refused.code = 'EADDRNOTPUBLIC'
-      return callback(refused, [])
-    }
-    if (options.all) return callback(null, addresses)
-    callback(null, addresses[0]!.address, addresses[0]!.family)
-  })
+export function publicOnly(resolve: Resolver = dnsLookup) {
+  return (hostname: string, options: { all?: boolean }, callback: LookupCallback): void => {
+    resolve(hostname, { all: true }, (error, addresses) => {
+      if (error) return callback(error, [])
+      const blocked = addresses.find((entry) => !isPublicAddress(entry.address))
+      if (blocked) {
+        const refused: NodeJS.ErrnoException = new Error(`${hostname} is not a public address`)
+        refused.code = 'EADDRNOTPUBLIC'
+        return callback(refused, [])
+      }
+      if (options.all) return callback(null, addresses)
+      callback(null, addresses[0]!.address, addresses[0]!.family)
+    })
+  }
+}
+
+/** publicOnly over the real DNS. */
+export const publicOnlyLookup = publicOnly()
+
+/**
+ * Node skips the lookup for a URL written with an IP address, like
+ * https://10.0.0.5/app, so such an address is put through it here instead.
+ * Otherwise a link could point a fetch straight at a private network.
+ */
+export function checkAddressLiteral(url: string, lookup: typeof publicOnlyLookup): Promise<void> {
+  // URL keeps an IPv6 host in brackets, which isIP does not accept.
+  const host = new URL(url).hostname.replace(/^\[(.*)\]$/, '$1')
+  if (!isIP(host)) return Promise.resolve()
+  return new Promise((resolve, reject) =>
+    lookup(host, { all: true }, (error) => (error ? reject(error) : resolve())),
+  )
 }
