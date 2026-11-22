@@ -1,6 +1,7 @@
 // The list's filters: a search box, then chips for the date range, the
-// category and the account, and "N need a category" while some do. On a
-// phone the chips scroll sideways in one line instead of wrapping.
+// category and the account, the merchant a link narrowed it to, and "N need a
+// category" while some do. On a phone the chips scroll sideways in one line
+// instead of wrapping.
 
 import { useState } from 'react'
 import type { Category } from '../../api/client'
@@ -57,6 +58,7 @@ export function FilterBar({
         />
         <CategoryChip filters={filters} categories={categories} />
         <AccountChip filters={filters} />
+        <MerchantChip filters={filters} />
         <UncategorizedChip filters={filters} />
       </div>
     </div>
@@ -143,6 +145,26 @@ function AccountChip({ filters }: { filters: ActivityFilters }) {
         })),
       ]}
     />
+  )
+}
+
+/**
+ * The merchant a link narrowed the list to (a leak alert's charges), shown
+ * only then; tapping it lets go of the merchant.
+ */
+function MerchantChip({ filters }: { filters: ActivityFilters }) {
+  if (!filters.merchant) return null
+  const name = filters.merchant.name ?? 'One merchant'
+  return (
+    <button
+      type="button"
+      className="fchip on"
+      aria-label={`Merchant: ${name}. Show every merchant`}
+      onClick={() => filters.clearMerchant()}
+    >
+      <span>{name}</span>
+      <Icon name="close" size={14} />
+    </button>
   )
 }
 

@@ -5,14 +5,17 @@
 // A hide follows the same rules as a dismissal, so home and the inbox agree:
 // - a condition (overdrawn, over its limit, low) is away for a day while it
 //   holds (RESURFACE_AFTER_MS), then shows again;
-// - a fee is news, so it is away for good, until a newer fee comes;
+// - a fee is news, so it is away for good, until a newer fee comes, and so
+//   is a leak (a charge made twice, a price gone up), until a newer charge;
 // - an alert that clears and comes back over an hour later (REARM_AFTER_MS)
 //   is a new run of it and shows afresh, while one that flickers back sooner
 //   stays away, as the inbox treats it;
 // - a condition's dismissal counts only while its kind is turned on, as the
 //   inbox keeps only those kinds current. A fee's dismissal is for good.
-// - a bill's change is not hidden but accepted: its charge's amount becomes
-//   the bill's usual one, so it clears everywhere (billChangeSource.ts).
+// - a bill's change is not hidden but accepted: its cycle's amount becomes
+//   the bill's usual one, so it clears everywhere (billChangeSource.ts). A
+//   cycle that was only paid twice teaches no new amount, so it is hidden
+//   like a leak instead, until its alert clears.
 //
 // The home list only reads. The notifier keeps hides current: it notes when
 // each hidden alert is gone and drops the hides that no longer count.
@@ -40,15 +43,15 @@ const alertKey = (alert: AccountAlert): string =>
 
 /**
  * Every current alert, for every account, whichever notifications are on.
- * Without `bills`, only the accounts' own alerts, which read no bill.
+ * Without `bills` or `leaks`, those are not read (see listAlerts).
  */
 export async function currentAlerts(
   db: Db,
   now: Date,
-  { bills = true }: { bills?: boolean } = {},
+  only: { bills?: boolean; leaks?: boolean } = {},
 ): Promise<AccountAlert[]> {
   const settings = await getSettings(db)
-  return listAlerts(db, settings, todayIn(settings.timeZone, now), [], { bills })
+  return listAlerts(db, settings, todayIn(settings.timeZone, now), [], only)
 }
 
 /**
@@ -116,18 +119,23 @@ export async function listHomeAlerts(
   return { alerts: shown, hidden: alerts.length - shown.length }
 }
 
-/** Which alert to hide: one per kind and account, and for a bill's change, per bill too. */
+/**
+ * Which alert to hide: one per kind and account, for a bill's change per bill
+ * too, and for a leak per charge.
+ */
 export interface HideTarget {
   kind: AlertKind
   accountId: string
   billId?: string
+  chargeId?: string
 }
 
 /**
  * Hides one of the current alerts from the home screen, leaving the inbox as
  * it was. Hiding it again starts it over, as a fresh hide the notifier has
  * not yet seen gone. An alert that is not current (it cleared a moment ago)
- * is not found. A bill's change is accepted instead, which clears it.
+ * is not found. A bill's change is accepted instead, which clears it, or
+ * hidden when its cycle was only paid twice and there is nothing to accept.
  */
 export async function hideHomeAlert(
   db: Db,
@@ -139,14 +147,15 @@ export async function hideHomeAlert(
     (one) =>
       one.kind === target.kind &&
       one.accountId === target.accountId &&
-      (target.billId === undefined || one.bill?.id === target.billId),
+      (target.billId === undefined || one.bill?.id === target.billId) &&
+      (target.chargeId === undefined || one.charge?.id === target.chargeId),
   )
   if (!alert) throw notFound('Alert')
   if (alert.bill) {
     const { timeZone } = await getSettings(db)
     const today = todayIn(timeZone, now)
-    await acceptBillChange(db, timeZone, today, { billId: alert.bill.id, date: alert.date! })
-    return
+    const target = { billId: alert.bill.id, date: alert.date! }
+    if (await acceptBillChange(db, timeZone, today, target)) return
   }
   await db.query(
     `INSERT INTO alert_hides (kind, subject, hidden_at) VALUES ($1, $2, $3)

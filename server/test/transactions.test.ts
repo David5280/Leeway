@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import type { Db } from '../src/db/pool.js'
+import { listTransactions, transactionFilterSchema } from '../src/domain/transactions.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -55,6 +57,56 @@ describe('filtering transactions', () => {
     expect((await call('list_transactions', { search: 'BIRTHDAY' })).total).toBe(1)
   })
 
+  it('narrows to the merchant of another transaction, as a leak alert links to its charges', async () => {
+    const checking = await insertBankAccount(ctx.db, { name: 'Checking' })
+    const card = await insertBankAccount(ctx.db, { name: 'Card' })
+    const tx = (accountId: string, date: string, name: string, merchantName: string | null) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, merchantName, amountCents: 1549 })
+    // The bank's text differs by a store number, so these are one merchant.
+    const latest = await tx(checking.accountId, '2026-11-10', 'NETFLIX.COM 8473 CA', null)
+    await tx(checking.accountId, '2026-10-10', 'Netflix.com 1192 CA', null)
+    await tx(card.accountId, '2026-11-09', 'NETFLIX.COM 2210 CA', null)
+    // Another merchant, and one whose name only starts the same, stay out.
+    await tx(checking.accountId, '2026-11-08', 'NETFLIX GIFT SHOP', null)
+    await tx(checking.accountId, '2026-11-07', 'SPOTIFY USA', 'Spotify')
+
+    const same = await call('list_transactions', { sameMerchantAs: latest })
+    expect(same.total).toBe(3)
+    const onChecking = await call('list_transactions', {
+      sameMerchantAs: latest,
+      accountId: checking.accountId,
+    })
+    expect(onChecking.transactions.map((t) => t.date)).toEqual(['2026-11-10', '2026-10-10'])
+    // The merchant name the bank gave is what groups a charge, as for repeat charges.
+    const spotify = await tx(card.accountId, '2026-11-06', 'SPOTIFY P1234', 'Spotify')
+    expect((await call('list_transactions', { sameMerchantAs: spotify })).total).toBe(2)
+  })
+
+  it('narrows to nothing for an unknown transaction, or one whose text is all digits', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    const digits = await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-10',
+      name: '#4471 0093',
+      amountCents: 100,
+    })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-10',
+      name: '5512',
+      amountCents: 100,
+    })
+    expect((await call('list_transactions', { sameMerchantAs: digits })).total).toBe(0)
+    expect((await call('list_transactions', { sameMerchantAs: UNKNOWN_ID })).total).toBe(0)
+  })
+
+  it('takes a search literally, with no wildcards', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    for (const name of ['SALE 50% OFF', 'SALE 50 OFF', 'A_B STORE', 'AXB STORE']) {
+      await insertBankTransaction(ctx.db, accountId, { date: '2026-11-10', name, amountCents: 100 })
+    }
+    expect(names(await call('list_transactions', { search: '50%' }))).toEqual(['SALE 50% OFF'])
+    expect(names(await call('list_transactions', { search: 'a_b' }))).toEqual(['A_B STORE'])
+  })
+
   it('pages through results while reporting the full total', async () => {
     const { accountId } = await insertBankAccount(ctx.db)
     for (const day of ['01', '02', '03']) {
@@ -69,6 +121,42 @@ describe('filtering transactions', () => {
 
     expect(page.total).toBe(3)
     expect(names(page)).toEqual(['Day 02'])
+  })
+
+  it('pages a search and a merchant in the database, with the full total', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    // 300 days of a gym and a cafe, alternating, newest on Nov 10.
+    await ctx.db.query(
+      `INSERT INTO transactions (account_id, provider_transaction_id, date, name, amount_cents)
+       SELECT $1, 'bulk-' || n, DATE '2026-11-10' - n,
+         CASE WHEN n % 2 = 0 THEN 'CITY GYM ' || n ELSE 'CORNER CAFE ' || n END, 100 + n
+       FROM generate_series(0, 299) AS n`,
+      [accountId],
+    )
+    const gym = (await call('list_transactions', { search: 'city gym', limit: 1 })).transactions[0]!
+
+    // Every list query is paged in SQL, so a search never reads the whole history.
+    const sent: string[] = []
+    const watched = {
+      query: (text: string, params: unknown[]) => {
+        sent.push(text)
+        return ctx.db.query(text, params)
+      },
+    } as unknown as Db
+    for (const filter of [{ search: 'city gym' }, { sameMerchantAs: gym.id }]) {
+      sent.length = 0
+      const page = await listTransactions(
+        watched,
+        transactionFilterSchema.parse({ ...filter, limit: 10, offset: 20 }),
+      )
+      expect(page.total).toBe(150)
+      expect(page.transactions).toHaveLength(10)
+      // Newest first: the 21st gym charge is 40 days before Nov 10.
+      expect(page.transactions[0]!.date).toBe('2026-10-01')
+      const lists = sent.filter((text) => text.includes('FROM transactions t LEFT JOIN categories'))
+      expect(lists).toHaveLength(1)
+      expect(lists[0]).toMatch(/LIMIT \$\d+ OFFSET \$\d+/)
+    }
   })
 
   it('rejects a date that does not exist', async () => {

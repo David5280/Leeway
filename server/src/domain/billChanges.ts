@@ -18,6 +18,7 @@
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
+import { DUPLICATE_DAYS } from './leaks/duplicates.js'
 
 /**
  * How far a charge must be from the usual amount to be news: at least this
@@ -78,19 +79,55 @@ export interface WatchedBill {
 }
 
 export type BillChange =
-  /** The latest cycle is news: well off the usual amount. `charge` is its latest, with the cycle's total. */
-  | { kind: 'changed'; bill: WatchedBill; charge: BillCharge }
+  /**
+   * The latest cycle is news: well off the usual amount. `charge` is its
+   * latest, with the cycle's total; `cycle` the charges added up, newest first.
+   */
+  | { kind: 'changed'; bill: WatchedBill; charge: BillCharge; cycle: BillCharge[] }
   /** Two charges in a row at the new amount: it is the usual one now. */
   | { kind: 'settled'; bill: WatchedBill; amountCents: number }
 
+/** A cycle that is news (BillChange's 'changed'). */
+export type ChangedBill = Extract<BillChange, { kind: 'changed' }>
+
+/**
+ * A cycle's charges (newest first) less the repeats: of the charges of one
+ * amount on one account within DUPLICATE_DAYS of each other, only the oldest,
+ * as duplicates.ts reads a charge made twice.
+ */
+export function withoutRepeats(cycle: BillCharge[]): BillCharge[] {
+  const kept: BillCharge[] = []
+  // Oldest first, so the first of each run is the one kept.
+  for (const charge of [...cycle].reverse()) {
+    const repeats = kept.some(
+      (one) =>
+        one.accountId === charge.accountId &&
+        one.amountCents === charge.amountCents &&
+        daysBetween(one.date, charge.date) <= DUPLICATE_DAYS,
+    )
+    if (!repeats) kept.push(charge)
+  }
+  return kept.reverse()
+}
+
+/** What a cycle cost paid once: its charges added up, the repeats left out (withoutRepeats). */
+export function paidOnceCents(cycle: BillCharge[]): number {
+  return withoutRepeats(cycle).reduce((sum, charge) => sum + charge.amountCents, 0)
+}
+
 /**
  * One cycle's charges from `first` (newest first) on: those within half a
- * cycle before it, as a split or second payment is, added up as one.
+ * cycle before it, as a split or second payment is.
  */
-function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
-  const within = charges.filter(
+function cycleCharges(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge[] {
+  return charges.filter(
     (charge) => charge.date <= first.date && daysBetween(charge.date, first.date) < cycle / 2,
   )
+}
+
+/** One cycle's charges from `first` on (cycleCharges), added up as one. */
+function cycleFrom(charges: BillCharge[], first: BillCharge, cycle: number): BillCharge {
+  const within = cycleCharges(charges, first, cycle)
   return { ...first, amountCents: within.reduce((sum, charge) => sum + charge.amountCents, 0) }
 }
 
@@ -133,6 +170,16 @@ function oneOffAt(amounts: number[]): number {
 }
 
 /**
+ * `amounts` (newest first) with the first one-off taken out (oneOffAt), so a
+ * credit, a late fee or an extra charge between two steady ones is not read
+ * as the price. The newest amount is never a one-off: nothing came after it.
+ */
+export function withoutOneOff(amounts: number[]): number[] {
+  const oneOff = oneOffAt(amounts)
+  return amounts.filter((_, i) => i !== oneOff)
+}
+
+/**
  * Whether a bill's amount varies by nature, judged by its cycles before the
  * latest (their totals, newest first), so the latest's own change cannot hide
  * itself. It does when it moved past the threshold from one cycle to the next
@@ -144,8 +191,7 @@ function oneOffAt(amounts: number[]): number {
  *   bill that swings between two amounts every cycle does vary.
  */
 export function amountsVary(earlier: number[]): boolean {
-  const oneOff = oneOffAt(earlier)
-  const kept = earlier.filter((_, i) => i !== oneOff)
+  const kept = withoutOneOff(earlier)
   const steps = kept.slice(1).map((older, i) => isAmountChange(older, kept[i]!))
   const moves = steps.filter(Boolean).length
   return moves >= VARIES_AFTER_MOVES && moves * 2 > steps.length
@@ -173,7 +219,7 @@ export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | nu
     return { kind: 'settled', bill, amountCents: latest.amountCents }
   }
   if (previous.date <= bill.trackedOn) return null
-  return { kind: 'changed', bill, charge: latest }
+  return { kind: 'changed', bill, charge: latest, cycle: cycleCharges(bill.charges, latest, cycle) }
 }
 
 /**
@@ -183,7 +229,7 @@ export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | nu
  * only worth knowing.
  */
 export function billChangeAlert(
-  { bill, charge }: Extract<BillChange, { kind: 'changed' }>,
+  { bill, charge }: Pick<ChangedBill, 'kind' | 'bill' | 'charge'>,
   accountName: string,
   { money }: Pick<AlertFormat, 'money'>,
 ): AccountAlert {
