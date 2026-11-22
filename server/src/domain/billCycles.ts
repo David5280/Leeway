@@ -54,21 +54,15 @@ export function withoutRepeats(cycle: BillCharge[]): BillCharge[] {
 }
 
 /**
- * Whether a cycle's charges hold two of one amount within DUPLICATE_DAYS of
- * each other, on any accounts. On two accounts that may be a charge made
- * twice (autopay from checking, a manual payment by card) or an even split:
- * withoutRepeats cannot tell, since a repeat must be on one account.
+ * Whether one cycle's charges hold two of one amount, however far apart and
+ * on whichever accounts. That may be a charge made twice (autopay from
+ * checking, a manual payment by card a few days later) or an even split.
+ * withoutRepeats cannot tell: it reads only a repeat on one account within
+ * DUPLICATE_DAYS as a charge made twice.
  */
 export function holdsEqualPair(cycle: BillCharge[]): boolean {
-  return cycle.some((charge, i) =>
-    cycle
-      .slice(i + 1)
-      .some(
-        (other) =>
-          other.amountCents === charge.amountCents &&
-          daysBetween(other.date, charge.date) <= DUPLICATE_DAYS,
-      ),
-  )
+  const amounts = cycle.map((charge) => charge.amountCents)
+  return new Set(amounts).size < amounts.length
 }
 
 /** What a cycle cost paid once: its charges added up, the repeats left out (withoutRepeats). */

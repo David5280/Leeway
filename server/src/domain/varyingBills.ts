@@ -3,13 +3,14 @@
 // what it cost when tracked. Pure; billChanges.ts asks here once a bill's
 // history says its amount varies.
 //
-// A charge made twice never lifts the amount. Repeats on one account are
-// read once (withoutRepeats). Two equal charges on two accounts may be a
-// mistake or an even split, which no rule can tell apart, so a cycle holding
-// them that costs well more than the others is not read at all: the amount
-// stays as it was rather than settle at double.
+// A charge made twice never lifts the amount. Repeats on one account within
+// a few days are read once (withoutRepeats). Any other two equal charges in a
+// cycle, on two accounts or further apart, may be a mistake or an even split,
+// which no rule can tell apart. So a cycle holding them that costs nearer
+// double than the usual level (DOUBLED_SHARE) is not read at all: the amount
+// stays as it was rather than settle at double. A bill paid in even halves
+// that climbs a little each cycle still follows.
 
-import { isAmountChange } from './billAmountChange.js'
 import type { BillChange, WatchedBill } from './billChanges.js'
 import {
   cycleCharges,
@@ -20,7 +21,14 @@ import {
 } from './billCycles.js'
 
 /** Recent cycles a varying bill's usual amount is read from (varyingUsualCents). */
-export const VARYING_CYCLES_READ = 3
+const VARYING_CYCLES_READ = 3
+
+/**
+ * How many times the usual level a cycle holding two equal charges must cost
+ * to be doubtful: halfway between paid once (1) and paid twice (2), so it is
+ * nearer double than the usual level.
+ */
+const DOUBLED_SHARE = 1.5
 
 /**
  * What a varying bill costs now: the higher of its latest cycle's total and
@@ -69,17 +77,17 @@ function readCycle(charges: BillCharge[], first: BillCharge, cycle: number): Rea
   }
 }
 
-/** Whether a cycle that may hold a charge made twice costs well more than `otherCents`. */
+/** Whether a cycle that may hold a charge made twice costs nearer double `otherCents` than it. */
 function doubtfulAbove(read: ReadCycle, otherCents: number): boolean {
-  return read.maybePaidTwice && read.cents > otherCents && isAmountChange(otherCents, read.cents)
+  return read.maybePaidTwice && read.cents > otherCents * DOUBLED_SHARE
 }
 
 /**
  * A varying bill never alerts; its usual amount follows its recent cycles
  * instead, each read paid once. Only here: the steady path keeps raw totals,
  * so a doubled cycle shows as changed and doublePaidBills.ts can tell it
- * once. An earlier cycle that may be doubled and costs well more than the
- * latest is left out of the average; a latest one that costs well more than
+ * once. An earlier cycle that may be doubled and costs nearer double the
+ * latest is left out of the average; a latest one that costs nearer double
  * the cycles before it settles nothing.
  */
 export function followVaryingBill(
