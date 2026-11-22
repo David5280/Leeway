@@ -142,6 +142,35 @@ describe('what went wrong', () => {
     )
     expect(form.getAllByRole('alert')).toHaveLength(1)
   })
+  it('drops the server’s error once what was typed is refused, so only that shows', async () => {
+    serve(BOTH, { '/api/actions/update_owned_or_owed': failing('That name is taken.') })
+    renderPlan('/plan/net-worth')
+    const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    expect(await form.findByRole('alert')).toHaveTextContent('That name is taken.')
+    const owed = form.getByRole('textbox', { name: 'Still owed' })
+    await user.clear(owed)
+    await user.type(owed, '-5000')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(form.getAllByRole('alert')).toHaveLength(1))
+    expect(form.getByRole('alert')).toHaveTextContent("What is still owed can't be below zero.")
+  })
+
+  it('drops a problem with what was typed once Delete is pressed', async () => {
+    serve(BOTH, { '/api/actions/delete_account': failing('That account is in use.') })
+    renderPlan('/plan/net-worth')
+    const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
+    const owed = form.getByRole('textbox', { name: 'Still owed' })
+    await user.clear(owed)
+    await user.type(owed, '-5000')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    expect(form.getByRole('alert')).toHaveTextContent("What is still owed can't be below zero.")
+    await user.click(form.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(form.getByRole('alert')).toHaveTextContent('That account is in use.'),
+    )
+    expect(form.getAllByRole('alert')).toHaveLength(1)
+  })
 })
 
 describe("a loan's rate", () => {

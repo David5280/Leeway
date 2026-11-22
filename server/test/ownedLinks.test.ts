@@ -3,6 +3,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
+import { saveLoanLink } from '../src/domain/loanLinks.js'
+import { AppError } from '../src/errors.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, insertBankAccount, resetData } from './helpers.js'
 
@@ -139,6 +141,33 @@ describe('what a loan can be tied to', () => {
         cabin.id,
       ]),
     ).rejects.toThrow(/accounts_loan_account_unique/)
+  })
+
+  it('says so in words when the database turns a tie away, never as a server error', async () => {
+    const { mortgage } = await homeWithMortgage()
+    const cabin = await call('add_owned_or_owed', { kind: 'home', name: 'Cabin', amountCents: 1 })
+    // As a save that checked the loan was free just before another tied it.
+    const error = await saveLoanLink(ctx.db, cabin.id, mortgage.id).catch((failure) => failure)
+    expect(error).toBeInstanceOf(AppError)
+    expect(error).toMatchObject({
+      code: 'invalid_input',
+      message: 'That loan was just tied to another home or car. Untie it there first.',
+    })
+  })
+
+  it('ties a loan to one of two homes saved at once, refusing the other in words', async () => {
+    const loan = await call('add_owned_or_owed', { kind: 'loan', name: 'Loan', amountCents: 1 })
+    const homes = await Promise.all(
+      ['Cabin', 'Cottage'].map((name) =>
+        call('add_owned_or_owed', { kind: 'home', name, amountCents: 1 }),
+      ),
+    )
+    const saves = await Promise.allSettled(
+      homes.map((home) => call('update_owned_or_owed', { id: home.id, loanId: loan.id })),
+    )
+    expect(saves.filter((save) => save.status === 'fulfilled')).toHaveLength(1)
+    const [refused] = saves.filter((save) => save.status === 'rejected')
+    expect(refused!.reason).toMatchObject({ code: 'invalid_input' })
   })
 })
 

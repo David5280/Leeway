@@ -126,13 +126,18 @@ export function selectAccounts<T extends { id: string }>(accounts: T[], ids: str
   return picked.length > 0 ? picked : accounts
 }
 
-/** Loads the alerts and words their counts for the server log. */
+/**
+ * Loads the alerts and words their counts for the server log. The line counts
+ * balances and fees only, so bills and leaks (about 400 days of history each
+ * sync) are not read for it.
+ */
 export async function alertLogLine(
   db: Db,
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
 ): Promise<string> {
-  return alertCountsLine(countAlerts(await listAlerts(db, settings, today)))
+  const alerts = await listAlerts(db, settings, today, [], { bills: false, leaks: false })
+  return alertCountsLine(countAlerts(alerts))
 }
 
 /**

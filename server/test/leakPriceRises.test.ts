@@ -20,7 +20,6 @@ const TODAY = '2026-11-17'
 
 /** Spotify's charges, oldest first, as [date, cents], monthly unless told. */
 const spotify = (charges: [string, number][], cadence: Cadence = 'month'): RepeatingCharge => ({
-  name: 'Spotify',
   cadence,
   charges: charges.map(([date, amountCents], index) => ({
     id: `tx-${index}`,
@@ -55,7 +54,6 @@ describe('priceRiseOf', () => {
       TODAY,
     )
     expect(rise).toMatchObject({
-      name: 'Spotify',
       previousCents: 1099,
       charge: { id: 'tx-2', date: '2026-11-12', amountCents: 1199, accountId: 'card' },
     })
@@ -366,22 +364,19 @@ describe('findPriceRises', () => {
       ['2026-10-12', 1099],
       ['2026-11-12', 1099],
     ])
-    const early = {
-      ...spotify([
-        ['2026-09-02', 1549],
-        ['2026-10-02', 1549],
-        ['2026-11-02', 1799],
-      ]),
-      name: 'Netflix',
-    }
+    const early = spotify([
+      ['2026-09-02', 1549],
+      ['2026-10-02', 1549],
+      ['2026-11-02', 1799],
+    ])
     const late = spotify([
       ['2026-09-14', 1099],
       ['2026-10-14', 1099],
       ['2026-11-14', 1199],
     ])
-    expect(findPriceRises([steady, early, late], TODAY).map((rise) => rise.name)).toEqual([
-      'Spotify',
-      'Netflix',
+    expect(findPriceRises([steady, early, late], TODAY).map((rise) => rise.charge.date)).toEqual([
+      '2026-11-14',
+      '2026-11-02',
     ])
   })
 })

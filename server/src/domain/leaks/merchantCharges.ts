@@ -3,11 +3,13 @@
 // are lines the owner made or the bank charged, where two alike within a few
 // days are ordinary and a new amount is no price: two cash withdrawals, the
 // same share paid to two friends through Venmo or Zelle, two checks written
-// for the same amount, money moved to another account, and bank fees (the fee
-// alert already counts the overdraft ones). A payment to a person is also
-// named after that person, so leaving it out keeps their name out of every
-// alert, and so out of the AI summary, the weekly email and assistants.
-// Pure.
+// for the same amount, money sent through the bank (bill pay, a wire, an
+// online payment to someone), money moved to another account, and bank fees
+// (the fee alert already counts the overdraft ones). A payment to a person is
+// also named after that person, so leaving it out keeps their name out of
+// every alert, and so out of the AI summary, the weekly email and assistants.
+// A merchant charge still shows its name only when leakNames.ts is sure it is
+// a merchant's. Pure.
 //
 // Without the bank's codes, only the words decide, so they must be a whole
 // phrase: "ATM WITHDRAWAL" is cash and "OVERDRAFT FEE" a fee, while "THE ATM
@@ -76,6 +78,36 @@ const FEE_WORDS = new RegExp(
  */
 const CHECK_WORDS = /\b(?:check|chk|cheque)\s*(?:paid\s*)?#?\s*\d+\b/i
 
+/**
+ * A check by its payee, as some banks write one: "CHECK JANE DOE". The word
+ * opens the text and stands alone, so "CHECKERS" is a merchant, and so are a
+ * card purchase written "CHECK CARD" and the lender "CHECK INTO CASH".
+ */
+const CHECK_PAYEE_WORDS = /^\s*(?:check|chk|cheque)\b(?!\s*(?:card|crd|into)\b)/i
+
+/**
+ * Money the owner sent someone, in a bank's words, whoever it went to: a
+ * payment through the bank's bill pay or online banking, a wire, or a person
+ * paid through an app the bank writes in short ("ZEL*" for Zelle, "SQC*" for
+ * Cash App). Sent to a person, it is rent, support or a share of something,
+ * never a price, and its text names that person.
+ */
+const SENT_WORDS = [
+  /\b(?:online|mobile|web|bill)?\s*(?:payment|pmt)\s+to\b/i,
+  /\bbill\s?pay\b/i,
+  /\bwire\s+(?:to|transfer)\b/i,
+  /\bzel\s*\*/i,
+  /\bsqc\s*\*/i,
+  /\bgoogle pay send\b/i,
+]
+
+/**
+ * A debit the owner's bank pulled for someone, written with no merchant:
+ * "ACH DEBIT JANE DOE". Only read so when the bank named no merchant, since
+ * billers also collect this way ("ACH DEBIT" with the merchant "Geico").
+ */
+const ACH_WORDS = /\bach\s+(?:debit|dr)\b/i
+
 /** Plaid's primary category for money sent out to an account: a transfer, not a purchase. */
 const TRANSFER_OUT = 'TRANSFER_OUT'
 
@@ -99,7 +131,7 @@ function isBankFee(line: CodedLine): boolean {
 }
 
 /** Whether the bank coded it as buying goods, food or a service (PURCHASE_CATEGORIES). */
-function isCodedPurchase(line: CodedLine): boolean {
+export function isCodedPurchase(line: CodedLine): boolean {
   const code = line.providerCategoryPrimary ?? line.providerCategoryDetailed ?? ''
   return PURCHASE_CATEGORIES.some((primary) => code === primary || code.startsWith(`${primary}_`))
 }
@@ -130,17 +162,31 @@ function isTransferOut(line: CodedLine): boolean {
   return TRANSFER_WORDS.test(line.name)
 }
 
+/** Whether it is a check, by its number or its payee. */
+const isCheck = (line: CodedLine) =>
+  CHECK_WORDS.test(line.name) || CHECK_PAYEE_WORDS.test(line.name)
+
+/**
+ * Whether the owner sent it to someone through the bank (SENT_WORDS), or the
+ * bank pulled it for someone it does not name as a merchant (ACH_WORDS).
+ */
+function sentBySomeoneElse(line: CodedLine): boolean {
+  if (SENT_WORDS.some((words) => words.test(line.name))) return true
+  return !line.merchantName?.trim() && ACH_WORDS.test(line.name)
+}
+
 /**
  * Whether a merchant charged this line, so two alike close together may be
  * one charge made twice, and a new amount a new price: not cash taken out, a
- * check, a payment to a person through an app, money moved to an account, or
- * a bank fee.
+ * check, a payment to a person through an app, money sent through the bank,
+ * money moved to an account, or a bank fee.
  */
 export function isMerchantCharge(line: CodedLine): boolean {
   return (
     !isCashWithdrawal(line) &&
-    !CHECK_WORDS.test(line.name) &&
+    !isCheck(line) &&
     !paidAPerson(line) &&
+    !sentBySomeoneElse(line) &&
     !isTransferOut(line) &&
     !isBankFee(line)
   )

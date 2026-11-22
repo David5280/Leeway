@@ -82,6 +82,46 @@ describe('isMerchantCharge', () => {
     expect(isMerchantCharge(line({ name: 'CHECK INTO CASH' }))).toBe(true)
   })
 
+  it('leaves out a check written to its payee, keeping a card purchase and a merchant alike', () => {
+    for (const name of ['CHECK JANE DOE', 'CHK PAT EXAMPLE', 'Cheque Sam River']) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+    }
+    for (const name of ['CHECKCARD 1105 CORNER HARDWARE', 'CHECK CARD PURCHASE TARGET']) {
+      expect(isMerchantCharge(line({ name })), name).toBe(true)
+    }
+  })
+
+  it('leaves out money the owner sent through the bank, whoever it went to', () => {
+    for (const name of [
+      'ONLINE PAYMENT TO JANE DOE',
+      'MOBILE PMT TO JANE DOE',
+      'PAYMENT TO JANE DOE',
+      'BILL PAY JANE DOE',
+      'BILLPAY JANE DOE',
+      'WIRE TO JANE DOE',
+      'WIRE TRANSFER JANE DOE REF 44120',
+      'ZEL*JANE DOE',
+      'SQC*JANE DOE',
+      'GOOGLE PAY SEND JANE DOE',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+      // A bank's code or a merchant name it guessed never makes it a store.
+      expect(
+        isMerchantCharge(
+          line({ name, merchantName: 'Jane Doe', providerCategoryPrimary: 'GENERAL_SERVICES' }),
+        ),
+        name,
+      ).toBe(false)
+    }
+  })
+
+  it('leaves out a debit the bank pulled for someone it names no merchant for', () => {
+    expect(isMerchantCharge(line({ name: 'ACH DEBIT JANE DOE' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'ACH DR JANE DOE' }))).toBe(false)
+    // A biller collecting by ACH, named by the bank, is still a merchant.
+    expect(isMerchantCharge(line({ name: 'ACH DEBIT GEICO', merchantName: 'Geico' }))).toBe(true)
+  })
+
   it('leaves out every bank fee, not only overdraft fees', () => {
     expect(isMerchantCharge(line({ providerCategoryDetailed: 'BANK_FEES_ATM_FEES' }))).toBe(false)
     expect(

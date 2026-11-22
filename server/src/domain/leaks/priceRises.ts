@@ -53,16 +53,14 @@ export const RISE_CADENCES: readonly Cadence[] = ['week', 'biweek', 'semimonth',
 
 /** A repeating charge no bill tracks, as the rise check reads it. */
 export interface RepeatingCharge {
-  /** The merchant as the app shows it, with no account number. */
-  name: string
   /** How often it repeats, as detection found it. */
   cadence: Cadence
   /** Its posted charges, oldest first. */
   charges: ChargeLine[]
 }
 
+/** A price rise, with no name: leakSource.ts picks the name an alert may show (leakNames.ts). */
 export interface PriceRise {
-  name: string
   /** The latest charge, the first at the new price, totalled with any other that day. */
   charge: ChargeLine
   /** What it cost before. */
@@ -154,7 +152,7 @@ export function priceRiseOf(repeating: RepeatingCharge, today: IsoDate): PriceRi
   if (before === undefined || older === undefined) return null
   if (!steady(older, before) || amountsVary(amounts)) return null
   if (!isPriceRise(before, latest.amountCents)) return null
-  return { name: repeating.name, charge: latest, previousCents: before }
+  return { charge: latest, previousCents: before }
 }
 
 /** Every price rise among these repeating charges, newest first. */

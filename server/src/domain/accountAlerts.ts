@@ -60,9 +60,10 @@ export interface AccountAlert {
   bill?: { id: string; name: string; usualCents: number }
   /**
    * For a leak: the latest charge it is about (its transaction's id), the
-   * merchant as the app shows it, and for a price rise what it cost before.
+   * merchant as the app shows it or null when the alert names no one
+   * (leakNames.ts), and for a price rise what it cost before.
    */
-  charge?: { id: string; merchant: string; previousCents: number | null }
+  charge?: { id: string; merchant: string | null; previousCents: number | null }
 }
 
 /** What an alert needs to know about an account. */

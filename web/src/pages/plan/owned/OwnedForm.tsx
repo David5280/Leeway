@@ -92,7 +92,9 @@ function LoanField({
 /**
  * Adding, changing and deleting one, each closing the form once it is done.
  * Each clears the errors the others left, so only the latest try's error
- * shows: a Delete that failed is not still blamed once Save is pressed.
+ * shows: a Delete that failed is not still blamed once Save is pressed. The
+ * form clears them too (clearErrors) when what was typed is refused before
+ * any is sent, so an old error from the server never shows beside it.
  */
 function useOwnedActions(onClose: () => void) {
   const add = useActionMutation('add_owned_or_owed')
@@ -113,6 +115,7 @@ function useOwnedActions(onClose: () => void) {
       clearErrors()
       remove.mutate({ id }, close)
     },
+    clearErrors,
     busy: add.isPending || update.isPending || remove.isPending,
     error: add.error ?? update.error ?? remove.error,
   }
@@ -143,17 +146,29 @@ export function OwnedForm({
     setText((now) => ({ ...now, ...next }))
   }
 
+  /** Shows what is wrong with what was typed, alone: the server's last error goes. */
+  const refuse = (error: string) => {
+    actions.clearErrors()
+    setProblem(error)
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault()
     if (item) {
       const read = readEdit(text, item)
       if (read.ok) actions.update(item.id, read.value)
-      else setProblem(read.error)
+      else refuse(read.error)
     } else {
       const read = readOwned(text, newKind)
       if (read.ok) actions.add(newKind, read.value)
-      else setProblem(read.error)
+      else refuse(read.error)
     }
+  }
+
+  /** Deletes it; a problem with what was typed no longer matters then. */
+  function remove(id: string) {
+    setProblem(null)
+    actions.remove(id)
   }
 
   return (
@@ -222,7 +237,7 @@ export function OwnedForm({
             type="button"
             className="btn danger"
             disabled={actions.busy}
-            onClick={() => actions.remove(item.id)}
+            onClick={() => remove(item.id)}
           >
             Delete
           </button>

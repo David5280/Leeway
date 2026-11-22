@@ -53,25 +53,28 @@ const ALERT_WORDS: Record<
 }
 
 /**
- * What a price rise is about: the charge on its account at the merchant, and
- * the move from the old price to the new one. Not the charge's id, which can
- * change when another charge posts the same day, so the same rise is never
- * pushed or brought back twice. The merchant is the name the app shows, never
- * the bank's text.
+ * What a price rise is about: the account, the day of the first charge at the
+ * new price, and the move from the old price to the new one. That day stays
+ * the same while the rise is news (priceRises.ts), so the same rise is never
+ * pushed or brought back twice. Not the charge's id, which can change when
+ * another charge posts the same day, and never a name: subjects are stored
+ * and reach the inbox, and a name, even a hashed one, could be a person's or
+ * hold bank text with an account number.
  */
 function priceRiseSubject({
   accountId,
   amountCents,
+  date,
   charge,
-}: Pick<AccountAlert, 'accountId' | 'amountCents' | 'charge'>): string {
-  return `rise:${accountId}:${charge?.merchant}:${charge?.previousCents}:${amountCents}`
+}: Pick<AccountAlert, 'accountId' | 'amountCents' | 'date' | 'charge'>): string {
+  return `rise:${accountId}:${date}:${charge?.previousCents}:${amountCents}`
 }
 
 /**
  * What an account alert is about, as its notification and its hide on the
  * home screen both key it. A fee is news once per latest fee date, a bill's
  * change once per bill and charge date, a charge made twice once per charge,
- * and a price rise once per merchant and price (priceRiseSubject); the others
+ * and a price rise once per day and price (priceRiseSubject); the others
  * are conditions, kept once per account while they last.
  */
 export function accountAlertSubject(
