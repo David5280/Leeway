@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { call, type Input } from '../../api/client'
 import { ErrorNote } from '../../components/ui'
+import { downloadText } from '../../lib/download'
 import { Section } from './Section'
 
 export function DataSection() {
@@ -18,14 +19,7 @@ export function DataSection() {
     setError(null)
     try {
       const config = await call('export_config')
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }),
-      )
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'leeway.json'
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadText(JSON.stringify(config, null, 2), 'leeway.json', 'application/json')
     } catch (caught) {
       setError(caught)
     }
