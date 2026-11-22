@@ -12,9 +12,9 @@
 //
 // The month still running has had only some of its paychecks, so a full
 // month of deductions would read as a high rate. Each deduction counts there
-// in proportion to pay seen so far: the running month's take-home pay as a
-// share of a usual finished month's, never more than a whole month, and none
-// before there is a finished month of pay to go by.
+// in proportion to pay seen so far: the running month's paychecks as a share
+// of a typical month of pay from the current employer (profile/income.ts),
+// never more than a whole month, and none without an employer paying now.
 
 import { addDays, addMonths, dateParts, type IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
@@ -163,15 +163,16 @@ export function streamKinds(streams: PayrollStream[]): { pension: boolean; plan:
 }
 
 /**
- * How much of a usual month's pay the running month has seen, from 0 to 1:
- * its take-home pay so far over the average finished month with pay.
+ * How much of a typical month's pay the running month has seen, from 0 to 1:
+ * its paychecks so far over the typical month. It used to divide by the
+ * average finished month of filed income, so months of money from family
+ * after a job ended set what a usual month was; now the typical month is
+ * the current employer's alone.
  */
-export function runningPayShare(months: MonthTotals[]): number {
+export function runningPayShare(months: MonthTotals[], typicalMonthCents: number | null): number {
   const current = months.find((month) => month.current)
-  const paid = months.filter((month) => !month.current && month.incomeCents > 0)
-  if (!current || current.incomeCents <= 0 || paid.length === 0) return 0
-  const usual = paid.reduce((sum, month) => sum + month.incomeCents, 0) / paid.length
-  return Math.min(1, current.incomeCents / usual)
+  if (!current || current.incomeCents <= 0 || !typicalMonthCents) return 0
+  return Math.min(1, current.incomeCents / typicalMonthCents)
 }
 
 /** What each kind of payroll deduction took in a month, or null when none counts there. */

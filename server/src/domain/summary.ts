@@ -12,7 +12,8 @@ import { AiProviderError } from '../ai/provider.js'
 import { AiLimitError } from './ai/gateway.js'
 import { getCheckin } from './checkin.js'
 import type { Settings } from './settings.js'
-import { plainSummary, summaryFacts, type SummaryFacts, type SummaryText } from './summaryText.js'
+import { summaryFacts, type SummaryFacts } from './summaryFacts.js'
+import { plainSummary, type SummaryText } from './summaryText.js'
 
 /**
  * Where the AI summary stands, so the app can explain what it shows:

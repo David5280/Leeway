@@ -1,19 +1,18 @@
 // Reads what the idle cash check needs (idleCash.ts) from stored data: the
-// cash in checking, the bills and payday from the cash flow, what the cards
-// owe, typical everyday spending from past months, whether any account is
-// overdrawn, and whether safe to spend is tight. Each step is its own small
-// function so the rules can be tested without a database.
+// cash in checking, payday and the bills due by then, all from the cash flow
+// so the two cards always agree; what the cards owe, typical everyday
+// spending from past months, whether any account is overdrawn, and whether
+// safe to spend is tight. Each step is its own small function so the rules
+// can be tested without a database.
 
 import type { Db } from '../db/pool.js'
 import { addDays, daysInMonth, dateParts, type IsoDate } from '../lib/dates.js'
-import { paysBills } from './accountKinds.js'
 import { isCounted } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import { alertsFor } from './alerts.js'
-import { dueBefore, listBills, type Bill } from './bills.js'
 import type { BudgetSummary } from './budget.js'
 import { budgetSummary } from './budgetReport.js'
-import { getCashFlow } from './cashFlow.js'
+import { getCashFlow, type CashFlow } from './cashFlow.js'
 import { checkIdleCash, type IdleCash } from './idleCash.js'
 import { billPaymentsByRange } from './idleCashBills.js'
 import { monthlyTotals, wholeMonths, type MonthTotals } from './monthlyTotals.js'
@@ -22,44 +21,11 @@ import type { Settings } from './settings.js'
 /** Past months read for typical spending: the last three whole ones. */
 const SPENDING_MONTHS = 3
 
-/**
- * What one checking account can be counted on for: the lower of its balance
- * and its available balance. Available alone can include an overdraft line,
- * which is borrowing, not cash; the balance alone misses pending charges.
- */
-function spendable(account: Pick<Account, 'balanceCents' | 'availableCents'>): number {
-  const known = [account.balanceCents, account.availableCents].filter(
-    (cents): cents is number => cents !== null,
-  )
-  return known.length > 0 ? Math.min(...known) : 0
-}
-
-/** Cash across counted checking accounts, each as spendable reads it. */
-export function checkingCash(accounts: Account[]): number {
-  return accounts
-    .filter((account) => isCounted(account) && paysBills(account))
-    .reduce((sum, account) => sum + spendable(account), 0)
-}
-
 /** What counted credit cards owe. A card in credit (a negative balance) owes nothing. */
 export function cardsOwed(accounts: Account[]): number {
   return accounts
     .filter((account) => isCounted(account) && account.kind === 'credit_card')
     .reduce((sum, account) => sum + Math.max(0, account.balanceCents ?? 0), 0)
-}
-
-/**
- * Bills due from now until payday, payday itself included: pay can land
- * after a bill drawn the same day, so that bill must still fit. The cash
- * flow leaves payday's bills out, which is why they are counted here.
- */
-export function billsByPayday(bills: Bill[], payday: IsoDate): number {
-  // Every bill is held back from checking, even one a card pays whose balance
-  // is also kept back (cardsOwed): deliberate, as counting it twice errs safe.
-  return bills.reduce(
-    (sum, bill) => sum + dueBefore(bill, addDays(payday, 1)).length * bill.amountCents,
-    0,
-  )
 }
 
 /**
@@ -91,20 +57,14 @@ export function anyOverdrawn(accounts: Account[], settings: Settings): boolean {
 }
 
 /**
- * Whether safe to spend is tight: the bills due by payday outrun the cash in
- * checking (counted as checkingCash counts it, so never an overdraft line),
- * or the budgets are spent to (or past) what they allow.
- *
- * Seam for true-numbers: once its safe to spend lands, this should come from
- * it (a shortfall, or a lead figure under typical spending).
+ * Whether safe to spend is tight: the cash flow is short of the bills due by
+ * payday, or the budgets are spent to (or past) what they allow.
  */
 export function isTight(
-  cash: { checkingCents: number; billsCents: number },
+  flow: Pick<CashFlow, 'shortfallCents'>,
   totals: Pick<BudgetSummary['totals'], 'budgetedCents' | 'leewayCents'>,
 ): boolean {
-  return (
-    cash.checkingCents < cash.billsCents || (totals.budgetedCents > 0 && totals.leewayCents <= 0)
-  )
+  return flow.shortfallCents > 0 || (totals.budgetedCents > 0 && totals.leewayCents <= 0)
 }
 
 /** Typical everyday spending a day, from the last SPENDING_MONTHS whole months. */
@@ -126,21 +86,21 @@ export async function getIdleCash(
   // One at a time: db may be a transaction's client, which runs one query at once.
   const flow = await getCashFlow(db, settings, today)
   const accounts = await listAccounts(db)
-  const bills = await listBills(db, today)
   const daily = await typicalDailySpend(db, settings, now)
   const budget = await budgetSummary(db, settings, now)
-  const cash = {
-    checkingCents: checkingCash(accounts),
-    billsCents: billsByPayday(bills, flow.nextPayday),
-  }
   return checkIdleCash({
-    ...cash,
+    checkingCents: flow.cashCents,
+    cashKnown: flow.cashKnown,
+    // Payday's own bills included: pay can land after a bill drawn the same day.
+    // Every bill is held back, even one a card pays whose balance is also kept
+    // back (cardsOwed): deliberate, as counting it twice errs safe.
+    billsCents: flow.billsDueCents,
     cardsOwedCents: cardsOwed(accounts),
     dailySpendCents: daily,
     daysUntilPayday: flow.daysUntilPayday,
     nextPayday: flow.nextPayday,
     paydayKnown: flow.paydaySource !== 'period_end',
     overdrawn: anyOverdrawn(accounts, settings),
-    tight: isTight(cash, budget.totals),
+    tight: isTight(flow, budget.totals),
   })
 }
