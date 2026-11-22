@@ -157,13 +157,15 @@ export function debtPlans(
 
 /**
  * The server for the Plan screen: cash flow is always there, with no
- * emergency fund to offer unless a test says otherwise; the rest per test.
+ * emergency fund to offer and nothing entered by hand unless a test says
+ * otherwise; the rest per test.
  */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
   return fakeServer(
     {
       get_cash_flow: () => cashFlow(),
       get_emergency_fund: () => null,
+      list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       ...handlers,
     },
     routes,
