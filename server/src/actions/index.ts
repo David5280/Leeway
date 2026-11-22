@@ -72,6 +72,7 @@ import {
   planDebtPayoffAction,
 } from './planning.js'
 import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
+import { getIdleCashAction } from './idleCash.js'
 import {
   createRuleAction,
   deleteRuleAction,
@@ -211,6 +212,7 @@ export const actionList = [
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
+  getIdleCashAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

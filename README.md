@@ -23,7 +23,8 @@ bank, and nothing in Leeway can ever move money.
 - **Account alerts** when an account is overdrawn, a card is over its limit, a
   balance is low or an overdraft fee was charged.
 - **Planning**: bills and subscriptions, recurring charges found for you,
-  savings goals, debt payoff plans, cash until payday and net worth.
+  savings goals, debt payoff plans, cash until payday (and cash in checking
+  that could earn more in savings, at a stated rate) and net worth.
 - **Savings and investments**: savings, retirement and investing accounts
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI
