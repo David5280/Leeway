@@ -110,55 +110,61 @@ const LINE_BY_CODE: Record<string, IncomeLine> = {
 /** Codes that say only that money came in, not what kind, so a line's words may say more. */
 const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 
-// For a line with no code or only a broad one, its words are read in three
+// For a line with no code or only a broad one, its words are read in four
 // tiers, surest first:
-// 1. An agency's own text says exactly what the money is, whatever else the
+// 1. An agency's ACH text says exactly what the money is, whatever else the
 //    line says: "DIR DEP IRS TREAS 310 TAX REF" is a refund that came by
 //    direct deposit, which says only how it arrived.
-// 2. An employer's words say pay: "REWARDS NETWORK INC PAYROLL" is pay.
-// 3. Looser words name a kind, read in the bank's description only: a
+// 2. An employer's words say pay, an agency's own staff included:
+//    "IRS TREAS 220 SALARY" (Treasury 220 pays salaries and vendors, 310
+//    refunds and benefits) and "TEXAS WORKFORCE COMMISSION PAYROLL" are pay.
+// 3. An agency's name says what it pays out: "Ohio Unemployment" as the
+//    merchant of a bare "DIRECT DEP" is unemployment.
+// 4. Looser words name a kind, read in the bank's description only: a
 //    merchant name is the payer's own, so a business called "Cash Back Car
 //    Wash" paying by direct deposit is still pay.
 // What none of them names, a bare direct deposit included, is pay.
 
 /**
- * "TAX REF" or "TAX RFND", but not a shop's "SALES TAX REF" or a preparer's
- * "TAX REFUND ADVANCE", which is a loan against the refund.
+ * "TAX REF" or "TAX RFND", but not a shop's "SALES TAX REF" or a
+ * preparer's "TAX REFUND ADVANCE", which is a loan against the refund.
  */
 const taxRefund = (ref: string) => String.raw`(?<!sales\s+)tax\s?${ref}(?!\W*adv)`
 
-/** Tier one: agency texts and names, read in the description and the merchant name. */
-const AGENCY_WORDS: [RegExp, IncomeLine][] = [
-  [
-    anyOf(String.raw`soc\s+sec|ssa\s+treas|social\s+security\s+admin(istration)?`),
-    'social_security',
-  ],
+/** Tier one: agency ACH texts, read in the description and the merchant name. */
+const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
+  [anyOf(String.raw`soc\s+sec|ssa\s+treas`), 'social_security'],
   [
     anyOf(
-      String.raw`irs|internal\s+revenue\s+service`,
-      taxRefund('(ref|rfnd)'),
+      String.raw`irs\s+treas\s+310|irs\s+treas\b.*\btax\s?ref(und)?`,
+      taxRefund('rfnd'),
       String.raw`\w*taxrfd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund`,
     ),
     'tax_refund',
   ],
-  [
-    anyOf(
-      String.raw`ui\s+benefits?|unemployment\s+(insurance|assistance|benefits?|comp(ensation)?)`,
-      String.raw`employment\s+development\s+dep(ar)?t(ment)?|dep(ar)?t(ment)?\.?\s+of\s+unemployment`,
-      String.raw`workforce\s+commission`,
-    ),
-    'unemployment',
-  ],
+  [anyOf(String.raw`ui\s+benefits?`), 'unemployment'],
 ]
 
 /** Tier two: an employer paying, by any route. */
 const EMPLOYER_WORDS = /\b(payroll|salary|wages?|paycheck)\b/i
 
-/** Tier three: looser words, read in the description only. */
+/** Tier three: agency names, read in the description and the merchant name. */
+const AGENCY_NAMES: [RegExp, IncomeLine][] = [
+  [anyOf(String.raw`social\s+security\s+admin(istration)?`), 'social_security'],
+  [anyOf(String.raw`irs|internal\s+revenue\s+service`), 'tax_refund'],
+  [
+    anyOf(
+      String.raw`unemployment|workforce\s+commission`,
+      String.raw`employment\s+development\s+dep(ar)?t(ment)?`,
+    ),
+    'unemployment',
+  ],
+]
+
+/** Tier four: looser words, read in the description only. */
 const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [/\bsocial\s+security\b/i, 'social_security'],
-  [anyOf(taxRefund('refund')), 'tax_refund'],
-  [/\bunemployment\b/i, 'unemployment'],
+  [anyOf(taxRefund('ref(und)?')), 'tax_refund'],
   [/\b(pension|annuity)\b/i, 'retirement'],
   [/\b(cash\s?back|rewards?|statement\s+credit\s+redemption)\b/i, 'rewards'],
 ]
@@ -170,10 +176,10 @@ const firstNamed = (list: [RegExp, IncomeLine][], text: string) =>
 /** What a line's words say it is, in the tiers above. */
 function lineFromWords({ name, merchantName }: Pick<Transaction, 'name' | 'merchantName'>) {
   const allWords = `${name} ${merchantName ?? ''}`
-  const agency = firstNamed(AGENCY_WORDS, allWords)
-  if (agency) return agency
+  const agencyText = firstNamed(AGENCY_TEXTS, allWords)
+  if (agencyText) return agencyText
   if (EMPLOYER_WORDS.test(allWords)) return 'pay'
-  return firstNamed(LOOSE_WORDS, name) ?? 'pay'
+  return firstNamed(AGENCY_NAMES, allWords) ?? firstNamed(LOOSE_WORDS, name) ?? 'pay'
 }
 
 /**

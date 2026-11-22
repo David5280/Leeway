@@ -94,7 +94,7 @@ describe('the income line of money filed as income', () => {
     )
   })
 
-  it('reads an agency named in full in the merchant name, whatever the description says', () => {
+  it('reads an agency named in full in the description or merchant name', () => {
     const fromAgency = (merchantName: string) => lineOf({ name: 'ACH CREDIT', merchantName })
     expect(fromAgency('Social Security Administration')).toBe('social_security')
     expect(fromAgency('Internal Revenue Service')).toBe('tax_refund')
@@ -102,6 +102,27 @@ describe('the income line of money filed as income', () => {
     expect(fromAgency('Employment Development Department')).toBe('unemployment')
     expect(fromAgency('Texas Workforce Commission')).toBe('unemployment')
     expect(fromAgency('Unemployment Insurance')).toBe('unemployment')
+    expect(lineOf({ name: 'DIRECT DEP', merchantName: 'Ohio Unemployment' })).toBe('unemployment')
+    expect(lineOf({ name: 'DIRECT DEP' })).toBe('pay')
+  })
+
+  it("reads an agency's own staff pay as pay, unless its ACH text says otherwise", () => {
+    for (const name of [
+      'TEXAS WORKFORCE COMMISSION PAYROLL',
+      'TX WORKFORCE COMMISSION SALARY',
+      'EMPLOYMENT DEVELOPMENT DEPT PAYROLL',
+      'IRS PAYROLL',
+      'INTERNAL REVENUE SERVICE PAYROLL',
+      'SOCIAL SECURITY ADMIN PAYROLL',
+      // Treasury 220 pays salaries and vendors; 310 pays refunds and benefits.
+      'IRS TREAS 220 FED SALARY',
+      'IRS TREAS 220 SALARY',
+    ]) {
+      expect(lineOf({ name }), name).toBe('pay')
+    }
+    expect(lineOf({ name: 'IRS TREAS 310' })).toBe('tax_refund')
+    expect(lineOf({ name: 'IRS TREAS 310 SALARY' })).toBe('tax_refund')
+    expect(lineOf({ name: 'IRS TREAS 220 TAX REF' })).toBe('tax_refund')
   })
 
   it("never reads a shop's sales tax refund or a preparer's refund advance as a tax refund", () => {

@@ -52,19 +52,26 @@ export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
 const CARD_PAYMENT_WORDS =
   /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt))\b/i
 
-/** Payment words any biller uses ("T-MOBILE PMT", "XCEL ENERGY EPAYMENT"), so they need an issuer. */
-const BILL_PAYMENT_WORDS = /\b(e-?payment|mobile\s+pmt|ach\s+pmt)\b/i
+// "EPAYMENT", "MOBILE PMT" and "ACH PMT" are words any biller uses ("T-MOBILE
+// PMT", "XCEL ENERGY EPAYMENT"), so they count as a card payment only right
+// beside a card issuer's name: "CITI AUTOPAY EPAYMENT", "ACH PMT TO AMEX".
+// "CHASE PLACE APTS EPAYMENT" pays rent.
+const ISSUER = String.raw`(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclay(s|card)?|synchrony|apple\s+card)`
+const BILL_PAYMENT = String.raw`(e-?payment|mobile\s+pmt|ach\s+pmt)`
+/** Card words that may sit between the two: "CITI CARD AUTO PAY EPAYMENT". */
+const CARD_FILLER = String.raw`(\s+(card|credit|crd|us|auto\W?pay|online))*`
+const ISSUER_BILL_PAYMENT = new RegExp(
+  String.raw`\b(${ISSUER}${CARD_FILLER}\s+${BILL_PAYMENT}|${BILL_PAYMENT}\s+(to\s+)?${ISSUER})\b`,
+  'i',
+)
 
-/** Card issuers, whose name beside a biller's payment words says it pays a card. */
-const CARD_ISSUER_WORDS =
-  /\b(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclay(s|card)?|synchrony|apple\s+card)\b/i
+/** An issuer's other debts, paid with the same words: "CHASE MORTGAGE ACH PMT", not "AUTO PAY". */
+const ISSUER_LOAN_WORDS =
+  /\b(mortgage|loan|auto(?!\W*pay)|student|home\s+equity|heloc|lease|personal|bank)\b/i
 
-/** An issuer's other debts, paid with the same words: "CHASE MORTGAGE ACH PMT". */
-const ISSUER_LOAN_WORDS = /\b(mortgage|loan|auto|student)\b/i
-
-/** Whether a biller's payment words come with an issuer's name and no word of a loan. */
+/** Whether an issuer's name sits beside a biller's payment words, with no word of a loan. */
 const paysIssuerCard = (words: string) =>
-  BILL_PAYMENT_WORDS.test(words) && CARD_ISSUER_WORDS.test(words) && !ISSUER_LOAN_WORDS.test(words)
+  ISSUER_BILL_PAYMENT.test(words) && !ISSUER_LOAN_WORDS.test(words)
 
 /** Whether a leg shows it pays a credit card: Plaid's card payment code, or clear words. */
 export function paysCard(leg: StoredLeg): boolean {

@@ -115,6 +115,8 @@ describe('pairing every account', () => {
       'BARCLAYCARD MOBILE PMT',
       'CHASE ACH PMT',
       'AMERICAN EXPRESS ACH PMT',
+      'CITI AUTO PAY EPAYMENT',
+      'ACH PMT TO AMEX',
     ]) {
       expect(says(name), name).toBe(true)
     }
@@ -131,6 +133,11 @@ describe('pairing every account', () => {
       'CHASE MORTGAGE ACH PMT',
       'DISCOVER STUDENT LOAN ACH PMT',
       'CAPITAL ONE AUTO EPAYMENT',
+      'CHASE HOME EQUITY ACH PMT',
+      'DISCOVER BANK ACH PMT',
+      'CITI PERSONAL LOAN EPAYMENT',
+      // An issuer's name far from the payment words is some other payee.
+      'CHASE PLACE APTS EPAYMENT',
     ]) {
       expect(says(name), name).toBe(false)
     }
