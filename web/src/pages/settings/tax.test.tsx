@@ -42,6 +42,7 @@ const exported: TaxExport = {
     interestCents: 1500,
     dividendsCents: 0,
     unemploymentCents: 0,
+    socialSecurityCents: 0,
     retirementCents: 0,
     taxRefundCents: 0,
     rewardsCents: 0,
@@ -139,6 +140,7 @@ describe('Tax export', () => {
         summary: {
           ...exported.summary,
           unemploymentCents: 120000,
+          socialSecurityCents: 98700,
           retirementCents: 45000,
           taxRefundCents: 2500,
           rewardsCents: 1234,
@@ -149,6 +151,8 @@ describe('Tax export', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
     expect(await screen.findByText('Unemployment benefits')).toBeVisible()
     expect(screen.getByText('$1,200.00')).toBeVisible()
+    expect(screen.getByText('Social Security benefits')).toBeVisible()
+    expect(screen.getByText('$987.00')).toBeVisible()
     expect(screen.getByText('Pension and retirement')).toBeVisible()
     expect(screen.getByText('$450.00')).toBeVisible()
     expect(screen.getByText('Tax refunds')).toBeVisible()

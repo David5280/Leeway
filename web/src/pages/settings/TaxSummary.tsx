@@ -13,6 +13,7 @@ type Summary = TaxExport['summary']
 function occasionalLines(summary: Summary) {
   return [
     { label: INCOME_LINES.unemployment.label, cents: summary.unemploymentCents },
+    { label: INCOME_LINES.social_security.label, cents: summary.socialSecurityCents },
     { label: INCOME_LINES.retirement.label, cents: summary.retirementCents },
     { label: INCOME_LINES.tax_refund.label, cents: summary.taxRefundCents },
     { label: INCOME_LINES.rewards.label, cents: summary.rewardsCents },

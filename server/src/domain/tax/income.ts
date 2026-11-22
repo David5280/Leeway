@@ -19,6 +19,7 @@ export const SUMMED_LINES: readonly SummedLine[] = [
   'interest',
   'dividends',
   'unemployment',
+  'social_security',
   'retirement',
   'tax_refund',
   'rewards',
@@ -39,10 +40,25 @@ export interface IncomeTotals {
   totals: Record<SummedLine, number>
 }
 
-/** A payer as rows group: by merchant key, so "ACME PAYROLL 0115" and "ACME PAYROLL 0215" are one. */
+/** A payer's running total, named as its first line of the year shows it. */
 interface Payer {
   name: string
   cents: number
+}
+
+/**
+ * Words banks add to a payroll deposit that say nothing of who paid: ACH
+ * entry codes and the labels before ids, as in "ACME PAYROLL PPD ID 123".
+ */
+const PAYROLL_NOISE = /\b(ppd|ccd|ctx|ach|web|id|co|entry|descr|des|indn|orig|trace)\b/g
+
+/**
+ * What groups one payer's deposits: its merchant key (digits and symbols
+ * already gone) less ACH noise, so "ACME PAYROLL PPD ID 123" and "ACME
+ * PAYROLL" are one source.
+ */
+export function payerKey(tx: Pick<Transaction, 'merchantName' | 'name'>): string {
+  return merchantKey(tx).replace(PAYROLL_NOISE, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /** Adds up money in filed under income categories (pass only those transactions). */
@@ -58,8 +74,7 @@ export function incomeTotals(transactions: Transaction[]): IncomeTotals {
     const cents = -tx.amountCents
     totals[line] += cents
     if (line !== 'pay') continue
-    // A payer is named as its first line of the year shows it.
-    const key = merchantKey(tx)
+    const key = payerKey(tx)
     const payer = payers.get(key) ?? { name: tx.displayName, cents: 0 }
     payer.cents += cents
     payers.set(key, payer)

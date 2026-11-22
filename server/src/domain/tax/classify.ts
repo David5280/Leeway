@@ -2,6 +2,7 @@
 // and whether a category is one that often matters on a return. Pure.
 
 import type { Transaction } from '../transactions.js'
+import { PAYCHECK_WORDS } from '../payWords.js'
 
 /**
  * Category names that clearly cover costs a return often asks about: medical
@@ -41,6 +42,7 @@ export type IncomeLine =
   | 'interest'
   | 'dividends'
   | 'unemployment'
+  | 'social_security'
   | 'retirement'
   | 'tax_refund'
   | 'rewards'
@@ -53,6 +55,10 @@ export const INCOME_LINES: Record<IncomeLine, { label: string; note: string }> =
   interest: { label: 'Interest', note: 'Interest, not pay' },
   dividends: { label: 'Dividends', note: 'Dividends, not pay' },
   unemployment: { label: 'Unemployment benefits', note: 'Unemployment benefits, not pay' },
+  social_security: {
+    label: 'Social Security benefits',
+    note: 'Social Security benefits, not pay',
+  },
   retirement: { label: 'Pension and retirement', note: 'Pension or retirement income, not pay' },
   tax_refund: { label: 'Tax refunds', note: 'Tax refund, not pay' },
   rewards: { label: 'Card rewards and cash back', note: 'Card rewards or cash back, not pay' },
@@ -72,12 +78,22 @@ const LINE_BY_CODE: Record<string, IncomeLine> = {
 /** Codes that say only that money came in, not what kind, so a line's words may say more. */
 const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 
-/** Words that name a kind of money in, for a line with no code or only a broad one. */
+/**
+ * Words that name a kind of money in, for a line with no code or only a
+ * broad one, as banks and agencies write them: "SOC SEC 310 SSA TREAS",
+ * "IRS TREAS 310 TAX REF", a state's "MNTAXRFD" or "NYS DTF PIT REFUND",
+ * "EDD UI BENEFIT", "STATEMENT CREDIT REDEMPTION". Read only after the pay
+ * words, so a payer whose name holds one of them is still pay.
+ */
 const LINE_BY_WORDS: [RegExp, IncomeLine][] = [
-  [/\b(tax\s?ref(und)?|irs\s+treas)\b/i, 'tax_refund'],
-  [/\bunemployment\b/i, 'unemployment'],
+  [/\b(soc\s+sec|social\s+security|ssa\s+treas)\b/i, 'social_security'],
+  [
+    /\b(tax\s?(ref(und)?|rfnd)|\w*taxrfd|irs\s+treas|pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund)\b/i,
+    'tax_refund',
+  ],
+  [/\b(unemployment|ui\s+benefits?)\b/i, 'unemployment'],
   [/\b(pension|annuity)\b/i, 'retirement'],
-  [/\b(cash\s?back|rewards?)\b/i, 'rewards'],
+  [/\b(cash\s?back|rewards?|statement\s+credit\s+redemption)\b/i, 'rewards'],
 ]
 
 /**
@@ -97,5 +113,7 @@ export function incomeLine(
   if (code.startsWith('TRANSFER_IN')) return 'moved_in'
   if (!BROAD_CODES.has(code)) return 'pay'
   const words = `${tx.name} ${tx.merchantName ?? ''}`
+  // A paycheck's words win: "REWARDS NETWORK PAYROLL" is pay, not rewards.
+  if (PAYCHECK_WORDS.test(words)) return 'pay'
   return LINE_BY_WORDS.find(([pattern]) => pattern.test(words))?.[1] ?? 'pay'
 }

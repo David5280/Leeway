@@ -30,6 +30,7 @@ import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { accountMasks } from './accounts.js'
 import type { Category } from './categories.js'
 import { withShownNames } from './ruleText.js'
+import { PAYCHECK_WORDS } from './payWords.js'
 import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
 import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
 
@@ -50,14 +51,18 @@ export type TransferHint = 'transfer' | 'other' | 'none'
 const TRANSFER_WORDS =
   /\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|payment\W*thank you|online pmt|mobile pmt)\b/i
 
+/** Words for money paid out or paid back to the owner: a payout, a refund. */
+const PAID_BACK_WORDS = /\b(payout|refund|reimburs\w*|rebate)\b/i
+
 /**
- * Words for pay or money paid back in a line with no code: a paycheck, a
- * payout, a refund. Such a line is money coming in from outside, so it never
- * pairs, even beside an equal purchase on another account, and even when it
- * also says "transfer", as in "Payroll transfer ACME" (see wordsHint).
+ * Whether words say pay or money paid back, in a line with no code. Such a
+ * line is money coming in from outside, so it never pairs, even beside an
+ * equal purchase on another account, and even when it also says "transfer",
+ * as in "Payroll transfer ACME" (see wordsHint).
  */
-const PAY_WORDS =
-  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate)\b/i
+function saysPaidIn(words: string): boolean {
+  return PAYCHECK_WORDS.test(words) || PAID_BACK_WORDS.test(words)
+}
 
 /**
  * Words for money a bank pays in, which can also be part of an account's
@@ -123,9 +128,9 @@ function wordsReadForPay(fields: string[]): string {
 function wordsHint(tx: Movement): TransferHint {
   const fields = [tx.name, tx.merchantName ?? '']
   const words = fields.join(' ')
-  if (PAY_WORDS.test(wordsReadForPay(fields))) return 'other'
+  if (saysPaidIn(wordsReadForPay(fields))) return 'other'
   if (TRANSFER_WORDS.test(words)) return 'transfer'
-  const paidIn = [PAY_WORDS, EARNED_WORDS].some((paid) => paid.test(words))
+  const paidIn = saysPaidIn(words) || EARNED_WORDS.test(words)
   return paidIn || PAID_ALONE.test(tx.name) ? 'other' : 'none'
 }
 

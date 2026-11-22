@@ -52,6 +52,7 @@ export interface TaxSummary {
   interestCents: number
   dividendsCents: number
   unemploymentCents: number
+  socialSecurityCents: number
   /** Pensions and annuities. */
   retirementCents: number
   taxRefundCents: number
@@ -135,6 +136,7 @@ export function summarize(year: number, rows: TaxRow[]): TaxSummary {
     interestCents: totals.interest,
     dividendsCents: totals.dividends,
     unemploymentCents: totals.unemployment,
+    socialSecurityCents: totals.social_security,
     retirementCents: totals.retirement,
     taxRefundCents: totals.tax_refund,
     rewardsCents: totals.rewards,

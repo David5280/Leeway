@@ -102,6 +102,37 @@ describe('the income line of money filed as income', () => {
     expect(lineOf({ name: 'DEPOSIT', merchantName: 'Card Rewards' })).toBe('rewards')
   })
 
+  it('reads the words agencies use for state refunds, benefits and Social Security', () => {
+    for (const name of [
+      'STATE OF COLORADO TAXRFD',
+      'CASTTAXRFD FRANCHISE TAX BD',
+      'MN DEPT OF REVENUE MNTAXRFD',
+      'DEPT REVENUE STATE TAX RFND',
+      'NYS DTF PIT REFUND',
+      'CO DEPT OF REV REFUND',
+    ]) {
+      expect(lineOf({ name }), name).toBe('tax_refund')
+    }
+    expect(lineOf({ name: 'EDD UI BENEFIT' })).toBe('unemployment')
+    expect(lineOf({ name: 'CDLE UI BENEFITS' })).toBe('unemployment')
+    expect(lineOf({ name: 'STATEMENT CREDIT REDEMPTION' })).toBe('rewards')
+    expect(lineOf({ name: 'SOC SEC 310 SSA TREAS' })).toBe('social_security')
+    expect(lineOf({ name: 'IRS TREAS 310 TAX REF' })).toBe('tax_refund')
+  })
+
+  it('reads pay words first, so a paycheck whose words also name another kind is pay', () => {
+    for (const fields of [
+      { name: 'REWARDS NETWORK INC PAYROLL' },
+      { name: 'PENSION FUND ADMIN DIR DEP' },
+      { name: 'CASH BACK CAR WASH LLC PAYROLL' },
+      { name: 'Direct Deposit', merchantName: 'Cash Back Car Wash' },
+      { name: 'Payroll TAX REFUND ADJ ACME', bankCategory: 'INCOME' },
+      { name: 'SSA TREAS SALARY', bankCategory: 'INCOME_OTHER_INCOME' },
+    ]) {
+      expect(lineOf(fields), fields.name).toBe('pay')
+    }
+  })
+
   it('trusts a wages code over words, so a payer named for rewards is still pay', () => {
     expect(lineOf({ name: 'REWARDS NETWORK PAYROLL', bankCategory: 'INCOME_WAGES' })).toBe('pay')
   })
@@ -165,6 +196,17 @@ describe('the summary', () => {
     ])
   })
 
+  it('groups payroll deposits as one source, whatever ACH noise and ids the bank adds', () => {
+    const pay = (id: string, name: string) => ({
+      tx: transaction({ id, name, displayName: name, amountCents: -100000 }),
+      category: income,
+    })
+    const rows: TaxRow[] = [pay('a', 'ACME PAYROLL'), pay('b', 'ACME PAYROLL PPD ID 123')]
+    expect(summarize(2026, rows).income).toEqual([
+      { key: 'acme payroll', source: 'ACME PAYROLL', cents: 200000 },
+    ])
+  })
+
   it('puts benefits, refunds and rewards on their own lines, never in Pay', () => {
     const deposit = (id: string, fields: Partial<Transaction>) => ({
       tx: transaction({ id, amountCents: -10000, ...fields }),
@@ -175,6 +217,7 @@ describe('the summary', () => {
       deposit('ui', { name: 'DES BENEFITS', bankCategory: 'INCOME_UNEMPLOYMENT' }),
       deposit('pen', { name: 'ACME PENSION', bankCategory: 'INCOME_RETIREMENT_PENSION' }),
       deposit('cb', { name: 'CASH BACK REWARD' }),
+      deposit('ss', { name: 'SOC SEC 310 SSA TREAS' }),
     ]
     expect(summarize(2026, rows)).toMatchObject({
       payCents: 0,
@@ -183,6 +226,7 @@ describe('the summary', () => {
       unemploymentCents: 10000,
       retirementCents: 10000,
       rewardsCents: 10000,
+      socialSecurityCents: 10000,
     })
   })
 })

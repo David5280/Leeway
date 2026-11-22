@@ -183,7 +183,7 @@ describe('the tax export', () => {
     expect(summary.income).toEqual([
       { key: 'acme corp', source: 'Acme Corp', cents: 600000 },
       { key: 'side gig', source: 'Side Gig', cents: 50000 },
-      { key: 'clawback co', source: 'Clawback Co', cents: -1000 },
+      { key: 'clawback', source: 'Clawback Co', cents: -1000 },
     ])
     expect(summary).toMatchObject({ payCents: 649000, interestCents: 1500, dividendsCents: 2500 })
     expect(summary.income.reduce((sum, source) => sum + source.cents, 0)).toBe(summary.payCents)
@@ -262,6 +262,7 @@ describe('the tax export', () => {
       'Interest,,,,,15.00,',
       'Dividends,,,,,25.00,',
       'Unemployment benefits,,,,,0.00,',
+      'Social Security benefits,,,,,0.00,',
       'Pension and retirement,,,,,0.00,',
       'Tax refunds,,,,,0.00,',
       'Card rewards and cash back,,,,,0.00,',
@@ -299,6 +300,42 @@ describe('the tax export', () => {
     await transaction(card, '2026-06-04', 'AUTOMATIC PAYMENT', -50000, moves)
     const { summary } = await call('export_tax_year', { year: 2026 })
     expect(summary.categories.map((c) => [c.name, c.totalCents])).toEqual([['Shopping', 50000]])
+  })
+
+  it('keeps a payment to a hidden loan filed as spending, since a loan has no purchases', async () => {
+    const debt = await category('Debt payments')
+    const moves = await category('Transfers', 'transfer')
+    const { checking } = await checkingAndHiddenCard()
+    const loan = (await insertBankAccount(ctx.db, { name: 'Car loan', type: 'loan', hidden: true }))
+      .accountId
+    await transaction(checking, '2026-08-01', 'TRANSFER TO CAR LOAN', 30000, debt, {
+      detailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      source: 'manual',
+    })
+    await transaction(loan, '2026-08-02', 'PAYMENT', -30000, moves)
+    const { summary } = await call('export_tax_year', { year: 2026 })
+    expect(summary.categories.map((c) => [c.name, c.totalCents])).toEqual([
+      ['Debt payments', 30000],
+    ])
+  })
+
+  it('keeps rent a rule files, though a hidden card took an equal payment from elsewhere', async () => {
+    const rent = await category('Rent')
+    const shopping = await category('Shopping')
+    await call('create_rule', { pattern: 'landlord', field: 'description', categoryId: rent })
+    const { checking, card } = await checkingAndHiddenCard()
+    await transaction(checking, '2026-05-01', 'ONLINE TRANSFER TO LANDLORD', 150000, rent, {
+      detailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      source: 'rule',
+    })
+    await transaction(card, '2026-05-02', 'PAYMENT THANK YOU', -150000, null)
+    await transaction(card, '2026-04-20', 'IKEA', 150000, shopping)
+    const { summary } = await call('export_tax_year', { year: 2026 })
+    const spending = summary.categories.filter((c) => c.kind === 'expense')
+    expect(spending.map((c) => [c.name, c.totalCents])).toEqual([
+      ['Rent', 150000],
+      ['Shopping', 150000],
+    ])
   })
 
   it('keeps a real deposit that a closer date would have paired with a card payment', async () => {

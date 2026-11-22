@@ -11,11 +11,16 @@
 // 2. Of the legs left, a side may also be silent if nobody has filed it, as
 //    monthly totals reads unfiled legs (see filedOrUnfiledLeg).
 // A leg the owner filed as something else, by hand or by rule, pairs only
-// with a hidden card or loan: budgets were right to call it spending, but
-// here the card's own purchases count.
+// when it shows it pays a credit card, and only with a leg on a card hidden
+// from budgets: budgets were right to call it spending, but here the card's
+// own purchases count. Never with a loan, which has no purchases to stand in
+// for the payment (and whose interest can matter at tax time), and never on
+// a transfer code alone, since a hidden card's payment from an account
+// Leeway cannot see could otherwise take the place of rent.
 
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
+import { CARD_PAYMENT_CODE } from './transfers.js'
 import {
   filedOrUnfiledLeg,
   pairTransfers,
@@ -43,9 +48,28 @@ export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
     ? saysTransfer(hint, leg)
     : unfiledOrFiledTransfer(hint, leg)
 
-/** A leg the owner filed as something else pairs only with a hidden card or loan. */
+/** Clear words for a credit card payment, as a bank writes one out of checking. */
+const CARD_PAYMENT_WORDS =
+  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt))\b/i
+
+/** Whether a leg shows it pays a credit card: Plaid's card payment code, or clear words. */
+export function paysCard(leg: StoredLeg): boolean {
+  const code = leg.providerCategoryDetailed ?? leg.providerCategoryPrimary
+  return (
+    code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(`${leg.name} ${leg.merchantName ?? ''}`)
+  )
+}
+
+/** Whether a leg is on a credit card hidden from budgets, whose purchases this view counts. */
+const onHiddenCard = (leg: StoredLeg) => leg.hiddenDebt && leg.accountType === 'credit'
+
+/** One side's part of filedElsewhereOk: filed elsewhere, it must pay a hidden card. */
+const sideOk = (side: StoredLeg, other: StoredLeg) =>
+  !side.filedElsewhere || (paysCard(side) && onHiddenCard(other))
+
+/** A leg the owner filed as something else pairs only as a payment to a hidden card. */
 export const filedElsewhereOk: PairTest<StoredLeg> = (out, arrival) =>
-  (!out.filedElsewhere || arrival.hiddenDebt) && (!arrival.filedElsewhere || out.hiddenDebt)
+  sideOk(out, arrival) && sideOk(arrival, out)
 
 /** The pairs among these legs, firm ones first (see the top of this file). Pure. */
 export function pairEveryAccount(legs: readonly StoredLeg[]): Map<string, StoredLeg> {

@@ -9,6 +9,7 @@ import {
   loadEveryAccountPairs,
   looseLeg,
   pairEveryAccount,
+  paysCard,
 } from '../src/domain/everyAccountPairs.js'
 import { loadTransferPairs, type StoredLeg } from '../src/domain/transferPairs.js'
 import { actionCaller } from './actionCaller.js'
@@ -71,21 +72,38 @@ describe('pairing every account', () => {
     expect(pairEveryAccount([out, into]).get('out')?.id).toBe('in')
   })
 
-  it('pairs a leg filed as something else only with a hidden card or loan', () => {
+  it('pairs a card payment filed as something else only with a hidden card', () => {
     const byHand = { ...cardPayment, filedElsewhere: true }
     expect(pairEveryAccount([byHand, cardSide]).get('payment')?.id).toBe('card')
     expect(pairEveryAccount([byHand, { ...cardSide, hiddenDebt: false }]).size).toBe(0)
   })
 
-  it('holds back a leg filed as something else on either side unless the other is a hidden debt', () => {
-    const elsewhere = leg({ id: 'e', amountCents: 1, filedElsewhere: true })
-    const hidden = leg({ id: 'h', amountCents: -1, hiddenDebt: true })
+  it('lets a leg filed as something else pair only as a payment to a hidden credit card', () => {
+    const byHand = (fields: Partial<StoredLeg>) =>
+      leg({ id: 'e', amountCents: 1, filedElsewhere: true, ...fields })
+    const hiddenCard = leg({ id: 'h', amountCents: -1, accountType: 'credit', hiddenDebt: true })
+    const hiddenLoan = { ...hiddenCard, accountType: 'loan' }
     const plain = leg({ id: 'p', amountCents: -1 })
-    expect(filedElsewhereOk(elsewhere, hidden)).toBe(true)
-    expect(filedElsewhereOk(hidden, elsewhere)).toBe(true)
-    expect(filedElsewhereOk(elsewhere, plain)).toBe(false)
-    expect(filedElsewhereOk(plain, elsewhere)).toBe(false)
-    expect(filedElsewhereOk(plain, hidden)).toBe(true)
+    const byCode = byHand({ providerCategoryDetailed: CARD_PAYMENT })
+    const byWords = byHand({ name: 'CHASE CREDIT CRD AUTOPAY' })
+    expect(filedElsewhereOk(byCode, hiddenCard)).toBe(true)
+    expect(filedElsewhereOk(hiddenCard, byWords)).toBe(true)
+    // A loan has no purchases to stand in for the payment.
+    expect(filedElsewhereOk(byCode, hiddenLoan)).toBe(false)
+    expect(filedElsewhereOk(byCode, plain)).toBe(false)
+    expect(filedElsewhereOk(plain, byCode)).toBe(false)
+    // A transfer code alone could be rent, paid while the card was paid from elsewhere.
+    const rent = byHand({
+      name: 'ONLINE TRANSFER TO LANDLORD',
+      providerCategoryDetailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
+    })
+    expect(filedElsewhereOk(rent, hiddenCard)).toBe(false)
+    expect(filedElsewhereOk(plain, hiddenCard)).toBe(true)
+  })
+
+  it('reads card payment words in the merchant name too', () => {
+    expect(paysCard(leg({ id: 'm', amountCents: 1, merchantName: 'Citi Card Payment' }))).toBe(true)
+    expect(paysCard(leg({ id: 'n', amountCents: 1, name: 'XCEL ENERGY AUTOPAY' }))).toBe(false)
   })
 
   it('reads a leg in round one as firm when it says transfer or is filed as one', () => {
@@ -197,9 +215,9 @@ describe('reading every account for pairs', () => {
     )
   })
 
-  it('pairs a transfer to a hidden loan, whichever way the owner filed it', async () => {
-    const { debt, checking, loan } = await accounts()
-    const out = await filed(
+  it('never pairs a payment filed as spending with a hidden loan, which has no purchases', async () => {
+    const { debt, moves, checking, loan } = await accounts()
+    await filed(
       checking,
       {
         date: '2026-08-01',
@@ -210,14 +228,8 @@ describe('reading every account for pairs', () => {
       debt,
       'manual',
     )
-    const into = await filed(
-      loan,
-      { date: '2026-08-02', name: 'PAYMENT', cents: -30000, detailed: 'LOAN_PAYMENTS_CAR_PAYMENT' },
-      null,
-    )
-    expect((await loadEveryAccountPairs(ctx.db, '2026-01-01', '2026-12-31')).get(out)?.id).toBe(
-      into,
-    )
+    await filed(loan, { date: '2026-08-02', name: 'PAYMENT', cents: -30000 }, moves)
+    expect((await loadEveryAccountPairs(ctx.db, '2026-01-01', '2026-12-31')).size).toBe(0)
   })
 
   it('pairs a card payment across the new year, from either year', async () => {

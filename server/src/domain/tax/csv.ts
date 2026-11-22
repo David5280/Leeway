@@ -58,6 +58,7 @@ export function lineCents(summary: TaxSummary): Record<SummedLine, number> {
     interest: summary.interestCents,
     dividends: summary.dividendsCents,
     unemployment: summary.unemploymentCents,
+    social_security: summary.socialSecurityCents,
     retirement: summary.retirementCents,
     tax_refund: summary.taxRefundCents,
     rewards: summary.rewardsCents,
