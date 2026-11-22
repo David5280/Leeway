@@ -11,8 +11,8 @@
 import type { Db } from '../../db/pool.js'
 import { makeDate } from '../../lib/dates.js'
 import { countedSql } from '../counted.js'
+import { loadEveryAccountPairs } from '../everyAccountPairs.js'
 import { transactionsByIds, type Transaction } from '../transactions.js'
-import { loadTransferPairs } from '../transferPairs.js'
 import { taxCsv } from './csv.js'
 import { summarize, type TaxRow, type TaxRowCategory, type TaxSummary } from './summary.js'
 
@@ -67,7 +67,7 @@ export async function taxExport(db: Db, year: number): Promise<TaxExport> {
   const counted = await countedRows(db, start, end)
   // Moves between own accounts that budgets do not file as transfers, such as
   // paying a hidden card or two unfiled legs of one move, are left out too.
-  const moves = await loadTransferPairs(db, start, end, { everyAccount: true })
+  const moves = await loadEveryAccountPairs(db, start, end)
   const rows = counted.filter((row) => !moves.has(row.id))
   const transactions = await transactionsByIds(
     db,

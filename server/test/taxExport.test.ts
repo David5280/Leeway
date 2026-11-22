@@ -28,8 +28,52 @@ beforeEach(async () => {
 interface Extra {
   detailed?: string
   merchantName?: string
-  account?: string
   pending?: boolean
+  /** How it was filed, when not by the bank's category. */
+  source?: 'manual' | 'rule'
+}
+
+const CARD_PAYMENT = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+
+/** A new category's id. */
+async function category(
+  name: string,
+  kind: 'expense' | 'income' | 'transfer' = 'expense',
+  groupName?: string,
+) {
+  return (await call('create_category', { name, kind, group: groupName })).id
+}
+
+/** A bank transaction on an account, filed under a category (or none). */
+async function transaction(
+  account: string,
+  date: string,
+  name: string,
+  cents: number,
+  categoryId: string | null,
+  extra: Extra = {},
+) {
+  const id = await insertBankTransaction(ctx.db, account, {
+    date,
+    name,
+    amountCents: cents,
+    detailed: extra.detailed ?? null,
+    merchantName: extra.merchantName ?? null,
+    pending: extra.pending,
+  })
+  await ctx.db.query(
+    'UPDATE transactions SET category_id = $1, category_source = $2 WHERE id = $3',
+    [categoryId, extra.source ?? null, id],
+  )
+  return id
+}
+
+/** A checking account and a hidden card. */
+async function checkingAndHiddenCard() {
+  const checking = (await insertBankAccount(ctx.db, { name: 'Checking' })).accountId
+  const card = (await insertBankAccount(ctx.db, { name: 'Card', type: 'credit', hidden: true }))
+    .accountId
+  return { checking, card }
 }
 
 /**
@@ -40,11 +84,6 @@ interface Extra {
  * pending one and the years either side.
  */
 async function seed() {
-  const category = async (
-    name: string,
-    kind: 'expense' | 'income' | 'transfer' = 'expense',
-    groupName?: string,
-  ) => (await call('create_category', { name, kind, group: groupName })).id
   const income = await category('Income', 'income')
   const fromPeople = await category('Received from people', 'income')
   const health = await category('Health', 'expense', 'Health and fitness')
@@ -58,24 +97,13 @@ async function seed() {
   const oldCard = (
     await insertBankAccount(ctx.db, { name: 'Old card', type: 'credit', hidden: true })
   ).accountId
-  const tx = async (
+  const tx = (
     date: string,
     name: string,
     cents: number,
     categoryId: string | null,
-    extra: Extra = {},
-  ) => {
-    const id = await insertBankTransaction(ctx.db, extra.account ?? everyday, {
-      date,
-      name,
-      amountCents: cents,
-      detailed: extra.detailed ?? null,
-      merchantName: extra.merchantName ?? null,
-      pending: extra.pending,
-    })
-    await ctx.db.query('UPDATE transactions SET category_id = $1 WHERE id = $2', [categoryId, id])
-    return id
-  }
+    extra: Extra & { account?: string } = {},
+  ) => transaction(extra.account ?? everyday, date, name, cents, categoryId, extra)
   const acme = { merchantName: 'Acme Corp', detailed: 'INCOME_WAGES' }
   await tx('2026-01-01', 'ACME PAYROLL', -300000, income, acme)
   await tx('2026-02-15', 'ACME PAYROLL', -300000, income, { ...acme, account: oldBank })
@@ -104,11 +132,10 @@ async function seed() {
   await tx('2026-05-05', 'To old bank', 40000, moves)
   await tx('2026-05-05', 'From everyday', -40000, moves, { account: oldBank })
   // Paying the hidden card: filed as spending, since budgets leave the card out, yet a move here.
-  const cardPayment = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-  await tx('2026-06-01', 'CARD PAYMENT', 25000, debt, { detailed: cardPayment })
+  await tx('2026-06-01', 'CARD PAYMENT', 25000, debt, { detailed: CARD_PAYMENT })
   await tx('2026-06-02', 'PAYMENT RECEIVED', -25000, null, {
     account: oldCard,
-    detailed: cardPayment,
+    detailed: CARD_PAYMENT,
   })
   // Two unfiled legs of one move between own accounts.
   await tx('2026-07-01', 'Withdrawal', 15000, null)
@@ -136,7 +163,7 @@ describe('the tax export', () => {
       ['Groceries', false, 22000, 4, false],
       ['Health', false, 12000, 1, true],
       ['Not categorized', false, 2500, 1, false],
-      ['Not categorized', false, 3000, 1, false],
+      ['Money out, not categorized', false, 3000, 1, false],
     ])
     expect(summary.categories[4]!.group).toBe('Health and fitness')
     // A category the owner named "Not categorized" stays apart from money with no category.
@@ -154,9 +181,9 @@ describe('the tax export', () => {
     await seed()
     const { summary } = await call('export_tax_year', { year: 2026 })
     expect(summary.income).toEqual([
-      { source: 'Acme Corp', cents: 600000 },
-      { source: 'Side Gig', cents: 50000 },
-      { source: 'Clawback Co', cents: -1000 },
+      { key: 'acme corp', source: 'Acme Corp', cents: 600000 },
+      { key: 'side gig', source: 'Side Gig', cents: 50000 },
+      { key: 'clawback co', source: 'Clawback Co', cents: -1000 },
     ])
     expect(summary).toMatchObject({ payCents: 649000, interestCents: 1500, dividendsCents: 2500 })
     expect(summary.income.reduce((sum, source) => sum + source.cents, 0)).toBe(summary.payCents)
@@ -166,7 +193,7 @@ describe('the tax export', () => {
     await seed()
     const { csv, summary } = await call('export_tax_year', { year: 2026 })
     // Half of Acme's pay landed in the old bank, now hidden.
-    expect(summary.income[0]).toEqual({ source: 'Acme Corp', cents: 600000 })
+    expect(summary.income[0]).toMatchObject({ source: 'Acme Corp', cents: 600000 })
     expect(csv).toMatch(/,2026-05-20,[^,]+,Test Old card,60\.00,/)
     expect(csv).toContain('2026-12-31,Old bank groceries,Test Old bank,90.00,')
     for (const move of [
@@ -215,6 +242,13 @@ describe('the tax export', () => {
     )
   })
 
+  it('notes interest and dividends filed as income, which have their own lines', async () => {
+    await seed()
+    const { csv } = await call('export_tax_year', { year: 2026 })
+    expect(csv).toContain(',2026-03-31,Interest Paid,Test Everyday,15.00,"Interest, not pay"\r\n')
+    expect(csv).toContain(',2026-06-30,Dividend,Test Everyday,25.00,"Dividends, not pay"\r\n')
+  })
+
   it('ends with the summary block, for anyone who only gets the file', async () => {
     await seed()
     const { csv } = await call('export_tax_year', { year: 2026 })
@@ -227,8 +261,59 @@ describe('the tax export', () => {
       'Pay from Clawback Co,,,,,-10.00,',
       'Interest,,,,,15.00,',
       'Dividends,,,,,25.00,',
-      `"Money in, not categorized",,,,,200.00,${CATEGORIZE_HINT}`,
+      'Unemployment benefits,,,,,0.00,',
+      'Pension and retirement,,,,,0.00,',
+      'Tax refunds,,,,,0.00,',
+      'Card rewards and cash back,,,,,0.00,',
+      `"Money in, not categorized",,,,,200.00,"${CATEGORIZE_HINT}"`,
     ])
+  })
+
+  it('keeps a tax refund out of Pay, on its own line', async () => {
+    const income = await category('Income', 'income')
+    const { checking } = await checkingAndHiddenCard()
+    await transaction(checking, '2026-01-15', 'ACME PAYROLL', -300000, income, {
+      merchantName: 'Acme Corp',
+      detailed: 'INCOME_WAGES',
+    })
+    await transaction(checking, '2026-04-20', 'IRS TREAS 310 TAX REF', -2500, income, {
+      detailed: 'INCOME_TAX_REFUND',
+    })
+    const { summary, csv } = await call('export_tax_year', { year: 2026 })
+    expect(summary).toMatchObject({ payCents: 300000, taxRefundCents: 2500 })
+    expect(summary.income.map((source) => source.source)).toEqual(['Acme Corp'])
+    expect(csv).toContain('\r\nTax refunds,,,,,25.00,\r\n')
+    expect(csv).toContain(',25.00,"Tax refund, not pay"\r\n')
+  })
+
+  it('counts a hidden card payment filed by hand as spending only once', async () => {
+    const shopping = await category('Shopping')
+    const debt = await category('Debt payments')
+    const moves = await category('Transfers', 'transfer')
+    const { checking, card } = await checkingAndHiddenCard()
+    await transaction(card, '2026-06-01', 'BEST BUY', 50000, shopping)
+    await transaction(checking, '2026-06-03', 'CHASE CREDIT CRD AUTOPAY', 50000, debt, {
+      detailed: CARD_PAYMENT,
+      source: 'manual',
+    })
+    await transaction(card, '2026-06-04', 'AUTOMATIC PAYMENT', -50000, moves)
+    const { summary } = await call('export_tax_year', { year: 2026 })
+    expect(summary.categories.map((c) => [c.name, c.totalCents])).toEqual([['Shopping', 50000]])
+  })
+
+  it('keeps a real deposit that a closer date would have paired with a card payment', async () => {
+    const debt = await category('Debt payments')
+    const moves = await category('Transfers', 'transfer')
+    const { checking, card } = await checkingAndHiddenCard()
+    const savings = (await insertBankAccount(ctx.db, { name: 'Savings' })).accountId
+    await transaction(checking, '2026-06-03', 'CARD AUTOPAY', 50000, debt, {
+      detailed: CARD_PAYMENT,
+    })
+    await transaction(card, '2026-06-05', 'AUTOMATIC PAYMENT', -50000, moves)
+    await transaction(savings, '2026-06-03', 'DEPOSIT', -50000, null)
+    const { summary } = await call('export_tax_year', { year: 2026 })
+    expect(summary.unfiledInCents).toBe(50000)
+    expect(summary.categories.map((c) => c.name)).toEqual(['Money in, not categorized'])
   })
 
   it('is the header and an empty summary for a year with nothing in it', async () => {

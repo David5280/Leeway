@@ -1,8 +1,9 @@
 // The year's export as CSV text: each category's transactions and a total
 // line, then the summary as its own block at the end, so someone who is only
-// sent the file still sees pay, interest and dividends. Pure.
+// sent the file still sees pay, interest, dividends and the rest. Pure.
 
-import { incomeLine, MAY_BE_DEDUCTIBLE, NOT_PAY_NOTES } from './classify.js'
+import { INCOME_LINES, incomeLine, MAY_BE_DEDUCTIBLE } from './classify.js'
+import { SUMMED_LINES, type SummedLine } from './income.js'
 import {
   lineKey,
   MONEY_IN_NOT_CATEGORIZED,
@@ -14,7 +15,8 @@ import {
 export const CSV_HEADER = 'Category,Group,Date,Name,Account,Amount,Note'
 
 export const NOT_TAX_ADVICE = 'A summary of what happened, not tax advice'
-export const CATEGORIZE_HINT = 'Categorize these rows as income so they count as pay'
+export const CATEGORIZE_HINT =
+  'Could be pay, interest or a refund; categorize these rows so each counts on its line'
 
 /** One CSV cell: quoted when it must be, and never read as a formula by a spreadsheet. */
 export function csvCell(value: string): string {
@@ -31,7 +33,7 @@ function labeledLine(label: string, cents: number, note = ''): string {
 
 /** A row's note: why income is not pay, then anything the owner wrote. */
 function rowNote({ tx, category }: TaxRow): string {
-  const notPay = category?.kind === 'income' ? NOT_PAY_NOTES[incomeLine(tx)] : undefined
+  const notPay = category?.kind === 'income' ? INCOME_LINES[incomeLine(tx)].note : ''
   return [notPay, tx.note].filter(Boolean).join('; ')
 }
 
@@ -49,17 +51,35 @@ function transactionLine(row: TaxRow, name: string, moneyIn: boolean): string {
   ].join(',')
 }
 
-/** The summary block: set apart by a blank line, then one labeled line per figure. */
+/** Each summed income line's figure in the summary. */
+export function lineCents(summary: TaxSummary): Record<SummedLine, number> {
+  return {
+    pay: summary.payCents,
+    interest: summary.interestCents,
+    dividends: summary.dividendsCents,
+    unemployment: summary.unemploymentCents,
+    retirement: summary.retirementCents,
+    tax_refund: summary.taxRefundCents,
+    rewards: summary.rewardsCents,
+  }
+}
+
+/**
+ * The summary block: set apart by a blank line, then Pay and who paid it,
+ * every other income line (zero ones too, so the file always reads the same),
+ * and money in not categorized.
+ */
 function summaryBlock(summary: TaxSummary): string[] {
   const heading = [`Summary for ${summary.year}`, '', '', '', '', 'Amount', NOT_TAX_ADVICE]
   const unfiledHint = summary.unfiledInCents > 0 ? CATEGORIZE_HINT : ''
+  const cents = lineCents(summary)
+  const figure = (line: SummedLine) => labeledLine(INCOME_LINES[line].label, cents[line])
   return [
     '',
     heading.map(csvCell).join(','),
-    labeledLine('Pay', summary.payCents),
+    figure('pay'),
     ...summary.income.map((source) => labeledLine(`Pay from ${source.source}`, source.cents)),
-    labeledLine('Interest', summary.interestCents),
-    labeledLine('Dividends', summary.dividendsCents),
+    ...SUMMED_LINES.filter((line) => line !== 'pay').map(figure),
     labeledLine(MONEY_IN_NOT_CATEGORIZED, summary.unfiledInCents, unfiledHint),
   ]
 }

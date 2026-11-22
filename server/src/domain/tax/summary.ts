@@ -1,5 +1,5 @@
-// The year's totals at tax time: one line per category, pay by who paid it,
-// interest, dividends, and money in that has no category yet. Pure.
+// The year's totals at tax time: one line per category, the income lines
+// (see income.ts), and money in that has no category yet. Pure.
 //
 // A transaction with no category is split by which way the money moved, as
 // monthly totals do (see flowTotals in monthlyTotals.ts): money out is still
@@ -7,9 +7,10 @@
 // is pay. Netting the two would hide a paycheck inside spending.
 
 import type { Transaction } from '../transactions.js'
-import { incomeLine, mayBeDeductible } from './classify.js'
+import { mayBeDeductible } from './classify.js'
+import { incomeTotals, type PaySource } from './income.js'
 
-export const NOT_CATEGORIZED = 'Not categorized'
+export const MONEY_OUT_NOT_CATEGORIZED = 'Money out, not categorized'
 export const MONEY_IN_NOT_CATEGORIZED = 'Money in, not categorized'
 
 /** The category a counted transaction is filed under. Transfers never count, so none is one. */
@@ -45,16 +46,23 @@ export interface TaxSummary {
   /** Money in first, then spending; real categories before the uncategorized lines; largest first. */
   categories: TaxCategory[]
   /** Pay by who paid it, net of any paid back, largest first. Adds up to payCents. */
-  income: { source: string; cents: number }[]
+  income: PaySource[]
+  /** Wages and other pay: money in under income categories that nothing marks as another kind. */
   payCents: number
   interestCents: number
   dividendsCents: number
-  /** Money in with no category: counted as pay only once it is categorized as income. */
+  unemploymentCents: number
+  /** Pensions and annuities. */
+  retirementCents: number
+  taxRefundCents: number
+  /** Card rewards and cash back. */
+  rewardsCents: number
+  /** Money in with no category: it may be pay, interest or a refund, so it counts on no line yet. */
   unfiledInCents: number
 }
 
 // Keys for the two uncategorized lines. Category ids are uuids, so these never
-// clash with one, and a category the owner named "Not categorized" stays apart.
+// clash with one, and a category the owner named like one of them stays apart.
 const UNFILED_OUT = 'unfiled:out'
 const UNFILED_IN = 'unfiled:in'
 
@@ -84,7 +92,7 @@ function emptyLine({ tx, category }: TaxRow): TaxCategory {
   const moneyIn = tx.amountCents < 0
   return {
     id: null,
-    name: moneyIn ? MONEY_IN_NOT_CATEGORIZED : NOT_CATEGORIZED,
+    name: moneyIn ? MONEY_IN_NOT_CATEGORIZED : MONEY_OUT_NOT_CATEGORIZED,
     group: null,
     kind: null,
     moneyIn,
@@ -114,38 +122,22 @@ function categoryLines(rows: TaxRow[]): Map<string, TaxCategory> {
   return lines
 }
 
-/** Pay by source, interest and dividends, from the rows filed under income categories. */
-function incomeTotals(rows: TaxRow[]) {
-  const sources = new Map<string, number>()
-  const totals = { pay: 0, interest: 0, dividends: 0 }
-  for (const row of rows) {
-    if (row.category?.kind !== 'income') continue
-    const line = incomeLine(row.tx)
-    if (line === 'person' || line === 'moved_in') continue
-    const cents = -row.tx.amountCents
-    totals[line] += cents
-    if (line === 'pay')
-      sources.set(row.tx.displayName, (sources.get(row.tx.displayName) ?? 0) + cents)
-  }
-  // Each source's net, money paid back included, so the sources add up to Pay.
-  const income = [...sources]
-    .map(([source, cents]) => ({ source, cents }))
-    .filter((source) => source.cents !== 0)
-    .sort((a, b) => b.cents - a.cents)
-  return { income, ...totals }
-}
-
 /** The year's summary from its counted rows. */
 export function summarize(year: number, rows: TaxRow[]): TaxSummary {
   const lines = categoryLines(rows)
-  const { income, pay, interest, dividends } = incomeTotals(rows)
+  const incomeRows = rows.filter((row) => row.category?.kind === 'income')
+  const { sources, totals } = incomeTotals(incomeRows.map((row) => row.tx))
   return {
     year,
     categories: [...lines.values()].sort(byPlace),
-    income,
-    payCents: pay,
-    interestCents: interest,
-    dividendsCents: dividends,
+    income: sources,
+    payCents: totals.pay,
+    interestCents: totals.interest,
+    dividendsCents: totals.dividends,
+    unemploymentCents: totals.unemployment,
+    retirementCents: totals.retirement,
+    taxRefundCents: totals.tax_refund,
+    rewardsCents: totals.rewards,
     unfiledInCents: lines.get(UNFILED_IN)?.totalCents ?? 0,
   }
 }

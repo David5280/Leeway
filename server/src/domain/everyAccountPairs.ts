@@ -1,0 +1,64 @@
+// Moves between the owner's own accounts across every account, cards and
+// loans hidden from budgets too, for a view that counts every account's money,
+// like the tax export. Budgets leave a hidden card's purchases out, so they
+// count a payment to it as spending (see loadTransferPairs); a view that
+// counts the purchases must count the payment as a move instead, or the same
+// money is spent twice.
+//
+// Legs pair in two rounds, so firm evidence is never outbid by a closer date:
+// 1. Both sides are firm: each says it is a transfer (see transferHint), or
+//    the owner filed it as one.
+// 2. Of the legs left, a side may also be silent if nobody has filed it, as
+//    monthly totals reads unfiled legs (see filedOrUnfiledLeg).
+// A leg the owner filed as something else, by hand or by rule, pairs only
+// with a hidden card or loan: budgets were right to call it spending, but
+// here the card's own purchases count.
+
+import type { Db } from '../db/pool.js'
+import type { IsoDate } from '../lib/dates.js'
+import {
+  filedOrUnfiledLeg,
+  pairTransfers,
+  readPairLegs,
+  saysTransfer,
+  type HintTest,
+  type PairTest,
+  type StoredLeg,
+} from './transferPairs.js'
+
+/** Round one: a side that says it is a transfer, or that the owner filed as one. */
+export const firmLeg: HintTest<StoredLeg> = (hint, leg) =>
+  saysTransfer(hint, leg) || leg.categoryKind === 'transfer'
+
+const unfiledOrFiledTransfer = filedOrUnfiledLeg<StoredLeg>(
+  (leg) => leg.categoryKind === 'transfer',
+)
+
+/**
+ * Round two: a leg filed as spending or income still has to say it is a
+ * transfer; one unfiled or filed as a transfer is read as monthly totals reads it.
+ */
+export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
+  leg.categoryKind === 'expense' || leg.categoryKind === 'income'
+    ? saysTransfer(hint, leg)
+    : unfiledOrFiledTransfer(hint, leg)
+
+/** A leg the owner filed as something else pairs only with a hidden card or loan. */
+export const filedElsewhereOk: PairTest<StoredLeg> = (out, arrival) =>
+  (!out.filedElsewhere || arrival.hiddenDebt) && (!arrival.filedElsewhere || out.hiddenDebt)
+
+/** The pairs among these legs, firm ones first (see the top of this file). Pure. */
+export function pairEveryAccount(legs: readonly StoredLeg[]): Map<string, StoredLeg> {
+  const firm = pairTransfers(legs, firmLeg, filedElsewhereOk)
+  const rest = legs.filter((leg) => !firm.has(leg.id))
+  return new Map([...firm, ...pairTransfers(rest, looseLeg, filedElsewhereOk)])
+}
+
+/** The moves between own accounts among transactions dated from `start` to `end`, both inclusive. */
+export async function loadEveryAccountPairs(
+  db: Db,
+  start: IsoDate,
+  end: IsoDate,
+): Promise<Map<string, StoredLeg>> {
+  return pairEveryAccount(await readPairLegs(db, start, end, { hiddenDebts: true }))
+}

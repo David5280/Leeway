@@ -1,12 +1,23 @@
 // What a tax year's export added up to, shown once its CSV has downloaded:
-// pay, interest and dividends, money in that has no category yet, pay by who
-// paid it, and the categories that may be deductible. Every figure is to the
-// cent, as the CSV is.
+// pay, interest and dividends, any benefits, refunds or rewards, money in that
+// has no category yet, pay by who paid it, and the categories that may be
+// deductible. Every figure is to the cent, as the CSV is.
 
+import { INCOME_LINES } from '../../../../server/src/domain/tax/classify'
 import type { TaxExport } from '../../api/client'
 import { Money } from '../../components/design/Money'
 
 type Summary = TaxExport['summary']
+
+/** The income lines that show only in a year that had some, with their figures. */
+function occasionalLines(summary: Summary) {
+  return [
+    { label: INCOME_LINES.unemployment.label, cents: summary.unemploymentCents },
+    { label: INCOME_LINES.retirement.label, cents: summary.retirementCents },
+    { label: INCOME_LINES.tax_refund.label, cents: summary.taxRefundCents },
+    { label: INCOME_LINES.rewards.label, cents: summary.rewardsCents },
+  ].filter((line) => line.cents !== 0)
+}
 
 /** One named amount in a list. */
 interface AmountLine {
@@ -46,7 +57,7 @@ function Fact({ label, cents }: { label: string; cents: number }) {
 export function TaxSummary({ summary }: { summary: Summary }) {
   const hasUnfiledIn = summary.unfiledInCents > 0
   const sources = summary.income.map((line) => ({
-    key: line.source,
+    key: line.key,
     name: line.source,
     cents: line.cents,
   }))
@@ -60,14 +71,18 @@ export function TaxSummary({ summary }: { summary: Summary }) {
   return (
     <div className="stack-sm">
       <dl className="facts">
-        <Fact label="Pay" cents={summary.payCents} />
-        <Fact label="Interest" cents={summary.interestCents} />
-        <Fact label="Dividends" cents={summary.dividendsCents} />
+        <Fact label={INCOME_LINES.pay.label} cents={summary.payCents} />
+        <Fact label={INCOME_LINES.interest.label} cents={summary.interestCents} />
+        <Fact label={INCOME_LINES.dividends.label} cents={summary.dividendsCents} />
+        {occasionalLines(summary).map((line) => (
+          <Fact key={line.label} label={line.label} cents={line.cents} />
+        ))}
         {hasUnfiledIn && <Fact label="Money in, not categorized" cents={summary.unfiledInCents} />}
       </dl>
       {hasUnfiledIn && (
         <span className="small muted">
-          Some money came in with no category. Categorize those rows as income so they count as pay.
+          Some money came in with no category. It could be pay, interest or a refund, so categorize
+          those rows and each will count on its line.
         </span>
       )}
       <AmountList title="Pay by source:" lines={sources} />

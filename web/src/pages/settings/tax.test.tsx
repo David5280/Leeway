@@ -35,12 +35,16 @@ const exported: TaxExport = {
       },
     ],
     income: [
-      { source: 'Acme Corp', cents: 600000 },
-      { source: 'Clawback Co', cents: -1000 },
+      { key: 'acme corp', source: 'Acme Corp', cents: 600000 },
+      { key: 'clawback co', source: 'Clawback Co', cents: -1000 },
     ],
     payCents: 599000,
     interestCents: 1500,
     dividendsCents: 0,
+    unemploymentCents: 0,
+    retirementCents: 0,
+    taxRefundCents: 0,
+    rewardsCents: 0,
     unfiledInCents: 0,
   },
 }
@@ -87,6 +91,7 @@ describe('Tax export', () => {
     expect(screen.getByText('$0.00')).toBeVisible()
     expect(screen.getByText('−$10.00')).toBeVisible()
     expect(screen.queryByText('Money in, not categorized')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tax refunds')).not.toBeInTheDocument()
     expect(screen.getByText('May be deductible, check with a tax pro:')).toBeVisible()
     expect(screen.getByText('Health')).toBeVisible()
     expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
@@ -124,7 +129,32 @@ describe('Tax export', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
     expect(await screen.findByText('Money in, not categorized')).toBeVisible()
     expect(screen.getByText('$3,000.00')).toBeVisible()
-    expect(screen.getByText(/Categorize those rows as income so they count as pay/)).toBeVisible()
+    expect(screen.getByText(/could be pay, interest or a refund/)).toBeVisible()
+  })
+
+  it('shows benefits, refunds and rewards on their own lines when the year had some', async () => {
+    fakeServer({
+      export_tax_year: () => ({
+        ...exported,
+        summary: {
+          ...exported.summary,
+          unemploymentCents: 120000,
+          retirementCents: 45000,
+          taxRefundCents: 2500,
+          rewardsCents: 1234,
+        },
+      }),
+    })
+    renderSignedIn(<TaxSection />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
+    expect(await screen.findByText('Unemployment benefits')).toBeVisible()
+    expect(screen.getByText('$1,200.00')).toBeVisible()
+    expect(screen.getByText('Pension and retirement')).toBeVisible()
+    expect(screen.getByText('$450.00')).toBeVisible()
+    expect(screen.getByText('Tax refunds')).toBeVisible()
+    expect(screen.getByText('$25.00')).toBeVisible()
+    expect(screen.getByText('Card rewards and cash back')).toBeVisible()
+    expect(screen.getByText('$12.34')).toBeVisible()
   })
 
   it('says why an export failed', async () => {

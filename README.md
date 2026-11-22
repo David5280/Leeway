@@ -28,9 +28,12 @@ bank, and nothing in Leeway can ever move money.
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI
   assistant can read all of it today.
-- **A tax-ready export**: a year of transactions as a CSV grouped by category
-  with totals, pay by source, interest and dividends, with categories that
-  may be deductible flagged for you to check with a tax pro (Settings, then
+- **A tax-ready export**: a year of transactions from every account, hidden
+  ones included, as a CSV grouped by category with totals. A summary at the
+  end gives pay by source, interest, dividends, benefits, tax refunds and
+  rewards, and "Money in, not categorized" for deposits still to sort.
+  Transfers between your own accounts are left out, and categories that may
+  be deductible are flagged for you to check with a tax pro (Settings, then
   Data). It is a summary, not tax advice.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or

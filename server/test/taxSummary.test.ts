@@ -77,20 +77,44 @@ describe('which categories may be deductible', () => {
 })
 
 describe('the income line of money filed as income', () => {
-  it('reads interest and dividends by bank code', () => {
-    expect(incomeLine({ bankCategory: 'INCOME_INTEREST_EARNED', person: null })).toBe('interest')
-    expect(incomeLine({ bankCategory: 'INCOME_DIVIDENDS', person: null })).toBe('dividends')
+  /** The line of a made-up deposit. */
+  const lineOf = (fields: Partial<Transaction>) =>
+    incomeLine(transaction({ amountCents: -1000, ...fields }))
+
+  it('reads each kind of money in that is not wages by its bank code', () => {
+    expect(lineOf({ bankCategory: 'INCOME_INTEREST_EARNED' })).toBe('interest')
+    expect(lineOf({ bankCategory: 'INCOME_DIVIDENDS' })).toBe('dividends')
+    expect(lineOf({ bankCategory: 'INCOME_UNEMPLOYMENT' })).toBe('unemployment')
+    expect(lineOf({ bankCategory: 'INCOME_RETIREMENT_PENSION' })).toBe('retirement')
+    expect(lineOf({ name: 'IRS TREAS 310 TAX REF', bankCategory: 'INCOME_TAX_REFUND' })).toBe(
+      'tax_refund',
+    )
+  })
+
+  it('reads the words of a line whose code is missing or says only that money came in', () => {
+    expect(lineOf({ name: 'IRS TREAS 310 TAX REF' })).toBe('tax_refund')
+    expect(lineOf({ name: 'STATE TAX REFUND', bankCategory: 'INCOME' })).toBe('tax_refund')
+    expect(lineOf({ name: 'DES UNEMPLOYMENT INS' })).toBe('unemployment')
+    expect(lineOf({ name: 'ACME PENSION PLAN', bankCategory: 'INCOME_OTHER_INCOME' })).toBe(
+      'retirement',
+    )
+    expect(lineOf({ name: 'CASH BACK REDEMPTION' })).toBe('rewards')
+    expect(lineOf({ name: 'DEPOSIT', merchantName: 'Card Rewards' })).toBe('rewards')
+  })
+
+  it('trusts a wages code over words, so a payer named for rewards is still pay', () => {
+    expect(lineOf({ name: 'REWARDS NETWORK PAYROLL', bankCategory: 'INCOME_WAGES' })).toBe('pay')
   })
 
   it('keeps a payment from a person and money moved in out of pay, whatever the category is called', () => {
     const person = { app: 'Venmo', direction: 'in' as const, counterparty: 'Sam' }
-    expect(incomeLine({ bankCategory: 'INCOME_WAGES', person })).toBe('person')
-    expect(incomeLine({ bankCategory: 'TRANSFER_IN_DEPOSIT', person: null })).toBe('moved_in')
+    expect(lineOf({ bankCategory: 'INCOME_WAGES', person })).toBe('person')
+    expect(lineOf({ bankCategory: 'TRANSFER_IN_DEPOSIT' })).toBe('moved_in')
   })
 
   it('reads anything else as pay', () => {
-    expect(incomeLine({ bankCategory: 'INCOME_WAGES', person: null })).toBe('pay')
-    expect(incomeLine({ bankCategory: null, person: null })).toBe('pay')
+    expect(lineOf({ name: 'ACME PAYROLL', bankCategory: 'INCOME_WAGES' })).toBe('pay')
+    expect(lineOf({ name: 'SIDE GIG LLC', bankCategory: null })).toBe('pay')
   })
 })
 
@@ -106,25 +130,74 @@ describe('the summary', () => {
     const summary = summarize(2026, rows)
     expect(summary.categories.map((c) => [c.name, c.moneyIn, c.totalCents])).toEqual([
       ['Money in, not categorized', true, 300000],
-      ['Not categorized', false, 3000],
+      ['Money out, not categorized', false, 3000],
     ])
     expect(summary).toMatchObject({ payCents: 0, unfiledInCents: 300000 })
   })
 
   it('leaves out a source that nets to nothing, and still adds up to Pay', () => {
+    const pay = (id: string, name: string, cents: number) => ({
+      tx: transaction({ id, name, displayName: name, amountCents: cents }),
+      category: income,
+    })
     const rows: TaxRow[] = [
-      { tx: transaction({ id: 'in', displayName: 'Gig', amountCents: -5000 }), category: income },
-      { tx: transaction({ id: 'back', displayName: 'Gig', amountCents: 5000 }), category: income },
-      { tx: transaction({ id: 'job', displayName: 'Job', amountCents: -9000 }), category: income },
+      pay('in', 'Gig', -5000),
+      pay('back', 'Gig', 5000),
+      pay('job', 'Job', -9000),
     ]
     expect(summarize(2026, rows)).toMatchObject({
-      income: [{ source: 'Job', cents: 9000 }],
+      income: [{ key: 'job', source: 'Job', cents: 9000 }],
       payCents: 9000,
+    })
+  })
+
+  it('groups a payer by its merchant key, named as its first line shows it', () => {
+    const pay = (id: string, name: string, displayName: string) => ({
+      tx: transaction({ id, name, displayName, amountCents: -100000 }),
+      category: income,
+    })
+    const rows: TaxRow[] = [
+      pay('jan', 'ACME PAYROLL 0115', 'Acme Payroll'),
+      pay('feb', 'ACME PAYROLL 0215', 'ACME PAYROLL'),
+    ]
+    expect(summarize(2026, rows).income).toEqual([
+      { key: 'acme payroll', source: 'Acme Payroll', cents: 200000 },
+    ])
+  })
+
+  it('puts benefits, refunds and rewards on their own lines, never in Pay', () => {
+    const deposit = (id: string, fields: Partial<Transaction>) => ({
+      tx: transaction({ id, amountCents: -10000, ...fields }),
+      category: income,
+    })
+    const rows: TaxRow[] = [
+      deposit('ref', { name: 'IRS TREAS 310 TAX REF', bankCategory: 'INCOME_TAX_REFUND' }),
+      deposit('ui', { name: 'DES BENEFITS', bankCategory: 'INCOME_UNEMPLOYMENT' }),
+      deposit('pen', { name: 'ACME PENSION', bankCategory: 'INCOME_RETIREMENT_PENSION' }),
+      deposit('cb', { name: 'CASH BACK REWARD' }),
+    ]
+    expect(summarize(2026, rows)).toMatchObject({
+      payCents: 0,
+      income: [],
+      taxRefundCents: 10000,
+      unemploymentCents: 10000,
+      retirementCents: 10000,
+      rewardsCents: 10000,
     })
   })
 })
 
 describe('the CSV', () => {
+  it('notes each income row that is not pay', () => {
+    const rows: TaxRow[] = [
+      {
+        tx: transaction({ name: 'IRS TREAS 310 TAX REF', amountCents: -2500 }),
+        category: income,
+      },
+    ]
+    expect(taxCsv(summarize(2026, rows), rows)).toContain(',25.00,"Tax refund, not pay"\r\n')
+  })
+
   it("puts why income is not pay ahead of the owner's own note", () => {
     const person = { app: 'Zelle', direction: 'in' as const, counterparty: 'Sam' }
     const rows: TaxRow[] = [
