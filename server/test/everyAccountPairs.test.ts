@@ -106,63 +106,46 @@ describe('pairing every account', () => {
     expect(paysCard(leg({ id: 'n', amountCents: 1, name: 'XCEL ENERGY AUTOPAY' }))).toBe(false)
   })
 
-  it('reads e-payments, mobile and ACH payments only beside a card issuer', () => {
-    const says = (name: string) => paysCard(leg({ id: 'w', amountCents: 1, name }))
-    for (const name of [
-      'CITI EPAYMENT',
-      'DISCOVER E-PAYMENT',
-      'CAPITAL ONE MOBILE PMT',
-      'BARCLAYCARD MOBILE PMT',
-      'CHASE ACH PMT',
-      'AMERICAN EXPRESS ACH PMT',
-      'CITI AUTO PAY EPAYMENT',
-      'ACH PMT TO AMEX',
-    ]) {
-      expect(says(name), name).toBe(true)
-    }
-    for (const name of [
-      'VERIZON WIRELESS EPAYMENT',
-      'XCEL ENERGY E-PAYMENT',
-      'STATE FARM EPAYMENT',
-      'NAVIENT EPAYMENT',
-      'CITY OF DENVER EPAYMENT',
-      'COMCAST MOBILE PMT',
-      'T-MOBILE PMT',
-      'CITY WATER ACH PMT',
-      // An issuer's mortgage or loan is not a card.
-      'CHASE MORTGAGE ACH PMT',
-      'DISCOVER STUDENT LOAN ACH PMT',
-      'CAPITAL ONE AUTO EPAYMENT',
-      'CHASE HOME EQUITY ACH PMT',
-      'DISCOVER BANK ACH PMT',
-      'CITI PERSONAL LOAN EPAYMENT',
-      // An issuer's name far from the payment words is some other payee.
-      'CHASE PLACE APTS EPAYMENT',
-    ]) {
-      expect(says(name), name).toBe(false)
-    }
-  })
-
-  it('never pairs a bill paid with e-payment or mobile words with a hidden card', () => {
+  it('pairs a card payment by its words only beside a card issuer, never a bill or rent', () => {
     const hiddenCard = { ...cardSide, name: 'PAYMENT THANK YOU' }
-    const bill = (name: string, code: string | null = null) =>
+    // Filed as spending with a transfer code, which alone could be rent.
+    const spent = (name: string, merchantName: string | null = null) =>
       leg({
-        id: 'bill',
+        id: 'spent',
         amountCents: 50000,
         name,
-        providerCategoryDetailed: code,
+        merchantName,
+        providerCategoryDetailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
         categoryKind: 'expense',
         filedElsewhere: true,
       })
-    const bills = [
-      bill('LANDLORD MOBILE PMT'),
-      bill('T-MOBILE PMT'),
-      bill('LANDLORD EPAYMENT'),
-      bill('CO DEPT REVENUE EPAYMENT', 'TRANSFER_OUT_ACCOUNT_TRANSFER'),
+    const pairs = (out: StoredLeg) => pairEveryAccount([out, hiddenCard]).size > 0
+    const cardPayments = [
+      spent('CAPITAL ONE DES:MOBILE PMT ID:XXXXXXXXXX INDN:JANE DOE CO ID:XXXXXXXXXX WEB'),
+      spent('AMERICAN EXPRESS DES:ACH PMT ID:W1234'),
+      spent('DISCOVER DES:E-PAYMENT ID:1234 INDN:JANE DOE'),
+      spent('SYNCHRONY EPAYMENT', 'Synchrony Bank'),
+      spent('DISCOVER E-PAYMENT 7895', 'Discover Bank'),
+      spent('BARCLAYCARD US MOBILE PMT', 'Barclays Bank Delaware'),
+      spent('APPLE CARD ACH PMT', 'Goldman Sachs Bank USA'),
+      spent('AMEX ACH PMT', 'American Express National Bank'),
+      spent('CHASE CC EPAYMENT'),
+      spent('CITI CARDS EPAYMENT'),
     ]
-    const paired = bills.filter((spent) => pairEveryAccount([spent, hiddenCard]).size > 0)
-    expect(paired.map((spent) => spent.name)).toEqual([])
-    expect(pairEveryAccount([bill('CITI MOBILE PMT'), hiddenCard]).get('bill')?.id).toBe('card')
+    expect(cardPayments.filter((out) => !pairs(out)).map((out) => out.name)).toEqual([])
+    const bills = [
+      spent('LANDLORD MOBILE PMT'),
+      spent('T-MOBILE PMT'),
+      spent('LANDLORD EPAYMENT'),
+      spent('CO DEPT REVENUE EPAYMENT'),
+      spent('DISCOVER BANK ACH PMT'),
+      spent('CHASE PLACE APTS EPAYMENT'),
+      spent('CHASE PLACE DES:EPAYMENT'),
+      spent('CHASE MORTGAGE DES:ACH PMT'),
+      spent('CAPITAL ONE 360 ACH PMT'),
+      spent('EPAYMENT TO CHASE PLACE APTS'),
+    ]
+    expect(bills.filter(pairs).map((out) => out.name)).toEqual([])
   })
 
   it('reads a leg in round one as firm when it says transfer or is filed as one', () => {

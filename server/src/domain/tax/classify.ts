@@ -114,10 +114,12 @@ const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 // tiers, surest first:
 // 1. An agency's ACH text says exactly what the money is, whatever else the
 //    line says: "DIR DEP IRS TREAS 310 TAX REF" is a refund that came by
-//    direct deposit, which says only how it arrived.
+//    direct deposit, which says only how it arrived. Treasury 310 pays
+//    refunds and benefits, but 220 pays salaries and vendors, so "IRS TREAS
+//    220" is pay unless it says TAX REF. A pension's own payroll ("OPERS
+//    PENSION PAYROLL") is a pension.
 // 2. An employer's words say pay, an agency's own staff included:
-//    "IRS TREAS 220 SALARY" (Treasury 220 pays salaries and vendors, 310
-//    refunds and benefits) and "TEXAS WORKFORCE COMMISSION PAYROLL" are pay.
+//    "TEXAS WORKFORCE COMMISSION PAYROLL" is pay.
 // 3. An agency's name says what it pays out: "Ohio Unemployment" as the
 //    merchant of a bare "DIRECT DEP" is unemployment.
 // 4. Looser words name a kind, read in the bank's description only: a
@@ -133,16 +135,19 @@ const taxRefund = (ref: string) => String.raw`(?<!sales\s+)tax\s?${ref}(?!\W*adv
 
 /** Tier one: agency ACH texts, read in the description and the merchant name. */
 const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
-  [anyOf(String.raw`soc\s+sec|ssa\s+treas`), 'social_security'],
+  // SSI is paid by the SSA too, though it is not taxed.
+  [anyOf(String.raw`soc\s+sec|(ssa|ssi)\s+treas`), 'social_security'],
   [
     anyOf(
       String.raw`irs\s+treas\s+310|irs\s+treas\b.*\btax\s?ref(und)?`,
       taxRefund('rfnd'),
-      String.raw`\w*taxrfd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+of\s+rev(enue)?\s+refund`,
+      String.raw`\w*taxrfd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+(of\s+)?rev(enue)?\s+refund`,
     ),
     'tax_refund',
   ],
-  [anyOf(String.raw`ui\s+benefits?`), 'unemployment'],
+  [anyOf(String.raw`irs\s+treas\s+220`), 'pay'],
+  [anyOf(String.raw`ui\s+(benefits?|dd)|(uc|uia)\s+benefits?|twc\W+benefits?`), 'unemployment'],
+  [anyOf(String.raw`(pension|annuity)\s+payroll`), 'retirement'],
 ]
 
 /** Tier two: an employer paying, by any route. */
@@ -154,7 +159,7 @@ const AGENCY_NAMES: [RegExp, IncomeLine][] = [
   [anyOf(String.raw`irs|internal\s+revenue\s+service`), 'tax_refund'],
   [
     anyOf(
-      String.raw`unemployment|workforce\s+commission`,
+      String.raw`(re|un)employment|workforce\s+commission`,
       String.raw`employment\s+development\s+dep(ar)?t(ment)?`,
     ),
     'unemployment',

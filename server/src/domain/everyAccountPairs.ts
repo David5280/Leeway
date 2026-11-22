@@ -20,6 +20,7 @@
 
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
+import { saysCardPayment } from './cardPaymentWords.js'
 import { CARD_PAYMENT_CODE } from './transfers.js'
 import {
   filedOrUnfiledLeg,
@@ -48,36 +49,10 @@ export const looseLeg: HintTest<StoredLeg> = (hint, leg) =>
     ? saysTransfer(hint, leg)
     : unfiledOrFiledTransfer(hint, leg)
 
-/** Clear words for a credit card payment, as a bank writes one out of checking. */
-const CARD_PAYMENT_WORDS =
-  /\b(credit\s+(card|crd)|crd\s+(pmt|payment|autopay|epay)|card\s+(payment|pmt))\b/i
-
-// "EPAYMENT", "MOBILE PMT" and "ACH PMT" are words any biller uses ("T-MOBILE
-// PMT", "XCEL ENERGY EPAYMENT"), so they count as a card payment only right
-// beside a card issuer's name: "CITI AUTOPAY EPAYMENT", "ACH PMT TO AMEX".
-// "CHASE PLACE APTS EPAYMENT" pays rent.
-const ISSUER = String.raw`(chase|amex|american\s+express|citi(card)?|capital\s+one|discover|barclay(s|card)?|synchrony|apple\s+card)`
-const BILL_PAYMENT = String.raw`(e-?payment|mobile\s+pmt|ach\s+pmt)`
-/** Card words that may sit between the two: "CITI CARD AUTO PAY EPAYMENT". */
-const CARD_FILLER = String.raw`(\s+(card|credit|crd|us|auto\W?pay|online))*`
-const ISSUER_BILL_PAYMENT = new RegExp(
-  String.raw`\b(${ISSUER}${CARD_FILLER}\s+${BILL_PAYMENT}|${BILL_PAYMENT}\s+(to\s+)?${ISSUER})\b`,
-  'i',
-)
-
-/** An issuer's other debts, paid with the same words: "CHASE MORTGAGE ACH PMT", not "AUTO PAY". */
-const ISSUER_LOAN_WORDS =
-  /\b(mortgage|loan|auto(?!\W*pay)|student|home\s+equity|heloc|lease|personal|bank)\b/i
-
-/** Whether an issuer's name sits beside a biller's payment words, with no word of a loan. */
-const paysIssuerCard = (words: string) =>
-  ISSUER_BILL_PAYMENT.test(words) && !ISSUER_LOAN_WORDS.test(words)
-
-/** Whether a leg shows it pays a credit card: Plaid's card payment code, or clear words. */
+/** Whether a leg shows it pays a credit card: Plaid's card payment code, or its words. */
 export function paysCard(leg: StoredLeg): boolean {
   const code = leg.providerCategoryDetailed ?? leg.providerCategoryPrimary
-  const words = `${leg.name} ${leg.merchantName ?? ''}`
-  return code === CARD_PAYMENT_CODE || CARD_PAYMENT_WORDS.test(words) || paysIssuerCard(words)
+  return code === CARD_PAYMENT_CODE || saysCardPayment(leg.name, leg.merchantName)
 }
 
 /** Whether a leg is on a credit card hidden from budgets, whose purchases this view counts. */

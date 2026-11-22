@@ -117,6 +117,9 @@ describe('the income line of money filed as income', () => {
       // Treasury 220 pays salaries and vendors; 310 pays refunds and benefits.
       'IRS TREAS 220 FED SALARY',
       'IRS TREAS 220 SALARY',
+      'IRS TREAS 220',
+      'DIR DEP IRS TREAS 220',
+      'IRS TREAS 220 VENDOR PAY',
     ]) {
       expect(lineOf({ name }), name).toBe('pay')
     }
@@ -135,6 +138,26 @@ describe('the income line of money filed as income', () => {
       'TAX REF ADV',
     ]) {
       expect(lineOf({ name }), name).toBe('pay')
+    }
+  })
+
+  it('reads the other common agency texts for refunds, benefits and pensions', () => {
+    const lines: [string, string][] = [
+      ['CO DEPT REV REFUND', 'tax_refund'],
+      ['PA DEPT REVENUE REFUND', 'tax_refund'],
+      ['SSI TREAS 310', 'social_security'],
+      ['UI DD', 'unemployment'],
+      ['UC BENEFITS', 'unemployment'],
+      ['UIA BENEFITS', 'unemployment'],
+      ['TWC-BENEFITS', 'unemployment'],
+      ['FL DEO REEMPLOYMENT', 'unemployment'],
+      ['OPERS PENSION PAYROLL', 'retirement'],
+      ['STATE ANNUITY PAYROLL', 'retirement'],
+      // No line fits VA benefits, which are not taxed, so they read as pay like any unnamed income.
+      ['VA BENEFITS TREAS 310', 'pay'],
+    ]
+    for (const [name, line] of lines) {
+      expect(lineOf({ name }), name).toBe(line)
     }
   })
 
