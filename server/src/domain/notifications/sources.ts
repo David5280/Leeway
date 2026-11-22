@@ -90,8 +90,10 @@ export async function gatherCandidates(
   const found: Candidate[][] = []
 
   // Any account alert turned on reads them all, then keeps the kinds that are on.
+  // A bill paid twice is pushed as a charge made twice only while that kind is on.
   if (ALERT_KINDS.some((kind) => on[kind])) {
-    const alerts = await listAlerts(db, settings, today)
+    const doublesTold = on.duplicate_charge
+    const alerts = await listAlerts(db, settings, today, [], { doublesTold })
     found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }
   if (on.over_budget) {

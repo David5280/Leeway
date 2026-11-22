@@ -12,8 +12,10 @@
 //   stays away, as the inbox treats it;
 // - a condition's dismissal counts only while its kind is turned on, as the
 //   inbox keeps only those kinds current. A fee's dismissal is for good.
-// - a bill's change is not hidden but accepted: its charge's amount becomes
-//   the bill's usual one, so it clears everywhere (billChangeSource.ts).
+// - a bill's change is not hidden but accepted: its cycle's amount becomes
+//   the bill's usual one, so it clears everywhere (billChangeSource.ts). A
+//   cycle that was only paid twice teaches no new amount, so it is hidden
+//   like a leak instead, until its alert clears.
 //
 // The home list only reads. The notifier keeps hides current: it notes when
 // each hidden alert is gone and drops the hides that no longer count.
@@ -132,7 +134,8 @@ export interface HideTarget {
  * Hides one of the current alerts from the home screen, leaving the inbox as
  * it was. Hiding it again starts it over, as a fresh hide the notifier has
  * not yet seen gone. An alert that is not current (it cleared a moment ago)
- * is not found. A bill's change is accepted instead, which clears it.
+ * is not found. A bill's change is accepted instead, which clears it, or
+ * hidden when its cycle was only paid twice and there is nothing to accept.
  */
 export async function hideHomeAlert(
   db: Db,
@@ -151,8 +154,8 @@ export async function hideHomeAlert(
   if (alert.bill) {
     const { timeZone } = await getSettings(db)
     const today = todayIn(timeZone, now)
-    await acceptBillChange(db, timeZone, today, { billId: alert.bill.id, date: alert.date! })
-    return
+    const target = { billId: alert.bill.id, date: alert.date! }
+    if (await acceptBillChange(db, timeZone, today, target)) return
   }
   await db.query(
     `INSERT INTO alert_hides (kind, subject, hidden_at) VALUES ($1, $2, $3)

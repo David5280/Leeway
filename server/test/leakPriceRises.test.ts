@@ -231,6 +231,46 @@ describe('priceRiseOf on a charge off the cycle', () => {
     expect(rise).toMatchObject({ previousCents: 1500 })
   })
 
+  it('never reads a fee a few days after the charge as a new price, even a cycle on', () => {
+    // A $30 gym on the 1st: Nov 2 and Nov 3 sit within a month's slack of Oct 1,
+    // but Nov 1 is the charge due that cycle, so the $50 is an extra.
+    const firsts = (extra: string) =>
+      spotify([
+        ['2026-08-01', 3000],
+        ['2026-09-01', 3000],
+        ['2026-10-01', 3000],
+        ['2026-11-01', 3000],
+        [extra, 5000],
+      ])
+    expect(priceRiseOf(firsts('2026-11-02'), TODAY)).toBeNull()
+    expect(priceRiseOf(firsts('2026-11-03'), TODAY)).toBeNull()
+    // Past the slack, Nov 6 has nothing a cycle before it.
+    expect(priceRiseOf(firsts('2026-11-06'), TODAY)).toBeNull()
+  })
+
+  it('never reads such a fee as a new price on months that start mid-month', () => {
+    const shifted = spotify([
+      ['2026-08-17', 1500],
+      ['2026-09-17', 1500],
+      ['2026-10-17', 1500],
+      ['2026-10-20', 4999],
+    ])
+    expect(priceRiseOf(shifted, '2026-10-21')).toBeNull()
+  })
+
+  it('reads a fee a few days before the charge is due as a rise until that charge posts', () => {
+    // A known gap: the Oct 29 fee is where Nov 1 should be, so it reads as a
+    // rise. Once Nov 1 posts, the fee is an extra between two cycles.
+    const early = [
+      ['2026-08-01', 3000],
+      ['2026-09-01', 3000],
+      ['2026-10-01', 3000],
+      ['2026-10-29', 5000],
+    ] as [string, number][]
+    expect(priceRiseOf(spotify(early), '2026-10-30')).toMatchObject({ previousCents: 3000 })
+    expect(priceRiseOf(spotify([...early, ['2026-11-01', 3000]]), TODAY)).toBeNull()
+  })
+
   it('stays quiet after a missed cycle, with nothing a cycle before the latest', () => {
     const missed = spotify([
       ['2026-07-12', 1099],
@@ -239,6 +279,17 @@ describe('priceRiseOf on a charge off the cycle', () => {
       ['2026-11-12', 1199],
     ])
     expect(priceRiseOf(missed, TODAY)).toBeNull()
+  })
+
+  it('never tells a rise right after a skipped month, not even a cycle later', () => {
+    // October was skipped and November rose: December is no longer the first at the new price.
+    const skipped = spotify([
+      ['2026-08-12', 1099],
+      ['2026-09-12', 1099],
+      ['2026-11-12', 1199],
+      ['2026-12-12', 1199],
+    ])
+    expect(priceRiseOf(skipped, '2026-12-13')).toBeNull()
   })
 
   it('reads the cycle the charge repeats on: weekly charges a week apart', () => {

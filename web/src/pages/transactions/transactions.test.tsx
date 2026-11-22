@@ -233,16 +233,32 @@ describe('Transactions filters', () => {
     await waitFor(() => expect(lastList(server)).toMatchObject({ search: 'costco', limit: 100 }))
   })
 
-  it('starts with the search a link gave, as a leak alert does, and clears it with the rest', async () => {
+  it('narrows to the merchant a link gave, as a leak alert does, until its chip is tapped', async () => {
     const server = serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
-    renderTransactions('/transactions?account=acct-1&range=all&search=Netflix')
-    expect(await screen.findByLabelText('Search transactions')).toHaveValue('Netflix')
-    await waitFor(() =>
-      expect(lastList(server)).toMatchObject({ search: 'Netflix', accountId: 'acct-1' }),
+    renderTransactions(
+      '/transactions?account=acct-1&range=all&merchant=tx-9&merchantName=Netflix+%26+Co',
     )
-    await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
+    await waitFor(() =>
+      expect(lastList(server)).toMatchObject({ sameMerchantAs: 'tx-9', accountId: 'acct-1' }),
+    )
+    // The search box stays free for typing.
     expect(screen.getByLabelText('Search transactions')).toHaveValue('')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Merchant: Netflix & Co. Show every merchant' }),
+    )
+    await waitFor(() => expect(lastList(server)?.sameMerchantAs).toBeUndefined())
+    expect(screen.getByText('Address: ?account=acct-1&range=all')).toBeInTheDocument()
+    expect(lastList(server)).toMatchObject({ accountId: 'acct-1' })
+  })
+
+  it('lets go of a linked merchant with the other filters', async () => {
+    serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
+    renderTransactions('/transactions?merchant=tx-9')
+    // With no name in the link, the chip still shows the list is narrowed.
+    expect(await screen.findByRole('button', { name: /^Merchant: One merchant/ })).toBeVisible()
+    await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
     expect(screen.getByText('Address: ?range=all')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Merchant:/ })).not.toBeInTheDocument()
   })
 
   it('picks a date range from its chip, and keeps it in the address', async () => {

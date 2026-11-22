@@ -12,8 +12,9 @@
 // charge made twice and refunded once is settled, while one made three times
 // and refunded once is still a charge made twice.
 //
-// A habit is judged over the HABIT_DAYS before the cluster began, not before
-// today, so the same charges read the same way all the while they are news.
+// A habit is judged over the HABIT_DAYS before the cluster's first charge,
+// ending there: nothing on or after that day counts, so the same charges read
+// the same way all the while they are news, however many come after them.
 //
 // Lines the owner made or the bank charged (cash, checks, payments to people,
 // bank fees) never reach here: merchantCharges.ts leaves them out.
@@ -36,7 +37,7 @@ export const HABIT_DAYS = 90
  */
 export const DUPLICATE_HISTORY_DAYS = HABIT_DAYS + DUPLICATE_NEWS_DAYS + DUPLICATE_DAYS
 
-/** Other days at the same merchant and amount within HABIT_DAYS that make it a habit: about weekly. */
+/** Days at the same merchant and amount within HABIT_DAYS before a cluster that make it a habit: about weekly. */
 const HABIT_OTHER_DAYS = 4
 
 /** A posted charge or refund, as the leak checks read it. Positive is money out. */
@@ -88,17 +89,16 @@ function clustersOf(group: ChargeLine[]): ChargeLine[][] {
 }
 
 /**
- * Whether charging this amount is routine at this merchant, judged from
- * HABIT_DAYS before the cluster began: charged on enough other days, or
- * twice close together more than once.
+ * Whether charging this amount is routine at this merchant, judged from the
+ * HABIT_DAYS before the cluster's first charge, up to that day and not on it:
+ * charged on enough days then, or twice close together then too.
  */
 function isHabit(group: ChargeLine[], cluster: ChargeLine[]): boolean {
-  const from = addDays(cluster[0]!.date, -HABIT_DAYS)
-  const seen = group.filter((charge) => charge.date >= from)
-  if (clustersOf(seen).length > 1) return true
-  const inCluster = new Set(cluster.map((charge) => charge.date))
-  const otherDays = new Set(seen.map((charge) => charge.date).filter((d) => !inCluster.has(d)))
-  return otherDays.size >= HABIT_OTHER_DAYS
+  const first = cluster[0]!.date
+  const from = addDays(first, -HABIT_DAYS)
+  const before = group.filter((charge) => charge.date >= from && charge.date < first)
+  if (clustersOf(before).length > 0) return true
+  return new Set(before.map((charge) => charge.date)).size >= HABIT_OTHER_DAYS
 }
 
 /**

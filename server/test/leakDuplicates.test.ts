@@ -201,6 +201,35 @@ describe('findDuplicates', () => {
       const later = lines().map((one, i) => (i >= 4 ? { ...one, date: '2026-11-25' } : one))
       expect(findDuplicates(later, '2026-11-26')).toHaveLength(1)
     })
+
+    it('counts nothing on or after the first charge, so later charges never make it a habit', () => {
+      // A gym's $40 charged twice on Nov 2 and 3, then weekly classes at $40 after.
+      const gym = { name: 'CITY GYM', merchantName: 'City Gym' }
+      const after = [
+        '2026-11-02',
+        '2026-11-03',
+        '2026-11-07',
+        '2026-11-10',
+        '2026-11-14',
+        '2026-11-17',
+      ]
+      expect(
+        dates(
+          findDuplicates(
+            after.map((d) => line(d, 4000, gym)),
+            TODAY,
+          ),
+        ),
+      ).toEqual([['2026-11-02', '2026-11-03']])
+      // Twice close together once before is the pattern, though.
+      const before = ['2026-10-02', '2026-10-04', '2026-11-02', '2026-11-03']
+      expect(
+        findDuplicates(
+          before.map((d) => line(d, 4000, gym)),
+          TODAY,
+        ),
+      ).toEqual([])
+    })
   })
 
   it('lists the newest duplicate first', () => {

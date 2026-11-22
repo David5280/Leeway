@@ -140,6 +140,11 @@ export const transactionFilterSchema = z.object({
   accountIds: z.array(z.uuid()).min(1).max(100).optional(),
   /** Matches the description, merchant or note. */
   search: z.string().trim().min(1).max(100).optional(),
+  /**
+   * Only charges from the same merchant as this transaction, as repeat
+   * charges are grouped (merchantKey.ts): how a leak alert shows its charges.
+   */
+  sameMerchantAs: z.uuid().optional(),
   minAmountCents: z.number().int().optional(),
   maxAmountCents: z.number().int().optional(),
   includeExcluded: z.boolean().default(false),
@@ -163,17 +168,17 @@ const SELECT = `
   FROM transactions t LEFT JOIN categories c ON c.id = t.category_id`
 
 /**
- * Transactions matching a filter, newest first. A search matches the display
- * name and the note, which is what the app shows, and the bank's description
- * and merchant name too, unless `searchBankText` is false: then it matches
- * only what the caller can read. Agents search that way (see context.ts).
+ * Transactions matching a filter, newest first. A search matches the bank's
+ * description and merchant name or the note, unless `searchBankText` is
+ * false: then it matches only what the caller can read, the display name and
+ * the note. Agents search that way (see context.ts).
  */
 export async function listTransactions(
   db: Db,
   filter: TransactionFilter,
   { searchBankText = true }: { searchBankText?: boolean } = {},
 ): Promise<{ transactions: Transaction[]; total: number }> {
-  if (filter.search) return searchShownText(db, filter, { searchBankText })
+  if (filter.search && !searchBankText) return searchDisplayNames(db, filter)
   const { whereSql, params } = filterSql(filter)
   const [list, count] = await Promise.all([
     db.query<StoredTransaction>(
@@ -193,8 +198,11 @@ export async function listTransactions(
   }
 }
 
-/** The WHERE clause for a filter, with its parameters. A search is matched in code (searchShownText). */
-function filterSql(filter: TransactionFilter) {
+/**
+ * The WHERE clause for a filter, with its parameters. With `withSearch` false
+ * the search is left out, for a caller that matches it in code.
+ */
+function filterSql(filter: TransactionFilter, withSearch = true) {
   const where: string[] = []
   const params: unknown[] = []
   const add = (sql: string, value: unknown) => {
@@ -207,6 +215,22 @@ function filterSql(filter: TransactionFilter) {
   else if (filter.categoryId) add('t.category_id = ?', filter.categoryId)
   if (filter.accountId) add('t.account_id = ?', filter.accountId)
   if (filter.accountIds) add('t.account_id = ANY(?::uuid[])', filter.accountIds)
+  if (filter.search && withSearch) {
+    add(
+      `(t.name ILIKE ? OR t.merchant_name ILIKE $${params.length + 1} OR t.note ILIKE $${params.length + 1})`,
+      `%${filter.search.replace(/[%_\\]/g, '\\$&')}%`,
+    )
+  }
+  if (filter.sameMerchantAs) {
+    // merchantKey() in SQL. The key keeps no digits, so it never matches on an
+    // account number, and a transaction with no key (all digits) matches nothing.
+    add(
+      `merchant_key(coalesce(t.merchant_name, t.name)) = (
+        SELECT nullif(merchant_key(coalesce(s.merchant_name, s.name)), '')
+        FROM transactions s WHERE s.id = ?)`,
+      filter.sameMerchantAs,
+    )
+  }
   if (filter.minAmountCents !== undefined) add('t.amount_cents >= ?', filter.minAmountCents)
   if (filter.maxAmountCents !== undefined) add('t.amount_cents <= ?', filter.maxAmountCents)
   if (!filter.includeExcluded) where.push('NOT t.excluded')
@@ -215,29 +239,26 @@ function filterSql(filter: TransactionFilter) {
 }
 
 /**
- * A search matched in code, since display names are worked out there: every
- * transaction the other filters allow is read, then matched and paged. It
- * matches the display name and the note, so what the app shows is what is
- * found (an alert's link searches a merchant's shown name, say), and with
- * `searchBankText` the bank's own description and merchant name as well.
+ * A search matched against what an agent can read: the display name and the
+ * note, never the bank's own text. Display names are worked out in code, so
+ * every transaction the other filters allow is read, then matched and paged.
  */
-async function searchShownText(
+async function searchDisplayNames(
   db: Db,
   filter: TransactionFilter,
-  { searchBankText }: { searchBankText: boolean },
 ): Promise<{ transactions: Transaction[]; total: number }> {
-  const { whereSql, params } = filterSql(filter)
+  const { whereSql, params } = filterSql(filter, false)
   const { rows } = await db.query<StoredTransaction>(
     `${SELECT} ${whereSql} ORDER BY t.date DESC, t.created_at DESC, t.id`,
     params,
   )
   const context = await presenting(db, rows)
   const term = filter.search!.toLowerCase()
-  const textsOf = (tx: Transaction) =>
-    searchBankText ? [tx.displayName, tx.note, tx.name, tx.merchantName] : [tx.displayName, tx.note]
   const matches = rows
     .map((row) => present(row, context))
-    .filter((tx) => textsOf(tx).some((text) => text?.toLowerCase().includes(term)))
+    .filter((tx) =>
+      [tx.displayName, tx.note ?? ''].some((text) => text.toLowerCase().includes(term)),
+    )
   return {
     transactions: matches.slice(filter.offset, filter.offset + filter.limit),
     total: matches.length,

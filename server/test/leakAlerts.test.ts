@@ -5,7 +5,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { duplicateAlert, priceRiseAlert } from '../src/domain/leaks/leakAlerts.js'
 import { leakAlerts } from '../src/domain/leaks/leakSource.js'
+import { listAlerts } from '../src/domain/alerts.js'
+import { hideHomeAlert, listHomeAlerts } from '../src/domain/notifications/homeAlerts.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
+import {
+  NOTIFICATION_KINDS,
+  updateNotificationSettings,
+} from '../src/domain/notifications/settings.js'
+import { getSettings } from '../src/domain/settings.js'
 import { accountAlertSubject } from '../src/domain/notifications/words.js'
 import { formatCents } from '../src/lib/money.js'
 import { shortDate } from '../src/lib/words.js'
@@ -16,6 +23,7 @@ import {
   insertBankTransaction,
   resetData,
 } from './helpers.js'
+import { withoutUuids } from './uuids.js'
 
 const format = {
   money: (cents: number) => formatCents(cents),
@@ -182,7 +190,7 @@ describe('leak alerts', () => {
       accountName: 'Test Everyday',
       message: 'Netflix charged $15.49 twice, on Nov 3 and Nov 4.',
     })
-    expect(JSON.stringify(await leaks())).not.toContain('4417')
+    expect(withoutUuids(JSON.stringify(await leaks()))).not.toContain('4417')
   })
 
   it('never takes a pending line and its posted twin for a duplicate', async () => {
@@ -289,7 +297,7 @@ describe('leak alerts', () => {
       message: 'Spotify went up to $11.99, from $10.99.',
       charge: { merchant: 'Spotify', previousCents: 1099 },
     })
-    expect(JSON.stringify(alert)).not.toContain('4417')
+    expect(withoutUuids(JSON.stringify(alert))).not.toContain('4417')
   })
 
   it('leaves a tracked bill to its own change alert, so a rise is never said twice', async () => {
@@ -422,6 +430,14 @@ describe('leak alerts', () => {
     /** A $15.49 Netflix bill, tracked since September, paid twice this month. */
     async function billPaidTwice() {
       const { accountId } = await everyday()
+      await earlierNetflix(accountId)
+      await chargedTwice(accountId)
+      await trackNetflix()
+      return accountId
+    }
+
+    /** Netflix at $15.49 on the 3rd of August, September and October. */
+    async function earlierNetflix(accountId: string) {
       for (const date of ['2026-08-03', '2026-09-03', '2026-10-03']) {
         await insertBankTransaction(ctx.db, accountId, {
           date,
@@ -430,8 +446,11 @@ describe('leak alerts', () => {
           amountCents: 1549,
         })
       }
-      await chargedTwice(accountId)
-      await call('create_bill', {
+    }
+
+    /** The Netflix bill at $15.49, tracked since September. */
+    async function trackNetflix() {
+      const bill = await call('create_bill', {
         name: 'Netflix',
         amountCents: 1549,
         cadence: 'month',
@@ -439,8 +458,11 @@ describe('leak alerts', () => {
         matchPattern: 'netflix',
       })
       await ctx.db.query(`UPDATE bills SET created_at = '2026-09-01T12:00:00Z'`)
-      return accountId
+      return bill.id
     }
+
+    const usual = async (billId: string) =>
+      (await call('list_bills')).bills.find((bill) => bill.id === billId)!.amountCents
 
     it('is told once, as a charge made twice, not also as a bill change', async () => {
       await billPaidTwice()
@@ -456,6 +478,60 @@ describe('leak alerts', () => {
         `SELECT kind FROM notifications WHERE kind IN ('duplicate_charge', 'bill_change')`,
       )
       expect(rows).toEqual([{ kind: 'duplicate_charge' }])
+    })
+
+    it('notifies as a bill change when charges made twice notify no one', async () => {
+      await billPaidTwice()
+      await updateNotificationSettings(ctx.db, {
+        kinds: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, kind === 'bill_change'])),
+      })
+      await refreshInbox(ctx)
+      const { rows } = await ctx.db.query<{ kind: string; message: string }>(
+        `SELECT kind, message FROM notifications WHERE kind IN ('duplicate_charge', 'bill_change')`,
+      )
+      expect(rows).toEqual([
+        { kind: 'bill_change', message: 'Netflix was $30.98, usually $15.49.' },
+      ])
+    })
+
+    it('tells a new price paid twice at the price, and dismissing takes that price', async () => {
+      const { accountId } = await everyday()
+      await earlierNetflix(accountId)
+      for (const date of ['2026-11-03', '2026-11-04']) {
+        await insertBankTransaction(ctx.db, accountId, {
+          date,
+          name: 'NETFLIX.COM 4417',
+          merchantName: 'Netflix',
+          amountCents: 1999,
+        })
+      }
+      const billId = await trackNetflix()
+      const alerts = await call('list_alerts', {})
+      expect(alerts.map((alert) => alert.message)).toEqual([
+        'Netflix was $19.99, usually $15.49.',
+        'Netflix charged $19.99 twice, on Nov 3 and Nov 4.',
+      ])
+      await call('hide_home_alert', { kind: 'bill_change', accountId, billId })
+      expect(await usual(billId)).toBe(1999)
+    })
+
+    it('hides a bill change for a cycle only paid twice, keeping the usual amount', async () => {
+      const accountId = await billPaidTwice()
+      const settings = await getSettings(ctx.db)
+      // As the inbox sees it with charges made twice turned off.
+      const alerts = await listAlerts(ctx.db, settings, '2026-11-17', [], { doublesTold: false })
+      const change = alerts.find((alert) => alert.kind === 'bill_change')!
+      expect(change.message).toBe('Netflix was $30.98, usually $15.49.')
+      const now = ctx.now()
+      await hideHomeAlert(
+        ctx.db,
+        alerts,
+        { kind: 'bill_change', accountId, billId: change.bill!.id },
+        now,
+      )
+      expect(await usual(change.bill!.id)).toBe(1549)
+      const home = await listHomeAlerts(ctx.db, alerts, [], now)
+      expect(home.alerts.map((alert) => alert.kind)).not.toContain('bill_change')
     })
 
     it('stays told once after a refund, and once the charge is old news', async () => {

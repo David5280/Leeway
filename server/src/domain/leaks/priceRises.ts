@@ -8,19 +8,25 @@
 // - the latest comes a cycle after an earlier charge. A charge in between is
 //   an extra off the cycle (an annual fee at a monthly gym, say) and is
 //   skipped, and an extra that is itself the latest has no charge a cycle
-//   before it, so an extra is never read as the new price;
+//   before it, or follows the charge due that cycle, so an extra is never
+//   read as the new price;
 // - the two charges before it agree, an odd one between steady ones aside,
 //   and the latest is clearly more than the last of them;
 // - the earlier charges do not move from cycle to cycle. A bill like power,
 //   whose amount moves every month, never had a steady price to rise from, so
 //   it stays quiet. Bill changes judge this the same way (amountsVary).
 // The latest charge must be the first at the new price, so the same rise is
-// never news twice.
+// never news twice. So a rise right after a skipped cycle is never told:
+// nothing sits a cycle before it, and the charge after it is no longer the
+// first at the new price. Missing one beats telling a false one.
+//
+// The web app bundles this file for PRICE_RISE, so it imports only pure
+// modules, never one that reaches the database (webBundle.test.ts).
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import { addCadence, type Cadence } from '../../lib/periods.js'
 import { amountsVary, CHARGES_READ, withoutOneOff } from '../billChanges.js'
-import { fitsCadence } from '../recurring.js'
+import { fitsCadence } from '../cadenceBands.js'
 import type { ChargeLine } from './duplicates.js'
 
 /**
@@ -77,17 +83,30 @@ export function isPriceRise(previousCents: number, amountCents: number): boolean
 /**
  * The days before `latest` (oldest first), newest first, from the one a cycle
  * before it on: the days between are extras off the cycle, left out. Null
- * when no day sits a cycle before the latest, as when the latest is itself an
- * extra or a cycle was missed.
+ * when no day sits a cycle before the latest, as when a cycle was missed, or
+ * when the latest is itself an extra.
+ *
+ * Bands have a few days' slack, so an extra a few days after a charge can sit
+ * a cycle after the charge before that one too (a $30 gym on the 1st with a
+ * $50 fee on Nov 2 or 3). The charge due that cycle is then the one between
+ * that lands closer to the due day, and the latest is the extra.
+ *
+ * An extra a few days before the next charge is due reads as that cycle's
+ * charge until the real one posts, then clears: the real one lands on the due
+ * day and the extra between is skipped.
  */
 function cycleBefore(earlier: ChargeLine[], latest: ChargeLine, cadence: Cadence) {
   const fitting = earlier.filter((day) => fitsCadence(daysBetween(day.date, latest.date), cadence))
   if (fitting.length === 0) return null
-  // Bands have a few days' slack, so an extra just after a charge can fit too:
-  // the cycle before is the day the latest follows most closely by the calendar.
-  const offBy = (day: ChargeLine) =>
-    Math.abs(daysBetween(addCadence(day.date, cadence), latest.date))
-  const previous = fitting.reduce((best, day) => (offBy(day) <= offBy(best) ? day : best))
+  // The cycle before is the day the latest follows most closely by the calendar.
+  const offBy = (day: ChargeLine, due: IsoDate) => Math.abs(daysBetween(due, day.date))
+  const dueAfter = (day: ChargeLine) => addCadence(day.date, cadence)
+  const previous = fitting.reduce((best, day) =>
+    offBy(latest, dueAfter(day)) <= offBy(latest, dueAfter(best)) ? day : best,
+  )
+  const due = dueAfter(previous)
+  const between = earlier.slice(earlier.indexOf(previous) + 1)
+  if (between.some((day) => offBy(day, due) < offBy(latest, due))) return null
   return earlier.slice(0, earlier.indexOf(previous) + 1).reverse()
 }
 

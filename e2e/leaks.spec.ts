@@ -53,10 +53,10 @@ test.describe('money leaks', () => {
     const alert = page.getByRole('link', { name: /Corner Hardware charged \$42\.10 twice/ })
     await expect(alert).toBeVisible()
     await alert.click()
-    await expect(page).toHaveURL(/\/transactions\?account=.+&range=all&search=Corner\+Hardware/)
-    await expect(page.getByRole('searchbox', { name: 'Search transactions' })).toHaveValue(
-      'Corner Hardware',
+    await expect(page).toHaveURL(
+      /\/transactions\?account=.+&range=all&merchant=.+&merchantName=Corner\+Hardware/,
     )
+    await expect(page.getByRole('button', { name: /^Merchant: Corner Hardware/ })).toBeVisible()
     const list = page.getByRole('region', { name: 'Transaction list' })
     await expect(
       list.getByRole('button', { name: /^Corner Hardware, spent \$42\.10/ }),
@@ -77,7 +77,9 @@ test.describe('money leaks', () => {
     const alert = page.getByRole('link', { name: /Streamly went up to \$11\.99, from \$10\.99/ })
     await expect(alert).toBeVisible()
     await alert.click()
-    await expect(page).toHaveURL(/\/transactions\?account=.+&range=all&search=Streamly/)
+    await expect(page).toHaveURL(
+      /\/transactions\?account=.+&range=all&merchant=.+&merchantName=Streamly/,
+    )
     // Every charge shows, the old price beside the new one.
     const list = page.getByRole('region', { name: 'Transaction list' })
     await expect(list.getByRole('button', { name: /^Streamly, spent \$10\.99/ })).toHaveCount(3)

@@ -53,8 +53,12 @@ const rise: AccountAlert = priceRiseAlert(
 
 describe('a leak alert', () => {
   it('opens the merchant’s charges on that account', () => {
-    expect(alertPath(twice)).toBe('/transactions?account=chk&range=all&search=Netflix+%26+Co')
-    expect(alertPath(rise)).toBe('/transactions?account=chk&range=all&search=Spotify')
+    expect(alertPath(twice)).toBe(
+      '/transactions?account=chk&range=all&merchant=22222222-2222-4222-8222-222222222222&merchantName=Netflix+%26+Co',
+    )
+    expect(alertPath(rise)).toBe(
+      '/transactions?account=chk&range=all&merchant=33333333-3333-4333-8333-333333333333&merchantName=Spotify',
+    )
   })
 
   it('is a warning, never red, with a word for its kind', () => {
@@ -77,10 +81,7 @@ describe('leaks on the home banner', () => {
     const server = fakeServer(homeAlertHandlers([twice, rise]).handlers)
     renderSignedIn(<AccountHealth />)
     const link = await screen.findByRole('link', { name: /Netflix & Co charged \$15\.49 twice/ })
-    expect(link).toHaveAttribute(
-      'href',
-      '/transactions?account=chk&range=all&search=Netflix+%26+Co',
-    )
+    expect(link).toHaveAttribute('href', alertPath(twice))
     expect(banner()).toHaveClass('warn-card')
 
     await userEvent.click(

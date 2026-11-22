@@ -44,9 +44,12 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
  * The alerts for these accounts, or for every account when none are given.
  * Hidden accounts are included: they stay out of budget totals, but an
  * overdraft on one still costs real money. A bill's change counts for the
- * account its charge came out of, hidden ones aside, as bills never read them.
- * A leak counts for the account it was charged to. A bill paid twice in a
- * cycle is told once, as a charge made twice (doublePaidBills.ts). Without `bills` or
+ * account its charge came out of, hidden ones aside, as bills never read
+ * them. A leak counts for the account it was charged to.
+ *
+ * A bill paid twice in a cycle is told once, as a charge made twice
+ * (doublePaidBills.ts). With `doublesTold` false, as when charges made twice
+ * notify no one, the bill's change tells it instead. Without `bills` or
  * `leaks`, those are not read, so a problem reading them never stands in the
  * way of the rest.
  */
@@ -55,7 +58,11 @@ export async function listAlerts(
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
   accountIds: string[] = [],
-  { bills = true, leaks = true }: { bills?: boolean; leaks?: boolean } = {},
+  {
+    bills = true,
+    leaks = true,
+    doublesTold = true,
+  }: { bills?: boolean; leaks?: boolean; doublesTold?: boolean } = {},
 ): Promise<AccountAlert[]> {
   const [accounts, charges, changes, found] = await Promise.all([
     listAccounts(db),
@@ -69,7 +76,7 @@ export async function listAlerts(
     money: (cents: number) => formatCents(cents, settings.currency, settings.locale),
     date: (date: IsoDate) => shortDate(date, settings.locale),
   }
-  const told = found ? withoutDoublePaid(changes, found.doubles, today) : changes
+  const told = found && doublesTold ? withoutDoublePaid(changes, found.doubles, today) : changes
   // Bill changes, then leaks, are the last kinds (ALERT_KINDS), so they go after the rest.
   return [
     ...alertsFor(picked, charges, settings),

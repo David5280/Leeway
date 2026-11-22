@@ -12,6 +12,7 @@ import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { accountMasks } from './accounts.js'
 import { listBills, type Bill } from './bills.js'
+import { CADENCE_BANDS, type CadenceBand } from './cadenceBands.js'
 import { countedSql } from './counted.js'
 import { bankTextKey, merchantKey, textKey } from './merchantKey.js'
 import { shownNameOf } from './ruleText.js'
@@ -56,18 +57,6 @@ export interface RecurringSeries {
   suggestedKind: 'bill' | 'subscription'
 }
 
-/**
- * The gap in days each cadence allows between two charges. Banks post a day
- * or two late and months differ in length, so each band has some slack.
- */
-const CADENCE_BANDS: { cadence: Cadence; min: number; max: number; minCount: number }[] = [
-  { cadence: 'week', min: 6, max: 8, minCount: 4 },
-  { cadence: 'biweek', min: 12, max: 16, minCount: 3 },
-  { cadence: 'month', min: 27, max: 33, minCount: 3 },
-  { cadence: 'quarter', min: 85, max: 97, minCount: 2 },
-  { cadence: 'year', min: 355, max: 375, minCount: 2 },
-]
-
 /** Share of gaps that must fit the cadence. One skipped or doubled month is tolerated. */
 const REGULAR_SHARE = 0.75
 /** Amounts within this share of the median count as the same price. */
@@ -85,21 +74,12 @@ function median(values: number[]): number {
  * The cadence whose band most gaps fall in, if enough of them do. The bands
  * do not overlap, so at most one can hold the regular share of the gaps.
  */
-function cadenceOfGaps(gaps: number[]): (typeof CADENCE_BANDS)[number] | null {
+function cadenceOfGaps(gaps: number[]): CadenceBand | null {
   for (const band of CADENCE_BANDS) {
     const fitting = gaps.filter((gap) => gap >= band.min && gap <= band.max).length
     if (gaps.length + 1 >= band.minCount && fitting / gaps.length >= REGULAR_SHARE) return band
   }
   return null
-}
-
-/**
- * Whether a gap in days between two charges fits a cadence, with the same
- * slack detection allows. A cadence detection never finds (semimonth) fits none.
- */
-export function fitsCadence(gapDays: number, cadence: Cadence): boolean {
-  const band = CADENCE_BANDS.find((one) => one.cadence === cadence)
-  return band !== undefined && gapDays >= band.min && gapDays <= band.max
 }
 
 function mostCommon(values: (string | null)[]): string | null {

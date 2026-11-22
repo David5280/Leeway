@@ -43,11 +43,11 @@ export function alertsTint(alerts: AccountAlert[]): '' | 'over-card' | 'warn-car
 
 /**
  * Where an alert is dealt with: its bill's list, a leak's charges (that
- * account's activity, searched for the merchant), or its account.
+ * account's activity, narrowed to the merchant), or its account.
  */
 export function alertPath(alert: AccountAlert): string {
   if (alert.bill) return '/plan/bills'
-  if (alert.charge) return merchantActivityPath(alert.accountId, alert.charge.merchant)
+  if (alert.charge) return merchantActivityPath(alert.accountId, alert.charge)
   return accountDetailPath(alert.accountId)
 }
 

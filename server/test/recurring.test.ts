@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bankTextKey, merchantKey, textKey } from '../src/domain/merchantKey.js'
-import { detectRecurring, fitsCadence, type PastTransaction } from '../src/domain/recurring.js'
+import { fitsCadence } from '../src/domain/cadenceBands.js'
+import { detectRecurring, type PastTransaction } from '../src/domain/recurring.js'
 
 /** No accounts with masks: names are only cleaned (see safeName.ts). */
 const NO_MASKS: string[] = []

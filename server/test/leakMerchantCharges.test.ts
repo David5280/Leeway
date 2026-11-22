@@ -47,6 +47,20 @@ describe('isMerchantCharge', () => {
     )
     expect(isMerchantCharge(line({ name: 'ATM WITHDRAWAL 1200 MAIN ST' }))).toBe(false)
     expect(isMerchantCharge(line({ name: 'CASH WITHDRAWAL BRANCH 12' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'WITHDRAWAL AT ATM #0042' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'ATM W/D 5TH AVE' }))).toBe(false)
+  })
+
+  it('reads a bank’s words only as a whole phrase, so a merchant named alike stays one', () => {
+    for (const name of [
+      'THE ATM BAR AND GRILL',
+      'OVERDRAFT BREWING CO',
+      'NSF HOLDINGS LLC',
+      'RETURNED ITEM BOUTIQUE',
+      'CASH AND CARRY WITHDRAWAL',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(true)
+    }
   })
 
   it('leaves out payments to people through an app, by name or code', () => {
@@ -74,8 +88,44 @@ describe('isMerchantCharge', () => {
       isMerchantCharge(line({ providerCategoryDetailed: 'BANK_FEES_FOREIGN_TRANSACTION_FEES' })),
     ).toBe(false)
     expect(isMerchantCharge(line({ providerCategoryPrimary: 'BANK_FEES' }))).toBe(false)
-    expect(isMerchantCharge(line({ name: 'ATM FEE' }))).toBe(false)
-    expect(isMerchantCharge(line({ name: 'OVERDRAFT FEE' }))).toBe(false)
+    // With no codes, by the fee's whole name.
+    for (const name of [
+      'ATM FEE',
+      'NON-NETWORK ATM FEE',
+      'ATM SURCHARGE',
+      'OVERDRAFT FEE',
+      'OVERDRAFT ITEM FEE',
+      'OVERDRAFT PROTECTION TRANSFER FEE',
+      'NSF FEE',
+      'INSUFFICIENT FUNDS CHARGE',
+      'MONTHLY MAINTENANCE FEE',
+      'SERVICE CHARGE',
+      'FOREIGN TRANSACTION FEE',
+      'WIRE TRANSFER FEE',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+    }
+  })
+
+  it('keeps a purchase through a payment app the bank coded as one', () => {
+    /** A payment app line with the bank's primary code, and its detailed one when given. */
+    const coded = (name: string, primary: string | null, detailed: string | null = null) =>
+      line({ name, providerCategoryPrimary: primary, providerCategoryDetailed: detailed })
+    expect(isMerchantCharge(coded('PAYPAL *CORNERSHOP', 'GENERAL_MERCHANDISE'))).toBe(true)
+    expect(isMerchantCharge(coded('CASH APP*TACO STAND', 'FOOD_AND_DRINK'))).toBe(true)
+    // The detailed code alone says so too.
+    expect(
+      isMerchantCharge(coded('VENMO *DOG WALKS', null, 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES')),
+    ).toBe(true)
+    // A transfer code, or none, is still a payment to a person.
+    expect(
+      isMerchantCharge(
+        coded('VENMO PAYMENT', 'TRANSFER_OUT', 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS'),
+      ),
+    ).toBe(false)
+    expect(isMerchantCharge(coded('PAYPAL TRANSFER', null))).toBe(false)
+    // Zelle has no checkout, so a code never makes it a store.
+    expect(isMerchantCharge(coded('Zelle payment to Pat Example', 'GENERAL_SERVICES'))).toBe(false)
   })
 })
 

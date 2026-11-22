@@ -18,6 +18,7 @@
 import { daysBetween, type IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
+import { DUPLICATE_DAYS } from './leaks/duplicates.js'
 
 /**
  * How far a charge must be from the usual amount to be news: at least this
@@ -85,6 +86,34 @@ export type BillChange =
   | { kind: 'changed'; bill: WatchedBill; charge: BillCharge; cycle: BillCharge[] }
   /** Two charges in a row at the new amount: it is the usual one now. */
   | { kind: 'settled'; bill: WatchedBill; amountCents: number }
+
+/** A cycle that is news (BillChange's 'changed'). */
+export type ChangedBill = Extract<BillChange, { kind: 'changed' }>
+
+/**
+ * A cycle's charges (newest first) less the repeats: of the charges of one
+ * amount on one account within DUPLICATE_DAYS of each other, only the oldest,
+ * as duplicates.ts reads a charge made twice.
+ */
+export function withoutRepeats(cycle: BillCharge[]): BillCharge[] {
+  const kept: BillCharge[] = []
+  // Oldest first, so the first of each run is the one kept.
+  for (const charge of [...cycle].reverse()) {
+    const repeats = kept.some(
+      (one) =>
+        one.accountId === charge.accountId &&
+        one.amountCents === charge.amountCents &&
+        daysBetween(one.date, charge.date) <= DUPLICATE_DAYS,
+    )
+    if (!repeats) kept.push(charge)
+  }
+  return kept.reverse()
+}
+
+/** What a cycle cost paid once: its charges added up, the repeats left out (withoutRepeats). */
+export function paidOnceCents(cycle: BillCharge[]): number {
+  return withoutRepeats(cycle).reduce((sum, charge) => sum + charge.amountCents, 0)
+}
 
 /**
  * One cycle's charges from `first` (newest first) on: those within half a
@@ -200,7 +229,7 @@ export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | nu
  * only worth knowing.
  */
 export function billChangeAlert(
-  { bill, charge }: Pick<Extract<BillChange, { kind: 'changed' }>, 'kind' | 'bill' | 'charge'>,
+  { bill, charge }: Pick<ChangedBill, 'kind' | 'bill' | 'charge'>,
   accountName: string,
   { money }: Pick<AlertFormat, 'money'>,
 ): AccountAlert {

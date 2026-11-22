@@ -90,7 +90,9 @@ describe('withoutDoublePaid', () => {
     // One on another account, or ending another day, is not this cycle's.
     const elsewhere = double(paid('2026-11-03', 8999, 'card'), paid('2026-11-04', 8999, 'card'))
     const earlier = double(paid('2026-11-02', 8999), paid('2026-11-03', 8999))
-    expect(withoutDoublePaid([change], [elsewhere, earlier], TODAY)).toEqual([change])
+    // Nor is one for another amount the same day, as a second shop's double.
+    const otherAmount = double(paid('2026-11-03', 2500), paid('2026-11-04', 2500))
+    expect(withoutDoublePaid([change], [elsewhere, earlier, otherAmount], TODAY)).toEqual([change])
   })
 
   it(`leaves it out once the double charge is past its ${DUPLICATE_NEWS_DAYS} days of news`, () => {
@@ -98,6 +100,18 @@ describe('withoutDoublePaid', () => {
     const lastNewsDay = addDays('2026-11-04', DUPLICATE_NEWS_DAYS - 1)
     expect(withoutDoublePaid([change], [], lastNewsDay)).toEqual([change])
     expect(withoutDoublePaid([change], [], addDays(lastNewsDay, 1))).toEqual([])
+  })
+
+  it('tells a price change paid twice at what the cycle cost paid once', () => {
+    // The gym went from $89.99 to $99.99 and the $99.99 went through twice.
+    const rose = [paid('2026-11-04', 9999), paid('2026-11-03', 9999)] as const
+    const change = changed(...rose)
+    expect(change.charge.amountCents).toBe(19998)
+    expect(withoutDoublePaid([change], [double(rose[1], rose[0])], TODAY)).toEqual([
+      { ...change, charge: { ...change.charge, amountCents: 9999 }, cycle: [rose[1]] },
+    ])
+    // With no "Charged twice?" telling the repeat, the cycle's full cost is the news.
+    expect(withoutDoublePaid([change], [], TODAY)).toEqual([change])
   })
 
   it('keeps every other change and a settled one', () => {

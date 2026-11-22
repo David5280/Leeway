@@ -129,12 +129,21 @@ export function dayNet(
 }
 
 /**
- * The activity list narrowed to one account and searched for a merchant, as
- * a link: where a leak's charges (a charge made twice, a price gone up) show
- * side by side, over every date, so the earlier price or the first charge
- * shows too. The merchant is the name the app shows, which a search matches
- * as well as the bank's own text.
+ * The activity list narrowed to one account and one merchant, as a link:
+ * where a leak's charges (a charge made twice, a price gone up) show side by
+ * side, over every date, so the earlier price or the first charge shows too.
+ * The merchant is matched by one of its charges, as the leak grouped them,
+ * and its shown name labels the filter.
  */
-export function merchantActivityPath(accountId: string, merchant: string): string {
-  return `/transactions?${new URLSearchParams({ account: accountId, range: 'all', search: merchant })}`
+export function merchantActivityPath(
+  accountId: string,
+  charge: { id: string; merchant: string },
+): string {
+  const params = {
+    account: accountId,
+    range: 'all',
+    merchant: charge.id,
+    merchantName: charge.merchant,
+  }
+  return `/transactions?${new URLSearchParams(params)}`
 }
