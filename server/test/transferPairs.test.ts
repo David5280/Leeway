@@ -121,15 +121,32 @@ describe('transferHint', () => {
     }
   })
 
-  it('reads pay words only before a "to" or "from" tail, which names an account', () => {
+  it("reads a pay word directly before an account word as that account's name", () => {
     const base = tx('a', { accountId: 'x', amountCents: -100 })
     for (const name of [
+      'Payroll Savings Transfer',
+      'Refund Account Transfer',
+      'PAYROLL CHK XFER',
       'Online Transfer to PAYROLL CHK 1234',
       'Transfer from Tax Refund Savings',
       'Transfer to Rebate account',
     ]) {
       expect(transferHint({ ...base, name })).toBe('transfer')
     }
+    // A pay word before any other word still says pay.
+    expect(transferHint({ ...base, name: 'Payroll Deposit Transfer' })).toBe('other')
+    // With no transfer word, the account's name says nothing to pair by: the pay word wins.
+    expect(transferHint({ ...base, name: 'Payroll Savings' })).toBe('other')
+  })
+
+  it('reads a "from" tail\'s pay words as pay, and a "to" tail as where the money went', () => {
+    const base = tx('a', { accountId: 'x', amountCents: -100 })
+    // A "from" tail names who sent it: an employer's payroll is pay.
+    for (const name of ['ACH Transfer from ACME Corp Payroll', 'Transfer from ACME Refund']) {
+      expect(transferHint({ ...base, name })).toBe('other')
+    }
+    // A "to" tail names where the money went, so its pay words are a name.
+    expect(transferHint({ ...base, name: 'Online Transfer to ACME Payroll Fund' })).toBe('transfer')
     // The name is read before the merchant, and a tail ends with its field.
     expect(transferHint({ ...base, name: 'Transfer', merchantName: 'From Refund Savings' })).toBe(
       'transfer',

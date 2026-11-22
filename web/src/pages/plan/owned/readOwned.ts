@@ -10,8 +10,7 @@ import {
   MAX_AMOUNT_CENTS,
 } from '../../../../../server/src/domain/ownedRules'
 import type { Account } from '../../../api/client'
-import { parseMoney } from '../../../lib/format'
-import { isUnreadableRate, parseRate } from '../DebtTerms'
+import { isUnreadableRate, MAX_RATE_PERCENT, parseMoney, readRate } from '../../../lib/format'
 import { isOwedKind, type OwnedItem, type OwnedText } from './ownedText'
 
 /** What the form holds, read: a loan's terms, or a home or car's loan, only where they apply. */
@@ -41,8 +40,10 @@ const refuse = (error: string): { ok: false; error: string } => ({ ok: false, er
 function readTerms(text: OwnedText): Read<Terms> {
   // A blank field clears its term; one typed that can't be read must not.
   if (isUnreadableRate(text.rate)) return refuse('Enter the rate as a number, like 6.5.')
-  const aprPercent = parseRate(text.rate)
-  if (aprPercent !== null && aprPercent > 100) return refuse('Use a rate of 100% or less.')
+  const aprPercent = readRate(text.rate)
+  if (aprPercent !== null && aprPercent > MAX_RATE_PERCENT) {
+    return refuse(`Use a rate of ${MAX_RATE_PERCENT}% or less.`)
+  }
   const monthlyPaymentCents = parseMoney(text.payment)
   if (monthlyPaymentCents === null && text.payment.trim() !== '') {
     return refuse('Enter the monthly payment as an amount, like 350.')

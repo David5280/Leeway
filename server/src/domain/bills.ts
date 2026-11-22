@@ -229,19 +229,27 @@ function readsAfter(
   return byAssistant && repatterned ? 'shown_name' : bill.reads
 }
 
+/**
+ * Changes a bill. A new amount is recorded as set by the owner (amount_set_at),
+ * so following a varying bill's cycles leaves it alone until a cycle posts
+ * after it. Resending the same amount, as a form saving other fields does,
+ * is no new figure and records nothing.
+ */
 export async function updateBill(
   db: Db,
   id: string,
   patch: z.infer<typeof billPatchSchema>,
-  today: IsoDate,
+  { today, now }: { today: IsoDate; now: Date },
   author: RuleAuthor = {},
 ): Promise<Bill> {
   const current = await getBill(db, id, today)
   if (patch.categoryId) await assertCategoryExists(db, patch.categoryId)
   const next = { ...current, ...patch, reads: readsAfter(current, patch, author) }
+  const amountSet = next.amountCents !== current.amountCents
   await db.query(
     `UPDATE bills SET name = $2, kind = $3, amount_cents = $4, cadence = $5, anchor_date = $6,
-       match_pattern = $7, category_id = $8, autopay = $9, reads = $10
+       match_pattern = $7, category_id = $8, autopay = $9, reads = $10,
+       amount_set_at = CASE WHEN $11::boolean THEN $12::timestamptz ELSE amount_set_at END
      WHERE id = $1`,
     [
       id,
@@ -254,6 +262,8 @@ export async function updateBill(
       next.categoryId,
       next.autopay,
       next.reads,
+      amountSet,
+      now,
     ],
   )
   return getBill(db, id, today)

@@ -13,6 +13,9 @@
 //
 // Money is integer cents. Amounts from the bank follow its convention:
 // positive is money out, negative is money in.
+//
+// A rate, like a card's APR, is formatted here too (percentText), so every
+// number Leeway writes in the owner's locale comes from this one file.
 
 export interface MoneyOptions {
   currency: string
@@ -149,4 +152,11 @@ export function currencySample(options: MoneyOptions): string {
     style: 'currency',
     currency: options.currency,
   }).format(1234.56)
+}
+
+/** A rate as the locale writes it, to the hundredth: "24.99%", or "24,99 %" in German. */
+export function percentText(percent: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(
+    percent / 100,
+  )
 }

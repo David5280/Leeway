@@ -379,6 +379,7 @@ function billChange(amountCents: number, name: string) {
         cadence: 'month',
         trackedOn: '2026-09-01',
         amountVaries: false,
+        amountSetOn: null,
         charges: [],
       },
       charge: { accountId: 'everyday', date: '2026-11-16', amountCents },
