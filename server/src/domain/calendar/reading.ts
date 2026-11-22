@@ -43,7 +43,7 @@ export interface Read {
 }
 
 /** Only the events likely to cost money, most ruled out on a first look. */
-const LIKELY_TO_COST: Keep = {
+export const LIKELY_TO_COST: Keep = {
   mayKeep: mayHaveKind,
   keeps: (event) => kindOf(event) !== null,
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_ZONES, perZone } from '../src/lib/zoneCache.js'
 import { wallClockMs, zonedInstant } from '../src/lib/zonedTime.js'
 
 const at = (date: string, hour: number, zone: string) =>
@@ -87,5 +88,18 @@ describe('wallClockMs', () => {
     const instant = Date.UTC(2026, 2, 8, 9, 30)
     expect(wallClockMs(instant, 'America/Denver')).toBe(wallClockMs(instant, 'America/Denver'))
     expect(wallClockMs(instant, 'America/Denver')).toBe(Date.UTC(2026, 2, 8, 3, 30))
+  })
+})
+
+describe('perZone', () => {
+  it('makes an entry once per zone, and empties the map rather than grow past MAX_ZONES', () => {
+    const map = new Map<string, number>()
+    let made = 0
+    const make = () => ++made
+    expect(perZone(map, 'Asia/Tokyo', make)).toBe(1)
+    expect(perZone(map, 'Asia/Tokyo', make)).toBe(1)
+    for (let i = 0; i < MAX_ZONES * 3; i++) perZone(map, `Zone/${i}`, make)
+    expect(map.size).toBeLessThanOrEqual(MAX_ZONES)
+    expect(made).toBe(1 + MAX_ZONES * 3)
   })
 })

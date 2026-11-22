@@ -2,16 +2,10 @@
 // named zone's clock, a UTC moment, or a "floating" moment on whatever clock
 // the reader keeps) and the days each covers on the owner's calendar. Pure.
 
-import {
-  addDays,
-  fromDayNumber,
-  isValidTimeZone,
-  makeDate,
-  toDayNumber,
-  type IsoDate,
-} from '../../lib/dates.js'
+import { addDays, fromDayNumber, makeDate, toDayNumber, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '../../lib/time.js'
 import { wallClockMs, zonedInstant } from '../../lib/zonedTime.js'
+import { listedZone } from './zoneNames.js'
 
 export interface Moment {
   /** The day as written, on the clock of the zone it is written in. */
@@ -31,18 +25,14 @@ export interface Days {
 const VALUE = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/
 const DURATION = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/
 
-/** Zone names already checked, since Intl is slow to ask. */
-const knownZones = new Map<string, boolean>()
-
 /**
- * A TZID Intl knows, or null. A Windows name ("Eastern Standard Time") or a
- * calendar's own made-up id is read as floating, which is right to the day
- * for anyone living in that zone.
+ * A TZID Intl lists, by Intl's own name, or null. A file's links (US/Eastern)
+ * are already read to a listed zone (componentsOf). A Windows name ("Eastern
+ * Standard Time") or a calendar's own made-up id is read as floating, which
+ * is right to the day for anyone living in that zone.
  */
 function zoneOf(tzid: string | undefined): string | null {
-  if (!tzid) return null
-  if (!knownZones.has(tzid)) knownZones.set(tzid, isValidTimeZone(tzid))
-  return knownZones.get(tzid) ? tzid : null
+  return tzid ? listedZone(tzid) : null
 }
 
 /** A DTSTART, DTEND, EXDATE, RECURRENCE-ID or UNTIL value, with its TZID if any. */

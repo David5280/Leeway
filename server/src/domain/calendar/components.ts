@@ -1,5 +1,8 @@
 // The lines of an iCalendar (.ics) file as events' properties: folded lines
-// joined, parameters split off, text unescaped and cleaned. Pure.
+// joined, parameters split off, text unescaped and cleaned, and each zone
+// named (TZID) read to the name Intl uses, or dropped when unknown. Pure.
+
+import { zoneReader } from './zoneNames.js'
 
 /** The longest title, location or id kept, in characters. */
 const MAX_TEXT = 200
@@ -13,6 +16,7 @@ const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g
 
 export interface Property {
   name: string
+  /** Its parameters by name in upper case; TZID, when kept, is a zone Intl lists. */
   params: Record<string, string>
   value: string
 }
@@ -49,6 +53,7 @@ function propertyOf(line: string): Property | null {
 /** The file's events, each as its own properties; an alarm's lines inside one are not its own. */
 export function componentsOf(text: string): Component[] {
   const components: Component[] = []
+  const zoneOf = zoneReader()
   let current: Component | null = null
   // How deep inside the event a line is.
   let nested = 0
@@ -63,9 +68,24 @@ export function componentsOf(text: string): Component[] {
       current = null
     } else if (upper.startsWith('BEGIN:')) nested++
     else if (upper.startsWith('END:')) nested--
-    else if (nested === 0) addProperty(current, propertyOf(line))
+    else if (nested === 0) addProperty(current, withZone(propertyOf(line), zoneOf))
   }
   return components
+}
+
+/**
+ * A property with its TZID read to the zone Intl uses, or without one when
+ * it names no zone Intl knows: it then reads as floating.
+ */
+function withZone(
+  property: Property | null,
+  zoneOf: (name: string) => string | null,
+): Property | null {
+  if (property?.params.TZID === undefined) return property
+  const zone = zoneOf(property.params.TZID)
+  if (zone) property.params.TZID = zone
+  else delete property.params.TZID
+  return property
 }
 
 function addProperty(component: Component, property: Property | null): void {
@@ -96,6 +116,32 @@ export function textOf(value: string | undefined): string | null {
 export function uidOf(component: Component): string | null {
   const uid = first(component, 'UID')?.value.replace(CONTROL, '').trim()
   return uid ? uid.slice(0, MAX_TEXT) : null
+}
+
+/** An email address, as a calendar's name may be one. */
+const ADDRESS = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/
+
+/**
+ * Whose calendar the file is, as an email address, when its name is one, as
+ * Google names a person's main calendar; null for any other name. Only the
+ * lines before the first event are read.
+ */
+export function calendarAddressOf(text: string): string | null {
+  const firstEvent = text.search(/BEGIN:VEVENT/i)
+  const head = firstEvent < 0 ? text : text.slice(0, firstEvent)
+  const line = unfold(head).find((line) => line.toUpperCase().startsWith('X-WR-CALNAME:'))
+  const name = line?.slice('X-WR-CALNAME:'.length).trim().toLowerCase()
+  return name && ADDRESS.test(name) ? name : null
+}
+
+/** True when the calendar's own `address` is invited to the event and said no. */
+export function isDeclinedBy(component: Component, address: string | null): boolean {
+  if (!address) return false
+  return (component.get('ATTENDEE') ?? []).some(
+    (attendee) =>
+      attendee.params.PARTSTAT?.toUpperCase() === 'DECLINED' &&
+      attendee.value.trim().toLowerCase() === `mailto:${address}`,
+  )
 }
 
 export function isCancelled(component: Component): boolean {

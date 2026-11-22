@@ -3,30 +3,30 @@
 
 import type { IsoDate } from './dates.js'
 import { DAY_MS } from './time.js'
+import { perZone } from './zoneCache.js'
 
 /**
  * One formatter per zone, made on first use: building an Intl.DateTimeFormat
  * costs far more than using one, and a calendar read asks thousands of times.
- * Zones are a short, fixed list, so the map stays small.
  */
 const wallClocks = new Map<string, Intl.DateTimeFormat>()
 
 function wallClockOf(timeZone: string): Intl.DateTimeFormat {
-  let format = wallClocks.get(timeZone)
-  if (!format) {
-    format = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      second: 'numeric',
-    })
-    wallClocks.set(timeZone, format)
-  }
-  return format
+  return perZone(
+    wallClocks,
+    timeZone,
+    () =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+      }),
+  )
 }
 
 /** The wall clock of `timeZone` at a whole second, read from Intl: the slow way. */
@@ -56,11 +56,7 @@ const MAX_MIDNIGHTS = 50_000
 const midnights = new Map<string, Map<number, number>>()
 
 function offsetAtMidnight(day: number, timeZone: string): number {
-  let known = midnights.get(timeZone)
-  if (!known) {
-    known = new Map()
-    midnights.set(timeZone, known)
-  }
+  const known = perZone(midnights, timeZone, () => new Map<number, number>())
   let offset = known.get(day)
   if (offset === undefined) {
     if (known.size >= MAX_MIDNIGHTS) known.clear()

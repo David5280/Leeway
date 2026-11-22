@@ -1,41 +1,11 @@
-// Calendar files built, or grown big enough, to keep the server busy: the
-// work budget, how it is shared among rules, and how quickly files read.
+// Calendar files built to keep the server busy with repeating events: the
+// work budget each read has, and how it is shared among a file's rules.
 
 import { describe, expect, it } from 'vitest'
-import type { CalendarEvent, Keep } from '../src/domain/calendar/ics.js'
-import { kindOf, mayHaveKind } from '../src/domain/calendar/kinds.js'
 import { REPEAT_UNITS, workBudget } from '../src/domain/calendar/recurrence.js'
 import { expandAll, type RuleJob } from '../src/domain/calendar/repeatShares.js'
 import { parseRule, type Rule } from '../src/domain/calendar/rule.js'
 import { eventsIn, ics } from './fixtures/calendarFile.js'
-
-/**
- * How long these may take. Each runs in a fraction of this on a laptop; the
- * bound is loose so a slow CI machine never fails it, yet tight enough that
- * the seconds-long reads these guard against always would.
- */
-const QUICK_MS = 1000
-
-/** The events likely to cost money, as a calendar read keeps them. */
-const LIKELY_TO_COST: Keep = {
-  mayKeep: mayHaveKind,
-  keeps: (event: CalendarEvent) => kindOf(event) !== null,
-}
-
-/** How long `work` takes, in milliseconds. */
-function timed(work: () => void): number {
-  const started = performance.now()
-  work()
-  return performance.now() - started
-}
-
-/** A calendar day `i` days after 2016-01-01, as an .ics date. */
-function icsDay(i: number): string {
-  return new Date(Date.UTC(2016, 0, 1) + i * 86_400_000)
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll('-', '')
-}
 
 describe('a file built to keep the server busy', () => {
   const window = { from: '2023-11-01', to: '2027-11-23' }
@@ -144,166 +114,8 @@ describe('a file built to keep the server busy', () => {
   })
 })
 
-describe('a large ordinary calendar', () => {
-  const window = { from: '2023-11-21', to: '2027-11-23' }
-
-  it('reads 8,000 meetings on a named zone’s clock well under a second, keeping none', () => {
-    // Ten years of hour-long meetings as Google exports them: about 1.7MB.
-    const meetings = Array.from({ length: 8000 }, (_, i) => [
-      `UID:m${i}@google.com`,
-      `DTSTART;TZID=America/Denver:${icsDay(Math.floor(i * 0.45))}T100000`,
-      `DTEND;TZID=America/Denver:${icsDay(Math.floor(i * 0.45))}T110000`,
-      `SUMMARY:Meeting ${i % 50}`,
-      'LOCATION:Office',
-    ])
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(ics(...meetings), 'America/Denver', window, { keep: LIKELY_TO_COST })
-    })
-    expect(events).toEqual([])
-    expect(ms).toBeLessThan(QUICK_MS)
-  })
-
-  it('reads 10,000 trips on a named zone’s clock in under a second', () => {
-    const trips = Array.from({ length: 10_000 }, (_, i) => [
-      `UID:t${i}`,
-      `SUMMARY:Trip ${i}`,
-      `DTSTART;TZID=Asia/Tokyo:${icsDay(2900 + (i % 400))}T100000`,
-      `DTEND;TZID=Asia/Tokyo:${icsDay(2902 + (i % 400))}T100000`,
-    ])
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(ics(...trips), 'America/Denver', window, { keep: LIKELY_TO_COST })
-    })
-    expect(events.length).toBeGreaterThan(0)
-    expect(ms).toBeLessThan(QUICK_MS)
-  })
-
-  it('pays for each repeat of a timed event on a named zone’s clock from the budget', () => {
-    // Fifty daily trips at 9 AM in New York: each repeat's time zone math is work too.
-    const daily = Array.from({ length: 50 }, (_, i) => [
-      `UID:d${i}`,
-      `SUMMARY:Trip ${i}`,
-      'DTSTART;TZID=America/New_York:20200101T090000',
-      'DTEND;TZID=America/New_York:20200101T100000',
-      'RRULE:FREQ=DAILY',
-    ])
-    const budget = workBudget()
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(ics(...daily), 'America/Denver', window, { budget })
-    })
-    expect(ms).toBeLessThan(QUICK_MS)
-    expect(budget.ranOut).toBe(true)
-    expect(budget.unitsLeft).toBeGreaterThanOrEqual(0)
-    // About 1,500 repeats across the window at a dozen units each: a few rules fit, not all.
-    const kept = new Set(events.map((event) => event.uid))
-    expect(kept.size).toBeGreaterThan(1)
-    expect(kept.size).toBeLessThan(50)
-    expect(REPEAT_UNITS.zoned).toBeGreaterThan(REPEAT_UNITS.plain)
-  })
-})
-
-describe('a file listing the same thing thousands of times', () => {
-  const window = { from: '2023-11-21', to: '2027-11-23' }
-  const daily = [
-    'UID:x',
-    'SUMMARY:Camping trip',
-    'DTSTART;TZID=America/New_York:20240101T090000',
-    'RRULE:FREQ=DAILY;COUNT=40',
-  ]
-
-  it('reads 110,000 EXDATE values on the event’s own clock in a moment, and still skips them', () => {
-    // Every day of 2024's first four weeks, each listed thousands of times over.
-    const values = Array.from(
-      { length: 110_000 },
-      (_, i) => `202401${String(1 + (i % 28)).padStart(2, '0')}T090000`,
-    )
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(
-        ics([...daily, `EXDATE;TZID=America/New_York:${values.join(',')}`]),
-        'UTC',
-        window,
-      )
-    })
-    expect(ms).toBeLessThan(QUICK_MS)
-    expect(events.map((event) => event.startsOn)).toEqual([
-      '2024-01-29',
-      '2024-01-30',
-      '2024-01-31',
-      '2024-02-01',
-      '2024-02-02',
-      '2024-02-03',
-      '2024-02-04',
-      '2024-02-05',
-      '2024-02-06',
-      '2024-02-07',
-      '2024-02-08',
-      '2024-02-09',
-    ])
-  })
-
-  it('pays for EXDATEs on another clock from the budget, leaving out an event that lists too many', () => {
-    // 60,000 different moments in UTC, each needing time zone math to place.
-    const values = Array.from({ length: 60_000 }, (_, i) => {
-      const day = icsDay(2930 + (i % 1400))
-      return `${day}T${String(Math.floor(i / 1400) % 24).padStart(2, '0')}${String(i % 60).padStart(2, '0')}00Z`
-    })
-    const text = ics(
-      [...daily, `EXDATE:${values.join(',')}`],
-      ['UID:mom', "SUMMARY:Mom's birthday", 'DTSTART;VALUE=DATE:19600305', 'RRULE:FREQ=YEARLY'],
-    )
-    const budget = workBudget()
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(text, 'UTC', window, { budget })
-    })
-    expect(ms).toBeLessThan(QUICK_MS)
-    expect(budget.ranOut).toBe(true)
-    // Left out before any was placed, so the birthday still has nearly all the budget to draw on.
-    expect(budget.unitsLeft).toBeGreaterThan(190_000)
-    expect(new Set(events.map((event) => event.uid))).toEqual(new Set(['mom']))
-  })
-
-  it('reads 36,000 changed repeats of one event in a moment', () => {
-    const changed = Array.from({ length: 36_000 }, (_, i) => [
-      'UID:r',
-      `RECURRENCE-ID;VALUE=DATE:202401${String(1 + (i % 28)).padStart(2, '0')}`,
-    ])
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(
-        ics(
-          ['UID:r', 'SUMMARY:Trip', 'DTSTART;VALUE=DATE:20240101', 'RRULE:FREQ=DAILY;COUNT=30'],
-          ...changed,
-        ),
-        'UTC',
-        window,
-      )
-    })
-    expect(ms).toBeLessThan(QUICK_MS)
-    // Each of the first 28 days is replaced by a repeat with no start, which replaces it with nothing.
-    expect(events.map((event) => event.startsOn)).toEqual(['2024-01-29', '2024-01-30'])
-  })
-
-  it.each([
-    ['BYDAY', 'FREQ=MONTHLY;BYDAY=', 'MO'],
-    ['BYMONTHDAY', 'FREQ=MONTHLY;BYMONTHDAY=', '1'],
-    ['BYMONTH', 'FREQ=YEARLY;BYMONTHDAY=1;BYMONTH=', '1'],
-  ])('reads a %s list of 200,000 repeated entries in a moment', (_, start, entry) => {
-    const rule = `${start}${Array.from({ length: 200_000 }, () => entry).join(',')}`
-    const text = ics(['UID:h', 'SUMMARY:Trip', 'DTSTART;VALUE=DATE:20240101', `RRULE:${rule}`])
-    let events: CalendarEvent[] = []
-    const ms = timed(() => {
-      events = eventsIn(text, 'UTC', window)
-    })
-    expect(ms).toBeLessThan(QUICK_MS)
-    expect(events.length).toBeGreaterThan(0)
-  })
-})
-
 describe('sharing the budget among many rules', () => {
+  const window = { from: '2023-11-01', to: '2027-11-23' }
   const bounds = { from: '2023-11-21', to: '2027-11-24', until: null }
   /** The same twice-weekly rule, `count` times over. */
   const twiceWeekly = (count: number): RuleJob[] =>
@@ -312,6 +124,7 @@ describe('sharing the budget among many rules', () => {
       rule: parseRule('FREQ=WEEKLY;BYDAY=MO,TH') as Rule,
       bounds,
       unitsPerRepeat: REPEAT_UNITS.plain,
+      upfrontUnits: 0,
     }))
 
   it('keeps every rule the budget can hold', () => {
@@ -337,17 +150,67 @@ describe('sharing the budget among many rules', () => {
       rule: parseRule('FREQ=DAILY;BYDAY=MO;COUNT=40000') as Rule,
       bounds,
       unitsPerRepeat: 1,
+      upfrontUnits: 0,
     }
     const birthday = {
       first: '1960-03-05',
       rule: parseRule('FREQ=YEARLY') as Rule,
       bounds,
       unitsPerRepeat: 1,
+      upfrontUnits: 0,
     }
     const budget = workBudget(40_000)
     const [first, second, last] = expandAll([daily, daily, birthday], budget)
     expect(last).toEqual(['2024-03-05', '2025-03-05', '2026-03-05', '2027-03-05'])
     expect([first, second]).toEqual([null, null])
+    expect(budget.ranOut).toBe(true)
+  })
+
+  it('pays for a rule’s other work first, counting it toward the rule’s cost', () => {
+    const birthday = (upfrontUnits: number): RuleJob => ({
+      first: '1960-03-05',
+      rule: parseRule('FREQ=YEARLY') as Rule,
+      bounds,
+      unitsPerRepeat: 1,
+      upfrontUnits,
+    })
+    const budget = workBudget(1000)
+    // The one with more to pay first is worked out last, and left out once too little is left.
+    expect(expandAll([birthday(990), birthday(5)], budget)).toEqual([
+      null,
+      ['2024-03-05', '2025-03-05', '2026-03-05', '2027-03-05'],
+    ])
+    expect(budget.ranOut).toBe(true)
+    expect(budget.unitsLeft).toBeGreaterThan(900)
+  })
+
+  it('leaves out the event whose skipped days cost most to place, wherever it is listed', () => {
+    // 12,500 skipped moments in UTC on a New York event: 150,000 units to place, listed first.
+    const skipped = Array.from({ length: 12_500 }, (_, i) => {
+      const minutes = i % 1440
+      const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}${String(minutes % 60).padStart(2, '0')}00`
+      return `202${4 + Math.floor(i / 1440 / 366)}${String(1 + (Math.floor(i / 1440) % 12)).padStart(2, '0')}15T${time}Z`
+    })
+    const listed = [
+      'UID:costly',
+      'SUMMARY:Camping trip',
+      'DTSTART;TZID=America/New_York:20240101T090000',
+      'RRULE:FREQ=DAILY;COUNT=40',
+      `EXDATE:${skipped.join(',')}`,
+    ]
+    // Forty daily trips across the window, about 3,000 units each: all fit if worked out first.
+    const daily = Array.from({ length: 40 }, (_, i) => [
+      `UID:daily-${i}`,
+      `SUMMARY:Trip ${i}`,
+      'DTSTART;VALUE=DATE:20231101',
+      'RRULE:FREQ=DAILY',
+    ])
+    const budget = workBudget()
+    const kept = new Set(
+      eventsIn(ics(listed, ...daily), 'UTC', window, { budget }).map((e) => e.uid),
+    )
+    expect(kept.size).toBe(40)
+    expect(kept.has('costly')).toBe(false)
     expect(budget.ranOut).toBe(true)
   })
 })

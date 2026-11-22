@@ -3,15 +3,16 @@
 // Only days near the ones asked for are read, a day written on the event's
 // own clock needs no time zone math, and one written on another clock is
 // paid for from the work budget, so a file listing a hundred thousand of
-// them costs next to nothing more than one listing a few. An event whose
-// list costs more than the budget has left is left out without spending
-// any of it, so the others are still read. Pure.
+// them costs next to nothing more than one listing a few. What placing an
+// event's list costs is known before any is placed, so a repeating event
+// pays for it with its rule, cheapest first (repeatShares.ts), and one that
+// costs more than is left is left out without spending any. Pure.
 
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import { first, type Component } from './components.js'
 import { dateIn, momentOf, onOwnClock, type Moment } from './moments.js'
 import { momentOfProperty } from './occurrences.js'
-import { REPEAT_UNITS, type WorkBudget } from './recurrence.js'
+import { REPEAT_UNITS } from './recurrence.js'
 import type { Bounds } from './rule.js'
 
 /** Every moment the event's EXDATE lines and its changed repeats name, as written. */
@@ -28,19 +29,25 @@ function* exceptionsOf(master: Component, overrides: Component[]): Generator<Mom
   }
 }
 
+/** The days a repeating event skips, near the days asked for, before any is placed. */
+export interface Exceptions {
+  /** Days written on the event's own clock: already its own days. */
+  skipped: Set<IsoDate>
+  /** Moments written on another clock, each written once, still to be placed on the event's. */
+  elsewhere: Moment[]
+}
+
 /**
  * The days, on the event's own clock (`zone`), its repeats are skipped on or
- * replaced from, among those near `bounds`. Null when placing them would
- * cost more than the budget has left: the event is then left out, rather
- * than shown on days it skips, and the budget is left for the other events.
+ * replaced from, among those near `bounds`; those written on another clock
+ * are left to place once paid for (placingUnits).
  */
-export function skippedDays(
+export function exceptionsNear(
   master: Component,
   zone: string | null,
   overrides: Component[],
   bounds: Bounds,
-  budget: WorkBudget,
-): Set<IsoDate> | null {
+): Exceptions {
   // A moment's day on another clock is at most a day from the day written.
   const from = addDays(bounds.from, -1)
   const to = addDays(bounds.to, 1)
@@ -52,13 +59,17 @@ export function skippedDays(
     if (onOwnClock(moment, zone)) skipped.add(moment.date)
     else elsewhere.set(`${moment.zone} ${moment.date} ${moment.seconds}`, moment)
   }
-  // Counted before any is placed, so an event listing too many costs nothing.
-  const cost = elsewhere.size * REPEAT_UNITS.zoned
-  if (cost > budget.unitsLeft) {
-    budget.ranOut = true
-    return null
-  }
-  budget.unitsLeft -= cost
-  for (const moment of elsewhere.values()) skipped.add(dateIn(moment, zone))
+  return { skipped, elsewhere: [...elsewhere.values()] }
+}
+
+/** The work placing an event's exceptions written on another clock costs. */
+export function placingUnits(exceptions: Exceptions): number {
+  return exceptions.elsewhere.length * REPEAT_UNITS.zoned
+}
+
+/** Every day an event skips, on its own clock (`zone`): its exceptions placed, once paid for. */
+export function skippedDays(exceptions: Exceptions, zone: string | null): Set<IsoDate> {
+  const skipped = new Set(exceptions.skipped)
+  for (const moment of exceptions.elsewhere) skipped.add(dateIn(moment, zone))
   return skipped
 }

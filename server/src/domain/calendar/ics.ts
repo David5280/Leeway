@@ -5,14 +5,24 @@
 // out before any time zone math. A repeating event is expanded across the
 // window asked for (recurrence.ts), less the days it skips (EXDATE) and the
 // repeats changed on their own (RECURRENCE-ID), which replace the repeat or,
-// when cancelled, remove it. Working out repeats draws on one budget per
+// when cancelled, remove it. An event the calendar's owner declined is left
+// out like a cancelled one, when the file says whose calendar it is
+// (components.ts). Working out repeats draws on one budget per
 // file, shared among its rules (repeatShares.ts), so no file can keep the
 // server busy. Pure.
 
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
-import { componentsOf, first, isCancelled, uidOf, type Component } from './components.js'
-import { skippedDays } from './exceptions.js'
+import {
+  calendarAddressOf,
+  componentsOf,
+  first,
+  isCancelled,
+  isDeclinedBy,
+  uidOf,
+  type Component,
+} from './components.js'
+import { exceptionsNear, placingUnits, skippedDays, type Exceptions } from './exceptions.js'
 import { dateIn, momentOf, onDate, timelineMs, type Moment } from './moments.js'
 import { bySoonest, MAX_EVENTS, nearest } from './nearest.js'
 import {
@@ -102,6 +112,8 @@ function boundsOf(event: Measured, until: Moment | null, window: Window): Bounds
 
 interface Reading {
   timeZone: string
+  /** Whose calendar it is, when the file says: events they declined are left out. */
+  owner: string | null
   window: Window
   keep: Keep
   budget: WorkBudget
@@ -116,41 +128,59 @@ interface Identified {
 /** An event kept, waiting for its repeats to be worked out: null `job` when it does not repeat. */
 interface Planned {
   event: Measured
-  skipped: Set<IsoDate>
+  exceptions: Exceptions
   until: Moment | null
   job: RuleJob | null
 }
 
-/** An event read and kept (its first repeat too), or null when it is left out. */
+/** An event read and kept (its first repeat too), or null when it is left out: cancelled, declined or not kept. */
 function keptEvent({ uid, component }: Identified, read: Reading): Measured | null {
   const base = baseOf(component, uid)
-  if (!base || isCancelled(component) || !read.keep.mayKeep(previewOf(base))) return null
+  if (!base || isCancelled(component) || isDeclinedBy(component, read.owner)) return null
+  if (!read.keep.mayKeep(previewOf(base))) return null
   const event = measure(base)
   return read.keep.keeps(occurrence(event, base.start.date, read.timeZone)) ? event : null
 }
 
-/** What an event needs for its repeats, or null when it is left out (cancelled, not kept). */
+/** Takes `units` from the budget, or says it ran out and takes none. */
+function pay(budget: WorkBudget, units: number): boolean {
+  if (units > budget.unitsLeft) {
+    budget.ranOut = true
+    return false
+  }
+  budget.unitsLeft -= units
+  return true
+}
+
+/**
+ * What an event needs for its repeats, or null when it is left out (cancelled,
+ * not kept, or its exceptions cost more than is left). A repeating event pays
+ * for its exceptions with its rule (expandAll); one that does not, at once.
+ */
 function planOf(master: Identified, overrides: Component[], read: Reading): Planned | null {
   const event = keptEvent(master, read)
   if (!event) return null
   const rule = parseRule(first(master.component, 'RRULE')?.value)
   const until = momentOf(rule?.until ?? undefined)
   const bounds = boundsOf(event, until, read.window)
-  const skipped = skippedDays(master.component, event.start.zone, overrides, bounds, read.budget)
-  if (!skipped) return null
-  const job = rule && {
+  const exceptions = exceptionsNear(master.component, event.start.zone, overrides, bounds)
+  const upfrontUnits = placingUnits(exceptions)
+  if (!rule) return pay(read.budget, upfrontUnits) ? { event, exceptions, until, job: null } : null
+  const job = {
     first: event.start.date,
     rule,
     bounds,
     unitsPerRepeat: unitsPerRepeat(event),
+    upfrontUnits,
   }
-  return { event, skipped, until, job }
+  return { event, exceptions, until, job }
 }
 
 /** An event's repeats on these days (in its zone), less those skipped, changed or past UNTIL. */
 function eventsOf(plan: Planned, starts: IsoDate[], timeZone: string): CalendarEvent[] {
+  const skipped = skippedDays(plan.exceptions, plan.event.start.zone)
   return starts
-    .filter((date) => !plan.skipped.has(date) && beforeUntil(plan.event, plan.until, date))
+    .filter((date) => !skipped.has(date) && beforeUntil(plan.event, plan.until, date))
     .map((date) => occurrence(plan.event, date, timeZone))
 }
 
@@ -196,7 +226,7 @@ export function parseCalendar(
   { keep = KEEP_ALL, budget = workBudget(), today = window.to }: ReadOptions = {},
 ): ParsedCalendar {
   const { masters, changedOf, cancelled } = sortedOut(text)
-  const read: Reading = { timeZone, window, keep, budget }
+  const read: Reading = { timeZone, owner: calendarAddressOf(text), window, keep, budget }
   let found = new Map<string, CalendarEvent>()
   let capped = false
   const add = (events: CalendarEvent[]) => {

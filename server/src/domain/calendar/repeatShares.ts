@@ -13,6 +13,8 @@ export interface RuleJob {
   bounds: Bounds
   /** What each repeat in the bounds costs to become an event (REPEAT_UNITS). */
   unitsPerRepeat: number
+  /** Work the event needs besides its rule, paid first: placing the days it skips. */
+  upfrontUnits: number
 }
 
 /**
@@ -20,7 +22,8 @@ export interface RuleJob {
  * for a rule left out. Rules are worked out cheapest first, by the most each
  * could cost (mostUnits), each free to use all that is left: a rule costing
  * no more than that always finishes, so the budget keeps as many rules as it
- * can hold and only the costliest are left out. When the budget cannot hold
+ * can hold and only the costliest are left out. A rule's upfront work counts
+ * toward its cost and is paid before it is worked out. When the budget cannot hold
  * them all, the first rule it cannot finish spends what is left and every
  * costlier one is left out with it; the budget says so.
  */
@@ -29,13 +32,17 @@ export function expandAll(jobs: RuleJob[], budget: WorkBudget): (IsoDate[] | nul
   const cheapestFirst = jobs
     .map((job, index) => ({
       index,
-      most: mostUnits(job.first, job.rule, job.bounds, job.unitsPerRepeat),
+      most: job.upfrontUnits + mostUnits(job.first, job.rule, job.bounds, job.unitsPerRepeat),
     }))
     .sort((a, b) => a.most - b.most || a.index - b.index)
   for (const { index } of cheapestFirst) {
     const job = jobs[index]!
+    if (budget.unitsLeft < job.upfrontUnits) {
+      budget.ranOut = true
+      continue
+    }
     // Its own copy of what is left, so a rule cut short is left out whole, its partial days unused.
-    const attempt = workBudget(budget.unitsLeft)
+    const attempt = workBudget(budget.unitsLeft - job.upfrontUnits)
     const starts = expandRule(job.first, job.rule, job.bounds, attempt, job.unitsPerRepeat)
     budget.unitsLeft = attempt.unitsLeft
     if (attempt.ranOut) budget.ranOut = true
