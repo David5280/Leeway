@@ -198,21 +198,48 @@ describe('the day a monthly payroll keeps', () => {
       )
   }
 
-  /** Whether a payday landed on `day` itself, not moved off it. */
-  const onItsDay = (day: number) => (date: IsoDate) => {
-    const { year, month } = dateParts(date)
-    return date === clampedDate(year, month, day)
-  }
+  /**
+   * Whether a payday landed on `day` itself, not moved off it nor clamped to
+   * a short month's end: Feb 28 is as much a 28th as a 29th.
+   */
+  const onItsDay = (day: number) => (date: IsoDate) => dateParts(date).day === day
 
-  it('never reads a 29th or a 30th as an earlier day, unless every payday came early', () => {
-    const failed: string[] = []
-    for (const day of [29, 30]) {
-      for (let first = makeDate(2023, 1, 1); first < '2027-05-01'; first = addMonths(first, 1)) {
-        const early = shownEarly(day, first).filter((run) => run.some(onItsDay(day)))
-        failed.push(...early.map((run) => run.join(',')))
+  it(
+    'never reads a 29th or a 30th as an earlier day, unless every payday came early',
+    () => {
+      const failed: string[] = []
+      for (const day of [29, 30]) {
+        for (let first = makeDate(2023, 1, 1); first < '2027-05-01'; first = addMonths(first, 1)) {
+          const early = shownEarly(day, first).filter((run) => run.some(onItsDay(day)))
+          failed.push(...early.map((run) => run.join(',')))
+        }
       }
-    }
-    expect(failed).toEqual([])
+      expect(failed).toEqual([])
+    },
+    SWEEP_TIMEOUT,
+  )
+
+  it('reads a 29th or 30th that only ties the 28th as the 28th', () => {
+    // Fri Feb 28 and Fri Mar 28 fit the 28th, 29th and 30th alike: Monday Apr 28.
+    expect(nextPaydayAfter(['2025-02-28', '2025-03-28'], 'month', '2025-03-28')).toBe('2025-04-28')
+    // Fri Feb 27 and Fri Mar 27 fit the 27th to the 29th alike: the 28th, the later of the two.
+    expect(nextPaydayAfter(['2026-02-27', '2026-03-27'], 'month', '2026-03-27')).toBe('2026-04-28')
+  })
+
+  it('reads a 29th that fits closest as the 29th, never as the month end', () => {
+    // Thu Jan 29, then Fri Feb 27 for a Saturday: Sunday Mar 29 is Friday Mar 27, not Tuesday Mar 31.
+    expect(nextPaydayAfter(['2026-01-29', '2026-02-27'], 'month', '2026-02-27')).toBe('2026-03-27')
+    // Paid on the 29th itself in a long month, it never waits for the month end either.
+    const twentyNinth = ['2026-04-29', '2026-05-29', '2026-06-29']
+    expect(nextPaydayAfter(twentyNinth, 'month', '2026-06-29')).toBe('2026-07-29')
+  })
+
+  it('reads a 30th that fits barely closer than the month end as the month end', () => {
+    // Fri May 28 for Memorial Day on Monday May 31 fits the 30th: still the month end, Wed Jun 30.
+    expect(nextPaydayAfter(['2027-04-30', '2027-05-28'], 'month', '2027-05-28')).toBe('2027-06-30')
+    // Two paydays on, the 30th still fits only one business day closer: Tue Aug 31, not Mon Aug 30.
+    const monthEnd = ['2027-04-30', '2027-05-28', '2027-06-30', '2027-07-30']
+    expect(nextPaydayAfter(monthEnd, 'month', '2027-07-30')).toBe('2027-08-31')
   })
 
   it('moves a weekend payday after for a payroll whose paydays show it does', () => {

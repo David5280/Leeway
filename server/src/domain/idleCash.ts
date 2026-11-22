@@ -7,9 +7,10 @@
 // everyday spending until then, what the counted credit cards owe (checking
 // pays them), and a cushion on top. Only what is left past all of that,
 // rounded down, is called idle. Every amount is in whole dollars, rounded
-// the careful way, so the math shown adds up exactly. Nothing is suggested while any account is
-// overdrawn, safe to spend is tight, no payday is known or there is no
-// spending to go by, since a guess then could leave checking short.
+// the careful way, so the math shown adds up exactly. Nothing is suggested
+// while any account is overdrawn, safe to spend is tight, no checking
+// balance or payday is known or there is no spending to go by, since a
+// guess then could leave checking short.
 
 import type { IsoDate } from '../lib/dates.js'
 
@@ -33,6 +34,8 @@ export const ROUND_TO_CENTS = 10_000
 export interface IdleCashInputs {
   /** Counted checking, each account at the lower of its balance and available balance. */
   checkingCents: number
+  /** Whether any counted checking account has a balance: without one, checkingCents is unknown, not zero. */
+  cashKnown: boolean
   /** Bills due from now until payday, payday itself included. */
   billsCents: number
   /** What counted credit cards owe, which checking pays. */
@@ -57,6 +60,7 @@ export interface IdleCashInputs {
 export const IDLE_CASH_REASONS = [
   'overdrawn',
   'tight',
+  'no_balance',
   'no_payday',
   'no_spending_history',
   'not_enough_extra',
@@ -69,7 +73,10 @@ export interface IdleCash {
   suggested: boolean
   /** Why not, when not suggested; null when it is. */
   reason: IdleCashReason | null
-  /** Counted checking, rounded down to the whole dollar (every need is rounded up). */
+  /**
+   * Counted checking, rounded down to the whole dollar (every need is
+   * rounded up); 0, and no figure at all, with reason no_balance.
+   */
   checkingCents: number
   billsCents: number
   /** Typical everyday spending until payday. */
@@ -114,6 +121,8 @@ export function yearlyInterest(cents: number, apyPercent = ASSUMED_SAVINGS_APY_P
 function blocker(inputs: IdleCashInputs): IdleCashReason | null {
   if (inputs.overdrawn) return 'overdrawn'
   if (inputs.tight) return 'tight'
+  // No balance to go by is unknown cash, not an empty account short of what it needs.
+  if (!inputs.cashKnown) return 'no_balance'
   if (!inputs.paydayKnown) return 'no_payday'
   // No spending at all (say, card payments all filed as transfers) is a gap
   // in the history, not a month of spending nothing, so it is no figure.

@@ -1,7 +1,8 @@
 // Idle cash math (idleCash.ts): money in checking well past what it needs
 // before payday, said with the assumed savings rate, and never while an
-// account is overdrawn, safe to spend is tight, payday is a guess or there
-// is no spending to go by. idleCashSource.test.ts covers reading the inputs.
+// account is overdrawn, safe to spend is tight, no balance is known, payday
+// is a guess or there is no spending to go by. idleCashSource.test.ts
+// covers reading the inputs.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -18,6 +19,7 @@ import {
 /** $8,000 in checking, $1,200 of bills, $50 a day for 10 days, no cards owed: plenty spare. */
 const flush = (fields: Partial<IdleCashInputs> = {}): IdleCashInputs => ({
   checkingCents: 800_000,
+  cashKnown: true,
   billsCents: 120_000,
   cardsOwedCents: 0,
   dailySpendCents: 5_000,
@@ -165,6 +167,18 @@ describe('checkIdleCash', () => {
     })
   })
 
+  it('says no balance is known, not that checking is short, without one', () => {
+    // What a bank with no balance gives: checking reads as $0, which is no figure at all.
+    expect(checkIdleCash(flush({ checkingCents: 0, cashKnown: false }))).toMatchObject({
+      suggested: false,
+      reason: 'no_balance',
+      checkingCents: 0,
+      idleCents: 0,
+    })
+    // Even a figure that came along with it is never suggested from.
+    expect(checkIdleCash(flush({ cashKnown: false })).reason).toBe('no_balance')
+  })
+
   it('never suggests while payday is only the end of the budget period standing in', () => {
     expect(checkIdleCash(flush({ paydayKnown: false }))).toMatchObject({
       suggested: false,
@@ -191,6 +205,7 @@ describe('checkIdleCash', () => {
     const everything = { overdrawn: true, tight: true, paydayKnown: false, dailySpendCents: null }
     expect(checkIdleCash(flush(everything)).reason).toBe('overdrawn')
     expect(checkIdleCash(flush({ ...everything, overdrawn: false })).reason).toBe('tight')
+    expect(checkIdleCash(flush({ cashKnown: false, paydayKnown: false })).reason).toBe('no_balance')
     expect(checkIdleCash(flush({ paydayKnown: false, dailySpendCents: null })).reason).toBe(
       'no_payday',
     )

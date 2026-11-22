@@ -1,7 +1,8 @@
 // Pay from paychecks only (domain/pay): what a deposit is, paychecks split
 // across accounts (and days) read as one, every employer paying now counted,
 // the current employer after a job ends, and a single new paycheck projected
-// cautiously as an estimate. How often pay comes is in payCadence.test.ts.
+// cautiously as an estimate. How often pay comes is in payCadence.test.ts,
+// and a deposit read by its words alone in payWords.test.ts.
 // Every amount and name here is made up.
 
 import { describe, expect, it } from 'vitest'
@@ -119,28 +120,6 @@ describe('depositKind', () => {
     expect(kind({ providerCategoryDetailed: 'INCOME_SALARY', accountType: 'credit' })).toBe(
       'card_funding',
     )
-  })
-
-  it('reads a line with no code by its words', () => {
-    const kind = (name: string) => depositKind(deposit('2026-11-01', name, 1_000))
-    expect(kind('ACME CORP DIR DEP')).toBe('payroll')
-    expect(kind('ACME PAYROLL')).toBe('payroll')
-    expect(kind('STORE REFUND')).toBe('refund')
-    expect(kind('INTEREST')).toBe('interest')
-    expect(kind('DEPOSIT')).toBe('other')
-    // A line that says who sent it is a person passing money on, not a payroll.
-    expect(kind('From Jane Doe paycheck share')).toBe('deposit')
-    expect(kind('Transfer from Jane Doe salary')).toBe('deposit')
-  })
-
-  it('reads the words of a line filed under a broad income code', () => {
-    const kind = (name: string, fields: Partial<Deposit>) =>
-      depositKind(deposit('2026-11-01', name, 1_000, fields))
-    expect(kind('ACME PAYROLL', { providerCategoryDetailed: 'INCOME_OTHER_INCOME' })).toBe(
-      'payroll',
-    )
-    expect(kind('ACME PAYROLL', { providerCategoryPrimary: 'INCOME' })).toBe('payroll')
-    expect(kind('BONUS POINTS', { providerCategoryDetailed: 'INCOME_OTHER_INCOME' })).toBe('other')
   })
 })
 

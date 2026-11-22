@@ -1,8 +1,8 @@
 // Reading idle cash's inputs (idleCashSource.ts) and get_idle_cash end to
 // end: checking, payday and the bills due by then as the cash flow reads
 // them (so never an overdraft line), card balances kept back, bill payments
-// out of typical spending, and nothing said without a known payday or
-// spending to go by.
+// out of typical spending, and nothing said without a known balance, payday
+// or spending to go by.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Account } from '../src/domain/accounts.js'
@@ -141,10 +141,11 @@ describe('get_idle_cash', () => {
     })
 
   /**
-   * Checking holding `balance`, with $50 a day spent over August, September
-   * and October ($1,550, $1,500 and $1,550), each from the first of the month.
+   * Checking holding `balance` (null when the bank gives none), with $50 a
+   * day spent over August, September and October ($1,550, $1,500 and
+   * $1,550), each from the first of the month.
    */
-  async function checking(balanceCents: number) {
+  async function checking(balanceCents: number | null) {
     const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents })
     const spent = { '2026-08-01': 155_000, '2026-09-01': 150_000, '2026-10-01': 155_000 }
     for (const [date, amountCents] of Object.entries(spent)) {
@@ -249,6 +250,17 @@ describe('get_idle_cash', () => {
     expect(await call('get_idle_cash')).toMatchObject({
       billsCents: 200_000,
       idleCents: 1_180_000,
+    })
+  })
+
+  it('says no balance is known when the bank gives checking none', async () => {
+    await paidBiweekly()
+    await checking(null)
+    expect(await call('get_idle_cash')).toMatchObject({
+      suggested: false,
+      reason: 'no_balance',
+      checkingCents: 0,
+      idleCents: 0,
     })
   })
 

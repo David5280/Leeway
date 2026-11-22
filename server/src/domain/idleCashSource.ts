@@ -90,6 +90,7 @@ export async function getIdleCash(
   const budget = await budgetSummary(db, settings, now)
   return checkIdleCash({
     checkingCents: flow.cashCents,
+    cashKnown: flow.cashKnown,
     // Payday's own bills included: pay can land after a bill drawn the same day.
     billsCents: flow.billsDueCents,
     cardsOwedCents: cardsOwed(accounts),

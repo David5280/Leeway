@@ -44,12 +44,16 @@ const PAYROLL_CODES = new Set(['INCOME_SALARY', 'INCOME_WAGES'])
 const CONTRACTOR_CODES = new Set(['INCOME_CONTRACTOR', 'INCOME_GIG_ECONOMY'])
 const INTEREST_CODES = new Set(['INCOME_INTEREST_EARNED', 'INCOME_DIVIDENDS'])
 
-/** Words for a paycheck in a line with no code, as a file or a bank without codes writes it. */
-const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?)\b/i
+/** Words only a payroll writes, "ACME PAYROLL" or "ACME CORP DIR DEP", in a line with no code. */
+const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?)\b/i
+/** Words for pay that a person passing on a share of theirs may write too: "paycheck share". */
+const PAY_WORDS = /\b(salary|paycheck|wages?)\b/i
+/** Words that end a business's name, "ACME Corp" or "Initech LLC", and never a person's. */
+const BUSINESS_WORDS = /\b(inc|corp|corporation|llc|ltd|co|company)\b/i
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
-/** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe": a person, not a payroll. */
-const FROM_SOMEONE = /^\s*(transfer\s+)?from\s+\S/i
+/** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe", and the sender. */
+const FROM_SOMEONE = /^\s*(?:transfer\s+)?from\s+(?<sender>\S.*)$/i
 
 /** A line's code, most specific first, or '' without one. */
 const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
@@ -57,9 +61,16 @@ const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCateg
 /** What a line is from its words alone, when it has no bank code or only a broad income one. */
 function kindFromWords(tx: Deposit): DepositKind {
   const words = `${tx.name} ${tx.merchantName ?? ''}`
-  // "From Jane Doe paycheck share" is money someone passed on, whatever it was to them.
-  if (FROM_SOMEONE.test(tx.name)) return 'deposit'
+  // Checked before the sender: a person passing money on never writes a
+  // payroll's own words, so "From GUSTO Payroll" is a paycheck, not a person.
   if (PAYROLL_WORDS.test(words)) return 'payroll'
+  const sender = FROM_SOMEONE.exec(tx.name)?.groups?.sender
+  if (sender !== undefined) {
+    // "From Jane Doe paycheck share" is money someone passed on, whatever it
+    // was to them; "Transfer From ACME Corp Salary" is a business paying.
+    return PAY_WORDS.test(words) && BUSINESS_WORDS.test(sender) ? 'payroll' : 'deposit'
+  }
+  if (PAY_WORDS.test(words)) return 'payroll'
   if (REFUND_WORDS.test(words)) return 'refund'
   if (INTEREST_WORDS.test(words)) return 'interest'
   return 'other'
