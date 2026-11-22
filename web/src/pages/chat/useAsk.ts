@@ -28,24 +28,46 @@ export interface Unanswered {
 export interface Asking {
   pending: Pending | null
   error: Unanswered | null
+  /** The answer that last finished here, for screen readers to announce. */
+  finished: string | null
   ask: (question: string) => void
 }
 
 /**
  * Sends questions one at a time. A failed question is handed back through
  * onFailed, so the owner can send it again without typing it twice.
+ *
+ * Leaving the page stops reading the answer, but the server still finishes
+ * and keeps it. A question asked while that one is still being answered is
+ * refused as a conflict, which is no problem: it is handed back, and
+ * get_chat is read again, which says an answer is under way (Chat.tsx waits
+ * for it).
  */
 export function useAsk(onFailed: (question: string) => void): Asking {
   const client = useQueryClient()
   const [pending, setPending] = useState<Pending | null>(null)
   const [error, setError] = useState<Unanswered | null>(null)
+  const [finished, setFinished] = useState<string | null>(null)
   const stop = useRef<AbortController | null>(null)
   useEffect(() => () => stop.current?.abort(), [])
+
+  const refresh = () => void client.invalidateQueries({ queryKey: CHAT_KEY })
 
   const fail = (question: string, message: string, limit = false) => {
     setPending(null)
     setError({ message, limit })
     onFailed(question)
+  }
+
+  const refused = (question: string, failure: unknown) => {
+    if (failure instanceof ApiError && failure.code === 'conflict') {
+      setPending(null)
+      onFailed(question)
+      refresh()
+      return
+    }
+    const limit = failure instanceof ApiError && failure.code === 'ai_limit'
+    fail(question, (failure as Error).message, limit)
   }
 
   const handle = (question: string, event: ChatEvent) => {
@@ -55,13 +77,18 @@ export function useAsk(onFailed: (question: string) => void): Asking {
       setPending((now) => now && { ...now, tool: event.title })
     } else if (event.type === 'error') {
       fail(question, event.message)
+    } else if (event.type === 'cleared') {
+      // Started over elsewhere while this was answered: nothing was kept.
+      setPending(null)
+      refresh()
     } else {
       client.setQueryData<ChatView>(CHAT_KEY, (chat) =>
         chat ? { ...chat, messages: [...chat.messages, event.question, event.answer] } : chat,
       )
       setPending(null)
+      setFinished(event.answer.text)
       // The day's allowance moved; the facts may have too.
-      void client.invalidateQueries({ queryKey: CHAT_KEY })
+      refresh()
     }
   }
 
@@ -71,16 +98,12 @@ export function useAsk(onFailed: (question: string) => void): Asking {
     const controller = new AbortController()
     stop.current = controller
     setError(null)
+    setFinished(null)
     setPending({ question, text: '', tool: null })
     askChat(question, (event) => handle(question, event), controller.signal).catch(
-      (failure: unknown) =>
-        fail(
-          question,
-          (failure as Error).message,
-          failure instanceof ApiError && failure.code === 'ai_limit',
-        ),
+      (failure: unknown) => refused(question, failure),
     )
   }
 
-  return { pending, error, ask }
+  return { pending, error, finished, ask }
 }

@@ -76,7 +76,7 @@ async function readStream(
       const read = readEvents(buffer + decoder.decode(value, { stream: true }))
       buffer = read.rest
       for (const event of read.events) {
-        ended ||= event.type === 'done' || event.type === 'error'
+        ended ||= event.type !== 'text' && event.type !== 'tool'
         onEvent(event)
       }
     }

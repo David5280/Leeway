@@ -1,15 +1,15 @@
 // Chat: hidden without an AI key, the starters, a streamed answer, failures,
 // what Leeway remembers, and starting over.
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { askChat, readEvents, STOPPED, type ChatEvent } from '../api/chat'
 import type { Output } from '../api/client'
 import { Shell } from '../components/Shell'
 import { fakeServer, renderSignedIn, type Handlers } from '../test/fake'
-import { ChatPage } from './Chat'
+import { ChatPage, STILL_ANSWERING } from './Chat'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -33,6 +33,7 @@ const FACT = {
 function chatView(fields: Partial<ChatView> = {}): ChatView {
   return {
     available: true,
+    answering: false,
     messages: [],
     facts: [],
     allowance: { usedTokens: 0, limitTokens: 600_000, resetsOn: '2026-11-21' },
@@ -95,10 +96,13 @@ function renderChat(handlers: Handlers, routes: Record<string, () => Response> =
 }
 
 describe('Chat without an AI key', () => {
-  it('has no way in from the header, and its address leads to Overview', async () => {
-    const server = fakeServer(chatHandlers(chatView(), false))
-    renderSignedIn(<Shell>Page</Shell>)
-    await waitFor(() => expect(server.actions('get_chat_status')).toHaveLength(1))
+  it('has no way in from the header', async () => {
+    fakeServer(chatHandlers(chatView(), false))
+    const { client } = renderSignedIn(<Shell>Page</Shell>)
+    // Once the answer has landed, not merely been asked for.
+    await waitFor(() =>
+      expect(client.getQueryData(['action', 'get_chat_status', {}])).toEqual({ available: false }),
+    )
     expect(screen.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
@@ -237,6 +241,154 @@ describe('Chat with an AI key', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(await screen.findByRole('button', { name: /PS5 Pro/ })).toBeVisible()
     expect(server.actions('clear_chat')).toHaveLength(1)
+  })
+})
+
+describe('Chat while an answer is on its way', () => {
+  const question = message('1', 'user', 'How am I doing?')
+  const answer = message('2', 'assistant', 'You are on track.')
+
+  /**
+   * get_chat as the server gives it while it finishes a question asked
+   * before: answering once, then the kept exchange.
+   */
+  function stillAnswering(first: ChatView): Handlers {
+    let view = first
+    return {
+      ...chatHandlers(),
+      get_chat: () => {
+        const now = view
+        if (now.answering) view = chatView({ messages: [question, answer] })
+        return now
+      },
+    }
+  }
+
+  it('waits for an answer it left partway, saying so plainly, until it lands', async () => {
+    renderChat(stillAnswering(chatView({ answering: true })))
+    expect(await screen.findByText(STILL_ANSWERING)).toHaveClass('notice')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'How am I doing this month?' })).toBeDisabled()
+    // Read again until the answer is kept.
+    expect(await screen.findByText('You are on track.', {}, { timeout: 4000 })).toBeVisible()
+    expect(screen.queryByText(STILL_ANSWERING)).not.toBeInTheDocument()
+  })
+
+  it('takes a question refused for one still being answered as a wait, not a problem', async () => {
+    const handlers = stillAnswering(chatView({ answering: true }))
+    let refusals = 0
+    renderChat(
+      {
+        ...handlers,
+        get_chat: (input) =>
+          // The page's first read finds nothing under way; after the refusal, it does.
+          refusals === 0 ? chatView() : handlers.get_chat!(input),
+      },
+      {
+        '/api/chat': () => {
+          refusals += 1
+          return Response.json(
+            { error: 'conflict', message: 'Leeway is still answering your last question.' },
+            { status: 409 },
+          )
+        },
+      },
+    )
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: 'Your question' }), 'Bills?{Enter}')
+    expect(await screen.findByText(STILL_ANSWERING)).toHaveClass('notice')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // The question is handed back to send again once the answer is in.
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Bills?')
+    expect(await screen.findByText('You are on track.', {}, { timeout: 4000 })).toBeVisible()
+  })
+
+  it('drops an exchange the owner started over elsewhere while it was answered', async () => {
+    const stream = liveStream()
+    renderChat(chatHandlers(), { '/api/chat': stream.response })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'How am I doing this month?' }))
+    stream.send({ type: 'text', text: 'You are' })
+    expect(await screen.findByText('You are')).toBeVisible()
+    stream.send({ type: 'cleared' })
+    stream.end()
+    expect(
+      await screen.findByRole('heading', { name: 'Ask anything about your money' }),
+    ).toBeVisible()
+    expect(screen.queryByText('You are')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('Chat for every reader', () => {
+  const scrolls = vi.fn()
+  beforeEach(() => {
+    scrolls.mockClear()
+    Element.prototype.scrollIntoView = scrolls
+  })
+  afterEach(() => {
+    delete (Element.prototype as Partial<Element>).scrollIntoView
+  })
+
+  it('marks the log busy while it streams, and announces the finished answer once', async () => {
+    const stream = liveStream()
+    const kept = { view: chatView() }
+    renderChat(chatHandlers(kept.view, true, kept), { '/api/chat': stream.response })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'What bills are coming up?' }))
+    const log = screen.getByRole('list', { name: 'Conversation' })
+    expect(log).toHaveAttribute('aria-busy', 'true')
+    stream.send({ type: 'text', text: 'Rent is due Friday.' })
+    expect(await within(log).findByText('Rent is due Friday.')).not.toHaveAttribute('aria-live')
+    const live = document.querySelector('[aria-live="polite"]')!
+    expect(live).toBeEmptyDOMElement()
+
+    const question = message('1', 'user', 'What bills are coming up?')
+    const answer = message('2', 'assistant', 'Rent is due Friday.')
+    kept.view = { ...kept.view, messages: [question, answer] }
+    stream.send({ type: 'done', question, answer })
+    stream.end()
+    await waitFor(() => expect(live).toHaveTextContent('Rent is due Friday.'))
+    expect(log).toHaveAttribute('aria-busy', 'false')
+    // The same element all along, so screen readers hear it.
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
+  })
+
+  it('follows the answer as it streams, unless the reader scrolled up', async () => {
+    const stream = liveStream()
+    renderChat(chatHandlers(), { '/api/chat': stream.response })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'What bills are coming up?' }))
+    stream.send({ type: 'text', text: 'Rent ' })
+    await screen.findByText('Rent')
+    const followed = scrolls.mock.calls.length
+    stream.send({ type: 'text', text: 'is due.' })
+    await screen.findByText('Rent is due.')
+    expect(scrolls.mock.calls.length).toBeGreaterThan(followed)
+
+    // Scrolled up: the end is far below the screen, so it stays put.
+    const end = document.querySelector('.chat')!.lastElementChild!
+    vi.spyOn(end, 'getBoundingClientRect').mockReturnValue({ top: 5_000 } as DOMRect)
+    fireEvent.scroll(document)
+    const before = scrolls.mock.calls.length
+    stream.send({ type: 'text', text: ' Then power.' })
+    await screen.findByText('Rent is due. Then power.')
+    expect(scrolls.mock.calls.length).toBe(before)
+  })
+
+  it('keeps focus in the conversation through Start over', async () => {
+    const messages = [message('1', 'user', 'Hi'), message('2', 'assistant', 'Hello.')]
+    renderChat(chatHandlers(chatView({ messages })))
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Start over' }))
+    expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Keep' }))
+    expect(screen.getByRole('button', { name: 'Start over' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveFocus(),
+    )
   })
 })
 

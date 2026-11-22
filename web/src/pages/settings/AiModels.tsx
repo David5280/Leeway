@@ -25,6 +25,11 @@ export function AiModelsSection() {
   )
 }
 
+/** The jobs to choose a model for. Chat only exists with a key, so its row waits for one. */
+function jobsShown(usage: AiUsage): AiUsage['jobs'] {
+  return usage.keySet ? usage.jobs : usage.jobs.filter((job) => job.job !== 'chat')
+}
+
 function AiModels({ usage }: { usage: AiUsage }) {
   const { locale } = useApp().settings
   return (
@@ -35,7 +40,7 @@ function AiModels({ usage }: { usage: AiUsage }) {
       <UsageSummary usage={usage} locale={locale} />
       <LimitField capCents={usage.monthlyCapCents} />
       <h3>Models</h3>
-      {usage.jobs.map((job) => (
+      {jobsShown(usage).map((job) => (
         <ModelPicker key={job.job} job={job} models={usage.models} locale={locale} />
       ))}
       <span className="small muted">

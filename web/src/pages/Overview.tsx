@@ -1,6 +1,6 @@
 // The Overview dashboard: widgets the owner arranges, sizes and hides.
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useChatAvailable } from '../api/chat'
 import { useAction } from '../api/hooks'
@@ -21,9 +21,8 @@ import {
   type Widget,
 } from '../widgets/library'
 
-/** The way into Chat from Overview, only when Chat is on. */
+/** The way into Chat from Overview, drawn only when Chat is on. */
 function AskBar() {
-  if (!useChatAvailable()) return null
   return (
     <Link to="/chat" className="card ask-bar">
       <Icon name="chat" size={20} />
@@ -36,11 +35,18 @@ function AskBar() {
   )
 }
 
+/** The Ask bar to draw under the hero: only when Chat is on, and not while editing the layout. */
+function useAskBar(editing: boolean): ReactNode {
+  const chatOn = useChatAvailable()
+  return chatOn && !editing ? <AskBar /> : undefined
+}
+
 export function Overview() {
   const { settings } = useApp()
   const [offset, setOffset] = useState(0)
   const [editing, setEditing] = useState(false)
   const budget = useAction('get_budget', { offset })
+  const askBar = useAskBar(editing)
   const update = useUpdateSettings()
   // Every change is made to the full saved list, so widgets this build cannot
   // draw (from a newer Leeway or an agent) are kept, just not shown.
@@ -83,8 +89,6 @@ export function Overview() {
       )}
 
       {!headsUpShown && <AccountHealth />}
-
-      {!editing && <AskBar />}
 
       <section className="row-between" style={{ alignItems: 'end' }}>
         <div>
@@ -135,6 +139,7 @@ export function Overview() {
             budget={budget.data}
             offset={offset}
             save={saveWidgets}
+            underHero={askBar}
           />
           {editing && addable.length > 0 && (
             <div className="card stack-sm add-widget">

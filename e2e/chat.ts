@@ -57,6 +57,7 @@ export async function pretendChatOn(page: Page, conversation = false): Promise<v
     route.fulfill(
       result({
         available: true,
+        answering: false,
         messages,
         facts,
         allowance: { usedTokens: 12_000, limitTokens: 600_000, resetsOn: '2026-12-01' },
@@ -98,5 +99,6 @@ export async function openChat(page: Page): Promise<void> {
 export async function askStarter(page: Page): Promise<void> {
   await page.getByRole('button', { name: QUESTION }).click()
   await expect(page.getByRole('button', { name: 'Start over' })).toBeVisible()
-  await expect(page.getByText(/^Yes\. A PS5 Pro costs about \$700/)).toBeVisible()
+  const log = page.getByRole('list', { name: 'Conversation' })
+  await expect(log.getByText(/^Yes\. A PS5 Pro costs about \$700/)).toBeVisible()
 }

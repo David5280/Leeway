@@ -1,5 +1,7 @@
 // The conversation in Chat: the owner's questions on the right, Leeway's
-// answers on the left, and the answer still arriving at the end.
+// answers on the left, and the answer still arriving at the end. The log is
+// marked busy while an answer streams; the finished answer is announced
+// once, from Chat's own live region, not word by word from here.
 
 import type { Output } from '../../api/client'
 import type { Pending } from './useAsk'
@@ -14,12 +16,10 @@ function Question({ text }: { text: string }) {
   )
 }
 
-function Answer({ text, live = false }: { text: string; live?: boolean }) {
+function Answer({ text }: { text: string }) {
   return (
     <li className="chat-line from-leeway">
-      <p className="chat-answer" aria-live={live ? 'polite' : undefined}>
-        {text}
-      </p>
+      <p className="chat-answer">{text}</p>
     </li>
   )
 }
@@ -48,7 +48,7 @@ export function Conversation({
   pending: Pending | null
 }) {
   return (
-    <ol className="chat-log" aria-label="Conversation">
+    <ol className="chat-log" aria-label="Conversation" aria-busy={pending !== null}>
       {messages.map((message) =>
         message.role === 'user' ? (
           <Question key={message.id} text={message.text} />
@@ -59,7 +59,7 @@ export function Conversation({
       {pending && (
         <>
           <Question text={pending.question} />
-          {pending.text && <Answer text={pending.text} live />}
+          {pending.text && <Answer text={pending.text} />}
           {(!pending.text || pending.tool) && <Working tool={pending.tool} />}
         </>
       )}
