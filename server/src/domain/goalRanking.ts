@@ -55,16 +55,19 @@ export async function getGoalOrder(db: Db, settings: Settings, today: IsoDate): 
  */
 export async function reorderGoals(db: Db, ids: string[]): Promise<void> {
   const unique = [...new Set(ids)]
-  // Every goal is renumbered, so lock them all first, in the same order a
-  // change to the emergency fund does: two at once then wait, never deadlock.
-  await db.query('SELECT id FROM goals ORDER BY id FOR UPDATE')
-  const { rowCount } = await db.query('SELECT 1 FROM goals WHERE id = ANY($1::uuid[])', [unique])
-  if (rowCount !== unique.length) {
+  // Lock every goal first, in the same order a change to the emergency fund
+  // does, so two at once wait for each other instead of deadlocking.
+  const { rows } = await db.query<{ id: string }>('SELECT id FROM goals ORDER BY id FOR UPDATE')
+  const locked = rows.map((row) => row.id)
+  const known = new Set(locked)
+  if (unique.some((id) => !known.has(id))) {
     throw new AppError('not_found', 'One of those goals no longer exists. Refresh and try again.')
   }
-  // Numbers every goal 1, 2, 3 and on: the ones given first, then the rest in
-  // the order they had. Positions never pass the number of goals, so they stay
-  // below every number the sequence hands out, and a new goal always joins last.
+  // Numbers the locked goals 1, 2, 3 and on: the ones given first, then the
+  // rest in the order they had. Only those are touched: a goal made since the
+  // lock was never locked here, and updating it could deadlock with a fund
+  // change that locked it first. It keeps its number from the sequence, which
+  // is past every number given here, so it stays last.
   await db.query(
     `UPDATE goals g SET position = ranked.n
      FROM (
@@ -73,8 +76,9 @@ export async function reorderGoals(db: Db, ids: string[]): Promise<void> {
        ) AS n
        FROM goals goal
        LEFT JOIN unnest($1::uuid[]) WITH ORDINALITY AS given(id, n) ON given.id = goal.id
+       WHERE goal.id = ANY($2::uuid[])
      ) ranked
      WHERE ranked.id = g.id`,
-    [unique],
+    [unique, locked],
   )
 }

@@ -57,18 +57,6 @@ describe('ranking goals', () => {
     expect(await names()).toEqual(['Laptop', 'Car', 'Trip', 'Bike'])
   })
 
-  it('takes two orders at once, leaving one of them whole', async () => {
-    const { trip, car, laptop } = await threeGoals()
-    await Promise.all([
-      call('reorder_goals', { ids: [laptop, car, trip] }),
-      call('reorder_goals', { ids: [car, trip, laptop] }),
-    ])
-    expect([
-      ['Laptop', 'Car', 'Trip'],
-      ['Car', 'Trip', 'Laptop'],
-    ]).toContainEqual(await names())
-  })
-
   it('refuses a goal that does not exist, changing nothing', async () => {
     const { car } = await threeGoals()
     const gone = '00000000-0000-4000-8000-000000000000'

@@ -88,7 +88,10 @@ export const reorderGoalsAction = defineAction({
   surface: 'all',
   run: async (ctx, { ids }) => {
     const { settings, today } = await settingsAndToday(ctx)
-    await withTransaction(ctx.db, (db) => reorderGoals(db, ids))
-    return getGoalOrder(ctx.db, settings, today)
+    // Read back in the same transaction, so the order returned is the one just saved.
+    return withTransaction(ctx.db, async (db) => {
+      await reorderGoals(db, ids)
+      return getGoalOrder(db, settings, today)
+    })
   },
 })
