@@ -48,6 +48,27 @@ describe('ranking goals', () => {
     expect(await names()).toEqual(['Laptop', 'Trip', 'Car'])
   })
 
+  it('still adds a new goal last after one goal is moved to the top again and again', async () => {
+    const { car, laptop } = await threeGoals()
+    await call('reorder_goals', { ids: [laptop] })
+    await call('reorder_goals', { ids: [car] })
+    await call('reorder_goals', { ids: [laptop] })
+    await call('create_goal', { name: 'Bike', targetCents: 80_000 })
+    expect(await names()).toEqual(['Laptop', 'Car', 'Trip', 'Bike'])
+  })
+
+  it('takes two orders at once, leaving one of them whole', async () => {
+    const { trip, car, laptop } = await threeGoals()
+    await Promise.all([
+      call('reorder_goals', { ids: [laptop, car, trip] }),
+      call('reorder_goals', { ids: [car, trip, laptop] }),
+    ])
+    expect([
+      ['Laptop', 'Car', 'Trip'],
+      ['Car', 'Trip', 'Laptop'],
+    ]).toContainEqual(await names())
+  })
+
   it('refuses a goal that does not exist, changing nothing', async () => {
     const { car } = await threeGoals()
     const gone = '00000000-0000-4000-8000-000000000000'

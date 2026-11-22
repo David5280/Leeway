@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Goal } from '../../../api/client'
 import { landings, type OrderedGoal } from '../../../../../server/src/domain/goalOrder'
+import { fundGoal, fundView, serveEmergency } from '../../../test/emergency'
 import { failing, sentence } from '../../../test/fake'
 import { goal, planServer, renderPlan, TODAY } from '../../../test/planning'
 import type { GoalOrder } from './orderText'
@@ -107,6 +108,34 @@ describe('goals in order', () => {
     renderPlan('/plan/goals')
     await screen.findByRole('region', { name: 'Trip' })
     expect(screen.queryByRole('region', { name: 'Which goal comes first?' })).toBeNull()
+  })
+})
+
+describe('the emergency fund in the order', () => {
+  const fund = fundGoal()
+
+  it('ranks beside the goals, and its card sits in its place among them', async () => {
+    const server = serveEmergency(fundView(), [fund, trip], {
+      get_goal_order: () => orderOf([fund, trip]),
+      reorder_goals: () => orderOf([trip, fund]),
+    })
+    renderPlan('/plan/goals')
+    const card = within(await orderCard())
+    const rows = within(card.getByRole('list', { name: 'Goals in order' })).getAllByRole('listitem')
+    // The fund's $1,500 to go at $500 a month lands in three months, then the trip's $2,000.
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Emergency fundLands Feb 2027'),
+      expect.stringContaining('TripLands Jun 2027'),
+    ])
+    // The fund draws its own card, ahead of the trip's as the list has them.
+    const fundRegion = await screen.findByRole('region', { name: 'Emergency fund' })
+    const tripRegion = screen.getByRole('region', { name: 'Trip' })
+    expect(fundRegion.compareDocumentPosition(tripRegion)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+
+    await userEvent.setup().click(card.getByRole('button', { name: 'Move Trip up' }))
+    await waitFor(() =>
+      expect(server.actions('reorder_goals')).toEqual([{ ids: ['goal-trip', 'goal-emergency'] }]),
+    )
   })
 })
 

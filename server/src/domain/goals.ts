@@ -11,7 +11,7 @@ import { periodContaining } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { listAccounts, type Account } from './accounts.js'
 import { followedAlready, namesEmergencyFund } from './emergencyPlan.js'
-import { fundLinkTakenBy, fundsOf, goalLinks, type FundRow } from './goalFunds.js'
+import { fundLinkTakenBy, fundsOf, goalLinks, GOALS_IN_ORDER, type FundRow } from './goalFunds.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import {
   goalOf,
@@ -54,9 +54,6 @@ const SELECT = `
     g.emergency_own_target AS "emergencyOwnTarget", g.emergency_by_hand AS "emergencyByHand",
     a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
-
-/** The order goals are listed in: the owner's ranking (goalOrder.ts), oldest first within it. */
-const IN_ORDER = 'ORDER BY g.position, g.created_at, g.name'
 
 /** A goal as stored, with the fund's own columns, which goalFunds.ts reads and nothing shows. */
 type StoredGoal = Omit<GoalRow, 'accountName' | 'followedAccountIds'> &
@@ -105,7 +102,7 @@ async function withPlans(
 }
 
 export async function listGoals(db: Db, reading: GoalReading): Promise<Goal[]> {
-  const { rows } = await db.query<StoredGoal>(`${SELECT} ${IN_ORDER}`)
+  const { rows } = await db.query<StoredGoal>(`${SELECT} ${GOALS_IN_ORDER}`)
   return readGoals(db, rows, reading)
 }
 

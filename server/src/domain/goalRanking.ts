@@ -7,7 +7,8 @@ import { AppError } from '../errors.js'
 import type { IsoDate } from '../lib/dates.js'
 import { cadenceOf, convertCadence } from '../lib/periods.js'
 import { landings, type GoalLanding } from './goalOrder.js'
-import { listGoals, type Goal } from './goals.js'
+import { goalReading, type Goal } from './goalProgress.js'
+import { listGoals } from './goals.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** Where the monthly amount came from: the owner, the recent pace, or nowhere yet. */
@@ -41,7 +42,7 @@ function monthlyAmount(goals: Goal[], settings: Settings) {
 
 /** The goals in the owner's order, with the month each lands in. */
 export async function getGoalOrder(db: Db, settings: Settings, today: IsoDate): Promise<GoalOrder> {
-  const goals = await listGoals(db, { today, period: periodConfig(settings) })
+  const goals = await listGoals(db, goalReading(settings, today))
   const amount = monthlyAmount(goals, settings)
   return { ...amount, goals: landings(goals, amount.monthlyCents, today) }
 }
@@ -49,23 +50,31 @@ export async function getGoalOrder(db: Db, settings: Settings, today: IsoDate): 
 /**
  * Puts goals in the order given, first to last. Goals left out keep their
  * order after the ones given, so an assistant can move one goal to the top
- * by naming just that one. An id that is no goal is refused.
+ * by naming just that one. An id that is no goal is refused. Run it in a
+ * transaction.
  */
 export async function reorderGoals(db: Db, ids: string[]): Promise<void> {
   const unique = [...new Set(ids)]
+  // Every goal is renumbered, so lock them all first, in the same order a
+  // change to the emergency fund does: two at once then wait, never deadlock.
+  await db.query('SELECT id FROM goals ORDER BY id FOR UPDATE')
   const { rowCount } = await db.query('SELECT 1 FROM goals WHERE id = ANY($1::uuid[])', [unique])
   if (rowCount !== unique.length) {
     throw new AppError('not_found', 'One of those goals no longer exists. Refresh and try again.')
   }
+  // Numbers every goal 1, 2, 3 and on: the ones given first, then the rest in
+  // the order they had. Positions never pass the number of goals, so they stay
+  // below every number the sequence hands out, and a new goal always joins last.
   await db.query(
-    `UPDATE goals g SET position = o.position
-     FROM unnest($1::uuid[]) WITH ORDINALITY AS o(id, position)
-     WHERE g.id = o.id`,
+    `UPDATE goals g SET position = ranked.n
+     FROM (
+       SELECT goal.id, row_number() OVER (
+         ORDER BY given.n NULLS LAST, goal.position, goal.created_at, goal.name
+       ) AS n
+       FROM goals goal
+       LEFT JOIN unnest($1::uuid[]) WITH ORDINALITY AS given(id, n) ON given.id = goal.id
+     ) ranked
+     WHERE ranked.id = g.id`,
     [unique],
   )
-  // Ranked positions start at 1, so moving the rest past them keeps their order.
-  await db.query(`UPDATE goals SET position = position + $1 WHERE NOT (id = ANY($2::uuid[]))`, [
-    unique.length + 1,
-    unique,
-  ])
 }
