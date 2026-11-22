@@ -9,6 +9,7 @@ import { addDays } from '../src/lib/dates.js'
 import { currentPay, paidBetween } from '../src/domain/pay/current.js'
 import { depositKind, type Deposit } from '../src/domain/pay/deposits.js'
 import { groupPaychecks, runsOf, usualPaycheckCents } from '../src/domain/pay/paychecks.js'
+import { biweeklyPaid } from './fixtures/paydays.js'
 
 const TODAY = '2026-11-17'
 
@@ -282,6 +283,21 @@ describe('currentPay', () => {
     })
   })
 
+  it('keeps a long Friday run with two holiday Thursdays every two weeks, next on Dec 4', () => {
+    // Jan 2 through Nov 20, Juneteenth and Independence Day paid the Thursday before.
+    const paid = biweeklyPaid('2026-01-02', 24).map((date) =>
+      salary(date, 'INITECH PAYROLL', 200_000),
+    )
+    expect(currentPay(paid, '2026-11-22')).toMatchObject({
+      cadence: 'biweek',
+      estimate: false,
+      // 26 paychecks a year, not the 24 twice a month would count.
+      monthlyCents: 434_821,
+      // Not Nov 27, so the bills from Nov 28 to Dec 4 count before it.
+      nextPayday: '2026-12-04',
+    })
+  })
+
   it('counts nothing but paychecks, and nothing once the last job stopped', () => {
     const before = history().filter((d) => d.name !== 'INITECH PAYROLL')
     // The old job last paid in January: money from people, a refund and a lump since are not pay.
@@ -375,6 +391,16 @@ describe('currentPay', () => {
     )
     const pay = currentPay([...main, salary('2026-11-10', 'BLUTH CO PAYROLL', 60_000)], TODAY)
     expect(pay).toMatchObject({ estimate: true, monthlyCents: 460_000 })
+  })
+
+  it("keeps a confirmed main job's payday sure while a side job's cadence is a guess", () => {
+    const main = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'].map(
+      (date) => salary(date, 'INITECH PAYROLL', 200_000),
+    )
+    const pay = currentPay([...main, salary('2026-11-06', 'BLUTH CO PAYROLL', 30_000)], TODAY)
+    // The month is an estimate; the payday safe to spend runs to is not (payday.ts).
+    expect(pay).toMatchObject({ estimate: true, nextPayday: '2026-11-30' })
+    expect(pay.employers.map((employer) => employer.estimate)).toEqual([false, true])
   })
 
   it('reads one contract payout as a one-off, and repeated contract pay as a job', () => {

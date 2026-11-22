@@ -260,10 +260,25 @@ describe('what the widget says', () => {
   it('is version 2: a script from before the shortfall had its own field asks to be updated', () => {
     // Version 1 sent the shortfall as a negative figure; that script would show $0 and no shortfall.
     expect(SUMMARY_VERSION).toBe(2)
-    expect(outcomeOf(200, { ...widgetSummary(), version: 1 })).toEqual({
+    expect(outcomeOf(200, { ...widgetSummary(), version: 3 })).toEqual({
       ok: false,
       problem: 'outdated',
     })
+  })
+
+  it('asks for Leeway itself to be updated when this script is the newer one', () => {
+    // A version 1 server cannot send the shortfall field this script reads.
+    expect(outcomeOf(200, { ...widgetSummary(), version: 1 })).toEqual({
+      ok: false,
+      problem: 'server_outdated',
+    })
+    expect(MESSAGES.server_outdated).toEqual({
+      title: 'Update your Leeway',
+      detail:
+        'This script is newer than your Leeway. Update Leeway, or copy the script again from Settings > Widget.',
+    })
+    // The older-script message never says the server is the newer one here.
+    expect(MESSAGES.outdated.detail).toContain('Your Leeway is newer than this script')
   })
 
   it('lists budget left, net worth and the next bill', () => {
@@ -423,7 +438,14 @@ describe('problem messages', () => {
     for (const problem of ['offline', 'busy', 'server'] as const) {
       expect(MESSAGES[problem].detail).toContain(`${REFRESH_MINUTES} minutes`)
     }
-    for (const problem of ['setup', 'bad_token', 'bad_address', 'outdated'] as const) {
+    const settingsHelps = [
+      'setup',
+      'bad_token',
+      'bad_address',
+      'outdated',
+      'server_outdated',
+    ] as const
+    for (const problem of settingsHelps) {
       expect(MESSAGES[problem].detail).toMatch(/Settings > Widget/)
     }
   })

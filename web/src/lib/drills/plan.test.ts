@@ -65,7 +65,9 @@ describe('cashFlowDrill', () => {
     expect(said(overdrawn)).toBe(
       'Safe to spend $1,340 = In checking $1,500 minus bills due before payday $60 minus to bring an overdraft back to zero $100',
     )
-    expect(overdrawn.subtitle).toBe('Payday about on 2026-11-27, from one paycheck so far')
+    expect(overdrawn.subtitle).toBe(
+      'Payday about on 2026-11-27, a best guess until more paychecks come',
+    )
     const end = cashFlowDrill(cashFlow({ paydaySource: 'period_end' }), date)
     expect(end.subtitle).toBe('To on 2026-11-27, when the budget period ends')
   })

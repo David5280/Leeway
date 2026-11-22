@@ -33,7 +33,7 @@ export interface CashFlow {
   today: IsoDate
   nextPayday: IsoDate
   paydaySource: PaydaySource
-  /** True while the payday is projected from a single paycheck. */
+  /** True while the main employer's cadence is unconfirmed, so the payday is a cautious projection. */
   paydayEstimate: boolean
   /** A usual paycheck from the current employer, when paychecks were found. */
   expectedPayCents: number | null

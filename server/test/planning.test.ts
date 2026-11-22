@@ -416,6 +416,38 @@ describe('get_cash_flow', () => {
     })
   })
 
+  it("says a shortfall in red when the main job is confirmed, whatever a side job's guess", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 10_000 })
+    const pay = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, accountId, {
+        date,
+        name,
+        amountCents: -amountCents,
+        detailed: 'INCOME_SALARY',
+      })
+    // $2,000 twice a month, confirmed, next on Nov 30; one $300 side-job paycheck, a guess.
+    for (const date of ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'])
+      await pay(date, 'INITECH PAYROLL', 200_000)
+    await pay('2026-11-06', 'BLUTH CO PAYROLL', 30_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150_000,
+      cadence: 'month',
+      anchorDate: '2026-11-25',
+    })
+    const flow = await call('get_cash_flow')
+    // The side job's guess makes the month an estimate, never the main job's payday.
+    expect(flow).toMatchObject({
+      nextPayday: '2026-11-30',
+      paydayEstimate: false,
+      shortfallCents: 140_000,
+    })
+    expect(flow.spendable).toMatchObject({
+      problem: true,
+      note: 'Checking is $1,400 short of the bills before payday on Nov 30.',
+    })
+  })
+
   it('falls back to the end of the budget period', async () => {
     const flow = await call('get_cash_flow')
     expect(flow).toMatchObject({

@@ -44,10 +44,11 @@ function employerWords(
 
 function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
   if (!pay.cadence || !pay.nextPayday) return null
-  const estimate = pay.estimate
-    ? ' This is an estimate: an employer that has paid once is confirmed by its second paycheck.'
-    : ''
   if (pay.employers.length > 1) {
+    // Each employer's amount is listed, so a side job's guess is said too.
+    const estimate = pay.employers.some((employer) => employer.estimate)
+      ? ' This is an estimate until more paychecks confirm how often each employer pays.'
+      : ''
     // A second job counts beside the first, so each is named with its own schedule.
     const each = pay.employers.map((employer) => employerWords(employer, locale, money))
     return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${estimate}`
@@ -55,11 +56,11 @@ function payLine({ pay, locale }: FinancialProfile, money: Money): string | null
   const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
   const from = pay.employer ? ` from ${pay.employer}` : ''
   const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
-  // One paycheck cannot show how often pay comes, so the schedule is said to be a guess.
-  const oneEstimate = pay.estimate
-    ? ' This is an estimate from one paycheck: the schedule is confirmed by the second.'
+  // Too few paychecks cannot show how often pay comes, so the schedule is said to be a guess.
+  const estimate = pay.estimate
+    ? ' This is an estimate until more paychecks confirm how often pay comes.'
     : ''
-  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${oneEstimate}`
+  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${estimate}`
 }
 
 /** "current employer", or "2 current employers" when a second job pays too. */
@@ -74,7 +75,7 @@ function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): st
       ? ''
       : `, ${money(monthly.essentialSpendingCents!)} of it essential`
   // Pay not seen is left out here and listed as not known, never shown as $0.
-  const estimated = monthly.incomeEstimated ? ' (estimated from one paycheck)' : ''
+  const estimated = monthly.incomeEstimated ? ' (estimated until more paychecks confirm it)' : ''
   const payIn =
     monthly.incomeCents === null
       ? ''

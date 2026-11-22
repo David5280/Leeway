@@ -77,8 +77,12 @@ function weekdaysAfter(from: number, to: number): number {
  * payday is 0 apart; one on the Monday after is 1.
  */
 export function businessDaysApart(a: IsoDate, b: IsoDate): number {
-  const [from, to] = [toDayNumber(a), toDayNumber(b)].sort((x, y) => x - y) as [number, number]
-  return weekdaysAfter(from, to)
+  return weekdaysApart(toDayNumber(a), toDayNumber(b))
+}
+
+/** businessDaysApart for day numbers, for loops that would otherwise parse each date again. */
+export function weekdaysApart(a: number, b: number): number {
+  return a <= b ? weekdaysAfter(a, b) : weekdaysAfter(b, a)
 }
 
 /**
@@ -99,22 +103,38 @@ function candidateSchedules(): SemimonthSchedule[] {
 
 const CANDIDATES = candidateSchedules()
 
-/** The day number of a nominal day in a month (months past 12 or below 1 roll the year), clamped to its length. */
-function nominalDay(year: number, month: number, day: number): number {
+/**
+ * A month's first day as a day number, and its length (months past 12 or
+ * below 1 roll the year): a nominal day in it is the first plus the day,
+ * clamped to the length, less one.
+ */
+function monthSpan(year: number, month: number): { first: number; length: number } {
   const length = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return Date.UTC(year, month - 1, Math.min(day, length)) / DAY_MS
+  return { first: Date.UTC(year, month - 1, 1) / DAY_MS, length }
+}
+
+/**
+ * Business days from a date to the nearest time each nominal day comes
+ * round, in its month or either side, by day. The date is read once for
+ * them all, since a schedule search asks of every day of the month.
+ */
+function offDays(date: IsoDate, days: Iterable<number>): Map<number, number> {
+  const { year, month } = dateParts(date)
+  const at = toDayNumber(date)
+  const months = [-1, 0, 1].map((shift) => monthSpan(year, month + shift))
+  const offs = new Map<number, number>()
+  for (const day of days) {
+    const each = months.map(({ first, length }) =>
+      weekdaysApart(at, first + Math.min(day, length) - 1),
+    )
+    offs.set(day, Math.min(...each))
+  }
+  return offs
 }
 
 /** Business days from a date to the nearest time a nominal day comes round, in its month or either side. */
-function offDay(date: IsoDate, day: number): number {
-  const { year, month } = dateParts(date)
-  const at = toDayNumber(date)
-  return Math.min(
-    ...[-1, 0, 1].map((shift) => {
-      const nominal = nominalDay(year, month + shift, day)
-      return at <= nominal ? weekdaysAfter(at, nominal) : weekdaysAfter(nominal, at)
-    }),
-  )
+export function offDay(date: IsoDate, day: number): number {
+  return offDays(date, [day]).get(day)!
 }
 
 /** How well paydays fit a schedule: how many land on it, and how far off those are in all. */
@@ -128,13 +148,25 @@ export interface ScheduleFit {
   bothDays: boolean
 }
 
-function fitOf(dates: IsoDate[], schedule: SemimonthSchedule): ScheduleFit {
+/**
+ * Business days each payday sits off every day the candidates pay on:
+ * worked out once, so trying each schedule only looks them up.
+ */
+function offsByDay(
+  dates: IsoDate[],
+  candidates: readonly SemimonthSchedule[],
+): Map<number, number>[] {
+  const days = new Set(candidates.flatMap((schedule) => [schedule.first, schedule.second]))
+  return dates.map((date) => offDays(date, days))
+}
+
+function fitOf(offs: Map<number, number>[], schedule: SemimonthSchedule): ScheduleFit {
   let matched = 0
   let offBy = 0
   const hit = { first: false, second: false }
-  for (const date of dates) {
-    const first = offDay(date, schedule.first)
-    const second = offDay(date, schedule.second)
+  for (const off of offs) {
+    const first = off.get(schedule.first)!
+    const second = off.get(schedule.second)!
     const nearest = Math.min(first, second)
     if (nearest > PAYDAY_SLACK) continue
     matched += 1
@@ -152,9 +184,10 @@ export function bestSchedule(
   dates: IsoDate[],
   candidates: readonly SemimonthSchedule[] = CANDIDATES,
 ): ScheduleFit {
-  let best = fitOf(dates, candidates[0]!)
+  const offs = offsByDay(dates, candidates)
+  let best = fitOf(offs, candidates[0]!)
   for (const schedule of candidates.slice(1)) {
-    const fit = fitOf(dates, schedule)
+    const fit = fitOf(offs, schedule)
     if (fit.matched > best.matched || (fit.matched === best.matched && fit.offBy < best.offBy)) {
       best = fit
     }

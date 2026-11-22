@@ -351,8 +351,8 @@ describe('profileDigest', () => {
       ],
     })
     expect(profileDigest(profile, dollars).split('\n').slice(1, 6)).toEqual([
-      'Pay: monthly from Acme Payroll since Nov 14, about $2,500 each, next on Dec 1. This is an estimate from one paycheck: the schedule is confirmed by the second.',
-      'Typical month (spending since Sep 24, pay from paychecks only): $5,000 take-home pay in from the current employer (estimated from one paycheck), $3,000 spent.',
+      'Pay: monthly from Acme Payroll since Nov 14, about $2,500 each, next on Dec 1. This is an estimate until more paychecks confirm how often pay comes.',
+      'Typical month (spending since Sep 24, pay from paychecks only): $5,000 take-home pay in from the current employer (estimated until more paychecks confirm it), $3,000 spent.',
       'Saved and invested: $3,000 (savings $3,000), down $200 since Nov 1.',
       'Emergency fund: savings cover 1 month of essentials ($3,000 a month); target 1 month ($3,000), met.',
       // The dated goal comes first: it is the nearer one.
@@ -360,16 +360,17 @@ describe('profileDigest', () => {
     ])
   })
 
+  const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
+    name,
+    cadence,
+    typicalPayCents: cents,
+    monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
+    since: '2026-09-25',
+    nextPayday: '2026-11-20',
+    estimate: false,
+  })
+
   it('names each employer paying now, and adds their pay up', () => {
-    const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
-      name,
-      cadence,
-      typicalPayCents: cents,
-      monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
-      since: '2026-09-25',
-      nextPayday: '2026-11-20',
-      estimate: false,
-    })
     const profile = emptyProfile({
       pay: {
         cadence: 'semimonth',
@@ -399,6 +400,28 @@ describe('profileDigest', () => {
     )
     expect(lines).toContain(
       'Typical month (spending since Sep 25, pay from paychecks only): $5,304 take-home pay in from the 2 current employers, $3,000 spent.',
+    )
+  })
+
+  it("calls pay from several employers an estimate while a side job's cadence is a guess", () => {
+    // The main job is confirmed, so its payday is not a guess; the side job's amount is.
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-30',
+        estimate: false,
+        employer: 'Initech Payroll',
+        employers: [
+          employer('Initech Payroll', 'semimonth', 200_000),
+          { ...employer('Bluth Co Payroll', 'biweek', 60_000), estimate: true },
+        ],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: Initech Payroll twice a month since Sep 25, about $2,000 each; Bluth Co Payroll every 2 weeks since Sep 25, about $600 each. Next payday Nov 30. This is an estimate until more paychecks confirm how often each employer pays.',
     )
   })
 

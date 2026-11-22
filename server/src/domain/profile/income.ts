@@ -61,9 +61,9 @@ export interface PaySchedule {
   source: Exclude<PaydaySource, 'period_end'> | null
   /** A usual paycheck from the main employer, the one paying the most a month. */
   typicalPayCents: number | null
-  /** The soonest next payday from any employer. */
+  /** The main employer's next payday: what safe to spend runs until. */
   nextPayday: IsoDate | null
-  /** True while any employer has paid once: its cadence, and so the month, are a projection. */
+  /** True while the main employer's cadence is unconfirmed: the next payday is a projection. */
   estimate: boolean
   /** The main employer, named as the app names its deposits, or null. */
   employer: string | null
@@ -76,7 +76,10 @@ export interface PaySchedule {
 export interface MonthlyAverages {
   /** A month of pay from the current employer, take-home; null when no employer is paying now. */
   incomeCents: number | null
-  /** True while the pay above is projected from a single paycheck. */
+  /**
+   * True while any employer's cadence is unconfirmed (one paycheck, or
+   * paydays that fit two cadences): the month is the cautious projection.
+   */
   incomeEstimated: boolean
   /** Spending a month, transfers and card payments left out; null with too little history. */
   spendingCents: number | null

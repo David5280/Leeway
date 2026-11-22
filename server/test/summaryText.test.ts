@@ -360,7 +360,7 @@ describe('summaryFacts', () => {
         overdraftToBringBackToZero: '$0',
         shortfall: null,
       },
-      typicalMonthlyPay: { amount: '$4,200', estimatedFromOnePaycheck: true },
+      typicalMonthlyPay: { amount: '$4,200', estimated: true },
       headsUp: [{ priority: 'soon', message: 'Rent is due' }],
       debts: null,
       fixedHeadline: null,

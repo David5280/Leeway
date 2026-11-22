@@ -121,7 +121,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     },
     /** The budget's room held to what is safe to spend, and the one line that says when they differ. */
     spendable: budget.spendable,
-    /** Pay from the current employer: an estimate while one paycheck is all there is. */
+    /** Pay from the employers paying now: an estimate while any one's cadence is unconfirmed. */
     pay: {
       monthlyCents: monthly.incomeCents,
       estimate: monthly.incomeEstimated,

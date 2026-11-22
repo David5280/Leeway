@@ -13,7 +13,7 @@ function untilLabel(flow: CashFlow, date: (iso: string) => string): string {
   if (flow.paydaySource === 'period_end')
     return `To ${date(flow.nextPayday)}, when the budget period ends`
   return flow.paydayEstimate
-    ? `Payday about ${date(flow.nextPayday)}, from one paycheck so far`
+    ? `Payday about ${date(flow.nextPayday)}, a best guess until more paychecks come`
     : `Payday ${date(flow.nextPayday)}`
 }
 

@@ -28,7 +28,10 @@
  */
 /** @typedef {'small' | 'medium' | 'large'} Family */
 /** @typedef {{ family: Family, blocks: Block[], palette: Palette }} Layout */
-/** @typedef {'setup' | 'bad_address' | 'offline' | 'bad_token' | 'busy' | 'server' | 'outdated'} Problem */
+/**
+ * @typedef {'setup' | 'bad_address' | 'offline' | 'bad_token' | 'busy' | 'server' | 'outdated'
+ *   | 'server_outdated'} Problem
+ */
 /** @typedef {{ ok: true, summary: Summary } | { ok: false, problem: Problem }} Outcome */
 /** @typedef {{ server: string, token: string }} Connection */
 
@@ -182,6 +185,8 @@ function outcomeOf(status, body) {
     return { ok: false, problem: 'server' }
   }
   const summary = /** @type {Summary} */ (body)
+  // An older summary means the server needs updating; any other, this script.
+  if (summary.version < SUMMARY_VERSION) return { ok: false, problem: 'server_outdated' }
   if (summary.version !== SUMMARY_VERSION) return { ok: false, problem: 'outdated' }
   return { ok: true, summary }
 }
@@ -520,6 +525,11 @@ const MESSAGES = {
   outdated: {
     title: 'Update the widget script',
     detail: 'Your Leeway is newer than this script. Copy the script again from Settings > Widget.',
+  },
+  server_outdated: {
+    title: 'Update your Leeway',
+    detail:
+      'This script is newer than your Leeway. Update Leeway, or copy the script again from Settings > Widget.',
   },
 }
 
