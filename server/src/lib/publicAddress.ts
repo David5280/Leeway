@@ -14,6 +14,8 @@ for (const [network, prefix] of [
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
   ['192.0.2.0', 24],
+  // The old 6to4 relays' shared address, which forwards into other networks.
+  ['192.88.99.0', 24],
   ['192.168.0.0', 16],
   ['198.18.0.0', 15],
   ['198.51.100.0', 24],
@@ -36,6 +38,8 @@ for (const [network, prefix] of [
   ['2002::', 16],
   ['fc00::', 7],
   ['fe80::', 10],
+  // Site-local: retired, but still a private network wherever it is used.
+  ['fec0::', 10],
   ['ff00::', 8],
 ] as const) {
   PRIVATE.addSubnet(network, prefix, 'ipv6')

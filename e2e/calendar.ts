@@ -61,6 +61,7 @@ function forecast() {
         [
           {
             type: 'event',
+            id: 'long-trip',
             date: SOON.startsOn,
             endsOn: SOON.endsOn,
             title: LONG_TRIP,
@@ -75,6 +76,7 @@ function forecast() {
       week(2, [
         {
           type: 'event',
+          id: 'long-event',
           date: daysFromNow(15),
           endsOn: daysFromNow(15),
           title: LONG_EVENT,

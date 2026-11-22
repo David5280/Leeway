@@ -10,7 +10,7 @@ import { nextPayday } from '../cashFlow.js'
 import type { Settings } from '../settings.js'
 import { costsOf, tripCostsOf, type TripCost } from './costs.js'
 import { daysOf, kindOf, type EventKind } from './kinds.js'
-import { mergeSpans, type KindedEvent } from './spans.js'
+import { mergeSpans, type EventSpan, type KindedEvent } from './spans.js'
 import { eventsBetween } from './store.js'
 import { FORECAST_WEEKS, intoWeeks, type Forecast, type ForecastItem } from './weeks.js'
 
@@ -41,7 +41,7 @@ export interface Typical {
 }
 
 /** What past trips usually cost: the booking once, the days by the day. */
-function typicalTrip(past: KindedEvent[], costs: TripCost[]): Typical | null {
+function typicalTrip(past: EventSpan[], costs: TripCost[]): Typical | null {
   const trips = past
     .map((trip, i) => ({ ...costs[i]!, days: daysOf(trip) }))
     .filter((trip) => trip.bookedCents + trip.onTripCents > 0)
@@ -53,7 +53,7 @@ function typicalTrip(past: KindedEvent[], costs: TripCost[]): Typical | null {
   }
 }
 
-async function typicalCost(db: Db, kind: EventKind, past: KindedEvent[]): Promise<Typical | null> {
+async function typicalCost(db: Db, kind: EventKind, past: EventSpan[]): Promise<Typical | null> {
   if (kind === 'trip') return typicalTrip(past, await tripCostsOf(db, past))
   const spent = (await costsOf(db, kind, past)).filter((cents) => cents > 0)
   if (spent.length < MIN_PAST_EVENTS) return null
@@ -64,7 +64,11 @@ async function typicalCost(db: Db, kind: EventKind, past: KindedEvent[]): Promis
  * What to set aside for an event coming up. A trip already under way is
  * booked already, so only the days it has left are still to pay for.
  */
-export function setAsideFor(event: KindedEvent, usual: Typical, today: IsoDate): number {
+export function setAsideFor(
+  event: Pick<KindedEvent, 'kind' | 'startsOn' | 'endsOn'>,
+  usual: Typical,
+  today: IsoDate,
+): number {
   const underWay = event.startsOn < today
   const daysLeft = daysOf({ startsOn: maxDate(event.startsOn, today), endsOn: event.endsOn })
   const once = underWay && event.kind === 'trip' ? 0 : usual.perEventCents
@@ -96,6 +100,7 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
     const usual = typical.get(span.kind)
     return {
       type: 'event' as const,
+      id: span.id,
       date: span.startsOn,
       endsOn: span.endsOn,
       title: span.title,

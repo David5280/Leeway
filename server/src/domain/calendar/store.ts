@@ -1,35 +1,27 @@
 // The linked calendar: its encrypted address, the events from its last read,
-// and reading it again every few hours, one read at a time. The address
-// never leaves this file except into the fetch: status says which calendar
-// it is by host alone.
+// and reading it again every few hours. A read fetches and works out the
+// events holding no database connection, then saves them in one short
+// transaction; reads asked for while one is under way join it rather than
+// fetch again. The address is unsealed only here, to be fetched
+// (reading.ts): status says which calendar it is by host alone.
 
 import type pg from 'pg'
 import { withTransaction, type Db } from '../../db/pool.js'
 import { AppError } from '../../errors.js'
 import { decrypt, encrypt } from '../../lib/crypto.js'
-import { addDays, todayIn, type IsoDate } from '../../lib/dates.js'
+import type { IsoDate } from '../../lib/dates.js'
 import { HOUR_MS } from '../../lib/time.js'
-import { calendarUrl, fetchCalendar, type Fetcher } from './feed.js'
-import { parseCalendar, type CalendarEvent, type Window } from './ics.js'
-import { kindOf } from './kinds.js'
+import { calendarUrl } from './feed.js'
+import type { CalendarEvent } from './ics.js'
+import { readEvents, type CalendarDeps, type Read } from './reading.js'
 
 /** How old the last read may be before the calendar is read again. */
 export const REFRESH_HOURS = 6
 /** How often the server checks whether the calendar is due a read. */
 export const CALENDAR_CHECK_MINUTES = 30
 
-/** Events are kept this far back, for what past trips and birthdays cost. */
-const PAST_DAYS = 3 * 366
-/** And this far ahead. */
-const AHEAD_DAYS = 366
-
-/** What reading the calendar needs: the key its address is sealed with, the clock, the fetch. */
-export interface CalendarDeps {
-  key: Buffer
-  timeZone: string
-  now: Date
-  fetcher?: Fetcher
-}
+/** How a read went: no calendar linked, none needed (or one already under way), or read. */
+export type ReadOutcome = 'none' | 'fresh' | 'read'
 
 export interface CalendarStatus {
   connected: boolean
@@ -48,21 +40,6 @@ interface FeedRow {
   connected_at: Date
   fetched_at: Date | null
   last_error: string | null
-}
-
-function windowFor(today: IsoDate): Window {
-  return { from: addDays(today, -PAST_DAYS), to: addDays(today, AHEAD_DAYS) }
-}
-
-/**
- * The calendar's events likely to cost money. The others (meetings, errands)
- * are never stored: the forecast has no use for them, and they are the
- * owner's own business.
- */
-async function readEvents(url: URL, deps: CalendarDeps): Promise<CalendarEvent[]> {
-  const text = await fetchCalendar(url, deps.fetcher)
-  const window = windowFor(todayIn(deps.timeZone, deps.now))
-  return parseCalendar(text, deps.timeZone, window, (event) => kindOf(event) !== null)
 }
 
 /** The stored events, all swapped for the new read at once. */
@@ -118,24 +95,28 @@ export async function connectCalendar(
   deps: CalendarDeps,
 ): Promise<CalendarStatus> {
   const url = calendarUrl(pasted)
-  const events = await readEvents(url, deps)
+  const { events, note } = await readEvents(url, deps)
   await withTransaction(pool, async (db) => {
+    const now = deps.now()
     await db.query(
       `INSERT INTO calendar_feed (id, url_encrypted, host, connected_at, fetched_at, last_error)
-       VALUES (true, $1, $2, $3, $3, NULL)
+       VALUES (true, $1, $2, $3, $3, $4)
        ON CONFLICT (id) DO UPDATE SET url_encrypted = $1, host = $2, connected_at = $3,
-         fetched_at = $3, last_error = NULL`,
-      [encrypt(url.href, deps.key), url.hostname, deps.now],
+         fetched_at = $3, last_error = $4`,
+      [encrypt(url.href, deps.key), url.hostname, now, note],
     )
     await saveEvents(db, events)
   })
   return calendarStatus(pool)
 }
 
-/** Unlinks the calendar and forgets its events, after any read under way has finished. */
+/**
+ * Unlinks the calendar and forgets its events at once. A read under way
+ * finds the calendar gone when it comes to save, and saves nothing.
+ */
 export async function disconnectCalendar(pool: pg.Pool): Promise<CalendarStatus> {
   await withTransaction(pool, async (db) => {
-    // The calendar's row first: it is what a read holds, so this waits its turn.
+    // The calendar's row first, then its events: the order every writer takes them in.
     await db.query('DELETE FROM calendar_feed')
     await db.query('DELETE FROM calendar_events')
   })
@@ -157,51 +138,120 @@ function savedUrl(row: FeedRow, key: Buffer): URL {
   }
 }
 
+/** True when the calendar is still as a read found it: the same link, and no read saved since. */
+function unchanged(now: FeedRow, then: FeedRow): boolean {
+  return (
+    now.url_encrypted === then.url_encrypted &&
+    now.connected_at.getTime() === then.connected_at.getTime() &&
+    now.fetched_at?.getTime() === then.fetched_at?.getTime()
+  )
+}
+
 /**
- * Reads the linked calendar while holding its row, so a manual read, the
- * scheduled one and an unlink never cross: each waits for the one before
- * and finds the calendar as it was left. `due` says, once the row is held,
- * whether a read is still needed. Any failure keeps the last read's events
- * and is noted, in words without the address, for Settings to show; one
- * that is not the calendar's own is a bug, so it is thrown on as well.
+ * Saves a read in one short transaction, holding the calendar's row only for
+ * the write. Nothing is saved when the calendar was unlinked, linked anew or
+ * read by another server while this read was fetching, so a slow read never
+ * puts an old calendar's events back.
  */
-async function readHeld(
+async function saveRead(
   pool: pg.Pool,
+  found: FeedRow,
+  read: Read,
   deps: CalendarDeps,
-  due: (row: FeedRow) => boolean,
-): Promise<'none' | 'fresh' | 'read'> {
+): Promise<ReadOutcome> {
+  return withTransaction(pool, async (db) => {
+    // The calendar's row first, then its events: the order every writer takes them in.
+    const { rows } = await db.query<FeedRow>('SELECT * FROM calendar_feed FOR UPDATE')
+    const current = rows[0]
+    if (!current) return 'none'
+    if (!unchanged(current, found)) return 'fresh'
+    await db.query('UPDATE calendar_feed SET fetched_at = $1, last_error = $2', [
+      deps.now(),
+      read.note,
+    ])
+    await saveEvents(db, read.events)
+    return 'read'
+  })
+}
+
+/**
+ * Reads the calendar found linked and saves what it holds. Any failure keeps
+ * the last read's events and is noted, in words without the address, for
+ * Settings to show, unless the calendar was linked anew meanwhile; one that
+ * is not the calendar's own is a bug, so it is thrown on as well.
+ */
+async function readAndSave(
+  pool: pg.Pool,
+  found: FeedRow,
+  deps: CalendarDeps,
+): Promise<ReadOutcome> {
   try {
-    return await withTransaction(pool, async (db) => {
-      const { rows } = await db.query<FeedRow>('SELECT * FROM calendar_feed FOR UPDATE')
-      const row = rows[0]
-      if (!row) return 'none'
-      if (!due(row)) return 'fresh'
-      const events = await readEvents(savedUrl(row, deps.key), deps)
-      await db.query('UPDATE calendar_feed SET fetched_at = $1, last_error = NULL', [deps.now])
-      await saveEvents(db, events)
-      return 'read'
-    })
+    const read = await readEvents(savedUrl(found, deps.key), deps)
+    return await saveRead(pool, found, read, deps)
   } catch (error) {
     const reason = error instanceof AppError ? error.message : UNEXPECTED
-    await pool.query('UPDATE calendar_feed SET last_error = $1', [reason])
+    await pool.query('UPDATE calendar_feed SET last_error = $1 WHERE url_encrypted = $2', [
+      reason,
+      found.url_encrypted,
+    ])
     if (!(error instanceof AppError)) throw error
     return 'read'
   }
 }
 
-/** Reads the linked calendar again now. */
+/** The read under way for each database, which a read asked for meanwhile joins. */
+const underWay = new WeakMap<pg.Pool, Promise<ReadOutcome>>()
+
+/**
+ * A read joined rather than repeated. Once it ends the calendar is as fresh
+ * as it can be; its failure is for the caller that started it to report, and
+ * is noted for Settings either way.
+ */
+async function join(read: Promise<ReadOutcome>): Promise<ReadOutcome> {
+  await read.catch(() => undefined)
+  return 'fresh'
+}
+
+/**
+ * Reads the linked calendar when `due` says, from its row, that it needs a
+ * read. One read at a time: a read asked for while one is under way waits
+ * for that one instead of fetching again, so a burst of manual reads, or the
+ * schedule meeting one, makes a single fetch. No connection is held while
+ * the calendar is fetched.
+ */
+async function readOnce(
+  pool: pg.Pool,
+  deps: CalendarDeps,
+  due: (row: FeedRow) => boolean,
+): Promise<ReadOutcome> {
+  const running = underWay.get(pool)
+  if (running) return join(running)
+  const { rows } = await pool.query<FeedRow>('SELECT * FROM calendar_feed')
+  const found = rows[0]
+  if (!found) return 'none'
+  if (!due(found)) return 'fresh'
+  // Another read may have begun while the row was being looked up.
+  const begun = underWay.get(pool)
+  if (begun) return join(begun)
+  const read = readAndSave(pool, found, deps)
+  underWay.set(pool, read)
+  try {
+    return await read
+  } finally {
+    underWay.delete(pool)
+  }
+}
+
+/** Reads the linked calendar again now, or waits for the read already under way. */
 export async function refreshCalendar(pool: pg.Pool, deps: CalendarDeps): Promise<CalendarStatus> {
-  await readHeld(pool, deps, () => true)
+  await readOnce(pool, deps, () => true)
   return calendarStatus(pool)
 }
 
 /** Reads the calendar when its last good read is older than REFRESH_HOURS. */
-export function refreshIfStale(
-  pool: pg.Pool,
-  deps: CalendarDeps,
-): Promise<'none' | 'fresh' | 'read'> {
-  return readHeld(pool, deps, (row) => {
-    const age = row.fetched_at ? deps.now.getTime() - row.fetched_at.getTime() : Infinity
+export function refreshIfStale(pool: pg.Pool, deps: CalendarDeps): Promise<ReadOutcome> {
+  return readOnce(pool, deps, (row) => {
+    const age = row.fetched_at ? deps.now().getTime() - row.fetched_at.getTime() : Infinity
     return age >= REFRESH_HOURS * HOUR_MS
   })
 }

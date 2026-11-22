@@ -27,11 +27,24 @@ const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
 const UNCOVERED = ['BYSETPOS', 'BYWEEKNO', 'BYYEARDAY']
 
 /**
- * Periods (days, weeks, months or years) walked at most for one rule. Enough
- * for a daily COUNT running years from a start long before the window, and a
- * stop for a rule that never matches a day (BYMONTHDAY=30 in February only).
+ * Periods (days, weeks, months or years) walked at most for one whole file,
+ * shared by all its rules. A rule is walked only up to the window's end, so
+ * a calendar of people's lives needs a small share of this; it is the stop
+ * for a file built to keep the server busy, such as thousands of daily rules
+ * counted from a century ago. Walking a period takes a microsecond or two.
  */
-const MAX_PERIODS = 20_000
+export const PERIODS_PER_FILE = 1_000_000
+
+/** What is left of a file's periods, spent by every rule expanded for it. */
+export interface WorkBudget {
+  periodsLeft: number
+  /** True once a rule was cut short for want of periods: the read is incomplete. */
+  ranOut: boolean
+}
+
+export function workBudget(periods = PERIODS_PER_FILE): WorkBudget {
+  return { periodsLeft: periods, ranOut: false }
+}
 
 /** A BYDAY entry: a weekday, and in a month or year which one of them ("2SU", "-1FR"). */
 interface ByDay {
@@ -161,6 +174,18 @@ function inYear(first: IsoDate, year: number): IsoDate {
   return makeDate(year, month, Math.min(day, daysInMonth(year, month)))
 }
 
+/** The first day of the period `period` periods after the first day's: no day it picks is earlier. */
+function periodStart(first: IsoDate, rule: Rule, period: number): IsoDate {
+  const { year } = dateParts(first)
+  if (rule.frequency === 'DAILY') return addDays(first, period)
+  if (rule.frequency === 'WEEKLY') {
+    const sinceWeekStart = (dayOfWeek(first) - rule.weekStart + 7) % 7
+    return addDays(first, 7 * period - sinceWeekStart)
+  }
+  if (rule.frequency === 'MONTHLY') return addMonths(first, period, 1)
+  return makeDate(year + period, 1, 1)
+}
+
 /** A daily rule's day, when BYMONTH, BYMONTHDAY and BYDAY (which only narrow it) let it through. */
 function dailyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
   const date = addDays(first, period)
@@ -174,7 +199,7 @@ function dailyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
 /** A weekly rule's days: each BYDAY weekday (or the first day's) in the week, moved on by period weeks. */
 function weeklyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
   const sinceWeekStart = (weekday: number) => (weekday - rule.weekStart + 7) % 7
-  const weekStart = addDays(first, 7 * period - sinceWeekStart(dayOfWeek(first)))
+  const weekStart = periodStart(first, rule, period)
   const weekdays = rule.byDay.length ? rule.byDay.map((d) => d.weekday) : [dayOfWeek(first)]
   return weekdays
     .map((weekday) => addDays(weekStart, sinceWeekStart(weekday)))
@@ -184,7 +209,7 @@ function weeklyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
 
 /** A monthly rule's days in the month `period` months after the first day's. */
 function monthlyDays(first: IsoDate, rule: Rule, period: number): IsoDate[] {
-  const monthStart = addMonths(first, period, 1)
+  const monthStart = periodStart(first, rule, period)
   const { year, month } = dateParts(monthStart)
   return inMonths(monthStart, rule) ? daysOfMonth(year, month, rule, first) : []
 }
@@ -218,15 +243,29 @@ function periodsUntil(first: IsoDate, date: IsoDate, frequency: Frequency): numb
 /**
  * The days the event starts on within the bounds, soonest first. The first
  * day always counts as the first repeat, as the format says. Without a COUNT,
- * the periods long before the window are skipped rather than walked.
+ * the periods long before the window are skipped rather than walked. The walk
+ * ends at the first period starting after the bounds, so a rule that never
+ * picks a day (BYMONTHDAY=30 in February) costs only the window's periods.
+ * Each period walked is taken from `budget`; when it runs out the rule stops
+ * where it is and the budget says so.
  */
-export function expandRule(first: IsoDate, rule: Rule, bounds: Bounds): IsoDate[] {
+export function expandRule(
+  first: IsoDate,
+  rule: Rule,
+  bounds: Bounds,
+  budget: WorkBudget = workBudget(),
+): IsoDate[] {
   const stop = bounds.until && bounds.until < bounds.to ? bounds.until : bounds.to
   const ahead = Math.floor(periodsUntil(first, bounds.from, rule.frequency) / rule.interval) - 1
   let period = rule.count === null ? Math.max(0, ahead) * rule.interval : 0
   const starts: IsoDate[] = []
   let seen = 0
-  for (let walked = 0; walked < MAX_PERIODS; walked++, period += rule.interval) {
+  for (; periodStart(first, rule, period) <= stop; period += rule.interval) {
+    if (budget.periodsLeft <= 0) {
+      budget.ranOut = true
+      return starts
+    }
+    budget.periodsLeft--
     const days = DAYS_OF_PERIOD[rule.frequency](first, rule, period)
     const picked = period === 0 ? [...new Set([first, ...days])].sort() : days
     for (const date of picked) {

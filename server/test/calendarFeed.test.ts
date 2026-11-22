@@ -92,6 +92,8 @@ describe('calendarUrl', () => {
       '[::ffff:127.0.0.1]',
       '[fd00::1]',
       '[fe80::1]',
+      '[fec0::1]',
+      '192.88.99.1',
       'printer.local',
       'db.internal',
     ]) {

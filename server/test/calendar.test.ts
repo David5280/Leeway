@@ -4,7 +4,13 @@ import type { AppContext } from '../src/context.js'
 import { median, setAsideFor } from '../src/domain/calendar/forecast.js'
 import type { Fetcher } from '../src/domain/calendar/feed.js'
 import { MAX_EVENTS } from '../src/domain/calendar/ics.js'
-import { refreshCalendar, refreshIfStale, REFRESH_HOURS } from '../src/domain/calendar/store.js'
+import { INCOMPLETE } from '../src/domain/calendar/reading.js'
+import {
+  connectCalendar,
+  refreshCalendar,
+  refreshIfStale,
+  REFRESH_HOURS,
+} from '../src/domain/calendar/store.js'
 import { decrypt } from '../src/lib/crypto.js'
 import { HOUR_MS } from '../src/lib/time.js'
 import { agentTools } from '../src/mcp/server.js'
@@ -58,6 +64,42 @@ function serving(text: string) {
   const fetcher = vi.fn<Fetcher>(async () => new Response(text))
   ctx.fetchCalendar = fetcher
   return fetcher
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Waits until the database pool has had nothing checked out or queued for a
+ * moment (every read asked for has looked at the calendar and is waiting),
+ * or two seconds have passed, for the test to then say what is still held.
+ */
+async function poolAtRest() {
+  const db = ctx.db
+  let quiet = 0
+  for (let tries = 0; quiet < 5 && tries < 100; tries++) {
+    await sleep(20)
+    quiet = db.totalCount === db.idleCount && db.waitingCount === 0 ? quiet + 1 : 0
+  }
+}
+
+/**
+ * Holds every read of the calendar until released, then answers with this
+ * text and status: `asked` settles when the first read is under way, and `fetches`
+ * counts them.
+ */
+function holdReads(text: string, status = 200) {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  let asked!: () => void
+  const reading = new Promise<void>((resolve) => (asked = resolve))
+  let fetches = 0
+  ctx.fetchCalendar = async () => {
+    fetches++
+    asked()
+    await gate
+    return new Response(text, { status })
+  }
+  return { asked: reading, release, fetches: () => fetches }
 }
 
 const LISBON: [string, string, string, string] = [
@@ -153,7 +195,7 @@ describe('linking a calendar', () => {
   it('notes any failure for Settings, and lets one that is not the calendar’s own through', async () => {
     const fetcher = serving(ics([LISBON]))
     await call('connect_calendar', { url: SECRET })
-    const deps = { key: ctx.config.encryptionKey, timeZone: 'Not/A_Zone', now: NOW, fetcher }
+    const deps = { key: ctx.config.encryptionKey, timeZone: 'Not/A_Zone', now: () => NOW, fetcher }
     await expect(refreshCalendar(ctx.db, deps)).rejects.toThrow(RangeError)
     expect(await call('calendar_status')).toMatchObject({
       eventCount: 1,
@@ -163,6 +205,18 @@ describe('linking a calendar', () => {
     await ctx.db.query('UPDATE calendar_feed SET last_error = NULL, fetched_at = NULL')
     await expect(refreshIfStale(ctx.db, deps)).rejects.toThrow(RangeError)
     expect((await call('calendar_status')).lastError).toMatch(/could not be read just now/)
+    // A read that joined the failed one is not thrown at: the one that started it reports it.
+    const held = holdReads(ics([LISBON]))
+    const holding = { ...deps, fetcher: ctx.fetchCalendar! }
+    const first = refreshIfStale(ctx.db, holding)
+    await held.asked
+    const joined = refreshIfStale(ctx.db, holding)
+    await sleep(100)
+    held.release()
+    expect(await Promise.allSettled([first, joined])).toMatchObject([
+      { status: 'rejected', reason: expect.any(RangeError) },
+      { status: 'fulfilled', value: 'fresh' },
+    ])
   })
 
   it('reads a calendar whose text holds control characters, which Postgres refuses', async () => {
@@ -188,7 +242,12 @@ describe('linking a calendar', () => {
 
   it('reads again on the schedule only once the last read is a few hours old', async () => {
     const fetcher = serving(ics([LISBON]))
-    const deps = (now: Date) => ({ key: ctx.config.encryptionKey, timeZone: 'UTC', now, fetcher })
+    const deps = (now: Date) => ({
+      key: ctx.config.encryptionKey,
+      timeZone: 'UTC',
+      now: () => now,
+      fetcher,
+    })
     expect(await refreshIfStale(ctx.db, deps(NOW))).toBe('none')
     await call('connect_calendar', { url: SECRET })
     const later = new Date(NOW.getTime() + REFRESH_HOURS * HOUR_MS - 1)
@@ -209,34 +268,128 @@ describe('linking a calendar', () => {
     expect(rowCount).toBe(0)
   })
 
-  it('reads one at a time, so an unlink waits for a read under way and wins', async () => {
+  it('unlinks at once during a read, which then saves nothing', async () => {
     serving(ics([LISBON]))
     await call('connect_calendar', { url: SECRET })
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => (release = resolve))
-    let asked!: () => void
-    const reading = new Promise<void>((resolve) => (asked = resolve))
-    ctx.fetchCalendar = async () => {
-      asked()
-      await gate
-      return new Response(ics([LISBON, ['bday', 'Birthday', '2026-12-01']]))
-    }
+    const held = holdReads(ics([LISBON, ['bday', 'Birthday', '2026-12-01']]))
     const refresh = call('refresh_calendar')
-    await reading
-    let unlinked = false
-    const unlink = call('disconnect_calendar').then(() => (unlinked = true))
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(unlinked).toBe(false)
-    release()
-    await Promise.all([refresh, unlink])
-    expect(await call('calendar_status')).toMatchObject({ connected: false, eventCount: 0 })
+    await held.asked
+    // The unlink holds nothing up and is held up by nothing.
+    const unlink = call('disconnect_calendar').then(() => 'unlinked')
+    expect(await Promise.race([unlink, sleep(1000).then(() => 'still waiting')])).toBe('unlinked')
+    held.release()
+    expect(await refresh).toMatchObject({ connected: false, eventCount: 0 })
+    const { rowCount } = await ctx.db.query('SELECT 1 FROM calendar_events')
+    expect(rowCount).toBe(0)
+  })
+
+  it('never saves a read of a calendar linked anew while it was fetching', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads(ics([['old', 'Old calendar trip', '2026-12-01', '2026-12-03']]))
+    const refresh = call('refresh_calendar')
+    await held.asked
+    // The new calendar answers at once; only the old one's read is held.
+    const other = 'https://other.example.com/private/basic.ics'
+    const holding = ctx.fetchCalendar!
+    ctx.fetchCalendar = async (url, init) =>
+      url === other
+        ? new Response(ics([['new', 'New calendar trip', '2026-12-20']]))
+        : holding(url, init)
+    expect(await call('connect_calendar', { url: other })).toMatchObject({ eventCount: 1 })
+    held.release()
+    expect(await refresh).toMatchObject({ host: 'other.example.com', eventCount: 1 })
+    const { rows } = await ctx.db.query('SELECT uid FROM calendar_events')
+    expect(rows).toEqual([{ uid: 'new' }])
+  })
+
+  it('never notes an old link’s failure on a calendar linked anew', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads('', 503)
+    const refresh = call('refresh_calendar')
+    await held.asked
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: 'https://other.example.com/private/basic.ics' })
+    held.release()
+    expect(await refresh).toMatchObject({ host: 'other.example.com', lastError: null })
+  })
+
+  it('saves nothing when another server saved a read while this one fetched', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads(ics([LISBON, ['bday', "Sam's birthday", '2026-12-01']]))
+    const refresh = call('refresh_calendar')
+    await held.asked
+    await ctx.db.query(`UPDATE calendar_feed SET fetched_at = fetched_at + interval '1 minute'`)
+    held.release()
+    expect(await refresh).toMatchObject({
+      eventCount: 1,
+      fetchedAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    })
+  })
+
+  it('makes one fetch for many reads asked at once, holding no connection while it fetches', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads(ics([LISBON, ['bday', "Sam's birthday", '2026-12-01']]))
+    const refreshes = Array.from({ length: 12 }, () => call('refresh_calendar'))
+    await held.asked
+    await poolAtRest()
+    expect(held.fetches()).toBe(1)
+    // Every connection is back in the pool, so the rest of the app is served meanwhile.
+    expect(ctx.db.totalCount - ctx.db.idleCount).toBe(0)
+    const started = performance.now()
+    await ctx.db.query('SELECT 1')
+    expect(performance.now() - started).toBeLessThan(500)
+    held.release()
+    for (const status of await Promise.all(refreshes)) {
+      expect(status).toMatchObject({ eventCount: 2, lastError: null })
+    }
+    expect(held.fetches()).toBe(1)
+  })
+
+  it('tells every read that joined a failed one why it failed, from one fetch', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads('', 503)
+    const refreshes = [call('refresh_calendar'), call('refresh_calendar')]
+    await held.asked
+    held.release()
+    for (const status of await Promise.all(refreshes)) {
+      expect(status).toMatchObject({ eventCount: 1, lastError: expect.stringMatching(/read/) })
+    }
+    expect(held.fetches()).toBe(1)
+  })
+
+  it('dates a read by when it is saved, not by when it was asked for', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const held = holdReads(ics([LISBON]))
+    const refresh = call('refresh_calendar')
+    await held.asked
+    const later = new Date(NOW.getTime() + HOUR_MS)
+    ctx.setNow(later)
+    held.release()
+    expect((await refresh).fetchedAt).toBe(later.toISOString())
+  })
+
+  it('notes when some repeating events were too costly to work out, keeping the rest', async () => {
+    const fetcher = serving(
+      ics([LISBON, ['camp', 'Camping trip', '2000-01-01', '2000-01-01', 'FREQ=DAILY;COUNT=99999']]),
+    )
+    const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: () => NOW, fetcher }
+    const status = await connectCalendar(ctx.db, SECRET, { ...deps, periodsPerRead: 100 })
+    expect(status).toMatchObject({ eventCount: 1, lastError: INCOMPLETE })
+    // A read that works everything out clears the note.
+    expect(await refreshCalendar(ctx.db, deps)).toMatchObject({ lastError: null })
   })
 
   it('reads once when the schedule and a second check ask together', async () => {
     const fetcher = serving(ics([LISBON]))
     await call('connect_calendar', { url: SECRET })
     await ctx.db.query('UPDATE calendar_feed SET fetched_at = NULL')
-    const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: NOW, fetcher }
+    const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: () => NOW, fetcher }
     const results = await Promise.all([refreshIfStale(ctx.db, deps), refreshIfStale(ctx.db, deps)])
     expect(results.sort()).toEqual(['fresh', 'read'])
     expect(fetcher).toHaveBeenCalledTimes(2)
@@ -370,6 +523,7 @@ describe('the forecast', () => {
     expect(weeks.flatMap((week) => week.items)).toEqual([
       {
         type: 'event',
+        id: 'rome 2026-12-10',
         date: '2026-12-10',
         endsOn: '2026-12-14',
         title: 'Rome trip',
@@ -379,6 +533,70 @@ describe('the forecast', () => {
       },
     ])
     expect(weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(150000)
+  })
+
+  it('lists two people’s birthdays on one day as two, setting aside for each', async () => {
+    const gifts = await call('create_category', { name: 'Gifts' })
+    const { accountId } = await insertBankAccount(ctx.db)
+    // Two past birthdays, a $50 gift before each.
+    await spend(accountId, '2025-05-28', 5000, { categoryId: gifts.id })
+    await spend(accountId, '2025-08-28', 5000, { categoryId: gifts.id })
+    serving(
+      ics([
+        ['cy', "Cy's birthday", '2025-06-01'],
+        ['di', "Di's birthday", '2025-09-01'],
+        ['alice', "Alice's birthday", '2026-11-25'],
+        ['bob', "Bob's birthday", '2026-11-25'],
+      ]),
+    )
+    await call('connect_calendar', { url: SECRET })
+    const [, nextWeek] = (await call('get_forecast')).weeks
+    expect(nextWeek!.items).toMatchObject([
+      { id: 'alice 2026-11-25', title: "Alice's birthday", suggestedCents: 5000, basedOn: 2 },
+      { id: 'bob 2026-11-25', title: "Bob's birthday", suggestedCents: 5000, basedOn: 2 },
+    ])
+    expect(nextWeek!.setAsideCents).toBe(10000)
+  })
+
+  it('counts a gift bought before two birthdays close together toward one of them only', async () => {
+    const gifts = await call('create_category', { name: 'Gifts' })
+    const { accountId } = await insertBankAccount(ctx.db)
+    // One $50 gift in the weeks before both Cy's and Di's; $30 and $40 for two others.
+    await spend(accountId, '2025-11-28', 5000, { categoryId: gifts.id })
+    await spend(accountId, '2025-05-28', 3000, { categoryId: gifts.id })
+    await spend(accountId, '2025-07-30', 4000, { categoryId: gifts.id })
+    serving(
+      ics([
+        ['cy', "Cy's birthday", '2025-12-01'],
+        ['di', "Di's birthday", '2025-12-03'],
+        ['ed', "Ed's birthday", '2025-06-01'],
+        ['fay', "Fay's birthday", '2025-08-01'],
+        ['gus', "Gus's birthday", '2026-11-30'],
+      ]),
+    )
+    await call('connect_calendar', { url: SECRET })
+    const items = (await call('get_forecast')).weeks.flatMap((week) => week.items)
+    // $50, $30 and $40 from three birthdays, the middle $40; Di's showed nothing of its own.
+    expect(items).toMatchObject([{ title: "Gus's birthday", suggestedCents: 4000, basedOn: 3 }])
+  })
+
+  it('counts travel booked before two trips toward the sooner one only', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    // One $600 flight booked within two months of both trips; $300 spent on each.
+    await spend(accountId, '2025-03-01', 60000, { primary: 'TRAVEL' })
+    await spend(accountId, '2025-03-11', 30000)
+    await spend(accountId, '2025-04-11', 30000)
+    serving(
+      ics([
+        ['a', 'Austin trip', '2025-03-10', '2025-03-12'],
+        ['b', 'Boston trip', '2025-04-10', '2025-04-12'],
+        LISBON,
+      ]),
+    )
+    await call('connect_calendar', { url: SECRET })
+    const items = (await call('get_forecast')).weeks.flatMap((week) => week.items)
+    // Booked $600 and $0 (the middle, $300, once), then five days at $100.
+    expect(items).toMatchObject([{ title: 'Lisbon trip', suggestedCents: 80000, basedOn: 2 }])
   })
 
   it('suggests nothing for a trip until past trips show what one costs', async () => {

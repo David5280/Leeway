@@ -20,22 +20,24 @@ test('with no calendar linked, it is one quiet entry in Settings and nowhere els
   const status = page.waitForResponse('**/api/actions/calendar_status')
   await page.goto('/plan')
   await status
-  await expect(page.getByRole('button', { name: 'Bills' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Coming up' })).toHaveCount(0)
+  // Exact names, in Plan's own sections: a card's button elsewhere can hold the word Bills.
+  const sections = page.getByRole('group', { name: 'Plan section' })
+  await expect(sections.getByRole('button', { name: 'Bills', exact: true })).toBeVisible()
+  await expect(sections.getByRole('button', { name: 'Coming up', exact: true })).toHaveCount(0)
   await page.goto('/settings/calendar')
-  await expect(page.getByRole('button', { name: 'Connect a calendar' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Connect a calendar', exact: true })).toBeDisabled()
 })
 
 test('a calendar link is checked before anything is saved', async ({ page }) => {
   await page.goto('/settings/calendar')
   const link = page.getByRole('textbox', { name: 'Calendar link' })
   await link.fill('http://calendar.example.com/basic.ics')
-  await page.getByRole('button', { name: 'Connect a calendar' }).click()
+  await page.getByRole('button', { name: 'Connect a calendar', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText(/secure calendar link/)
   // A calendar that does not answer is said plainly, and the address is not repeated back.
   await calendarNotAnswering(page)
   await link.fill('https://calendar.example.com/private-abc123/basic.ics')
-  await page.getByRole('button', { name: 'Connect a calendar' }).click()
+  await page.getByRole('button', { name: 'Connect a calendar', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText(/did not answer/)
   await expect(page.getByText('private-abc123')).toHaveCount(0)
   expect(await action(page.request, 'calendar_status')).toMatchObject({ connected: false })
@@ -44,7 +46,8 @@ test('a calendar link is checked before anything is saved', async ({ page }) => 
 test('the weeks ahead show paydays, bills and events from the calendar', async ({ page }) => {
   await pretendCalendar(page)
   await page.goto('/plan/ahead')
-  await expect(page.getByRole('button', { name: 'Coming up' })).toHaveAttribute(
+  const sections = page.getByRole('group', { name: 'Plan section' })
+  await expect(sections.getByRole('button', { name: 'Coming up', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   )

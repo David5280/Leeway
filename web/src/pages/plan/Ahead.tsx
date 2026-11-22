@@ -51,7 +51,7 @@ function EventRow({ event, today }: { event: Event; today: string }) {
       ? relativeDay(event.date, today, settings.locale)
       : dayRange({ startsOn: event.date, endsOn: event.endsOn }, settings.locale)
   return (
-    <Link to={saveForPath(event)} className="list-row clickrow">
+    <Link to={saveForPath(event, today)} className="list-row clickrow">
       <RowText
         name={event.title}
         detail={`${EVENT_KIND_NAMES[event.kind]}, ${when}. ${setAsideText(event)}`}
@@ -93,13 +93,13 @@ function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
 
 /**
  * A key unique within a week: one payday a day, a bill once per due day, and
- * one event per kind and first day, since the server merges events of one
- * kind that overlap.
+ * an event by the server's own id for it, since two of one kind can share a
+ * day (two friends' birthdays).
  */
 function itemKey(item: ForecastItem): string {
   if (item.type === 'payday') return `payday ${item.date}`
   if (item.type === 'bill') return `bill ${item.billId} ${item.date}`
-  return `event ${item.kind} ${item.date}`
+  return `event ${item.id}`
 }
 
 function WeekCard({ week, index, today }: { week: Week; index: number; today: string }) {

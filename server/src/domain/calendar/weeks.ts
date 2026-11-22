@@ -21,6 +21,8 @@ export type ForecastItem =
     }
   | {
       type: 'event'
+      /** Stable and unique among events: two on one day of one kind are still told apart. */
+      id: string
       date: IsoDate
       endsOn: IsoDate
       title: string

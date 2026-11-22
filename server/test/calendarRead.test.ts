@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_EVENTS, parseCalendar } from '../src/domain/calendar/ics.js'
 import { daysOf, kindOf } from '../src/domain/calendar/kinds.js'
+import { occasionWords } from '../src/domain/calendar/occasions.js'
 import { mergeSpans, type KindedEvent } from '../src/domain/calendar/spans.js'
 
 const WINDOW = { from: '2026-01-01', to: '2027-12-31' }
@@ -249,36 +250,36 @@ describe('kindOf', () => {
 })
 
 describe('mergeSpans', () => {
+  /** An event for these tests; its title doubles as its calendar id. */
   const event = (
     kind: KindedEvent['kind'],
     title: string,
     startsOn: string,
     endsOn = startsOn,
-  ) => ({
-    kind,
-    title,
-    startsOn,
-    endsOn,
-  })
+  ): KindedEvent => ({ uid: title, kind, title, startsOn, endsOn })
+
+  /** The spans as [kind, title, first day, last day], for reading at a glance. */
+  const merged = (...events: KindedEvent[]) =>
+    mergeSpans(events).map((span) => [span.kind, span.title, span.startsOn, span.endsOn])
 
   it('merges a trip with its flight and hotel, named for its longest event', () => {
     expect(
-      mergeSpans([
+      merged(
         event('trip', 'Flight to Rome', '2026-12-09'),
         event('trip', 'Hotel Rome', '2026-12-10', '2026-12-13'),
         event('trip', 'Rome trip', '2026-12-10', '2026-12-14'),
         event('trip', 'Flight home', '2026-12-15'),
         event('trip', 'Ski weekend', '2026-12-20', '2026-12-21'),
-      ]),
+      ),
     ).toEqual([
-      event('trip', 'Rome trip', '2026-12-09', '2026-12-15'),
-      event('trip', 'Ski weekend', '2026-12-20', '2026-12-21'),
+      ['trip', 'Rome trip', '2026-12-09', '2026-12-15'],
+      ['trip', 'Ski weekend', '2026-12-20', '2026-12-21'],
     ])
   })
 
   it('merges back-to-back days only for kinds that run over days', () => {
     expect(
-      mergeSpans([
+      merged(
         event('wedding', 'Rehearsal dinner', '2026-06-05'),
         event('wedding', "Sam's wedding", '2026-06-06'),
         event('holiday', 'Christmas Eve', '2026-12-24'),
@@ -287,7 +288,7 @@ describe('mergeSpans', () => {
         event('birthday', "Al's birthday", '2026-03-02'),
         event('birthday', "Jo's bday dinner", '2026-03-01'),
         event('show', 'Concert', '2026-03-01'),
-      ]).map((span) => [span.kind, span.title, span.startsOn, span.endsOn]),
+      ),
     ).toEqual([
       ['birthday', "Jo's birthday", '2026-03-01', '2026-03-01'],
       ['show', 'Concert', '2026-03-01', '2026-03-01'],
@@ -297,6 +298,116 @@ describe('mergeSpans', () => {
     ])
   })
 
+  it('keeps two people’s birthdays on one day apart', () => {
+    expect(
+      merged(
+        event('birthday', "Alice's birthday", '2026-12-05'),
+        event('birthday', "Bob's birthday", '2026-12-05'),
+      ),
+    ).toEqual([
+      ['birthday', "Alice's birthday", '2026-12-05', '2026-12-05'],
+      ['birthday', "Bob's birthday", '2026-12-05', '2026-12-05'],
+    ])
+  })
+
+  it('keeps two shows on one night apart, and one show’s tickets with it', () => {
+    expect(
+      merged(
+        event('show', 'Taylor Swift concert', '2026-12-10'),
+        event('show', 'Hamilton tickets', '2026-12-10'),
+        event('show', 'Taylor Swift tickets', '2026-12-10'),
+      ),
+    ).toEqual([
+      ['show', 'Hamilton tickets', '2026-12-10', '2026-12-10'],
+      ['show', 'Taylor Swift concert', '2026-12-10', '2026-12-10'],
+    ])
+  })
+
+  it('never joins two couples’ weddings on consecutive days, but joins one couple’s', () => {
+    expect(
+      merged(
+        event('wedding', "Sam & Jo's wedding", '2026-12-12'),
+        event('wedding', "Pat & Lee's wedding", '2026-12-13'),
+        event('wedding', "Pat & Lee's wedding brunch", '2026-12-14'),
+      ),
+    ).toEqual([
+      ['wedding', "Sam & Jo's wedding", '2026-12-12', '2026-12-12'],
+      ['wedding', "Pat & Lee's wedding", '2026-12-13', '2026-12-14'],
+    ])
+  })
+
+  it('keeps two trips each named for itself apart, even back to back', () => {
+    expect(
+      merged(
+        event('trip', 'Trip to Rome', '2027-01-02', '2027-01-08'),
+        event('trip', 'Ski trip', '2027-01-09', '2027-01-11'),
+      ),
+    ).toEqual([
+      ['trip', 'Trip to Rome', '2027-01-02', '2027-01-08'],
+      ['trip', 'Ski trip', '2027-01-09', '2027-01-11'],
+    ])
+  })
+
+  it('joins trips that overlap, or touch and name the same place', () => {
+    expect(
+      merged(
+        event('trip', 'Italy vacation', '2027-01-02', '2027-01-10'),
+        event('trip', 'Florence day trip', '2027-01-05'),
+        event('trip', 'Lisbon trip', '2027-02-01', '2027-02-03'),
+        event('trip', 'Lisbon getaway, part two', '2027-02-04', '2027-02-05'),
+      ),
+    ).toEqual([
+      ['trip', 'Italy vacation', '2027-01-02', '2027-01-10'],
+      ['trip', 'Lisbon trip', '2027-02-01', '2027-02-05'],
+    ])
+  })
+
+  it('joins a flight the day before a trip to it, and the flight home wherever it says', () => {
+    expect(
+      merged(
+        event('trip', 'Flight to Lisbon', '2027-03-01'),
+        event('trip', 'Portugal trip', '2027-03-02', '2027-03-06'),
+        event('trip', 'Flight to Denver', '2027-03-07'),
+      ),
+    ).toEqual([['trip', 'Portugal trip', '2027-03-01', '2027-03-07']])
+  })
+
+  it('never merges events of different kinds on one day', () => {
+    expect(
+      merged(
+        event('birthday', "Jo's birthday", '2026-03-01'),
+        event('show', 'Jo concert', '2026-03-01'),
+      ),
+    ).toHaveLength(2)
+  })
+
+  it('gives each span a stable id from its first event, unique when two share a day', () => {
+    const spans = mergeSpans([
+      {
+        uid: 'b',
+        kind: 'birthday',
+        title: "Bob's birthday",
+        startsOn: '2026-12-05',
+        endsOn: '2026-12-05',
+      },
+      {
+        uid: 'a',
+        kind: 'birthday',
+        title: "Alice's birthday",
+        startsOn: '2026-12-05',
+        endsOn: '2026-12-05',
+      },
+      {
+        uid: 'a2',
+        kind: 'birthday',
+        title: "Alice's bday dinner",
+        startsOn: '2026-12-05',
+        endsOn: '2026-12-05',
+      },
+    ])
+    expect(spans.map((span) => span.id)).toEqual(['a 2026-12-05', 'b 2026-12-05'])
+  })
+
   it('leaves the events given as they were', () => {
     const events = [
       event('trip', 'A', '2026-01-01'),
@@ -304,5 +415,15 @@ describe('mergeSpans', () => {
     ]
     mergeSpans(events)
     expect(events[0]).toEqual(event('trip', 'A', '2026-01-01'))
+  })
+})
+
+describe('occasionWords', () => {
+  it('keeps the words that say whose or where, and drops the ones that say what kind', () => {
+    expect([...occasionWords("Jo's bday dinner")]).toEqual(['jo'])
+    expect([...occasionWords('Sam & Jo’s wedding rehearsal')]).toEqual(['sam', 'jo'])
+    expect([...occasionWords('Flight to Rome ✈')]).toEqual(['rome'])
+    expect([...occasionWords('Christmas Eve')]).toEqual(['christmas', 'eve'])
+    expect([...occasionWords('B-day party')]).toEqual([])
   })
 })

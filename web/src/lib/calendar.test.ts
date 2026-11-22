@@ -15,11 +15,20 @@ describe('calendar words', () => {
   it('links a bill to its form, and an event to a purchase to save for it', () => {
     expect(billPath('b 1')).toBe('/plan/bills?bill=b+1')
     const trip = { title: 'Rome & Florence', date: '2026-12-10', suggestedCents: 150000 }
-    expect(saveForPath(trip)).toBe(
+    expect(saveForPath(trip, '2026-11-17')).toBe(
       '/plan/goals?new=purchase&name=Rome+%26+Florence&by=2026-12-10&price=150000',
     )
-    expect(saveForPath({ ...trip, suggestedCents: null })).toBe(
+    expect(saveForPath({ ...trip, suggestedCents: null }, '2026-11-17')).toBe(
       '/plan/goals?new=purchase&name=Rome+%26+Florence&by=2026-12-10',
+    )
+    // Starting today is wanted by today.
+    expect(saveForPath(trip, '2026-12-10')).toContain('by=2026-12-10&')
+  })
+
+  it('wants a purchase for an event already under way by today, never a day gone by', () => {
+    const trip = { title: 'Lisbon trip', date: '2026-11-15', suggestedCents: 20000 }
+    expect(saveForPath(trip, '2026-11-17')).toBe(
+      '/plan/goals?new=purchase&name=Lisbon+trip&by=2026-11-17&price=20000',
     )
   })
 

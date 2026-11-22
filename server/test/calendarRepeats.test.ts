@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { parseCalendar, type CalendarEvent } from '../src/domain/calendar/ics.js'
 import { kindOf } from '../src/domain/calendar/kinds.js'
 import { durationMs, momentOf } from '../src/domain/calendar/moments.js'
-import { expandRule, parseRule, type Rule } from '../src/domain/calendar/recurrence.js'
+import { expandRule, parseRule, workBudget, type Rule } from '../src/domain/calendar/recurrence.js'
 
 /** A calendar file holding these events, each given as its lines. */
 function ics(...events: string[][]): string {
@@ -177,6 +177,61 @@ describe('repeating events in a file', () => {
     expect(days(parseCalendar(text, 'America/Denver', window))).toEqual([
       '2026-12-01',
       '2026-12-02',
+    ])
+  })
+
+  it('ends a timed repeat at UNTIL’s moment, not at the end of its day', () => {
+    const weekly = (until: string) =>
+      ics([
+        'UID:x',
+        'SUMMARY:Comedy show',
+        'DTSTART;TZID=America/Denver:20261102T230000',
+        `RRULE:FREQ=WEEKLY;UNTIL=${until}`,
+      ])
+    // 05:59:59 UTC on Nov 24 is 10:59:59 PM on Nov 23 in Denver: an hour before that week's show.
+    expect(days(parseCalendar(weekly('20261124T055959Z'), 'America/Denver', window))).toEqual([
+      '2026-11-02',
+      '2026-11-09',
+      '2026-11-16',
+    ])
+    // UNTIL at the very moment of a repeat still takes it.
+    expect(days(parseCalendar(weekly('20261124T060000Z'), 'America/Denver', window))).toEqual([
+      '2026-11-02',
+      '2026-11-09',
+      '2026-11-16',
+      '2026-11-23',
+    ])
+  })
+
+  it('leaves out the changed repeats of an event called off as a whole', () => {
+    const text = ics(
+      [
+        'UID:club',
+        'SUMMARY:Concert series',
+        'STATUS:CANCELLED',
+        'DTSTART;VALUE=DATE:20261201',
+        'RRULE:FREQ=WEEKLY;COUNT=4',
+      ],
+      [
+        'UID:club',
+        'SUMMARY:Concert series finale',
+        'RECURRENCE-ID;VALUE=DATE:20261222',
+        'DTSTART;VALUE=DATE:20261223',
+      ],
+      // A changed repeat of an event still on is kept.
+      ['UID:sam', "SUMMARY:Sam's birthday", 'DTSTART;VALUE=DATE:20241201', 'RRULE:FREQ=YEARLY'],
+      [
+        'UID:sam',
+        "SUMMARY:Sam's birthday",
+        'RECURRENCE-ID;VALUE=DATE:20261201',
+        'DTSTART;VALUE=DATE:20261205',
+      ],
+    )
+    expect(parseCalendar(text, 'UTC', window).map((e) => [e.uid, e.startsOn])).toEqual([
+      ['sam', '2024-12-01'],
+      ['sam', '2025-12-01'],
+      ['sam', '2026-12-05'],
+      ['sam', '2027-12-01'],
     ])
   })
 
@@ -414,5 +469,100 @@ describe('expandRule', () => {
     expect(expandRule('2026-01-01', rule('FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=30'), all)).toEqual([
       '2026-01-01',
     ])
+  })
+
+  it('walks a rule that never picks a day only across the window, however old it is', () => {
+    const budget = workBudget()
+    const never = rule('FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30')
+    const window = { from: '2023-11-01', to: '2027-11-23', until: null }
+    expect(expandRule('1900-01-01', never, window, budget)).toEqual([])
+    // The years from 1900 are skipped, and the walk ends with the window's last year.
+    const walked = workBudget().periodsLeft - budget.periodsLeft
+    expect(walked).toBeGreaterThan(0)
+    expect(walked).toBeLessThanOrEqual(6)
+    expect(budget.ranOut).toBe(false)
+  })
+
+  it('ends a counted rule at the window too, rather than walk on to its count', () => {
+    const budget = workBudget()
+    const counted = rule('FREQ=DAILY;COUNT=100000;BYMONTH=2;BYMONTHDAY=30')
+    expect(expandRule('2026-01-01', counted, { ...all, to: '2026-12-31' }, budget)).toEqual([
+      '2026-01-01',
+    ])
+    expect(workBudget().periodsLeft - budget.periodsLeft).toBe(365)
+  })
+
+  it('still finds the right days for rules begun long before the window', () => {
+    const june = { from: '2026-06-01', to: '2026-06-30', until: null }
+    expect(expandRule('1900-03-15', rule('FREQ=YEARLY'), { ...all, from: '2026-01-01' })).toEqual([
+      '2026-03-15',
+      '2027-03-15',
+      '2028-03-15',
+      '2029-03-15',
+      '2030-03-15',
+    ])
+    expect(expandRule('1980-01-01', rule('FREQ=WEEKLY;INTERVAL=2'), june)).toEqual([
+      '2026-06-02',
+      '2026-06-16',
+      '2026-06-30',
+    ])
+    expect(
+      expandRule('1950-01-27', rule('FREQ=MONTHLY;BYDAY=-1FR'), { ...june, to: '2026-07-31' }),
+    ).toEqual(['2026-06-26', '2026-07-31'])
+    // A count is walked from the first day: 3,000 days from 2020 runs to 2028-03-18.
+    expect(
+      expandRule('2020-01-01', rule('FREQ=DAILY;COUNT=3000'), { ...june, to: '2026-06-03' }),
+    ).toEqual(['2026-06-01', '2026-06-02', '2026-06-03'])
+    expect(
+      expandRule('2020-01-01', rule('FREQ=DAILY;COUNT=3000'), {
+        from: '2028-03-17',
+        to: '2028-12-31',
+        until: null,
+      }),
+    ).toEqual(['2028-03-17', '2028-03-18'])
+  })
+
+  it('stops where its budget runs out, and says so', () => {
+    const budget = workBudget(10)
+    const days = expandRule('2026-01-01', rule('FREQ=DAILY'), all, budget)
+    expect(days).toHaveLength(10)
+    expect(budget).toEqual({ periodsLeft: 0, ranOut: true })
+    // A rule with nothing left to spend gives nothing.
+    expect(expandRule('2026-01-01', rule('FREQ=YEARLY'), all, budget)).toEqual([])
+  })
+})
+
+describe('a file built to keep the server busy', () => {
+  const window = { from: '2023-11-01', to: '2027-11-23' }
+  /** An event repeating every February 30th since 1900, which never comes. */
+  const never = (i: number) => [
+    `UID:never-${i}`,
+    `SUMMARY:Birthday ${i}`,
+    'DTSTART;VALUE=DATE:19000101',
+    'RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30',
+  ]
+
+  it('reads hundreds of rules that never pick a day in a moment', () => {
+    const text = ics(...Array.from({ length: 200 }, (_, i) => never(i)))
+    const budget = workBudget()
+    const started = performance.now()
+    // Each keeps its first day, long before the window, so none is in it.
+    expect(parseCalendar(text, 'UTC', window, () => true, budget)).toEqual([])
+    // Before, each walked 20,000 years: seconds on end. Now a few years each.
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(workBudget().periodsLeft - budget.periodsLeft).toBeLessThanOrEqual(200 * 6)
+  })
+
+  it('leaves out the repeating events past its budget, keeping the rest', () => {
+    const text = ics(
+      // Counted from 2000, so walked day by day from then: more than the budget.
+      ['UID:greedy', 'SUMMARY:Camp', 'DTSTART;VALUE=DATE:20000101', 'RRULE:FREQ=DAILY;COUNT=99999'],
+      ['UID:mom', "SUMMARY:Mom's birthday", 'DTSTART;VALUE=DATE:20200301', 'RRULE:FREQ=YEARLY'],
+      ['UID:rome', 'SUMMARY:Rome trip', 'DTSTART;VALUE=DATE:20261210'],
+    )
+    const budget = workBudget(1000)
+    const events = parseCalendar(text, 'UTC', window, () => true, budget)
+    expect(budget.ranOut).toBe(true)
+    expect(events.map((event) => event.uid)).toEqual(['rome'])
   })
 })

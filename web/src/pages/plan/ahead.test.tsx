@@ -98,8 +98,8 @@ describe('Coming up', () => {
         forecastOf([
           ITEMS[0]!,
           ITEMS[4]!,
-          // Two events on one day with one title are told apart by their kind.
-          { ...(ITEMS[4] as Extract<ForecastItem, { type: 'event' }>), kind: 'holiday' },
+          // Two events on one day with one title are told apart by their ids.
+          { ...(ITEMS[4] as Extract<ForecastItem, { type: 'event' }>), id: 'comedy-2' },
         ]),
     })
     renderPlan('/plan/ahead')
@@ -109,6 +109,30 @@ describe('Coming up', () => {
     )
     expect(screen.getAllByText('Comedy show')).toHaveLength(2)
     expect(screen.getByRole('region', { name: 'Nothing due the week of Dec 22' })).toBeVisible()
+    expect(error).not.toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it('lists two events of one kind on one day as two rows, each kept by its own id', async () => {
+    const error = vi.spyOn(console, 'error')
+    const birthday = ITEMS[2] as Extract<ForecastItem, { type: 'event' }>
+    planServer({
+      calendar_status: () => linked(),
+      get_forecast: () =>
+        forecastOf([
+          { ...birthday, id: 'alice 2026-12-01', title: "Alice's birthday" },
+          { ...birthday, id: 'bob 2026-12-01', title: "Bob's birthday" },
+        ]),
+    })
+    renderPlan('/plan/ahead')
+    const week = await screen.findByRole('region', { name: 'Week of Dec 1' })
+    expect(week).toHaveTextContent('$120 to set aside')
+    const rows = within(week).getAllByRole('link')
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Alice's birthday"),
+      expect.stringContaining("Bob's birthday"),
+    ])
+    // React says so when two rows share a key; here none do.
     expect(error).not.toHaveBeenCalled()
     error.mockRestore()
   })

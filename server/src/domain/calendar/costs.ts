@@ -54,20 +54,41 @@ export function belongsSql(kind: EventKind, from: string, to: string): string {
     OR (t.date >= ${from}::date - ${rule.aheadDays} AND t.date < ${from} AND ${rule.ahead}))`
 }
 
+/**
+ * The SQL, with $1 and $2 the events' first and last days and $3 how far
+ * ahead spending counts, for `claimed`: each transaction that belongs to an
+ * event of this kind, claimed by one event only (i, its place in the list),
+ * so two events close together (birthdays two days apart, sharing their
+ * weeks of gift buying) never both count the same purchase. It goes to the
+ * event that started soonest among those it could belong to: the one whose
+ * days it falls on, since that one started before it, and otherwise the next
+ * event after it.
+ */
+function claimedSql(kind: EventKind): string {
+  return `w AS (
+      SELECT * FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS w(from_day, to_day, i)
+    ),
+    claimed AS (
+      SELECT DISTINCT ON (t.id) w.i, t.date, t.amount_cents
+      FROM w
+      JOIN (transactions t
+        JOIN accounts a ON a.id = t.account_id
+        LEFT JOIN categories c ON c.id = t.category_id)
+        ON t.date >= w.from_day - $3::int AND t.date <= w.to_day
+          AND ${belongsSql(kind, 'w.from_day', 'w.to_day')}
+      ORDER BY t.id, w.from_day, w.i
+    )`
+}
+
 /** What each event of one kind cost, in the order given, in one query. */
 export async function costsOf(db: Db, kind: EventKind, spans: Span[]): Promise<number[]> {
   if (!spans.length) return []
-  const ahead = COST_RULES[kind].aheadDays
   const { rows } = await db.query<{ i: number; cents: string }>(
-    `SELECT w.i, coalesce(sum(t.amount_cents), 0) AS cents
-     FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS w(from_day, to_day, i)
-     LEFT JOIN (transactions t
-       JOIN accounts a ON a.id = t.account_id
-       LEFT JOIN categories c ON c.id = t.category_id)
-       ON t.date >= w.from_day - $3::int AND t.date <= w.to_day
-         AND ${belongsSql(kind, 'w.from_day', 'w.to_day')}
+    `WITH ${claimedSql(kind)}
+     SELECT w.i, coalesce(sum(claimed.amount_cents), 0) AS cents
+     FROM w LEFT JOIN claimed ON claimed.i = w.i
      GROUP BY w.i ORDER BY w.i`,
-    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), ahead],
+    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), COST_RULES[kind].aheadDays],
   )
   return rows.map((row) => Number(row.cents))
 }
@@ -88,15 +109,11 @@ export interface TripCost {
 export async function tripCostsOf(db: Db, spans: Span[]): Promise<TripCost[]> {
   if (!spans.length) return []
   const { rows } = await db.query<{ booked: string; on_trip: string }>(
-    `SELECT w.i,
-       coalesce(sum(t.amount_cents) FILTER (WHERE t.date < w.from_day), 0) AS booked,
-       coalesce(sum(t.amount_cents) FILTER (WHERE t.date >= w.from_day), 0) AS on_trip
-     FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS w(from_day, to_day, i)
-     LEFT JOIN (transactions t
-       JOIN accounts a ON a.id = t.account_id
-       LEFT JOIN categories c ON c.id = t.category_id)
-       ON t.date >= w.from_day - $3::int AND t.date <= w.to_day
-         AND ${belongsSql('trip', 'w.from_day', 'w.to_day')}
+    `WITH ${claimedSql('trip')}
+     SELECT w.i,
+       coalesce(sum(claimed.amount_cents) FILTER (WHERE claimed.date < w.from_day), 0) AS booked,
+       coalesce(sum(claimed.amount_cents) FILTER (WHERE claimed.date >= w.from_day), 0) AS on_trip
+     FROM w LEFT JOIN claimed ON claimed.i = w.i
      GROUP BY w.i ORDER BY w.i`,
     [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), COST_RULES.trip.aheadDays],
   )

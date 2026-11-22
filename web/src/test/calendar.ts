@@ -36,6 +36,7 @@ export const ITEMS: ForecastItem[] = [
   { type: 'bill', date: '2026-11-25', billId: 'b1', name: 'Rent', amountCents: 150000 },
   {
     type: 'event',
+    id: 'sam-bday 2026-12-01',
     date: '2026-12-01',
     endsOn: '2026-12-01',
     title: "Sam's birthday",
@@ -45,6 +46,7 @@ export const ITEMS: ForecastItem[] = [
   },
   {
     type: 'event',
+    id: 'lisbon 2026-12-10',
     date: '2026-12-10',
     endsOn: '2026-12-14',
     title: 'Lisbon trip',
@@ -54,6 +56,7 @@ export const ITEMS: ForecastItem[] = [
   },
   {
     type: 'event',
+    id: 'comedy 2026-12-18',
     date: '2026-12-18',
     endsOn: '2026-12-18',
     title: 'Comedy show',

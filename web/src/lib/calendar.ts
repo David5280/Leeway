@@ -45,10 +45,14 @@ interface Saveable {
 
 /**
  * A new purchase goal for an event coming up: named for it, priced at what
- * to set aside when that is known, to be ready by the day it starts.
+ * to set aside when that is known, to be ready by the day it starts. One
+ * already under way (a trip that started yesterday) is wanted by today, since
+ * a goal dated in the past would open as overdue.
  */
-export function saveForPath({ title, date, suggestedCents }: Saveable): string {
-  const params = new URLSearchParams({ new: 'purchase', name: title, by: date })
+export function saveForPath({ title, date, suggestedCents }: Saveable, today: string): string {
+  // ISO days sort as text, so the later of the two is the greater string.
+  const by = date < today ? today : date
+  const params = new URLSearchParams({ new: 'purchase', name: title, by })
   if (suggestedCents !== null) params.set('price', String(suggestedCents))
   return `/plan/goals?${params}`
 }
