@@ -74,7 +74,21 @@ export const deleteAccountAction = defineAction({
 export const listAlertsAction = defineAction({
   name: 'list_alerts',
   title: 'List account alerts',
-  description: `What is going wrong with accounts right now, most serious first: a checking or savings account overdrawn (kind "overdrawn", severity "urgent"), a credit card over its limit ("over_limit", urgent), overdraft or insufficient funds fees charged in the last ${FEE_DAYS} days ("overdraft_fee", warning, with the count and latest date), money available below the account's low-balance warning ("low_balance", warning), and a bill whose latest charge was at least ${BILL_CHANGE_THRESHOLD.share * 100}% and ${BILL_CHANGE_THRESHOLD.cents} cents off its usual amount ("bill_change", warning when higher, info when lower, with the bill's id, name and usual amount and the charge's date), and money leaks: the same merchant charging an account the same amount more than once within ${DUPLICATE_DAYS} days, unless that is routine there or one was refunded ("duplicate_charge", warning, count is how many times), and a repeating charge no bill tracks whose latest charge rose at least ${PRICE_RISE.share * 100}% and ${PRICE_RISE.cents} cents over a steady price ("price_rise", warning, with charge.previousCents the old price). A leak has charge.id, its latest transaction, and charge.merchant. amountCents is how far overdrawn or over the limit, the balance left, the fees in all, what the bill's charge cost, what a duplicated charge was each time, or a risen price. Worked out from the balances of the last bank sync. Give accountIds for some accounts only.`,
+  // Kept as one sentence per alert kind so the description reads cleanly to people and models alike.
+  description: [
+    'What is going wrong with accounts right now, most serious first.',
+    'A checking or savings account overdrawn is kind "overdrawn", severity "urgent".',
+    'A credit card over its limit is "over_limit", urgent.',
+    `Overdraft or insufficient funds fees charged in the last ${FEE_DAYS} days are "overdraft_fee", warning, with the count and latest date.`,
+    'Money available below the account\'s low-balance warning is "low_balance", warning.',
+    `A bill whose latest charge was at least ${BILL_CHANGE_THRESHOLD.share * 100}% and ${BILL_CHANGE_THRESHOLD.cents} cents off its usual amount is "bill_change", warning when higher and info when lower, with the bill's id, name and usual amount and the charge's date.`,
+    'A bill whose amount moves from cycle to cycle, such as power or water, raises none once its charges show it varies.',
+    `Money leaks come in two kinds. The same merchant charging an account the same amount more than once within ${DUPLICATE_DAYS} days is "duplicate_charge", warning, with count saying how many times, unless that is routine there or one was refunded.`,
+    `A repeating charge no bill tracks whose latest charge rose at least ${PRICE_RISE.share * 100}% and ${PRICE_RISE.cents} cents over a steady price is "price_rise", warning, with charge.previousCents the old price.`,
+    'A leak has charge.id, its latest transaction, and charge.merchant.',
+    'amountCents is how far overdrawn or over the limit, the balance left, the fees in all, what the bill\'s charge cost, what a duplicated charge was each time, or a risen price.',
+    'Worked out from the balances of the last bank sync. Give accountIds for some accounts only.',
+  ].join(' '),
   input: accountIdsInput,
   scope: 'read',
   surface: 'all',
