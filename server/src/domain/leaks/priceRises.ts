@@ -3,13 +3,24 @@
 // Pure: each repeating charge's history comes in, the rises worth a look come
 // out; leakSource.ts reads them.
 //
-// A rise is only news when the price was steady before it: the two charges
-// before the latest agree, and the latest is clearly more than both. A bill
-// whose amount moves every month, like power, never had a steady price to
-// rise from, so it stays quiet. The latest charge must be the first at the
-// new price, so the same rise is never news twice.
+// A rise is only news when the price was steady before it and the latest
+// charge is the next one in the cycle:
+// - the latest comes a cycle after an earlier charge. A charge in between is
+//   an extra off the cycle (an annual fee at a monthly gym, say) and is
+//   skipped, and an extra that is itself the latest has no charge a cycle
+//   before it, so an extra is never read as the new price;
+// - the two charges before it agree, an odd one between steady ones aside,
+//   and the latest is clearly more than the last of them;
+// - the earlier charges do not move from cycle to cycle. A bill like power,
+//   whose amount moves every month, never had a steady price to rise from, so
+//   it stays quiet. Bill changes judge this the same way (amountsVary).
+// The latest charge must be the first at the new price, so the same rise is
+// never news twice.
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
+import { addCadence, type Cadence } from '../../lib/periods.js'
+import { amountsVary, CHARGES_READ, withoutOneOff } from '../billChanges.js'
+import { fitsCadence } from '../recurring.js'
 import type { ChargeLine } from './duplicates.js'
 
 /**
@@ -29,6 +40,8 @@ export const RISE_NEWS_DAYS = 45
 export interface RepeatingCharge {
   /** The merchant as the app shows it, with no account number. */
   name: string
+  /** How often it repeats, as detection found it. */
+  cadence: Cadence
   /** Its posted charges, oldest first. */
   charges: ChargeLine[]
 }
@@ -61,15 +74,37 @@ export function isPriceRise(previousCents: number, amountCents: number): boolean
   return rise >= PRICE_RISE.cents && rise >= previousCents * PRICE_RISE.share
 }
 
+/**
+ * The days before `latest` (oldest first), newest first, from the one a cycle
+ * before it on: the days between are extras off the cycle, left out. Null
+ * when no day sits a cycle before the latest, as when the latest is itself an
+ * extra or a cycle was missed.
+ */
+function cycleBefore(earlier: ChargeLine[], latest: ChargeLine, cadence: Cadence) {
+  const fitting = earlier.filter((day) => fitsCadence(daysBetween(day.date, latest.date), cadence))
+  if (fitting.length === 0) return null
+  // Bands have a few days' slack, so an extra just after a charge can fit too:
+  // the cycle before is the day the latest follows most closely by the calendar.
+  const offBy = (day: ChargeLine) =>
+    Math.abs(daysBetween(addCadence(day.date, cadence), latest.date))
+  const previous = fitting.reduce((best, day) => (offBy(day) <= offBy(best) ? day : best))
+  return earlier.slice(0, earlier.indexOf(previous) + 1).reverse()
+}
+
 /** What a repeating charge's latest charge says about its price, or null when nothing. */
 export function priceRiseOf(repeating: RepeatingCharge, today: IsoDate): PriceRise | null {
-  const days = byDay(repeating.charges)
-  if (days.length < 3) return null
-  const [older, before, latest] = days.slice(-3) as [ChargeLine, ChargeLine, ChargeLine]
-  if (daysBetween(latest.date, today) > RISE_NEWS_DAYS) return null
-  if (!steady(older.amountCents, before.amountCents)) return null
-  if (!isPriceRise(before.amountCents, latest.amountCents)) return null
-  return { name: repeating.name, charge: latest, previousCents: before.amountCents }
+  // The last few cycles, as bill changes read them: older history says nothing of today's price.
+  const days = byDay(repeating.charges).slice(-CHARGES_READ)
+  const latest = days.at(-1)
+  if (!latest || daysBetween(latest.date, today) > RISE_NEWS_DAYS) return null
+  const earlier = cycleBefore(days.slice(0, -1), latest, repeating.cadence)
+  if (!earlier) return null
+  const amounts = earlier.map((day) => day.amountCents)
+  const [before, older] = withoutOneOff(amounts)
+  if (before === undefined || older === undefined) return null
+  if (!steady(older, before) || amountsVary(amounts)) return null
+  if (!isPriceRise(before, latest.amountCents)) return null
+  return { name: repeating.name, charge: latest, previousCents: before }
 }
 
 /** Every price rise among these repeating charges, newest first. */

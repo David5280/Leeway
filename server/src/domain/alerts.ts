@@ -18,6 +18,7 @@ import {
 import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import { billChangeAlerts, listBillChanges } from './billChangeSource.js'
+import { withoutDoublePaid } from './leaks/doublePaidBills.js'
 import { leakAlerts, listLeaks } from './leaks/leakSource.js'
 import type { Settings } from './settings.js'
 
@@ -44,7 +45,8 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
  * Hidden accounts are included: they stay out of budget totals, but an
  * overdraft on one still costs real money. A bill's change counts for the
  * account its charge came out of, hidden ones aside, as bills never read them.
- * A leak counts for the account it was charged to. Without `bills` or
+ * A leak counts for the account it was charged to. A bill paid twice in a
+ * cycle is told once, as a charge made twice (doublePaidBills.ts). Without `bills` or
  * `leaks`, those are not read, so a problem reading them never stands in the
  * way of the rest.
  */
@@ -67,10 +69,11 @@ export async function listAlerts(
     money: (cents: number) => formatCents(cents, settings.currency, settings.locale),
     date: (date: IsoDate) => shortDate(date, settings.locale),
   }
+  const told = found ? withoutDoublePaid(changes, found.doubles, today) : changes
   // Bill changes, then leaks, are the last kinds (ALERT_KINDS), so they go after the rest.
   return [
     ...alertsFor(picked, charges, settings),
-    ...billChangeAlerts(changes, names, format),
+    ...billChangeAlerts(told, names, format),
     ...(found ? leakAlerts(found, names, format) : []),
   ]
 }

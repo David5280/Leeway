@@ -13,7 +13,7 @@ import { addCadence, type Cadence } from '../lib/periods.js'
 import { accountMasks } from './accounts.js'
 import { listBills, type Bill } from './bills.js'
 import { countedSql } from './counted.js'
-import { merchantKey, textKey } from './merchantKey.js'
+import { bankTextKey, merchantKey, textKey } from './merchantKey.js'
 import { shownNameOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
 import { merchantDisplayName } from './transactionName.js'
@@ -91,6 +91,15 @@ function cadenceOfGaps(gaps: number[]): (typeof CADENCE_BANDS)[number] | null {
     if (gaps.length + 1 >= band.minCount && fitting / gaps.length >= REGULAR_SHARE) return band
   }
   return null
+}
+
+/**
+ * Whether a gap in days between two charges fits a cadence, with the same
+ * slack detection allows. A cadence detection never finds (semimonth) fits none.
+ */
+export function fitsCadence(gapDays: number, cadence: Cadence): boolean {
+  const band = CADENCE_BANDS.find((one) => one.cadence === cadence)
+  return band !== undefined && gapDays >= band.min && gapDays <= band.max
 }
 
 function mostCommon(values: (string | null)[]): string | null {
@@ -210,7 +219,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTrans
      LEFT JOIN categories c ON c.id = t.category_id
      WHERE NOT t.pending AND NOT t.excluded AND NOT a.hidden AND t.date BETWEEN $1 AND $2
        AND ${countedSql()}
-     ORDER BY t.date`,
+     ORDER BY t.date, t.id`,
     [addDays(today, -HISTORY_DAYS), today],
   )
   return rows
@@ -234,15 +243,39 @@ export interface Untracked {
   shownKey: string
 }
 
+/** A series found, with the keys a bill's pattern is looked for in. */
+interface Keyed<T extends PastTransaction> extends Untracked {
+  /** Its latest charge's merchant name and description together (bankTextKey). */
+  bankKey: string
+  charges: T[]
+}
+
+/** Every series found, keyed by its latest charge as a bill would read it. */
+function keyedSeries<T extends StoredTransaction>(
+  history: T[],
+  today: IsoDate,
+  masks: AccountMasks,
+): Keyed<T>[] {
+  return findSeries(history, today, masks).map(({ series, charges, last }) => ({
+    series,
+    charges,
+    shownKey: textKey(shownNameOf(last, masks)),
+    bankKey: bankTextKey(last),
+  }))
+}
+
 /**
- * Whether a bill tracks a series: its pattern, read as a merchant key, is
- * part of the series' key. A bill that reads shown names is compared with the
- * key made from the shown name, never the bank's text.
+ * Whether a bill tracks a series, judged as the bill finds its payments: its
+ * pattern, read as a merchant key, is part of the series' latest charge. A
+ * bill that reads bank text looks in the merchant name and description
+ * together, as its SQL does, so a pattern from the description ("spotify
+ * usa") tracks too. A bill that reads shown names looks in the key made from
+ * the shown name, never the bank's text.
  */
-function tracks(bill: Bill, { series, shownKey }: Untracked): boolean {
+function tracks(bill: Bill, { bankKey, shownKey }: Keyed<PastTransaction>): boolean {
   const pattern = bill.matchPattern ? textKey(bill.matchPattern) : ''
   if (!pattern) return false
-  return (bill.reads === 'shown_name' ? shownKey : series.key).includes(pattern)
+  return (bill.reads === 'shown_name' ? shownKey : bankKey).includes(pattern)
 }
 
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
@@ -253,9 +286,9 @@ export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
     listBills(db, today),
     accountMasks(db),
   ])
-  return findSeries(history, today, masks)
-    .map(({ series, last }) => ({ series, shownKey: textKey(shownNameOf(last, masks)) }))
+  return keyedSeries(history, today, masks)
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
+    .map(({ series, shownKey }) => ({ series, shownKey }))
 }
 
 /**
@@ -272,13 +305,9 @@ export async function untrackedSeries(
     listBills(db, today),
     accountMasks(db),
   ])
-  return findSeries(history, today, masks)
-    .map(({ series, charges, last }) => ({
-      series,
-      charges,
-      shownKey: textKey(shownNameOf(last, masks)),
-    }))
+  return keyedSeries(history, today, masks)
     .filter((found) => !bills.some((bill) => tracks(bill, found)))
+    .map(({ series, shownKey, charges }) => ({ series, shownKey, charges }))
 }
 
 /**

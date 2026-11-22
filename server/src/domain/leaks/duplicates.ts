@@ -8,7 +8,15 @@
 // equal parts every month) is a habit, not a duplicate: the merchant charges
 // that amount often, or has charged it twice close together before. A
 // monthly subscription charged twice in a few days is neither, so it shows.
-// A cluster one of whose charges was refunded is already put right.
+// Each refund since a cluster began puts one of its charges right, so a
+// charge made twice and refunded once is settled, while one made three times
+// and refunded once is still a charge made twice.
+//
+// A habit is judged over the HABIT_DAYS before the cluster began, not before
+// today, so the same charges read the same way all the while they are news.
+//
+// Lines the owner made or the bank charged (cash, checks, payments to people,
+// bank fees) never reach here: merchantCharges.ts leaves them out.
 
 import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
 import { merchantKey } from '../merchantKey.js'
@@ -19,8 +27,14 @@ export const DUPLICATE_DAYS = 3
 /** How long a duplicate stays news: about one statement. */
 export const DUPLICATE_NEWS_DAYS = 30
 
-/** History read to tell a habit from a duplicate. */
+/** History before a cluster that tells a habit from a duplicate. */
 export const HABIT_DAYS = 90
+
+/**
+ * History read: back to the habit window of the oldest cluster still news,
+ * which began up to DUPLICATE_DAYS before its latest charge.
+ */
+export const DUPLICATE_HISTORY_DAYS = HABIT_DAYS + DUPLICATE_NEWS_DAYS + DUPLICATE_DAYS
 
 /** Other days at the same merchant and amount within HABIT_DAYS that make it a habit: about weekly. */
 const HABIT_OTHER_DAYS = 4
@@ -50,7 +64,9 @@ function groupCharges(lines: ChargeLine[]): ChargeLine[][] {
   for (const line of lines) {
     if (line.amountCents <= 0 || !merchantKey(line)) continue
     const key = groupKey(line)
-    groups.set(key, [...(groups.get(key) ?? []), line])
+    const group = groups.get(key)
+    if (group) group.push(line)
+    else groups.set(key, [line])
   }
   return [...groups.values()].map((group) =>
     group.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)),
@@ -72,45 +88,66 @@ function clustersOf(group: ChargeLine[]): ChargeLine[][] {
 }
 
 /**
- * Whether charging this amount is routine at this merchant: on enough other
- * days lately, or twice close together more than once (`runs` are every
- * cluster in the group).
+ * Whether charging this amount is routine at this merchant, judged from
+ * HABIT_DAYS before the cluster began: charged on enough other days, or
+ * twice close together more than once.
  */
-function isHabit(group: ChargeLine[], cluster: ChargeLine[], runs: number): boolean {
-  if (runs > 1) return true
+function isHabit(group: ChargeLine[], cluster: ChargeLine[]): boolean {
+  const from = addDays(cluster[0]!.date, -HABIT_DAYS)
+  const seen = group.filter((charge) => charge.date >= from)
+  if (clustersOf(seen).length > 1) return true
   const inCluster = new Set(cluster.map((charge) => charge.date))
-  const otherDays = new Set(group.map((charge) => charge.date).filter((d) => !inCluster.has(d)))
+  const otherDays = new Set(seen.map((charge) => charge.date).filter((d) => !inCluster.has(d)))
   return otherDays.size >= HABIT_OTHER_DAYS
 }
 
-/** Whether a refund of the same amount from the same merchant came on or after the cluster began. */
-function wasRefunded(cluster: ChargeLine[], refunds: ChargeLine[]): boolean {
+/**
+ * The cluster less one charge for each refund of its amount from its merchant
+ * on its account since it began. Charges come off the oldest end, so what is
+ * left still points at the latest charge, as the alert did before the refund.
+ */
+function lessRefunds(cluster: ChargeLine[], refunds: ChargeLine[]): ChargeLine[] {
   const first = cluster[0]!
-  return refunds.some(
+  const refunded = refunds.filter(
     (refund) =>
       refund.accountId === first.accountId &&
       refund.amountCents === -first.amountCents &&
       refund.date >= first.date &&
       merchantKey(refund) === merchantKey(first),
-  )
+  ).length
+  return cluster.slice(refunded)
+}
+
+/** Newest first, by each duplicate's latest charge. */
+const newestFirst = (a: DuplicateCharge, b: DuplicateCharge) =>
+  b.charges.at(-1)!.date.localeCompare(a.charges.at(-1)!.date)
+
+/**
+ * Every charge made more than once whose latest charge is still news
+ * (DUPLICATE_NEWS_DAYS), refunded or not, newest first. A bill paid twice is
+ * told once by these (doublePaidBills.ts), the refunded ones too. `lines` are
+ * posted charges and refunds from the last DUPLICATE_HISTORY_DAYS, transfers
+ * between the owner's own accounts left out.
+ */
+export function findDoubleCharges(lines: ChargeLine[], today: IsoDate): DuplicateCharge[] {
+  const since = addDays(today, -DUPLICATE_NEWS_DAYS)
+  return groupCharges(lines)
+    .flatMap((group) =>
+      clustersOf(group)
+        .filter((cluster) => cluster.at(-1)!.date > since)
+        .filter((cluster) => !isHabit(group, cluster))
+        .map((charges) => ({ accountId: charges[0]!.accountId, charges })),
+    )
+    .sort(newestFirst)
 }
 
 /**
- * Every likely duplicate whose latest charge is still news (DUPLICATE_NEWS_DAYS),
- * newest first. `lines` are posted charges and refunds from the last
- * HABIT_DAYS, transfers between the owner's own accounts left out.
+ * Every likely duplicate still news, newest first: the double charges with
+ * the refunded charges taken off, while two or more are left.
  */
 export function findDuplicates(lines: ChargeLine[], today: IsoDate): DuplicateCharge[] {
-  const since = addDays(today, -DUPLICATE_NEWS_DAYS)
   const refunds = lines.filter((line) => line.amountCents < 0)
-  return groupCharges(lines)
-    .flatMap((group) => {
-      const clusters = clustersOf(group)
-      return clusters
-        .filter((cluster) => cluster.at(-1)!.date > since)
-        .filter((cluster) => !isHabit(group, cluster, clusters.length))
-        .filter((cluster) => !wasRefunded(cluster, refunds))
-        .map((charges) => ({ accountId: charges[0]!.accountId, charges }))
-    })
-    .sort((a, b) => b.charges.at(-1)!.date.localeCompare(a.charges.at(-1)!.date))
+  return findDoubleCharges(lines, today)
+    .map((duplicate) => ({ ...duplicate, charges: lessRefunds(duplicate.charges, refunds) }))
+    .filter((duplicate) => duplicate.charges.length > 1)
 }

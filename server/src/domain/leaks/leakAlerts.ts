@@ -11,8 +11,9 @@ import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
 import type { DuplicateCharge } from './duplicates.js'
 import type { PriceRise } from './priceRises.js'
 
-/** "twice", or "3 times". */
-const times = (count: number) => (count === 2 ? 'twice' : `${count} times`)
+/** "$15.49 twice", or "$10, 3 times": the comma keeps the price and the count apart. */
+const amountTimes = (amount: string, count: number) =>
+  count === 2 ? `${amount} twice` : `${amount}, ${count} times`
 
 /** " on Nov 3" for one day, ", on Nov 3 and Nov 4" for two, " between Nov 3 and Nov 5" for a run. */
 function whenWords(charges: DuplicateCharge['charges'], date: AlertFormat['date']): string {
@@ -25,7 +26,8 @@ function whenWords(charges: DuplicateCharge['charges'], date: AlertFormat['date'
 
 /**
  * The alert for a charge made more than once: "Netflix charged $15.49 twice,
- * on Nov 3 and Nov 4." It points at the latest of the charges.
+ * on Nov 3 and Nov 4.", or "Netflix charged $10, 3 times between Nov 3 and
+ * Nov 5." It points at the latest of the charges.
  */
 export function duplicateAlert(
   duplicate: DuplicateCharge,
@@ -34,7 +36,7 @@ export function duplicateAlert(
 ): AccountAlert {
   const { charges } = duplicate
   const latest = charges.at(-1)!
-  const charged = `${merchant} charged ${money(latest.amountCents)} ${times(charges.length)}`
+  const charged = `${merchant} charged ${amountTimes(money(latest.amountCents), charges.length)}`
   return {
     kind: 'duplicate_charge',
     severity: 'warning',

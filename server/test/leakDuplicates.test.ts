@@ -1,12 +1,15 @@
 // Duplicate charges (leaks/duplicates.ts): the same merchant charging one
 // account the same amount more than once within a few days, unless that is a
-// habit there or one of them was refunded.
+// habit there or refunds put it right.
 
 import { describe, expect, it } from 'vitest'
 import {
   DUPLICATE_DAYS,
+  DUPLICATE_HISTORY_DAYS,
   DUPLICATE_NEWS_DAYS,
+  findDoubleCharges,
   findDuplicates,
+  HABIT_DAYS,
   type ChargeLine,
 } from '../src/domain/leaks/duplicates.js'
 
@@ -127,7 +130,7 @@ describe('findDuplicates', () => {
     expect(dates(found)).toEqual([['2026-11-04', '2026-11-05']])
   })
 
-  it('leaves out a duplicate one of whose charges was refunded since', () => {
+  it('leaves out a duplicate one of whose two charges was refunded since', () => {
     const lines = [line('2026-11-03', 4210), line('2026-11-04', 4210), line('2026-11-08', -4210)]
     expect(findDuplicates(lines, TODAY)).toEqual([])
   })
@@ -137,6 +140,25 @@ describe('findDuplicates', () => {
     expect(findDuplicates(partial, TODAY)).toHaveLength(1)
     const earlier = [line('2026-10-20', -4210), line('2026-11-03', 4210), line('2026-11-04', 4210)]
     expect(findDuplicates(earlier, TODAY)).toHaveLength(1)
+  })
+
+  it('takes one charge off a run of three for one refund, still pointing at the latest', () => {
+    const run = [line('2026-11-03', 999), line('2026-11-04', 999), line('2026-11-05', 999)]
+    const [found] = findDuplicates([...run, line('2026-11-09', -999)], TODAY)
+    expect(found!.charges).toEqual(run.slice(1))
+    expect(
+      findDuplicates([...run, line('2026-11-09', -999), line('2026-11-10', -999)], TODAY),
+    ).toEqual([])
+  })
+
+  it('counts a refund only from the same merchant and account', () => {
+    const lines = [
+      line('2026-11-03', 4210),
+      line('2026-11-04', 4210),
+      line('2026-11-08', -4210, { name: 'HULU', merchantName: 'Hulu' }),
+      line('2026-11-08', -4210, { accountId: 'card' }),
+    ]
+    expect(findDuplicates(lines, TODAY)).toHaveLength(1)
   })
 
   it(`stops being news after ${DUPLICATE_NEWS_DAYS} days`, () => {
@@ -155,6 +177,32 @@ describe('findDuplicates', () => {
     ).toEqual([])
   })
 
+  it(`reads enough history for the habit window of the oldest duplicate still news`, () => {
+    expect(DUPLICATE_HISTORY_DAYS).toBe(HABIT_DAYS + DUPLICATE_NEWS_DAYS + DUPLICATE_DAYS)
+  })
+
+  describe('a habit judged from when the charges were made, not from today', () => {
+    // A $4.50 coffee every five days in late summer, then two on Nov 19.
+    const coffee = { name: 'CORNER CAFE', merchantName: 'Corner Cafe' }
+    const lines = () =>
+      ['2026-08-24', '2026-08-29', '2026-09-03', '2026-09-08', '2026-11-19', '2026-11-19'].map(
+        (date) => line(date, 450, coffee),
+      )
+
+    it('stays a habit the day after and a week after, never raising a late alert', () => {
+      expect(findDuplicates(lines(), '2026-11-20')).toEqual([])
+      expect(findDuplicates(lines(), '2026-11-25')).toEqual([])
+      // As long as it is news at all.
+      expect(findDuplicates(lines(), '2026-12-18')).toEqual([])
+    })
+
+    it(`no longer counts days more than ${HABIT_DAYS} days before the charges`, () => {
+      // The same two on Nov 25 instead: the earliest coffee is now 93 days before them.
+      const later = lines().map((one, i) => (i >= 4 ? { ...one, date: '2026-11-25' } : one))
+      expect(findDuplicates(later, '2026-11-26')).toHaveLength(1)
+    })
+  })
+
   it('lists the newest duplicate first', () => {
     const hulu = { name: 'HULU', merchantName: 'Hulu' }
     const found = findDuplicates(
@@ -170,5 +218,20 @@ describe('findDuplicates', () => {
       ['2026-11-12', '2026-11-12'],
       ['2026-11-01', '2026-11-02'],
     ])
+  })
+})
+
+describe('findDoubleCharges', () => {
+  it('keeps a refunded double charge, which still tells a bill paid twice', () => {
+    const lines = [line('2026-11-03', 4210), line('2026-11-04', 4210), line('2026-11-08', -4210)]
+    expect(findDuplicates(lines, TODAY)).toEqual([])
+    expect(dates(findDoubleCharges(lines, TODAY))).toEqual([['2026-11-03', '2026-11-04']])
+  })
+
+  it('still leaves out a habit and a charge no longer news', () => {
+    const old = [line('2026-10-10', 4210), line('2026-10-11', 4210)]
+    expect(findDoubleCharges(old, TODAY)).toEqual([])
+    const split = ['2026-10-01', '2026-10-03', '2026-11-01', '2026-11-03'].map((d) => line(d, 600))
+    expect(findDoubleCharges(split, TODAY)).toEqual([])
   })
 })

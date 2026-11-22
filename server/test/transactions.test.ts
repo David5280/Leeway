@@ -55,6 +55,44 @@ describe('filtering transactions', () => {
     expect((await call('list_transactions', { search: 'BIRTHDAY' })).total).toBe(1)
   })
 
+  it('finds the name the app shows, as an alert links to a merchant by it', async () => {
+    const checking = await insertBankAccount(ctx.db, { name: 'Checking' })
+    const card = await insertBankAccount(ctx.db, { name: 'Card' })
+    for (const [accountId, date] of [
+      [checking.accountId, '2026-11-09'],
+      [checking.accountId, '2026-11-10'],
+      [card.accountId, '2026-11-10'],
+    ] as const) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'AMZN Mktp US*2K3LM1',
+        amountCents: 2599,
+      })
+    }
+    const shown = await call('list_transactions', { search: 'Amazon Marketplace' })
+    expect(shown.total).toBe(3)
+    expect(shown.transactions[0]!.displayName).toMatch(/^Amazon Marketplace/)
+    // The bank's own text still finds it, and the other filters still narrow it, page by page.
+    expect((await call('list_transactions', { search: 'amzn mktp' })).total).toBe(3)
+    const page = await call('list_transactions', {
+      search: 'amazon marketplace',
+      accountId: checking.accountId,
+      limit: 1,
+      offset: 1,
+    })
+    expect(page.total).toBe(2)
+    expect(page.transactions.map((tx) => tx.date)).toEqual(['2026-11-09'])
+  })
+
+  it('takes a search literally, with no wildcards', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    for (const name of ['SALE 50% OFF', 'SALE 50 OFF', 'A_B STORE', 'AXB STORE']) {
+      await insertBankTransaction(ctx.db, accountId, { date: '2026-11-10', name, amountCents: 100 })
+    }
+    expect(names(await call('list_transactions', { search: '50%' }))).toEqual(['SALE 50% OFF'])
+    expect(names(await call('list_transactions', { search: 'a_b' }))).toEqual(['A_B STORE'])
+  })
+
   it('pages through results while reporting the full total', async () => {
     const { accountId } = await insertBankAccount(ctx.db)
     for (const day of ['01', '02', '03']) {

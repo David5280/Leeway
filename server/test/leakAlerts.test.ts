@@ -4,6 +4,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { duplicateAlert, priceRiseAlert } from '../src/domain/leaks/leakAlerts.js'
+import { leakAlerts } from '../src/domain/leaks/leakSource.js'
 import { refreshInbox } from '../src/domain/notifications/notifier.js'
 import { accountAlertSubject } from '../src/domain/notifications/words.js'
 import { formatCents } from '../src/lib/money.js'
@@ -76,7 +77,8 @@ describe('leak wording', () => {
       names,
       format,
     )
-    expect(run.message).toBe('Netflix charged $10 3 times between Nov 3 and Nov 5.')
+    expect(run.message).toBe('Netflix charged $10, 3 times between Nov 3 and Nov 5.')
+    expect(run.summary).toBe('Netflix charged $10, 3 times.')
     expect(run.count).toBe(3)
   })
 
@@ -95,6 +97,18 @@ describe('leak wording', () => {
     })
   })
 
+  it('leaves out a leak on an account not among those named', () => {
+    const rise = { name: 'Spotify', charge: charge('c', '2026-11-12', 1199), previousCents: 1099 }
+    const duplicate = {
+      accountId: 'checking',
+      charges: [charge('a', '2026-11-03', 1549), charge('b', '2026-11-04', 1549)],
+    }
+    const found = { duplicates: [duplicate], rises: [rise], masks: [] }
+    expect(leakAlerts(found, new Map(), format)).toEqual([])
+    const named = leakAlerts(found, new Map([['checking', 'Everyday']]), format)
+    expect(named.map((alert) => alert.kind)).toEqual(['duplicate_charge', 'price_rise'])
+  })
+
   it('keys each leak by its charge, so the same charge is news once', () => {
     const alert = {
       kind: 'price_rise' as const,
@@ -108,7 +122,7 @@ describe('leak wording', () => {
 
 describe('leak alerts', () => {
   let ctx: Awaited<ReturnType<typeof createTestContext>>
-  const { call } = actionCaller(() => ctx)
+  const { call, callError } = actionCaller(() => ctx)
 
   beforeAll(async () => {
     ctx = await createTestContext()
@@ -217,6 +231,53 @@ describe('leak alerts', () => {
     expect(kinds).toContain('overdraft_fee')
   })
 
+  it('never calls cash, checks or bank fees the owner was charged twice a duplicate', async () => {
+    const { accountId } = await everyday()
+    const twice = async (fields: { name: string; detailed?: string; amountCents?: number }) => {
+      for (const date of ['2026-11-10', '2026-11-11']) {
+        await insertBankTransaction(ctx.db, accountId, { amountCents: 6_000, date, ...fields })
+      }
+    }
+    await twice({ name: 'ATM WITHDRAWAL', detailed: 'TRANSFER_OUT_WITHDRAWAL' })
+    await twice({ name: 'NON-NETWORK ATM FEE', detailed: 'BANK_FEES_ATM_FEES', amountCents: 300 })
+    await twice({ name: 'VENMO PAYMENT', detailed: 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS' })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-12',
+      name: 'CHECK 1043',
+      amountCents: 120_000,
+    })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'CHECK 1044',
+      amountCents: 120_000,
+    })
+    expect(await leaks()).toEqual([])
+  })
+
+  it('judges a habit from when the charges came, so it never turns into a late alert', async () => {
+    const { accountId } = await everyday()
+    // A $4.50 coffee every five days in late summer, then two on Nov 19.
+    for (const date of [
+      '2026-08-24',
+      '2026-08-29',
+      '2026-09-03',
+      '2026-09-08',
+      '2026-11-19',
+      '2026-11-19',
+    ]) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'CORNER CAFE',
+        merchantName: 'Corner Cafe',
+        amountCents: 450,
+      })
+    }
+    for (const day of ['2026-11-20', '2026-11-25']) {
+      ctx.setNow(new Date(`${day}T18:00:00Z`))
+      expect(await leaks()).toEqual([])
+    }
+  })
+
   it('alerts for a price rise on a repeating charge that is not a bill', async () => {
     const { accountId } = await everyday()
     await spotifyRose(accountId)
@@ -242,6 +303,40 @@ describe('leak alerts', () => {
       matchPattern: 'spotify',
     })
     expect(await leaks()).toEqual([])
+  })
+
+  it('leaves a bill whose pattern is from the bank’s description to its own alert too', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    // The bank names the merchant "Spotify"; only its description says "SPOTIFY USA".
+    await call('create_bill', {
+      name: 'Spotify',
+      amountCents: 1099,
+      cadence: 'month',
+      anchorDate: '2026-11-12',
+      matchPattern: 'Spotify USA',
+    })
+    expect(await leaks()).toEqual([])
+  })
+
+  it('points a rise at the same charge every time on a day paid in parts', async () => {
+    const { accountId } = await everyday()
+    await spotifyRose(accountId)
+    await ctx.db.query(`DELETE FROM transactions WHERE date = '2026-11-12'`)
+    const ids: string[] = []
+    for (const amountCents of [600, 599]) {
+      ids.push(
+        await insertBankTransaction(ctx.db, accountId, {
+          date: '2026-11-12',
+          name: 'SPOTIFY USA 4417',
+          merchantName: 'Spotify',
+          amountCents,
+        }),
+      )
+    }
+    const [rise] = await leaks()
+    // The day's charges are read in id order, and the last stands for the day.
+    expect(rise!.charge!.id).toBe(ids.sort().at(-1))
   })
 
   it('still says a rise on a charge the owner chose not to track', async () => {
@@ -290,6 +385,16 @@ describe('leak alerts', () => {
     expect((await call('list_home_alerts')).alerts).toEqual([])
   })
 
+  it('needs the charge to hide a leak, so the wrong one is never hidden', async () => {
+    const { accountId } = await everyday()
+    await chargedTwice(accountId)
+    const error = await callError('hide_home_alert', { kind: 'duplicate_charge', accountId })
+    expect(error.code).toBe('invalid_input')
+    expect((await call('list_home_alerts')).alerts.map((alert) => alert.kind)).toEqual([
+      'duplicate_charge',
+    ])
+  })
+
   it('hides one leak without hiding another on the same account', async () => {
     const { accountId } = await everyday()
     await chargedTwice(accountId)
@@ -311,5 +416,61 @@ describe('leak alerts', () => {
     expect(rows).toEqual([
       { title: 'Price went up', push_body: 'A repeating charge went up in price.' },
     ])
+  })
+
+  describe('a tracked bill paid twice', () => {
+    /** A $15.49 Netflix bill, tracked since September, paid twice this month. */
+    async function billPaidTwice() {
+      const { accountId } = await everyday()
+      for (const date of ['2026-08-03', '2026-09-03', '2026-10-03']) {
+        await insertBankTransaction(ctx.db, accountId, {
+          date,
+          name: 'NETFLIX.COM 4417',
+          merchantName: 'Netflix',
+          amountCents: 1549,
+        })
+      }
+      await chargedTwice(accountId)
+      await call('create_bill', {
+        name: 'Netflix',
+        amountCents: 1549,
+        cadence: 'month',
+        anchorDate: '2026-11-03',
+        matchPattern: 'netflix',
+      })
+      await ctx.db.query(`UPDATE bills SET created_at = '2026-09-01T12:00:00Z'`)
+      return accountId
+    }
+
+    it('is told once, as a charge made twice, not also as a bill change', async () => {
+      await billPaidTwice()
+      const kinds = (await call('list_alerts', {})).map((alert) => alert.kind)
+      expect(kinds).toContain('duplicate_charge')
+      expect(kinds).not.toContain('bill_change')
+    })
+
+    it('notifies once', async () => {
+      await billPaidTwice()
+      await refreshInbox(ctx)
+      const { rows } = await ctx.db.query<{ kind: string }>(
+        `SELECT kind FROM notifications WHERE kind IN ('duplicate_charge', 'bill_change')`,
+      )
+      expect(rows).toEqual([{ kind: 'duplicate_charge' }])
+    })
+
+    it('stays told once after a refund, and once the charge is old news', async () => {
+      const accountId = await billPaidTwice()
+      await insertBankTransaction(ctx.db, accountId, {
+        date: '2026-11-08',
+        name: 'NETFLIX.COM 4417',
+        merchantName: 'Netflix',
+        amountCents: -1549,
+      })
+      expect(await call('list_alerts', {})).toEqual([])
+      ctx.setNow(new Date('2026-12-02T18:00:00Z'))
+      expect(
+        (await call('list_alerts', {})).filter((alert) => alert.kind === 'bill_change'),
+      ).toEqual([])
+    })
   })
 })

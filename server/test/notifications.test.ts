@@ -266,6 +266,84 @@ describe('kinds turned off', () => {
   })
 })
 
+describe('one account alert kind on alone', () => {
+  /** Every kind off but these. */
+  const onlyOn = (...kinds: string[]) =>
+    updateNotificationSettings(ctx.db, {
+      kinds: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, kinds.includes(kind)])),
+    })
+
+  /** Netflix charged twice on Nov 3 and 4 on a checking account. */
+  async function chargedTwice() {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    for (const date of ['2026-11-03', '2026-11-04']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'NETFLIX.COM',
+        merchantName: 'Netflix',
+        amountCents: 1549,
+      })
+    }
+    return accountId
+  }
+
+  it('notifies a charge made twice with only that switch on', async () => {
+    await chargedTwice()
+    await onlyOn('duplicate_charge')
+    await refreshInbox(ctx)
+    expect((await inbox()).map((one) => one.kind)).toEqual(['duplicate_charge'])
+  })
+
+  it('notifies a price rise with only that switch on', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    for (const [date, amountCents] of [
+      ['2026-08-12', 1099],
+      ['2026-09-12', 1099],
+      ['2026-10-12', 1099],
+      ['2026-11-12', 1199],
+    ] as const) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'SPOTIFY USA',
+        merchantName: 'Spotify',
+        amountCents,
+      })
+    }
+    await onlyOn('price_rise')
+    await refreshInbox(ctx)
+    expect((await inbox()).map((one) => one.kind)).toEqual(['price_rise'])
+  })
+
+  it('notifies a bill change with only that switch on', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    for (const [date, amountCents] of [
+      ['2026-09-16', 8000],
+      ['2026-10-16', 8000],
+      ['2026-11-16', 9500],
+    ] as const) {
+      await insertBankTransaction(ctx.db, accountId, { date, name: 'COMCAST', amountCents })
+    }
+    await call('create_bill', {
+      name: 'Comcast',
+      amountCents: 8000,
+      cadence: 'month',
+      anchorDate: '2026-11-16',
+      matchPattern: 'comcast',
+    })
+    await ctx.db.query(`UPDATE bills SET created_at = '2026-09-01T12:00:00Z'`)
+    await onlyOn('bill_change')
+    await refreshInbox(ctx)
+    expect((await inbox()).map((one) => one.kind)).toEqual(['bill_change'])
+  })
+
+  it('still notifies none of a kind left off', async () => {
+    await chargedTwice()
+    await onlyOn('price_rise')
+    await refreshInbox(ctx)
+    expect(await inbox()).toEqual([])
+  })
+})
+
 describe('large charges', () => {
   async function charge(accountId: string, more: { amountCents?: number; date?: string } = {}) {
     return insertBankTransaction(ctx.db, accountId, {

@@ -36,7 +36,12 @@ export const hideHomeAlertAction = defineAction({
       billId: z.uuid().optional(),
       chargeId: z.uuid().optional(),
     })
-    .strict(),
+    .strict()
+    // A leak is about one charge, so hiding one names it: without it, any leak of the kind would do.
+    .refine((target) => !LEAK_KINDS.includes(target.kind) || target.chargeId !== undefined, {
+      message: "Give the leak's chargeId",
+      path: ['chargeId'],
+    }),
   scope: 'write',
   surface: 'app',
   run: async (ctx, target) => {

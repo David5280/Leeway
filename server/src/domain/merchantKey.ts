@@ -26,6 +26,15 @@ export function merchantKey(tx: MerchantText): string {
   return textKey(tx.merchantName ?? tx.name)
 }
 
+/**
+ * The merchant name and the bank's description together, reduced the same
+ * way: the text a bill that reads bank text finds its pattern in, as the SQL
+ * merchant_key(coalesce(merchant_name, '') || ' ' || name) does (bills.ts).
+ */
+export function bankTextKey(tx: MerchantText): string {
+  return textKey(`${tx.merchantName ?? ''} ${tx.name}`)
+}
+
 /** Any text reduced the same way: lower case, letters only, words split by single spaces. */
 export function textKey(text: string): string {
   return text

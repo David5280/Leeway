@@ -7,7 +7,7 @@ import { addDays, todayIn, type IsoDate } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
 import { formatCents } from '../../lib/money.js'
 import { shortDate } from '../../lib/words.js'
-import type { AlertFormat } from '../accountAlerts.js'
+import { ALERT_KINDS, type AlertFormat } from '../accountAlerts.js'
 import { listAccounts } from '../accounts.js'
 import { listAlerts } from '../alerts.js'
 import { listBills } from '../bills.js'
@@ -89,7 +89,8 @@ export async function gatherCandidates(
   const on = choices.kinds
   const found: Candidate[][] = []
 
-  if (on.overdrawn || on.over_limit || on.overdraft_fee || on.low_balance) {
+  // Any account alert turned on reads them all, then keeps the kinds that are on.
+  if (ALERT_KINDS.some((kind) => on[kind])) {
     const alerts = await listAlerts(db, settings, today)
     found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }

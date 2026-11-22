@@ -63,7 +63,10 @@ test.describe('money leaks', () => {
     ).toHaveCount(2)
   })
 
-  test('a repeating charge that went up says from what to what', async ({ page, request }) => {
+  test('a repeating charge that went up says from what to what, and opens its charges', async ({
+    page,
+    request,
+  }) => {
     await charge(request, accountId!, 'Streamly', [
       [95, 1_099],
       [65, 1_099],
@@ -71,8 +74,13 @@ test.describe('money leaks', () => {
       [5, 1_199],
     ])
     await page.goto('/alerts')
-    await expect(
-      page.getByRole('link', { name: /Streamly went up to \$11\.99, from \$10\.99/ }),
-    ).toBeVisible()
+    const alert = page.getByRole('link', { name: /Streamly went up to \$11\.99, from \$10\.99/ })
+    await expect(alert).toBeVisible()
+    await alert.click()
+    await expect(page).toHaveURL(/\/transactions\?account=.+&range=all&search=Streamly/)
+    // Every charge shows, the old price beside the new one.
+    const list = page.getByRole('region', { name: 'Transaction list' })
+    await expect(list.getByRole('button', { name: /^Streamly, spent \$10\.99/ })).toHaveCount(3)
+    await expect(list.getByRole('button', { name: /^Streamly, spent \$11\.99/ })).toHaveCount(1)
   })
 })
