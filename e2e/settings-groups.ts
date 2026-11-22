@@ -5,6 +5,7 @@
 export const SETTINGS_GROUPS = [
   'appearance',
   'budgeting',
+  'planning',
   'accounts',
   'banks',
   'email',

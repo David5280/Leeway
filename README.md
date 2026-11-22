@@ -21,7 +21,8 @@ bank, and nothing in Leeway can ever move money.
 - **An accounts dashboard** for one account or several: balances, money in and
   out, spending by category and recent transactions.
 - **Account alerts** when an account is overdrawn, a card is over its limit, a
-  balance is low or an overdraft fee was charged.
+  balance is low or an overdraft fee was charged, and for money leaking away:
+  a charge that went through twice, or a repeating charge that went up in price.
 - **Planning**: bills and subscriptions, recurring charges found for you,
   savings goals, debt payoff plans, cash until payday (and cash in checking
   that could earn more in savings, at a stated rate) and net worth.
@@ -356,6 +357,11 @@ sync, and tells you about:
 - a bill not on autopay coming due (2 days before, by default), until it is
   paid;
 - a single charge of at least an amount you choose ($500 by default);
+- the same charge at one place twice within 3 days (not a habit there, and not
+  refunded since; cash, checks, payments to people and bank fees aside), or a
+  repeating charge that isn't a bill yet going up in price on its usual cycle
+  (a bill's own change alert covers a tracked bill, and a bill paid twice is
+  told once, as the charge made twice);
 - a bank that needs you to sign in again;
 - AI spending near or at this month's limit, once each as it happens (see
   [AI models](#ai-models-and-the-monthly-limit)).

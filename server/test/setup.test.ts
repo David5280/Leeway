@@ -56,6 +56,19 @@ describe('finishing first-run setup', () => {
     expect(await getOwner(ctx.db)).toMatchObject({ onboarded: true })
   })
 
+  it('refuses a birth year still to come before creating anything', async () => {
+    await createOwner(ctx.db, { email: 'me@example.com', password: 'correct horse battery' })
+    const error = await callError('complete_setup', {
+      categories: [{ name: 'Groceries' }],
+      settings: { retirement: { birthYear: 2090 } },
+    })
+    expect(error.message).toBe(
+      'settings.retirement.birthYear: Use a birth year of 2026 or earlier, since 2090 is still to come.',
+    )
+    expect(await categoryNames()).toEqual([])
+    expect(await getOwner(ctx.db)).toMatchObject({ onboarded: false })
+  })
+
   it('skips names that already exist, ignoring case, including repeats in the same list', async () => {
     await call('create_category', { name: 'Groceries', budgetCents: 10000 })
 

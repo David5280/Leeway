@@ -13,10 +13,11 @@ import {
   billChangeAlert,
   billChangeOf,
   CHARGES_READ,
+  isAmountChange,
   type BillChange,
-  type BillCharge,
   type WatchedBill,
 } from './billChanges.js'
+import { paidOnceCents, type BillCharge } from './billCycles.js'
 import { textKey } from './merchantKey.js'
 import { shownNameOf } from './ruleText.js'
 import type { RuleReads } from './rules.js'
@@ -154,9 +155,12 @@ export async function settleBillChanges(db: Db, timeZone: string, today: IsoDate
 }
 
 /**
- * Takes a changed charge's amount as the bill's usual one, as dismissing or
+ * Takes a changed cycle's amount as the bill's usual one, as dismissing or
  * hiding its alert does, so the alert clears and never comes back for that
- * charge. False when the bill's latest charge is no longer a change.
+ * charge. A charge made twice in the cycle counts once (paidOnceCents), so
+ * the usual amount never becomes a doubled total. False when nothing was
+ * learned: the bill's latest charge is no longer a change, or its cycle was
+ * only paid twice and costs the usual amount paid once.
  */
 export async function acceptBillChange(
   db: Db,
@@ -169,6 +173,8 @@ export async function acceptBillChange(
       one.kind === 'changed' && one.bill.id === target.billId && one.charge.date === target.date,
   )
   if (change?.kind !== 'changed') return false
-  await setUsual(db, change.bill.id, change.charge.amountCents)
+  const usualCents = paidOnceCents(change.cycle)
+  if (!isAmountChange(change.bill.amountCents, usualCents)) return false
+  await setUsual(db, change.bill.id, usualCents)
   return true
 }
