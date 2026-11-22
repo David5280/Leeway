@@ -281,7 +281,7 @@ export const SCREENS: Screen[] = [
     name: '/settings/data with a tax year exported',
     then: async (page) => {
       await page.getByRole('button', { name: /^Download \d{4} CSV$/ }).click()
-      await expect(page.getByText('Interest')).toBeVisible()
+      await expect(page.getByText('Interest', { exact: true })).toBeVisible()
     },
   }),
   at('settings', '/settings/widget', {
