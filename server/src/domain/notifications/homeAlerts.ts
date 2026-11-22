@@ -5,7 +5,8 @@
 // A hide follows the same rules as a dismissal, so home and the inbox agree:
 // - a condition (overdrawn, over its limit, low) is away for a day while it
 //   holds (RESURFACE_AFTER_MS), then shows again;
-// - a fee is news, so it is away for good, until a newer fee comes;
+// - a fee is news, so it is away for good, until a newer fee comes, and so
+//   is a leak (a charge made twice, a price gone up), until a newer charge;
 // - an alert that clears and comes back over an hour later (REARM_AFTER_MS)
 //   is a new run of it and shows afresh, while one that flickers back sooner
 //   stays away, as the inbox treats it;
@@ -40,15 +41,15 @@ const alertKey = (alert: AccountAlert): string =>
 
 /**
  * Every current alert, for every account, whichever notifications are on.
- * Without `bills`, only the accounts' own alerts, which read no bill.
+ * Without `bills` or `leaks`, those are not read (see listAlerts).
  */
 export async function currentAlerts(
   db: Db,
   now: Date,
-  { bills = true }: { bills?: boolean } = {},
+  only: { bills?: boolean; leaks?: boolean } = {},
 ): Promise<AccountAlert[]> {
   const settings = await getSettings(db)
-  return listAlerts(db, settings, todayIn(settings.timeZone, now), [], { bills })
+  return listAlerts(db, settings, todayIn(settings.timeZone, now), [], only)
 }
 
 /**
@@ -116,11 +117,15 @@ export async function listHomeAlerts(
   return { alerts: shown, hidden: alerts.length - shown.length }
 }
 
-/** Which alert to hide: one per kind and account, and for a bill's change, per bill too. */
+/**
+ * Which alert to hide: one per kind and account, for a bill's change per bill
+ * too, and for a leak per charge.
+ */
 export interface HideTarget {
   kind: AlertKind
   accountId: string
   billId?: string
+  chargeId?: string
 }
 
 /**
@@ -139,7 +144,8 @@ export async function hideHomeAlert(
     (one) =>
       one.kind === target.kind &&
       one.accountId === target.accountId &&
-      (target.billId === undefined || one.bill?.id === target.billId),
+      (target.billId === undefined || one.bill?.id === target.billId) &&
+      (target.chargeId === undefined || one.charge?.id === target.chargeId),
   )
   if (!alert) throw notFound('Alert')
   if (alert.bill) {

@@ -37,6 +37,21 @@ export async function fakeLongHomeAlerts(page: Page): Promise<void> {
       accountId: '00000000-0000-4000-8000-0000000000a2',
       message: `${LONG.account} is down to $20, below your $100 warning.`,
     }),
+    // A leak names the merchant, which can run on as long as the bank writes it.
+    {
+      ...longAlert({
+        kind: 'duplicate_charge',
+        severity: 'warning',
+        accountId: '00000000-0000-4000-8000-0000000000a1',
+        message: `${LONG.merchant} charged $1,240.18 twice, on Nov 3 and Nov 4.`,
+      }),
+      count: 2,
+      charge: {
+        id: '00000000-0000-4000-8000-0000000000c1',
+        merchant: LONG.merchant,
+        previousCents: null,
+      },
+    },
   ]
   await page.route('**/api/actions/list_home_alerts', (route) =>
     route.fulfill({ json: { result: { alerts, hidden: 0 } } }),

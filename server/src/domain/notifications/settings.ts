@@ -14,6 +14,8 @@ export const NOTIFICATION_KINDS = [
   'over_budget',
   'bill_due',
   'bill_change',
+  'duplicate_charge',
+  'price_rise',
   'large_transaction',
   'bank_login',
   'ai_limit',

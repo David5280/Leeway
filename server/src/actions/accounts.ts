@@ -13,6 +13,8 @@ import { DEFAULT_LOW_BALANCE_CENTS, FEE_DAYS } from '../domain/accountAlerts.js'
 import { getAccountsView } from '../domain/accountView.js'
 import { listAlerts } from '../domain/alerts.js'
 import { BILL_CHANGE_THRESHOLD } from '../domain/billChanges.js'
+import { DUPLICATE_DAYS } from '../domain/leaks/duplicates.js'
+import { PRICE_RISE } from '../domain/leaks/priceRises.js'
 import { updateAccountWithinPensionLimit } from '../domain/retirement/pensionStore.js'
 import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
@@ -72,7 +74,7 @@ export const deleteAccountAction = defineAction({
 export const listAlertsAction = defineAction({
   name: 'list_alerts',
   title: 'List account alerts',
-  description: `What is going wrong with accounts right now, most serious first: a checking or savings account overdrawn (kind "overdrawn", severity "urgent"), a credit card over its limit ("over_limit", urgent), overdraft or insufficient funds fees charged in the last ${FEE_DAYS} days ("overdraft_fee", warning, with the count and latest date), money available below the account's low-balance warning ("low_balance", warning), and a bill whose latest charge was at least ${BILL_CHANGE_THRESHOLD.share * 100}% and ${BILL_CHANGE_THRESHOLD.cents} cents off its usual amount ("bill_change", warning when higher, info when lower, with the bill's id, name and usual amount and the charge's date). amountCents is how far overdrawn or over the limit, the balance left, the fees in all, or what the bill's charge cost. Worked out from the balances of the last bank sync. Give accountIds for some accounts only.`,
+  description: `What is going wrong with accounts right now, most serious first: a checking or savings account overdrawn (kind "overdrawn", severity "urgent"), a credit card over its limit ("over_limit", urgent), overdraft or insufficient funds fees charged in the last ${FEE_DAYS} days ("overdraft_fee", warning, with the count and latest date), money available below the account's low-balance warning ("low_balance", warning), and a bill whose latest charge was at least ${BILL_CHANGE_THRESHOLD.share * 100}% and ${BILL_CHANGE_THRESHOLD.cents} cents off its usual amount ("bill_change", warning when higher, info when lower, with the bill's id, name and usual amount and the charge's date), and money leaks: the same merchant charging an account the same amount more than once within ${DUPLICATE_DAYS} days, unless that is routine there or one was refunded ("duplicate_charge", warning, count is how many times), and a repeating charge no bill tracks whose latest charge rose at least ${PRICE_RISE.share * 100}% and ${PRICE_RISE.cents} cents over a steady price ("price_rise", warning, with charge.previousCents the old price). A leak has charge.id, its latest transaction, and charge.merchant. amountCents is how far overdrawn or over the limit, the balance left, the fees in all, what the bill's charge cost, what a duplicated charge was each time, or a risen price. Worked out from the balances of the last bank sync. Give accountIds for some accounts only.`,
   input: accountIdsInput,
   scope: 'read',
   surface: 'all',

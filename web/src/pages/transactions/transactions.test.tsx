@@ -233,6 +233,18 @@ describe('Transactions filters', () => {
     await waitFor(() => expect(lastList(server)).toMatchObject({ search: 'costco', limit: 100 }))
   })
 
+  it('starts with the search a link gave, as a leak alert does, and clears it with the rest', async () => {
+    const server = serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
+    renderTransactions('/transactions?account=acct-1&range=all&search=Netflix')
+    expect(await screen.findByLabelText('Search transactions')).toHaveValue('Netflix')
+    await waitFor(() =>
+      expect(lastList(server)).toMatchObject({ search: 'Netflix', accountId: 'acct-1' }),
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByLabelText('Search transactions')).toHaveValue('')
+    expect(screen.getByText('Address: ?range=all')).toBeInTheDocument()
+  })
+
   it('picks a date range from its chip, and keeps it in the address', async () => {
     const server = serve()
     renderTransactions()

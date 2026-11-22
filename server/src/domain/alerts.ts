@@ -1,6 +1,7 @@
 // Account alerts from stored data: loads balances and recent charges, then
 // lets accountAlerts.ts decide what is worth flagging, and adds the bills
-// whose latest charge cost more or less than usual (billChanges.ts).
+// whose latest charge cost more or less than usual (billChanges.ts) and the
+// money leaks: charges made twice and prices gone up (leaks/).
 
 import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
@@ -17,6 +18,7 @@ import {
 import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import { billChangeAlerts, listBillChanges } from './billChangeSource.js'
+import { leakAlerts, listLeaks } from './leaks/leakSource.js'
 import type { Settings } from './settings.js'
 
 /**
@@ -42,25 +44,35 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
  * Hidden accounts are included: they stay out of budget totals, but an
  * overdraft on one still costs real money. A bill's change counts for the
  * account its charge came out of, hidden ones aside, as bills never read them.
- * Without `bills`, only the accounts' own alerts are read.
+ * A leak counts for the account it was charged to. Without `bills` or
+ * `leaks`, those are not read, so a problem reading them never stands in the
+ * way of the rest.
  */
 export async function listAlerts(
   db: Db,
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
   accountIds: string[] = [],
-  { bills = true }: { bills?: boolean } = {},
+  { bills = true, leaks = true }: { bills?: boolean; leaks?: boolean } = {},
 ): Promise<AccountAlert[]> {
-  const [accounts, charges, changes] = await Promise.all([
+  const [accounts, charges, changes, found] = await Promise.all([
     listAccounts(db),
     recentCharges(db, today),
     bills ? listBillChanges(db, settings.timeZone, today) : [],
+    leaks ? listLeaks(db, today) : null,
   ])
   const picked = selectAccounts(accounts, accountIds)
   const names = new Map(picked.filter(isShared).map((account) => [account.id, account.name]))
-  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
-  // Bill changes are the last kind (ALERT_KINDS), so they go after the rest.
-  return [...alertsFor(picked, charges, settings), ...billChangeAlerts(changes, names, { money })]
+  const format = {
+    money: (cents: number) => formatCents(cents, settings.currency, settings.locale),
+    date: (date: IsoDate) => shortDate(date, settings.locale),
+  }
+  // Bill changes, then leaks, are the last kinds (ALERT_KINDS), so they go after the rest.
+  return [
+    ...alertsFor(picked, charges, settings),
+    ...billChangeAlerts(changes, names, format),
+    ...(found ? leakAlerts(found, names, format) : []),
+  ]
 }
 
 /**

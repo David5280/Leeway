@@ -1,7 +1,8 @@
 // What the transaction list is narrowed to: a search, a date range, a
 // category and an account. The range, category and account live in the
 // address (?range=, ?category=, ?account=), so other screens can link
-// straight to them and a reload or Back keeps them.
+// straight to them and a reload or Back keeps them. A link may start the
+// search too (?search=), as an alert does to show a merchant's charges.
 
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -16,8 +17,8 @@ export const MAX_SHOWN = 500
 /** The category filter's value for transactions that still need a category. */
 export const UNCATEGORIZED = 'uncategorized'
 
-/** The filters kept in the address. */
-type AddressFilter = 'category' | 'account' | 'range'
+/** The filters kept in the address, and the search a link may start. */
+type AddressFilter = 'category' | 'account' | 'range' | 'search'
 
 /**
  * Filters kept in the address, replaced in place so Back leaves the screen.
@@ -42,6 +43,7 @@ function useAddressFilters() {
     category: params.get('category'),
     account: params.get('account'),
     range: parseRange(params.get('range')),
+    search: params.get('search') ?? '',
     set,
   }
 }
@@ -54,8 +56,9 @@ export function useActivityFilters({
   periodStart: string | undefined
   timeZone: string
 }) {
-  const [search, setSearchText] = useState('')
   const address = useAddressFilters()
+  // The address only starts the search; typing takes over from there.
+  const [search, setSearchText] = useState(address.search)
   const range = address.range
   const categoryId = address.category
   const accountId = address.account
@@ -98,7 +101,7 @@ export function useActivityFilters({
     showMore: () => setLimit((shown) => Math.min(MAX_SHOWN, shown + PAGE)),
     clear: () => {
       setSearchText('')
-      address.set({ category: null, account: null, range: rangeParam('all') })
+      address.set({ category: null, account: null, range: rangeParam('all'), search: null })
       setLimit(PAGE)
     },
   }

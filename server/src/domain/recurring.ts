@@ -30,8 +30,8 @@ export interface PastTransaction {
   accountId?: string
 }
 
-/** A past transaction as stored, with what its shown name is worked out from. */
-export type StoredTransaction = PastTransaction & Movement
+/** A past transaction as stored, with its id and what its shown name is worked out from. */
+export type StoredTransaction = PastTransaction & Movement & { id: string }
 
 export interface RecurringSeries {
   /** Stable key for the merchant, used to dismiss a suggestion and to match it again. */
@@ -141,9 +141,10 @@ function seriesOf(
   }
 }
 
-/** A series found, with the newest transaction in it. */
+/** A series found, with its transactions, oldest first, and the newest of them. */
 interface Found<T extends PastTransaction> {
   series: RecurringSeries
+  charges: T[]
   last: T
 }
 
@@ -181,7 +182,7 @@ function findSeries<T extends PastTransaction>(
     const [direction, key] = group.split(/:(.*)/s) as ['out' | 'in', string]
     charges.sort((a, b) => a.date.localeCompare(b.date))
     const series = seriesOf(key, direction, charges, today, masks)
-    if (series) found.push({ series, last: charges.at(-1)! })
+    if (series) found.push({ series, charges, last: charges.at(-1)! })
   }
   return found.sort(
     (a, b) =>
@@ -200,7 +201,7 @@ const HISTORY_DAYS = 400
  */
 export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTransaction[]> {
   const { rows } = await db.query<StoredTransaction>(
-    `SELECT t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
+    `SELECT t.id, t.date, t.merchant_name AS "merchantName", t.name, t.amount_cents AS "amountCents",
        t.category_id AS "categoryId", t.account_id AS "accountId",
        t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType"
@@ -255,6 +256,29 @@ export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
   return findSeries(history, today, masks)
     .map(({ series, last }) => ({ series, shownKey: textKey(shownNameOf(last, masks)) }))
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
+}
+
+/**
+ * Charges still repeating that no bill tracks, dismissed suggestions too, each
+ * with its transactions, oldest first. Leak checks read these: a price rise is
+ * news whether or not the owner wants the charge suggested as a bill.
+ */
+export async function untrackedSeries(
+  db: Db,
+  today: IsoDate,
+): Promise<(Untracked & { charges: StoredTransaction[] })[]> {
+  const [history, bills, masks] = await Promise.all([
+    recentHistory(db, today),
+    listBills(db, today),
+    accountMasks(db),
+  ])
+  return findSeries(history, today, masks)
+    .map(({ series, charges, last }) => ({
+      series,
+      charges,
+      shownKey: textKey(shownNameOf(last, masks)),
+    }))
+    .filter((found) => !bills.some((bill) => tracks(bill, found)))
 }
 
 /**

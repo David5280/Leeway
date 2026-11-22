@@ -317,6 +317,8 @@ describe('large charges', () => {
     await charge(accountId)
     await charge(accountId, { date: '2026-11-16' })
     await refreshInbox(ctx)
+    // The same charge on two days is also a duplicate_charge alert; only large charges move here.
+    await ctx.db.query(`DELETE FROM notifications WHERE kind <> 'large_transaction'`)
     const { rows } = await ctx.db.query<{ subject: string }>(
       `UPDATE notifications SET push_state = 'sent' WHERE id = (
          SELECT id FROM notifications ORDER BY subject LIMIT 1)
@@ -384,7 +386,8 @@ describe('large charges', () => {
       [accountId],
     )
     await refreshInbox(ctx)
-    expect(await inbox()).toEqual([])
+    // Several of these are the same charge on one day, which is a duplicate_charge alert instead.
+    expect((await inbox()).filter((item) => item.kind === 'large_transaction')).toEqual([])
   })
 })
 

@@ -1,6 +1,7 @@
 // Account alerts as rows: an overdrawn account, a card over its limit, a fee
-// or a low balance, each opening its account, and a bill that cost more or
-// less than usual, opening Bills. Shared by the dashboard banner,
+// or a low balance, each opening its account, a bill that cost more or
+// less than usual, opening Bills, and a leak (a charge made twice, a price
+// gone up), opening that merchant's charges. Shared by the dashboard banner,
 // the Alerts page, the Accounts screen and each account's page. On the home
 // screen each row also has a button that hides it there.
 
@@ -9,6 +10,7 @@ import { Link } from 'react-router-dom'
 import type { AccountAlert } from '../api/client'
 import { useHideHomeAlert } from '../api/homeAlerts'
 import { accountDetailPath } from '../lib/accounts'
+import { merchantActivityPath } from '../lib/transactions'
 import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
 import { Card } from './design/Card'
 import { Icon } from './ui'
@@ -20,6 +22,8 @@ export const ALERT_LABELS: Record<AccountAlert['kind'], string> = {
   overdraft_fee: 'Fee',
   low_balance: 'Low',
   bill_change: 'Bill',
+  duplicate_charge: 'Twice',
+  price_rise: 'Price',
 }
 
 /** How an alert reads: urgent ones in the problem tone, a bill costing more as a warning, less as news. */
@@ -37,14 +41,19 @@ export function alertsTint(alerts: AccountAlert[]): '' | 'over-card' | 'warn-car
   return tones.includes('warn') ? 'warn-card' : ''
 }
 
-/** Where an alert is dealt with: its bill's list, or its account. */
+/**
+ * Where an alert is dealt with: its bill's list, a leak's charges (that
+ * account's activity, searched for the merchant), or its account.
+ */
 export function alertPath(alert: AccountAlert): string {
-  return alert.bill ? '/plan/bills' : accountDetailPath(alert.accountId)
+  if (alert.bill) return '/plan/bills'
+  if (alert.charge) return merchantActivityPath(alert.accountId, alert.charge.merchant)
+  return accountDetailPath(alert.accountId)
 }
 
-/** One key per alert: a kind and account, and the bill for a bill's change. */
+/** One key per alert: a kind and account, the bill for a bill's change, and a leak's charge. */
 export const alertKey = (alert: AccountAlert) =>
-  `${alert.kind}-${alert.accountId}${alert.bill ? `-${alert.bill.id}` : ''}`
+  `${alert.kind}-${alert.accountId}${alert.bill ? `-${alert.bill.id}` : ''}${alert.charge ? `-${alert.charge.id}` : ''}`
 
 /**
  * A home screen row with a button beside it that hides the alert there: a
@@ -99,7 +108,12 @@ function HideFromHome({ alert, regionStays }: { alert: AccountAlert; regionStays
       aria-label={`Hide from home: ${alert.message}`}
       onClick={(event) => {
         const next = focusAfterHide(event.currentTarget, regionStays)
-        hide.mutate({ kind: alert.kind, accountId: alert.accountId, billId: alert.bill?.id })
+        hide.mutate({
+          kind: alert.kind,
+          accountId: alert.accountId,
+          billId: alert.bill?.id,
+          chargeId: alert.charge?.id,
+        })
         next?.focus()
       }}
     >
