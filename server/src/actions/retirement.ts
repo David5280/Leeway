@@ -6,7 +6,11 @@
 import { z } from 'zod'
 import { getFinancialProfile } from '../domain/profile/profile.js'
 import { retirementView } from '../domain/profile/views.js'
-import { retirementPatchSchema, retirementSchema } from '../domain/retirement/assumptions.js'
+import {
+  checkBirthYear,
+  retirementPatchSchema,
+  retirementSchema,
+} from '../domain/retirement/assumptions.js'
 import {
   attachPension,
   attachPensionSchema,
@@ -76,6 +80,7 @@ export const projectRetirementAction = defineAction({
   surface: 'all',
   run: async (ctx, whatIf) => {
     const { settings, today } = await settingsAndToday(ctx)
+    checkBirthYear(whatIf.birthYear, today, 'birthYear')
     const assumptions = retirementSchema.parse({ ...settings.retirement, ...whatIf })
     const tried = { ...settings, retirement: assumptions }
     const profile = await getFinancialProfile(ctx.db, tried, today)

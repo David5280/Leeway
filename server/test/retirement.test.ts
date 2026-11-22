@@ -3,7 +3,6 @@
 // the check-in, and projecting with what-ifs.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { AppContext } from '../src/context.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
 import { patchPension } from '../src/domain/retirement/pensionStore.js'
@@ -19,7 +18,7 @@ import {
 } from './helpers.js'
 
 // The test clock reads 2026-11-19 at noon in Denver.
-let ctx: AppContext
+let ctx: Awaited<ReturnType<typeof createTestContext>>
 const { call, callError } = actionCaller(() => ctx)
 const TODAY = '2026-11-19'
 
@@ -458,6 +457,13 @@ describe('project_retirement', () => {
     const error = await callError('project_retirement', { returnPercent: 40 })
     expect(error.message).toContain('Use 15% or less')
   })
+
+  it('refuses a what-if birth year still to come, rather than quietly not projecting', async () => {
+    const error = await callError('project_retirement', { birthYear: 2090 })
+    expect(error.message).toBe(
+      'birthYear: Use a birth year of 2026 or earlier, since 2090 is still to come.',
+    )
+  })
 })
 
 /**
@@ -564,5 +570,63 @@ describe('update_settings with retirement', () => {
       withdrawalPercent: 3.5,
       retirementAge: 65,
     })
+  })
+})
+
+describe("the birth year, checked against the install's today", () => {
+  /** Puts a year straight into the stored settings, as one saved before the check existed. */
+  async function storeBirthYear(year: number) {
+    await ctx.db.query(`UPDATE settings SET data = jsonb_set(data, '{retirement}', $1::jsonb)`, [
+      JSON.stringify({ birthYear: year }),
+    ])
+  }
+
+  it('takes this year and the year that makes the owner 110, the two ends of the range', async () => {
+    await call('update_settings', { retirement: { birthYear: 2026 } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(2026)
+    await call('update_settings', { retirement: { birthYear: 1916 } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(1916)
+  })
+
+  it('refuses a year still to come or further back than 110 years, and keeps the saved one', async () => {
+    await call('update_settings', { retirement: { birthYear: 1986 } })
+    const future = await callError('update_settings', { retirement: { birthYear: 2027 } })
+    expect(future.code).toBe('invalid_input')
+    expect(future.message).toBe(
+      'retirement.birthYear: Use a birth year of 2026 or earlier, since 2027 is still to come.',
+    )
+    const ancient = await callError('update_settings', { retirement: { birthYear: 1915 } })
+    expect(ancient.message).toBe('retirement.birthYear: Use a birth year of 1916 or later.')
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(1986)
+  })
+
+  it('counts the year where the owner lives, after a time zone change in the same patch', async () => {
+    // 11pm on New Year's Eve in Denver is already 2027 in Auckland.
+    ctx.setNow(new Date('2027-01-01T06:00:00Z'))
+    try {
+      await callError('update_settings', { retirement: { birthYear: 2027 } })
+      await call('update_settings', {
+        timeZone: 'Pacific/Auckland',
+        retirement: { birthYear: 2027 },
+      })
+      expect((await getSettings(ctx.db)).retirement.birthYear).toBe(2027)
+    } finally {
+      ctx.setNow(new Date('2026-11-19T19:00:00Z'))
+    }
+  })
+
+  it('lets a year still to come, saved before the check, be corrected or cleared', async () => {
+    await storeBirthYear(2090)
+    const waiting = await call('project_retirement')
+    expect(waiting.plan.projection).toBeNull()
+    expect(waiting.lens.answer.detail).toBe(
+      'Your birth year is saved as 2090, which is still to come. Correct it to see what your savings and any pension could pay.',
+    )
+    // The stored year never blocks saving anything else.
+    await call('update_settings', { retirement: { withdrawalPercent: 3.5 } })
+    await call('update_settings', { retirement: { birthYear: null } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBeNull()
+    await call('update_settings', { retirement: { birthYear: 1986 } })
+    expect((await call('project_retirement')).plan.projection).toMatchObject({ age: 40 })
   })
 })
