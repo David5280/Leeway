@@ -106,6 +106,7 @@ import {
   starterCategoriesAction,
 } from './setup.js'
 import { clearChatAction, forgetFactAction, getChatAction, getChatStatusAction } from './chat.js'
+import { exportTaxYearAction } from './taxExport.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
 import {
@@ -239,6 +240,7 @@ export const actionList = [
   disconnectAppAction,
   getConnectRequestAction,
   answerConnectRequestAction,
+  exportTaxYearAction,
 ] as const
 
 export type Actions = (typeof actionList)[number]

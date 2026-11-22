@@ -191,6 +191,13 @@ h2 {
   gap: 8px;
 }
 
+/* A short list read as one block, like a title over a few rows of amounts. */
+.stack-xs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .row {
   display: flex;
   align-items: center;

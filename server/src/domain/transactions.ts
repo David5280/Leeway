@@ -273,6 +273,17 @@ export async function getTransaction(db: Db, id: string): Promise<Transaction> {
   return present(rows[0], await presenting(db, rows))
 }
 
+/** These transactions as the app shows them, newest first; ids that are gone are skipped. */
+export async function transactionsByIds(db: Db, ids: string[]): Promise<Transaction[]> {
+  if (!ids.length) return []
+  const { rows } = await db.query<StoredTransaction>(
+    `${SELECT} WHERE t.id = ANY($1::uuid[]) ORDER BY t.date DESC, t.created_at DESC, t.id`,
+    [ids],
+  )
+  const context = await presenting(db, rows)
+  return rows.map((row) => present(row, context))
+}
+
 /**
  * Sets the category of transactions by hand. A manual choice sticks: rules
  * and syncs never override it. Passing null hands them back to the rules.
