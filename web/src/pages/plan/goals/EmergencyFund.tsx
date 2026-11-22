@@ -2,7 +2,9 @@
 // essential spending, from real spending), then shown as the goal it became.
 // Each card's figure opens its drill-down (lib/drills/emergency.ts); under it
 // sit the next step (three months, then six), the essentials it is sized by
-// and the accounts it counts, each with its own control.
+// and the accounts it counts, each with its own control. When the owner's
+// own pick of essentials had no spending, the offer is only that note and
+// the picker, so the pick can be changed or handed back.
 
 import { useState } from 'react'
 import type { Goal } from '../../../api/client'
@@ -11,9 +13,10 @@ import { Card } from '../../../components/design/Card'
 import { Money } from '../../../components/design/Money'
 import { ErrorNote, Progress } from '../../../components/ui'
 import { emergencyFundDrill, emergencyOfferDrill } from '../../../lib/drills/emergency'
+import { canPickEssentials } from '../../../lib/essentialChoice'
 import {
   countedWords,
-  essentialsWords,
+  essentialsSentence,
   leftOutNotes,
   monthsWord,
   targetWords,
@@ -24,34 +27,44 @@ import { EssentialCategoriesForm } from './EssentialCategories'
 import { FundAccountsForm } from './FundAccounts'
 
 /**
- * "What Rent, Groceries and 2 more cost in a typical month." The essentials
- * open a form to pick them, except bills, which have no categories to pick.
+ * "What Rent, Groceries and 2 more cost in a typical month. Change" The link
+ * opens the picker whenever there is something to pick (canPickEssentials):
+ * bills alone are plain words, with no categories behind them.
  */
-function EssentialsLine({ view }: { view: EmergencyView }) {
-  const [picking, setPicking] = useState(false)
-  const essentials = view.essentials
-  const words = essentialsWords(essentials)
-  if (!essentials || essentials.from === 'bills') {
-    return <p className="small muted">What {words} cost in a typical month.</p>
-  }
+function EssentialsLine({ view, open = false }: { view: EmergencyView; open?: boolean }) {
+  const [picking, setPicking] = useState(open)
+  const sentence = essentialsSentence(view)
+  if (!canPickEssentials(view)) return <p className="small muted">{sentence}</p>
   return (
     <>
       <p className="small muted">
-        What{' '}
+        {sentence}{' '}
         <button
           type="button"
           className="linkbtn small tap"
           aria-expanded={picking}
+          aria-label={picking ? 'Close essentials' : 'Change essentials'}
           onClick={() => setPicking(!picking)}
         >
-          {words}
-        </button>{' '}
-        cost in a typical month.
+          {picking ? 'Close' : 'Change'}
+        </button>
       </p>
-      {picking && (
-        <EssentialCategoriesForm essentials={essentials} onDone={() => setPicking(false)} />
-      )}
+      {picking && <EssentialCategoriesForm view={view} onDone={() => setPicking(false)} />}
     </>
+  )
+}
+
+/**
+ * The offer while the owner's picked essentials had no spending to size it
+ * by: no figure to show, only that note and the picker, open at once.
+ */
+function UnsizedOffer({ view }: { view: EmergencyView }) {
+  return (
+    <Card static="form" label="Start an emergency fund" className="stack-sm emergency-offer">
+      <span className="eyebrow">Emergency fund</span>
+      <h2>Pick what counts as essential</h2>
+      <EssentialsLine view={view} open />
+    </Card>
   )
 }
 
@@ -60,6 +73,7 @@ export function EmergencyOffer({ view }: { view: EmergencyView }) {
   const start = useActionMutation('start_emergency_fund')
   // Gone the moment the fund starts, before the goals reload to show it.
   if (start.isSuccess) return null
+  if (view.essentials === null) return <UnsizedOffer view={view} />
   return (
     <Card
       drill={emergencyOfferDrill(view)}
@@ -116,8 +130,11 @@ function NextStep({ view, reached }: { view: EmergencyView; reached: boolean }) 
   )
 }
 
-/** What the fund counts, why any account is left out, and the form to change it. */
-function CountsLine({ view }: { view: EmergencyView }) {
+/**
+ * What the fund counts, why any account is left out, and the form to change
+ * it. `handKept` says a count by hand is stored, so it can be gone back to.
+ */
+function CountsLine({ view, handKept }: { view: EmergencyView; handKept: boolean }) {
   const [choosing, setChoosing] = useState(false)
   return (
     <>
@@ -127,6 +144,7 @@ function CountsLine({ view }: { view: EmergencyView }) {
           type="button"
           className="linkbtn small tap"
           aria-expanded={choosing}
+          aria-label={choosing ? 'Close accounts' : 'Change accounts'}
           onClick={() => setChoosing(!choosing)}
         >
           {choosing ? 'Close' : 'Change'}
@@ -137,7 +155,9 @@ function CountsLine({ view }: { view: EmergencyView }) {
           {note}
         </p>
       ))}
-      {choosing && <FundAccountsForm view={view} onDone={() => setChoosing(false)} />}
+      {choosing && (
+        <FundAccountsForm view={view} handKept={handKept} onDone={() => setChoosing(false)} />
+      )}
     </>
   )
 }
@@ -172,7 +192,7 @@ export function EmergencyCard({
         <div className="stack-sm">
           <NextStep view={view} reached={goal.status === 'reached'} />
           <EssentialsLine view={view} />
-          <CountsLine view={view} />
+          <CountsLine view={view} handKept={view.counts === 'hand' || goal.savedCents > 0} />
           {view.counts === 'hand' && (
             <>
               <AddMoney goal={goal} />

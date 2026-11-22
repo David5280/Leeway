@@ -1,31 +1,63 @@
 // Picking the categories that count as essential, the spending an emergency
-// fund is sized by: a tick for each spending category, saved to the
-// essential categories setting, or handed back to Leeway to find.
+// fund is sized by: a tick for each spending category, what counts now first
+// and the rest under their groups, saved to the essential categories
+// setting, or handed back to Leeway to find. A tick on a category with no
+// recent spending says it adds nothing, so a quiet pick never surprises.
 
 import { useState, type FormEvent } from 'react'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, LoadingOrError } from '../../../components/ui'
-import type { EmergencyView } from '../../../lib/emergencyText'
-
-type Essentials = NonNullable<EmergencyView['essentials']>
+import {
+  essentialSections,
+  quietPicks,
+  startingTicks,
+  type EssentialSection,
+} from '../../../lib/essentialChoice'
+import { quietNote, type EmergencyView } from '../../../lib/emergencyText'
 
 /** Whether two lists hold the same ids, in any order. */
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id) => b.includes(id))
 }
 
+/** One heading of the picker and a tick for each category under it. */
+function SectionTicks({
+  section,
+  ticked,
+  onToggle,
+}: {
+  section: EssentialSection
+  ticked: string[]
+  onToggle: (id: string) => void
+}) {
+  return (
+    <fieldset className="essential-group">
+      <legend className="small muted">{section.title}</legend>
+      {section.categories.map((category) => (
+        <label key={category.id} className="check-row">
+          <input
+            type="checkbox"
+            checked={ticked.includes(category.id)}
+            onChange={() => onToggle(category.id)}
+          />
+          <span className="check-words">{category.name}</span>
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
 export function EssentialCategoriesForm({
-  essentials,
+  view,
   onDone,
 }: {
-  essentials: Essentials
+  view: EmergencyView
   onDone: () => void
 }) {
   const categories = useAction('list_categories')
   const save = useActionMutation('update_settings')
   const spending = (categories.data ?? []).filter((c) => c.kind === 'expense')
-  // No categories named means all spending counts, so every one starts ticked.
-  const start = essentials.categoryIds ?? spending.map((c) => c.id)
+  const start = startingTicks(view, spending)
   const [ticked, setTicked] = useState<string[] | null>(null)
   // Until the owner ticks something, the form shows what counts now.
   const shown = ticked ?? start
@@ -46,21 +78,17 @@ export function EssentialCategoriesForm({
   }
 
   if (!categories.data) return <LoadingOrError error={categories.error} />
+  const quiet = quietNote(quietPicks(spending, shown, view.essentialsChoice.spentIds))
   return (
     <form className="stack-sm" onSubmit={submit} aria-label="Essential categories">
       <span className="small muted">
         Tick what keeps coming due even in a lean month. The fund is sized by these.
       </span>
-      {spending.map((category) => (
-        <label key={category.id} className="check-row">
-          <input
-            type="checkbox"
-            checked={shown.includes(category.id)}
-            onChange={() => toggle(category.id)}
-          />
-          <span className="check-words">{category.name}</span>
-        </label>
+      {/* Sections follow what counts now, not the live ticks, so rows stay put while ticking. */}
+      {essentialSections(spending, start).map((section) => (
+        <SectionTicks key={section.title} section={section} ticked={shown} onToggle={toggle} />
       ))}
+      {quiet && <span className="small muted">{quiet}</span>}
       {shown.length === 0 && <span className="small muted">Tick at least one to save.</span>}
       <ErrorNote error={save.error} />
       <div className="row wrap">
@@ -71,7 +99,10 @@ export function EssentialCategoriesForm({
         >
           Save
         </button>
-        {essentials.picked && (
+        <button type="button" className="btn" disabled={save.isPending} onClick={onDone}>
+          Cancel
+        </button>
+        {view.essentialsChoice.pickedIds !== null && (
           <button
             type="button"
             className="btn"

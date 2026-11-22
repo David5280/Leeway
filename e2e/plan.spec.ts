@@ -14,8 +14,9 @@ test('a bill added by hand is listed with the others', async ({ page }) => {
 })
 
 test.describe('a goal named as an emergency fund', () => {
-  // The goal is the emergency fund by its name, so it goes again after, for
-  // the emergency fund specs that start one from its offer on the same install.
+  // The whole name is an emergency fund's, so the goal is taken as the fund:
+  // it goes again after, for the emergency fund specs that start one from
+  // its offer on the same install.
   test.afterEach(async ({ page }) => {
     const goals = await action<{ id: string; name: string }[]>(page, 'list_goals')
     for (const goal of goals.filter((one) => one.name === 'Emergency fund')) {
@@ -31,8 +32,13 @@ test.describe('a goal named as an emergency fund', () => {
     await form.getByRole('textbox', { name: 'Target amount' }).fill('3000')
     await form.getByRole('textbox', { name: 'Saved so far' }).fill('500')
     await form.getByRole('button', { name: 'Add goal' }).click()
-    await expect(page.getByText('Emergency fund')).toBeVisible()
-    await expect(page.getByText(/\$500/).first()).toBeVisible()
+    // The goal's own card, named exactly by it, never the offer beside it.
+    const card = page.getByRole('region', { name: 'Emergency fund', exact: true })
+    await expect(card.getByRole('heading', { name: 'Emergency fund' })).toBeVisible()
+    await expect(card).toContainText('$500')
+    // Taken as the fund, it is counted by hand, so no fund is offered beside it.
+    await expect(card).toContainText('Counts what you add by hand.')
+    await expect(page.getByRole('region', { name: 'Start an emergency fund' })).toBeHidden()
   })
 })
 

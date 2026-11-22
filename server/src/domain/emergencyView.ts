@@ -18,7 +18,7 @@ import {
   type FundCounts,
 } from './emergencyPlan.js'
 import type { Goal } from './goalProgress.js'
-import type { MonthlyEssentials } from './monthlyEssentials.js'
+import type { EssentialsChoice, MonthlyEssentials } from './monthlyEssentials.js'
 import { monthsCovered } from './savings/emergency.js'
 import type { Settings } from './settings.js'
 
@@ -26,8 +26,14 @@ import type { Settings } from './settings.js'
 export interface EmergencyFundView {
   /** The fund's goal; null while it is only offered. */
   goalId: string | null
-  /** Essential spending a month; null when not known yet (only possible once started). */
+  /**
+   * Essential spending a month; null when not known yet: once started, or on
+   * an offer that can't be sized because the categories the owner picked as
+   * essential had no spending and there are no bills.
+   */
   essentials: MonthlyEssentials | null
+  /** The owner's pick of essential categories, and which categories had spending. */
+  essentialsChoice: EssentialsChoice
   /**
    * How many months of essentials the target is: the step it aims for (1
    * when offered), or for the owner's own amount that amount in months, to one
@@ -36,6 +42,7 @@ export interface EmergencyFundView {
   months: number | null
   /** Whether the target is the owner's own amount, rather than months of essentials. */
   ownTarget: boolean
+  /** The target; 0 on an offer that can't be sized yet. */
   targetCents: number
   /** What the fund holds now, as its goal counts it. */
   savedCents: number
@@ -53,6 +60,7 @@ export interface EmergencyFundView {
 export interface EmergencyViewInput {
   goals: Goal[]
   essentials: MonthlyEssentials | null
+  choice: EssentialsChoice
   /** Every account, hidden ones included, so a hidden marked account shows as such. */
   accounts: Account[]
   /** The fund's stored state; nothing marked and no own target for the offer or a named goal. */
@@ -82,16 +90,20 @@ function nextStep(
 
 /**
  * The target in months and cents: the offer's first step, the step a fund
- * aims for, or the owner's own amount told in months. Null for an offer with
- * no essentials to size it by.
+ * aims for, or the owner's own amount told in months. With no essentials to
+ * size an offer by, nothing, unless the owner picked the essentials: then an
+ * offer of nothing yet, so the pick can still be changed from it.
  */
 function targetOf(
   fund: Goal | null,
   ownTarget: boolean,
   essentials: MonthlyEssentials | null,
+  choice: EssentialsChoice,
 ): { months: number | null; targetCents: number } | null {
   if (fund === null) {
-    if (essentials === null) return null
+    if (essentials === null) {
+      return choice.pickedIds === null ? null : { months: null, targetCents: 0 }
+    }
     return {
       months: FIRST_STEP_MONTHS,
       targetCents: targetFor(FIRST_STEP_MONTHS, essentials.cents),
@@ -106,11 +118,13 @@ function targetOf(
 
 /**
  * The emergency fund, or its offer, as of now. Null with no fund while
- * essential spending is unknown, since there is nothing to size an offer by.
+ * essential spending is unknown and the owner picked no essentials, since
+ * there is nothing to size an offer by and nothing to change.
  */
 export function emergencyView({
   goals,
   essentials,
+  choice,
   accounts,
   state,
   settings,
@@ -118,7 +132,7 @@ export function emergencyView({
   const fund = findFund(goals)
   // A goal named as a fund and never marked keeps the target it was given.
   const ownTarget = fund !== null && (fund.emergencyMonths === null || state.ownTarget)
-  const target = targetOf(fund, ownTarget, essentials)
+  const target = targetOf(fund, ownTarget, essentials, choice)
   if (target === null) return null
   const otherGoals = accountsOtherGoalsFollow(goals, fund?.id ?? null)
   const counts = countsOf(fund, state.markedIds)
@@ -129,14 +143,16 @@ export function emergencyView({
   ).accounts
   const linked = fund?.accountId ?? null
   const followsAccounts = counts === 'savings' || counts === 'marked'
+  // The one linked account counts unless another goal follows it (goalFunds.ts).
   const countedIds = followsAccounts
     ? counted.map((a) => a.id)
-    : [linked].filter((id) => id !== null)
+    : [linked].filter((id): id is string => id !== null && !otherGoals.has(id))
   const savedCents = emergencySavedCents(goals, accounts, settings.currency)
   const { months, targetCents } = target
   return {
     goalId: fund?.id ?? null,
     essentials,
+    essentialsChoice: choice,
     months,
     ownTarget,
     targetCents,

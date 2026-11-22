@@ -25,7 +25,7 @@ test('an emergency fund starts in one tap and grows a step at a time', async ({ 
   await expect(fund.getByRole('button', { name: /^Aim for 6 months/ })).toBeVisible()
 
   // Marking the account that holds it.
-  await fund.getByRole('button', { name: 'Change' }).click()
+  await fund.getByRole('button', { name: 'Change accounts' }).click()
   const form = fund.getByRole('form', { name: 'Accounts for the emergency fund' })
   await form.getByRole('checkbox', { name: new RegExp(RAINY_DAY) }).check()
   await form.getByRole('button', { name: 'Save' }).click()

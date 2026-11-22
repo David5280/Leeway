@@ -16,7 +16,7 @@ import {
   RAINY,
   serveEmergency,
 } from '../../../test/emergency'
-import { account } from '../../../test/fake'
+import { account, category } from '../../../test/fake'
 import { renderPlan } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -33,7 +33,8 @@ describe('the essentials it is sized by', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
-    await user.click(offer.getByRole('button', { name: 'Rent, Groceries, Gas and 1 more' }))
+    expect(offer.getByText(/What Rent, Groceries, Gas and 1 more cost/)).toBeVisible()
+    await user.click(offer.getByRole('button', { name: 'Change essentials' }))
     const form = within(await offer.findByRole('form', { name: 'Essential categories' }))
     expect(form.getByRole('checkbox', { name: 'Rent' })).toBeChecked()
     expect(form.getByRole('checkbox', { name: 'Fun' })).not.toBeChecked()
@@ -50,18 +51,23 @@ describe('the essentials it is sized by', () => {
   })
 
   it('closes on an untouched save without saving, and hands a pick back to Leeway', async () => {
-    const server = serveEmergency(fundView({ essentials: essentials({ picked: true }) }), [
-      fundGoal(),
-    ])
+    const picked = {
+      pickedIds: ['cat-rent', 'cat-groceries'],
+      spentIds: ['cat-rent', 'cat-groceries'],
+    }
+    const server = serveEmergency(
+      fundView({ essentials: essentials({ picked: true }), essentialsChoice: picked }),
+      [fundGoal()],
+    )
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Rent and Groceries' }))
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
     await user.click(fund.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fund.queryByRole('form')).toBeNull())
     expect(server.actions('update_settings')).toEqual([])
 
-    await user.click(fund.getByRole('button', { name: 'Rent and Groceries' }))
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
     await user.click(fund.getByRole('button', { name: 'Let Leeway choose' }))
     await waitFor(() =>
       expect(server.actions('update_settings')).toEqual([
@@ -76,7 +82,7 @@ describe('the essentials it is sized by', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'your spending' }))
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
     const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
     for (const name of ['Rent', 'Groceries', 'Fun']) {
       expect(form.getByRole('checkbox', { name })).toBeChecked()
@@ -99,7 +105,81 @@ describe('the essentials it is sized by', () => {
     renderPlan('/plan/goals')
     const fund = await fundCard()
     expect(fund.getByText('What your bills cost in a typical month.')).toBeVisible()
-    expect(fund.queryByRole('button', { name: 'your bills' })).toBeNull()
+    expect(fund.queryByRole('button', { name: 'Change essentials' })).toBeNull()
+  })
+
+  it('keeps a pick reachable while bills size the fund, ticked as picked', async () => {
+    const bills = essentials({ from: 'bills', categories: null, categoryIds: null, picked: true })
+    const choice = { pickedIds: ['cat-rent'], spentIds: [] }
+    const server = serveEmergency(fundView({ essentials: bills, essentialsChoice: choice }), [
+      fundGoal(),
+    ])
+    renderPlan('/plan/goals')
+    const user = userEvent.setup()
+    const fund = await fundCard()
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
+    const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
+    expect(form.getByRole('checkbox', { name: 'Rent' })).toBeChecked()
+    expect(form.getByRole('checkbox', { name: 'Groceries' })).not.toBeChecked()
+    await user.click(form.getByRole('button', { name: 'Let Leeway choose' }))
+    await waitFor(() =>
+      expect(server.actions('update_settings')).toEqual([
+        { savingsPlan: { essentialCategoryIds: null } },
+      ]),
+    )
+  })
+
+  it('lists what counts now first, then the rest under their groups', async () => {
+    serveEmergency(fundView(), [fundGoal()], {
+      list_categories: () => [
+        category('Fun', { group: 'Lifestyle' }),
+        category('Rent', { group: 'Home' }),
+        category('Pets'),
+        category('Groceries', { group: 'Food' }),
+        category('Dining', { group: 'Food' }),
+        category('Salary', { kind: 'income' }),
+      ],
+    })
+    renderPlan('/plan/goals')
+    const user = userEvent.setup()
+    const fund = await fundCard()
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
+    const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
+    const groups = form.getAllByRole('group').map((group) => [
+      within(group).getByText(/./, { selector: 'legend' }).textContent,
+      within(group)
+        .getAllByRole('checkbox')
+        .map((box) => box.closest('label')!.textContent),
+    ])
+    expect(groups).toEqual([
+      ['Counted now', ['Rent', 'Groceries']],
+      ['Lifestyle', ['Fun']],
+      ['Food', ['Dining']],
+      ['Other', ['Pets']],
+    ])
+  })
+
+  it('says when a ticked category had no recent spending, and closes on Cancel', async () => {
+    const server = serveEmergency(fundView(), [fundGoal()], {
+      list_categories: () => [category('Rent'), category('Groceries'), category('Pets')],
+    })
+    renderPlan('/plan/goals')
+    const user = userEvent.setup()
+    const fund = await fundCard()
+    await user.click(fund.getByRole('button', { name: 'Change essentials' }))
+    const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
+    expect(form.queryByText(/had no spending/)).toBeNull()
+    await user.click(form.getByRole('checkbox', { name: 'Pets' }))
+    expect(
+      form.getByText('Pets had no spending in recent months, so it adds nothing to the fund.'),
+    ).toBeVisible()
+    expect(fund.getByRole('button', { name: 'Close essentials' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await user.click(form.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(fund.queryByRole('form')).toBeNull())
+    expect(server.actions('update_settings')).toEqual([])
   })
 })
 
@@ -109,7 +189,7 @@ describe('the accounts the fund counts', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     const form = within(fund.getByRole('form', { name: 'Accounts for the emergency fund' }))
     expect(form.getByRole('radio', { name: 'Every savings account' })).toBeChecked()
     expect(form.getByRole('checkbox', { name: /Rainy Day/ })).not.toBeChecked()
@@ -131,7 +211,7 @@ describe('the accounts the fund counts', () => {
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText(/Counts Rainy Day\./)).toBeVisible()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByRole('checkbox', { name: /Rainy Day/ })).toBeChecked()
     await user.click(fund.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fund.queryByRole('form')).toBeNull())
@@ -146,7 +226,7 @@ describe('the accounts the fund counts', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     await user.click(fund.getByRole('checkbox', { name: /Rainy Day/ }))
     await user.click(fund.getByRole('checkbox', { name: /Everyday/ }))
     await user.click(fund.getByRole('button', { name: 'Save' }))
@@ -160,7 +240,7 @@ describe('the accounts the fund counts', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     await user.click(fund.getByRole('radio', { name: 'Only the accounts I pick' }))
     expect(fund.getByText('Tick at least one account to save.')).toBeVisible()
     expect(fund.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -174,7 +254,7 @@ describe('the accounts the fund counts', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     await user.click(fund.getByRole('radio', { name: 'Every savings account' }))
     await user.click(fund.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
@@ -192,7 +272,7 @@ describe('the accounts the fund counts', () => {
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText(/Counts Rainy Day\./)).toBeVisible()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByRole('radio', { name: 'Only the accounts I pick' })).toBeChecked()
     expect(fund.getByRole('checkbox', { name: /Rainy Day/ })).toBeChecked()
     await user.click(fund.getByRole('button', { name: 'Save' }))
@@ -213,7 +293,7 @@ describe('the accounts the fund counts', () => {
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText('Trip savings is left out, since Trip follows it.')).toBeVisible()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByRole('checkbox', { name: /Trip savings/ })).toBeDisabled()
     expect(fund.getByText('(Trip follows it)')).toBeVisible()
   })
@@ -233,7 +313,7 @@ describe('the accounts the fund counts', () => {
     expect(
       fund.getByText('Spare is hidden, so it counts nothing until you show it again.'),
     ).toBeVisible()
-    await userEvent.setup().click(fund.getByRole('button', { name: 'Change' }))
+    await userEvent.setup().click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByRole('checkbox', { name: /Spare/ })).toBeChecked()
     expect(fund.getByText('(Hidden)')).toBeVisible()
   })
@@ -245,7 +325,7 @@ describe('the accounts the fund counts', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    await user.click(fund.getByRole('button', { name: 'Change' }))
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByRole('radio', { name: 'What I add by hand' })).toBeChecked()
     await user.click(fund.getByRole('radio', { name: 'Every savings account' }))
     await user.click(fund.getByRole('button', { name: 'Save' }))
@@ -254,11 +334,31 @@ describe('the accounts the fund counts', () => {
     )
   })
 
+  it('goes back to counting by hand while a count by hand is kept', async () => {
+    const server = serveEmergency(FUND, [fundGoal({ savedCents: 20_000 })])
+    renderPlan('/plan/goals')
+    const user = userEvent.setup()
+    const fund = await fundCard()
+    await user.click(fund.getByRole('button', { name: 'Change accounts' }))
+    expect(fund.getByRole('radio', { name: 'Every savings account' })).toBeChecked()
+    await user.click(fund.getByRole('radio', { name: 'What I add by hand' }))
+    await user.click(fund.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(server.actions('change_emergency_fund')).toEqual([{ byHand: true }]))
+  })
+
+  it('offers no count by hand when none was ever kept', async () => {
+    serveEmergency(FUND, [fundGoal()])
+    renderPlan('/plan/goals')
+    const fund = await fundCard()
+    await userEvent.setup().click(fund.getByRole('button', { name: 'Change accounts' }))
+    expect(fund.queryByRole('radio', { name: 'What I add by hand' })).toBeNull()
+  })
+
   it('asks for a savings account when there is none to count', async () => {
     serveEmergency(fundView({ accounts: [] }), [fundGoal()])
     renderPlan('/plan/goals')
     const fund = await fundCard()
-    await userEvent.setup().click(fund.getByRole('button', { name: 'Change' }))
+    await userEvent.setup().click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByText('Link or add a savings account to hold the fund.')).toBeVisible()
   })
 })

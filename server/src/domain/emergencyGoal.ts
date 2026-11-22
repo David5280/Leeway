@@ -14,15 +14,16 @@ import {
   EMERGENCY_GOAL_NAME,
   findFund,
   FIRST_STEP_MONTHS,
+  followedAlready,
   fundCandidates,
   monthsOf,
   targetFor,
 } from './emergencyPlan.js'
 import { emergencyView, type EmergencyFundView } from './emergencyView.js'
-import { fundState } from './goalFunds.js'
+import { essentialsOf, fundState, stateOf } from './goalFunds.js'
 import { goalReading, type Goal } from './goalProgress.js'
 import { getGoal, listGoals } from './goals.js'
-import { readMonthlyEssentials, type MonthlyEssentials } from './monthlyEssentials.js'
+import type { MonthlyEssentials } from './monthlyEssentials.js'
 import type { Settings } from './settings.js'
 
 /**
@@ -46,14 +47,16 @@ export async function getEmergencyFund(
   settings: Settings,
   today: IsoDate,
 ): Promise<EmergencyFundView | null> {
+  // One reading, so what the goals list read of the fund is not read again here.
+  const reading = goalReading(settings, today)
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const goals = await listGoals(db, goalReading(settings, today))
+  const goals = await listGoals(db, reading)
   const fund = findFund(goals)
-  const essentials = await readMonthlyEssentials(db, settings, today)
+  const { essentials, choice } = await essentialsOf(db, reading)
   const accounts = await listAccounts(db)
   const marked = fund !== null && fund.emergencyMonths !== null
-  const state = marked ? await fundState(db, fund.id) : NOTHING_STORED
-  return emergencyView({ goals, essentials, accounts, state, settings })
+  const state = marked ? await stateOf(db, reading, fund.id) : NOTHING_STORED
+  return emergencyView({ goals, essentials, choice, accounts, state, settings })
 }
 
 const noEssentials = () =>
@@ -74,7 +77,7 @@ export async function startEmergencyFund(
   const reading = goalReading(settings, today)
   const existing = findFund(await listGoals(db, reading))
   if (existing) throw alreadyHave(existing.name)
-  const essentials = await readMonthlyEssentials(db, settings, today)
+  const { essentials } = await essentialsOf(db, reading)
   if (!essentials) throw noEssentials()
   try {
     const { rows } = await db.query<{ id: string }>(
@@ -101,6 +104,8 @@ export interface EmergencyChange {
   months?: number
   /** The accounts that hold the fund; empty goes back to every savings account. */
   accountIds?: string[]
+  /** Count the fund by hand again, from the count it kept, instead of from accounts. */
+  byHand?: boolean
 }
 
 /** The whole months, within what a fund can aim for, nearest to some months. */
@@ -162,10 +167,7 @@ function checkAccounts(accountIds: string[], rules: AccountRules) {
   for (const id of accountIds.filter((one) => !rules.current.includes(one))) {
     const otherGoal = rules.otherGoals.get(id)
     if (otherGoal !== undefined) {
-      throw new AppError(
-        'invalid_input',
-        `${otherGoal} follows that account already, so the emergency fund can't count it too`,
-      )
+      throw new AppError('invalid_input', followedAlready(otherGoal))
     }
     if (!rules.candidates.includes(id)) {
       throw new AppError(
@@ -195,18 +197,35 @@ async function setAccounts(db: Db, goalId: string, accountIds: string[], rules: 
   )
 }
 
-/** Changes the fund's step or accounts. Run it in a transaction, so both land or neither. */
+/** Counts the fund by hand again, from the count it kept, rather than from accounts. */
+async function setByHand(db: Db, goalId: string) {
+  await db.query('UPDATE goals SET account_id = NULL, emergency_by_hand = true WHERE id = $1', [
+    goalId,
+  ])
+  await db.query('DELETE FROM goal_accounts WHERE goal_id = $1', [goalId])
+}
+
+/**
+ * Changes the fund's step, its accounts, or back to its count by hand. Run it
+ * in a transaction, so every part lands or none does.
+ */
 export async function changeEmergencyFund(
   db: Db,
   settings: Settings,
   today: IsoDate,
   change: EmergencyChange,
 ): Promise<EmergencyFundView> {
+  // Which goal is the fund, and whether it is marked yet, depends on every
+  // goal, so a change locks them all (a handful of rows) before reading:
+  // two changes at once then run one after the other, and the second sees a
+  // named goal the first marked as the fund instead of marking it again.
+  await db.query('SELECT id FROM goals ORDER BY id FOR UPDATE')
+  const reading = goalReading(settings, today)
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const goals = await listGoals(db, goalReading(settings, today))
+  const goals = await listGoals(db, reading)
   const fund = findFund(goals)
   if (!fund) throw notFound('Emergency fund goal')
-  const essentials = await readMonthlyEssentials(db, settings, today)
+  const { essentials } = await essentialsOf(db, reading)
   const months = fund.emergencyMonths ?? (await adopt(db, fund, essentials))
   if (change.months !== undefined) {
     await setMonths(
@@ -216,6 +235,7 @@ export async function changeEmergencyFund(
       essentials,
     )
   }
+  if (change.byHand) await setByHand(db, fund.id)
   if (change.accountIds !== undefined) {
     const { markedIds } = await fundState(db, fund.id)
     const linked = fund.accountId === null ? [] : [fund.accountId]

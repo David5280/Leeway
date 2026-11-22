@@ -35,6 +35,26 @@ export function essentialsWords(essentials: EmergencyView['essentials']): string
 }
 
 /**
+ * The line about the essentials on the fund's card or offer: what they cost,
+ * or, when the owner's pick had no spending to size the fund by, that.
+ */
+export function essentialsSentence(
+  view: Pick<EmergencyView, 'essentials' | 'essentialsChoice'>,
+): string {
+  if (view.essentials === null && view.essentialsChoice.pickedIds !== null) {
+    return 'The essentials you picked had no spending in recent months.'
+  }
+  return `What ${essentialsWords(view.essentials)} cost in a typical month.`
+}
+
+/** A note on ticked essentials that add nothing, having had no spending; null when none. */
+export function quietNote(names: string[]): string | null {
+  if (names.length === 0) return null
+  const adds = names.length === 1 ? 'it adds' : 'they add'
+  return `${listed(names)} had no spending in recent months, so ${adds} nothing to the fund.`
+}
+
+/**
  * The fund's target as a badge: "3 months of essentials" for a step, or for
  * the owner's own amount that amount in months, never a step it is not.
  */

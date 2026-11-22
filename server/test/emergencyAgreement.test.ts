@@ -125,6 +125,13 @@ describe('the emergency fund reads the same on its card and in the profile', () 
     await call('create_goal', { name: 'Trip', targetCents: 900_000, accountId: savings })
     expect((await agreed()).card.savedCents).toBe(50_000)
   })
+
+  it('counts nothing in both from a linked account another goal took', async () => {
+    const { savings } = await owner()
+    await call('create_goal', { name: 'Rainy day', targetCents: 300_000, accountId: savings })
+    await call('create_goal', { name: 'Trip', targetCents: 900_000, accountId: savings })
+    expect((await agreed()).card).toMatchObject({ counts: 'account', savedCents: 0 })
+  })
 })
 
 describe("the fund's pace", () => {

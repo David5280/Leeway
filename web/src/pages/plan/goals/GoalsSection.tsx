@@ -28,6 +28,16 @@ function titleOf({ goal, kind }: Editing): string {
   return kind === 'purchase' ? 'Save for a purchase' : 'New goal'
 }
 
+/**
+ * A goal's save, leaving out a target the form left as it opened: the
+ * emergency fund's target grows with essentials, so sending back the one the
+ * form showed would read as the owner typing their own.
+ */
+function changesTo(goal: Goal, fields: GoalFields) {
+  const { targetCents, ...rest } = fields
+  return targetCents === goal.targetCents ? { id: goal.id, ...rest } : { id: goal.id, ...fields }
+}
+
 /** The open form, with the changes it can save. */
 function GoalEditor({
   editing,
@@ -46,7 +56,7 @@ function GoalEditor({
   const remove = useActionMutation('delete_goal')
   const close = { onSuccess: onClose }
   const save = (fields: GoalFields) =>
-    goal ? update.mutate({ id: goal.id, ...fields }, close) : create.mutate(fields, close)
+    goal ? update.mutate(changesTo(goal, fields), close) : create.mutate(fields, close)
   return (
     <FormCard title={titleOf(editing)}>
       <GoalForm

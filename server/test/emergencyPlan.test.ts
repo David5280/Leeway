@@ -83,13 +83,43 @@ describe('emergency fund steps', () => {
 })
 
 describe('which goal is the emergency fund', () => {
-  it('reads a goal named as an emergency fund, in any case', () => {
-    for (const name of ['Emergency fund', 'EMERGENCY SAVINGS', 'My rainy day pot', 'rainy  day']) {
-      expect(namesEmergencyFund(name)).toBe(true)
-    }
-    for (const name of ['Emergency', 'Trip', 'Fund for a rainy weekend', 'Emergency room bill']) {
-      expect(namesEmergencyFund(name)).toBe(false)
-    }
+  // Every name the rule takes, with each ending it allows and in any case or spacing.
+  const FUND_NAMES = [
+    'Emergency fund',
+    'emergency savings',
+    'Rainy day',
+    'rainy-day',
+    'My emergency fund',
+    'MY RAINY DAY FUND',
+    'Emergency savings account',
+    'Emergency fund pot',
+    'Rainy day savings',
+    'My rainy day pot',
+    'rainy  day',
+    '  Emergency Fund  ',
+  ]
+
+  // Names that only mention a fund, or mean something else: the whole name must be one.
+  const OTHER_NAMES = [
+    'Emergency',
+    'Trip',
+    'Not an emergency fund',
+    'Emergency fund for unexpected car repairs',
+    'Rainy day trip to Seattle',
+    'Fund for a rainy weekend',
+    'Emergency room bill',
+    // Sounds like more than one fund, so it is left for the owner to say.
+    'Emergency funds',
+    'Emergency fund account savings',
+    'My my emergency fund',
+  ]
+
+  it('reads a goal whose whole name is an emergency fund, in any case', () => {
+    for (const name of FUND_NAMES) expect(namesEmergencyFund(name), name).toBe(true)
+  })
+
+  it('leaves a goal whose name only mentions one', () => {
+    for (const name of OTHER_NAMES) expect(namesEmergencyFund(name), name).toBe(false)
   })
 
   it('takes the goal marked as the fund over one only named as one', () => {

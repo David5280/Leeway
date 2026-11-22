@@ -10,7 +10,8 @@ import { isoDateSchema } from '../lib/schemas.js'
 import { periodContaining } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { listAccounts, type Account } from './accounts.js'
-import { fundsOf, type FundRow } from './goalFunds.js'
+import { followedAlready, namesEmergencyFund } from './emergencyPlan.js'
+import { fundLinkTakenBy, fundsOf, goalLinks, type FundRow } from './goalFunds.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import {
   goalOf,
@@ -113,8 +114,19 @@ export async function getGoal(db: Db, id: string, reading: GoalReading): Promise
   return goal!
 }
 
+/**
+ * A goal about to be saved: its fields, its id and fund step unless it is
+ * new, and whether it may newly link an account as the fund: its account
+ * changes, or a new name makes it read as the fund.
+ */
+type SavingGoal = GoalInput & {
+  id: string | null
+  emergencyMonths: number | null
+  linkChanges: boolean
+}
+
 /** The checks a goal must pass however it was made or changed. */
-async function assertValid(db: Db, goal: GoalInput): Promise<void> {
+async function assertValid(db: Db, goal: SavingGoal): Promise<void> {
   if (goal.setAside && goal.targetDate === null) {
     throw new AppError(
       'invalid_input',
@@ -124,10 +136,14 @@ async function assertValid(db: Db, goal: GoalInput): Promise<void> {
   if (!goal.accountId) return
   const { rowCount } = await db.query('SELECT 1 FROM accounts WHERE id = $1', [goal.accountId])
   if (!rowCount) throw notFound('Account')
+  if (!goal.linkChanges) return
+  // The emergency fund can't follow an account another goal follows: it would count twice.
+  const takenBy = fundLinkTakenBy(await goalLinks(db), { ...goal, accountId: goal.accountId })
+  if (takenBy !== null) throw new AppError('invalid_input', followedAlready(takenBy))
 }
 
 export async function createGoal(db: Db, input: GoalInput, reading: GoalReading): Promise<Goal> {
-  await assertValid(db, input)
+  await assertValid(db, { ...input, id: null, emergencyMonths: null, linkChanges: true })
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO goals (kind, name, target_cents, target_date, account_id, saved_cents, color, set_aside)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -148,7 +164,8 @@ export async function createGoal(db: Db, input: GoalInput, reading: GoalReading)
 /**
  * Changes only the fields given. A changed "saved so far" is a correction, not
  * a contribution, so it does not count toward recent progress. A target typed
- * for the emergency fund becomes its own, no longer sized from essentials.
+ * for the emergency fund becomes its own, no longer sized from essentials; a
+ * save that leaves the target out (a new name, say) keeps it sized.
  */
 export async function updateGoal(
   db: Db,
@@ -158,8 +175,14 @@ export async function updateGoal(
 ): Promise<Goal> {
   const current = await getGoal(db, id, reading)
   const next = { ...current, ...patch }
-  await assertValid(db, next)
-  const ownTarget = current.emergencyMonths !== null && next.targetCents !== current.targetCents
+  // A plain rename of a fund whose account another goal took since is no new link to refuse.
+  const namedFundNow = namesEmergencyFund(next.name) && !namesEmergencyFund(current.name)
+  await assertValid(db, {
+    ...next,
+    linkChanges: next.accountId !== current.accountId || namedFundNow,
+  })
+  const typedTarget = patch.targetCents !== undefined && patch.targetCents !== current.targetCents
+  const ownTarget = current.emergencyMonths !== null && typedTarget
   await db.query(
     `UPDATE goals SET kind = $2, name = $3, target_cents = $4, target_date = $5, account_id = $6,
        saved_cents = $7, color = $8, set_aside = $9, emergency_own_target = emergency_own_target OR $10

@@ -129,17 +129,30 @@ export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
   return rows[0]!.first
 }
 
+/** The categories, and each of the last whole months' totals by category. */
+export interface RecentMonths {
+  categories: Category[]
+  totalsByMonth: CategoryTotal[][]
+}
+
+/** The last whole months held, as totals by category, with the categories to read them by. */
+export async function recentMonths(db: Db, today: IsoDate): Promise<RecentMonths> {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
+  const categories = await listCategories(db)
+  // Posted transactions only: a month already over has nothing left pending that matters.
+  const totalsByMonth = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
+  return { categories, totalsByMonth }
+}
+
 /** A typical month of income and spending, from the last whole months held. */
 export async function monthlyAverages(
   db: Db,
   settings: Settings,
   today: IsoDate,
 ): Promise<MonthlyAverages> {
-  const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
-  const categories = await listCategories(db)
-  // Posted transactions only: a month already over has nothing left pending that matters.
-  const totals = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
-  return averageMonths(categories, totals, settings.savingsPlan.essentialCategoryIds)
+  const { categories, totalsByMonth } = await recentMonths(db, today)
+  return averageMonths(categories, totalsByMonth, settings.savingsPlan.essentialCategoryIds)
 }
 
 /** How often pay comes and when next, from the budget period or regular deposits. */

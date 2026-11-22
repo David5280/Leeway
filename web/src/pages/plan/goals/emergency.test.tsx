@@ -21,9 +21,7 @@ describe('the emergency fund offer', () => {
     const offer = within(region)
     expect(offer.getByText('Start with one month of essentials')).toBeVisible()
     expect(offer.getByText('$2,000')).toBeVisible()
-    expect(
-      offer.getByText(sentence('What Rent and Groceries cost in a typical month.')),
-    ).toBeVisible()
+    expect(offer.getByText(/^What Rent and Groceries cost in a typical month\./)).toBeVisible()
     expect(offer.getByText(sentence('Then aim for 3 months: $6,000.'))).toBeVisible()
     // No empty-goals card beside the offer: the offer is the way to start.
     expect(screen.queryByText(/No goals yet/)).toBeNull()
@@ -57,6 +55,36 @@ describe('the emergency fund offer', () => {
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
     await userEvent.setup().click(offer.getByRole('button', { name: 'Start my emergency fund' }))
     expect(await offer.findByText('Rainy day is already your emergency fund')).toBeVisible()
+  })
+
+  it('shows only the picker, with no figure, when the picked essentials had no spending', async () => {
+    const quiet = offerView({
+      essentials: null,
+      essentialsChoice: { pickedIds: ['cat-fun'], spentIds: ['cat-rent'] },
+      months: null,
+      targetCents: 0,
+      monthsCovered: null,
+      next: null,
+    })
+    const server = serveEmergency(quiet)
+    renderPlan('/plan/goals')
+    const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
+    expect(offer.getByText('Pick what counts as essential')).toBeVisible()
+    expect(
+      offer.getByText(/^The essentials you picked had no spending in recent months\./),
+    ).toBeVisible()
+    expect(offer.queryByText('$0')).toBeNull()
+    expect(offer.queryByRole('button', { name: 'Start my emergency fund' })).toBeNull()
+    // The picker is open at once, saying why the pick adds nothing.
+    const form = within(await offer.findByRole('form', { name: 'Essential categories' }))
+    expect(form.getByRole('checkbox', { name: 'Fun' })).toBeChecked()
+    expect(form.getByText(/^Fun had no spending in recent months/)).toBeVisible()
+    await userEvent.setup().click(form.getByRole('button', { name: 'Let Leeway choose' }))
+    await waitFor(() =>
+      expect(server.actions('update_settings')).toEqual([
+        { savingsPlan: { essentialCategoryIds: null } },
+      ]),
+    )
   })
 
   it('is not offered before spending is known, so the empty card says when it will be', async () => {
@@ -144,5 +172,21 @@ describe('the emergency fund goal', () => {
     expect(form.getByText(/^Sized by essentials/)).toBeVisible()
     expect(form.queryByRole('combobox', { name: 'Progress' })).toBeNull()
     expect(form.queryByRole('textbox', { name: 'Saved so far' })).toBeNull()
+  })
+
+  it('saves a new name without its target, so the target stays sized by essentials', async () => {
+    const server = serveEmergency(FUND, [fundGoal()], { update_goal: () => fundGoal() })
+    renderPlan('/plan/goals')
+    const user = userEvent.setup()
+    const fund = await fundCard()
+    await user.click(fund.getByRole('button', { name: 'Edit goal' }))
+    const form = within(await screen.findByRole('form', { name: 'Edit Emergency fund' }))
+    await user.clear(form.getByRole('textbox', { name: 'Name' }))
+    await user.type(form.getByRole('textbox', { name: 'Name' }), 'Cushion')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(server.actions('update_goal')).toHaveLength(1))
+    const [saved] = server.actions('update_goal')
+    expect(saved).toMatchObject({ id: 'goal-emergency', name: 'Cushion' })
+    expect(saved).not.toHaveProperty('targetCents')
   })
 })

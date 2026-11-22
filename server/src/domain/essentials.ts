@@ -93,7 +93,12 @@ const ESSENTIAL_WORDS = new Set([
 const ESSENTIAL_PAIRS = new Set([
   'child care',
   'car payment',
+  'car loan',
+  'car loans',
+  'auto loan',
+  'auto loans',
   'car insurance',
+  'auto insurance',
   'home insurance',
   'renters insurance',
   'health insurance',

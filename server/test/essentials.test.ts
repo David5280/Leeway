@@ -74,6 +74,9 @@ describe('nameIsEssential', () => {
       'Power',
       'Phone bill',
       'Health insurance',
+      'Auto insurance',
+      'Car loan',
+      'Auto loan payments',
     ]) {
       expect(nameIsEssential(name), name).toBe(true)
     }
@@ -89,6 +92,8 @@ describe('nameIsEssential', () => {
       'Healthy snacks',
       'Gaming',
       'Loans to friends',
+      'Auto parts',
+      'Car wash',
       'Debts',
       'Bills',
       '',

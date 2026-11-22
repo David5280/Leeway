@@ -1,6 +1,6 @@
 // Choosing what the emergency fund counts: every savings account, only the
-// accounts the owner picks, or (for a goal that was counted by hand) what is
-// added by hand. Each account says why it is left out when it is: hidden, or
+// accounts the owner picks, or (for a goal that keeps a count by hand) what
+// is added by hand, which stays a choice after switching to accounts. Each account says why it is left out when it is: hidden, or
 // followed by another goal, which keeps it out so no dollar counts twice.
 
 import { useState, type FormEvent } from 'react'
@@ -67,7 +67,16 @@ function ModeChoice({
   )
 }
 
-export function FundAccountsForm({ view, onDone }: { view: EmergencyView; onDone: () => void }) {
+export function FundAccountsForm({
+  view,
+  handKept,
+  onDone,
+}: {
+  view: EmergencyView
+  /** A count by hand is stored, so going back to it is a choice. */
+  handKept: boolean
+  onDone: () => void
+}) {
   const change = useActionMutation('change_emergency_fund')
   // Starts from what is counted now, so an untouched save changes nothing.
   const [mode, setMode] = useState<Mode>(() => modeOf(view))
@@ -83,13 +92,14 @@ export function FundAccountsForm({ view, onDone }: { view: EmergencyView; onDone
     event.preventDefault()
     const untouched =
       mode === modeOf(view) && (mode !== 'picked' || sameIds(ticked, markedOf(view)))
-    // Nothing changed, or still counted by hand: nothing to save, so it only closes.
-    if (untouched || mode === 'hand') return onDone()
+    // Nothing changed: nothing to save, so it only closes.
+    if (untouched) return onDone()
+    if (mode === 'hand') return change.mutate({ byHand: true }, { onSuccess: onDone })
     // No accounts given counts every savings account again.
     change.mutate({ accountIds: mode === 'picked' ? ticked : [] }, { onSuccess: onDone })
   }
 
-  if (view.accounts.length === 0 && view.counts !== 'hand') {
+  if (view.accounts.length === 0 && !handKept) {
     return <p className="small muted">Link or add a savings account to hold the fund.</p>
   }
   const pickedNone = mode === 'picked' && ticked.length === 0
@@ -98,7 +108,7 @@ export function FundAccountsForm({ view, onDone }: { view: EmergencyView; onDone
       <div role="radiogroup" aria-label="What the fund counts">
         <ModeChoice mode={mode} value="savings" label="Every savings account" onPick={setMode} />
         <ModeChoice mode={mode} value="picked" label="Only the accounts I pick" onPick={setMode} />
-        {view.counts === 'hand' && (
+        {handKept && (
           <ModeChoice mode={mode} value="hand" label="What I add by hand" onPick={setMode} />
         )}
       </div>

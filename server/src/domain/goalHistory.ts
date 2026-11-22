@@ -156,8 +156,11 @@ async function balanceHistory(
  * the ones the emergency fund counts. Null for a goal counted by hand.
  */
 function accountsBehind(goal: GoalHistorySubject): FollowedAccount[] | null {
+  // The fund's own list comes first: it is empty when another goal follows
+  // the one account the fund links, so that account's savings count once.
+  if (goal.followedAccounts !== null) return goal.followedAccounts
   if (goal.accountId !== null) return [{ id: goal.accountId, balanceCents: goal.currentCents }]
-  return goal.followedAccounts
+  return null
 }
 
 /** Recent progress for every goal given, in two queries however many there are. */

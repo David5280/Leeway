@@ -5,8 +5,10 @@
 
 import { dateParts, type IsoDate } from '../lib/dates.js'
 import type { PeriodConfig } from '../lib/periods.js'
+import type { FundState } from './emergencyPlan.js'
 import { planOf, type GoalPlan, type GoalProgressFacts, type GoalStatus } from './goalPlan.js'
 import type { GoalInput } from './goals.js'
+import type { EssentialsReading } from './monthlyEssentials.js'
 import { periodConfig, type Settings } from './settings.js'
 
 /** A goal as stored, with its linked account's name and balance. */
@@ -56,9 +58,24 @@ export interface GoalClock {
   period: PeriodConfig
 }
 
-/** The clock, and the settings the emergency fund is measured by, so goals never read them again. */
+/**
+ * What working out the emergency fund read, kept for the rest of one reading,
+ * so the goals list and the fund's card beside it read each only once.
+ */
+export interface FundReads {
+  essentials?: EssentialsReading
+  /** Each fund's stored state, by goal id. */
+  states: Map<string, FundState>
+}
+
+/**
+ * The clock, the settings the emergency fund is measured by, and what was
+ * read of the fund so far, so goals never read any of them again. One reading
+ * is for one read of the goals: make a new one after changing them.
+ */
 export interface GoalReading extends GoalClock {
   settings: Settings
+  reads: FundReads
 }
 
 /** What reading goals needs, from settings already read and today's date. */
@@ -66,6 +83,7 @@ export const goalReading = (settings: Settings, today: IsoDate): GoalReading => 
   today,
   period: periodConfig(settings),
   settings,
+  reads: { states: new Map() },
 })
 
 /** Months from today's month to the target's month, counting both: November to January is 3. */

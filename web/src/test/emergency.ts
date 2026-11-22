@@ -49,6 +49,7 @@ export function offerView(fields: Partial<EmergencyView> = {}): EmergencyView {
   return {
     goalId: null,
     essentials: essentials(),
+    essentialsChoice: { pickedIds: null, spentIds: ['cat-rent', 'cat-groceries', 'cat-fun'] },
     months: 1,
     ownTarget: false,
     targetCents: 200_000,

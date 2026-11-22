@@ -40,12 +40,22 @@ export const monthsOf = (cents: number, monthlyEssentialsCents: number) =>
   Math.round((cents / monthlyEssentialsCents) * 10) / 10
 
 /**
- * Whether a goal's name says it is an emergency fund: "Emergency fund",
- * "Emergency savings" or "Rainy day", in any case. A goal the owner made by
- * hand with such a name is taken as the fund, so no second one is offered.
+ * A whole name that says "this is my emergency fund": "Emergency fund",
+ * "Emergency savings" or "Rainy day" (also "rainy-day"), maybe after "My" and
+ * before "fund", "savings", "account" or "pot". The whole name has to match,
+ * so "Not an emergency fund" and "Rainy day trip to Seattle" are other goals,
+ * and so is "Emergency funds", which sounds like more than one.
+ */
+const FUND_NAME =
+  /^(my\s+)?(emergency\s+(fund|savings)|rainy(\s+|-)day)(\s+(fund|savings|account|pot))?$/i
+
+/**
+ * Whether a goal's name says it is an emergency fund (FUND_NAME), in any case
+ * and ignoring spaces around it. A goal the owner made by hand with such a
+ * name is taken as the fund, so no second one is offered.
  */
 export function namesEmergencyFund(name: string): boolean {
-  return /\b(emergency\s+(fund|savings)|rainy\s+day)\b/i.test(name)
+  return FUND_NAME.test(name.trim())
 }
 
 /** What finding the fund reads of each goal. */
@@ -103,6 +113,12 @@ export interface FundLinks {
   markedIds: string[]
   /** Accounts other goals follow, which the fund leaves out so no money counts twice. */
   otherGoalAccountIds: string[]
+}
+
+/** What is stored about a fund beyond its goal: the accounts it links, and whose target it is. */
+export interface FundState extends FundLinks {
+  /** The owner's own target amount, rather than months of essentials. */
+  ownTarget: boolean
 }
 
 /**
@@ -194,6 +210,10 @@ export function fundChoices<A extends FundAccount & { name: string }>(
       return shown || choice.marked
     })
 }
+
+/** Why the fund can't count an account: another goal follows it, and a dollar counts toward one goal. */
+export const followedAlready = (goal: string) =>
+  `${goal} follows that account already, so the emergency fund can't count it too`
 
 /** What finding the accounts other goals follow reads of each goal. */
 interface FollowingGoal {

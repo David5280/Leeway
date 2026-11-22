@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { essentials, EVERYDAY, fundChoice, fundView, RAINY } from '../test/emergency'
 import {
   countedWords,
+  essentialsSentence,
   essentialsWords,
   followHint,
   fundTargetHint,
   leftOutNotes,
   monthsWord,
+  quietNote,
   targetWords,
 } from './emergencyText'
 
@@ -34,6 +36,30 @@ describe('what counts as essential', () => {
     expect(essentialsWords(null)).toBe('your bills')
     expect(essentialsWords(essentials({ categories: null }))).toBe('your spending')
     expect(essentialsWords(essentials({ categories: [] }))).toBe('your spending')
+  })
+})
+
+describe('the line about the essentials', () => {
+  it('says what they cost, or that a pick had no spending to size the fund by', () => {
+    expect(essentialsSentence(fundView())).toBe('What Rent and Groceries cost in a typical month.')
+    const quiet = { pickedIds: ['cat-pets'], spentIds: [] }
+    expect(essentialsSentence(fundView({ essentials: null, essentialsChoice: quiet }))).toBe(
+      'The essentials you picked had no spending in recent months.',
+    )
+    // Unknown with no pick: only bills could size it.
+    expect(essentialsSentence(fundView({ essentials: null }))).toBe(
+      'What your bills cost in a typical month.',
+    )
+  })
+
+  it('notes ticked categories that add nothing, one or several', () => {
+    expect(quietNote([])).toBeNull()
+    expect(quietNote(['Pets'])).toBe(
+      'Pets had no spending in recent months, so it adds nothing to the fund.',
+    )
+    expect(quietNote(['Pets', 'Gifts'])).toBe(
+      'Pets and Gifts had no spending in recent months, so they add nothing to the fund.',
+    )
   })
 })
 

@@ -106,6 +106,48 @@ describe('the emergency fund offer', () => {
     })
   })
 
+  it("keeps the owner's pick when bills size the fund, and lists the categories spent in", async () => {
+    const { rent } = await owner()
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: [rent] } })
+    await ctx.db.query('DELETE FROM transactions')
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150_000,
+      cadence: 'month',
+      anchorDate: '2026-11-01',
+    })
+    expect(await call('get_emergency_fund')).toMatchObject({
+      essentials: { from: 'bills', categoryIds: null, picked: true },
+      essentialsChoice: { pickedIds: [rent], spentIds: [] },
+    })
+  })
+
+  it('still offers a way back when the picked categories had no spending', async () => {
+    const { checking, rent, groceries, fun } = await owner()
+    const pets = await call('create_category', { name: 'Pets' })
+    // A refund is no spending, so it leaves Pets as quiet as before.
+    await filed(ctx.db, checking, pets.id, '2026-10-20', -5_000)
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: [pets.id] } })
+    const offer = await call('get_emergency_fund')
+    expect(offer).toMatchObject({
+      goalId: null,
+      essentials: null,
+      essentialsChoice: { pickedIds: [pets.id] },
+      months: null,
+      targetCents: 0,
+      savedCents: 350_000,
+      monthsCovered: null,
+      next: null,
+    })
+    expect(offer!.essentialsChoice.spentIds.sort()).toEqual([rent, groceries, fun].sort())
+    // Handing the choice back to Leeway sizes the offer again.
+    await call('update_settings', { savingsPlan: { essentialCategoryIds: null } })
+    expect(await call('get_emergency_fund')).toMatchObject({
+      essentials: { cents: 260_000, picked: false },
+      essentialsChoice: { pickedIds: null },
+    })
+  })
+
   it('never shows an account mask', async () => {
     await owner()
     await insertBankAccount(ctx.db, { name: 'Vault', subtype: 'savings', mask: '9876' })
@@ -178,6 +220,21 @@ describe('starting and climbing the emergency fund', () => {
     expect(both.map((fund) => fund.savedCents)).toEqual([350_000, 350_000])
     const { rows } = await ctx.db.query('SELECT account_id FROM goal_accounts')
     expect(rows).toHaveLength(2)
+  })
+
+  it('marks a named goal as the fund once for two changes at once', async () => {
+    const { spare } = await owner()
+    await call('create_goal', { name: 'Rainy day', targetCents: 300_000, savedCents: 20_000 })
+    await Promise.all([
+      call('change_emergency_fund', { accountIds: [spare] }),
+      call('change_emergency_fund', { months: 3 }),
+    ])
+    // Whichever ran first, the second sees the goal marked and keeps the accounts.
+    expect(await call('get_emergency_fund')).toMatchObject({
+      counts: 'marked',
+      months: 3,
+      savedCents: 50_000,
+    })
   })
 
   it('starts once for two taps at once, telling the second it is already there', async () => {
@@ -283,6 +340,70 @@ describe('accounts another goal follows', () => {
     // Still marked, so a save that keeps it is no new mark to refuse.
     const kept = await call('change_emergency_fund', { accountIds: [savings, spare] })
     expect(kept.savedCents).toBe(50_000)
+  })
+})
+
+describe('a fund linked to an account another goal follows', () => {
+  const TAKEN = "Trip follows that account already, so the emergency fund can't count it too"
+
+  it('cannot be linked, as a new named goal or by changing the fund', async () => {
+    const { savings, spare } = await owner()
+    await call('create_goal', { name: 'Trip', targetCents: 500_000, accountId: savings })
+    const named = await callError('create_goal', {
+      name: 'Rainy day',
+      targetCents: 300_000,
+      accountId: savings,
+    })
+    expect(named).toMatchObject({ code: 'invalid_input', message: TAKEN })
+
+    const fund = await call('start_emergency_fund')
+    const linked = await callError('update_goal', { id: fund.id, accountId: savings })
+    expect(linked.message).toBe(TAKEN)
+    // Any other account is fine.
+    await call('update_goal', { id: fund.id, accountId: spare })
+    expect((await call('get_emergency_fund'))!.savedCents).toBe(50_000)
+  })
+
+  it('cannot become the fund by a new name', async () => {
+    const { savings } = await owner()
+    await call('create_goal', { name: 'Trip', targetCents: 500_000, accountId: savings })
+    const cushion = await call('create_goal', {
+      name: 'Cushion',
+      targetCents: 300_000,
+      accountId: savings,
+    })
+    const renamed = await callError('update_goal', { id: cushion.id, name: 'Emergency fund' })
+    expect(renamed.message).toBe(TAKEN)
+  })
+
+  it('counts nothing from it once another goal takes it, before and after the fund is marked', async () => {
+    const { savings } = await owner()
+    const named = await call('create_goal', {
+      name: 'Rainy day',
+      targetCents: 300_000,
+      accountId: savings,
+    })
+    await call('create_goal', { name: 'Trip', targetCents: 500_000, accountId: savings })
+    const card = await call('get_emergency_fund')
+    expect(card).toMatchObject({ goalId: named.id, counts: 'account', savedCents: 0 })
+    expect(card!.accounts.find((a) => a.id === savings)).toMatchObject({
+      counted: false,
+      marked: true,
+      leftOut: 'other_goal',
+      otherGoal: 'Trip',
+    })
+    expect((await call('list_goals')).map((g) => [g.name, g.currentCents])).toEqual([
+      ['Rainy day', 0],
+      ['Trip', 300_000],
+    ])
+
+    // A rename alone is no new link to refuse.
+    await call('update_goal', { id: named.id, name: 'Rainy day fund' })
+    // Marked as the fund by a step, it still counts nothing from that account.
+    const climbed = await call('change_emergency_fund', { months: 3 })
+    expect(climbed).toMatchObject({ counts: 'account', months: 3, savedCents: 0 })
+    const marked = (await call('list_goals')).find((g) => g.id === named.id)
+    expect(marked).toMatchObject({ currentCents: 0, followedAccountIds: [] })
   })
 })
 
@@ -392,6 +513,17 @@ describe('a goal the owner named as an emergency fund', () => {
     })
   })
 
+  it('goes back to its count by hand after counting accounts, keeping what it counted', async () => {
+    await owner()
+    await call('create_goal', { name: 'Rainy day', targetCents: 300_000, savedCents: 50_000 })
+    const counted = await call('change_emergency_fund', { accountIds: [] })
+    expect(counted).toMatchObject({ counts: 'savings', savedCents: 350_000 })
+    const byHand = await call('change_emergency_fund', { byHand: true })
+    expect(byHand).toMatchObject({ counts: 'hand', savedCents: 50_000 })
+    const both = await callError('change_emergency_fund', { byHand: true, accountIds: [] })
+    expect(both.code).toBe('invalid_input')
+  })
+
   it('follows the one account it was linked to', async () => {
     const { spare } = await owner()
     await call('create_goal', { name: 'Rainy day', targetCents: 300_000, accountId: spare })
@@ -402,10 +534,23 @@ describe('a goal the owner named as an emergency fund', () => {
   })
 
   it('gives way to a goal already marked as the fund', async () => {
-    await owner()
+    const { spare } = await owner()
     const fund = await call('start_emergency_fund')
-    await call('create_goal', { name: 'Rainy day', targetCents: 100_000 })
+    // Not the fund, so it follows its account as any goal would.
+    const named = await call('create_goal', {
+      name: 'Rainy day',
+      targetCents: 100_000,
+      accountId: spare,
+    })
+    expect(named.currentCents).toBe(50_000)
     expect((await call('get_emergency_fund'))!.goalId).toBe(fund.id)
+  })
+
+  it('climbs from its own target while essentials are unknown', async () => {
+    await call('create_goal', { name: 'Rainy day', targetCents: 300_000 })
+    // Taken as one month, the next step is three times where it stands.
+    const climbed = await call('change_emergency_fund', { months: 3 })
+    expect(climbed).toMatchObject({ months: 3, ownTarget: false, targetCents: 900_000 })
   })
 })
 
@@ -436,5 +581,21 @@ describe("the owner's own target", () => {
 
     const stepped = await call('change_emergency_fund', { months: 3 })
     expect(stepped).toMatchObject({ ownTarget: false, months: 3, targetCents: 825_000 })
+  })
+
+  it('is not taken from a save that leaves the target out after essentials grew', async () => {
+    const { checking, rent } = await owner()
+    const goal = await call('start_emergency_fund')
+    // $150 a month more rent over the two whole months averaged.
+    await filed(ctx.db, checking, rent, '2026-10-04', 30_000)
+    await call('update_goal', { id: goal.id, name: 'Cushion' })
+    expect(await call('get_emergency_fund')).toMatchObject({
+      ownTarget: false,
+      months: 1,
+      targetCents: 275_000,
+    })
+    // Sending back the target it reads now is no new amount either.
+    await call('update_goal', { id: goal.id, targetCents: 275_000 })
+    expect((await call('get_emergency_fund'))!.ownTarget).toBe(false)
   })
 })
