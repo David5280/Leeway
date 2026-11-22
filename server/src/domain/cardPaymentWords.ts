@@ -20,8 +20,14 @@ const ISSUER = [
   String.raw`wells\s+fargo\s+card|(bk|bank)\s+of\s+amer(ica)?\s+(visa|card)`,
 ].join('|')
 
-/** Payment words, from the plain ("PAYMENT", "PMT") to the coded ("CRCARDPMT"). */
-const PAYMENT = String.raw`e-?pay(ment)?|(ach|mobile|online)\s+(payment|pmt|pymt)|crcardpmt|cc\s?pymt|payment|pymt|pmt`
+/** Payment words a bank codes: "EPAYMENT", "ACH PMT", "CRCARDPMT". */
+const CODED_PAYMENT = String.raw`e-?pay(ment)?|(ach|mobile|online)\s+(payment|pmt|pymt)|crcardpmt|cc\s?pymt`
+
+/** Plain payment words, which count only after the issuer and at the line's end. */
+const BARE_PAYMENT = String.raw`payment|pymt|pmt`
+
+/** The end of a line, or an id after it: "1234", "#1234", ": XXXX1234", "ID:", "INDN:". */
+const LINE_END = String.raw`\s*$|\s*(?:[:#]\s*)?x*\d|\s+(id|indn)\b`
 
 /**
  * Card words that may sit between an issuer and its payment words, and Bank
@@ -33,11 +39,23 @@ const PAYMENT = String.raw`e-?pay(ment)?|(ach|mobile|online)\s+(payment|pmt|pymt
 const FILLER = String.raw`(\s+(cards?|cc|credit|crd|us|auto\W?pay|online)|\s+des:)*`
 
 /** What may follow an issuer named after the payment words: nothing, card words or an id. */
-const ISSUER_END = String.raw`(?=(\s+(cards?|cc|credit|crd))*(\s*$|\s*[:#]?\s*x*\d|\s+(id|indn)\b))`
+const ISSUER_END = String.raw`(?=(\s+(cards?|cc|credit|crd))*(${LINE_END}))`
 
-/** Issuer then payment words ("DISCOVER DES:E-PAYMENT"), or payment words then issuer ("ACH PMT TO AMEX"). */
+/** An issuer's name, unless it names a place: "THE CHASE". */
+const NAMED_ISSUER = String.raw`(?<!\bthe\s+)(${ISSUER})`
+
+/**
+ * Issuer then payment words ("DISCOVER DES:E-PAYMENT", "SYNCB PAYMENT"), or
+ * coded payment words then the issuer ("ACH PMT TO AMEX"). A bare "PAYMENT
+ * TO CHASE" or "CHASE PMT TECH FEE" could be anything.
+ */
 const ISSUER_PAYMENT = new RegExp(
-  String.raw`\b((${ISSUER})${FILLER}(\s+|(?<=:))(${PAYMENT})|(${PAYMENT})\s+(to\s+)?(${ISSUER})${ISSUER_END})\b`,
+  [
+    String.raw`${NAMED_ISSUER}${FILLER}(\s+|(?<=:))(${CODED_PAYMENT}|(${BARE_PAYMENT})(?=${LINE_END}))`,
+    String.raw`(${CODED_PAYMENT})\s+(to\s+)?${NAMED_ISSUER}${ISSUER_END}`,
+  ]
+    .map((form) => String.raw`\b(${form})\b`)
+    .join('|'),
   'i',
 )
 

@@ -126,6 +126,8 @@ describe('the income line of money filed as income', () => {
     expect(lineOf({ name: 'IRS TREAS 310' })).toBe('tax_refund')
     expect(lineOf({ name: 'IRS TREAS 310 SALARY' })).toBe('tax_refund')
     expect(lineOf({ name: 'IRS TREAS 220 TAX REF' })).toBe('tax_refund')
+    // TAX REF counts only within a short gap of IRS TREAS.
+    expect(lineOf({ name: `IRS TREAS 220 ${'ADJ '.repeat(25)}TAX REF` })).toBe('pay')
   })
 
   it("never reads a shop's sales tax refund or a preparer's refund advance as a tax refund", () => {

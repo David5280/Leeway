@@ -139,7 +139,7 @@ const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
   [anyOf(String.raw`soc\s+sec|(ssa|ssi)\s+treas`), 'social_security'],
   [
     anyOf(
-      String.raw`irs\s+treas\s+310|irs\s+treas\b.*\btax\s?ref(und)?`,
+      String.raw`irs\s+treas\b[^\n]{0,80}?\btax\s?ref(und)?|irs\s+treas\s+310`,
       taxRefund('rfnd'),
       String.raw`\w*taxrfd|(dtf|nys|state)\s+pit\s+refund|dept\.?\s+(of\s+)?rev(enue)?\s+refund`,
     ),

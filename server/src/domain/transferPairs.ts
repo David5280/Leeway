@@ -32,7 +32,12 @@ import type { Category } from './categories.js'
 import { withShownNames } from './ruleText.js'
 import { PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
 import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
-import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
+import {
+  CARD_PAYMENT_CODE,
+  CASH_WITHDRAWAL_CODE,
+  personToPersonApp,
+  type Movement,
+} from './transfers.js'
 
 /** How far apart, in days, the two sides of one transfer may post. */
 export const PAIR_WINDOW_DAYS = 5
@@ -78,8 +83,6 @@ const COUNTERPARTY_TAIL = /\b(to|from)\b.*$/i
 
 /** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
 const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
-
-const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
 
 /**
  * Whether a transaction says it is a transfer. Plaid's codes decide when

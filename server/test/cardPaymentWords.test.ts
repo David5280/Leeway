@@ -29,6 +29,10 @@ describe('words for a credit card payment', () => {
       'CHASE CC EPAYMENT',
       'CITI CARDS EPAYMENT',
       'CHASE EPAY',
+      'CHASE PAYMENT',
+      'CHASE PMT 1234',
+      'SYNCB PAYMENT ID:123',
+      'EPAYMENT CHASE: XXXX1234',
       'CITI CARD ONLINE PAYMENT',
       'CAPITAL ONE ONLINE PMT',
       'CAPITAL ONE CRCARDPMT',
@@ -77,6 +81,11 @@ describe('words for a credit card payment', () => {
       'EPAYMENT TO CHASE PLACE APTS',
       'ACH PMT CHASE PLACE APTS',
       'EPAYMENT CHASE TOWER RENT',
+      // "The Chase" names a place, and a bare payment word says too little.
+      'THE CHASE PAYMENT',
+      'THE CHASE EPAYMENT',
+      'PAYMENT TO CHASE',
+      'CHASE PMT TECH FEE',
       // An issuer's mortgage or loan is not a card.
       'CHASE MORTGAGE ACH PMT',
       'CHASE MORTGAGE DES:ACH PMT',
@@ -87,5 +96,11 @@ describe('words for a credit card payment', () => {
       ['AMEX ACH PMT', 'Amex Personal Loan'],
     ]
     expect(lines.filter(readsAsCard)).toEqual([])
+  })
+
+  it('reads a long run of spaces after an issuer in linear time', () => {
+    const started = performance.now()
+    expect(saysCardPayment(`EPAYMENT TO CHASE${' '.repeat(50_000)}APTS`, null)).toBe(false)
+    expect(performance.now() - started).toBeLessThan(500)
   })
 })
