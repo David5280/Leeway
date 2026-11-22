@@ -92,6 +92,7 @@ describe('the emergency fund offer', () => {
       from: 'spending',
       categories: null,
       categoryIds: null,
+      partlyCounted: null,
       picked: false,
     })
   })

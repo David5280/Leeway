@@ -316,7 +316,9 @@ export const SCREENS: Screen[] = [
     name: '/settings/data with a tax year exported',
     then: async (page) => {
       await page.getByRole('button', { name: /^Download \d{4} CSV$/ }).click()
-      await expect(page.getByText('Interest', { exact: true })).toBeVisible()
+      // A year with nothing in it says so instead of listing the income lines.
+      const summed = page.getByText('Interest', { exact: true })
+      await expect(summed.or(page.getByText(/^No transactions in \d{4}\.$/))).toBeVisible()
     },
   }),
   at('settings', '/settings/widget', {

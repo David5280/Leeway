@@ -23,12 +23,14 @@ const NAMED = 3
 
 /**
  * What the essentials are, finishing "What ... cost in a typical month":
- * "Rent, Groceries and Gas", "your bills", or "your spending".
+ * "Rent, Groceries and Gas", "your bills", or "your spending". Categories
+ * counted in part (only their essential payments) are named after the rest.
  */
 export function essentialsWords(essentials: EmergencyView['essentials']): string {
   if (!essentials || essentials.from === 'bills') return 'your bills'
-  const names = essentials.categories
-  if (!names || names.length === 0) return 'your spending'
+  if (!essentials.categories) return 'your spending'
+  const names = [...essentials.categories, ...(essentials.partlyCounted ?? [])]
+  if (names.length === 0) return 'your spending'
   if (names.length <= NAMED) return listed(names)
   const more = names.length - NAMED
   return `${names.slice(0, NAMED).join(', ')} and ${more} more`
@@ -47,6 +49,16 @@ export function essentialsSentence(
   return `What ${essentialsWords(view.essentials)} cost in a typical month.`
 }
 
+/**
+ * A note in the picker on the categories Leeway counts in part, which a tick
+ * cannot show: only their essential payments count, and a pick of the
+ * owner's own counts whole categories. Null when there are none.
+ */
+export function partlyNote(names: string[]): string | null {
+  if (names.length === 0) return null
+  return `Also counted: only the essential payments in ${listed(names)}, like loans or child care, never card payments. Your own pick counts whole categories.`
+}
+
 /** A note on ticked essentials that add nothing, having had no spending; null when none. */
 export function quietNote(names: string[]): string | null {
   if (names.length === 0) return null
@@ -60,6 +72,8 @@ export function quietNote(names: string[]): string | null {
  */
 export function targetWords(view: Pick<EmergencyView, 'months' | 'ownTarget'>): string {
   if (view.months === null) return 'Your own target'
+  // "About 0 months" says nothing, so a target under half a month is told as less than one.
+  if (view.ownTarget && view.months < 0.5) return 'Less than a month of essentials'
   if (view.ownTarget) return `About ${monthsWord(view.months)} of essentials`
   return `${monthsWord(view.months)} of essentials`
 }

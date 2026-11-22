@@ -5,11 +5,16 @@
 import type { Db } from '../../db/pool.js'
 import { addMonths, dateParts, makeDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
-import type { CategoryTotal } from '../budget.js'
-import { categoryTotalsByRange, sumTotals, type DateRange } from '../categoryTotals.js'
+import {
+  categoryTotalsByRange,
+  codedTotalsByRange,
+  sumTotals,
+  type DateRange,
+} from '../categoryTotals.js'
 import { nextPayday, type PaydaySource } from '../cashFlow.js'
 import { listCategories, type Category } from '../categories.js'
-import { essentialIdsOf } from '../essentials.js'
+import { essentialSpending, type MonthSpending } from '../essentialSpending.js'
+import { ESSENTIAL_CODES } from '../essentials.js'
 import type { Settings } from '../settings.js'
 
 /** How many recent months the averages look at. */
@@ -38,7 +43,8 @@ export interface MonthlyAverages {
   spendingCents: number | null
   /**
    * Spending in the essential categories: the owner's pick, or the ones found
-   * by their codes and names (essentials.ts), or all spending when none are.
+   * by their codes and names with essential payments filed elsewhere
+   * (essentialSpending.ts), or all spending when none are.
    */
   essentialSpendingCents: number | null
 }
@@ -59,58 +65,23 @@ export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null):
   return ranges
 }
 
-/**
- * The essential categories the owner picked that still exist as spending
- * categories, or null when there is no pick to go by, so the essentials are
- * found instead (essentialIdsOf in essentials.ts). Settings can hold ids of
- * categories since deleted or replaced, so only current ones count, and a
- * pick with none left is no pick rather than no essentials.
- */
-export function currentEssentials(
-  categories: Category[],
-  essentialIds: string[] | null,
-): Set<string> | null {
-  if (essentialIds === null) return null
-  const picked = new Set(essentialIds)
-  const current = categories.filter((c) => c.kind === 'expense' && picked.has(c.id))
-  return current.length ? new Set(current.map((c) => c.id)) : null
-}
-
-/**
- * Sums the essential categories' spending in one month's totals. Without a
- * pick, the essentials found by their codes and names count (essentials.ts),
- * and all spending counts when none are found.
- */
-export function essentialSpending(
-  categories: Category[],
-  totals: CategoryTotal[],
-  essentialIds: string[] | null,
-): number {
-  const essentials = essentialIdsOf(categories, currentEssentials(categories, essentialIds))
-  if (essentials === null) return sumTotals(categories, totals).spentCents
-  return totals
-    .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
-    .reduce((sum, total) => sum + total.amountCents, 0)
-}
-
 /** Averages each month's totals into a typical month. */
 export function averageMonths(
-  categories: Category[],
-  totalsByMonth: CategoryTotal[][],
+  { categories, spendingByMonth }: RecentMonths,
   essentialIds: string[] | null,
 ): MonthlyAverages {
-  const months = totalsByMonth.length
+  const months = spendingByMonth.length
   if (months === 0) {
     return { months, incomeCents: null, spendingCents: null, essentialSpendingCents: null }
   }
   let income = 0
   let spending = 0
   let essential = 0
-  for (const totals of totalsByMonth) {
-    const sums = sumTotals(categories, totals)
+  for (const month of spendingByMonth) {
+    const sums = sumTotals(categories, month.totals)
     income += sums.incomeCents
     spending += sums.spentCents
-    essential += essentialSpending(categories, totals, essentialIds)
+    essential += essentialSpending(categories, month, essentialIds)
   }
   return {
     months,
@@ -129,10 +100,11 @@ export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
   return rows[0]!.first
 }
 
-/** The categories, and each of the last whole months' totals by category. */
+/** The categories, and each of the last whole months' spending by category. */
 export interface RecentMonths {
   categories: Category[]
-  totalsByMonth: CategoryTotal[][]
+  /** Oldest first, each with the part under essential bank codes (see essentialSpending.ts). */
+  spendingByMonth: MonthSpending[]
 }
 
 /** The last whole months held, as totals by category, with the categories to read them by. */
@@ -140,9 +112,15 @@ export async function recentMonths(db: Db, today: IsoDate): Promise<RecentMonths
   // One at a time: db may be a transaction's client, which runs one query at once.
   const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
   const categories = await listCategories(db)
+  if (ranges.length === 0) return { categories, spendingByMonth: [] }
   // Posted transactions only: a month already over has nothing left pending that matters.
-  const totalsByMonth = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
-  return { categories, totalsByMonth }
+  const totalsByMonth = await categoryTotalsByRange(db, ranges, false)
+  const codedByMonth = await codedTotalsByRange(db, ranges, [...ESSENTIAL_CODES])
+  const spendingByMonth = totalsByMonth.map((totals, at) => ({
+    totals,
+    essentialCoded: codedByMonth[at]!,
+  }))
+  return { categories, spendingByMonth }
 }
 
 /** A typical month of income and spending, from the last whole months held. */
@@ -151,8 +129,7 @@ export async function monthlyAverages(
   settings: Settings,
   today: IsoDate,
 ): Promise<MonthlyAverages> {
-  const { categories, totalsByMonth } = await recentMonths(db, today)
-  return averageMonths(categories, totalsByMonth, settings.savingsPlan.essentialCategoryIds)
+  return averageMonths(await recentMonths(db, today), settings.savingsPlan.essentialCategoryIds)
 }
 
 /** How often pay comes and when next, from the budget period or regular deposits. */

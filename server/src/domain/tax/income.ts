@@ -4,14 +4,28 @@
 
 import { merchantKey, textKey } from '../merchantKey.js'
 import type { Transaction } from '../transactions.js'
-import { incomeLine, type IncomeLine } from './classify.js'
+import { incomeLine, type IncomeLine } from './incomeLine.js'
 
 /**
- * The lines the summary adds up. Payments from people and money moved in
- * from another account are neither earned nor paid out to the owner, so they
- * stay in their category's total with a note (see INCOME_LINES), on no line here.
+ * The lines the summary leaves out. Payments from people, child support and
+ * money moved in from another account are neither earned nor taxed as pay,
+ * and veterans benefits are not taxed, so each stays in its category's total
+ * with a note (see INCOME_LINES), on no line here.
  */
-export type SummedLine = Exclude<IncomeLine, 'person' | 'moved_in'>
+type UnsummedLine = 'veterans' | 'support' | 'person' | 'moved_in'
+
+const UNSUMMED_LINES: ReadonlySet<IncomeLine> = new Set<UnsummedLine>([
+  'veterans',
+  'support',
+  'person',
+  'moved_in',
+])
+
+/** The lines the summary adds up. */
+export type SummedLine = Exclude<IncomeLine, UnsummedLine>
+
+/** Whether the summary adds up a line (see UNSUMMED_LINES). */
+const isSummed = (line: IncomeLine): line is SummedLine => !UNSUMMED_LINES.has(line)
 
 /** The summed lines, in the order the summary shows them. */
 export const SUMMED_LINES: readonly SummedLine[] = [
@@ -86,7 +100,7 @@ export function incomeTotals(transactions: Transaction[]): IncomeTotals {
   const payers = new Map<string, Payer>()
   for (const tx of transactions) {
     const line = incomeLine(tx)
-    if (line === 'person' || line === 'moved_in') continue
+    if (!isSummed(line)) continue
     const cents = -tx.amountCents
     totals[line] += cents
     if (line !== 'pay') continue

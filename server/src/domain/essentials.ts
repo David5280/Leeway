@@ -3,14 +3,18 @@
 // child care and the fixed payments on a home, a car or a loan). The
 // emergency fund is measured in months of these. The owner's own pick wins;
 // without one they are found from each category's bank codes, or its name
-// when it has none. Pure, so the rules read and test alone.
+// when it has none, and essential payments filed in other categories count
+// by their own bank code (see essentialSpending.ts). Pure, so the rules read
+// and test alone.
 
 import type { Category } from './categories.js'
 
 /**
  * Bank codes (Plaid's personal finance categories) that are essential, each
  * listed exactly. A category with bank codes is essential only when every one
- * of them is, so a mixed category ("Pets": vet bills and toys) is not.
+ * of them is, so a mixed category ("Pets": vet bills and toys) is not. In a
+ * category that is not, a payment whose own code is listed here still counts
+ * (see essentialSpending.ts): a student loan in the starter "Debt payments".
  *
  * Debt is the careful part. A car, mortgage, student or personal loan is paid
  * in fixed installments, so its payment is the minimum that keeps coming due.
@@ -20,7 +24,7 @@ import type { Category } from './categories.js'
  * access and the bare LOAN_PAYMENTS code can't be told apart from such
  * payoffs, so they are left out too. The owner can still count any of them.
  */
-const ESSENTIAL_CODES = new Set([
+export const ESSENTIAL_CODES: ReadonlySet<string> = new Set([
   'RENT_AND_UTILITIES',
   'RENT_AND_UTILITIES_RENT',
   'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',

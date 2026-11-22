@@ -190,3 +190,33 @@ describe('the emergency fund goal', () => {
     expect(saved).not.toHaveProperty('targetCents')
   })
 })
+
+describe('the emergency fund when it fails to load', () => {
+  /** The fund's read, failing until it is asked again. */
+  function failingOnce() {
+    let reads = 0
+    return () => {
+      reads += 1
+      return reads === 1 ? failing('The fund is down', 500)() : Response.json({ result: FUND })
+    }
+  }
+
+  it('still shows every goal, with a retry in place of the fund card', async () => {
+    const trip = goal({ id: 'goal-trip', name: 'Trip', targetCents: 100_000 })
+    planServer(
+      { list_goals: () => [fundGoal(), trip], list_accounts: () => [] },
+      { '/api/actions/get_emergency_fund': failingOnce() },
+    )
+    renderPlan('/plan/goals')
+    expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Trip' })).toBeVisible()
+    // The fund's goal shows as a plain goal until the fund loads.
+    const plain = within(screen.getByRole('region', { name: 'Emergency fund' }))
+    expect(plain.queryByText(/months? of essentials/)).toBeNull()
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    const fund = await fundCard()
+    expect(await fund.findByText('1 month of essentials')).toBeVisible()
+    expect(screen.queryByText('The emergency fund did not load.')).toBeNull()
+  })
+})

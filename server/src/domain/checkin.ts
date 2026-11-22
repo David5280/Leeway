@@ -14,6 +14,7 @@ import { debtPlans } from './debts.js'
 import { fundSaved } from './emergencyPlan.js'
 import { goalReading } from './goalProgress.js'
 import { listGoals } from './goals.js'
+import { readEssentialBillsCents } from './monthlyEssentials.js'
 import { latestPaystub } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
 import { untrackedRecurring } from './recurring.js'
@@ -71,6 +72,8 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
   const plan = paystubPlan(paystub, today)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
+  // Only essential bills size the emergency fund before spending does.
+  const essentialBillsCents = await readEssentialBillsCents(db, settings, bills)
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
     {
@@ -156,7 +159,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
         planMonthlyCents: plan.monthlyCents,
         stalePlan: plan.stale,
         monthly,
-        billsMonthlyCents,
+        billsMonthlyCents: essentialBillsCents,
         settings,
         today,
       }),

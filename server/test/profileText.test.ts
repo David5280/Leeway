@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
 import { DIGEST_GOALS, nearestGoals, profileDigest } from '../src/domain/profile/digest.js'
-import {
-  averageMonths,
-  essentialSpending,
-  wholeMonthsBefore,
-} from '../src/domain/profile/income.js'
+import type { CategoryTotal } from '../src/domain/budget.js'
+import { essentialSpending } from '../src/domain/essentialSpending.js'
+import { averageMonths, wholeMonthsBefore } from '../src/domain/profile/income.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
 import { RATE_GUARD_FOR_AI, savingsRate } from '../src/domain/savings/rate.js'
 import {
@@ -110,6 +108,13 @@ describe('monthly averages', () => {
     category('fun', 'expense', 'Fun'),
     category('pay', 'income', 'Paycheck'),
   ]
+  /** A month of these totals, with nothing under essential bank codes. */
+  const spent = (totals: CategoryTotal[]) => ({ totals, essentialCoded: [] })
+  /** Recent months of these totals, read by these categories. */
+  const recent = (totalsByMonth: CategoryTotal[][]) => ({
+    categories,
+    spendingByMonth: totalsByMonth.map(spent),
+  })
 
   it('takes the last three whole months that history fully covers', () => {
     expect(wholeMonthsBefore(TODAY, '2026-01-01')).toEqual([
@@ -133,27 +138,27 @@ describe('monthly averages', () => {
       { categoryId: null, amountCents: 1_000, count: 1 },
     ]
     const totals = [month(200_000, 50_000, 600_000), month(200_000, 30_001, 600_000)]
-    expect(averageMonths(categories, totals, ['rent'])).toEqual({
+    expect(averageMonths(recent(totals), ['rent'])).toEqual({
       months: 2,
       incomeCents: 600_000,
       spendingCents: 241_001,
       essentialSpendingCents: 200_000,
     })
     // With no essentials picked, they are found by name (essentials.ts): Rent, not Fun.
-    expect(essentialSpending(categories, totals[0]!, null)).toBe(200_000)
+    expect(essentialSpending(categories, spent(totals[0]!), null)).toBe(200_000)
     // Picks that are no longer expense categories (income, or deleted) are ignored,
     // and none left means the essentials are found, as if nothing had been picked.
-    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(200_000)
+    expect(essentialSpending(categories, spent(totals[0]!), ['pay', 'gone'])).toBe(200_000)
     // When none reads as essential, all spending counts, uncategorized included.
     const plain = categories.map((one, index) => ({ ...one, name: `Group ${index + 1}` }))
-    expect(essentialSpending(plain, totals[0]!, null)).toBe(251_000)
+    expect(essentialSpending(plain, spent(totals[0]!), null)).toBe(251_000)
     // A partly stale pick keeps the categories that still exist.
-    expect(essentialSpending(categories, totals[0]!, ['rent', 'gone'])).toBe(200_000)
+    expect(essentialSpending(categories, spent(totals[0]!), ['rent', 'gone'])).toBe(200_000)
   })
 
   it('reads take-home pay as unknown when no income was categorized', () => {
     const noPay = [[{ categoryId: 'rent', amountCents: 200_000, count: 1 }]]
-    expect(averageMonths(categories, noPay, null)).toEqual({
+    expect(averageMonths(recent(noPay), null)).toEqual({
       months: 1,
       incomeCents: null,
       spendingCents: 200_000,
@@ -162,7 +167,7 @@ describe('monthly averages', () => {
   })
 
   it('knows nothing without a whole month', () => {
-    expect(averageMonths(categories, [], null)).toEqual({
+    expect(averageMonths(recent([]), null)).toEqual({
       months: 0,
       incomeCents: null,
       spendingCents: null,

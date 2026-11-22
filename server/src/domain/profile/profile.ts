@@ -32,6 +32,7 @@ import { listBills } from '../bills.js'
 import { fundSaved } from '../emergencyPlan.js'
 import { goalReading, type Goal } from '../goalProgress.js'
 import { listGoals } from '../goals.js'
+import { readEssentialBillsCents } from '../monthlyEssentials.js'
 import { latestPaystub } from '../paystubs/paystubs.js'
 import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
 import { pensionsOf } from '../retirement/pensionStore.js'
@@ -181,7 +182,7 @@ export interface SavingsMeasuresInput {
   /** The plan the newest paystub shows but is too old to count, by name, or null. */
   stalePlan?: string | null
   monthly: MonthlyAverages
-  /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
+  /** Essential tracked bills a month, the stand-in for essentials before a whole month is held. */
   billsMonthlyCents: number
   settings: Pick<Settings, 'savingsPlan'>
   today: IsoDate
@@ -260,7 +261,7 @@ export async function getFinancialProfile(
     planMonthlyCents: plan.monthlyCents,
     stalePlan: plan.stale,
     monthly,
-    billsMonthlyCents,
+    billsMonthlyCents: await readEssentialBillsCents(db, settings, bills),
     settings,
     today,
   })
