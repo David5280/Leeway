@@ -49,6 +49,14 @@ function serve(view: RetirementView, extra: Handlers = {}, routes = {}) {
 
 const card = (name: string) => screen.findByRole('region', { name })
 
+/** Opens the form to add a pension by hand, with its plan details unfolded. */
+async function addByHand(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
+  const form = within(await screen.findByRole('form', { name: 'New pension' }))
+  await user.click(form.getByText('More details (optional)'))
+  return form
+}
+
 describe('the projection', () => {
   it('asks for a birth year before projecting anything', async () => {
     serve(retirementOf())
@@ -231,8 +239,7 @@ describe('pensions', () => {
     const server = serve(retirementOf())
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     expect(screen.getByRole('region', { name: 'Add a pension' })).toBeVisible()
 
     await user.type(form.getByLabelText('Name'), 'Colorado PERA')
@@ -271,8 +278,7 @@ describe('pensions', () => {
     })
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     const where = await form.findByRole('combobox', { name: 'Add it to' })
     // Only an account that could hold a pension is offered; a checking account is not.
     expect(
@@ -302,8 +308,7 @@ describe('pensions', () => {
     serve(retirementOf())
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     const type = form.getByRole('combobox', { name: 'Contribution type' })
     await user.selectOptions(type, 'A percent of gross pay')
     await user.type(form.getByRole('textbox', { name: 'Percent of pay' }), '11')
@@ -320,13 +325,22 @@ describe('pensions', () => {
     serve(retirementOf())
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     expect(
       form.getByRole('textbox', { name: 'Benefit starts at age' }),
     ).toHaveAccessibleDescription('Blank uses your retirement age')
+    expect(form.getByRole('textbox', { name: 'Years of service' })).toHaveAccessibleDescription(
+      "Your service so far, from your plan's statement",
+    )
+    expect(form.getByRole('combobox', { name: 'Pay schedule' })).toHaveAccessibleDescription(
+      'How often a paycheck comes',
+    )
     // A figure with no hint names nothing.
-    expect(form.getByRole('textbox', { name: 'Years of service' })).not.toHaveAttribute(
+    await user.selectOptions(
+      form.getByRole('combobox', { name: 'Contribution type' }),
+      'An amount each paycheck',
+    )
+    expect(form.getByRole('textbox', { name: 'Amount each paycheck' })).not.toHaveAttribute(
       'aria-describedby',
     )
     await user.type(form.getByLabelText('Name'), 'PERA')
@@ -339,8 +353,7 @@ describe('pensions', () => {
     const server = serve(retirementOf())
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     await user.type(form.getByLabelText('Name'), 'PERA')
     await user.type(form.getByRole('textbox', { name: 'Multiplier, percent per year' }), 'lots')
     await user.click(form.getByRole('button', { name: 'Add pension' }))
@@ -366,8 +379,7 @@ describe('pensions', () => {
     )
     renderPlan('/plan/retirement')
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
-    const form = within(screen.getByRole('form', { name: 'New pension' }))
+    const form = await addByHand(user)
     await user.type(form.getByLabelText('Name'), 'PERA')
     await user.click(form.getByRole('button', { name: 'Add pension' }))
     expect(await form.findByText('Leeway keeps up to 10 pensions')).toBeVisible()

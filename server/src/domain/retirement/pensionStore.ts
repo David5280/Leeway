@@ -171,31 +171,36 @@ function checkRoomForPension(accounts: Account[]): void {
 }
 
 /**
- * Adds a pension: an account added by hand, of kind pension, with its plan.
- * It is an investment-type account, the type banks give a pension, so its
- * balance, when known, counts as something the owner owns.
+ * Adds a pension inside a transaction the caller holds, such as saving a
+ * paystub: an account added by hand, of kind pension, with its plan. It is an
+ * investment-type account, the type banks give a pension, so its balance,
+ * when known, counts as something the owner owns. Takes the pensions lock and
+ * a free place, so the limit holds however a pension is made.
  */
+export async function insertPension(db: Db, input: NewPension, currency: string): Promise<Pension> {
+  await lockPensions(db)
+  checkRoomForPension(await listAccounts(db))
+  const { name, balanceCents, ...plan } = input
+  const account = await insertManualAccount(db, {
+    name,
+    type: 'investment',
+    subtype: 'pension',
+    balanceCents,
+    creditLimitCents: null,
+    currency,
+    kind: 'pension',
+  })
+  await savePlan(db, account.id, plan)
+  return getPension(db, account.id)
+}
+
+/** Adds a pension, all or nothing. */
 export async function createPension(
   pool: pg.Pool,
   input: NewPension,
   currency: string,
 ): Promise<Pension> {
-  return withTransaction(pool, async (db) => {
-    await lockPensions(db)
-    checkRoomForPension(await listAccounts(db))
-    const { name, balanceCents, ...plan } = input
-    const account = await insertManualAccount(db, {
-      name,
-      type: 'investment',
-      subtype: 'pension',
-      balanceCents,
-      creditLimitCents: null,
-      currency,
-      kind: 'pension',
-    })
-    await savePlan(db, account.id, plan)
-    return getPension(db, account.id)
-  })
+  return withTransaction(pool, (db) => insertPension(db, input, currency))
 }
 
 /**

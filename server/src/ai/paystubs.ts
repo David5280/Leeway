@@ -19,9 +19,12 @@ payFrequency.value: week (weekly), biweek (every two weeks), semimonth (twice a 
 Amounts: copy each exactly as printed, such as "1,234.56". Never add, subtract or estimate. When a figure is not printed, give null. When two lines are the same kind, such as pre-tax and Roth 401(k), give both joined with " + ".
 current: this period. yearToDate: the year-to-date column.
 grossPay: total gross earnings. netPay: net or take-home pay.
-pension: the employee's own pension contribution, such as PERA, FPPA or another state or city retirement plan. pensionEmployer: the employer's pension share, only when printed.
+pension: the employee's own contribution to a pension, a defined-benefit plan run by a state, city, school system or employer. It is often labeled with the plan's initials, such as PERA, PERS, STRS, TRS or FPPA, or as Pension, or as Retirement beside such a plan's name, such as "Retirement PERA" or "State Teachers Retirement". It is never a 401(k), 457 or 403(b), which have their own fields below. A line labeled only Retirement, with no plan name, goes here only when nothing marks it a 401(k), 457 or 403(b), and with medium confidence.
+pensionEmployer: the employer's share of that pension, such as "PERA Employer", only when printed.
+pensionPlanName: the pension's plan name as its line prints it, such as PERA or Colorado PERA, without words like Member, Employee, EE or Pre-tax and without amounts or rates. Null when the stub shows no pension contribution.
 plan401k, plan457, plan403b: the employee's own contributions to each plan, Roth included. A 457 may be labeled deferred compensation.
 hsa: the employee's own HSA contribution.
+Report only what this paystub prints. Never supply a plan's contribution rate, employer rate, multiplier or rules from what you know of the plan, even when the plan is named.
 
 confidence: high when the label and amount are clear, medium when the label is ambiguous, low when the print is hard to read.
 source: the paystub line the figure came from, its label and amount only, under 80 characters. Never copy a Social Security number, employee ID, account or routing number, check number or address into any field.`

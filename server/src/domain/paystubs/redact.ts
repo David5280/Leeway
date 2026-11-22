@@ -12,6 +12,9 @@ export const MAX_SOURCE_LENGTH = 120
 /** The longest employer name kept. */
 export const MAX_EMPLOYER_LENGTH = 80
 
+/** The longest pension plan name kept: the most a pension's name may be. */
+export const MAX_PLAN_NAME_LENGTH = 80
+
 /**
  * A Social Security number, plain or masked: 123-45-6789, 123 45 6789,
  * XXX-XX-6789, ***-**-6789. A mask is no word character, so the start is
@@ -88,15 +91,25 @@ export function redactSource(text: string | null): string | null {
 }
 
 /**
- * The employer's name, redacted and cut to length. Only the name is kept: an
- * address printed after it, on the same line or after a comma, is dropped,
- * and so is everything after the first thing taken out, since a city and
- * state follow a street address ("1437 Bannock St Denver CO").
+ * The name at the start of a line, redacted and cut to `max`: an address or
+ * detail printed after it, on the same line or after a comma, is dropped, and
+ * so is everything after the first thing taken out, since a city and state
+ * follow a street address ("1437 Bannock St Denver CO").
  */
-export function redactEmployer(text: string | null): string | null {
+function leadingName(text: string | null, max: number): string | null {
   if (text === null) return null
   const parts = redact(text.split(/[\n,]/)[0]!).split(REMOVED)
   // The name is what comes before the first removal, or after it when the line began with one.
   const name = parts.map((part) => part.trim()).find((part) => part !== '') ?? ''
-  return name === '' ? null : name.slice(0, MAX_EMPLOYER_LENGTH).trim()
+  return name === '' ? null : name.slice(0, max).trim()
+}
+
+/** The employer's name only, never the address printed after it. */
+export function redactEmployer(text: string | null): string | null {
+  return leadingName(text, MAX_EMPLOYER_LENGTH)
+}
+
+/** The pension plan's name only, like "PERA", short enough to name a pension by. */
+export function redactPlanName(text: string | null): string | null {
+  return leadingName(text, MAX_PLAN_NAME_LENGTH)
 }

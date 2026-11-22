@@ -7,7 +7,7 @@
 import type { Input, Output } from '../../../../api/client'
 import { parseMoney } from '../../../../lib/format'
 import { typedAmount } from '../../../../lib/money'
-import type { RetirementView } from '../fields'
+import { readAmount, type RetirementView } from '../fields'
 import {
   HEIC_HELP,
   MAX_PAYSTUB_BYTES,
@@ -29,6 +29,7 @@ export type { CurrentField, PaystubRead }
 export type Extraction = PaystubRead['extraction']
 export type Paystub = Input<'save_paystub'>['paystub']
 export type PaystubImport = Output<'get_paystub'>
+export type NewPension = NonNullable<Input<'save_paystub'>['newPension']>
 
 /** A pension the figures can go to. */
 export interface PensionChoice {
@@ -176,6 +177,32 @@ export function showsPlanFigures(text: ReviewText): boolean {
   return [text.current.plan401k, text.current.plan457, text.current.plan403b].some(
     (typed) => typed.trim() !== '',
   )
+}
+
+/** Whether the paystub Claude read shows a pension contribution, which adding a pension needs. */
+export function readsPension(extraction: Extraction): boolean {
+  return (extraction.current.pension.cents ?? 0) > 0
+}
+
+/** A new pension read back: its name and balance, or the first thing to fix. */
+export type NewPensionRead = { ok: true; pension: NewPension } | { ok: false; error: string }
+
+/**
+ * A new pension from the review screen: the name the owner confirmed and the
+ * member balance if typed, for a paystub that still shows a pension
+ * contribution after their edits, since an empty pension is never added.
+ */
+export function readNewPension(paystub: Paystub, name: string, balance: string): NewPensionRead {
+  if ((paystub.current.pension ?? 0) <= 0) {
+    return {
+      ok: false,
+      error: 'Enter the pension contribution from your paystub, or add the pension by hand.',
+    }
+  }
+  if (name.trim() === '') return { ok: false, error: 'Name your pension, like Colorado PERA.' }
+  const member = readAmount(balance, 'the member balance')
+  if (!member.ok) return member
+  return { ok: true, pension: { name: name.trim(), balanceCents: member.value } }
 }
 
 /** A chosen file's type, as the browser names it, when it is one Leeway reads. */

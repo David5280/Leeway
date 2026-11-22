@@ -6,14 +6,16 @@ import {
   UNSUPPORTED,
 } from '../../../../../../server/src/domain/paystubs/files'
 import { paystubSchema } from '../../../../../../server/src/domain/paystubs/paystubs'
-import { cityRead } from '../../../../test/paystub'
+import { cityRead, noPensionRead } from '../../../../test/paystub'
 import { pension } from '../../../../test/profile'
 import { retirementOf } from '../../../../test/planning'
 import {
   ACCEPT,
   fileProblem,
   pensionChoices,
+  readNewPension,
   readReview,
+  readsPension,
   reviewText,
   showsPlanFigures,
   type ReviewText,
@@ -217,5 +219,47 @@ describe('pensionChoices', () => {
       { accountId: 'a', name: 'Colorado PERA' },
       { accountId: 'b', name: 'FERS' },
     ])
+  })
+})
+
+describe('adding a pension from the review', () => {
+  /** The city paystub as confirmed, with its pension contribution as typed. */
+  function confirmed(pension: string) {
+    const read = readReview(typed({ pension }))
+    if (!read.ok) throw new Error(read.error)
+    return read.paystub
+  }
+
+  it('needs a paystub that shows a pension contribution', () => {
+    expect(readsPension(cityRead().extraction)).toBe(true)
+    expect(readsPension(noPensionRead.extraction)).toBe(false)
+    for (const pension of ['', '0']) {
+      expect(readNewPension(confirmed(pension), 'PERA', '')).toEqual({
+        ok: false,
+        error: 'Enter the pension contribution from your paystub, or add the pension by hand.',
+      })
+    }
+  })
+
+  it('takes the name trimmed, and the balance as cents or not known', () => {
+    expect(readNewPension(confirmed('422.95'), '  Colorado PERA ', '65,000')).toEqual({
+      ok: true,
+      pension: { name: 'Colorado PERA', balanceCents: 6_500_000 },
+    })
+    expect(readNewPension(confirmed('422.95'), 'PERA', '')).toEqual({
+      ok: true,
+      pension: { name: 'PERA', balanceCents: null },
+    })
+  })
+
+  it('names what to fix: a blank name, then a balance that is not an amount', () => {
+    expect(readNewPension(confirmed('422.95'), '  ', '')).toEqual({
+      ok: false,
+      error: 'Name your pension, like Colorado PERA.',
+    })
+    expect(readNewPension(confirmed('422.95'), 'PERA', 'lots')).toEqual({
+      ok: false,
+      error: 'Enter the member balance as an amount.',
+    })
   })
 })

@@ -9,7 +9,7 @@ import { paystubs } from '../../../../api/client'
 import { useActionMutation } from '../../../../api/hooks'
 import { ErrorNote, Loading } from '../../../../components/ui'
 import { PaystubReview } from './PaystubReview'
-import { ACCEPT, fileProblem, type PensionChoice } from './review'
+import { ACCEPT, fileProblem, readsPension, type PensionChoice } from './review'
 
 /** What the owner sees before choosing a file: who reads it, what is sent, and what is kept. */
 function ChooseFile({
@@ -82,17 +82,63 @@ function ChooseFile({
   )
 }
 
+/**
+ * Said plainly when a paystub read to add a pension shows no pension
+ * contribution, since an empty pension is never added: typing it in comes
+ * first, when offered, then another paystub.
+ */
+function NoPensionFound({
+  readerName,
+  onManual,
+  onRetry,
+  onCancel,
+}: {
+  readerName: string
+  onManual?: () => void
+  onRetry: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="stack paystub">
+      <p className="notice" role="status">
+        {readerName} found no pension contribution on this paystub, so there is no pension to add
+        from it.
+      </p>
+      <div className="row wrap">
+        {onManual && (
+          <button type="button" className="btn primary" onClick={onManual}>
+            Enter it myself
+          </button>
+        )}
+        <button type="button" className="btn" onClick={onRetry}>
+          Try another paystub
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function PaystubImport({
   readerName,
-  pensions,
+  pensions = [],
   pensionAccountId = null,
+  adding = false,
+  onManual,
   onSaved,
   onCancel,
 }: {
   readerName: string
-  pensions: PensionChoice[]
+  /** The kept pensions the figures can update; none when adding one. */
+  pensions?: PensionChoice[]
   /** The pension to update, chosen to start with, as when opened from its form. */
   pensionAccountId?: string | null
+  /** Adding a new pension from the paystub, named on the review, instead of updating one. */
+  adding?: boolean
+  /** Goes on to typing the pension in, when the paystub shows none to add. */
+  onManual?: () => void
   onSaved: (payDate: string | null) => void
   onCancel: () => void
 }) {
@@ -119,11 +165,22 @@ export function PaystubImport({
       />
     )
   }
+  if (adding && !readsPension(read.data.extraction)) {
+    return (
+      <NoPensionFound
+        readerName={readerName}
+        onManual={onManual}
+        onRetry={() => read.reset()}
+        onCancel={onCancel}
+      />
+    )
+  }
   return (
     <PaystubReview
       read={read.data}
       pensions={pensions}
       pensionAccountId={pensionAccountId}
+      adding={adding}
       busy={save.isPending}
       error={save.error}
       onSave={(input) =>

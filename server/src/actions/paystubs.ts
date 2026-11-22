@@ -34,7 +34,7 @@ export const savePaystubAction = defineAction({
   name: 'save_paystub',
   title: 'Save a paystub',
   description:
-    'Saves the paystub figures the owner reviewed, in cents. pensionAccountId applies the pension contribution, gross pay, pay frequency and employer share to that pension; setRetirementContribution makes the 401(k), 457 and 403(b) figures the monthly retirement contribution.',
+    'Saves the paystub figures the owner reviewed, in cents. pensionAccountId applies the pension contribution, gross pay, pay frequency and employer share to that pension; newPension ({name, balanceCents}) instead adds a pension holding those figures, in the same step, and needs a paystub that shows a pension contribution; setRetirementContribution makes the 401(k), 457 and 403(b) figures the monthly retirement contribution.',
   input: savePaystubSchema,
   scope: 'write',
   surface: 'app',
