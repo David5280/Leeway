@@ -221,6 +221,23 @@ describe('recurring charges', () => {
     expect((await call('find_recurring')).map((s) => s.key)).not.toContain(first!.key)
   })
 
+  it('stops suggesting a charge a bill tracks by words only its description holds', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    // The bank names the merchant "Netflix"; only its description says "NETFLIX.COM", the pattern.
+    for (const date of ['2026-08-20', '2026-09-20', '2026-10-20']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'NETFLIX.COM 8473',
+        merchantName: 'Netflix',
+        amountCents: 1549,
+      })
+    }
+    expect((await call('find_recurring')).map((s) => s.key)).toEqual(['netflix'])
+    const bill = await call('create_bill', netflix)
+    expect(bill.lastPaidDate).toBe('2026-10-20')
+    expect(await call('find_recurring')).toEqual([])
+  })
+
   it('stops suggesting a dismissed charge', async () => {
     await history()
     expect(await call('dismiss_recurring', { key: 'spotify p a' })).toEqual({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { merchantKey, textKey } from '../src/domain/merchantKey.js'
+import { bankTextKey, merchantKey, textKey } from '../src/domain/merchantKey.js'
+import { fitsCadence } from '../src/domain/cadenceBands.js'
 import { detectRecurring, type PastTransaction } from '../src/domain/recurring.js'
 
 /** No accounts with masks: names are only cleaned (see safeName.ts). */
@@ -36,6 +37,34 @@ describe('merchantKey', () => {
   it('reduces any text the same way, as a bill pattern is read', () => {
     expect(textKey('  Netflix.com #1192 ')).toBe('netflix com')
     expect(textKey('1234')).toBe('')
+  })
+})
+
+describe('bankTextKey', () => {
+  it('reads the merchant name and the description together, as a bill reading bank text does', () => {
+    expect(bankTextKey({ merchantName: 'Spotify', name: 'SPOTIFY USA P1A2' })).toBe(
+      'spotify spotify usa p a',
+    )
+    expect(bankTextKey({ merchantName: null, name: 'NETFLIX.COM 8473' })).toBe('netflix com')
+  })
+})
+
+describe('fitsCadence', () => {
+  it('takes the gaps detection allows for each cadence, slack included', () => {
+    expect(fitsCadence(31, 'month')).toBe(true)
+    expect(fitsCadence(27, 'month')).toBe(true)
+    expect(fitsCadence(33, 'month')).toBe(true)
+    expect(fitsCadence(26, 'month')).toBe(false)
+    expect(fitsCadence(34, 'month')).toBe(false)
+    expect(fitsCadence(7, 'week')).toBe(true)
+    expect(fitsCadence(14, 'week')).toBe(false)
+    expect(fitsCadence(14, 'biweek')).toBe(true)
+    expect(fitsCadence(91, 'quarter')).toBe(true)
+    expect(fitsCadence(365, 'year')).toBe(true)
+  })
+
+  it('fits nothing to a cadence detection never finds', () => {
+    expect(fitsCadence(15, 'semimonth')).toBe(false)
   })
 })
 

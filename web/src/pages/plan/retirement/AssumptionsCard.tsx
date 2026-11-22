@@ -1,7 +1,7 @@
-// The assumptions a projection rests on, each one the owner's to change:
-// their birth year (which only they can give), when they want to stop
-// working, returns, inflation, how fast savings are drawn, what they add each
-// month and the income they want. Saved to settings.
+// The assumptions a projection rests on, each one the owner's to change: when
+// they want to stop working, returns, inflation, how fast savings are drawn,
+// what they add each month and the income they want. Saved to settings. The
+// birth year is asked on its own (BirthYearCard) and changed in Settings.
 
 import { Card } from '../../../components/design/Card'
 import { useId, useState, type FormEvent } from 'react'
@@ -11,7 +11,6 @@ import { assumptionsText, readAssumptions, type Assumptions, type AssumptionsTex
 
 /** Each field: its label and a hint. */
 const FIELDS: { key: keyof AssumptionsText; label: string; hint: string }[] = [
-  { key: 'birthYear', label: 'Birth year', hint: 'Projections start from your age' },
   { key: 'retirementAge', label: 'Retire at', hint: 'The age you want to stop working' },
   {
     key: 'returnPercent',

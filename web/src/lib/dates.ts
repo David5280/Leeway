@@ -9,7 +9,9 @@ export {
   dateParts,
   daysBetween,
   fromDayNumber,
+  todayIn,
   toDayNumber,
+  type IsoDate,
 } from '../../../server/src/lib/dates'
 
 /** The date `days` calendar days before today, as the calendar shows it in `timeZone`. */
