@@ -1,10 +1,11 @@
 // The emergency fund goal's plan: one month of essential spending first, a
-// target close enough to feel within reach, then three months, then six (or
-// the owner's own target, when it is longer). Which accounts it counts: the
-// ones the owner marked, or every savings account. Pure.
+// target close enough to feel within reach, then three months, then six, each
+// stopping at the owner's own target. Which goal is the fund, and which
+// accounts it counts: the ones the owner marked, or every savings account,
+// never one another goal already follows. Pure.
 
 import type { AccountKind } from './accountKinds.js'
-import { isCounted } from './accountSharing.js'
+import { isCounted, isShared } from './accountSharing.js'
 
 /** The steps every emergency fund climbs, in months of essential spending. */
 const STARTER_STEPS = [1, 3, 6] as const
@@ -16,16 +17,16 @@ export const FIRST_STEP_MONTHS = STARTER_STEPS[0]
 export const EMERGENCY_GOAL_NAME = 'Emergency fund'
 
 /**
- * Every step in order. The owner's own target (savingsPlan.emergencyFundMonths)
- * joins as a last step when it reaches past six months.
+ * Every step in order, up to the owner's own target
+ * (savingsPlan.emergencyFundMonths), which is always the last: a target of
+ * four months climbs 1, 3, 4 and a target of twelve climbs 1, 3, 6, 12.
  */
 export function emergencySteps(ownerTargetMonths: number): number[] {
-  const steps: number[] = [...STARTER_STEPS]
-  if (ownerTargetMonths > steps.at(-1)!) steps.push(ownerTargetMonths)
-  return steps
+  const below = STARTER_STEPS.filter((step) => step < ownerTargetMonths)
+  return [...below, ownerTargetMonths]
 }
 
-/** The step after `months`, or null once the last step is the target. */
+/** The step after `months`, or null once the fund aims at the owner's target or past it. */
 export function nextStepMonths(months: number, ownerTargetMonths: number): number | null {
   return emergencySteps(ownerTargetMonths).find((step) => step > months) ?? null
 }
@@ -33,6 +34,44 @@ export function nextStepMonths(months: number, ownerTargetMonths: number): numbe
 /** A target in cents for some months of essential spending. */
 export const targetFor = (months: number, monthlyEssentialsCents: number) =>
   months * monthlyEssentialsCents
+
+/** How many months of essentials an amount is, to one decimal: "about 1.2 months". */
+export const monthsOf = (cents: number, monthlyEssentialsCents: number) =>
+  Math.round((cents / monthlyEssentialsCents) * 10) / 10
+
+/**
+ * Whether a goal's name says it is an emergency fund: "Emergency fund",
+ * "Emergency savings" or "Rainy day", in any case. A goal the owner made by
+ * hand with such a name is taken as the fund, so no second one is offered.
+ */
+export function namesEmergencyFund(name: string): boolean {
+  return /\b(emergency\s+(fund|savings)|rainy\s+day)\b/i.test(name)
+}
+
+/** What finding the fund reads of each goal. */
+interface FundCandidateGoal {
+  name: string
+  emergencyMonths: number | null
+}
+
+/**
+ * The emergency fund among the goals: the one marked as the fund, or else the
+ * first one named as an emergency fund, taken as it is. Null with neither.
+ */
+export function findFund<G extends FundCandidateGoal>(goals: G[]): G | null {
+  return (
+    goals.find((goal) => goal.emergencyMonths !== null) ??
+    goals.find((goal) => namesEmergencyFund(goal.name)) ??
+    null
+  )
+}
+
+/**
+ * Where the fund's progress comes from: every savings account, the accounts
+ * the owner marked, the one account its form links, or a count kept by hand
+ * (a goal made that way before it was taken as the fund).
+ */
+export type FundCounts = 'savings' | 'marked' | 'account' | 'hand'
 
 /** What choosing the accounts an emergency fund counts reads from each account. */
 export interface FundAccount {
@@ -59,21 +98,158 @@ export function fundCandidates<A extends FundAccount>(accounts: A[], currency: s
   )
 }
 
+/** The accounts the owner marked for the fund, and those other goals follow. */
+export interface FundLinks {
+  markedIds: string[]
+  /** Accounts other goals follow, which the fund leaves out so no money counts twice. */
+  otherGoalAccountIds: string[]
+}
+
 /**
- * The accounts the fund counts: those the owner marked that can still hold
- * it, or, with none marked (or none left), every savings account.
+ * The accounts the fund counts. With accounts marked, only those that can
+ * still hold it: a marked account that is hidden or followed by another goal
+ * is left out and shown as such, never swapped for every savings account
+ * behind the owner's back. With none marked, every savings account no other
+ * goal follows.
  */
 export function fundAccounts<A extends FundAccount>(
   accounts: A[],
-  pickedIds: string[],
+  { markedIds, otherGoalAccountIds }: FundLinks,
   currency: string,
-): { accounts: A[]; picked: boolean } {
-  const candidates = fundCandidates(accounts, currency)
-  const picked = candidates.filter((a) => pickedIds.includes(a.id))
-  if (picked.length > 0) return { accounts: picked, picked: true }
-  return { accounts: candidates.filter((a) => a.kind === 'savings'), picked: false }
+): { accounts: A[]; counts: 'marked' | 'savings' } {
+  const free = fundCandidates(accounts, currency).filter((a) => !otherGoalAccountIds.includes(a.id))
+  if (markedIds.length > 0) {
+    return { accounts: free.filter((a) => markedIds.includes(a.id)), counts: 'marked' }
+  }
+  return { accounts: free.filter((a) => a.kind === 'savings'), counts: 'savings' }
 }
 
-/** What the counted accounts hold together; an overdrawn one counts as nothing. */
-export const fundBalance = (accounts: FundAccount[]) =>
+/**
+ * What the counted accounts hold together. An overdrawn account counts as
+ * nothing rather than taking from the others, as a goal following one
+ * account does: the fund is money put by, and an overdraft is not negative
+ * savings. The financial profile counts the fund the same way.
+ */
+export const fundBalance = (accounts: Pick<FundAccount, 'balanceCents'>[]) =>
   accounts.reduce((sum, a) => sum + Math.max(0, a.balanceCents ?? 0), 0)
+
+/** Why an account the fund could hold is left out, or null when it can be counted. */
+export type LeftOut = 'hidden' | 'not_shared' | 'other_goal' | 'unavailable'
+
+/** One account on the fund's list, with whether it counts now and why not. */
+export interface FundChoice {
+  id: string
+  name: string
+  /** Null while the account has no balance yet. */
+  balanceCents: number | null
+  /** Whether the fund counts it now. */
+  counted: boolean
+  /** Whether the owner marked it (or linked it in the goal's form). */
+  marked: boolean
+  leftOut: LeftOut | null
+  /** For an account another goal follows, that goal's name. */
+  otherGoal: string | null
+}
+
+/** Why an account is left out of the fund, checked in the order the owner can act on. */
+function leftOutOf(
+  account: FundAccount,
+  currency: string,
+  otherGoal: string | null,
+): LeftOut | null {
+  if (account.hidden) return 'hidden'
+  if (!isShared(account)) return 'not_shared'
+  if (otherGoal !== null) return 'other_goal'
+  if (account.currency !== currency || account.balanceCents === null) return 'unavailable'
+  return null
+}
+
+/**
+ * Every checking and savings account the fund's list shows: the ones it can
+ * count, the ones other goals follow (so the owner sees why they are out),
+ * and any marked account that can't be counted now, like a hidden one.
+ */
+export function fundChoices<A extends FundAccount & { name: string }>(
+  accounts: A[],
+  links: { markedIds: string[]; countedIds: string[]; otherGoals: Map<string, string> },
+  currency: string,
+): FundChoice[] {
+  return accounts
+    .filter((a) => a.kind === 'savings' || a.kind === 'checking')
+    .map((a) => {
+      const otherGoal = links.otherGoals.get(a.id) ?? null
+      return {
+        id: a.id,
+        name: a.name,
+        balanceCents: a.balanceCents,
+        counted: links.countedIds.includes(a.id),
+        marked: links.markedIds.includes(a.id),
+        leftOut: leftOutOf(a, currency, otherGoal),
+        otherGoal,
+      }
+    })
+    .filter((choice) => {
+      // A hidden or unusable account is noise unless the owner marked it.
+      const shown = choice.leftOut === null || choice.leftOut === 'other_goal'
+      return shown || choice.marked
+    })
+}
+
+/** What finding the accounts other goals follow reads of each goal. */
+interface FollowingGoal {
+  id: string
+  name: string
+  accountId: string | null
+}
+
+/** The accounts goals other than the fund follow, each with the goal's name. */
+export function accountsOtherGoalsFollow(
+  goals: FollowingGoal[],
+  fundId: string | null,
+): Map<string, string> {
+  const followed = new Map<string, string>()
+  for (const goal of goals) {
+    if (goal.id !== fundId && goal.accountId !== null && !followed.has(goal.accountId)) {
+      followed.set(goal.accountId, goal.name)
+    }
+  }
+  return followed
+}
+
+/** What working out the fund's savings reads of each goal. */
+interface SavingGoal extends FundCandidateGoal, FollowingGoal {
+  currentCents: number
+}
+
+/**
+ * What the emergency fund holds now: its goal's progress, as the goals list
+ * counts it, or with no fund yet every savings account no goal follows. The
+ * fund's card and the financial profile both read the fund through this, so
+ * they never disagree.
+ */
+export function emergencySavedCents(
+  goals: SavingGoal[],
+  accounts: FundAccount[],
+  currency: string,
+): number {
+  const fund = findFund(goals)
+  if (fund !== null) return fund.currentCents
+  const otherGoalAccountIds = [...accountsOtherGoalsFollow(goals, null).keys()]
+  return fundBalance(
+    fundAccounts(accounts, { markedIds: [], otherGoalAccountIds }, currency).accounts,
+  )
+}
+
+/**
+ * What the emergency fund holds for the financial profile: as emergencySavedCents,
+ * or null with neither a fund nor a savings account, when there is no fund to speak of.
+ */
+export function fundSaved(
+  goals: SavingGoal[],
+  accounts: FundAccount[],
+  currency: string,
+  hasSavingsAccount: boolean,
+): number | null {
+  if (findFund(goals) === null && !hasSavingsAccount) return null
+  return emergencySavedCents(goals, accounts, currency)
+}

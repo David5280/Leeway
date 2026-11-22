@@ -2,7 +2,8 @@
 
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
-import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
+import { goalOf } from '../../../server/src/domain/goalProgress'
+import { goalInputSchema } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { retirementView } from '../../../server/src/domain/profile/views'
 import type { RetirementPatch } from '../../../server/src/domain/retirement/assumptions'

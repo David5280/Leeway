@@ -6,6 +6,7 @@ import type { Account, Goal, Input } from '../../../api/client'
 import { ColorPicker } from '../../../components/ColorPicker'
 import { ErrorNote, Setting, Switch } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
+import { followHint, fundTargetHint, type EmergencyView } from '../../../lib/emergencyText'
 import { parseMoney, periodWord } from '../../../lib/format'
 import { CATEGORY_COLORS } from '../../../lib/theme'
 
@@ -54,12 +55,15 @@ function ProgressFields({
   accounts,
   accountId,
   saved,
+  note,
   onAccount,
   onSaved,
 }: {
   accounts: Account[]
   accountId: string
   saved: string
+  /** A line under the choice, like the emergency fund losing the account picked. */
+  note: string | null
   onAccount: (id: string) => void
   onSaved: (text: string) => void
 }) {
@@ -81,6 +85,7 @@ function ProgressFields({
           ))}
         </select>
       </Setting>
+      {note && <p className="small muted">{note}</p>}
       {accountId === BY_HAND && (
         <Setting label="Saved so far">
           <input
@@ -98,10 +103,24 @@ function ProgressFields({
   )
 }
 
+/**
+ * The emergency fund's hints in a goal's form: how the fund's own target is
+ * sized, and, on another goal, that following an account the fund counts
+ * leaves it out of the fund.
+ */
+function fundHints(goal: Goal | undefined, emergency: EmergencyView | null, accountId: string) {
+  const isFund = goal !== undefined && emergency !== null && goal.id === emergency.goalId
+  return {
+    target: isFund ? fundTargetHint(emergency) : undefined,
+    follow: followHint(emergency, goal?.id ?? null, accountId),
+  }
+}
+
 export function GoalForm({
   goal,
   kind,
   accounts,
+  emergency = null,
   busy,
   error,
   onSubmit,
@@ -112,6 +131,8 @@ export function GoalForm({
   /** The kind of a new goal; an existing goal keeps its own. */
   kind: GoalKind
   accounts: Account[]
+  /** The emergency fund, for the hints on its own target and on the accounts it counts. */
+  emergency?: EmergencyView | null
   busy: boolean
   error: unknown
   onSubmit: (fields: GoalFields) => void
@@ -135,6 +156,7 @@ export function GoalForm({
   const savingsAccounts = accounts.filter((a) => a.type === 'depository' && !a.hidden)
   // The emergency fund counts the accounts picked on its own card.
   const followsSavings = goal?.emergencyMonths !== null && goal?.emergencyMonths !== undefined
+  const hints = fundHints(goal, emergency, accountId)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -164,7 +186,7 @@ export function GoalForm({
           onChange={(e) => setName(e.target.value)}
         />
       </label>
-      <Setting label={words.target}>
+      <Setting label={words.target} hint={hints.target}>
         <input
           className="input num"
           style={{ width: 130 }}
@@ -205,6 +227,7 @@ export function GoalForm({
           accounts={savingsAccounts}
           accountId={accountId}
           saved={saved}
+          note={hints.follow}
           onAccount={setAccountId}
           onSaved={setSaved}
         />

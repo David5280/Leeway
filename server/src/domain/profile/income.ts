@@ -6,7 +6,7 @@ import type { Db } from '../../db/pool.js'
 import { addMonths, dateParts, makeDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import type { CategoryTotal } from '../budget.js'
-import { categoryTotalsByRange, sumTotals, type DateRange } from '../budgetReport.js'
+import { categoryTotalsByRange, sumTotals, type DateRange } from '../categoryTotals.js'
 import { nextPayday, type PaydaySource } from '../cashFlow.js'
 import { listCategories, type Category } from '../categories.js'
 import { essentialIdsOf } from '../essentials.js'
@@ -61,9 +61,10 @@ export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null):
 
 /**
  * The essential categories the owner picked that still exist as spending
- * categories, or null for every spending category. Settings can hold ids of
+ * categories, or null when there is no pick to go by, so the essentials are
+ * found instead (essentialIdsOf in essentials.ts). Settings can hold ids of
  * categories since deleted or replaced, so only current ones count, and a
- * pick with none left counts all spending rather than none.
+ * pick with none left is no pick rather than no essentials.
  */
 export function currentEssentials(
   categories: Category[],

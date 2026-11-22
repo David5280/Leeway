@@ -12,7 +12,7 @@ import { useAction, useActionMutation } from '../../../api/hooks'
 import { LoadingOrError } from '../../../components/ui'
 import { FormCard } from '../FormCard'
 import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
-import type { EmergencyView } from './emergencyText'
+import type { EmergencyView } from '../../../lib/emergencyText'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
 
@@ -32,10 +32,12 @@ function titleOf({ goal, kind }: Editing): string {
 function GoalEditor({
   editing,
   accounts,
+  emergency,
   onClose,
 }: {
   editing: Editing
   accounts: Account[]
+  emergency: EmergencyView | null
   onClose: () => void
 }) {
   const { goal, kind } = editing
@@ -51,6 +53,7 @@ function GoalEditor({
         goal={goal ?? undefined}
         kind={kind}
         accounts={accounts}
+        emergency={emergency}
         busy={create.isPending || update.isPending || remove.isPending}
         error={create.error ?? update.error ?? remove.error}
         onSubmit={save}
@@ -76,7 +79,8 @@ function GoalCards({
   return (
     <div className="grid">
       {goals.map((goal) =>
-        goal.emergencyMonths !== null && emergency ? (
+        // The fund's goal, marked or only named as one, draws the fund's card.
+        emergency && goal.id === emergency.goalId ? (
           <EmergencyCard key={goal.id} goal={goal} view={emergency} onEdit={() => onEdit(goal)} />
         ) : (
           <GoalCard key={goal.id} goal={goal} today={today} onEdit={() => onEdit(goal)} />
@@ -133,6 +137,7 @@ export function GoalsSection() {
           key={editing.goal?.id ?? `new-${editing.kind}`}
           editing={editing}
           accounts={accounts.data}
+          emergency={emergency.data}
           onClose={close}
         />
       )}

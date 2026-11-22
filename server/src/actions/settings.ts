@@ -13,7 +13,7 @@ export const getSettingsAction = defineAction({
   name: 'get_settings',
   title: 'Get settings',
   description:
-    'Read all preferences: budget period (monthly, weekly or per paycheck), time zone, currency, warning threshold, appearance, dashboard layout and the savings plan (emergency fund target in months, and which spending categories count as essential: null finds them from each category, counting housing, utilities, groceries, transport, health, insurance and loan payments).',
+    'Read all preferences: budget period (monthly, weekly or per paycheck), time zone, currency, warning threshold, appearance, dashboard layout and the savings plan (emergency fund target in months, and which spending categories count as essential: null finds them from the bank codes or name of each category, counting housing, utilities, groceries, transport, health, insurance, child care and fixed loan payments, never credit card payments).',
   input: z.object({}),
   scope: 'read',
   surface: 'all',
