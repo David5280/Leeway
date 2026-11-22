@@ -30,22 +30,17 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetData(ctx.db)
   ctx.setNow(new Date('2026-11-17T18:00:00Z'))
-  ;({ accountId } = await insertBankAccount(ctx.db, { name: 'Chase Total Checking' }))
+  ;({ accountId } = await insertBankAccount(ctx.db, { name: 'Chase Total Checking', mask: '4417' }))
 })
 
 /** Adds a transaction this month, with an optional note from the owner. */
 async function pay(
   name: string,
   amountCents: number,
-  fields: { merchantName?: string; detailed?: string; note?: string } = {},
+  fields: { merchantName?: string; detailed?: string; note?: string; date?: string } = {},
 ): Promise<string> {
-  const { note, ...bank } = fields
-  const id = await insertBankTransaction(ctx.db, accountId, {
-    date: '2026-11-15',
-    name,
-    amountCents,
-    ...bank,
-  })
+  const { note, date = '2026-11-15', ...bank } = fields
+  const id = await insertBankTransaction(ctx.db, accountId, { date, name, amountCents, ...bank })
   if (note) await ctx.db.query('UPDATE transactions SET note = $1 WHERE id = $2', [note, id])
   return id
 }
@@ -351,5 +346,99 @@ describe("a person's name alone in a note", () => {
     expect(await notesOf()).toEqual(['Cake from Marigold for someone'])
     expect(transactions).toContain('Marigold Bakery')
     expect(transactions).toContain('Quorn Florist')
+  })
+})
+
+describe('a bank transfer to a person, with no app named', () => {
+  const transfer = { detailed: ACCOUNT_TRANSFER }
+
+  it('shows no person and drops its note, through any wording or a short Zelle', async () => {
+    await pay(
+      'ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX9081 REF #IBEXYZ ON 11/15/26',
+      60_000,
+      {
+        ...transfer,
+        note: 'Clara rent share',
+      },
+    )
+    await pay('Online Transfer to Clara Thornbury', 5_000, transfer)
+    await pay('SENT MONEY TO PELLWORTH ODA', 2_000, transfer)
+    await pay('ZEL TO MIRABEL QUINT', 3_000, transfer)
+    await pay('KING SOOPERS', 900, {
+      merchantName: 'King Soopers',
+      detailed: GROCERIES,
+      note: 'With CLARA THORNBURY, Thornbury and Mirabel Quint',
+    })
+
+    const transactions = await transactionsOf()
+    expect(JSON.stringify(transactions)).not.toMatch(
+      /thornbury|clara|pellworth|oda\b|mirabel|quint/i,
+    )
+    expect(transactions.filter((tx) => tx.displayName === 'To someone')).toHaveLength(4)
+    expect(await notesOf()).toEqual(['With someone, someone and someone'])
+  })
+
+  it("leaves a transfer to the owner's own account as it was", async () => {
+    await pay('ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX4417', 60_000, {
+      ...transfer,
+      note: 'moving savings',
+    })
+    await pay('Online Transfer to Wells Fargo Way2Save Savings', 10_000, transfer)
+
+    expect(await paymentPeople(ctx.db)).toBe(NO_PEOPLE)
+    const transactions = await transactionsOf()
+    expect(transactions.some((tx) => tx.displayName === 'To someone')).toBe(false)
+    expect(await notesOf()).toEqual(['moving savings'])
+  })
+})
+
+describe('a person named in one word, paid every month', () => {
+  it('reaches no repeating series or merchant total, through Zelle or PayPal', async () => {
+    for (const month of ['08', '09', '10', '11']) {
+      const date = `2026-${month}-05`
+      await pay('Zelle payment to CLARA JPM99A1B2C3', 20_000, { date })
+      await pay('PAYPAL INST XFER', 3_000, {
+        date,
+        merchantName: 'Clara',
+        detailed: ACCOUNT_TRANSFER,
+      })
+    }
+
+    const recurring = JSON.parse(await sent('find_recurring')) as Record<string, unknown>[]
+    expect(recurring).toHaveLength(2)
+    for (const series of recurring) {
+      expect(series).toMatchObject({ name: 'Payment app', key: 'Payment app', betweenPeople: true })
+    }
+    const totals = JSON.parse(await sent('top_merchants')) as Record<string, unknown>[]
+    expect(totals.map((total) => total.merchant)).toEqual(['Payment app', 'Payment app'])
+    expect(JSON.stringify([recurring, totals])).not.toMatch(/clara/i)
+  })
+})
+
+describe('a payment app paying a shop, a card or the owner', () => {
+  it('keeps its name and note, and hides nothing elsewhere', async () => {
+    await pay('PAYPAL *FROM YOU FLOWERS', 6_500, {
+      detailed: 'GENERAL_MERCHANDISE_FLORISTS',
+      note: 'For June',
+    })
+    await pay('Online Payment to PayPal Credit', 9_000, { detailed: 'LOAN_PAYMENTS_OTHER_PAYMENT' })
+    await pay('Online Payment to Venmo Credit Card', 12_000, {
+      detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    })
+    await pay('VENMO CASHOUT PPD ID: 5264681992', -4_000, {
+      detailed: 'TRANSFER_IN_ACCOUNT_TRANSFER',
+    })
+    await pay('Transfer from Venmo', -4_000, {
+      detailed: 'TRANSFER_IN_ACCOUNT_TRANSFER',
+      note: 'cashout',
+    })
+    await pay('VENMO ADD FUNDS', 5_000, { detailed: ACCOUNT_TRANSFER })
+    await pay('APPLE CASH BALANCE ADD', 2_000, { detailed: ACCOUNT_TRANSFER })
+
+    expect(await paymentPeople(ctx.db)).toBe(NO_PEOPLE)
+    const transactions = await transactionsOf()
+    expect(transactions.some((tx) => /someone/.test(tx.displayName))).toBe(false)
+    expect(JSON.stringify(transactions)).toMatch(/venmo credit card/i)
+    expect((await notesOf()).sort()).toEqual(['For June', 'cashout'])
   })
 })

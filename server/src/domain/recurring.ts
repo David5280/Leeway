@@ -11,12 +11,14 @@ import { notFound } from '../errors.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { accountMasks } from './accounts.js'
+import { betweenPeople, type PeopleContext } from './betweenPeople.js'
 import { listBills, type Bill } from './bills.js'
 import { countedSql } from './counted.js'
 import { merchantKey, textKey } from './merchantKey.js'
+import { loadPeopleContext } from './peopleContext.js'
 import { shownNameOf } from './ruleText.js'
 import type { AccountMasks } from './safeName.js'
-import { merchantDisplayName } from './transactionName.js'
+import { merchantDisplayName, transactionDisplayName } from './transactionName.js'
 import type { Movement } from './transfers.js'
 
 /** One past transaction, as detection needs it. Amounts are positive for money out. */
@@ -54,6 +56,8 @@ export interface RecurringSeries {
   accountId: string | null
   /** A fixed monthly or yearly charge reads as a subscription; anything else as a bill. */
   suggestedKind: 'bill' | 'subscription'
+  /** Set on payments to or from a person (betweenPeople.ts), named as the activity list names them. */
+  betweenPeople?: true
 }
 
 /**
@@ -244,16 +248,34 @@ function tracks(bill: Bill, { series, shownKey }: Untracked): boolean {
   return (bill.reads === 'shown_name' ? shownKey : series.key).includes(pattern)
 }
 
+/**
+ * A series as suggested, keyed by its shown name. Payments to or from a
+ * person are named as the activity list names them ("To Jane Doe") and
+ * flagged, as merchant totals are; the key stays, so bills keep matching.
+ */
+function suggested(
+  { series, last }: Found<StoredTransaction>,
+  masks: AccountMasks,
+  people: PeopleContext,
+): Untracked {
+  const shownKey = textKey(shownNameOf(last, masks))
+  const person = betweenPeople(last, people)
+  if (!person) return { series, shownKey }
+  const name = transactionDisplayName({ ...last, person }, null, { masks })
+  return { series: { ...series, name, betweenPeople: true }, shownKey }
+}
+
 /** Series still repeating that are neither dismissed nor tracked by a bill yet. */
 export async function untracked(db: Db, today: IsoDate): Promise<Untracked[]> {
-  const [history, dismissed, bills, masks] = await Promise.all([
+  const [history, dismissed, bills, masks, people] = await Promise.all([
     recentHistory(db, today),
     dismissedKeys(db),
     listBills(db, today),
     accountMasks(db),
+    loadPeopleContext(db),
   ])
   return findSeries(history, today, masks)
-    .map(({ series, last }) => ({ series, shownKey: textKey(shownNameOf(last, masks)) }))
+    .map((found) => suggested(found, masks, people))
     .filter((found) => !dismissed.has(found.series.key) && !bills.some((b) => tracks(b, found)))
 }
 

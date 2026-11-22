@@ -330,6 +330,51 @@ describe('a person in what a tool returns', () => {
     })
   })
 
+  it('keeps every value when names in keys would land on the same key', () => {
+    const result = { 'Jane Doe': 1, 'JANE DOE': 2, someone: 3 }
+    expect(JSON.parse(chatToolText(result, people(['Jane Doe'])))).toEqual({
+      someone: 1,
+      'someone 2': 2,
+      'someone 3': 3,
+    })
+  })
+
+  it('finds a name through invisible characters, soft hyphens and fullwidth letters', () => {
+    const result = {
+      a: 'Jane\u200BDoe',
+      b: 'Ja\u00ADne Doe',
+      c: '\uFF2A\uFF41\uFF4E\uFF45 Doe',
+      d: 'Janet',
+    }
+    expect(JSON.parse(chatToolText(result, people(['Jane Doe'])))).toEqual({
+      a: 'someone',
+      b: 'someone',
+      c: 'someone',
+      d: 'Janet',
+    })
+  })
+
+  it('shows a repeating series between people as a payment app, by name and key', () => {
+    const result = [
+      { key: 'zelle payment to clara', name: 'To Clara', betweenPeople: true },
+      { key: 'netflix', name: 'Netflix' },
+    ]
+    expect(JSON.parse(chatToolText(result, NO_PEOPLE))).toEqual([
+      { key: PAYMENT_APP, name: PAYMENT_APP, betweenPeople: true },
+      { key: 'netflix', name: 'Netflix' },
+    ])
+  })
+
+  it("keeps a transfer paired between the owner's own accounts as it is", () => {
+    const row = {
+      id: 't',
+      displayName: 'Checking to Savings',
+      amountCents: 500,
+      transfer: { id: 'u' },
+    }
+    expect(JSON.parse(chatToolText([row], people([], [], ['t'])))).toEqual([row])
+  })
+
   it('shows a merchant total of payments between people as a payment app', () => {
     const result = [
       { merchant: 'To Bill', spentCents: 900, count: 1, betweenPeople: true },

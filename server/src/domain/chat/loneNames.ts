@@ -7,12 +7,12 @@
 // and never when they are a common word or how a known shop is called.
 
 import { isCommonWord } from './commonWords.js'
-import { startsAShop, type KnownShops } from './knownShops.js'
-import { isMovementWord } from './movementWords.js'
+import { startsAShop, type KnownShops } from '../knownShops.js'
+import { isMovementWord } from '../movementWords.js'
 
 // One word of a name that reads as a given name, middle name or surname:
-// letters, with an inner hyphen or apostrophe allowed ("Mary-Kate", "O'Neil").
-const NAME_PART = /^\p{L}[\p{L}'-]*\p{L}$/u
+// letters, with an inner hyphen or apostrophe allowed ("Mary-Kate", "O'Neil", "O’Neil").
+const NAME_PART = /^\p{L}[\p{L}'\u2019-]*\p{L}$/u
 
 /** Whether a word of a name can be hidden alone without hiding a common word or a shop. */
 function hideableAlone(part: string, shops: KnownShops): boolean {

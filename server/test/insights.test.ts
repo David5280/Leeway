@@ -273,3 +273,42 @@ describe('insights with little or no history', () => {
     expect(pace).toMatchObject({ start: '2026-12-01', cumulative: [], projectedCents: 0 })
   })
 })
+
+describe('payments between people', () => {
+  const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
+
+  /** Adds a transaction with Plaid's merchant and code, as a sync would. */
+  async function bank(date: string, name: string, amountCents: number, more = {}) {
+    await insertBankTransaction(ctx.db, accountId, { date, name, amountCents, ...more })
+  }
+
+  it('are totalled apart from a shop of the same name, flagged and named as people', async () => {
+    await bank('2026-11-03', 'Zelle payment to ROSALIND FAIRWEATHER', 2_500)
+    await bank('2026-11-04', 'SQ *ROSALIND FAIRWEATHER', 4_000, {
+      merchantName: 'Rosalind Fairweather',
+      detailed: 'FOOD_AND_DRINK_BAKERIES',
+    })
+    await bank('2026-11-05', 'PAYPAL INST XFER', 3_000, {
+      merchantName: 'Clara',
+      detailed: ACCOUNT_TRANSFER,
+    })
+    await recategorize()
+    expect(await call('top_merchants')).toEqual([
+      { merchant: 'Rosalind Fairweather', spentCents: 4_000, count: 1 },
+      { merchant: 'Clara', spentCents: 3_000, count: 1, betweenPeople: true },
+      { merchant: 'To Rosalind Fairweather', spentCents: 2_500, count: 1, betweenPeople: true },
+    ])
+  })
+
+  it('repeat as a series flagged and named as people, beside a shop that is not', async () => {
+    for (const month of ['08', '09', '10', '11']) {
+      await bank(`2026-${month}-05`, 'Zelle payment to CLARA JPM99A1B2C3', 20_000)
+      await bank(`2026-${month}-06`, 'NETFLIX.COM', 1_599, { merchantName: 'Netflix' })
+    }
+    const found = (await call('find_recurring')) as { name: string; betweenPeople?: true }[]
+    expect(found.map(({ name, betweenPeople }) => ({ name, betweenPeople }))).toEqual([
+      { name: 'To Clara', betweenPeople: true },
+      { name: 'Netflix', betweenPeople: undefined },
+    ])
+  })
+})

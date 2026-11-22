@@ -1,18 +1,15 @@
 // The pure rules behind who Chat keeps out of what it sends a model: which
-// transactions are one person paying another, which shops the owner buys
-// from, which names are read from a payment, and where each is hidden.
+// shops the owner buys from, which names are read from a payment between
+// people (betweenPeople.test.ts finds them), and where each is hidden.
 // Every name is made up.
 
 import { describe, expect, it } from 'vitest'
 import { isCommonWord } from '../src/domain/chat/commonWords.js'
-import { isKnownShop, knownShops, NO_SHOPS, startsAShop } from '../src/domain/chat/knownShops.js'
+import { isKnownShop, knownShops, NO_SHOPS, startsAShop } from '../src/domain/knownShops.js'
 import { loneNamesOf } from '../src/domain/chat/loneNames.js'
-import { namesSomeone } from '../src/domain/chat/movementWords.js'
-import { isPersonPayment, lineName, namesIn, namesToHide } from '../src/domain/chat/personNames.js'
-import { personPayment, type Movement } from '../src/domain/transfers.js'
-
-const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
-const FROM_APPS = 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS'
+import { namesSomeone } from '../src/domain/movementWords.js'
+import { namesIn, namesToHide } from '../src/domain/chat/personNames.js'
+import type { Movement, PersonPayment } from '../src/domain/transfers.js'
 
 /** A transaction as the rules read it: money out, with only what a case sets. */
 const movement = (fields: Partial<Movement>): Movement => ({
@@ -24,90 +21,28 @@ const movement = (fields: Partial<Movement>): Movement => ({
   ...fields,
 })
 
-describe('one person paying another', () => {
-  const shops = knownShops(['eBay', 'Spotify'])
-  const paypal = (fields: Partial<Movement>) =>
-    isPersonPayment(movement({ name: 'PAYPAL INST XFER', ...fields }), shops)
-
-  it('through PayPal by bare transfer, is a person unless the merchant is a known shop', () => {
-    expect(paypal({ merchantName: 'EBAY', providerCategoryDetailed: ACCOUNT_TRANSFER })).toBe(false)
-    expect(paypal({ merchantName: 'Spotify', providerCategoryPrimary: 'TRANSFER_OUT' })).toBe(false)
-    const person = { merchantName: 'Quillon Marsh', providerCategoryDetailed: ACCOUNT_TRANSFER }
-    expect(paypal(person)).toBe(true)
-    // With no merchant there is no name to hide, so nothing makes it a person's.
-    expect(paypal({ providerCategoryDetailed: ACCOUNT_TRANSFER })).toBe(false)
-    expect(paypal({ merchantName: 'Quillon Marsh' })).toBe(false)
-  })
-
-  it('through PayPal, is a person when the line names one or Plaid files it as from an app', () => {
-    expect(paypal({ merchantName: 'eBay', providerCategoryDetailed: FROM_APPS })).toBe(true)
-    const named = {
-      name: 'PAYPAL TRANSFER TO QUILLON MARSH',
-      providerCategoryDetailed: ACCOUNT_TRANSFER,
-    }
-    expect(paypal(named)).toBe(true)
-  })
-
-  it('through Venmo, Cash App or Zelle, takes any transfer code', () => {
-    for (const name of ['VENMO PAYMENT', 'CASH APP*PAYMENT', 'ZELLE PAYMENT']) {
-      const tx = movement({ name, merchantName: 'eBay' })
-      expect(isPersonPayment({ ...tx, providerCategoryDetailed: ACCOUNT_TRANSFER }, shops)).toBe(
-        true,
-      )
-      const service = { ...tx, providerCategoryDetailed: 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES' }
-      expect(isPersonPayment(service, shops)).toBe(false)
-    }
-  })
-
-  it('is never a shop paid through an app, or money that went through none', () => {
-    const spotify = movement({ name: 'PAYPAL *SPOTIFY', merchantName: 'Spotify' })
-    expect(isPersonPayment(spotify, NO_SHOPS)).toBe(false)
-    const payroll = movement({
-      name: 'ACME CORP PAYROLL',
-      amountCents: -250_000,
-      providerCategoryDetailed: 'TRANSFER_IN_DEPOSIT',
-    })
-    expect(isPersonPayment(payroll, NO_SHOPS)).toBe(false)
-  })
-})
-
-describe("a person's name as the bank wrote it", () => {
-  const counterparty = (name: string) => personPayment(movement({ name }))?.counterparty
-
-  it('ends before the memo the sender wrote, quoted or not', () => {
-    expect(counterparty('Zelle payment to JANE DOE for rent')).toBe('Jane Doe')
-    expect(counterparty('Zelle payment to Jane Doe "dinner"')).toBe('Jane Doe')
-    expect(counterparty('Zelle payment to Jane Doe “dinner”')).toBe('Jane Doe')
-    expect(counterparty('Zelle payment to JANE DOE; dinner')).toBe('Jane Doe')
-    expect(counterparty('Zelle payment to JANE DOE #A1B2C3')).toBe('Jane Doe')
-    expect(counterparty('Zelle payment to JANE DOE Conf# T0ABCD')).toBe('Jane Doe')
-    // "For" inside a name is left alone.
-    expect(counterparty('Zelle payment to JANE FORD')).toBe('Jane Ford')
-  })
-
-  it('is what is left of a line with no "to" or "from", without the app, words or codes', () => {
-    expect(lineName('Zelle Transfer Conf# T0ABCD123; Jane Doe')).toBe('Jane Doe')
-    expect(lineName('CASH APP*TOBIAS FENNWICK')).toBe('TOBIAS FENNWICK')
-    expect(lineName("VENMO 1234567 MEMO D'ARCY")).toBe("D'ARCY")
-    expect(lineName('PAYPAL INST XFER 99')).toBe('')
-    expect(lineName('*** / ***')).toBe('')
-  })
-})
-
 describe('the names read from a payment between people', () => {
-  const shops = knownShops(['eBay'])
+  const context = {
+    shops: knownShops(['eBay']),
+    accounts: { words: new Set<string>(), masks: new Set<string>() },
+  }
+  const person = (counterparty: string | null): PersonPayment => ({
+    app: 'Zelle',
+    direction: 'out',
+    counterparty,
+  })
 
   it('are the name after "to" or "from" and the merchant, unless the merchant is a shop', () => {
     const tx = movement({ name: 'Zelle payment to JANE DOE 4417', merchantName: 'JANE Q DOE' })
-    expect(namesIn(tx, shops)).toEqual(['Jane Doe', 'Jane Q Doe'])
+    expect(namesIn(tx, person('Jane Doe'), context)).toEqual(['Jane Doe', 'Jane Q Doe'])
     const shop = movement({ name: 'PAYPAL INST XFER', merchantName: 'EBAY' })
-    expect(namesIn(shop, shops)).toEqual([])
+    expect(namesIn(shop, person(null), context)).toEqual([])
   })
 
   it("are what is left of the bank's line when it names no one otherwise", () => {
     const tx = movement({ name: 'Zelle Transfer Conf# T0ABCD123; Jane Doe', merchantName: 'Zelle' })
-    expect(namesIn(tx, shops)).toEqual(['Jane Doe'])
-    expect(namesIn(movement({ name: 'VENMO 1234567' }), shops)).toEqual([])
+    expect(namesIn(tx, person(null), context)).toEqual(['Jane Doe'])
+    expect(namesIn(movement({ name: 'VENMO 1234567' }), person(null), context)).toEqual([])
   })
 })
 
@@ -133,6 +68,7 @@ describe('the words of a name hidden alone', () => {
     expect(
       loneNamesOf(['Jane Q Doe', 'José María Núñez', 'Quillon', 'Jane Roe'], NO_SHOPS),
     ).toEqual(['Jane', 'Doe', 'José', 'María', 'Núñez', 'Quillon', 'Roe'])
+    expect(loneNamesOf(['D’Arcy Vane'], NO_SHOPS)).toEqual(['D’Arcy', 'Vane'])
   })
 
   it('leave out common words, months, banks, contacts, money words and odd parts', () => {
@@ -158,6 +94,12 @@ describe('where each name is hidden', () => {
       names: ['Jane Doe'],
       loneNames: ['Jane', 'Doe', 'Quillon'],
     })
+  })
+
+  it("leaves out a business's name, which is no person", () => {
+    for (const business of ['Acme Plumbing LLC', 'Quorn & Sons Inc.', 'Vale Co']) {
+      expect(namesToHide([business, 'Jane Doe'], NO_SHOPS).names).toEqual(['Jane Doe'])
+    }
   })
 
   it('reads a name as someone only when it has a word beyond how money moved', () => {

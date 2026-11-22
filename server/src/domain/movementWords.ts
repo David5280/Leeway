@@ -1,5 +1,6 @@
 // Words that say how money moved, never who it moved to, and whether a name
-// has anything more. Pure.
+// has anything more (betweenPeople.ts, chat/). Bank codes like BofA's "DES",
+// "INDN" and "CO ID" count among them. Pure.
 
 /**
  * Words that say how money moved, never who it moved to. A name made only
@@ -7,9 +8,10 @@
  */
 const MOVEMENT_WORDS = new Set(
   (
-    'a ach add apple app bank cash cashout conf credit debit deposit from fund funds id inst ' +
-    'instant memo mobile money online p2p payment payments paypal quickpay received recurring ref request sent ' +
-    'standard the to transaction transfer transfers venmo web with withdrawal xfer zelle'
+    'a ach add apple app bank cash cashout ccd co conf credit debit dep deposit des from fund ' +
+    'funds id indn inst instant memo mobile money online out p2p payment payments paypal ppd ' +
+    'quickpay received recurring ref request sent standard the to transaction transfer ' +
+    'transfers venmo web with withdrawal xfer zel zelle'
   ).split(' '),
 )
 

@@ -85,7 +85,7 @@ const CARD_DIGITS = /(?:ending in\s+|(?<![a-z])x+|\*+|\.{3})(\d{4})\b/i
  */
 export function paysTrackedCard(tx: Movement, accounts: OwnAccounts): boolean {
   if (accounts.cardMasks.length === 0) return false
-  const digits = CARD_DIGITS.exec(tx.name)?.[1]
+  const digits = accountDigitsIn(tx.name)
   if (!digits) return true
   return accounts.cardMasks.some((mask) => mask === null || mask === digits)
 }
@@ -149,19 +149,6 @@ function tidyName(name: string): string {
 }
 
 /**
- * Whether a transaction is one person paying another, as far as the
- * transaction alone can tell: through a payment app, naming the person or
- * filed by Plaid as an app payment. Through any app but PayPal, a transfer
- * code also does; PayPal pays shops by transfer too ("PAYPAL INST XFER" to eBay).
- */
-export function isPaymentBetweenPeople(tx: Movement): boolean {
-  const person = personPayment(tx)
-  if (!person) return false
-  if (person.counterparty !== null || isAppTransfer(tx)) return true
-  return person.app !== 'PayPal' && codeOf(tx).startsWith('TRANSFER')
-}
-
-/**
  * Reads a payment between people. The direction always comes from the amount,
  * never from "to" or "from" in the description, so a bank's wording can never
  * turn money received into money sent.
@@ -169,11 +156,21 @@ export function isPaymentBetweenPeople(tx: Movement): boolean {
 export function personPayment(tx: Movement): PersonPayment | null {
   const app = personToPersonApp(tx)
   if (!app || tx.amountCents === 0) return null
-  const named = NAMED_PAYMENT.exec(tx.name)?.[1]?.split(NAME_END)[0]
-  const counterparty = named ? withoutReference(named) : ''
   return {
     app,
     direction: tx.amountCents < 0 ? 'in' : 'out',
-    counterparty: counterparty ? tidyName(counterparty) : null,
+    counterparty: nameAfterToOrFrom(tx.name),
   }
+}
+
+/** The name a bank wrote after "to" or "from", without what it added after it, if any. */
+export function nameAfterToOrFrom(line: string): string | null {
+  const named = NAMED_PAYMENT.exec(line)?.[1]?.split(NAME_END)[0]
+  const name = named ? withoutReference(named) : ''
+  return name ? tidyName(name) : null
+}
+
+/** The last four digits of an account a bank's line names ("XXXXXX4417", "ending in 4417"), if any. */
+export function accountDigitsIn(line: string): string | null {
+  return CARD_DIGITS.exec(line)?.[1] ?? null
 }

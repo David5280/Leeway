@@ -1,5 +1,5 @@
-// The shops the owner really buys from, as Chat's privacy rules ask about
-// them (chat/people.ts finds them). Pure.
+// The shops the owner really buys from, as the rules that keep people apart
+// ask about them (peopleContext.ts finds them). Pure.
 
 /** The owner's shops, by whole name and by first word, in lower case. */
 export interface KnownShops {
