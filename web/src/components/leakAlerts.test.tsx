@@ -45,6 +45,7 @@ const rise: AccountAlert = priceRiseAlert(
   {
     charge: charge('33333333-3333-4333-8333-333333333333', '2026-11-12', 1199),
     previousCents: 1099,
+    previousId: '30000000-3000-4000-8000-300000000000',
   },
   { accountName: 'Everyday', merchant: 'Spotify' },
   format,
@@ -55,6 +56,7 @@ const unnamed: AccountAlert = priceRiseAlert(
   {
     charge: charge('44444444-4444-4444-8444-444444444444', '2026-11-01', 165000),
     previousCents: 150000,
+    previousId: '40000000-4000-4000-8000-400000000000',
   },
   { accountName: 'Everyday', merchant: null },
   format,

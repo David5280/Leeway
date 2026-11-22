@@ -54,12 +54,13 @@ const ALERT_WORDS: Record<
 
 /**
  * What a price rise is about: the account, the day of the first charge at the
- * new price, and the move from the old price to the new one. That day stays
- * the same while the rise is news (priceRises.ts), so the same rise is never
- * pushed or brought back twice. Not the charge's id, which can change when
- * another charge posts the same day, and never a name: subjects are stored
- * and reach the inbox, and a name, even a hashed one, could be a person's or
- * hold bank text with an account number.
+ * new price, the charge a cycle before it (so two like rises on one account
+ * and day stay apart), and the move from the old price to the new one. That
+ * day stays the same while the rise is news (priceRises.ts), so the same rise
+ * is never pushed or brought back twice. Not the latest charge's id, which
+ * can change when another charge posts the same day, and never a name:
+ * subjects are stored and reach the inbox, and a name, even a hashed one,
+ * could be a person's or hold bank text with an account number.
  */
 function priceRiseSubject({
   accountId,
@@ -67,7 +68,7 @@ function priceRiseSubject({
   date,
   charge,
 }: Pick<AccountAlert, 'accountId' | 'amountCents' | 'date' | 'charge'>): string {
-  return `rise:${accountId}:${date}:${charge?.previousCents}:${amountCents}`
+  return `rise:${accountId}:${date}:${charge?.previousId}:${charge?.previousCents}:${amountCents}`
 }
 
 /**

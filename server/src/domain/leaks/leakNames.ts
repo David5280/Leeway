@@ -1,78 +1,72 @@
 // Which name a leak alert may show. An alert reaches the AI summary writer,
-// the weekly email, the inbox and assistants, so a name is hidden by default
-// and shown only when the charge is clearly a merchant's: the bank named the
-// merchant, or coded it as a purchase other than rent, it did not go through
-// a payment app, and the name does not read as a person's. Otherwise the
-// alert is worded with no name ("A repeating payment went up"), and the owner
-// still finds the charges by tapping through to their own activity. Pure.
+// the weekly email, the inbox and assistants, so it names the merchant only
+// when the name cannot be a person's. Every line here is one a merchant
+// charged already (merchantCharges.ts), so a name is shown unless:
+// - the bank coded it as rent, so often paid to a person or a landlord;
+// - it went through a payment app and the bank named no merchant, since the
+//   app's own text names whoever was paid ("PAYPAL *JANEDOE");
+// - the name reads as a person's (personNames.ts). A merchant the bank named
+//   and coded as a kind of business people rarely are (a restaurant, a store,
+//   an airline, an insurer, a gym) is taken at the bank's word, so "Taco
+//   Bell" and "State Farm" still show.
+// Otherwise the alert names no one ("A repeating payment went up"), and the
+// owner still finds the charges by tapping through to their own activity.
+// Pure.
 
 import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
 import { personToPersonApp } from '../transfers.js'
-import { isCodedPurchase, type CodedLine } from './merchantCharges.js'
+import type { CodedLine } from './merchantCharges.js'
+import { judgedText, looksLikePerson, plainText } from './personNames.js'
 
 /** Plaid's code for rent, usually paid to a person or a small landlord. */
 const RENT_CODE = 'RENT_AND_UTILITIES_RENT'
 
 /**
- * Words that mark a business, so a name holding one is never read as a
- * person's: "Planet Fitness", "Corner Cafe", "Acme Insurance Co".
+ * Plaid's codes, primary or detailed, for kinds of business people rarely
+ * are: food and drink, goods, entertainment, getting around, travel, bills
+ * other than rent, insurance and gyms. Hair and beauty, other personal care,
+ * other services, childcare and medical are often one person, and stay out.
  */
-const BUSINESS_WORDS = new Set(
-  [
-    'inc llc ltd lp llp co corp corporation company group holdings',
-    'the and of at on for',
-    'store stores shop shops market mart supermarket grocery foods food',
-    'fitness gym club yoga pilates studio salon spa barber',
-    'cafe coffee bar grill kitchen restaurant pizza bakery diner deli',
-    'clinic dental medical health pharmacy care vet hospital',
-    'insurance auto car cars motors wash parking rental rentals',
-    'energy electric power gas water utilities utility',
-    'bank financial services service center centre',
-    'wireless mobile internet cable tv music media radio news',
-    'plus prime premium pro one cloud online app apps games labs',
-    'systems solutions software tech home garden books hotel travel',
-    'air airlines delivery express supply depot hardware subscription',
-  ].flatMap((line) => line.split(' ')),
-)
+const RARELY_PEOPLE = [
+  'FOOD_AND_DRINK',
+  'GENERAL_MERCHANDISE',
+  'ENTERTAINMENT',
+  'TRANSPORTATION',
+  'TRAVEL',
+  'RENT_AND_UTILITIES',
+  'GENERAL_SERVICES_INSURANCE',
+  'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS',
+]
 
-/** A word a person's name is made of: letters, maybe with an apostrophe, hyphen or period. */
-const NAME_WORD = /^\p{L}[\p{L}'.-]*$/u
-
-/**
- * Whether a name reads as a person's: two to four plain words, none of them a
- * business word, like "Jane Doe" or "Mary Ann O'Neil". Two-word brands with
- * no business word ("Hello Fresh") read so too, and are worded with no name:
- * hiding a merchant's name costs a word, showing a person's costs their privacy.
- */
-export function looksLikePerson(name: string): boolean {
-  const words = name.trim().split(/\s+/)
-  if (words.length < 2 || words.length > 4) return false
-  if (!words.every((word) => NAME_WORD.test(word))) return false
-  return !words.some((word) => BUSINESS_WORDS.has(word.toLowerCase().replace(/[.']/g, '')))
+/** Whether the bank's code puts the line among RARELY_PEOPLE (rent aside: leakName leaves rent out first). */
+function rarelyAPerson(line: CodedLine): boolean {
+  const code = line.providerCategoryDetailed ?? line.providerCategoryPrimary ?? ''
+  return RARELY_PEOPLE.some((kind) => code === kind || code.startsWith(`${kind}_`))
 }
 
 /**
- * Whether the bank says a merchant made the charge: it named the merchant, or
- * coded a purchase. Rent never counts, whatever name the bank gives it: it is
- * so often paid to a person or a small landlord.
+ * The line's shown name, its text made plain by `plain` first (plainText to
+ * show it, judgedText to judge it), with no account number.
  */
-function knownMerchant(line: CodedLine): boolean {
-  if (line.providerCategoryDetailed === RENT_CODE) return false
-  return Boolean(line.merchantName?.trim()) || isCodedPurchase(line)
+function shownName(line: CodedLine, plain: (text: string) => string, masks: AccountMasks) {
+  const merchantName = plain(line.merchantName ?? '').trim() || null
+  return merchantDisplayName({ name: plain(line.name), merchantName }, { masks })
 }
 
 /**
  * The name a leak alert may show for this charge, as the app shows it with
- * no account number, or null when the alert should name no one. A charge
- * through a payment app counts only when the bank named the merchant, since
- * the app's own text names whoever was paid ("PAYPAL *JANEDOE").
+ * no account number, or null when the alert should name no one (see the top
+ * of this file). A zero-width space can neither hide a name from the check,
+ * which reads it as a space, nor reach the alert, which never shows it.
  */
 export function leakName(line: CodedLine, masks: AccountMasks): string | null {
-  if (!knownMerchant(line)) return null
-  if (personToPersonApp(line) !== null && !line.merchantName?.trim()) return null
-  const name = merchantDisplayName(line, { masks })
-  return looksLikePerson(name) ? null : name
+  if (line.providerCategoryDetailed === RENT_CODE) return null
+  const merchantNamed = plainText(line.merchantName ?? '').trim() !== ''
+  if (personToPersonApp(line) !== null && !merchantNamed) return null
+  const name = shownName(line, plainText, masks)
+  if (merchantNamed && rarelyAPerson(line)) return name
+  return looksLikePerson(shownName(line, judgedText, masks)) ? null : name
 }
 
 /** The name each charge may show (leakName), by the charge's id. */

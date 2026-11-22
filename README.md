@@ -369,8 +369,9 @@ sync, and tells you about:
   bill yet going up in price on its usual cycle (a bill's own change alert
   covers a tracked bill, and a bill paid twice is told once, as the charge
   made twice). Cash, checks, payments to people, transfers and bank fees are
-  never either, and an alert names the merchant only when the bank's data
-  shows one made the charge ("A payment of $40 went out twice" otherwise);
+  never either, and an alert never names what may be a person: rent, a
+  payment app with no merchant named, or a name that reads as someone's is
+  told as "A payment of $40 went out twice";
 - a bank that needs you to sign in again;
 - AI spending near or at this month's limit, once each as it happens (see
   [AI models](#ai-models-and-the-monthly-limit)).

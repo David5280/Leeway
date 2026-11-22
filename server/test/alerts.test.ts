@@ -141,6 +141,23 @@ describe('the alert counts in the server log', () => {
     expect(line).not.toContain('Everyday')
   })
 
+  it('reads no bills and no leaks, which it never counts', async () => {
+    const settings = await getSettings(ctx.db)
+    // The bills, the leaks' posted charges, and the recurring finder's history.
+    const costly = /FROM bills b|AS "providerCategoryDetailed"|NOT a\.hidden AND t\.date BETWEEN/
+    const query = vi.spyOn(ctx.db, 'query')
+    const costlyReads = () => query.mock.calls.filter(([sql]) => costly.test(String(sql))).length
+    try {
+      await alertLogLine(ctx.db, settings, '2026-11-17')
+      expect(costlyReads()).toBe(0)
+      // Listing every alert does read them, so the pattern above would see it.
+      await listAlerts(ctx.db, settings, '2026-11-17')
+      expect(costlyReads()).toBeGreaterThan(0)
+    } finally {
+      query.mockRestore()
+    }
+  })
+
   it('logs a line only when it differs from the last one', () => {
     const log = vi.fn()
     const report = changedLinesOnly(log)

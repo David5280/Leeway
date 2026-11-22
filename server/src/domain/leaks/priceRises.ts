@@ -65,6 +65,8 @@ export interface PriceRise {
   charge: ChargeLine
   /** What it cost before. */
   previousCents: number
+  /** The charge a cycle before the latest, at the old price: it tells two like rises on one day apart. */
+  previousId: string
 }
 
 /**
@@ -152,7 +154,7 @@ export function priceRiseOf(repeating: RepeatingCharge, today: IsoDate): PriceRi
   if (before === undefined || older === undefined) return null
   if (!steady(older, before) || amountsVary(amounts)) return null
   if (!isPriceRise(before, latest.amountCents)) return null
-  return { charge: latest, previousCents: before }
+  return { charge: latest, previousCents: before, previousId: earlier[0]!.id }
 }
 
 /** Every price rise among these repeating charges, newest first. */

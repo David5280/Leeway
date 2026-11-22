@@ -52,7 +52,7 @@ describe('leak wording', () => {
       date: '2026-11-04',
       message: 'Netflix charged $15.49 twice, on Nov 3 and Nov 4.',
       summary: 'Netflix charged $15.49 twice.',
-      charge: { id: 'b', merchant: 'Netflix', previousCents: null },
+      charge: { id: 'b', merchant: 'Netflix', previousCents: null, previousId: null },
     })
     const oneDay = duplicateAlert(
       {
@@ -85,7 +85,7 @@ describe('leak wording', () => {
 
   it('says what a price went up to and from', () => {
     const alert = priceRiseAlert(
-      { charge: charge('c', '2026-11-12', 1199), previousCents: 1099 },
+      { charge: charge('c', '2026-11-12', 1199), previousCents: 1099, previousId: 'p' },
       { accountName: 'Everyday', merchant: 'Spotify' },
       format,
     )
@@ -94,12 +94,12 @@ describe('leak wording', () => {
       severity: 'warning',
       amountCents: 1199,
       message: 'Spotify went up to $11.99, from $10.99.',
-      charge: { id: 'c', merchant: 'Spotify', previousCents: 1099 },
+      charge: { id: 'c', merchant: 'Spotify', previousCents: 1099, previousId: 'p' },
     })
   })
 
   it('leaves out a leak on an account not among those named', () => {
-    const rise = { charge: charge('c', '2026-11-12', 1199), previousCents: 1099 }
+    const rise = { charge: charge('c', '2026-11-12', 1199), previousCents: 1099, previousId: 'p' }
     const duplicate = {
       accountId: 'checking',
       charges: [charge('a', '2026-11-03', 1549), charge('b', '2026-11-04', 1549)],
@@ -111,7 +111,7 @@ describe('leak wording', () => {
   })
 
   it('names the merchant its names give the charge, and no one when they give none', () => {
-    const rise = { charge: charge('c', '2026-11-12', 1199), previousCents: 1099 }
+    const rise = { charge: charge('c', '2026-11-12', 1199), previousCents: 1099, previousId: 'p' }
     const duplicate = {
       accountId: 'checking',
       charges: [charge('a', '2026-11-03', 1549), charge('b', '2026-11-04', 1549)],
@@ -145,7 +145,7 @@ describe('leak wording with no merchant named', () => {
     expect(twice(['2026-11-03', '2026-11-03'])).toMatchObject({
       message: 'A payment of $40 went out twice on Nov 3.',
       summary: 'A payment of $40 went out twice.',
-      charge: { id: 'c1', merchant: null, previousCents: null },
+      charge: { id: 'c1', merchant: null, previousCents: null, previousId: null },
     })
     expect(twice(['2026-11-03', '2026-11-04']).message).toBe(
       'A payment of $40 went out twice, on Nov 3 and Nov 4.',
@@ -160,14 +160,14 @@ describe('leak wording with no merchant named', () => {
 
   it('says a repeating payment went up, still pointing at its charge', () => {
     const alert = priceRiseAlert(
-      { charge: charge('c', '2026-11-01', 165_000), previousCents: 150_000 },
+      { charge: charge('c', '2026-11-01', 165_000), previousCents: 150_000, previousId: 'p' },
       nameless,
       format,
     )
     expect(alert).toMatchObject({
       message: 'A repeating payment went up to $1,650, from $1,500.',
       summary: 'A repeating payment went up to $1,650, from $1,500.',
-      charge: { id: 'c', merchant: null, previousCents: 150_000 },
+      charge: { id: 'c', merchant: null, previousCents: 150_000, previousId: 'p' },
     })
   })
 })

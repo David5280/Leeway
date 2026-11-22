@@ -115,6 +115,37 @@ describe('isMerchantCharge', () => {
     }
   })
 
+  it('reads a bank’s reference or confirmation number between the words', () => {
+    for (const name of [
+      'Online Payment 13577083912 To Jane Doe 11/04',
+      'ONLINE TRANSFER REF #IBE7KT4QRS TO JANE DOE',
+      'ONLINE TRANSFER REF IBE7KT4QRS TO JANE DOE',
+      'BILL PAYMENT - JANE DOE',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+    }
+  })
+
+  it('keeps a bill paid to a business the bank named and coded as a purchase', () => {
+    const comcast = {
+      name: 'ONLINE PAYMENT TO COMCAST',
+      merchantName: 'Comcast',
+      providerCategoryPrimary: 'RENT_AND_UTILITIES',
+      providerCategoryDetailed: 'RENT_AND_UTILITIES_INTERNET_AND_CABLE',
+    }
+    expect(isMerchantCharge(line(comcast))).toBe(true)
+    // Not without the code, nor for rent, nor for a name that reads as a person.
+    expect(
+      isMerchantCharge(
+        line({ ...comcast, providerCategoryPrimary: null, providerCategoryDetailed: null }),
+      ),
+    ).toBe(false)
+    expect(
+      isMerchantCharge(line({ ...comcast, providerCategoryDetailed: 'RENT_AND_UTILITIES_RENT' })),
+    ).toBe(false)
+    expect(isMerchantCharge(line({ ...comcast, merchantName: 'Jane Doe' }))).toBe(false)
+  })
+
   it('leaves out a debit the bank pulled for someone it names no merchant for', () => {
     expect(isMerchantCharge(line({ name: 'ACH DEBIT JANE DOE' }))).toBe(false)
     expect(isMerchantCharge(line({ name: 'ACH DR JANE DOE' }))).toBe(false)

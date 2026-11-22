@@ -66,7 +66,7 @@ export function duplicateAlert(
     date: latest.date,
     message: `${charged}${whenWords(charges, date)}.`,
     summary: `${charged}.`,
-    charge: { id: latest.id, merchant, previousCents: null },
+    charge: { id: latest.id, merchant, previousCents: null, previousId: null },
   }
 }
 
@@ -91,6 +91,11 @@ export function priceRiseAlert(
     date: rise.charge.date,
     message: sentence,
     summary: sentence,
-    charge: { id: rise.charge.id, merchant, previousCents: rise.previousCents },
+    charge: {
+      id: rise.charge.id,
+      merchant,
+      previousCents: rise.previousCents,
+      previousId: rise.previousId,
+    },
   }
 }

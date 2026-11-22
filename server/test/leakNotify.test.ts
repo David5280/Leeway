@@ -16,7 +16,7 @@ describe('a leak’s subject', () => {
       accountId: 'x',
       amountCents: 1549,
       date: '2026-11-04',
-      charge: { id: 'c', merchant: 'Netflix', previousCents: null },
+      charge: { id: 'c', merchant: 'Netflix', previousCents: null, previousId: null },
     }
     expect(accountAlertSubject(alert)).toBe('charge:c')
   })
@@ -27,9 +27,9 @@ describe('a leak’s subject', () => {
       accountId: 'x',
       amountCents: 1199,
       date: '2026-11-12',
-      charge: { id: 'c', merchant: 'Spotify', previousCents: 1099 },
+      charge: { id: 'c', merchant: 'Spotify', previousCents: 1099, previousId: 'p' },
     }
-    expect(accountAlertSubject(alert)).toBe('rise:x:2026-11-12:1099:1199')
+    expect(accountAlertSubject(alert)).toBe('rise:x:2026-11-12:p:1099:1199')
     const sameDayLater = { ...alert, charge: { ...alert.charge, id: 'later' } }
     expect(accountAlertSubject(sameDayLater)).toBe(accountAlertSubject(alert))
   })
@@ -40,9 +40,9 @@ describe('a leak’s subject', () => {
       accountId: 'x',
       amountCents: 165_000,
       date: '2026-11-01',
-      charge: { id: 'c', merchant: 'Jane Doe', previousCents: 150_000 },
+      charge: { id: 'c', merchant: 'Jane Doe', previousCents: 150_000, previousId: 'p' },
     }
-    expect(accountAlertSubject(alert)).toBe('rise:x:2026-11-01:150000:165000')
+    expect(accountAlertSubject(alert)).toBe('rise:x:2026-11-01:p:150000:165000')
     const unnamed = { ...alert, charge: { ...alert.charge, merchant: null } }
     expect(accountAlertSubject(unnamed)).toBe(accountAlertSubject(alert))
   })
@@ -85,6 +85,15 @@ describe('leaks in the inbox and on home', () => {
     )
   }
 
+  /** The id of the one charge on this day. */
+  async function chargeOn(date: string): Promise<string> {
+    const { rows } = await ctx.db.query<{ id: string }>(
+      'SELECT id FROM transactions WHERE date = $1',
+      [date],
+    )
+    return rows[0]!.id
+  }
+
   it('pushes a rise once, even when another charge posts on its day later', async () => {
     const { accountId } = await everyday(ctx.db)
     await spotifyRose(ctx.db, accountId)
@@ -94,7 +103,26 @@ describe('leaks in the inbox and on home', () => {
     const { rows } = await ctx.db.query<{ subject: string }>(
       `SELECT subject FROM notifications WHERE kind = 'price_rise'`,
     )
-    expect(rows).toEqual([{ subject: `rise:${accountId}:2026-11-12:1099:1199` }])
+    const october = await chargeOn('2026-10-12')
+    expect(rows).toEqual([{ subject: `rise:${accountId}:2026-11-12:${october}:1099:1199` }])
+  })
+
+  it('pushes two like rises on one account and day apart', async () => {
+    const { accountId } = await everyday(ctx.db)
+    await spotifyRose(ctx.db, accountId)
+    // A second plan at the same prices on the same days, under its own name.
+    await ctx.db.query(
+      `INSERT INTO transactions (account_id, provider_transaction_id, date, name, merchant_name,
+         amount_cents, pending)
+       SELECT account_id, provider_transaction_id || '-tidal', date, 'TIDAL MUSIC', 'Tidal',
+         amount_cents, pending
+       FROM transactions`,
+    )
+    await refreshInbox(ctx)
+    const { rows } = await ctx.db.query<{ subject: string }>(
+      `SELECT subject FROM notifications WHERE kind = 'price_rise'`,
+    )
+    expect(new Set(rows.map((row) => row.subject)).size).toBe(2)
   })
 
   it('keeps a hidden rise hidden when another charge posts on its day later', async () => {

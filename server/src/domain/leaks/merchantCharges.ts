@@ -8,8 +8,8 @@
 // (the fee alert already counts the overdraft ones). A payment to a person is
 // also named after that person, so leaving it out keeps their name out of
 // every alert, and so out of the AI summary, the weekly email and assistants.
-// A merchant charge still shows its name only when leakNames.ts is sure it is
-// a merchant's. Pure.
+// A merchant charge still shows its name only when leakNames.ts finds it
+// cannot be a person's. Pure.
 //
 // Without the bank's codes, only the words decide, so they must be a whole
 // phrase: "ATM WITHDRAWAL" is cash and "OVERDRAFT FEE" a fee, while "THE ATM
@@ -17,10 +17,14 @@
 
 import { CASH_WITHDRAWAL_CODE, personToPersonApp, type Movement } from '../transfers.js'
 import type { ChargeLine } from './duplicates.js'
+import { looksLikePerson } from './personNames.js'
 
 /** A posted line with the bank's own codes, as read before deciding. */
 export type CodedLine = ChargeLine &
   Pick<Movement, 'providerCategoryPrimary' | 'providerCategoryDetailed'>
+
+/** Plaid's code for rent: a purchase code, yet so often paid to a person. */
+const RENT_CODE = 'RENT_AND_UTILITIES_RENT'
 
 /** Plaid's primary category for every fee a bank charges: ATM, overdraft, foreign transaction and more. */
 const BANK_FEES = 'BANK_FEES'
@@ -87,14 +91,16 @@ const CHECK_PAYEE_WORDS = /^\s*(?:check|chk|cheque)\b(?!\s*(?:card|crd|into)\b)/
 
 /**
  * Money the owner sent someone, in a bank's words, whoever it went to: a
- * payment through the bank's bill pay or online banking, a wire, or a person
- * paid through an app the bank writes in short ("ZEL*" for Zelle, "SQC*" for
- * Cash App). Sent to a person, it is rent, support or a share of something,
- * never a price, and its text names that person.
+ * payment through the bank's bill pay or online banking (some banks put a
+ * confirmation number before "to": "Online Payment 13577083912 To Jane
+ * Doe"), a wire, or a person paid through an app the bank writes in short
+ * ("ZEL*" for Zelle, "SQC*" for Cash App). Sent to a person, it is rent,
+ * support or a share of something, never a price, and its text names that
+ * person.
  */
 const SENT_WORDS = [
-  /\b(?:online|mobile|web|bill)?\s*(?:payment|pmt)\s+to\b/i,
-  /\bbill\s?pay\b/i,
+  /\b(?:payment|pmt)\s+(?:\d+\s+)?to\b/i,
+  /\bbill\s?pay(?:ment)?\b/i,
   /\bwire\s+(?:to|transfer)\b/i,
   /\bzel\s*\*/i,
   /\bsqc\s*\*/i,
@@ -113,10 +119,12 @@ const TRANSFER_OUT = 'TRANSFER_OUT'
 
 /**
  * Money moved to an account, in the words of a bank that sends no codes:
- * "ONLINE TRANSFER TO SAV", "XFER TO CHECKING". "Transfer" must be followed by
- * "to", so a merchant with the word in its name ("TRANSFERWISE") is kept.
+ * "ONLINE TRANSFER TO SAV", "XFER TO CHECKING", or with the bank's reference
+ * between ("ONLINE TRANSFER REF #IBE12345 TO JANE DOE"). "Transfer" must be
+ * followed by "to", so a merchant with the word in its name ("TRANSFERWISE")
+ * is kept.
  */
-const TRANSFER_WORDS = /\b(?:transfer|xfer)\s+to\b/i
+const TRANSFER_WORDS = /\b(?:transfer|xfer)\s+(?:ref\s+#?\S+\s+)?to\b/i
 
 /** The line's words: the bank's text and the merchant name it gave. */
 const wordsOf = (line: CodedLine) => `${line.name} ${line.merchantName ?? ''}`
@@ -131,7 +139,7 @@ function isBankFee(line: CodedLine): boolean {
 }
 
 /** Whether the bank coded it as buying goods, food or a service (PURCHASE_CATEGORIES). */
-export function isCodedPurchase(line: CodedLine): boolean {
+function isCodedPurchase(line: CodedLine): boolean {
   const code = line.providerCategoryPrimary ?? line.providerCategoryDetailed ?? ''
   return PURCHASE_CATEGORIES.some((primary) => code === primary || code.startsWith(`${primary}_`))
 }
@@ -167,12 +175,26 @@ const isCheck = (line: CodedLine) =>
   CHECK_WORDS.test(line.name) || CHECK_PAYEE_WORDS.test(line.name)
 
 /**
- * Whether the owner sent it to someone through the bank (SENT_WORDS), or the
- * bank pulled it for someone it does not name as a merchant (ACH_WORDS).
+ * Whether the bank vouches for a business: it named the merchant, coded the
+ * line as a purchase other than rent, and the name is no person's. Then
+ * "ONLINE PAYMENT TO COMCAST" with the merchant "Comcast" is a bill paid to
+ * a business, not money sent to someone.
+ */
+function vouchedBusiness(line: CodedLine): boolean {
+  const merchant = line.merchantName?.trim()
+  if (!merchant || line.providerCategoryDetailed === RENT_CODE) return false
+  return isCodedPurchase(line) && !looksLikePerson(merchant)
+}
+
+/**
+ * Whether the owner sent it to someone through the bank (SENT_WORDS), unless
+ * the bank vouches for a business, or the bank pulled it for someone it does
+ * not name as a merchant (ACH_WORDS).
  */
 function sentBySomeoneElse(line: CodedLine): boolean {
-  if (SENT_WORDS.some((words) => words.test(line.name))) return true
-  return !line.merchantName?.trim() && ACH_WORDS.test(line.name)
+  const sentWords = SENT_WORDS.some((words) => words.test(line.name))
+  if (!line.merchantName?.trim()) return sentWords || ACH_WORDS.test(line.name)
+  return sentWords && !vouchedBusiness(line)
 }
 
 /**
