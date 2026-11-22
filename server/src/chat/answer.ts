@@ -2,7 +2,7 @@
 // question, and the answer kept when the model stops.
 
 import type { AiChatStop, AiMessage } from '../ai/provider.js'
-import type { ChatMessage } from '../domain/chat/store.js'
+import { MESSAGE_MAX_LENGTH, type ChatMessage } from '../domain/chat/store.js'
 
 /** The most characters of past conversation sent with a question, to keep each call small. */
 export const HISTORY_MAX_CHARS = 16_000
@@ -57,6 +57,26 @@ export function chatEnding(stop: AiChatStop, written: string, note?: string): st
   const why = note ?? noteFor(stop)
   if (!why) return words || NO_ANSWER
   return words ? `${words}\n\n${why}` : why
+}
+
+/** How far back a cut looks for a space, so a word is not split. */
+const WORD_ROOM = 200
+
+/**
+ * The answer cut to what can be kept, MESSAGE_MAX_LENGTH, ending with
+ * CUT_OFF when it had to be cut. Steps that each stayed in bounds can still
+ * add up to more, and a longer answer would fail to save at all.
+ */
+export function forKeeping(answer: string): string {
+  if (answer.length <= MESSAGE_MAX_LENGTH) return answer
+  const room = MESSAGE_MAX_LENGTH - CUT_OFF.length - 2
+  let kept = answer.slice(0, room)
+  // Never half a character: a cut between a surrogate pair drops its first half.
+  if (/[\uD800-\uDBFF]$/.test(kept)) kept = kept.slice(0, -1)
+  // Never half a word either, when a space comes near the end.
+  const lastSpace = kept.search(/\s\S*$/)
+  if (lastSpace > room - WORD_ROOM) kept = kept.slice(0, lastSpace)
+  return `${kept.trimEnd()}\n\n${CUT_OFF}`
 }
 
 function noteFor(stop: AiChatStop): string | null {

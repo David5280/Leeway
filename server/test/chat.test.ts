@@ -6,12 +6,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { runAction } from '../src/actions/action.js'
 import { canIAffordAction, whenCanIAffordAction } from '../src/actions/coach.js'
 import { AiProviderError, type AiMessage } from '../src/ai/provider.js'
+import { clearChatAction, getChatAction } from '../src/actions/chat.js'
 import { CUT_OFF, DECLINED, TOO_MANY_STEPS } from '../src/chat/answer.js'
 import { CHAT_SYSTEM } from '../src/chat/prompt.js'
 import { CHAT_TOOLS } from '../src/chat/tools.js'
 import { MAX_STEPS, openTurn, type ChatEvent } from '../src/chat/turn.js'
 import { CHAT_DAILY_TOKENS } from '../src/domain/chat/allowance.js'
-import { listFacts, listMessages, saveExchange, saveFact } from '../src/domain/chat/store.js'
+import { isAnswering } from '../src/domain/chat/answering.js'
+import {
+  listFacts,
+  listMessages,
+  MESSAGE_MAX_LENGTH,
+  saveExchange,
+  saveFact,
+} from '../src/domain/chat/store.js'
 import { getSettings, saveSettings } from '../src/domain/settings.js'
 import { AppError } from '../src/errors.js'
 import type { FakeProvider } from './fixtures/ai.js'
@@ -104,7 +112,7 @@ describe('answering a question', () => {
     expect(sent.system).toBe(CHAT_SYSTEM)
     expect(sent.context).toContain('Today is Tuesday, 2026-11-17.')
     expect(sent.context).toContain("The owner's currency is USD.")
-    expect(sent.context).toContain('- Saving for a wedding in June 2027 (saved 2026-11-17)')
+    expect(sent.context).toContain('"Saving for a wedding in June 2027" (saved 2026-11-17)')
     expect(sent.messages).toEqual<AiMessage[]>([
       { role: 'user', text: 'Am I on track?' },
       { role: 'assistant', text: 'Yes, $300 under budget.' },
@@ -168,32 +176,45 @@ describe('answering a question', () => {
 
   it('never shows the model a person from a payment between people, or an account number', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { name: 'Checking', mask: '4417' })
-    await insertBankTransaction(ctx.db, accountId, {
-      date: '2026-11-15',
-      name: 'Zelle payment to JANE DOE JPM99A1B2C3',
-      amountCents: 5_000,
+    const pay = (date: string, name: string, amountCents: number, fields = {}) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents, ...fields })
+    await pay('2026-11-14', 'Zelle payment to JANE DOE JPM99A1B2C3', 5_000)
+    await pay('2026-11-15', 'Venmo cashout from Zoë Ruiz 8812', -2_500)
+    // Plaid puts the person in the merchant name, under a bank line that names nobody.
+    await pay('2026-11-15', 'Online transfer', 4_200, {
+      merchantName: 'Rosalind Fairweather',
+      primary: 'TRANSFER_OUT',
+      detailed: 'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS',
     })
-    await insertBankTransaction(ctx.db, accountId, {
-      date: '2026-11-16',
-      name: 'Venmo cashout from Zoë Ruiz 8812',
-      amountCents: -2_500,
+    // A bank that writes a date and a reference after the name.
+    await pay('2026-11-16', 'ZELLE TO VANTERPOOL SKYE ON 11/15 REF # PP0ABC', 3_100, {
+      primary: 'TRANSFER_OUT',
+      detailed: 'TRANSFER_OUT_ACCOUNT_TRANSFER',
     })
     // A shop paid through PayPal is no person, so its name stays.
-    await insertBankTransaction(ctx.db, accountId, {
-      date: '2026-11-17',
-      name: 'PAYPAL *SPOTIFY',
-      amountCents: 1_199,
-    })
-    provider.steps = [calls([{ id: 'list', name: 'list_transactions', input: {} }]), says('Done.')]
+    await pay('2026-11-17', 'PAYPAL *SPOTIFY', 1_199)
+    const looks = ['list_transactions', 'top_merchants', 'summarize_accounts'].map((name) => ({
+      id: name,
+      name,
+      input: {},
+    }))
+    provider.steps = [calls(looks), says('Done.')]
     await ask('What did I spend this week?')
 
-    const content = toolResults(0)[0]!.content
-    expect(content).not.toMatch(/jane|doe|zoë|ruiz/i)
-    expect(content).toContain('To someone')
-    expect(content).toContain('From someone')
-    expect(content).not.toContain('4417')
-    expect(content).not.toContain('JPM99A1B2C3')
-    expect(content).toMatch(/spotify/i)
+    const [transactions, merchants, accounts] = toolResults(0).map((result) => result.content)
+    for (const content of [transactions!, merchants!, accounts!]) {
+      expect(content).not.toMatch(/jane|doe|zoë|ruiz|rosalind|fairweather|vanterpool|skye/i)
+      expect(content).not.toContain('4417')
+      expect(content).not.toContain('JPM99A1B2C3')
+      expect(content).not.toContain('PP0ABC')
+    }
+    // Each payment between people is named by its direction alone: three out, one in.
+    expect(transactions!.match(/"To someone"/g)).toHaveLength(3)
+    expect(transactions!.match(/"From someone"/g)).toHaveLength(1)
+    expect(transactions).toMatch(/spotify/i)
+    expect(merchants).toContain('Payment app')
+    expect(merchants).toMatch(/spotify/i)
+    expect(accounts).toContain('To someone')
   })
 
   it('remembers what the owner says, and sends it with later questions', async () => {
@@ -243,6 +264,29 @@ describe('answering a question', () => {
       content: expect.stringMatching(/^Something went wrong/),
     })
     expect(logged).toEqual([new Error('connection lost')])
+  })
+  it('keeps an answer too long to save, cut to fit and saying so', async () => {
+    provider.steps = [says('word '.repeat(5_000))]
+    const done = lastOf(await ask('Tell me everything, at length.'))
+    expect(done.type).toBe('done')
+    const [, answer] = await listMessages(ctx.db)
+    expect(answer!.text.length).toBeLessThanOrEqual(MESSAGE_MAX_LENGTH)
+    expect(answer!.text.endsWith(CUT_OFF)).toBe(true)
+  })
+
+  it('keeps nothing when the owner starts over while it answers', async () => {
+    await saveExchange(ctx.db, 'Am I on track?', 'Yes.', ctx.now())
+    let release = () => {}
+    provider.gate = new Promise((resolve) => (release = resolve))
+    const events: ChatEvent[] = []
+    const running = (await openTurn(ctx, 'And next month?', () => {})).run((event) =>
+      events.push(event),
+    )
+    await runAction(ctx, clearChatAction, {})
+    release()
+    await running
+    expect(lastOf(events)).toEqual({ type: 'cleared' })
+    expect(await listMessages(ctx.db)).toEqual([])
   })
 })
 
@@ -295,10 +339,40 @@ describe('when a question is turned away or fails', () => {
     const first = await openTurn(ctx, 'First?', () => {})
     const running = first.run(() => {})
     expect(await refused('Second?')).toMatchObject({ code: 'conflict' })
+    // The app is told, so it can wait for the answer instead.
+    expect((await runAction(ctx, getChatAction, {})).answering).toBe(true)
     release()
     await running
     provider.gate = null
     expect(lastOf(await ask('Second?')).type).toBe('done')
+  })
+
+  it('lets only one of two questions asked at the same moment through', async () => {
+    const opened = await Promise.allSettled([
+      openTurn(ctx, 'First?', () => {}),
+      openTurn(ctx, 'Second?', () => {}),
+    ])
+    expect(opened.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const refusal = opened.find((result) => result.status === 'rejected')!
+    expect((refusal as PromiseRejectedResult).reason).toMatchObject({ code: 'conflict' })
+    // The one let through answers, then lets the next question in.
+    const turn = opened.find((result) => result.status === 'fulfilled')!
+    expect(isAnswering(ctx.db)).toBe(true)
+    await (turn as PromiseFulfilledResult<Awaited<ReturnType<typeof openTurn>>>).value.run(() => {})
+    expect(isAnswering(ctx.db)).toBe(false)
+  })
+
+  it('lets the next question in when one is turned away after it was claimed', async () => {
+    await ctx.db.query(
+      `INSERT INTO ai_usage (job, model, input_tokens, output_tokens, cache_read_tokens,
+         cache_write_tokens, cost_micros, created_at)
+       VALUES ('chat', 'claude-haiku-5-5', $1, 0, 0, 0, 0, $2)`,
+      [CHAT_DAILY_TOKENS, ctx.now()],
+    )
+    expect(await refused('Hello?')).toMatchObject({ code: 'ai_limit' })
+    expect(isAnswering(ctx.db)).toBe(false)
+    await ctx.db.query('DELETE FROM ai_usage')
+    expect(lastOf(await ask('Hello?')).type).toBe('done')
   })
 
   it("stops at the day's allowance, counting cache reads at a tenth, from midnight where the owner lives", async () => {

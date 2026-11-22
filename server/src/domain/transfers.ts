@@ -124,6 +124,10 @@ export interface PersonPayment {
 // the name sits between "to" or "from" and a trailing confirmation code.
 const NAMED_PAYMENT = /\b(?:to|from)\s+(.+)$/i
 
+// Where the name ends when a bank adds more after it: a date ("ZELLE TO JANE
+// DOE ON 11/15") or a reference ("... REF # PP0ABC", "... CONF 12AB").
+const NAME_END = /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf)\b)/i
+
 /** Drops trailing reference codes (any word with a digit in it) from a name. */
 function withoutReference(text: string): string {
   const words = text.trim().split(/\s+/)
@@ -145,7 +149,7 @@ function tidyName(name: string): string {
 export function personPayment(tx: Movement): PersonPayment | null {
   const app = personToPersonApp(tx)
   if (!app || tx.amountCents === 0) return null
-  const named = NAMED_PAYMENT.exec(tx.name)?.[1]
+  const named = NAMED_PAYMENT.exec(tx.name)?.[1]?.split(NAME_END)[0]
   const counterparty = named ? withoutReference(named) : ''
   return {
     app,

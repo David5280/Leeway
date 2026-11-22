@@ -50,6 +50,7 @@ describe('the chat actions', () => {
               ('summary', 'claude-haiku-5-5', 9000, 900, 0, 0, 0)`,
     )
     const chat = await call('get_chat')
+    expect(chat.answering).toBe(false)
     expect(chat.messages.map((message) => message.text)).toEqual([
       'First?',
       'One.',
@@ -101,6 +102,19 @@ describe('what Chat keeps', () => {
       'Q3',
       'A3',
     ])
+  })
+
+  it('keeps nothing once the conversation it was asked in is started over', async () => {
+    const first = (await saveExchange(ctx.db, 'First?', 'One.', ctx.now()))!
+    // Asked after "One.", still there: kept.
+    expect(await saveExchange(ctx.db, 'Second?', 'Two.', ctx.now(), first.answer.id)).toMatchObject(
+      { answer: { text: 'Two.' } },
+    )
+    await call('clear_chat')
+    expect(await saveExchange(ctx.db, 'Third?', 'Three.', ctx.now(), first.answer.id)).toBeNull()
+    expect(await listMessages(ctx.db)).toEqual([])
+    // A question asked in an empty conversation has nothing to be started over.
+    expect(await saveExchange(ctx.db, 'Fourth?', 'Four.', ctx.now(), null)).not.toBeNull()
   })
 
   it('keeps a question and its answer together or not at all', async () => {

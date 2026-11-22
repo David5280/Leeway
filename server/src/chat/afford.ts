@@ -31,7 +31,7 @@ export const checkPurchaseTool = defineAction({
   name: 'check_purchase',
   title: 'Checking the purchase',
   description:
-    'Answers "can I afford this?" for a purchase. today is the check of buying it today: verdict "yes", "tight" (fits, but pushes a budget over, dips into money held for goals, or halves the money left per day) or "no" (the bills before payday would not be covered), with reasons in plain words. plan says when it fits if not today: periodsNeeded, affordableBy and a plain message, saving at perPeriodCents if given or else the recent surplus after what goals need. Give categoryId to check that category\'s budget too, and savedCents for money already put aside toward it. Amounts are in cents. Nothing is bought or recorded.',
+    'Answers "can I afford this right now?" for a purchase, as one of three outcomes. today is the check of buying it today, with reasons in plain words: verdict "yes" is paid from money already saved (it fits in the cash before payday, after the bills due by then); "tight" eats into projected savings (it fits, but pushes a budget over, dips into money held for goals, or halves the money left per day); "no" causes debt (the bills before payday would not be covered). plan says how long it takes to cover: periodsNeeded is the pay periods to repay or save it, with affordableBy and a plain message, saving at perPeriodCents if given or else the recent surplus after what goals need. Give categoryId to check that category\'s budget too, and savedCents for money already put aside toward it. Amounts are in cents. Nothing is bought or recorded.',
   input: purchaseInput,
   scope: 'read',
   surface: 'app',

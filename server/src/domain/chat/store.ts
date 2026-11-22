@@ -42,19 +42,40 @@ export async function listMessages(db: Db, limit = SHOWN_MESSAGES): Promise<Chat
   return rows.map((row) => ({ ...row, createdAt: new Date(row.createdAt).toISOString() }))
 }
 
+/** The longest message kept, in characters, as migration 025 allows. */
+export const MESSAGE_MAX_LENGTH = 20_000
+
+/** A question and its answer, as kept. */
+export interface Exchange {
+  question: ChatMessage
+  answer: ChatMessage
+}
+
 /**
  * Keeps a question with its answer, both or neither, so the conversation
  * never holds a question whose answer failed: the owner just asks again.
+ *
+ * `latestId` is the newest message when the question was asked (null for an
+ * empty conversation). If that message is gone, the owner started over while
+ * it was answered, so nothing is kept and null comes back: a deleted
+ * conversation never gets an answer added back to it.
  */
 export async function saveExchange(
   db: pg.Pool,
   question: string,
   answer: string,
   at: Date,
-): Promise<{ question: ChatMessage; answer: ChatMessage }> {
+  latestId: string | null = null,
+): Promise<Exchange | null> {
   const client = await db.connect()
   try {
     await client.query('BEGIN')
+    // Waits for a start-over under way, and holds the next one off until this commits.
+    await client.query('LOCK TABLE chat_messages IN SHARE ROW EXCLUSIVE MODE')
+    if (latestId !== null && !(await messageExists(client, latestId))) {
+      await client.query('ROLLBACK')
+      return null
+    }
     const insert = (role: ChatMessage['role'], text: string) =>
       client.query<ChatMessage>(
         `INSERT INTO chat_messages (role, text, created_at) VALUES ($1, $2, $3)
@@ -72,6 +93,11 @@ export async function saveExchange(
   } finally {
     client.release()
   }
+}
+
+async function messageExists(db: Db, id: string): Promise<boolean> {
+  const { rowCount } = await db.query('SELECT 1 FROM chat_messages WHERE id = $1', [id])
+  return rowCount !== 0
 }
 
 /** Starts the conversation over. The remembered facts stay. */

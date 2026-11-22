@@ -8,17 +8,17 @@
 // time. Each step resends only the question's history, never the tool calls
 // of earlier questions.
 
-import type pg from 'pg'
 import { AiProviderError, type AiFailure, type AiMessage } from '../ai/provider.js'
 import type { AppContext } from '../context.js'
 import { AiLimitError, type AiGateway } from '../domain/ai/gateway.js'
 import { allowanceMessage, chatAllowance } from '../domain/chat/allowance.js'
-import { paymentNames } from '../domain/chat/people.js'
+import { claimAnswering, releaseAnswering } from '../domain/chat/answering.js'
+import { paymentPeople, type PaymentPeople } from '../domain/chat/people.js'
 import { listFacts, listMessages, saveExchange, type ChatMessage } from '../domain/chat/store.js'
 import { getSettings, type Settings } from '../domain/settings.js'
 import { AppError } from '../errors.js'
 import { todayIn } from '../lib/dates.js'
-import { chatEnding, historyFor, joinSteps, TOO_MANY_STEPS } from './answer.js'
+import { chatEnding, forKeeping, historyFor, joinSteps, TOO_MANY_STEPS } from './answer.js'
 import { CHAT_SYSTEM, chatContext } from './prompt.js'
 import { chatToolList, runChatTool, toolTitle } from './tools.js'
 
@@ -40,6 +40,8 @@ export type ChatEvent =
   /** A tool is running, by its title, like "Money check-in". */
   | { type: 'tool'; title: string }
   | { type: 'done'; question: ChatMessage; answer: ChatMessage }
+  /** The owner started over while this was answered, so the exchange was not kept. */
+  | { type: 'cleared' }
   | { type: 'error'; message: string }
 
 export type Emit = (event: ChatEvent) => void
@@ -61,9 +63,6 @@ const FAILURES: Record<AiFailure, string> = {
   unreachable: 'Leeway could not reach Claude. Try again in a moment.',
   failed: SOMETHING_WRONG,
 }
-
-/** Installs answering a question now, so each answers one at a time. */
-const answering = new WeakSet<pg.Pool>()
 
 export interface ChatTurn {
   /** Answers the question, telling `emit` as it goes. Never throws: a failure is an error event. */
@@ -87,11 +86,17 @@ export async function openTurn(
   if (question.length > QUESTION_MAX_LENGTH) {
     throw new AppError('invalid_input', `Keep a question to ${QUESTION_MAX_LENGTH} characters.`)
   }
-  if (answering.has(ctx.db)) throw new AppError('conflict', STILL_ANSWERING)
-  const settings = await getSettings(ctx.db)
-  const limit = allowanceMessage(await chatAllowance(ctx.db, settings, ctx.now()))
-  if (limit) throw new AppError('ai_limit', limit)
-  answering.add(ctx.db)
+  // Claimed before the first await, so two questions at once can't both get through.
+  if (!claimAnswering(ctx.db)) throw new AppError('conflict', STILL_ANSWERING)
+  let settings: Settings
+  try {
+    settings = await getSettings(ctx.db)
+    const limit = allowanceMessage(await chatAllowance(ctx.db, settings, ctx.now()))
+    if (limit) throw new AppError('ai_limit', limit)
+  } catch (error) {
+    releaseAnswering(ctx.db)
+    throw error
+  }
   return {
     run: async (emit) => {
       try {
@@ -99,7 +104,7 @@ export async function openTurn(
       } catch (error) {
         emit({ type: 'error', message: failureMessage(error, onError) })
       } finally {
-        answering.delete(ctx.db)
+        releaseAnswering(ctx.db)
       }
     },
   }
@@ -117,7 +122,7 @@ async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
   const [past, facts, people] = await Promise.all([
     listMessages(ctx.db, HISTORY_MESSAGES),
     listFacts(ctx.db),
-    paymentNames(ctx.db),
+    paymentPeople(ctx.db),
   ])
   const context = chatContext(todayIn(settings.timeZone, ctx.now()), settings.currency, facts)
   const messages: AiMessage[] = [...historyFor(past), { role: 'user', text: question }]
@@ -126,15 +131,16 @@ async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
   for (let step = 0; step < MAX_STEPS && ending === null; step++) {
     ending = await takeStep(turn, { context, messages, people, steps }, emit)
   }
-  const text = ending ?? chatEnding('cut_off', joinSteps(steps), TOO_MANY_STEPS)
-  const saved = await saveExchange(ctx.db, question, text, ctx.now())
-  emit({ type: 'done', ...saved })
+  const text = forKeeping(ending ?? chatEnding('cut_off', joinSteps(steps), TOO_MANY_STEPS))
+  // Kept only if the conversation it was asked in is still there (saveExchange).
+  const saved = await saveExchange(ctx.db, question, text, ctx.now(), past.at(-1)?.id ?? null)
+  emit(saved ? { type: 'done', ...saved } : { type: 'cleared' })
 }
 
 interface Conversation {
   context: string
   messages: AiMessage[]
-  people: readonly string[]
+  people: PaymentPeople
   /** The text of each step so far, streamed as it came. */
   steps: string[]
 }

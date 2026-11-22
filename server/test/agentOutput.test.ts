@@ -34,4 +34,8 @@ describe('agentJson', () => {
     expect(agentJson({ a: 1 })).toBe('{\n  "a": 1\n}')
     expect(agentJson([1, 'two', null])).toBe(JSON.stringify([1, 'two', null], null, 2))
   })
+
+  it('writes compact JSON when asked, still without owner-only fields', () => {
+    expect(agentJson({ a: 1, mask: '4417', b: [2] }, { compact: true })).toBe('{"a":1,"b":[2]}')
+  })
 })

@@ -11,10 +11,12 @@ import { activeSpendAlert, dismissSpendAlerts } from '../src/domain/ai/alerts.js
 import {
   AiLimitError,
   billedNothing,
+  estimateChatTokens,
   estimateInputTokens,
   FRAMING_TOKENS,
   limitMessage,
   type AiAsk,
+  type AiChatAsk,
 } from '../src/domain/ai/gateway.js'
 import { aiMonth } from '../src/domain/ai/month.js'
 import { DEFAULT_MONTHLY_CAP_CENTS } from '../src/domain/ai/settings.js'
@@ -22,7 +24,7 @@ import { unavailableModels } from '../src/domain/ai/unavailable.js'
 import { monthSpend } from '../src/domain/ai/usage.js'
 import { getSettings, saveSettings, type Settings } from '../src/domain/settings.js'
 import { createTestContext, resetData } from './helpers.js'
-import { FakeProvider, gatewayFor, tokens } from './fixtures/ai.js'
+import { FakeProvider, gatewayFor, says, tokens } from './fixtures/ai.js'
 
 let ctx: Awaited<ReturnType<typeof createTestContext>>
 
@@ -319,6 +321,32 @@ describe('AiGateway: the monthly limit', () => {
     expect(refused).toBeInstanceOf(AiLimitError)
     expect((refused as AiLimitError).resetsOn).toBe('2026-12-01')
     expect(provider.sent).toHaveLength(1)
+  })
+
+  it('holds a Chat step to the limit by its input estimate, not its output alone', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    // A step whose cost is mostly what it sends: long history, little output.
+    const step: AiChatAsk = {
+      system: 'You are a money coach.',
+      context: 'Today is Tuesday.',
+      tools: [],
+      messages: [{ role: 'user', text: 'x'.repeat(200_000) }],
+      effort: 'low',
+      maxTokens: 100,
+    }
+    const worst = worstCostMicros('claude-haiku-5-5', estimateChatTokens(step), step.maxTokens)
+    const outputOnly = worstCostMicros('claude-haiku-5-5', 0, step.maxTokens)
+    expect(worst).toBeGreaterThan(outputOnly * 10)
+    provider.steps = [{ ...says(''), usage: tokens({ inputTokens: 0, outputTokens: 0 }) }]
+    await spend(500 * MICROS_PER_CENT - worst)
+    // Exactly the estimate is left, so it goes.
+    await ai.converse('chat', step, () => {})
+    expect(provider.conversed).toHaveLength(1)
+
+    // One millionth short of the estimate, though far more than the output costs: refused unsent.
+    await spend(1)
+    await expect(ai.converse('chat', step, () => {})).rejects.toThrow(/could cost up to/)
+    expect(provider.conversed).toHaveLength(1)
   })
 
   it('says the limit is reached and when it resets, once the month has spent it', async () => {

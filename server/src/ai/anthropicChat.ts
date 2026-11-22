@@ -42,8 +42,9 @@ function messageParam(message: AiMessage): Anthropic.MessageParam {
 
 /**
  * The request for one step. The tools come first and the fixed instructions
- * after them, marked for the cache; the day's context follows the mark, so a
- * new day changes nothing that is cached.
+ * after them, marked for the cache. The context follows the mark in a block
+ * of its own (the day, and the owner's saved notes as quoted data; see
+ * chat/prompt.ts), so a new day or a new note changes nothing that is cached.
  */
 export function chatParams(request: AiChatRequest) {
   return {

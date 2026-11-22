@@ -189,6 +189,16 @@ describe('reading a payment between people', () => {
     expect(personPayment(tx)?.counterparty).toBe('Jane Doe')
   })
 
+  it('ends the name before a date or a reference the bank wrote after it', () => {
+    const dated = movement('ZELLE TO VANTERPOOL SKYE ON 11/15 REF # PP0ABC', null)
+    expect(personPayment(dated)?.counterparty).toBe('Vanterpool Skye')
+    const confirmed = movement('Zelle payment from QUILLON MARSH CONF 7KQ2', null)
+    expect(personPayment(confirmed)?.counterparty).toBe('Quillon Marsh')
+    // "On" and "Ref" inside a name are left alone.
+    const named = movement('Venmo payment to Ona Refford 2041', null)
+    expect(personPayment(named)?.counterparty).toBe('Ona Refford')
+  })
+
   it('leaves the name out when the description does not give one', () => {
     expect(personPayment(movement('VENMO PAYMENT 1023456789', null))).toEqual({
       app: 'Venmo',

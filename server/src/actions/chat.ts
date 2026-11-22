@@ -7,6 +7,7 @@
 
 import { z } from 'zod'
 import { chatAllowance } from '../domain/chat/allowance.js'
+import { isAnswering } from '../domain/chat/answering.js'
 import { clearMessages, deleteFact, listFacts, listMessages } from '../domain/chat/store.js'
 import { getSettings } from '../domain/settings.js'
 import { defineAction } from './action.js'
@@ -26,7 +27,7 @@ export const getChatAction = defineAction({
   name: 'get_chat',
   title: 'Chat',
   description:
-    "The conversation in Chat, oldest first, what the owner told Leeway to remember, and today's use of Chat's daily allowance in tokens.",
+    "The conversation in Chat, oldest first, what the owner told Leeway to remember, today's use of Chat's daily allowance in tokens, and whether a question is being answered now (its answer joins the conversation once done).",
   input: z.object({}),
   scope: 'read',
   surface: 'app',
@@ -37,14 +38,21 @@ export const getChatAction = defineAction({
       listFacts(ctx.db),
       chatAllowance(ctx.db, settings, ctx.now()),
     ])
-    return { available: ctx.ai !== null, messages, facts, allowance }
+    return {
+      available: ctx.ai !== null,
+      answering: isAnswering(ctx.db),
+      messages,
+      facts,
+      allowance,
+    }
   },
 })
 
 export const clearChatAction = defineAction({
   name: 'clear_chat',
   title: 'Start Chat over',
-  description: 'Deletes the conversation in Chat. What Leeway was told to remember stays.',
+  description:
+    'Deletes the conversation in Chat. An answer still on its way is not added back. What Leeway was told to remember stays.',
   input: z.object({}),
   scope: 'write',
   surface: 'app',
