@@ -1,11 +1,11 @@
-// Cash that could earn more on Plan, Bills, from a seeded household the
-// server itself finds spare cash in: its answer adds up, the card says it
+// Cash that could earn more on Plan, Bills, from a seeded household in which
+// the server itself finds some: its answer adds up, the card says it
 // with the rate it assumes and agrees with cash until payday above it, and
 // the math opens under the same name with the rounding as its own row.
 
 import { expect, test } from '@playwright/test'
 import type { IdleCash } from '../server/src/domain/idleCash'
-import { removeSpareCash, seedSpareCash, type SpareCashSeed } from './idleCash'
+import { removeIdleCash, seedIdleCash, type IdleCashSeed } from './idleCash'
 import { action } from './seed'
 
 const NAME = 'Cash that could earn more'
@@ -14,13 +14,13 @@ const NAME = 'Cash that could earn more'
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString('en-US')}`
 
 test.describe('cash that could earn more', () => {
-  const seed: SpareCashSeed = { bills: [], accounts: [] }
+  const seed: IdleCashSeed = { bills: [], accounts: [] }
 
   test.beforeAll(async ({ request }) => {
-    await seedSpareCash(request, seed)
+    await seedIdleCash(request, seed)
   })
   test.afterAll(async ({ request }) => {
-    await removeSpareCash(request, seed)
+    await removeIdleCash(request, seed)
   })
 
   test('the server finds it, with math that adds up and the rate it assumes', async ({
@@ -32,7 +32,8 @@ test.describe('cash that could earn more', () => {
       reason: null,
       checkingCents: 980_000,
       billsCents: 145_000,
-      cardsOwedCents: 41_200,
+      // $412.30 owed, rounded up as every need is.
+      cardsOwedCents: 41_300,
       // About $40 a day of everyday spending, whatever the months' lengths,
       // keeps $2,800 or so back, leaving $7,000 and some dollars to round off.
       idleCents: 700_000,

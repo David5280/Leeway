@@ -8,7 +8,7 @@ import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { CONNECT_SCREEN } from './connect-screen'
-import { fakeSpareCash } from './idleCash'
+import { fakeIdleCash } from './idleCash'
 import { importPaystub, mockReader } from './paystub'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
@@ -228,7 +228,7 @@ export const SCREENS: Screen[] = [
     name: '/plan with cash that could earn more',
     // The shared install holds an overdrawn account, which hides the card, so
     // the answer is stood in for (idle-cash.spec.ts reads the server's own).
-    before: fakeSpareCash,
+    before: fakeIdleCash,
   }),
   at('plan', '/plan', {
     name: '/plan adding a bill',

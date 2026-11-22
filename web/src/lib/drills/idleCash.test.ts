@@ -38,7 +38,7 @@ describe('idleCashDrill', () => {
     expect(drill.title).toBe('Cash that could earn more')
     expect(drill.figure).toEqual({ cents: 520_000 })
     expect(mathSentence(drill.math, money)).toBe(
-      'Could sit in savings $5,200 = In checking $8,060 minus bills due by payday $1,200 minus typical spending until payday $500 minus credit cards owed $400 minus a cushion kept for surprises $700 minus rounded down $60',
+      'Could sit in savings $5,200 = In checking $8,059 minus bills due by payday $1,200 minus typical spending until payday $500 minus credit cards owed $400 minus a cushion kept for surprises $700 minus rounded down $59',
     )
     expect(total(drill.math)).toBe(520_000)
   })

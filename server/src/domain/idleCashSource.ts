@@ -13,7 +13,7 @@ import { alertsFor } from './alerts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
 import type { BudgetSummary } from './budget.js'
 import { budgetSummary } from './budgetReport.js'
-import { getCashFlow, type CashFlow } from './cashFlow.js'
+import { getCashFlow } from './cashFlow.js'
 import { checkIdleCash, type IdleCash } from './idleCash.js'
 import { billPaymentsByRange } from './idleCashBills.js'
 import { monthlyTotals, wholeMonths, type MonthTotals } from './monthlyTotals.js'
@@ -89,18 +89,19 @@ export function anyOverdrawn(accounts: Account[], settings: Settings): boolean {
 }
 
 /**
- * Whether safe to spend is tight: the bills before payday outrun the cash,
+ * Whether safe to spend is tight: the bills due by payday outrun the cash in
+ * checking (counted as checkingCash counts it, so never an overdraft line),
  * or the budgets are spent to (or past) what they allow.
  *
  * Seam for true-numbers: once its safe to spend lands, this should come from
  * it (a shortfall, or a lead figure under typical spending).
  */
 export function isTight(
-  flow: Pick<CashFlow, 'cashCents' | 'billsDueCents'>,
+  cash: { checkingCents: number; billsCents: number },
   totals: Pick<BudgetSummary['totals'], 'budgetedCents' | 'leewayCents'>,
 ): boolean {
   return (
-    flow.cashCents < flow.billsDueCents || (totals.budgetedCents > 0 && totals.leewayCents <= 0)
+    cash.checkingCents < cash.billsCents || (totals.budgetedCents > 0 && totals.leewayCents <= 0)
   )
 }
 
@@ -113,7 +114,7 @@ async function typicalDailySpend(db: Db, settings: Settings, now: Date): Promise
   return dailySpend(months, paid)
 }
 
-/** Whether checking has spare cash to suggest saving, worked out now. */
+/** Whether checking holds cash that could earn more in savings, worked out now. */
 export async function getIdleCash(
   db: Db,
   settings: Settings,
@@ -126,15 +127,18 @@ export async function getIdleCash(
   const bills = await listBills(db, today)
   const daily = await typicalDailySpend(db, settings, now)
   const budget = await budgetSummary(db, settings, now)
-  return checkIdleCash({
+  const cash = {
     checkingCents: checkingCash(accounts),
     billsCents: billsByPayday(bills, flow.nextPayday),
+  }
+  return checkIdleCash({
+    ...cash,
     cardsOwedCents: cardsOwed(accounts),
     dailySpendCents: daily,
     daysUntilPayday: flow.daysUntilPayday,
     nextPayday: flow.nextPayday,
     paydayKnown: flow.paydaySource !== 'period_end',
     overdrawn: anyOverdrawn(accounts, settings),
-    tight: isTight(flow, budget.totals),
+    tight: isTight(cash, budget.totals),
   })
 }

@@ -169,20 +169,20 @@ describe('anyOverdrawn', () => {
 })
 
 describe('isTight', () => {
-  const flow = { cashCents: 100_000, billsDueCents: 50_000 }
+  const cash = { checkingCents: 100_000, billsCents: 50_000 }
   const totals = { budgetedCents: 80_000, leewayCents: 1 }
 
-  it('is tight when the bills before payday outrun the cash', () => {
-    expect(isTight(flow, totals)).toBe(false)
-    expect(isTight({ ...flow, billsDueCents: 100_000 }, totals)).toBe(false)
-    expect(isTight({ ...flow, billsDueCents: 100_001 }, totals)).toBe(true)
+  it('is tight when the bills by payday outrun the cash in checking', () => {
+    expect(isTight(cash, totals)).toBe(false)
+    expect(isTight({ ...cash, billsCents: 100_000 }, totals)).toBe(false)
+    expect(isTight({ ...cash, billsCents: 100_001 }, totals)).toBe(true)
   })
 
   it('is tight when the budgets are spent to what they allow, or past it', () => {
-    expect(isTight(flow, { ...totals, leewayCents: 0 })).toBe(true)
-    expect(isTight(flow, { ...totals, leewayCents: -1 })).toBe(true)
+    expect(isTight(cash, { ...totals, leewayCents: 0 })).toBe(true)
+    expect(isTight(cash, { ...totals, leewayCents: -1 })).toBe(true)
     // With no budgets set there is nothing to be spent past.
-    expect(isTight(flow, { budgetedCents: 0, leewayCents: 0 })).toBe(false)
+    expect(isTight(cash, { budgetedCents: 0, leewayCents: 0 })).toBe(false)
   })
 })
 
@@ -349,6 +349,113 @@ describe('get_idle_cash', () => {
     })
     // Still $50 a day: the rent comes out of the average.
     expect(await call('get_idle_cash')).toMatchObject({ spendingCents: 50_000, billsCents: 0 })
+  })
+
+  /** A bill matched by `matchPattern`, and its payments filed under an expense category. */
+  async function billPaidAs(
+    accountId: string,
+    bill: { name: string; amountCents: number; cadence: string; anchorDate: string },
+    matchPattern: string,
+    payments: [date: string, name: string, cents: number][],
+  ) {
+    const category = await call('create_category', {
+      name: `${bill.name} spending`,
+      kind: 'expense',
+    })
+    for (const [date, name, amountCents] of payments) {
+      await fileUnder(
+        await insertBankTransaction(ctx.db, accountId, { date, name, amountCents }),
+        category.id,
+      )
+    }
+    return call('create_bill', { ...bill, matchPattern })
+  }
+
+  it('keeps shopping that only shares a short pattern with a bill in typical spending', async () => {
+    // $3,000 in checking. Each month: $100 at a cafe and four $725 Costco trips.
+    await paidBiweekly()
+    const { accountId } = await insertBankAccount(ctx.db, {
+      subtype: 'checking',
+      balanceCents: 300_000,
+    })
+    const trips: [string, string, number][] = []
+    for (const month of ['08', '09', '10']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date: `2026-${month}-01`,
+        name: 'CORNER CAFE',
+        amountCents: 10_000,
+      })
+      for (const day of ['04', '11', '18', '25'])
+        trips.push([`2026-${month}-${day}`, 'COSTCO WHSE', 72_500])
+    }
+    const groceries = await call('create_category', { name: 'Groceries', kind: 'expense' })
+    for (const [date, name, amountCents] of trips) {
+      await fileUnder(
+        await insertBankTransaction(ctx.db, accountId, { date, name, amountCents }),
+        groceries.id,
+      )
+    }
+    // $9,000 over 92 days: $97.83 a day, so $979 until payday and a $1,370 cushion.
+    const before = await call('get_idle_cash')
+    expect(before).toMatchObject({ spendingCents: 97_900, idleCents: 60_000 })
+
+    // A $65 yearly membership matched by "costco" changes nothing.
+    await call('create_bill', {
+      name: 'Costco membership',
+      amountCents: 6_500,
+      cadence: 'year',
+      anchorDate: '2026-09-15',
+      matchPattern: 'costco',
+    })
+    expect(await call('get_idle_cash')).toEqual(before)
+  })
+
+  it('takes a bill paid a little above its amount out only up to that amount', async () => {
+    await paidBiweekly()
+    const accountId = await checking(1_500_000)
+    const rent = { name: 'Rent', amountCents: 150_000, cadence: 'month', anchorDate: '2026-12-01' }
+    const paid = ['2026-08-01', '2026-09-01', '2026-10-01'].map(
+      (date): [string, string, number] => [date, 'PARKVIEW APTS RENT', 156_000],
+    )
+    await billPaidAs(accountId, rent, 'parkview', paid)
+    // The $60 over each month stays: $4,600 + $180 over 92 days is $51.96 a day.
+    expect(await call('get_idle_cash')).toMatchObject({ spendingCents: 52_000 })
+  })
+
+  it('keeps a payment far above a bill in typical spending', async () => {
+    await paidBiweekly()
+    const accountId = await checking(1_500_000)
+    const rent = { name: 'Rent', amountCents: 150_000, cadence: 'month', anchorDate: '2026-12-01' }
+    await billPaidAs(accountId, rent, 'parkview', [['2026-09-01', 'PARKVIEW APTS RENT', 180_000]])
+    // $4,600 + $1,800 over 92 days is $69.57 a day.
+    expect(await call('get_idle_cash')).toMatchObject({ spendingCents: 69_600 })
+  })
+
+  it('takes a varying bill out at what was paid, never more than its amount', async () => {
+    await paidBiweekly()
+    const accountId = await checking(1_500_000)
+    const power = { name: 'Power', amountCents: 12_000, cadence: 'month', anchorDate: '2026-12-03' }
+    const bill = await billPaidAs(accountId, power, 'xcel', [
+      ['2026-08-03', 'XCEL ENERGY', 9_500],
+      ['2026-09-03', 'XCEL ENERGY', 14_000],
+      ['2026-10-03', 'XCEL ENERGY', 30_000],
+    ])
+    await ctx.db.query('UPDATE bills SET amount_varies = true WHERE id = $1', [bill.id])
+    // $95, $120 and $120 come out; $20 and $180 stay: $4,800 over 92 days is $52.17 a day.
+    expect(await call('get_idle_cash')).toMatchObject({ spendingCents: 52_200 })
+  })
+
+  it('reads tight when only an overdraft line would cover the bills by payday', async () => {
+    await paidBiweekly()
+    const accountId = await checking(100_000)
+    await ctx.db.query('UPDATE accounts SET available_cents = 900000 WHERE id = $1', [accountId])
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 200_000,
+      cadence: 'month',
+      anchorDate: '2026-11-20',
+    })
+    expect(await call('get_idle_cash')).toMatchObject({ suggested: false, reason: 'tight' })
   })
 
   it('averages only the months the history covers from their first day', async () => {

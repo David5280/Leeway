@@ -6,8 +6,8 @@
 // What checking needs before payday is the bills due by then, typical
 // everyday spending until then, what the counted credit cards owe (checking
 // pays them), and a cushion on top. Only what is left past all of that,
-// rounded down, is called idle. Every amount is in whole dollars, so the
-// math shown adds up exactly. Nothing is suggested while any account is
+// rounded down, is called idle. Every amount is in whole dollars, rounded
+// the careful way, so the math shown adds up exactly. Nothing is suggested while any account is
 // overdrawn, safe to spend is tight, no payday is known or there is no
 // spending to go by, since a guess then could leave checking short.
 
@@ -69,7 +69,7 @@ export interface IdleCash {
   suggested: boolean
   /** Why not, when not suggested; null when it is. */
   reason: IdleCashReason | null
-  /** Counted checking, to the whole dollar like every amount here. */
+  /** Counted checking, rounded down to the whole dollar (every need is rounded up). */
   checkingCents: number
   billsCents: number
   /** Typical everyday spending until payday. */
@@ -90,13 +90,19 @@ export interface IdleCash {
   nextPayday: IsoDate
 }
 
-/**
- * An amount to the whole dollar, as the app shows it (web/src/lib/money.ts
- * rounds the same way), so every figure in the math is exactly what is drawn
- * and the rows add up to the result on screen.
- */
-function wholeDollars(cents: number): number {
-  return Math.round(cents / 100) * 100
+// Amounts go to the whole dollar, as the app shows them, so every figure in
+// the math is exactly what is drawn and the rows add up to the result on
+// screen. Always the careful way: what checking holds is rounded down and
+// what it needs is rounded up, so rounding never makes cash look spare.
+
+/** Down to the whole dollar: for what checking holds. */
+function dollarsDown(cents: number): number {
+  return Math.floor(cents / 100) * 100
+}
+
+/** Up to the whole dollar: for what checking needs. */
+function dollarsUp(cents: number): number {
+  return Math.ceil(cents / 100) * 100
 }
 
 /** What a year at the assumed rate earns on `cents`. */
@@ -118,12 +124,12 @@ function blocker(inputs: IdleCashInputs): IdleCashReason | null {
 /** Whether checking holds money it will not need before payday, and how much. */
 export function checkIdleCash(inputs: IdleCashInputs): IdleCash {
   const daily = Math.max(0, inputs.dailySpendCents ?? 0)
-  const checkingCents = wholeDollars(inputs.checkingCents)
-  const billsCents = wholeDollars(inputs.billsCents)
-  const cardsOwedCents = wholeDollars(inputs.cardsOwedCents)
+  const checkingCents = dollarsDown(inputs.checkingCents)
+  const billsCents = dollarsUp(inputs.billsCents)
+  const cardsOwedCents = dollarsUp(inputs.cardsOwedCents)
   // Today counts as a day to spend, so a payday tomorrow still needs a day's spending.
-  const spendingCents = wholeDollars(daily * Math.max(1, inputs.daysUntilPayday))
-  const cushionCents = wholeDollars(Math.max(CUSHION_FLOOR_CENTS, daily * CUSHION_DAYS))
+  const spendingCents = dollarsUp(daily * Math.max(1, inputs.daysUntilPayday))
+  const cushionCents = dollarsUp(Math.max(CUSHION_FLOOR_CENTS, daily * CUSHION_DAYS))
   const neededCents = billsCents + spendingCents + cardsOwedCents + cushionCents
   const spareCents = Math.max(0, checkingCents - neededCents)
   const rounded = Math.floor(spareCents / ROUND_TO_CENTS) * ROUND_TO_CENTS

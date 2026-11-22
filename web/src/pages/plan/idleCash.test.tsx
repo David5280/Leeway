@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 const NAME = 'Cash that could earn more'
 
-/** $8,059.99 in checking (shown as $8,060), $1,200 of bills and $50 a day for 10 days to payday. */
+/** $8,059.99 in checking (shown as $8,059, rounded down), $1,200 of bills and $50 a day for 10 days to payday. */
 const flush = {
   checkingCents: 805_999,
   billsCents: 120_000,
@@ -59,7 +59,7 @@ describe('cash that could earn more on Plan, Bills', () => {
     const math = within(drill).getByRole('region', { name: 'How it adds up' })
     expect(math).toHaveTextContent('rounded down')
     expect(math).toHaveTextContent(
-      'Could sit in savings $5,600 = In checking $8,060 minus bills due by payday $1,200 minus typical spending until payday $500 minus a cushion kept for surprises $700 minus rounded down $60',
+      'Could sit in savings $5,600 = In checking $8,059 minus bills due by payday $1,200 minus typical spending until payday $500 minus a cushion kept for surprises $700 minus rounded down $59',
     )
     expect(drill).toHaveTextContent('assumed 4% APY')
     expect(drill).toHaveTextContent('Leeway never moves money')

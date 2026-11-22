@@ -1,7 +1,8 @@
 // The card contract (Card.tsx), checked on the screens that promise it: with
 // real-looking data on Overview (every widget shown), Accounts, an account's
-// page, Activity and Plan's bills (with cash that could earn more), every card is a drill-down that opens its math, a link
-// to its own page, or static for a stated reason other than "pending".
+// page, Activity and Plan's bills (with cash that could earn more), every
+// card is a drill-down that opens its math, a link to its own page, or
+// static for a stated reason other than "pending".
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

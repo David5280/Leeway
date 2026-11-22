@@ -86,19 +86,41 @@ describe('checkIdleCash', () => {
     expect(ROUND_TO_CENTS).toBe(10_000)
   })
 
-  it('works in whole dollars, as the app shows them, so the math shown is exact', () => {
+  it('works in whole dollars, checking rounded down and every need rounded up', () => {
     const idle = checkIdleCash(
-      flush({ checkingCents: 805_999, billsCents: 120_049, cardsOwedCents: 10_050 }),
+      flush({ checkingCents: 805_999, billsCents: 120_001, cardsOwedCents: 10_001 }),
     )
     expect(idle).toMatchObject({
-      checkingCents: 806_000,
-      billsCents: 120_000,
+      checkingCents: 805_900,
+      billsCents: 120_100,
       cardsOwedCents: 10_100,
-      roundedOffCents: 5_900,
+      roundedOffCents: 5_700,
       idleCents: 550_000,
     })
-    // $33.33 a day for 10 days is $333.30, shown as $333.
-    expect(checkIdleCash(flush({ dailySpendCents: 3_333 })).spendingCents).toBe(33_300)
+    // $33.33 a day for 10 days is $333.30, kept back as $334.
+    expect(checkIdleCash(flush({ dailySpendCents: 3_333 })).spendingCents).toBe(33_400)
+  })
+
+  it('never lets rounding make cash look spare', () => {
+    // $1,699.50 against $1,200 needed is $499.50 spare: short of the $500 worth a move.
+    const needs = { billsCents: 60_000, dailySpendCents: 1_000 }
+    expect(checkIdleCash(flush({ ...needs, checkingCents: 169_950 }))).toMatchObject({
+      checkingCents: 169_900,
+      neededCents: 120_000,
+      suggested: false,
+      reason: 'not_enough_extra',
+    })
+    expect(checkIdleCash(flush({ ...needs, checkingCents: 170_000 })).idleCents).toBe(50_000)
+    // Needs a cent past a dollar are kept back as the next dollar.
+    expect(
+      checkIdleCash(flush({ ...needs, billsCents: 59_901, checkingCents: 170_000 })),
+    ).toMatchObject({
+      neededCents: 120_000,
+      idleCents: 50_000,
+    })
+    expect(
+      checkIdleCash(flush({ ...needs, billsCents: 60_001, checkingCents: 170_000 })).reason,
+    ).toBe('not_enough_extra')
   })
 
   it('shows math that adds up to the figure, to the cent', () => {
