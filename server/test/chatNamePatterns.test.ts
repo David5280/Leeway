@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   fullNamePattern,
   loneNamePattern,
+  maskPattern,
   replacedIn,
   type Replacement,
 } from '../src/chat/namePatterns.js'
@@ -94,5 +95,40 @@ describe('a word of a name alone', () => {
     ).toBe("the someone' cabin, someone's dog")
     expect(hidden('Bright-water and BRIGHTWATERS', [], ['Brightwater'])).toBe('someone and someone')
     expect(hidden('Ysolde Bright-waters', ['Ysolde Brightwater'])).toBe('someone')
+  })
+})
+
+describe('a name with an apostrophe or hyphen', () => {
+  it('is found whichever apostrophe is written, in the name or the text', () => {
+    // A curly apostrophe in the name, a straight one in the text, and the other way round.
+    expect(hidden("Siobhan O'Brien's gift", ['SIOBHAN O’BRIEN'])).toBe("someone's gift")
+    expect(hidden('Seamus O’Donnell', ["SEAMUS O'DONNELL"])).toBe('someone')
+    expect(hidden('O‘Donnell and OʼDONNELL', [], ["O'Donnell"])).toBe('someone and someone')
+  })
+
+  it('is found with its hyphen written as a space, a hyphen or nothing', () => {
+    const reversed = ['Núñez-García José']
+    expect(hidden('NUNEZ GARCIA JOSE', reversed)).toBe('someone')
+    expect(hidden('Mary Kate, MaryKate, Mary-Kate', [], ['Mary-Kate'])).toBe(
+      'someone, someone, someone',
+    )
+  })
+})
+
+describe('an account mask', () => {
+  /** The text with a mask hidden. */
+  const masked = (text: string, mask: string) =>
+    replacedIn(text, [{ pattern: maskPattern(mask), with: '••••' }])
+
+  it('is hidden as a whole number, after dots or a dash too', () => {
+    expect(masked('acct 9911, card ...9911, xxxx-9911', '9911')).toBe(
+      'acct ••••, card ...••••, xxxx-••••',
+    )
+    expect(masked('99110 and 19911', '9911')).toBe('99110 and 19911')
+  })
+
+  it("never in a date's year or an amount", () => {
+    expect(masked('2026-11-17, 11/2026, 2026-11', '2026')).toBe('2026-11-17, 11/2026, 2026-11')
+    expect(masked('$9911.50, 1,9911, 12:9911', '9911')).toBe('$9911.50, 1,9911, 12:9911')
   })
 })

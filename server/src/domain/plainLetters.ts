@@ -19,13 +19,17 @@ const LOOK_ALIKES = new Map(
   ].map((pair) => [pair[0]!, pair[1]!]),
 )
 
+// Apostrophes written curly or as a letter, read as a straight one: "O’Brien" is O'Brien.
+const APOSTROPHE = /^[’‘ʼ]$/u
+
 /**
- * One character as names are read: nothing for an invisible one, otherwise
- * its compatibility form (NFKD, so "Ｊ" reads "J" and "é" reads "e" and its
- * mark) with look-alike letters made plain.
+ * One character as names are read: nothing for an invisible one, a straight
+ * apostrophe for any other, otherwise its compatibility form (NFKD, so "Ｊ"
+ * reads "J" and "é" reads "e" and its mark) with look-alike letters made plain.
  */
 export function plainCharacter(character: string): string {
   if (INVISIBLE.test(character)) return ''
+  if (APOSTROPHE.test(character)) return "'"
   return [...character.normalize('NFKD')].map((one) => LOOK_ALIKES.get(one) ?? one).join('')
 }
 

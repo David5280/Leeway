@@ -14,10 +14,11 @@
 // rent" is about a person), and the names read from them by "someone", full
 // names and single words alike; a single word that is a common word or one
 // of the owner's account names' words only in their notes, so "Rent" and
-// account names stay. What the owner writes (notes, and the names and
-// patterns of what they made) shows none of their account masks either.
+// account names stay. A note goes only when every word of it is surely no
+// one's (domain/chat/ownerText.ts). No string shows an account mask.
 
 import { wordsOf } from '../domain/chat/billLabels.js'
+import { noteMaySend } from '../domain/chat/ownerText.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 import type { RowLabel } from '../domain/modelLabels.js'
 import { agentJson } from '../mcp/agentOutput.js'
@@ -34,7 +35,7 @@ import {
 /** Stands in for a person's name wherever one would show. */
 export const SOMEONE = 'someone'
 
-/** Stands in for an account mask in what the owner wrote. */
+/** Stands in for an account mask wherever one is written. */
 export const MASKED = '••••'
 
 /** What Chat hides in a tool's result. */
@@ -42,17 +43,13 @@ interface Hidden {
   people: PaymentPeople
   /**
    * Shown names by their label, then full names, then single words of names
-   * by "someone", but a word of the owner's account names, which stay.
+   * by "someone", but a word of the owner's account names, which stay; then
+   * account masks.
    */
   everywhere: Replacement[]
-  /** All of those, account words, common words of names and account masks too, for notes. */
+  /** All of those, with account words and common words of names too, for notes. */
   inNotes: Replacement[]
-  /** Those of everywhere and account masks, for the names and patterns the owner wrote. */
-  inOwnerText: Replacement[]
 }
-
-// Fields whose text the owner wrote: a goal's, category's or bill's name, a rule's pattern.
-const OWNER_TEXT = new Set(['name', 'pattern', 'matchPattern'])
 
 type Row = Record<string, unknown>
 
@@ -117,12 +114,19 @@ function freeKey(key: string, taken: ReadonlySet<string>, hidden: Hidden): strin
   return `${replaced} ${number}`
 }
 
+/** A note as sent: only one whose every word is surely no one's, with anything hidden replaced. */
+function noteOf(note: string, hidden: Hidden): string | null {
+  const { shownWords, accountWords } = hidden.people
+  const plain = (word: string) => shownWords.has(word) || accountWords.includes(word)
+  return noteMaySend(note, plain) ? replacedIn(note, hidden.inNotes) : null
+}
+
 /** One field of an object, with anything hidden in it replaced. */
 function cleanField(key: string, value: unknown, hidden: Hidden): unknown {
   if (key === 'counterparty') return null
   if (typeof value !== 'string') return walked(value, hidden)
-  if (key === 'note') return replacedIn(value, hidden.inNotes)
-  return replacedIn(value, OWNER_TEXT.has(key) ? hidden.inOwnerText : hidden.everywhere)
+  if (key === 'note') return noteOf(value, hidden)
+  return replacedIn(value, hidden.everywhere)
 }
 
 /** An object shown by its label where it has one, then with every key and field cleaned. */
@@ -166,7 +170,7 @@ function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
   const account = new Set(people.accountWords)
   const ofAccounts = ({ word }: { word: string }) => account.has(word.toLowerCase())
   const asSomeone = ({ pattern }: { pattern: RegExp }) => ({ pattern, with: SOMEONE })
-  const everywhere = [
+  const named = [
     ...phrases,
     ...names,
     ...words,
@@ -174,8 +178,8 @@ function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
   ]
   const common = people.noteNames.map((word) => ({ pattern: loneNamePattern(word), with: SOMEONE }))
   const masks = people.masks.map((mask) => ({ pattern: maskPattern(mask), with: MASKED }))
-  const inNotes = [...everywhere, ...lone.filter(ofAccounts).map(asSomeone), ...common, ...masks]
-  return { everywhere, inNotes, inOwnerText: [...everywhere, ...masks] }
+  const inNotes = [...named, ...lone.filter(ofAccounts).map(asSomeone), ...common, ...masks]
+  return { everywhere: [...named, ...masks], inNotes }
 }
 
 /**

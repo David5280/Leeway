@@ -13,8 +13,11 @@
 // 2. It names no payment app, except a PayPal purchase at a merchant Plaid
 //    named (paysAShopThroughPayPal).
 // 3. It does not read as money moved or paid to someone (MOVED).
-// 4. What it would show has no person's shape ("Odalys Larkspur",
-//    personShape.ts), unless Plaid vouched for the merchant as a business.
+// 4. Plaid vouched for the merchant as a business (merchantEntityId), or
+//    what it would show has no person's shape ("Odalys Larkspur",
+//    personShape.ts). A medical one, or one a card processor ran ("SQ *",
+//    "TST*"), where sole traders go by their own names, needs Plaid's word;
+//    pay needs no person's name anywhere in its line (household payroll).
 // 5. A medical one does not name a clinician ("DR. JANE DOE LCSW").
 //
 // Every other row is shown by what kind of movement it is (LABELS): "Zelle
@@ -22,20 +25,26 @@
 // To show a new code by name, add it to SHOWN_CODES only when Plaid files
 // nothing but businesses under it; when it can also be a person, give it a
 // label in LABELS instead, so its rows say what they were without a name.
-// A row the owner typed in has no code, so it shows only as a shop they buy
-// from or in everyday words ("Rent", "House cleaner"); a line like "Jane Doe
-// babysitting" is labelled, and its names hidden, as an imported one is.
+// A row the owner typed in or imported from a file has no code, so it shows
+// only as a shop they buy from ("Costco Warehouse" beside Plaid's Costco) or
+// in everyday words ("Rent", "House cleaner"); a line like "Jane Doe
+// babysitting" is labelled, and its names hidden.
 
 import { appIn, merchantOf, paymentAppOf } from './betweenPeople.js'
-import { isKnownShop, NO_SHOPS, type KnownShops } from './knownShops.js'
+import { isKnownShop, NO_SHOPS, restAfterAShop, type KnownShops } from './knownShops.js'
 import { cleanMerchantName } from './merchantName.js'
-import { hasAPersonsShape, namesAClinician, onlyEverydayWords } from './personShape.js'
+import {
+  hasAPersonsShape,
+  holdsAPersonsName,
+  namesAClinician,
+  onlyEverydayWords,
+} from './personShape.js'
 import { nameAfterToOrFrom, type Movement } from './transfers.js'
 
-/** A transaction as labelling reads it: its bank fields, and whether the owner typed it in. */
+/** A transaction as labelling reads it: its bank fields, and whether the owner typed or imported it. */
 export type LabelSubject = Movement & {
-  /** Entered by hand: no code, and a name the owner typed, which may be anyone's. */
-  handEntered?: boolean
+  /** Typed in or brought in from a file: no code, and a name that may be anyone's. */
+  typedOrImported?: boolean
   /** Plaid's id for the merchant, set only when it recognised a business. */
   merchantEntityId?: string | null
 }
@@ -78,6 +87,10 @@ const LEAD = '(?:(?:online|mobile|internet|web|bank|banking|external|wire|ach|in
 const BILL_PAY = /\bbill\s?pay(?:ment)?\b/i
 // "DEPOSIT FROM JANE DOE": money in from someone.
 const DEPOSIT_FROM = /\bdeposit\s+from\b/i
+// A card processor's code before the seller's name ("SQ *J PEMBERTON",
+// "TST* ..."), whose sellers are often people going by their own names.
+const PROCESSOR = /(?<!\p{L})(?:sq|squ|tst|sp|py)\s?\*/iu
+
 // A line, or the name cleaned from it, that reads as money moved to or from someone.
 const MOVED = [
   new RegExp(
@@ -158,24 +171,38 @@ function shownMerchant(tx: Movement): string {
 
 /**
  * Whether a row may show its own name: a shown code, no movement in its
- * line, no person's shape unless Plaid vouched for the business, and no
- * clinician named on a medical one (see the top of this file).
+ * line, and either Plaid's word for the business or no person's name in it
+ * (see the top of this file).
  */
 function showsItsName(tx: LabelSubject): boolean {
   const code = codeOf(tx)
   if (!SHOWN_CODES.test(code) || readsAsMoved(tx.name)) return false
-  if (code.startsWith('MEDICAL') && [tx.name, merchantOf(tx)].some(namesAClinician)) return false
-  return Boolean(tx.merchantEntityId) || !hasAPersonsShape(shownMerchant(tx))
+  const vouched = Boolean(tx.merchantEntityId)
+  // A clinician is a person even when Plaid knows their practice.
+  if (code.startsWith('MEDICAL')) {
+    return vouched && ![tx.name, merchantOf(tx)].some(namesAClinician)
+  }
+  if (vouched) return true
+  if (PROCESSOR.test(tx.name)) return false
+  // Pay names its payer anywhere in a line: "DIRECT DEP JOHN Q PUBLIC HOUSEHOLD PAYROLL".
+  if (code.startsWith('INCOME')) return !holdsAPersonsName(shownMerchant(tx))
+  return !hasAPersonsShape(shownMerchant(tx))
 }
 
 /**
- * Whether a row the owner typed in may show its name: a shop they buy from,
- * or one made only of everyday words that reads as no money moved. Anything
- * else could name a person ("Jane Doe babysitting", "Rent to John Smith").
+ * Whether a row the owner typed in or imported may show its name: a shop
+ * they buy from, written alone or before everyday words ("Costco
+ * Warehouse"), or a name made only of everyday words, reading as no money
+ * moved. Anything else could name a person ("Jane Doe babysitting", "Rent
+ * to John Smith").
  */
-function handEnteredShows(tx: LabelSubject, shops: KnownShops): boolean {
-  if (isKnownShop(shops, shownMerchant(tx))) return true
-  return !readsAsMoved(tx.name) && onlyEverydayWords(tx.name)
+function typedOrImportedShows(tx: LabelSubject, shops: KnownShops): boolean {
+  const shown = shownMerchant(tx)
+  if (isKnownShop(shops, shown)) return true
+  if (readsAsMoved(tx.name)) return false
+  const rest = restAfterAShop(shops, shown)
+  if (rest !== null) return !/\p{L}/u.test(rest) || onlyEverydayWords(rest)
+  return onlyEverydayWords(tx.name)
 }
 
 /**
@@ -211,7 +238,7 @@ function appLabel(tx: Movement, app: string): string {
  *   or "Purchase or payment" and "Money received" with none.
  *
  * `shops` are the shops the owner buys from (peopleContext.ts), which a row
- * typed in by hand may show as; without them, it shows only in everyday words.
+ * typed in or imported may show as; without them, it shows only in everyday words.
  */
 export function neutralLabel(tx: LabelSubject, shops: KnownShops = NO_SHOPS): RowLabel | null {
   const app = paymentAppOf(tx)
@@ -219,7 +246,7 @@ export function neutralLabel(tx: LabelSubject, shops: KnownShops = NO_SHOPS): Ro
     if (app === 'PayPal' && paysAShopThroughPayPal(tx)) return null
     return { label: appLabel(tx, app), kind: 'app' }
   }
-  if (tx.handEntered ? handEnteredShows(tx, shops) : showsItsName(tx)) return null
+  if (tx.typedOrImported ? typedOrImportedShows(tx, shops) : showsItsName(tx)) return null
   const moved = codeOf(tx).startsWith('TRANSFER') || readsAsMoved(tx.name)
   return { label: labelOf(tx, moved), kind: moved ? 'transfer' : 'unknown' }
 }

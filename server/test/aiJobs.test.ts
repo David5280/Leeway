@@ -12,7 +12,7 @@ import {
 import { AiProviderError, type AiFailure } from '../src/ai/provider.js'
 import { aiServices } from '../src/ai/services.js'
 import { AiSummaryWriter, SUMMARY_MAX_TOKENS, SYSTEM_PROMPT } from '../src/ai/summary.js'
-import { AiLimitError } from '../src/domain/ai/gateway.js'
+import { AiLimitError } from '../src/domain/ai/limit.js'
 import { checkPaystubFile } from '../src/domain/paystubs/files.js'
 import { PaystubReader } from '../src/domain/paystubs/reader.js'
 import { getSettings, saveSettings } from '../src/domain/settings.js'

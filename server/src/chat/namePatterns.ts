@@ -5,6 +5,7 @@
 // after its letter, so each letter can take its accents or none. Only the
 // names found are replaced; the rest of the text stays as written. Pure.
 
+import { APOSTROPHES } from '../domain/personShape.js'
 import { plainCharacter } from '../domain/plainLetters.js'
 
 // Not inside a longer word: no letter or accent mark either side. A digit
@@ -22,12 +23,24 @@ function escaped(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// Between the parts of a hyphenated name: a hyphen, a space, or nothing
+// ("Núñez-García" is also "NUNEZ GARCIA" and "NunezGarcia").
+const HYPHEN = '[\\s-]?'
+
+/** A RegExp source matching one character of a name: a letter with or without accents. */
+function characterOf(character: string): string {
+  if (character === '-') return HYPHEN
+  // Text is searched folded, where every apostrophe is a straight one (plainCharacter).
+  if (APOSTROPHES.includes(character)) return "'"
+  return `${escaped(character)}\\p{M}*`
+}
+
 /**
  * A RegExp source matching a word letter by letter, each with or without
  * accents, and with a hyphen between any two ("Bright-water").
  */
 function lettersOf(word: string): string {
-  return [...withoutAccents(word)].map((letter) => `${escaped(letter)}\\p{M}*`).join('-?')
+  return [...withoutAccents(word)].map(characterOf).join('-?')
 }
 
 // A name made plural: "BRIGHTWATERS", "the Prycewoods'". One owned
@@ -82,9 +95,15 @@ function searchable(original: string): Searchable {
   return search
 }
 
-/** An account mask's digits as a whole number: "4417" in "acct 4417", never in "44170". */
+/**
+ * An account mask's digits as a whole number: "4417" in "acct 4417" and
+ * "card ...4417", never inside a longer number ("44170"), a date's year
+ * ("2026-11-17" or "11/2026" with a mask 2026) or an amount ("$4417.50", "1,4417").
+ */
 export function maskPattern(mask: string): RegExp {
-  return new RegExp(`(?<!\\p{N})${escaped(mask)}(?!\\p{N})`, 'gu')
+  const before = '(?<!\\p{N}|\\p{N}[.,:/])'
+  const after = '(?!\\p{N}|[-.,:/]\\p{N})'
+  return new RegExp(`${before}${escaped(mask)}${after}`, 'gu')
 }
 
 /** What a pattern's matches are replaced with. */

@@ -1,28 +1,64 @@
 // Whether a merchant name is shaped like a person's ("Odalys Larkspur",
-// "DR. JANE DOE LCSW"), for labelling (modelLabels.ts). Plaid writes the
-// person paid as the merchant on some lines, and a sole trader goes by
-// their own name. Pure.
+// "Maeve Anne Calloway", "J Pemberton", "DR. JANE DOE LCSW"), for labelling
+// (modelLabels.ts). Plaid writes the person paid as the merchant on some
+// lines, and a sole trader goes by their own name. Pure.
 
+import { isBrandWord } from './brandWords.js'
 import { isCommonWord } from './chat/commonWords.js'
 import { isBusinessWord } from './businessWords.js'
 import { isMovementWord } from './movementWords.js'
+import { isPlainWord } from './plainWords.js'
+
+// Every way an apostrophe is written: straight, curly either way, or as a letter.
+export const APOSTROPHES = "'’‘ʼ"
 
 // A word that could be a given name or surname: letters, with an inner
 // hyphen or apostrophe ("Mary-Kate", "O'Neil"), but no possessive ("Joe's").
-const NAME_WORD = /^\p{L}[\p{L}'’-]*\p{L}$/u
-const POSSESSIVE = /['’]s$/i
+const NAME_WORD = new RegExp(`^\\p{L}[\\p{L}${APOSTROPHES}-]*\\p{L}$`, 'u')
+const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'i')
 
-// A middle initial, with or without its dot: "Jane Q. Doe".
+// An initial, with or without its dot: "Jane Q. Doe", "J PEMBERTON".
 const INITIAL = /^\p{L}\.?$/u
 
-// A clinician's title or credential, anywhere in a line: "DR. JANE DOE", "JANE DOE LCSW".
-const TITLE = /(?:^|[^\p{L}])(?:dr|lcsw|dds|dmd|phd|ph\.d|lpc|psyd|lmft|lmhc)(?:[^\p{L}]|$)/iu
-// "MD" after a name: "JANE DOE MD", "Jane Doe, M.D.". Alone it is too often Maryland.
-const TRAILING_MD = /[\s,]+m\.?d\.?\s*$/i
+// The most name words a person's name is read as: "Juan Carlos Echeverria Lopez".
+const MOST_NAME_WORDS = 4
 
-/** Whether a word is an everyday one, never a name to hide: a common, business or movement word. */
+// A clinician's title or credential, found anywhere in a line: "DR. JANE DOE", "JANE DOE LCSW".
+const TITLES = ['dr', 'lcsw', 'dds', 'dmd', 'phd', 'lpc', 'psyd', 'lmft', 'lmhc', 'lmsw', 'lpcc']
+const MORE_TITLES = ['lcpc', 'mft', 'crnp', 'arnp', 'fnp', 'dnp', 'dpt']
+// A short credential, found only after a name ("JANE DOE MD", "Corwin Ashby, D.C."):
+// alone each is too often something else (Maryland, Washington DC, "do").
+const AFTER_A_NAME = ['md', 'dc', 'np', 'pa', 'pa-c', 'rn', 'do', 'od', 'pt']
+
+/** A credential as a RegExp source, a dot allowed after each letter: "ph.d", "D.C.". */
+function written(credential: string): string {
+  return [...credential].map((letter) => (letter === '-' ? '-' : `${letter}\\.?`)).join('')
+}
+
+const TITLE = new RegExp(
+  `(?:^|[^\\p{L}])(?:${[...TITLES, ...MORE_TITLES].map(written).join('|')})(?:[^\\p{L}]|$)`,
+  'iu',
+)
+const TRAILING_CREDENTIAL = new RegExp(
+  `[\\s,]+(?:${AFTER_A_NAME.map(written).join('|')})\\s*$`,
+  'i',
+)
+const CREDENTIALS = new Set([...TITLES, ...MORE_TITLES, ...AFTER_A_NAME])
+
+/** Whether a word is a clinician's credential or title, dots aside: "LCSW", "M.D.", "PA-C". */
+export function isCredential(word: string): boolean {
+  return CREDENTIALS.has(word.toLowerCase().replace(/\./g, ''))
+}
+
+/** A name without the credential written after it: "Corwin Ashby DC" reads "Corwin Ashby". */
+export function withoutCredential(name: string): string {
+  return name.replace(TRAILING_CREDENTIAL, '')
+}
+
+/** Whether a word is an everyday one, never a name: a common, business, brand, movement or plain word. */
 export function isEverydayWord(word: string): boolean {
-  return isCommonWord(word) || isBusinessWord(word) || isMovementWord(word)
+  if (isCommonWord(word) || isBusinessWord(word) || isBrandWord(word)) return true
+  return isMovementWord(word) || isPlainWord(word)
 }
 
 /** Whether one word could be part of a person's name and is no everyday or business word. */
@@ -37,18 +73,35 @@ export function onlyEverydayWords(text: string): boolean {
 }
 
 /**
- * Whether a name has the shape of a person's: two name words ("Jane Doe"),
- * or two around a middle initial ("Jane Q. Doe"), none of them an everyday
- * or business word ("King Soopers", "Taco Bell" and "Joe's Pizza" are not).
+ * Whether a name has the shape of a person's: two to four name words ("Jane
+ * Doe", "Sarah Beth Holloway"), or an initial and a surname ("J Pemberton"),
+ * with initials anywhere ("Jane Q. Doe"), none of them an everyday or
+ * business word ("King Soopers", "Taco Bell" and "Joe's Pizza" are not).
  */
 export function hasAPersonsShape(name: string): boolean {
   const words = name.trim().split(/\s+/)
-  if (words.length === 3 && INITIAL.test(words[1]!)) words.splice(1, 1)
-  return words.length === 2 && words.every(couldBeANameWord)
+  const nameWords = words.filter((word) => !INITIAL.test(word))
+  if (words.length < 2 || nameWords.length === 0 || nameWords.length > MOST_NAME_WORDS) {
+    return false
+  }
+  return nameWords.every(couldBeANameWord)
 }
 
-/** Whether a line or merchant reads as a clinician by name: a title, or a name then "MD". */
+/**
+ * Whether a line holds a person's name among everyday words and numbers:
+ * "Direct Dep John Q Public Household Payroll" holds "John Q Public". What
+ * is left once those are gone is read as a name (hasAPersonsShape).
+ */
+export function holdsAPersonsName(line: string): boolean {
+  const words = line
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, ''))
+    .filter((word) => word && !/\d/.test(word) && !isEverydayWord(word.replace(/\.$/, '')))
+  return hasAPersonsShape(words.join(' '))
+}
+
+/** Whether a line or merchant reads as a clinician by name: a title, or a name then a credential. */
 export function namesAClinician(text: string): boolean {
   if (TITLE.test(text)) return true
-  return TRAILING_MD.test(text) && hasAPersonsShape(text.replace(TRAILING_MD, ''))
+  return TRAILING_CREDENTIAL.test(text) && hasAPersonsShape(withoutCredential(text))
 }

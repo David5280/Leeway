@@ -366,8 +366,8 @@ describe('payments that could be between people', () => {
         count: 1,
         modelLabel: 'Purchase or payment',
       },
-      // "Farmers" could be a surname, so it is labelled too.
-      { merchant: 'Farmers market', spentCents: 800, count: 1, modelLabel: 'Purchase or payment' },
+      // Everyday words: a market, as "farmers" in the plural names no one.
+      { merchant: 'Farmers market', spentCents: 800, count: 1 },
       { merchant: 'House cleaner', spentCents: 700, count: 1 },
     ])
   })

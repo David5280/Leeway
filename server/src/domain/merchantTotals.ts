@@ -58,7 +58,7 @@ export async function topMerchants(
             t.provider_category_primary AS "providerCategoryPrimary",
             t.provider_category_detailed AS "providerCategoryDetailed",
             t.merchant_entity_id AS "merchantEntityId",
-            (t.provider_transaction_id IS NULL AND t.import_id IS NULL) AS "handEntered",
+            (t.provider_transaction_id IS NULL) AS "typedOrImported",
             sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
@@ -72,7 +72,7 @@ export async function topMerchants(
   // Merchant names go to assistants and the AI writer, so they show no account number.
   const masks = await accountMasks(db)
   const spent = rows.map((row) => ({ ...row, amountCents: row.spentCents }))
-  // A row typed in by hand joins a total of the same name, so a shop in it is one seen here.
+  // A row typed in or imported joins a total of the same name, so a shop in it is one seen here.
   const shops = shopsIn(spent)
   const byMerchant = new Map<string, MerchantTotal>()
   for (const row of spent) {

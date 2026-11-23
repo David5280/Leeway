@@ -42,7 +42,7 @@ export async function recentHistory(db: Db, today: IsoDate): Promise<StoredTrans
        t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
        t.merchant_entity_id AS "merchantEntityId",
-       (t.provider_transaction_id IS NULL AND t.import_id IS NULL) AS "handEntered"
+       (t.provider_transaction_id IS NULL) AS "typedOrImported"
      FROM transactions t
      JOIN accounts a ON a.id = t.account_id
      LEFT JOIN categories c ON c.id = t.category_id

@@ -58,7 +58,7 @@ describe('a shop paid through PayPal', () => {
       'King Soopers',
       'PayPal payment (sent)',
     ])
-    expect(await probe.notes()).toEqual(['someone came too'])
+    expect(await probe.notes()).toEqual([])
   })
 })
 
@@ -119,10 +119,8 @@ describe('a person paid through an app', () => {
 
     const transactions = await probe.transactions()
     expect(JSON.stringify(transactions)).not.toMatch(/maria|silva|john|smith/i)
-    expect((await probe.notes()).sort()).toEqual([
-      'Lunch with someone and someone',
-      'Rent to someone',
-    ])
+    // A note naming them is left out whole, wherever it is written.
+    expect(await probe.notes()).toEqual([])
   })
 
   it('is read from the line, the memo and the merchant, however the bank wrote them', async () => {
@@ -144,7 +142,7 @@ describe('a person paid through an app', () => {
     expect(JSON.stringify(transactions)).not.toMatch(
       /ingrid|halvorsen|dunmore|perpetua|ilsabet|quorn|ambrose|kettering|wilhelmina|ashcombe|corrigan/i,
     )
-    expect(await probe.notes()).toEqual(['someone, someone, someone, someone, someone and someone'])
+    expect(await probe.notes()).toEqual([])
     // Money in arrived in the owner's own account, which keeps its name.
     expect(await probe.sent('summarize_accounts')).toContain('Chase Total Checking')
   })
@@ -244,7 +242,7 @@ describe('a sole trader also paid through an app', () => {
       'Purchase or payment',
       'Venmo payment (sent)',
     ])
-    expect(await probe.notes()).toEqual(['someone scones'])
+    expect(await probe.notes()).toEqual([])
     expect(JSON.parse(await probe.sent('top_merchants'))).toEqual([
       { merchant: 'Purchase or payment', spentCents: 6_500, count: 2 },
     ])

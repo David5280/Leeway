@@ -4,7 +4,13 @@
 
 import { describe, expect, it } from 'vitest'
 import { isCommonWord } from '../src/domain/chat/commonWords.js'
-import { isKnownShop, knownShops, NO_SHOPS, startsAShop } from '../src/domain/knownShops.js'
+import {
+  isKnownShop,
+  knownShops,
+  NO_SHOPS,
+  restAfterAShop,
+  startsAShop,
+} from '../src/domain/knownShops.js'
 import { loneNamesOf } from '../src/domain/chat/loneNames.js'
 import { namesSomeone } from '../src/domain/movementWords.js'
 import { namesIn, namesToHide, type FoundName } from '../src/domain/chat/personNames.js'
@@ -82,6 +88,15 @@ describe('the shops the owner buys from', () => {
     expect(startsAShop(shops, 'Wendy')).toBe(false)
     expect(startsAShop(shops, 'Bakery')).toBe(false)
   })
+
+  it('start a longer name by their whole name only, leaving what follows', () => {
+    expect(restAfterAShop(shops, 'Marigold Bakery Downtown 0042')).toBe('Downtown 0042')
+    expect(restAfterAShop(shops, 'XCEL ENERGY PAYMENT')).toBe('PAYMENT')
+    // The whole name alone, a first word only, or a word run on is no shop's start.
+    expect(restAfterAShop(shops, 'Xcel Energy')).toBeNull()
+    expect(restAfterAShop(shops, 'Marigold Cafe')).toBeNull()
+    expect(restAfterAShop(shops, "Wendy'sburger Jane")).toBeNull()
+  })
 })
 
 describe('the words of a name hidden alone', () => {
@@ -90,6 +105,25 @@ describe('the words of a name hidden alone', () => {
     expect(loneNamesOf(names, NO_SHOPS)).toEqual({
       capital: ['Q', 'Doe', 'Roe'].filter((word) => word.length > 1),
       anyCase: ['Jane', 'José', 'María', 'Núñez', 'Quillon', 'D’Arcy', 'Vane'],
+      inNotes: [],
+    })
+  })
+
+  it('hide a hyphenated word whole and each part alone, but never a credential', () => {
+    expect(
+      loneNamesOf(found('Mary-Kate Abernethy', 'José Núñez-García DDS', 'Jo PA'), NO_SHOPS),
+    ).toEqual({
+      capital: ['Jo'],
+      anyCase: [
+        'Mary-Kate',
+        'Mary',
+        'Kate',
+        'Abernethy',
+        'José',
+        'Núñez-García',
+        'Núñez',
+        'García',
+      ],
       inNotes: [],
     })
   })

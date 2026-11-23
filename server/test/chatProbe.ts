@@ -4,7 +4,7 @@
 // helpers to add a transaction and read a tool's output as the model would.
 
 import { afterAll, beforeAll, beforeEach, expect } from 'vitest'
-import { runChatTool } from '../src/chat/tools.js'
+import { CHAT_TOOLS, runChatTool } from '../src/chat/tools.js'
 import { paymentPeople } from '../src/domain/chat/people.js'
 import {
   createTestContext,
@@ -49,6 +49,20 @@ export interface ChatProbe {
   notes(): Promise<string[]>
   /** The merchants top_merchants sends, in its order. */
   merchants(): Promise<string[]>
+  /**
+   * Everything every tool sends a model, folded as names are compared:
+   * accents aside, lower case. Running every tool takes a while, so a test
+   * that calls it waits longer.
+   */
+  everything(): Promise<string>
+}
+
+/** What some tools need to run at all, or to read every row. */
+const INPUTS: Record<string, unknown> = {
+  check_purchase: { amountCents: 70_000 },
+  preview_rule: { pattern: 'zz' },
+  list_transactions: { limit: 200, includeExcluded: true },
+  top_merchants: { limit: 50 },
 }
 
 /** Makes a row read as one a statement file brought in, as a CSV import does. */
@@ -104,6 +118,14 @@ export function useChatProbe(): ChatProbe {
     (JSON.parse(await probe.sent('list_transactions')) as { transactions: SentTransaction[] })
       .transactions
   probe.notes = async () => (await probe.transactions()).flatMap((tx) => (tx.note ? [tx.note] : []))
+  probe.everything = async () => {
+    const skipped = new Set(['remember', 'list_goal_contributions'])
+    const outputs: string[] = []
+    for (const { name } of CHAT_TOOLS.filter((tool) => !skipped.has(tool.name))) {
+      outputs.push((await probe.run(name, INPUTS[name] ?? {})).content)
+    }
+    return outputs.join('\n').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+  }
   probe.merchants = async () =>
     (JSON.parse(await probe.sent('top_merchants')) as { merchant: string }[]).map(
       (total) => total.merchant,

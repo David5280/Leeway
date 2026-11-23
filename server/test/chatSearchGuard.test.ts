@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { HIDDEN_SEARCH_MESSAGE, refusedSearch } from '../src/chat/searchGuard.js'
 import { NO_PEOPLE, type PaymentPeople } from '../src/domain/chat/people.js'
+import { knownShops } from '../src/domain/knownShops.js'
 
 const people: PaymentPeople = {
   ...NO_PEOPLE,
@@ -11,7 +12,9 @@ const people: PaymentPeople = {
   hiddenTexts: [
     { text: 'to jane prycewood', label: 'zelle payment (sent)' },
     { text: 'venmo for concert tickets', label: 'venmo payment (sent)' },
+    { text: 'costco whse #0482', label: 'purchase or payment' },
   ],
+  shops: knownShops(['Costco']),
 }
 
 const search = (text: unknown, tool = 'list_transactions') =>
@@ -45,5 +48,16 @@ describe('a search for text', () => {
     for (const text of ['sam', 'max', 'sam jones', 'jane doe']) {
       expect([text, search(text)]).toEqual([text, HIDDEN_SEARCH_MESSAGE])
     }
+  })
+})
+
+describe('a search for a shop the owner buys from', () => {
+  it('runs though a labelled row holds it: its name, the start of it, or more after it', () => {
+    for (const text of ['Costco', 'cost', 'costco whse']) {
+      expect([text, search(text)]).toEqual([text, null])
+      expect([text, search(text, 'preview_rule')]).toEqual([text, null])
+    }
+    // Text only a labelled row holds that names no shop is still refused.
+    expect(search('whse #0482')).toBe(HIDDEN_SEARCH_MESSAGE)
   })
 })

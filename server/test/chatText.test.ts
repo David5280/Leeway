@@ -18,7 +18,7 @@ import {
 import { CHAT_SYSTEM, chatContext } from '../src/chat/prompt.js'
 import { CHAT_TOOLS, chatToolList, toolTitle } from '../src/chat/tools.js'
 import { withoutAbsentTools } from '../src/chat/toolWords.js'
-import { estimateChatTokens, FRAMING_TOKENS, type AiChatAsk } from '../src/domain/ai/gateway.js'
+import { estimateChatTokens, FRAMING_TOKENS, type AiChatAsk } from '../src/domain/ai/limit.js'
 import { MESSAGE_MAX_LENGTH, type ChatMessage } from '../src/domain/chat/store.js'
 
 const message = (role: ChatMessage['role'], text: string, id = '1'): ChatMessage => ({

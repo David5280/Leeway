@@ -48,12 +48,12 @@ describe('a labelled transaction', () => {
     })
   })
 
-  it("keeps a transfer's note with names hidden, and a paired transfer its own name", () => {
+  it("keeps a transfer's note in everyday words, and a paired transfer its own name", () => {
     const row = {
       id: 't',
       displayName: 'Transfer to Clara Thornbury',
       amountCents: 9,
-      note: 'Rent, Clara',
+      note: 'Rent split',
     }
     const paired = {
       id: 't',
@@ -63,9 +63,12 @@ describe('a labelled transaction', () => {
     }
     const people = hiding({ rows, loneAnyCase: ['Clara'] })
     expect(sent([row, paired], people)).toEqual([
-      { ...row, displayName: TRANSFER.label, note: 'Rent, someone' },
+      { ...row, displayName: TRANSFER.label, note: 'Rent split' },
       paired,
     ])
+    // A note naming someone is left out whole.
+    const named = sent([{ ...row, note: 'Rent, Clara' }], people) as Record<string, unknown>[]
+    expect(named[0]!.note).toBeNull()
   })
 
   it("is a leak's charge too, its alert's words replaced by what it would have shown", () => {
@@ -197,12 +200,12 @@ describe('a hidden name anywhere else', () => {
     const result = {
       categories: [{ name: 'Kettering loan' }, { name: 'kettering fund' }],
       accounts: [{ name: 'Chase Checking' }],
-      note: 'Chase paid back; kettering too',
+      note: 'Chase paid back too',
     }
     expect(sent(result, people)).toEqual({
       categories: [{ name: 'someone loan' }, { name: 'someone fund' }],
       accounts: [{ name: 'Chase Checking' }],
-      note: 'someone paid back; someone too',
+      note: 'someone paid back too',
     })
   })
 
@@ -216,7 +219,7 @@ describe('a hidden name anywhere else', () => {
 
   it('goes as a short word only as a name is written, with a capital or in capitals', () => {
     const people = hiding({ loneNames: ['Bo'] })
-    expect(sent({ note: 'Bo, BO and bo' }, people)).toEqual({ note: 'someone, someone and bo' })
+    expect(sent({ goal: 'Bo, BO and bo' }, people)).toEqual({ goal: 'someone, someone and bo' })
   })
 
   it('keeps every value when names in keys would land on the same key', () => {
@@ -246,16 +249,28 @@ describe('what the owner wrote', () => {
       masks: ['4417'],
     })
     const result = [
-      {
-        name: 'Larkspur wedding fund 4417',
-        note: 'Odalys Larkspur, acct 4417, Aurelia Brightwater',
-      },
+      { name: 'Larkspur wedding fund 4417', note: 'acct 4417' },
       { pattern: 'acct 4417', matchPattern: 'xfer 4417', label: 'Card 4417' },
     ]
     expect(sent(result, people)).toEqual([
-      { name: 'someone wedding fund ••••', note: 'Service payment, acct ••••, someone' },
-      // A mask is hidden only where the owner writes; other fields never carry one.
-      { pattern: 'acct ••••', matchPattern: 'xfer ••••', label: 'Card 4417' },
+      { name: 'someone wedding fund ••••', note: 'acct ••••' },
+      { pattern: 'acct ••••', matchPattern: 'xfer ••••', label: 'Card ••••' },
     ])
+  })
+
+  it('shows no account mask in any string, but leaves dates and amounts whole', () => {
+    const people = hiding({ masks: ['9911', '2026'] })
+    const result = {
+      message: 'Goals: Pay off card 9911 0%. Card ...9911 is due 2026-12-01.',
+      at: '2026-11-17T18:00:00Z',
+      text: 'Spent $9911.50 and $1,9911 since 11/2026',
+      cents: 9911,
+    }
+    expect(sent(result, people)).toEqual({
+      message: 'Goals: Pay off card •••• 0%. Card ...•••• is due 2026-12-01.',
+      at: '2026-11-17T18:00:00Z',
+      text: 'Spent $9911.50 and $1,9911 since 11/2026',
+      cents: 9911,
+    })
   })
 })

@@ -8,7 +8,6 @@ import { runAction } from '../src/actions/action.js'
 import { topMerchantsAction } from '../src/actions/insights.js'
 import { listTransactionsAction } from '../src/actions/transactions.js'
 import { HIDDEN_SEARCH_MESSAGE } from '../src/chat/searchGuard.js'
-import { CHAT_TOOLS } from '../src/chat/tools.js'
 import { ACCOUNT_TRANSFER, GROCERIES, useChatProbe } from './chatProbe.js'
 
 const SERVICES = 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES'
@@ -17,27 +16,6 @@ const LOAN = 'LOAN_PAYMENTS_OTHER_PAYMENT'
 const CARD = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
 const probe = useChatProbe()
 const { pay } = probe
-
-/** What some tools need to run at all, or to read every row. */
-const INPUTS: Record<string, unknown> = {
-  check_purchase: { amountCents: 70_000 },
-  preview_rule: { pattern: 'zz' },
-  list_transactions: { limit: 200, includeExcluded: true },
-  top_merchants: { limit: 50 },
-}
-
-/**
- * Everything every tool sends a model, folded as names are compared: accents
- * aside, lower case. Running every tool takes a while, so its test waits longer.
- */
-async function everything(): Promise<string> {
-  const skipped = new Set(['remember', 'list_goal_contributions'])
-  const outputs: string[] = []
-  for (const { name } of CHAT_TOOLS.filter((tool) => !skipped.has(tool.name))) {
-    outputs.push((await probe.run(name, INPUTS[name] ?? {})).content)
-  }
-  return outputs.join('\n').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
-}
 
 /** Each transaction as the model is shown it, sorted. */
 async function shown(): Promise<string[]> {
@@ -148,7 +126,7 @@ describe('a row that is surely no purchase from a business', () => {
          ('Netflix', 1549, 'month', '2026-12-15', 'netflix')`,
     )
 
-    const text = await everything()
+    const text = await probe.everything()
     expect(HIDDEN.filter((name) => text.includes(name))).toEqual([])
     for (const number of ['4417', '123456789', '55512', 'jpm99a1b2c3']) {
       expect([number, text.includes(number)]).toEqual([number, false])
@@ -170,9 +148,8 @@ describe('a row that is surely no purchase from a business', () => {
       'Spotify',
       'Zelle payment (sent)',
     ])
-    expect(await probe.notes()).toEqual([
-      'dinner w/ someone and someone, someone, someone. acct ••••',
-    ])
+    // A note naming people is left out whole: no word of it is surely no one's.
+    expect(await probe.notes()).toEqual([])
     const goals = await probe.sent('list_goals')
     for (const goal of ['"someone/someone trip"', '"someone"', '"PS5 fund"']) {
       expect(goals).toContain(goal)

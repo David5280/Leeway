@@ -17,7 +17,7 @@ import {
   limitMessage,
   type AiAsk,
   type AiChatAsk,
-} from '../src/domain/ai/gateway.js'
+} from '../src/domain/ai/limit.js'
 import { aiMonth } from '../src/domain/ai/month.js'
 import { DEFAULT_MONTHLY_CAP_CENTS } from '../src/domain/ai/settings.js'
 import { unavailableModels } from '../src/domain/ai/unavailable.js'

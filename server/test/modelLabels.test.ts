@@ -4,7 +4,6 @@
 // no code Plaid files a person under, can reach the model. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
-import { knownShops } from '../src/domain/knownShops.js'
 import { neutralLabel, readsAsLabelled, type LabelSubject } from '../src/domain/modelLabels.js'
 
 const ACCOUNT_TRANSFER = 'TRANSFER_OUT_ACCOUNT_TRANSFER'
@@ -44,7 +43,6 @@ describe('the allowlist: a line shows its name only when all of it holds', () =>
       ['DELTA AIR 0062', 'TRAVEL_FLIGHTS', null],
       ['SHELL OIL 5741', 'TRANSPORTATION_GAS', null],
       ['HOME DEPOT #4410', 'HOME_IMPROVEMENT_HARDWARE', null],
-      ['CVS PHARMACY 01234', 'MEDICAL_PHARMACIES_AND_SUPPLEMENTS', null],
       ['XCEL ENERGY', 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY', null],
       ['CHASE CREDIT CRD AUTOPAY', 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', null],
       ['OVERDRAFT FEE', 'BANK_FEES_OVERDRAFT_FEES', null],
@@ -55,6 +53,9 @@ describe('the allowlist: a line shows its name only when all of it holds', () =>
     for (const [name, code, merchantName] of shown) {
       expect([name, labelOf(name, coded(code, { merchantName }))]).toEqual([name, null])
     }
+    // A medical row shows only with Plaid's word for the business.
+    const pharmacy = coded('MEDICAL_PHARMACIES_AND_SUPPLEMENTS', { merchantEntityId: 'ent_cvs' })
+    expect(labelOf('CVS PHARMACY 01234', pharmacy)).toBeNull()
   })
 
   it('labels every code it does not list, and a family named without its detail', () => {
@@ -110,39 +111,21 @@ describe('the allowlist: a line shows its name only when all of it holds', () =>
     }
   })
 
-  it('labels a medical line that names a clinician by a title', () => {
-    const medical = (name: string, merchantName: string | null = null) =>
-      label(name, { merchantName, ...coded('MEDICAL_OTHER_MEDICAL') })
+  it("labels a medical line without Plaid's word for the business, or naming a clinician", () => {
+    const medical = (name: string, merchantName: string | null = null, entity = 'ent_1') =>
+      label(name, { merchantName, merchantEntityId: entity, ...coded('MEDICAL_OTHER_MEDICAL') })
     expect(medical('DR. ODALYS LARKSPUR LCSW', 'Odalys Larkspur')).toBe('Medical payment')
     expect(medical('MERIDIAN COUNSELING', 'Jane Doe, PsyD')).toBe('Medical payment')
     expect(medical('JANE DOEBRIGHT MD')).toBe('Medical payment')
     expect(medical('BRIGHT SMILES DDS 0042')).toBe('Medical payment')
+    expect(medical('CORWIN ASHBY DC')).toBe('Medical payment')
+    expect(medical('MARA LINDQVIST NP')).toBe('Medical payment')
     expect(medical('CVS PHARMACY BALTIMORE MD')).toBeUndefined()
     expect(medical('MAYO CLINIC')).toBeUndefined()
-  })
-
-  it('shows a row the owner typed in only as a shop they buy from, or in everyday words', () => {
-    const typed = { handEntered: true }
-    for (const name of ['Rent', 'House cleaner', 'Groceries', 'Cash']) {
-      expect([name, labelOf(name, typed)]).toEqual([name, null])
+    // With no entity id, any medical line is labelled: a clinician goes by their own name.
+    for (const name of ['SARAH BETH HOLLOWAY', 'CORWIN ASHBY DC', 'MAYO CLINIC']) {
+      expect([name, medical(name, null, '')]).toEqual([name, 'Medical payment'])
     }
-    // A shop is one the owner buys from only when the shops are known.
-    const shops = knownShops(['King Soopers'])
-    expect(neutralLabel({ ...movement('King Soopers'), ...typed }, shops)).toBeNull()
-    expect(label('King Soopers', typed)).toBe('Purchase or payment')
-    // Anything else could name a person, so it is labelled like a line with no code.
-    expect(labelOf('Jane Doe babysitting', typed)).toEqual({
-      label: 'Purchase or payment',
-      kind: 'unknown',
-    })
-    expect(label('Rent to John Smith', typed)).toBe('Purchase or payment')
-    expect(labelOf('Transfer to John Smith', typed)).toEqual({
-      label: 'Payment sent',
-      kind: 'transfer',
-    })
-    expect(label('Jane Doe', { ...typed, amountCents: -500 })).toBe('Money received')
-    expect(label('Venmo Jane', typed)).toBe('Venmo payment (sent)')
-    expect(label('1043', typed)).toBe('Purchase or payment')
   })
 })
 

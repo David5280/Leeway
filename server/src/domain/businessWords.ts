@@ -14,6 +14,7 @@ const BUSINESS_WORDS = new Set(
     'nursery optical outlet pantry parking pets pharmacy pizza plumbing pub repair',
     'restaurant salon shack shop shoes spa sports station store studio supply sushi taco',
     'tacos tavern tea theater theatre tire tires tool tools toys travel tree trip wine',
+    'farmers jewelers jewelry warehouse wholesale',
     // How a company or service is called.
     'agency airlines airways associates bros brothers center centre city company county',
     'department energy enterprises group guys insurance international lawn labs lessons',

@@ -112,8 +112,8 @@ describe('a bill tracking labelled payments', () => {
       bills: Record<string, unknown>[]
     }
     expect(bills.map(({ name, matchPattern }) => [name, matchPattern ?? null]).sort()).toEqual([
-      // Neither a loan's merchant nor "Chase" is surely no one's name.
-      ['Card payment', null],
+      // A loan's merchant is not surely no one's name; "Chase card" is everyday words.
+      ['Chase card', null],
       ['Loan payment', null],
       ['Purchases', 'rent'],
       ['Rent', null],

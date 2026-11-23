@@ -4,35 +4,57 @@
 
 import { describe, expect, it } from 'vitest'
 import { isBusinessWord } from '../src/domain/businessWords.js'
-import { hasAPersonsShape, namesAClinician } from '../src/domain/personShape.js'
+import {
+  hasAPersonsShape,
+  holdsAPersonsName,
+  isCredential,
+  namesAClinician,
+} from '../src/domain/personShape.js'
 import { plainCharacter, plainLetters } from '../src/domain/plainLetters.js'
 
 describe("a person's shape", () => {
-  it('is two name words, or two around a middle initial', () => {
+  it('is two to four name words, or an initial and a surname, initials anywhere', () => {
     for (const name of [
       'Odalys Larkspur',
       'SERAPHINA OKONKWO',
       'Jane Q. Doe',
       "Mary-Kate O'Neil",
+      'Siobhan O’Brien',
+      'SARAH BETH HOLLOWAY',
+      'Juan Carlos Echeverria Lopez',
+      'Jane Q Doe Smith',
+      'J PEMBERTON',
+      'J. R. Pemberton',
     ]) {
       expect([name, hasAPersonsShape(name)]).toEqual([name, true])
     }
   })
 
-  it('is never one word, three, an everyday or business word, a possessive or a code', () => {
+  it('is never one word, five, an everyday or business word, a possessive or a code', () => {
     for (const name of [
       'Spotify',
       'Hooked on Colfax',
       'King Soopers',
       'Taco Bell',
       "Joe's Pizza",
+      'Ben & Jerry’s',
+      'Blue Bottle Coffee',
+      'Kay Jewelers',
+      'Farmers Market',
       'Acme Corp',
       'Venmo Payment',
       'Jane D0e',
-      'Jane Q Doe Smith',
+      'Anna Beth Cora Dee Eve',
+      'J Q',
     ]) {
       expect([name, hasAPersonsShape(name)]).toEqual([name, false])
     }
+  })
+
+  it('is found among everyday words and numbers, as pay lines hold it', () => {
+    expect(holdsAPersonsName('Direct Dep John Q Public Household Payroll')).toBe(true)
+    expect(holdsAPersonsName('Payroll Acme Corp 0042')).toBe(false)
+    expect(holdsAPersonsName('State of Colorado Payroll')).toBe(false)
   })
 })
 
@@ -42,8 +64,18 @@ describe('a clinician by name', () => {
     expect(namesAClinician('ODALYS LARKSPUR LCSW')).toBe(true)
     expect(namesAClinician('Jane Doe, Ph.D')).toBe(true)
     expect(namesAClinician('Jane Doe, M.D.')).toBe(true)
+    expect(namesAClinician('CORWIN ASHBY DC')).toBe(true)
+    expect(namesAClinician('MARA LINDQVIST NP')).toBe(true)
+    expect(namesAClinician('Mara Lindqvist, PA-C')).toBe(true)
+    expect(namesAClinician('ASHBY FAMILY CHIRO LMSW')).toBe(true)
     expect(namesAClinician('DREW PHARMACY')).toBe(false)
     expect(namesAClinician('CVS PHARMACY ANNAPOLIS MD')).toBe(false)
+    expect(namesAClinician('WASHINGTON DC')).toBe(false)
+  })
+
+  it('reads a credential alone, dots aside', () => {
+    for (const word of ['LCSW', 'M.D.', 'PA-C', 'dpt', 'Dds']) expect(isCredential(word)).toBe(true)
+    expect(isCredential('Doe')).toBe(false)
   })
 })
 
@@ -65,8 +97,9 @@ describe('a line read as it shows', () => {
     expect(plainLetters('KING SOOPERS')).toBe('KING SOOPERS')
   })
 
-  it('reads one character at a time, accents split off', () => {
+  it('reads one character at a time, accents split off and any apostrophe straight', () => {
     expect(plainCharacter('‍')).toBe('')
+    for (const apostrophe of ['’', '‘', 'ʼ']) expect(plainCharacter(apostrophe)).toBe("'")
     expect(plainCharacter('Ј')).toBe('J')
     expect(plainCharacter('é')).toBe('é')
   })

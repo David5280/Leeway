@@ -22,6 +22,7 @@ import {
 import { isBusinessWord } from '../businessWords.js'
 import { isKnownShop, type KnownShops } from '../knownShops.js'
 import type { LabelKind } from '../modelLabels.js'
+import { withoutCredential } from '../personShape.js'
 import { plainLetters } from '../plainLetters.js'
 import { nameAfterToOrFrom, type Movement } from '../transfers.js'
 import { loneNamesOf, type NameSource } from './loneNames.js'
@@ -41,6 +42,11 @@ const BANK_WORDS = new Set(
     'phd psyd'
   ).split(' '),
 )
+
+/** Whether a word is one a bank writes around a name ("CHECK", "BILL PAY"), never a name. */
+export function isBankWord(word: string): boolean {
+  return BANK_WORDS.has(word.toLowerCase())
+}
 
 /** A bank's text as names are read from it: as it shows, with "/" between words ("DOE/JANE"). */
 function readable(text: string): string {
@@ -91,7 +97,7 @@ const BUSINESS_END = /\s+(?:llc|inc|co|corp|ltd|lp|pllc|pc|company)\.?$/i
 const ACCOUNT_WORDS = new Set(
   (
     'account acct bank brokerage card cd checking chk credit debit everyday hsa joint loan ' +
-    'market money mortgage saving savings share shares spend way2save'
+    'market money mortgage sav saving savings share shares spend svgs way2save'
   ).split(' '),
 )
 
@@ -105,14 +111,15 @@ function withoutAccountWords(name: string): string {
 /**
  * Every form a name is hidden in: as written; without a business ending
  * ("Jane Doe Pc", "Jane Doe"), unless the business is a shop the owner buys
- * from; without the account words after it ("Clara Thornbury Everyday
- * Checking", "Clara Thornbury"); and with two words the other way round, as
- * banks write a surname first ("DUNMORE PERPETUA", "Halvorsen, Ingrid").
+ * from; without a credential after it ("Corwin Ashby DC", "Corwin Ashby");
+ * without the account words after it ("Clara Thornbury Everyday Checking",
+ * "Clara Thornbury"); and with two words the other way round, as banks write
+ * a surname first ("DUNMORE PERPETUA", "Halvorsen, Ingrid").
  */
 function formsOf(name: string, shops: KnownShops): string[] {
   const bare = name.trim().replace(BUSINESS_END, '')
   if (bare !== name.trim() && (isKnownShop(shops, name) || isKnownShop(shops, bare))) return []
-  const forms = new Set([name.trim(), bare, withoutAccountWords(bare)])
+  const forms = new Set([name.trim(), bare, withoutCredential(bare), withoutAccountWords(bare)])
   for (const form of [...forms]) {
     const words = form.split(/\s+/)
     if (words.length === 2) forms.add(`${words[1]} ${words[0]}`)
@@ -167,5 +174,35 @@ export function namesToHide(
     loneNames: lone.capital,
     loneAnyCase: lone.anyCase,
     noteNames: lone.inNotes,
+  }
+}
+
+/** Words without a second of any in any case, first kept: "JANE" and "Jane" are one. */
+function unique(words: readonly string[]): string[] {
+  const seen = new Set<string>()
+  return words.filter((word) => !seen.has(word.toLowerCase()) && seen.add(word.toLowerCase()))
+}
+
+/**
+ * The hidden names with the words of the owner's labels that could be a
+ * name (ownerText.ts) added, each hidden alone as a name's single word is.
+ */
+export function withOwnerWords(
+  hidden: HiddenNames,
+  ownerWords: readonly string[],
+  shops: KnownShops,
+): HiddenNames {
+  const owner = loneNamesOf(
+    ownerWords.map((name) => ({ name })),
+    shops,
+    ACCOUNT_WORDS,
+  )
+  const anyCase = unique([...hidden.loneAnyCase, ...owner.anyCase])
+  const inAnyCase = new Set(anyCase.map((word) => word.toLowerCase()))
+  const capital = unique([...hidden.loneNames, ...owner.capital])
+  return {
+    ...hidden,
+    loneAnyCase: anyCase,
+    loneNames: capital.filter((word) => !inAnyCase.has(word.toLowerCase())),
   }
 }

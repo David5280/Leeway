@@ -10,7 +10,8 @@
 
 import { AiProviderError, type AiFailure, type AiMessage } from '../ai/provider.js'
 import type { AppContext } from '../context.js'
-import { AiLimitError, type AiGateway } from '../domain/ai/gateway.js'
+import type { AiGateway } from '../domain/ai/gateway.js'
+import { AiLimitError } from '../domain/ai/limit.js'
 import { allowanceMessage, chatAllowance } from '../domain/chat/allowance.js'
 import { claimAnswering, releaseAnswering } from '../domain/chat/answering.js'
 import { paymentPeople, type PaymentPeople } from '../domain/chat/people.js'

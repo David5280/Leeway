@@ -38,7 +38,8 @@ describe('a bank transfer', () => {
       ...lines.map(() => 'Transfer to another account'),
       'Transfer to investments',
     ])
-    expect(await probe.notes()).toEqual(lines.map(() => 'someone rent share'))
+    // A note naming someone is left out whole.
+    expect(await probe.notes()).toEqual([])
   })
 
   it('reads as a payment however a bank abbreviates it, under any code or none', async () => {
@@ -134,8 +135,8 @@ describe('a line with no code, as an import brings', () => {
       'Venmo payment (sent)',
       'Zelle payment (sent)',
     ])
-    // A name read from a line with no code is hidden like any other.
-    expect(await probe.notes()).toEqual(['someone, someone and someone; someone came'])
+    // A name read from a line with no code is hidden like any other; a note naming one goes.
+    expect(await probe.notes()).toEqual([])
     expect(JSON.stringify(transactions)).not.toMatch(/prycewood|halloway|foxhall|mossgiel/i)
   })
 
@@ -169,7 +170,7 @@ describe('a line with no code, as an import brings', () => {
       'Purchase or payment',
       'Rent',
     ])
-    expect(await probe.notes()).toEqual(['someone came, and someone'])
+    expect(await probe.notes()).toEqual([])
     const totals = await probe.sent('top_merchants', { limit: 50 })
     expect(totals).toContain('"merchant":"King Soopers","spentCents":2900')
     for (const tool of ['list_transactions', 'top_merchants', 'get_summary', 'find_recurring']) {

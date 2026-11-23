@@ -38,3 +38,18 @@ export function startsAShop(shops: KnownShops, word: string): boolean {
   const lower = word.toLowerCase()
   return shops.names.has(lower) || shops.firstWords.has(lower)
 }
+
+/**
+ * What follows a known shop's whole name at the start of a name, or null
+ * when it starts with none: " Warehouse" for "Costco Warehouse" when Costco
+ * is known. Whole words only, so "Costcolike" starts with no shop.
+ */
+export function restAfterAShop(shops: KnownShops, name: string): string | null {
+  const words = name.trim().split(/\s+/)
+  for (let count = words.length - 1; count > 0; count -= 1) {
+    if (shops.names.has(words.slice(0, count).join(' ').toLowerCase())) {
+      return words.slice(count).join(' ')
+    }
+  }
+  return null
+}

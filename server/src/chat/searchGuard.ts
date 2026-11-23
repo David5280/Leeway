@@ -4,7 +4,7 @@
 // hold it, so even with every labelled row relabelled, searching "prycewood"
 // and getting 3 would show that someone of that name was paid. Such a search
 // is refused with a plain message: one that could find a hidden name, or text
-// only a labelled row's hidden name or line holds.
+// only a labelled row's hidden name or line holds, unless it is a shop's.
 
 import { wordsOf } from '../domain/chat/billLabels.js'
 import { isCommonWord } from '../domain/chat/commonWords.js'
@@ -41,9 +41,18 @@ function findsName(text: string, people: PaymentPeople): boolean {
   )
 }
 
+/**
+ * Whether a search is for a shop the owner buys from: its name, the start of
+ * it, or its name and more ("costco", "cost", "costco whse"). A shop's name
+ * shows on its rows, so a row of it shown by a label hides no one.
+ */
+function findsAShop(search: string, people: PaymentPeople): boolean {
+  return [...people.shops.names].some((shop) => shop.startsWith(search) || search.startsWith(shop))
+}
+
 /** Whether a search finds text a labelled row hides that its label does not show. */
 function findsHiddenText(search: string, people: PaymentPeople): boolean {
-  if (search.length < PART_LENGTH) return false
+  if (search.length < PART_LENGTH || findsAShop(search, people)) return false
   return people.hiddenTexts.some(
     ({ text, label }) => text.includes(search) && !label.includes(search),
   )

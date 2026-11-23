@@ -1,6 +1,7 @@
 // The parts of a hidden person's name that could be written alone ("Dinner
 // with Jane", "DOE, JANE", "lunch with jane", a category "Kettering loan"),
-// so Chat can hide those too. Pure.
+// so Chat can hide those too. A hyphenated part is hidden whole and each of
+// its parts alone ("Mary-Kate", "Mary", "Kate"). Pure.
 //
 // A part is never hidden when it is how a known shop is called, or a word
 // businesses are named with (businessWords.ts). A longer part is hidden in
@@ -14,10 +15,11 @@ import { isBusinessWord } from '../businessWords.js'
 import { isCommonWord } from './commonWords.js'
 import { startsAShop, type KnownShops } from '../knownShops.js'
 import { isMovementWord } from '../movementWords.js'
+import { APOSTROPHES, isCredential } from '../personShape.js'
 
 // One word of a name that reads as a given name, middle name or surname:
 // letters, with an inner hyphen or apostrophe allowed ("Mary-Kate", "O'Neil", "O’Neil").
-const NAME_PART = /^\p{L}[\p{L}'’-]*\p{L}$/u
+const NAME_PART = new RegExp(`^\\p{L}[\\p{L}${APOSTROPHES}-]*\\p{L}$`, 'u')
 
 // The shortest part hidden in any case: shorter ones ("Al", "Bo", "Ann") are words too often.
 const ANY_CASE_LENGTH = 4
@@ -47,6 +49,7 @@ function hiddenAs(
   skip: ReadonlySet<string>,
 ): keyof LoneNames | null {
   if (!NAME_PART.test(part) || isMovementWord(part) || startsAShop(shops, part)) return null
+  if (isCredential(part)) return null
   // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
   if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null
   if (isCommonWord(part)) return source.paid ? 'inNotes' : null
@@ -56,6 +59,12 @@ function hiddenAs(
 /** Whether a list holds a word already, in any case ("JANE" and "Jane" are one). */
 function holds(words: readonly string[], word: string): boolean {
   return words.some((one) => one.toLowerCase() === word.toLowerCase())
+}
+
+/** A word of a name, and each part of it when hyphenated: "Mary-Kate", "Mary", "Kate". */
+function partsOf(word: string): string[] {
+  const pieces = word.split('-').filter(Boolean)
+  return pieces.length > 1 ? [word, ...pieces] : [word]
 }
 
 /**
@@ -70,7 +79,7 @@ export function loneNamesOf(
 ): LoneNames {
   const found: LoneNames = { capital: [], anyCase: [], inNotes: [] }
   for (const source of sources) {
-    for (const part of source.name.trim().split(/\s+/)) {
+    for (const part of source.name.trim().split(/\s+/).flatMap(partsOf)) {
       const how = hiddenAs(part, source, shops, skip)
       if (how && !holds(found[how], part)) found[how].push(part)
     }
