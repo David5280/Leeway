@@ -9,7 +9,7 @@
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { textKey } from '../merchantKey.js'
-import { SMALL_WORDS } from '../merchantName.js'
+import { SMALL_WORDS } from '../merchantCase.js'
 import { withoutPayWords } from './deposits.js'
 import type { EmployerRun } from './paychecks.js'
 
@@ -41,17 +41,38 @@ const COMPANY_WORDS = new Set([
   'payroll',
 ])
 
+/**
+ * Short forms a bank prints for words a paystub spells out, each read as its
+ * full word so "UNIV OF COLORADO PAYROLL" names "University of Colorado".
+ * Only short forms with one plain meaning; "Corp" and "Co" are company words
+ * above, so they need none.
+ */
+const SHORT_FORMS = new Map([
+  ['univ', 'university'],
+  ['intl', 'international'],
+  ['natl', 'national'],
+  ['svc', 'service'],
+  ['svcs', 'services'],
+  ['dept', 'department'],
+  ['assn', 'association'],
+  ['hosp', 'hospital'],
+  ['mgmt', 'management'],
+  ['ctr', 'center'],
+])
+
 /** How many leading name words two names are held to, at most. */
 const LEADING_WORDS = 2
 
 /**
  * The words of a name that say which company it is, in order: no small word
  * ("of"), company word ("Inc", "Payroll"), pay word ("DIR DEP") or single
- * letter. Read as textKey reads text, so a stub's name and a key read alike.
+ * letter, and each short form spelled out ("Univ" is "university"). Read as
+ * textKey reads text, so a stub's name and a key read alike.
  */
 function nameWords(text: string): string[] {
   return textKey(withoutPayWords(text))
     .split(' ')
+    .map((word) => SHORT_FORMS.get(word) ?? word)
     .filter((word) => word.length > 1 && !SMALL_WORDS.has(word) && !COMPANY_WORDS.has(word))
 }
 

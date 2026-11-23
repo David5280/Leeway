@@ -171,4 +171,12 @@ describe('namesPayer', () => {
     // An ACH line puts its own labels before the company.
     expect(namesPayer('Acme Corp', 'orig co name acme corp orig co entry descr payroll')).toBe(true)
   })
+
+  it('reads a short form the bank prints as the word the stub spells out', () => {
+    expect(namesPayer('University of Colorado', 'univ of colorado payroll')).toBe(true)
+    expect(namesPayer('Acme International', 'acme intl payroll')).toBe(true)
+    expect(namesPayer('Acme Svcs', 'acme services dir dep')).toBe(true)
+    // Spelled out, two employers that share one word are still two.
+    expect(namesPayer('State of Colorado', 'univ of colorado payroll')).toBe(false)
+  })
 })

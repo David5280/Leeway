@@ -187,6 +187,25 @@ describe('a deposit that names a business', () => {
     expect(names('JANE DOE DENVER CO')).toBe(false)
     expect(names('JOHN SMITH DIR DEP')).toBe(false)
   })
+
+  it('never reads the state ending an ACH payer or a transfer sender as a company', () => {
+    expect(names('JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD')).toBe(
+      false,
+    )
+    expect(names('JANE DOE CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD')).toBe(false)
+    expect(
+      names('ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 DESC DATE: CO ENTRY DESCR:DIR DEP'),
+    ).toBe(false)
+    expect(names('ORIG CO NAME:JANE DOE CO CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(false)
+    expect(names('Transfer from Jane Doe CO salary')).toBe(false)
+  })
+
+  it('still reads a business ending in Co in an ACH line', () => {
+    expect(names('ACME CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
+    expect(names('3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
+    expect(names('ORIG CO NAME:ACME INC ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(true)
+    expect(names('GREAT DIVIDE BREWING CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD')).toBe(true)
+  })
 })
 
 describe('who paid a deposit', () => {

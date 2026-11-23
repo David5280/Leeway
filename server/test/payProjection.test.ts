@@ -50,6 +50,31 @@ describe('the paydays ahead', () => {
     })
   })
 
+  it('pays a twice-monthly 1st and 15th payroll before New Year, then on the 15th', () => {
+    // Weekend paydays paid the Friday before: Sat Aug 15, Sun Nov 1, Sun Nov 15.
+    const paydays = ['2026-08-14', '2026-09-01', '2026-09-15', '2026-10-01', '2026-10-15']
+    const ahead = paydaysAhead([...paydays, '2026-10-30', '2026-11-13'], '2026-11-20', '2027-01-31')
+    // New Year's Day, a Friday, is paid Thursday Dec 31; Jan 15 stays put.
+    expect(ahead).toEqual({
+      cadence: 'semimonth',
+      dates: ['2026-12-01', '2026-12-15', '2026-12-31', '2027-01-15'],
+    })
+  })
+
+  it('keeps a weekly Friday payroll on Fridays after Christmas and New Year', () => {
+    const fridays = ['2026-10-23', '2026-10-30', '2026-11-06', '2026-11-13', '2026-11-20']
+    const ahead = paydaysAhead(
+      [...fridays, '2026-11-27', '2026-12-04', '2026-12-11'],
+      '2026-12-12',
+      '2027-01-15',
+    )
+    // Christmas and New Year's Day are Fridays, each paid the Thursday before.
+    expect(ahead).toEqual({
+      cadence: 'week',
+      dates: ['2026-12-18', '2026-12-24', '2026-12-31', '2027-01-08', '2027-01-15'],
+    })
+  })
+
   it('moves a monthly payday off a weekend without moving the next', () => {
     const paydays = ['2026-06-15', '2026-07-15', '2026-08-14', '2026-09-15', '2026-10-15']
     const ahead = paydaysAhead(paydays, '2026-10-20', '2027-01-31')

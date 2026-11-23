@@ -80,9 +80,10 @@ describe('the payers the profile names', () => {
 
   // A household or a sole trader paying by direct deposit under their own
   // name, as banks write it: an ACH line's "CO" labels name no company, nor
-  // does a trailing state with a pay word after it ("DENVER CO DIR DEP"),
-  // nor a word an ACH line prints after its pay word ("DES:PAYROLL CO ID").
-  // A bank code, where given, is the one some banks put on such a line.
+  // does a trailing state, before a pay word ("DENVER CO DIR DEP") or an ACH
+  // label ("DENVER CO DES:PAYROLL"), nor a word an ACH line prints after its
+  // pay word ("DES:PAYROLL CO ID"). A bank code, where given, is the one some
+  // banks put on such a line.
   const PERSON_PAYERS: [name: string, code: string | null][] = [
     ['JOHN SMITH DIR DEP', null],
     ['ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', null],
@@ -90,6 +91,14 @@ describe('the payers the profile names', () => {
     ['JOHN SMITH DES:PAYROLL CO ID:XXXXX PPD', null],
     ['JOHN SMITH DENVER CO DIR DEP', null],
     ['JANE DOE CO PAYROLL', 'TRANSFER_IN_DEPOSIT'],
+    // A state ends an ACH line's payer as it does a plain line's.
+    ['JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD', null],
+    [
+      'ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 DESC DATE: CO ENTRY DESCR:DIR DEP SEC:PPD',
+      null,
+    ],
+    ['JANE DOE CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD', null],
+    ['Transfer from Jane Doe CO salary', 'INCOME_SALARY'],
   ]
 
   /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
@@ -132,7 +141,9 @@ describe('the payers the profile names', () => {
 
   it.each([
     ['ACME CO PAYROLL', 'Acme Co Payroll'],
+    ['ACME CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', 'Acme Co Payroll'],
     ['3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', '3m Co Payroll'],
+    ['ORIG CO NAME:ACME INC ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', 'Acme Inc'],
     ['GREAT DIVIDE BREWING CO DIR DEP', 'Great Divide Brewing Co Dir Dep'],
   ])('still names a business whose name ends in Co: %s', async (name, shown) => {
     const result = await paidBy(name)

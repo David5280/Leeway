@@ -79,9 +79,11 @@ export const withoutPayWords = (text: string) => text.replace(ANY_PAY_WORDS, ' '
 
 /**
  * Whether a bank's text names a business, read from the clean name the app
- * shows, which drops an ACH line's own labels ("ORIG CO NAME:", "CO ID:")
- * and a trailing state. It is read twice, as written and with the pay words
- * taken off, and both readings must find a business ending:
+ * shows. That drops an ACH line's own labels ("ORIG CO NAME:", "CO ID:")
+ * and a state that ends the payer's name: in an ACH line the name's own end
+ * ("JANE DOE CO DES:PAYROLL"), elsewhere only when the state is the line's
+ * last word (merchantPlace.ts). It is read twice, as written and with the
+ * pay words taken off, and both readings must find a business ending:
  * - Without the pay words a state is last again and goes, so "JANE DOE
  *   DENVER CO DIR DEP" is Jane Doe in Colorado, not a company.
  * - As written, a word after a pay word cannot stand in for it, so "JANE DOE
