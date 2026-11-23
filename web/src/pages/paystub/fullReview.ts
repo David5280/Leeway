@@ -1,4 +1,4 @@
-// The full paystub review as text and back: every line Claude read, turned
+// The full paystub review as text and back: every line the AI read, turned
 // into what the inputs show, and the owner's edits read back into the
 // paystub save_paystub_detail keeps. Pure, so every rule is tested alone. A
 // blank figure means "not on this paystub" (null), never zero.
@@ -48,7 +48,7 @@ const lineText = (line: CentsLine): LineText => ({
   yearToDate: centsText(line.yearToDate),
 })
 
-/** The review's text for what Claude read. */
+/** The review's text for what the AI read. */
 export function fullText(extraction: Extraction): FullText {
   const { detail } = extraction
   return {
@@ -60,7 +60,7 @@ export function fullText(extraction: Extraction): FullText {
     pay: {
       gross: lineText(detail.pay.gross),
       net: lineText(detail.pay.net),
-      // Hours are not money: shown as Claude read them, like 86.67.
+      // Hours are not money: shown as the AI read them, like 86.67.
       hours: detail.pay.hours.value === null ? '' : String(detail.pay.hours.value),
       hourlyRate: centsText(detail.pay.hourlyRate.value),
       annualSalary: centsText(detail.pay.annualSalary.value),

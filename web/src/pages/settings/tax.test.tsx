@@ -175,13 +175,13 @@ describe('Tax export', () => {
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
-  it('reads "Preparing..." and stays disabled while the year builds', async () => {
+  it('reads "Preparing…" and stays disabled while the year builds', async () => {
     let answer: (response: Response) => void = () => {}
     const building = () => new Promise<Response>((resolve) => (answer = resolve)) as never
     fakeServer({}, { '/api/actions/export_tax_year': building })
     renderSignedIn(<TaxSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
-    const preparing = await screen.findByRole('button', { name: 'Preparing...' })
+    const preparing = await screen.findByRole('button', { name: 'Preparing…' })
     expect(preparing).toBeDisabled()
     answer(Response.json({ result: exported }))
     expect(await screen.findByRole('button', { name: 'Download 2025 CSV' })).toBeEnabled()

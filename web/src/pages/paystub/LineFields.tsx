@@ -1,6 +1,6 @@
 // The rows of the full review: each paystub line with its two amounts, this
-// paycheck and the year to date, how sure Claude was when it is worth a
-// second look, and the line it came from. Lines Claude did not find fold
+// paycheck and the year to date, how sure the reader was when it is worth a
+// second look, and the line it came from. Lines the reader did not find fold
 // away, so a phone shows only what is on the paystub.
 
 import { useId } from 'react'
@@ -19,9 +19,14 @@ function Check({ confidence }: { confidence: Confidence }) {
   return <span className={low ? 'badge warn' : 'badge'}>{CONFIDENCE_WORDS[confidence]}</span>
 }
 
-/** Whether Claude found a figure: an amount, or at least the line it would have come from. */
+/**
+ * Whether the reader found a figure: an amount, the line it would have come
+ * from, or a low mark. An amount printed but unreadable is low with nothing
+ * else to show (after-tax "other" never shows its line), and must stay in
+ * view with its flag rather than fold away as a line not found.
+ */
 export function isFound(figure: ReviewLine | ReviewValue): boolean {
-  if (figure.source !== null) return true
+  if (figure.source !== null || figure.confidence === 'low') return true
   return 'value' in figure
     ? figure.value !== null
     : figure.current !== null || figure.yearToDate !== null
@@ -128,12 +133,13 @@ export function ValueField({
 }
 
 /**
- * A block of lines under one heading: the ones Claude found first, the rest
- * folded away for the owner to add if Claude missed one.
+ * A block of lines under one heading: the ones the reader found first, the
+ * rest folded away for the owner to add if the reader missed one.
  */
 export function LineBlockFields<L extends string>({
   context,
   heading,
+  readerName,
   labels,
   lines,
   text,
@@ -141,6 +147,8 @@ export function LineBlockFields<L extends string>({
 }: {
   context: string
   heading?: string
+  /** Who read the paystub, named as the rest of the review names it. */
+  readerName: string
   labels: Record<L, string>
   lines: Record<L, ReviewLine>
   text: Record<L, LineText>
@@ -168,10 +176,12 @@ export function LineBlockFields<L extends string>({
           {found.map(row)}
         </>
       )}
-      {found.length === 0 && <p className="small muted">Claude found none of these.</p>}
+      {found.length === 0 && <p className="small muted">{readerName} found none of these.</p>}
       {missed.length > 0 && (
         <details className="more review-more">
-          <summary>Add a line Claude did not find ({missed.length})</summary>
+          <summary>
+            Add a line {readerName} did not find ({missed.length})
+          </summary>
           <div className="stack-sm">
             <ColumnHeads />
             {missed.map(row)}
