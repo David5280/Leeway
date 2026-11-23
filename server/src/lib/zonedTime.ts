@@ -90,6 +90,11 @@ function offsetAtMidnight(day: number, timeZone: string): number {
  * at most and never twice in one day, so a UTC day that starts and ends on
  * the same offset keeps it throughout: those two remembered midnights answer
  * for every instant of the day, and only a day holding a change asks Intl.
+ *
+ * Zone names reach here only as Intl knows them: the owner's is checked when
+ * saved (isValidTimeZone), and a calendar's are read to Intl's own names
+ * first (zoneNames.ts). So a made-up zone in a hostile calendar file never
+ * reaches this, and the midnights remembered are only ever for real zones.
  */
 function offsetMs(instant: number, timeZone: string): number {
   // Seconds are dropped from the instant so the difference is whole seconds.

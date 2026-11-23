@@ -141,13 +141,35 @@ describe('the forecast', () => {
       startsOn: '2026-11-15',
       endsOn: '2026-11-19',
     }
-    expect(setAsideFor(trip, usual, '2026-11-10')).toBe(100000)
-    expect(setAsideFor(trip, usual, '2026-11-17')).toBe(30000)
-    // A wedding's gift is the same whether it has started or not.
+    const nothing = { aheadCents: 0, duringCents: 0 }
+    expect(setAsideFor(trip, usual, '2026-11-10', nothing)).toBe(100000)
+    expect(setAsideFor(trip, usual, '2026-11-17', nothing)).toBe(30000)
+    // Travel booked already comes off the booking, never below nothing.
+    expect(setAsideFor(trip, usual, '2026-11-10', { aheadCents: 20000, duringCents: 0 })).toBe(
+      80000,
+    )
+    expect(setAsideFor(trip, usual, '2026-11-10', { aheadCents: 70000, duringCents: 0 })).toBe(
+      50000,
+    )
+    // A trip under way whose past ones showed no spending while away needs nothing more.
+    expect(setAsideFor(trip, { ...usual, perDayCents: 0 }, '2026-11-17', nothing)).toBe(0)
+  })
+
+  it('sets aside a gift once, less what was bought for it already, started or not', () => {
     const gift = { perEventCents: 7000, perDayCents: 0, basedOn: 3 }
-    const wedding = { ...trip, kind: 'wedding' as const, title: 'Wedding weekend' }
-    expect(setAsideFor(wedding, gift, '2026-11-17')).toBe(7000)
-    expect(setAsideFor(wedding, gift, '2026-11-10')).toBe(7000)
+    const wedding = {
+      kind: 'wedding' as const,
+      startsOn: '2026-11-15',
+      endsOn: '2026-11-19',
+    }
+    const nothing = { aheadCents: 0, duringCents: 0 }
+    expect(setAsideFor(wedding, gift, '2026-11-17', nothing)).toBe(7000)
+    expect(setAsideFor(wedding, gift, '2026-11-10', nothing)).toBe(7000)
+    // Under way, with $20 bought ahead and $30 on its days: $20 is left.
+    expect(setAsideFor(wedding, gift, '2026-11-17', { aheadCents: 2000, duringCents: 3000 })).toBe(
+      2000,
+    )
+    expect(setAsideFor(wedding, gift, '2026-11-17', { aheadCents: 9000, duringCents: 0 })).toBe(0)
   })
 
   it('takes the middle value of an even count as the mean of the two middle ones', () => {
