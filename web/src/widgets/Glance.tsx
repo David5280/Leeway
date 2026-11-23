@@ -66,12 +66,16 @@ function SpentCard({ budget, word }: { budget: Budget; word: string }) {
   )
 }
 
+/**
+ * Money filed as income: pay, but also money from people, refunds and the
+ * like when they are filed there, so it is called money in, not pay.
+ */
 function IncomeCard({ budget, word }: { budget: Budget; word: string }) {
   return (
-    <Card drill={incomeDrill(budget, word)} label="Income" className="stack-sm">
-      <TileHead icon="moneyIn" title="Income" tone="in" />
+    <Card drill={incomeDrill(budget, word)} label="Money in" className="stack-sm">
+      <TileHead icon="moneyIn" title="Money in" tone="in" />
       <Money cents={budget.totals.incomeCents} sign="change" tone="in" className="mid-number" />
-      <span className="small muted">Money in this {word}</span>
+      <span className="small muted">Filed as income this {word}</span>
     </Card>
   )
 }

@@ -12,6 +12,9 @@ export const MAX_SOURCE_LENGTH = 120
 /** The longest employer name kept. */
 export const MAX_EMPLOYER_LENGTH = 80
 
+/** The longest pension plan name kept: the most a pension's name may be. */
+export const MAX_PLAN_NAME_LENGTH = 80
+
 /**
  * A Social Security number, plain or masked: 123-45-6789, 123 45 6789,
  * XXX-XX-6789, ***-**-6789. A mask is no word character, so the start is
@@ -25,7 +28,7 @@ const SSN = /(?<![\w*•])[\dXx*•]{3}[-\s.]?[\dXx*•]{2}[-\s.]?\d{4}\b/g
  * "#", so its end is "no word character next" rather than a word boundary.
  */
 const LABELED_ID =
-  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
+  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|member\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
 
 /** A street address: a house number, up to four words, and a street word. */
 const STREET =
@@ -88,15 +91,64 @@ export function redactSource(text: string | null): string | null {
 }
 
 /**
- * The employer's name, redacted and cut to length. Only the name is kept: an
- * address printed after it, on the same line or after a comma, is dropped,
- * and so is everything after the first thing taken out, since a city and
- * state follow a street address ("1437 Bannock St Denver CO").
+ * The name at the start of a line, redacted and cut to `max`: an address or
+ * detail printed after it, on the same line or after a comma, is dropped, and
+ * so is everything after the first thing taken out, since a city and state
+ * follow a street address ("1437 Bannock St Denver CO").
  */
-export function redactEmployer(text: string | null): string | null {
+function leadingName(text: string | null, max: number): string | null {
   if (text === null) return null
   const parts = redact(text.split(/[\n,]/)[0]!).split(REMOVED)
   // The name is what comes before the first removal, or after it when the line began with one.
   const name = parts.map((part) => part.trim()).find((part) => part !== '') ?? ''
-  return name === '' ? null : name.slice(0, MAX_EMPLOYER_LENGTH).trim()
+  return name === '' ? null : name.slice(0, max).trim()
+}
+
+/** The employer's name only, never the address printed after it. */
+export function redactEmployer(text: string | null): string | null {
+  return leadingName(text, MAX_EMPLOYER_LENGTH)
+}
+
+/** A word that is no part of a plan's name: one holding a digit, #, % or $, like a rate or an ID. */
+const NOT_A_NAME_WORD = /[\d#%$]/
+
+/**
+ * Words a pension line prints after the plan's name, which name the
+ * deduction or label a member number, not the plan. Compared without case or
+ * a closing "." or ":", so "No." and "ID:" count.
+ */
+const LABEL_WORDS = new Set([
+  'member',
+  'mbr',
+  'employee',
+  'ee',
+  'pre-tax',
+  'pretax',
+  'contribution',
+  'contrib',
+  'deduction',
+  'ded',
+  'no',
+  'id',
+])
+
+/** A word as LABEL_WORDS holds it: lower case, with no closing "." or ":". */
+const labelForm = (word: string) => word.toLowerCase().replace(/[.:]$/, '')
+
+/**
+ * The pension plan's name only, like "PERA", short enough to name a pension
+ * by: everything from the first word holding a digit, #, % or $ on is dropped,
+ * then any label words left at its end and a trailing colon ("PERA Member
+ * 11.00% 422.95" and "PERA No. 4417" are both "PERA").
+ */
+export function redactPlanName(text: string | null): string | null {
+  const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
+  if (name === null) return null
+  const words = name.split(' ')
+  const cut = words.findIndex((word) => NOT_A_NAME_WORD.test(word))
+  const kept = cut === -1 ? words : words.slice(0, cut)
+  while (kept.length > 0 && LABEL_WORDS.has(labelForm(kept.at(-1)!))) kept.pop()
+  // A label's colon may be left on the name itself, as in "PERA: 422.95".
+  const named = kept.join(' ').replace(/:$/, '')
+  return named === '' ? null : named
 }

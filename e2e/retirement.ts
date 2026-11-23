@@ -15,7 +15,9 @@ export async function addPension(page: Page): Promise<void> {
   const form = page.getByRole('form', { name: 'New pension' })
   await form.getByRole('textbox', { name: 'Name' }).fill(PENSION)
   await form.getByRole('textbox', { name: 'Member balance' }).fill('65000')
-  await form.getByRole('combobox', { name: 'Contribution type' }).selectOption('percent')
+  // The plan's figures are folded away until asked for.
+  await form.getByText('More details (optional)').click()
+  await form.getByRole('combobox', { name: 'Your contribution' }).selectOption('percent')
   await form.getByRole('textbox', { name: 'Percent of pay', exact: true }).fill('11')
   await form.getByRole('textbox', { name: 'Gross pay each paycheck' }).fill('2500')
   await form.getByRole('combobox', { name: 'Pay schedule' }).selectOption('biweek')

@@ -13,6 +13,7 @@ const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: '
 /** $8,059.99 in checking, $1,200 of bills, $400 owed on a card, $50 a day for 10 days. */
 const facts: IdleCashInputs = {
   checkingCents: 805_999,
+  cashKnown: true,
   billsCents: 120_000,
   cardsOwedCents: 40_000,
   dailySpendCents: 5_000,

@@ -64,6 +64,11 @@ function RateChart({ rates }: { rates: SavingsRates }) {
         label="Savings rate each month"
       />
       <p className="small muted">{rates.note}</p>
+      {rates.payEstimated && (
+        <p className="small muted">
+          Pay is an estimate for now, until more paychecks show how often it comes.
+        </p>
+      )}
     </>
   )
 }

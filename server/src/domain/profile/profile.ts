@@ -13,10 +13,12 @@
  * Sources, and where each is worked out:
  * - accounts and their kinds: accounts.ts and accountKinds.ts
  * - balances over time and contributions: savings/report.ts
- * - pay schedule and a typical month of income and spending: income.ts
+ * - pay schedule and a typical month of income and spending: income.ts, which
+ *   reads pay from the current employer's paychecks (pay/current.ts)
  * - bills: bills.ts; goals: goals.ts
  * - the emergency fund and savings rate: savings/emergency.ts, savings/rate.ts, with the
- *   fund's savings read as its goal counts them (emergencyPlan.ts), so both say the same
+ *   fund's savings and essentials read as its card reads them (emergencyPlan.ts,
+ *   monthlyEssentials.ts), so both say the same
  * - pensions and the retirement projection: retirement/pensions.ts, retirement/plan.ts
  *
  * userContext is where life context the owner writes in their own words will
@@ -36,7 +38,8 @@ import { latestPaystub } from '../paystubs/paystubs.js'
 import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
 import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
-import { emergencyFund, essentialsFrom, type EmergencyFund } from '../savings/emergency.js'
+import { essentialsOf } from '../goalFunds.js'
+import { emergencyFund, type EmergencyFund, type EssentialsMeasure } from '../savings/emergency.js'
 import { paystubPlan } from '../savings/payrollMonths.js'
 import {
   payrollSources,
@@ -47,7 +50,7 @@ import {
 import type { BankContributions } from '../savings/contributions.js'
 import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import type { Settings } from '../settings.js'
-import { monthlyAverages, paySchedule, type MonthlyAverages, type PaySchedule } from './income.js'
+import { typicalMonth, type MonthlyAverages, type PaySchedule } from './income.js'
 
 /** The owner's accounts of one kind, added up. */
 export interface KindSummary {
@@ -85,7 +88,7 @@ export interface FinancialProfile {
   currency: string
   locale: string
   pay: PaySchedule
-  /** A typical month of income and spending, from the last whole months. */
+  /** A typical month: pay from the current employer, and recent spending (see income.ts). */
   monthly: MonthlyAverages
   bills: { count: number; monthlyCents: number }
   /** Every kind the owner has an account of, in the standard order. */
@@ -180,9 +183,10 @@ export interface SavingsMeasuresInput {
   planMonthlyCents?: number | null
   /** The plan the newest paystub shows but is too old to count, by name, or null. */
   stalePlan?: string | null
+  /** Pay in a typical month, for the savings rate. */
   monthly: MonthlyAverages
-  /** Tracked bills a month, the stand-in for essentials before a whole month is held. */
-  billsMonthlyCents: number
+  /** Essential spending a month, as the fund's card reads it (monthlyEssentials.ts), or null. */
+  essentials: EssentialsMeasure | null
   settings: Pick<Settings, 'savingsPlan'>
   today: IsoDate
 }
@@ -204,7 +208,7 @@ export function savingsMeasures({
   planMonthlyCents = null,
   stalePlan = null,
   monthly,
-  billsMonthlyCents,
+  essentials,
   settings,
   today,
 }: SavingsMeasuresInput): SavingsMeasures {
@@ -212,8 +216,6 @@ export function savingsMeasures({
     monthly.incomeCents,
     savingSources(contributions, pensionMonthlyCents, planMonthlyCents),
   )
-  // Sized by the same rule as the fund's card: spending, or the bills before it says.
-  const essentials = essentialsFrom(monthly.essentialSpendingCents, billsMonthlyCents)
   return {
     emergencyFund:
       fundSavedCents === null || essentials === null
@@ -244,10 +246,12 @@ export async function getFinancialProfile(
   // One at a time: db may be a transaction's client, which runs one query at once.
   const accounts = await listAccounts(db, false)
   const savings = await getSavingsReport(db, settings, today, accounts)
-  const monthly = await monthlyAverages(db, settings, today)
-  const pay = await paySchedule(db, settings, today)
+  const { monthly, pay } = await typicalMonth(db, settings, today)
   const bills = await listBills(db, today)
-  const goals = await listGoals(db, goalReading(settings, today))
+  const reading = goalReading(settings, today)
+  const goals = await listGoals(db, reading)
+  // Read once with the goals, so the fund's goal, its card and this profile agree.
+  const { essentials } = await essentialsOf(db, reading)
   const pensions = await pensionsOf(db, accounts)
   const plan = paystubPlan(await latestPaystub(db), today)
 
@@ -260,7 +264,7 @@ export async function getFinancialProfile(
     planMonthlyCents: plan.monthlyCents,
     stalePlan: plan.stale,
     monthly,
-    billsMonthlyCents,
+    essentials,
     settings,
     today,
   })

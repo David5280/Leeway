@@ -2,7 +2,8 @@
 // tests use a fake and another model provider could be added without
 // touching the rest of the app.
 
-import type { SummaryFacts, SummaryText } from '../domain/summaryText.js'
+import type { SummaryFacts } from '../domain/summaryFacts.js'
+import type { SummaryText } from '../domain/summaryText.js'
 
 export interface SummaryWriter {
   /** Shown in the app as who wrote the summary, like "Claude". */
