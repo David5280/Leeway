@@ -26,7 +26,6 @@ import { currentPeriod } from './budgetReport.js'
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
-  NOT_CARD_PAYMENT_SQL,
   rangeParams,
   sumTotals,
   type DateRange,
@@ -139,7 +138,6 @@ async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
-  skipCardPayments = false,
 ): Promise<Flows[]> {
   const margin = 2 * PAIR_WINDOW_DAYS
   const span = {
@@ -151,7 +149,7 @@ async function unfiledFlows(
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
        t.category_id IS NOT NULL AS "filedTransfer"
-     ${IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
+     ${IN_RANGES_SQL}
        AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
@@ -191,8 +189,11 @@ function flowTotals(
 
 /**
  * Spending in each range as a month's totals count it (see the top of this
- * file), less every credit card payment (NOT_CARD_PAYMENT_SQL), with each
- * range's category totals for working out what is essential.
+ * file), less the card's side of every credit card payment
+ * (NOT_CARD_PAYMENT_SQL), with each range's category totals for working out
+ * what is essential. Unfiled lines need no such rule: a card payment there
+ * pairs with its other side as a move between own accounts, or, paid to a
+ * card Leeway cannot see, counts as the spending it stands for.
  */
 export async function spendingByRange(
   db: Db,
@@ -203,7 +204,7 @@ export async function spendingByRange(
   const totalsByRange = await categoryTotalsByRange(db, ranges, false, null, {
     skipCardPayments: true,
   })
-  const unfiled = await unfiledFlows(db, ranges, false, true)
+  const unfiled = await unfiledFlows(db, ranges, false)
   return ranges.map((_, i) => {
     const totals = totalsByRange[i]!
     const flows = flowTotals(sumTotals(categories, totals), totals, unfiled[i]!)

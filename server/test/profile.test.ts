@@ -204,8 +204,15 @@ describe('getFinancialProfile', () => {
     for (const date of ['2026-09-05', '2026-10-05', '2026-11-05']) {
       await filed(checking.accountId, groceries.id, date, 60_000)
     }
-    // A card payment and a move to savings are not spending.
-    await money('2026-10-20', 'PAYMENT THANK YOU', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    // A payment to a tracked card, either side, and a move to savings are not spending.
+    const card = await insertBankAccount(ctx.db, { type: 'credit', subtype: 'credit card' })
+    await money('2026-10-20', 'CARD PAYMENT', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    await insertBankTransaction(ctx.db, card.accountId, {
+      date: '2026-10-20',
+      name: 'PAYMENT THANK YOU',
+      amountCents: -150_000,
+      detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    })
     await filed(checking.accountId, transfers.id, '2026-10-21', 50_000)
     await ctx.db.query('DELETE FROM balance_history')
 

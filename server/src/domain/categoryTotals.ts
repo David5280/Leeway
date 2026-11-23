@@ -37,12 +37,17 @@ export const COUNTED_IN_RANGES_SQL = `${IN_RANGES_SQL}
     AND ${countedSql()}`
 
 /**
- * Leaves out credit card payments, either side, wherever they are filed: a
+ * Leaves out the card's side of a credit card payment (money into the card,
+ * or any payment line on a card or loan account), wherever it is filed: a
  * typical month's spending counts the purchases, never the payment for them,
- * nor money paid into a card from an account Leeway cannot see.
+ * nor money paid into a card from an account Leeway cannot see. The checking
+ * side is left to how it is filed: a transfer when it pays a card Leeway
+ * tracks (paysTrackedCard in transfers.ts), and otherwise spending, since a
+ * payment to a card Leeway cannot see is the only trace of what was bought.
  */
 export const NOT_CARD_PAYMENT_SQL = `
-    AND coalesce(t.provider_category_detailed, '') <> '${CARD_PAYMENT_CODE}'`
+    AND NOT (coalesce(t.provider_category_detailed, '') = '${CARD_PAYMENT_CODE}'
+      AND (t.amount_cents < 0 OR a.type IN ('credit', 'loan')))`
 
 /** COUNTED_IN_RANGES_SQL's parameters, in order. */
 export function rangeParams(
