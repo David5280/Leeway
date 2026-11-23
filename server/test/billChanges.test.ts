@@ -26,6 +26,7 @@ const comcast = (charges: [string, number][], fields: Partial<WatchedBill> = {})
   trackedOn: '2026-09-25',
   amountVaries: false,
   amountSetOn: null,
+  followAfterOn: null,
   charges: charges.map(([date, amountCents]) => ({ accountId: 'checking', date, amountCents })),
   ...fields,
 })

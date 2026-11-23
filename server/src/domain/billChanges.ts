@@ -13,10 +13,12 @@
 // (varyingBills.ts).
 //
 // An amount the owner sets stands: no cycle with a charge on or before the day
-// they set it says anything about it (postedSinceOwnerSet), so following
-// resumes only with a cycle that came after. A steady bill charged its old
-// price again after the owner set a new one is news, not a settling: their
-// change did not take.
+// they set it says anything about it (postedAfter), so following resumes
+// only with a cycle that came after. A steady bill charged its old price
+// again after the owner set a new one is news, not a settling: their change
+// did not take. The amounts bills had when following began are kept the same
+// way, but from following only (followAfterOn): a steady bill's alerts never
+// waited on them.
 //
 // A change is an account alert of its own kind (bill_change), so it shows,
 // notifies, hides and dismisses as the other alerts do. Dismissing or hiding
@@ -57,6 +59,13 @@ export interface WatchedBill {
    * that posted after it, so the owner's figure stands until then.
    */
   amountSetOn: IsoDate | null
+  /**
+   * The day following began, for a bill whose amount was there before then
+   * and may be the owner's own (migration 035), or null. Following a varying
+   * bill waits for a cycle that posted after it; a steady bill's alerts and
+   * settling never do, since nothing says the owner set that amount.
+   */
+  followAfterOn: IsoDate | null
   /** Its last few posted charges (CHARGES_READ), newest first. */
   charges: BillCharge[]
 }
@@ -130,14 +139,19 @@ export function amountsVary(earlier: number[]): boolean {
 }
 
 /**
- * Whether every charge in the cycle from `first` posted after the day the
- * owner last set the bill's amount. A charge on that very day may have come
- * before the edit, so it does not count: the owner's figure stands.
+ * Whether every charge in the bill's cycle from `first` posted after `day`
+ * (the owner last setting its amount, or following beginning); true when
+ * there is no such day. A charge on that very day may have come before it,
+ * so it does not count: the amount as it stood then stays.
  */
-function postedSinceOwnerSet(bill: WatchedBill, first: BillCharge, cycle: number): boolean {
-  const setOn = bill.amountSetOn
-  if (setOn === null) return true
-  return cycleCharges(bill.charges, first, cycle).every((charge) => charge.date > setOn)
+function postedAfter(
+  day: IsoDate | null,
+  bill: WatchedBill,
+  first: BillCharge,
+  cycle: number,
+): boolean {
+  if (day === null) return true
+  return cycleCharges(bill.charges, first, cycle).every((charge) => charge.date > day)
 }
 
 /**
@@ -162,7 +176,7 @@ function steadyBillChange(
     cycle: cycleCharges(bill.charges, latest, cycle),
   }
   if (!isAmountChange(previous.amountCents, latest.amountCents)) {
-    if (!postedSinceOwnerSet(bill, previous, cycle)) return changed
+    if (!postedAfter(bill.amountSetOn, bill, previous, cycle)) return changed
     return { kind: 'settled', bill, amountCents: latest.amountCents }
   }
   // The first charge since tracking: the usual amount was only an estimate from history.
@@ -186,10 +200,14 @@ export function billChangeOf(bill: WatchedBill, today: IsoDate): BillChange | nu
   if (!latest || latest.date <= bill.trackedOn) return null
   if (missedBetween(latest.date, today, cycle)) return null
   // The owner set the amount after this cycle came: their figure is newer than it.
-  if (!postedSinceOwnerSet(bill, latest, cycle)) return null
+  if (!postedAfter(bill.amountSetOn, bill, latest, cycle)) return null
   // Judged by the cycles before the latest, so the latest's own change cannot hide itself.
   const varies = bill.amountVaries || amountsVary(earlier.map((one) => one.amountCents))
-  if (varies) return followVaryingBill(bill, latest, earlier, cycle)
+  if (varies) {
+    // The amount it had when following began stands until a cycle posts after then.
+    if (!postedAfter(bill.followAfterOn, bill, latest, cycle)) return null
+    return followVaryingBill(bill, latest, earlier, cycle)
+  }
   return steadyBillChange(bill, latest, earlier[0], cycle)
 }
 

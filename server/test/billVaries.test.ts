@@ -42,6 +42,7 @@ function charged(amounts: number[], fields: Partial<WatchedBill> = {}): WatchedB
     trackedOn: '2025-01-01',
     amountVaries: false,
     amountSetOn: null,
+    followAfterOn: null,
     ...fields,
     charges: amounts.map((amountCents, cycle) => ({
       accountId: 'checking',
@@ -170,6 +171,7 @@ describe('billChangeOf following a varying bill', () => {
       trackedOn: '2025-01-01',
       amountVaries: true,
       amountSetOn: null,
+      followAfterOn: null,
       charges: [
         { accountId: 'checking', date: LATEST, amountCents: 10000 },
         { accountId: 'checking', date: '2026-10-17', amountCents: 20000 },

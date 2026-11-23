@@ -4,6 +4,7 @@
 
 import { useId, useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
+import { AmountNote, useAmountField } from '../../../components/AmountNote'
 import { Money } from '../../../components/design/Money'
 import { ErrorNote } from '../../../components/ui'
 import { parseMoney } from '../../../lib/format'
@@ -30,12 +31,14 @@ function AmountForm({
   const save = useActionMutation('update_settings')
   const [text, setText] = useState(start === null ? '' : String(start / 100))
   const cents = parseMoney(text)
+  // Never negative: one that can't be read, or a negative one, keeps Save off with a note.
+  const field = useAmountField(text, { min: 0 })
   const saveAmount = (goalsMonthlyCents: number | null) =>
     save.mutate({ savingsPlan: { goalsMonthlyCents } }, { onSuccess: onDone })
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (cents !== null) saveAmount(cents)
+    if (cents !== null && field.note === null) saveAmount(cents)
   }
 
   return (
@@ -50,10 +53,15 @@ function AmountForm({
           style={{ width: 130 }}
           inputMode="decimal"
           placeholder="0"
+          {...field.inputProps}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <button type="submit" className="btn primary" disabled={cents === null || save.isPending}>
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={cents === null || field.note !== null || save.isPending}
+        >
           Save
         </button>
         {onCancel && (
@@ -62,6 +70,7 @@ function AmountForm({
           </button>
         )}
       </span>
+      <AmountNote id={field.id} text={field.shown} />
       {canUsePace && (
         <button
           type="button"

@@ -16,7 +16,7 @@ export interface FetchJsonOptions {
 /**
  * Fetches and parses one JSON document. Redirects are not followed and only a
  * 200 counts, so the document always comes from the exact URL asked for.
- * Connections only go to public addresses (see publicAddress.ts).
+ * Connections only go to public addresses (see isFetchableAddress in publicAddress.ts).
  */
 export async function fetchJson(url: string, options: FetchJsonOptions): Promise<unknown> {
   const { transport = https, lookup = publicOnlyLookup } = options

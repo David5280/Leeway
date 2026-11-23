@@ -9,7 +9,7 @@
 // from Payroll Savings": the account names are taken out before the line is
 // read for pay (wordsReadForPay).
 
-import { PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
+import { PAID_IN_FORMS, PAYCHECK_WORDS, PAYMENT_THANK_YOU } from './payWords.js'
 import type { Movement } from './transfers.js'
 
 /** What a transaction says about itself: a transfer, something else, or nothing either way. */
@@ -38,7 +38,10 @@ const PAY_WORDS = new RegExp(`(${PAYCHECK_WORDS.source}|${PAID_BACK_WORDS.source
  * name, so transfer words win over them: "Online Transfer to Interest
  * Savings" is a move. Interest and dividends only in their paid forms.
  */
-const EARNED_WORDS = /\b(cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
+const EARNED_WORDS = new RegExp(
+  String.raw`\b(cash\s?back|(interest|int|dividends?|divs?)\.?\s+(${PAID_IN_FORMS}))\b`,
+  'i',
+)
 
 /**
  * Words for a kind of account the owner keeps, short forms too: "PAYROLL

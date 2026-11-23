@@ -387,7 +387,8 @@ describe('Accounts', () => {
       await user.tab()
       await user.type(input, '-5')
       await user.tab()
-      expect(input).toHaveValue('')
+      // Kept in the box with its note, to be fixed rather than quietly undone.
+      expect(input).toHaveValue('-5')
       expect(server.actions('update_account')).toEqual([])
     })
 

@@ -16,9 +16,9 @@ import type { Db } from '../../db/pool.js'
 import { addDays, daysBetween, maxDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { accountMasks } from '../accounts.js'
-import type { CategoryTotal } from '../budget.js'
-import { listCategories, type Category } from '../categories.js'
-import { essentialIdsOf } from '../essentials.js'
+import { listCategories } from '../categories.js'
+import { essentialCodedByRange } from '../essentialCoded.js'
+import { essentialSpending } from '../essentialSpending.js'
 import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
 import type { CurrentPay } from '../pay/current.js'
 import { readCurrentPay } from '../pay/source.js'
@@ -86,7 +86,8 @@ export interface MonthlyAverages {
   spendingCents: number | null
   /**
    * Spending in the essential categories: the owner's pick, or the ones found
-   * by their codes and names (essentials.ts), or all spending when none are.
+   * by their codes and names with loan and child care payments filed
+   * elsewhere (essentialSpending.ts), or all spending when none are.
    */
   essentialSpendingCents: number | null
   /** The first day spending was measured from, or null with too little history. */
@@ -122,41 +123,6 @@ export function spendingWindow(
   return held < SPENDING_LEAST_DAYS ? null : { start, days: held }
 }
 
-/**
- * The essential categories the owner picked that still exist as spending
- * categories, or null when there is no pick to go by, so the essentials are
- * found instead (essentialIdsOf in essentials.ts). Settings can hold ids of
- * categories since deleted or replaced, so only current ones count, and a
- * pick with none left is no pick rather than no essentials.
- */
-export function currentEssentials(
-  categories: Category[],
-  essentialIds: string[] | null,
-): Set<string> | null {
-  if (essentialIds === null) return null
-  const picked = new Set(essentialIds)
-  const current = categories.filter((c) => c.kind === 'expense' && picked.has(c.id))
-  return current.length ? new Set(current.map((c) => c.id)) : null
-}
-
-/**
- * Spending in the essential categories. Without a pick, the essentials found
- * by their codes and names count (essentials.ts), and all of `spentCents`
- * counts when none are found.
- */
-export function essentialSpending(
-  categories: Category[],
-  totals: CategoryTotal[],
-  essentialIds: string[] | null,
-  spentCents: number,
-): number {
-  const essentials = essentialIdsOf(categories, currentEssentials(categories, essentialIds))
-  if (essentials === null) return spentCents
-  return totals
-    .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
-    .reduce((sum, total) => sum + total.amountCents, 0)
-}
-
 /** Spending a month over the window, and its essential share. */
 async function monthlySpending(
   db: Db,
@@ -165,10 +131,13 @@ async function monthlySpending(
   today: IsoDate,
 ) {
   if (window === null) return { spendingCents: null, essentialSpendingCents: null }
-  const [spending] = await spendingByRange(db, [{ start: window.start, end: today }])
+  const range = { start: window.start, end: today }
+  const [spending] = await spendingByRange(db, [range])
+  const [essentialCoded] = await essentialCodedByRange(db, [range])
   const categories = await listCategories(db)
   const ids = settings.savingsPlan.essentialCategoryIds
-  const essential = essentialSpending(categories, spending!.totals, ids, spending!.spentCents)
+  const month = { totals: spending!.totals, essentialCoded: essentialCoded! }
+  const essential = essentialSpending(categories, month, ids, spending!.spentCents)
   const perMonth = (cents: number) => Math.round((cents * DAYS_PER_MONTH) / window.days)
   return {
     spendingCents: perMonth(spending!.spentCents),

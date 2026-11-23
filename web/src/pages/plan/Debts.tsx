@@ -7,6 +7,7 @@ import { useState } from 'react'
 import type { Account, DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { cardInterestTotal, isCounted, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
@@ -104,7 +105,9 @@ function CardsCost({ accounts }: { accounts: Account[] }) {
 
 export function DebtsSection() {
   const [extra, setExtra] = useState('')
-  const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
+  const extraField = useAmountField(extra, { min: 0 })
+  // One that can't be read, or a negative one, counts as no extra, and its note says so.
+  const extraCents = useDebounced(extraField.note !== null ? 0 : (parseMoney(extra) ?? 0), 400)
   const accounts = useAction('list_accounts')
   if (!accounts.data) return <LoadingOrError error={accounts.error} />
   // The ones the payoff plan counts: shown, still shared by the bank, and owing.
@@ -138,11 +141,14 @@ export function DebtsSection() {
               inputMode="decimal"
               aria-label="Extra each month"
               placeholder="0"
+              {...extraField.inputProps}
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
             />
           </Setting>
         </div>
+        {/* The plan then counts no extra, so say why rather than show it quietly. */}
+        <AmountNote id={extraField.id} text={extraField.shown} />
         <PayoffPlan extraCents={extraCents} />
       </Card>
     </>

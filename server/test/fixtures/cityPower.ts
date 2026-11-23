@@ -30,6 +30,7 @@ export const cityPower = (
   trackedOn: '2025-01-01',
   amountVaries: true,
   amountSetOn: null,
+  followAfterOn: null,
   charges,
   ...fields,
 })
