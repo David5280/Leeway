@@ -98,9 +98,25 @@ function isKept(roles: (Role | null)[], index: number): boolean {
   return (roles[index] ?? null) !== null
 }
 
-/** Whether the words from `index` on spell `phrase`. */
+/** Only spaces or one hyphen join a phrase's words: "Roth IRA", "SEP-IRA", never "Roth, Ira". */
+const PHRASE_JOIN = /^ *-? *$/
+
+/** Initialisms that are also first names ("Ira"), so they count only as "IRA" or "ira". */
+const INITIALISMS = new Set(['ira'])
+
+/** Whether a phrase word is written as the phrase writes it: an initialism never in title case. */
+function writtenAsPhrase(token: Token): boolean {
+  if (!INITIALISMS.has(token.form)) return true
+  return token.text === token.text.toUpperCase() || token.text === token.text.toLowerCase()
+}
+
+/** Whether the words from `index` on spell `phrase`, joined only by spaces or a hyphen. */
 function spells(tokens: Token[], index: number, phrase: readonly string[]): boolean {
-  return phrase.every((word, offset) => tokens[index + offset]?.form === word)
+  return phrase.every((word, offset) => {
+    const token = tokens[index + offset]
+    if (token?.form !== word || !writtenAsPhrase(token)) return false
+    return offset === 0 || (token.before !== '' && PHRASE_JOIN.test(token.before))
+  })
 }
 
 /** Marks each provider or plan kind named by more than one word ("T. Rowe Price"). */

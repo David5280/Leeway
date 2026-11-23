@@ -59,12 +59,29 @@ describe('redactPlanName drops a person in every shape around the plan', () => {
     ['Ira Glass PERA', 'PERA'],
     ['Ira Doe', null],
     ['Roth', null],
+    ['Roth Roth', null],
+    ['PERA Roth, Ira', 'PERA'],
+    ['PERA Roth Ira', 'PERA'],
+    ['Roth, Ira 401k', '401k'],
+    ['Sep, Ira PERA', 'PERA'],
+    // A lone surname right before a tax code reads as a Roth account: a known residual.
+    ['Jane Roth 401k', 'Roth 401k'],
   ])('drops Roth and Ira read as names in "%s"', keeps)
+
+  it.each<Case>([
+    ['ROTH IRA', 'ROTH IRA'],
+    ['roth ira', 'roth ira'],
+    ['SEP-IRA', 'SEP IRA'],
+    ['Vanguard IRA', 'Vanguard'],
+    ['Traditional IRA', null],
+  ])('keeps an IRA kind only as one written phrase in "%s"', keeps)
 
   it.each<Case>([
     ['Jane Doe 4417JD', null],
     ['PERA 4417JD', 'PERA'],
     ['PERA 12AB', 'PERA'],
+    ['PERA JD4417', 'PERA'],
+    ['PERA A1234B', 'PERA'],
   ])('drops an ID of digits and initials in "%s"', keeps)
 
   it.each<Case>([
