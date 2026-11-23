@@ -219,6 +219,15 @@ describe('who paid a deposit', () => {
     expect(key('7-ELEVEN DIR DEP')).toBe('7eleven dir dep')
     expect(key('7-ELEVEN DIR DEP 0012345')).toBe(key('7-ELEVEN DIR DEP 0067890'))
     expect(key('PAYROLL ID:K3J9X')).toBe(key('PAYROLL ID:Q7Z2W'))
+    expect(key('7-ELEVEN, DIR DEP')).toBe('7eleven dir dep')
+  })
+
+  it('drops a date written with letters beside pay words alone', () => {
+    expect(key('PAYROLL 20NOV')).toBe('payroll')
+    expect(key('PAYROLL 04DEC')).toBe('payroll')
+    expect(key('PAYROLL 2026-NOV')).toBe('payroll')
+    expect(key('DIR DEP 1ST')).toBe('dir dep')
+    expect(key('DIR DEP 15TH')).toBe('dir dep')
   })
 
   it('drops the digits where the other words name the payer', () => {

@@ -110,5 +110,8 @@ describe('namesPayer', () => {
     expect(namesPayer('Initech, Inc.', 'initech payroll')).toBe(true)
     expect(namesPayer('Globex Corporation', 'initech payroll')).toBe(false)
     expect(namesPayer('The Payroll Company', 'acme payroll')).toBe(false)
+    // A key keeps the number that names its payer; a stub's name is read without it.
+    expect(namesPayer('7-Eleven, Inc.', '7eleven dir dep')).toBe(true)
+    expect(namesPayer('1199SEIU Benefit Funds', '1199seiu dir dep')).toBe(true)
   })
 })

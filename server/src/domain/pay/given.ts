@@ -42,7 +42,8 @@ const COMPANY_WORDS = new Set([
 
 /** Whether a paystub's employer name and a payer's key, read from the bank's text, share a name word. */
 export function namesPayer(employerName: string, payerKey: string): boolean {
-  const payerWords = new Set(payerKey.split(' '))
+  // Both read alike: a key keeps a number naming its payer ("7eleven"), a stub's name drops it.
+  const payerWords = new Set(textKey(payerKey).split(' '))
   return textKey(employerName)
     .split(' ')
     .some(
