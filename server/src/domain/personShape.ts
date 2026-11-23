@@ -4,7 +4,7 @@
 // lines, and a sole trader goes by their own name. Pure.
 
 import { isBrandWord } from './brandWords.js'
-import { isCommonWord } from './chat/commonWords.js'
+import { isEverydayCommonWord, isNameInALine } from './chat/commonWords.js'
 import { isBusinessWord } from './businessWords.js'
 import { isMovementWord } from './movementWords.js'
 import { isPlainWord } from './plainWords.js'
@@ -25,10 +25,11 @@ const MOST_NAME_WORDS = 4
 
 // A clinician's title or credential, found anywhere in a line: "DR. JANE DOE", "JANE DOE LCSW".
 const TITLES = ['dr', 'lcsw', 'dds', 'dmd', 'phd', 'lpc', 'psyd', 'lmft', 'lmhc', 'lmsw', 'lpcc']
-const MORE_TITLES = ['lcpc', 'mft', 'crnp', 'arnp', 'fnp', 'dnp', 'dpt']
+const MORE_TITLES = ['lcpc', 'mft', 'crnp', 'arnp', 'fnp', 'dnp', 'dpt', 'otr/l', 'aprn', 'pmhnp']
 // A short credential, found only after a name ("JANE DOE MD", "Corwin Ashby, D.C."):
 // alone each is too often something else (Maryland, Washington DC, "do").
 const AFTER_A_NAME = ['md', 'dc', 'np', 'pa', 'pa-c', 'rn', 'do', 'od', 'pt']
+const MORE_AFTER_A_NAME = ['lac', 'cnm', 'lmt', 'ot']
 
 /** A credential as a RegExp source, a dot allowed after each letter: "ph.d", "D.C.". */
 function written(credential: string): string {
@@ -40,10 +41,10 @@ const TITLE = new RegExp(
   'iu',
 )
 const TRAILING_CREDENTIAL = new RegExp(
-  `[\\s,]+(?:${AFTER_A_NAME.map(written).join('|')})\\s*$`,
+  `[\\s,]+(?:${[...AFTER_A_NAME, ...MORE_AFTER_A_NAME].map(written).join('|')})\\s*$`,
   'i',
 )
-const CREDENTIALS = new Set([...TITLES, ...MORE_TITLES, ...AFTER_A_NAME])
+const CREDENTIALS = new Set([...TITLES, ...MORE_TITLES, ...AFTER_A_NAME, ...MORE_AFTER_A_NAME])
 
 /** Whether a word is a clinician's credential or title, dots aside: "LCSW", "M.D.", "PA-C". */
 export function isCredential(word: string): boolean {
@@ -55,15 +56,24 @@ export function withoutCredential(name: string): string {
   return name.replace(TRAILING_CREDENTIAL, '')
 }
 
-/** Whether a word is an everyday one, never a name: a common, business, brand, movement or plain word. */
+/**
+ * Whether a word is an everyday one, never a name in a note or label: a
+ * common (but not a name that is also a word, like "Mark"), business, brand,
+ * movement or plain word.
+ */
 export function isEverydayWord(word: string): boolean {
-  if (isCommonWord(word) || isBusinessWord(word) || isBrandWord(word)) return true
+  if (isEverydayCommonWord(word) || isBusinessWord(word) || isBrandWord(word)) return true
   return isMovementWord(word) || isPlainWord(word)
 }
 
-/** Whether one word could be part of a person's name and is no everyday or business word. */
+/** Whether a word of a merchant or pay line could be a name: "Mark", "June", or no everyday one. */
+function nameInALine(word: string): boolean {
+  return isNameInALine(word) || !isEverydayWord(word)
+}
+
+/** Whether one word could be part of a person's name: name-shaped, not possessive, not everyday. */
 function couldBeANameWord(word: string): boolean {
-  return NAME_WORD.test(word) && !POSSESSIVE.test(word) && !isEverydayWord(word)
+  return NAME_WORD.test(word) && !POSSESSIVE.test(word) && nameInALine(word)
 }
 
 /** Whether a text has words and every one is an everyday word ("Rent", "House cleaner"). */
@@ -88,15 +98,19 @@ export function hasAPersonsShape(name: string): boolean {
 }
 
 /**
- * Whether a line holds a person's name among everyday words and numbers:
- * "Direct Dep John Q Public Household Payroll" holds "John Q Public". What
- * is left once those are gone is read as a name (hasAPersonsShape).
+ * Whether a line holds a person's name among everyday words, numbers and
+ * credentials: "Direct Dep John Q Public Household Payroll" holds "John Q
+ * Public", "JANE DOE COUNSELING" holds "JANE DOE". What is left once those
+ * are gone is read as a name (hasAPersonsShape). A name that is also a word
+ * stays, so "DIRECT DEP MARK WHITLOCK" or "BILL WHITLOCK" never leaves a lone
+ * surname too short to read as one.
  */
 export function holdsAPersonsName(line: string): boolean {
   const words = line
     .split(/\s+/)
     .map((word) => word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, ''))
-    .filter((word) => word && !/\d/.test(word) && !isEverydayWord(word.replace(/\.$/, '')))
+    .filter((word) => word && !/\d/.test(word) && !isCredential(word))
+    .filter((word) => nameInALine(word.replace(/\.$/, '')))
   return hasAPersonsShape(words.join(' '))
 }
 

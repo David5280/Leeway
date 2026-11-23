@@ -23,6 +23,7 @@ import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
 import { labelBills, wordsOf, type BillShown, type StoredBill } from './billLabels.js'
 import { ownerLabels, namesInLabels } from './ownerText.js'
+import { shownWordsOf } from './shownText.js'
 import {
   isBankWord,
   namesIn,
@@ -62,8 +63,8 @@ export interface PaymentPeople extends HiddenNames {
   /** The shops the owner buys from, which a search may always look for. */
   shops: KnownShops
   /**
-   * Every word of the rows shown by name (wordsOf), which a note may hold:
-   * a word Chat shows anyway is no hidden name.
+   * The words of the rows shown by name (wordsOf), which a note may hold: a
+   * word Chat shows anyway is no hidden name (but see shownText.ts).
    */
   shownWords: ReadonlySet<string>
 }
@@ -220,10 +221,11 @@ function hiddenSet(hidden: HiddenNames): Set<string> {
   return new Set(all.map((name) => name.toLowerCase()))
 }
 
-/** Every word of the rows shown by name: their lines, merchants and shown names (wordsOf). */
+/** The words of the rows shown by name: their lines, merchants and shown names (shownWordsOf). */
 function wordsShownIn(rows: readonly Row[], masks: AccountMasks): Set<string> {
-  const texts = rows.flatMap((tx) => [tx.name, tx.merchantName ?? '', ...shownForms(tx, masks)])
-  return new Set(texts.flatMap(wordsOf))
+  return shownWordsOf(
+    rows.flatMap((tx) => [tx.name, tx.merchantName ?? '', ...shownForms(tx, masks)]),
+  )
 }
 
 /** Every labelled row, bill and name Chat hides from a model, and what it shows instead. */
@@ -244,7 +246,7 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
   const plain = (word: string) => shownWords.has(word) || ownWords.has(word)
   const found = labelled.flatMap(({ tx, kind }) => namesIn(tx, kind, shops))
   const ofPeople = namesToHide(found, shops, ownWords)
-  const hidden = withOwnerWords(ofPeople, namesInLabels(labels, plain), shops)
+  const hidden = withOwnerWords(ofPeople, namesInLabels(labels, plain, shops), shops)
   const hiddenWords = searchWords(hidden)
   // A bill's payments are money out, matched by its pattern's whole words.
   const payments = labelled

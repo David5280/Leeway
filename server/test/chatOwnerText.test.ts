@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { HIDDEN_SEARCH_MESSAGE } from '../src/chat/searchGuard.js'
 import { namesInLabels, noteMaySend } from '../src/domain/chat/ownerText.js'
 import { paymentPeople } from '../src/domain/chat/people.js'
+import { shownWordsOf } from '../src/domain/chat/shownText.js'
+import { knownShops } from '../src/domain/knownShops.js'
 import { ACCOUNT_TRANSFER, GROCERIES, useChatProbe } from './chatProbe.js'
 
 const probe = useChatProbe()
@@ -186,6 +188,26 @@ describe("the owner's own words", () => {
     for (const note of ['gift for Ignatius Thorne', 'Lunch w/ Jo', 'Rent to John']) {
       expect([note, noteMaySend(note, shown)]).toEqual([note, false])
     }
+  })
+
+  it('read a name that is also a word as a name, and a shown word after "for" as no proof', () => {
+    const labels = ['Max allowance', "Grace's college fund", 'Hope support', 'Lily braces']
+    expect(namesInLabels(labels, shown)).toEqual(['Max', 'Grace', 'Hope', 'Lily'])
+    expect(namesInLabels(['Electric bill', 'May rent', 'Mom', 'Car payoff'], shown)).toEqual([])
+    expect(noteMaySend('gift for Max', shown)).toBe(false)
+    expect(noteMaySend('order for Marigold', shown)).toBe(false)
+    expect(noteMaySend('Marigold order', shown)).toBe(true)
+  })
+
+  it("take a shop's whole name as shown, but never the given name it is named for", () => {
+    const words = shownWordsOf(["Trader Joe's", "Sam's Club", 'HBO Max', 'Ross Stores'])
+    expect([...words].sort()).toEqual(['club', 'hbo', 'ross', 's', 'stores', 'trader'])
+    const plain = (word: string) => words.has(word)
+    const shops = knownShops(["Trader Joe's", "Sam's Club"])
+    expect(noteMaySend('Trader Joe’s run', plain, shops)).toBe(true)
+    expect(noteMaySend('birthday gift for Joe', plain, shops)).toBe(false)
+    expect(noteMaySend("Sam's birthday", plain, shops)).toBe(false)
+    expect(namesInLabels(["Trader Joe's", "Joe's birthday"], plain, shops)).toEqual(['Joe'])
   })
 })
 

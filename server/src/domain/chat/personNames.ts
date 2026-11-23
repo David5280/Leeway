@@ -193,7 +193,7 @@ export function withOwnerWords(
   shops: KnownShops,
 ): HiddenNames {
   const owner = loneNamesOf(
-    ownerWords.map((name) => ({ name })),
+    ownerWords.map((name) => ({ name, owner: true })),
     shops,
     ACCOUNT_WORDS,
   )

@@ -138,7 +138,7 @@ export function detectRecurring(
   return findSeries(transactions, today, masks).map(({ series }) => series)
 }
 
-/** detectRecurring, keeping each series' newest transaction beside it. */
+/** detectRecurring, keeping each series' transactions, oldest first, and its newest beside it. */
 export function findSeries<T extends PastTransaction>(
   transactions: T[],
   today: IsoDate,

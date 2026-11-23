@@ -18,7 +18,9 @@
 //    personShape.ts). A medical one, or one a card processor ran ("SQ *",
 //    "TST*"), where sole traders go by their own names, needs Plaid's word;
 //    pay needs no person's name anywhere in its line (household payroll).
-// 5. A medical one does not name a clinician ("DR. JANE DOE LCSW").
+// 5. A medical one does not name a clinician ("DR. JANE DOE LCSW"), nor hold
+//    a person's name anywhere ("JANE DOE COUNSELING"): a practice is often
+//    named for the clinician, and Plaid vouches for it all the same.
 //
 // Every other row is shown by what kind of movement it is (LABELS): "Zelle
 // payment (sent)", "Rent payment", "Service payment", "Purchase or payment".
@@ -180,7 +182,8 @@ function showsItsName(tx: LabelSubject): boolean {
   const vouched = Boolean(tx.merchantEntityId)
   // A clinician is a person even when Plaid knows their practice.
   if (code.startsWith('MEDICAL')) {
-    return vouched && ![tx.name, merchantOf(tx)].some(namesAClinician)
+    if (!vouched || [tx.name, merchantOf(tx)].some(namesAClinician)) return false
+    return !holdsAPersonsName(shownMerchant(tx))
   }
   if (vouched) return true
   if (PROCESSOR.test(tx.name)) return false

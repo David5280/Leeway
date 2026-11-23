@@ -9,10 +9,12 @@
 // capitals. A common word ("Will", "May", "Rent") is a person
 // only when an app's line named it as the person paid ("Zelle payment to
 // RENT"), and even then only in the owner's notes, where they write about
-// people: everywhere else it far more often means the word.
+// people: everywhere else it far more often means the word. A name that is
+// also a word ("Grace") in a label the owner wrote is them, so it is hidden
+// as a name is written ("Grace's college fund", never "grace").
 
 import { isBusinessWord } from '../businessWords.js'
-import { isCommonWord } from './commonWords.js'
+import { isCommonWord, isNameAsWord } from './commonWords.js'
 import { startsAShop, type KnownShops } from '../knownShops.js'
 import { isMovementWord } from '../movementWords.js'
 import { APOSTROPHES, isCredential } from '../personShape.js'
@@ -29,6 +31,8 @@ export interface NameSource {
   name: string
   /** Named by an app's line as the person paid, so even a common word of it is them. */
   paid?: boolean
+  /** Written in the owner's own label, so a name that is also a word ("Grace") is them. */
+  owner?: boolean
 }
 
 /** The single words Chat hides alone, and how. */
@@ -52,6 +56,7 @@ function hiddenAs(
   if (isCredential(part)) return null
   // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
   if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null
+  if (source.owner && isNameAsWord(part)) return 'capital'
   if (isCommonWord(part)) return source.paid ? 'inNotes' : null
   return [...part].length >= ANY_CASE_LENGTH ? 'anyCase' : 'capital'
 }

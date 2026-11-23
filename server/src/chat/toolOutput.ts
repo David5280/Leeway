@@ -56,6 +56,15 @@ type Row = Record<string, unknown>
 // The fields that name a transaction, a merchant total, a series or a bill.
 const NAME_FIELDS = ['displayName', 'merchant', 'name', 'key'] as const
 
+// An id (a row's, or an object keyed by one), which holds no name or mask, but
+// whose digits or letters may look like one ("9f1c4417-ab3e-..." beside a mask 4417).
+const AN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** A text with anything hidden in it replaced, but an id kept whole so a tool can take it back. */
+function scrubbed(text: string, replacements: readonly Replacement[]): string {
+  return AN_ID.test(text) ? text : replacedIn(text, replacements)
+}
+
 /** A row's naming fields, each that is set reading as the label. */
 function named(row: Row, label: string, fields: readonly string[] = NAME_FIELDS): Row {
   const set = fields.filter((field) => typeof row[field] === 'string')
@@ -107,7 +116,7 @@ function relabelled(row: Row, people: PaymentPeople): Row {
  * on a key already taken ("someone", "someone 2"), so no value is lost.
  */
 function freeKey(key: string, taken: ReadonlySet<string>, hidden: Hidden): string {
-  const replaced = replacedIn(key, hidden.everywhere)
+  const replaced = scrubbed(key, hidden.everywhere)
   if (!taken.has(replaced)) return replaced
   let number = 2
   while (taken.has(`${replaced} ${number}`)) number += 1
@@ -116,9 +125,9 @@ function freeKey(key: string, taken: ReadonlySet<string>, hidden: Hidden): strin
 
 /** A note as sent: only one whose every word is surely no one's, with anything hidden replaced. */
 function noteOf(note: string, hidden: Hidden): string | null {
-  const { shownWords, accountWords } = hidden.people
+  const { shownWords, accountWords, shops } = hidden.people
   const plain = (word: string) => shownWords.has(word) || accountWords.includes(word)
-  return noteMaySend(note, plain) ? replacedIn(note, hidden.inNotes) : null
+  return noteMaySend(note, plain, shops) ? replacedIn(note, hidden.inNotes) : null
 }
 
 /** One field of an object, with anything hidden in it replaced. */
@@ -126,7 +135,7 @@ function cleanField(key: string, value: unknown, hidden: Hidden): unknown {
   if (key === 'counterparty') return null
   if (typeof value !== 'string') return walked(value, hidden)
   if (key === 'note') return noteOf(value, hidden)
-  return replacedIn(value, hidden.everywhere)
+  return scrubbed(value, hidden.everywhere)
 }
 
 /** An object shown by its label where it has one, then with every key and field cleaned. */
@@ -143,10 +152,27 @@ function cleanRow(row: Row, hidden: Hidden): Row {
 
 /** The result with every labelled row shown by its label and every hidden name replaced. */
 function walked(value: unknown, hidden: Hidden): unknown {
-  if (typeof value === 'string') return replacedIn(value, hidden.everywhere)
+  if (typeof value === 'string') return scrubbed(value, hidden.everywhere)
   if (Array.isArray(value)) return mergedByLabel(value.map((item) => walked(item, hidden)))
   if (value === null || typeof value !== 'object' || value instanceof Date) return value
   return cleanRow(value as Row, hidden)
+}
+
+/**
+ * The names of shops the owner buys from that hold a word hidden alone, each
+ * kept as written: Chat shows them anyway, and "Trader Joe's" must not read
+ * "Trader someone's" because the owner wrote a goal "Joe's birthday".
+ */
+function shopsKept(people: PaymentPeople): Replacement[] {
+  const alone = [
+    ...people.loneAnyCase,
+    ...people.loneNames,
+    ...people.phrases.map(([phrase]) => phrase),
+  ]
+  const hidden = new Set(alone.flatMap(wordsOf))
+  return [...people.shops.names]
+    .filter((shop) => wordsOf(shop).some((word) => hidden.has(word)))
+    .map((shop) => ({ pattern: fullNamePattern(shop), with: null }))
 }
 
 /** What replaces each hidden thing, in the order they are looked for. */
@@ -173,6 +199,7 @@ function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
   const named = [
     ...phrases,
     ...names,
+    ...shopsKept(people),
     ...words,
     ...lone.filter((one) => !ofAccounts(one)).map(asSomeone),
   ]

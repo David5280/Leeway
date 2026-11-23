@@ -25,6 +25,12 @@ describe("a person's shape", () => {
       'Jane Q Doe Smith',
       'J PEMBERTON',
       'J. R. Pemberton',
+      // A name that is also an everyday word is a name word all the same.
+      'MARK OSTROWSKI',
+      'JANE BROWN',
+      'Max Frank',
+      'Will Grace',
+      'JUNE PARKER',
     ]) {
       expect([name, hasAPersonsShape(name)]).toEqual([name, true])
     }
@@ -56,6 +62,15 @@ describe("a person's shape", () => {
     expect(holdsAPersonsName('Payroll Acme Corp 0042')).toBe(false)
     expect(holdsAPersonsName('State of Colorado Payroll')).toBe(false)
   })
+
+  it('keeps a name that is also a word, and drops credentials, before reading the rest', () => {
+    expect(holdsAPersonsName('DIRECT DEP MARK WHITLOCK HOUSEHOLD PAYROLL')).toBe(true)
+    expect(holdsAPersonsName('DIRECT DEP BILL WHITLOCK HOUSEHOLD PAYROLL')).toBe(true)
+    expect(holdsAPersonsName('JANE DOE, OTR/L')).toBe(true)
+    expect(holdsAPersonsName('JANE DOE COUNSELING')).toBe(true)
+    expect(holdsAPersonsName('KING SOOPERS PAYROLL')).toBe(false)
+    expect(holdsAPersonsName('ACME PHYSICAL THERAPY')).toBe(false)
+  })
 })
 
 describe('a clinician by name', () => {
@@ -68,13 +83,19 @@ describe('a clinician by name', () => {
     expect(namesAClinician('MARA LINDQVIST NP')).toBe(true)
     expect(namesAClinician('Mara Lindqvist, PA-C')).toBe(true)
     expect(namesAClinician('ASHBY FAMILY CHIRO LMSW')).toBe(true)
+    expect(namesAClinician('JANE DOE LAC')).toBe(true)
+    expect(namesAClinician('JANE DOE, L.Ac.')).toBe(true)
+    expect(namesAClinician('JANE DOE CNM')).toBe(true)
+    expect(namesAClinician('JANE DOE, OTR/L')).toBe(true)
     expect(namesAClinician('DREW PHARMACY')).toBe(false)
     expect(namesAClinician('CVS PHARMACY ANNAPOLIS MD')).toBe(false)
     expect(namesAClinician('WASHINGTON DC')).toBe(false)
   })
 
   it('reads a credential alone, dots aside', () => {
-    for (const word of ['LCSW', 'M.D.', 'PA-C', 'dpt', 'Dds']) expect(isCredential(word)).toBe(true)
+    for (const word of ['LCSW', 'M.D.', 'PA-C', 'dpt', 'Dds', 'OTR/L', 'L.Ac.', 'CNM']) {
+      expect([word, isCredential(word)]).toEqual([word, true])
+    }
     expect(isCredential('Doe')).toBe(false)
   })
 })

@@ -14,7 +14,7 @@ const BRAND_WORDS = new Set(
     // Shops and delivery.
     'aldi amazon bestbuy costco cvs doordash ebay etsy grubhub ikea instacart kohls kroger',
     'lowes lululemon macys nike nordstrom publix rei safeway sephora starbucks ulta walgreens',
-    'walmart',
+    'walmart soopers',
     'wholefoods chipotle mcdonalds airbnb uber lyft',
     // Phones, internet, power and insurance.
     'att comcast spectrum tmobile verizon xfinity xcel allstate geico progressive',

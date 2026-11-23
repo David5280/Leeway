@@ -106,10 +106,10 @@ export function maskPattern(mask: string): RegExp {
   return new RegExp(`${before}${escaped(mask)}${after}`, 'gu')
 }
 
-/** What a pattern's matches are replaced with. */
+/** What a pattern's matches are replaced with; null keeps them as written, so none cuts in. */
 export interface Replacement {
   pattern: RegExp
-  with: string
+  with: string | null
 }
 
 /** A match in the original text: where it starts and ends, and what replaces it. */
@@ -126,7 +126,7 @@ function matchesIn(original: string, replacements: readonly Replacement[]): Span
         ? [from[match.index]!.start, from[last]!.end]
         : [match.index, last + 1]
       if (!found.some(([other, otherEnd]) => start < otherEnd && other < end)) {
-        found.push([start, end, replacement])
+        found.push([start, end, replacement ?? original.slice(start, end)])
       }
     }
   }

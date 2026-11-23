@@ -35,6 +35,10 @@ const PLAIN_WORDS = new Set(
     // Health and care.
     'braces checkup contacts dentist doctor glasses haircut hospital medical medicine',
     'personal prescription prescriptions surgery therapy vet vision wellness',
+    // What a practice is named for ("Acme Physical Therapy", "Rocky Mountain Pediatrics").
+    'acupuncture cardiology chiropractic dermatology diagnostics imaging midwifery occupational',
+    'optometry orthodontics orthopedics pediatric pediatrics physical physicians radiology',
+    'surgical urology',
     // Fun.
     'apps books concert concerts entertainment events fun games gaming movies party',
     'streaming tickets vacations',
@@ -52,6 +56,11 @@ const PLAIN_WORDS = new Set(
     'mississippi missouri nebraska hampshire jersey mexico york ohio oklahoma oregon',
     'pennsylvania rhode island tennessee texas utah vermont wisconsin wyoming',
     'beach mountain mountains',
+    // Countries and regions a trip is saved for; ones that are also given names are left out.
+    'africa asia australia austria belgium brazil canada caribbean denmark egypt england',
+    'europe finland france germany greece iceland ireland italy japan korea morocco',
+    'netherlands norway peru poland portugal scotland spain sweden switzerland thailand',
+    'vietnam',
     // More of what budgets and goals are for.
     'activities activity airfare alarm apartment app apps beauty bills boat boots buffer',
     'camp camping celebration classes cloud condo copay copays cost costs counseling',
@@ -70,6 +79,8 @@ const PLAIN_WORDS = new Set(
     // Everyday verbs and words a note is written with.
     'came come cover covered gave give go going half left made make need needed still',
     'due moved rest run took take total used went',
+    // More words goals and notes are written with ("Car payoff", "Giving", "Cleaning lady").
+    'bread ending giving lady payoff projects support',
   ]
     .join(' ')
     .split(' '),
