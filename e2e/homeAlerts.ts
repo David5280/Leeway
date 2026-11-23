@@ -50,6 +50,7 @@ export async function fakeLongHomeAlerts(page: Page): Promise<void> {
         id: '00000000-0000-4000-8000-0000000000c1',
         merchant: LONG.merchant,
         previousCents: null,
+        previousId: null,
       },
     },
   ]

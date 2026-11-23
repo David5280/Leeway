@@ -3,7 +3,7 @@
 // the figures should go: a kept pension, or the new pension being added from
 // this paystub. Nothing is saved until the owner confirms.
 
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Input } from '../../../../api/client'
 import { ErrorNote } from '../../../../components/ui'
 import {
@@ -18,9 +18,16 @@ import {
   type PensionChoice,
   type ReviewText,
 } from './review'
+import { accountChoice, type AccountChoice } from '../fields'
 import type { Candidate } from '../PensionFields'
 import { FigureGroup, PaystubDetails } from './ReviewFields'
 import { NewPensionFields, SavingChoice, UseFigures } from './ReviewUse'
+
+/** The save button's words: a kept pension is saved, a pension made meanwhile updated. */
+function confirmLabel(adding: boolean, choice: AccountChoice): string {
+  if (!adding) return 'Save'
+  return choice.kind === 'kept' ? 'Update pension' : 'Add pension'
+}
 
 export function PaystubReview({
   read,
@@ -30,10 +37,15 @@ export function PaystubReview({
   candidates = [],
   busy,
   error,
+  loadProblem,
   onSave,
   onCancel,
 }: {
   read: PaystubRead
+  /**
+   * The kept pensions the figures can update; when adding, those an account
+   * chosen may have become since it was offered.
+   */
   pensions: PensionChoice[]
   /** The pension chosen to start with, as when opened from that pension's form. */
   pensionAccountId: string | null
@@ -43,6 +55,8 @@ export function PaystubReview({
   candidates?: Candidate[]
   busy: boolean
   error: unknown
+  /** Why something the save needs could not load, such as the accounts, with a way to try again. */
+  loadProblem: ReactNode
   onSave: (input: Input<'save_paystub'>) => void
   onCancel: () => void
 }) {
@@ -50,25 +64,31 @@ export function PaystubReview({
   const [text, setText] = useState<ReviewText>(() => reviewText(extraction))
   const [pension, setPension] = useState(pensionAccountId ?? '')
   // The new pension's name starts as the plan name on the paystub's pension line, if Claude read one.
-  const [created, setCreated] = useState<NewPensionText>({
+  const [typed, setCreated] = useState<NewPensionText>({
     accountId: '',
     name: extraction.pensionPlanName ?? '',
     balance: '',
   })
+  // An account chosen, then made a pension elsewhere, takes the figures as that pension.
+  const choice = accountChoice(typed.accountId, candidates, pensions)
   const [contribution, setContribution] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const set = (change: Partial<ReviewText>) => setText((current) => ({ ...current, ...change }))
   const plans = showsPlanFigures(text)
-  const confirm = adding ? 'Add pension' : 'Save'
+  const confirm = confirmLabel(adding, choice)
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    // An account that left the list for good waits for the owner to choose again.
+    if (choice.kind === 'gone') return
     const reviewed = readReview(text)
     if (!reviewed.ok) {
       setProblem(reviewed.error)
       return
     }
-    const target = adding ? readNewPension(reviewed.paystub, created) : null
+    // A pension made meanwhile is updated, as the server's refusal said; nothing new is added.
+    const kept = choice.kind === 'kept' ? choice.accountId : null
+    const target = adding && kept === null ? readNewPension(reviewed.paystub, typed) : null
     if (target && !target.ok) {
       setProblem(target.error)
       return
@@ -76,7 +96,7 @@ export function PaystubReview({
     setProblem(null)
     onSave({
       paystub: reviewed.paystub,
-      pensionAccountId: adding ? null : pension || null,
+      pensionAccountId: adding ? kept : pension || null,
       newPension: target ? target.target.newPension : null,
       attachAccountId: target ? target.target.attachAccountId : null,
       setRetirementContribution: plans && contribution,
@@ -108,7 +128,9 @@ export function PaystubReview({
         <>
           <NewPensionFields
             candidates={candidates}
-            typed={created}
+            typed={typed}
+            choice={choice}
+            confirm={confirm}
             onChange={(change) => setCreated((current) => ({ ...current, ...change }))}
           />
           {plans && <SavingChoice checked={contribution} onChange={setContribution} />}
@@ -129,8 +151,9 @@ export function PaystubReview({
         </p>
       )}
       <ErrorNote error={error} />
+      {loadProblem}
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy || choice.kind === 'gone'}>
           {confirm}
         </button>
         <button type="button" className="btn" onClick={onCancel}>

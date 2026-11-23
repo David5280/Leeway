@@ -154,7 +154,7 @@ function AccountChip({ filters }: { filters: ActivityFilters }) {
  */
 function MerchantChip({ filters }: { filters: ActivityFilters }) {
   if (!filters.merchant) return null
-  const name = filters.merchant.name ?? 'One merchant'
+  const name = filters.merchant.name ?? 'These charges'
   return (
     <button
       type="button"
