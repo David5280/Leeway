@@ -103,7 +103,12 @@ import {
   getForecastAction,
   refreshCalendarAction,
 } from './calendar.js'
-import { deletePaystubAction, getPaystubAction, savePaystubAction } from './paystubs.js'
+import {
+  deletePaystubAction,
+  getPaystubAction,
+  savePaystubAction,
+  savePaystubDetailAction,
+} from './paystubs.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import {
   attachPensionAction,
@@ -206,6 +211,7 @@ export const actionList = [
   updatePensionAction,
   getPaystubAction,
   savePaystubAction,
+  savePaystubDetailAction,
   deletePaystubAction,
   listBillsAction,
   createBillAction,
