@@ -31,6 +31,7 @@ import { paystubPlan } from './savings/payrollMonths.js'
 import { bankSeenRate, countedNote, countsPayroll, type SavingsRate } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import type { Settings } from './settings.js'
+import { tripGoalIds } from './trips/budget.js'
 import { suggestionsOf, untrackedSeries } from './untrackedRecurring.js'
 
 /** How far back the net worth change is measured. */
@@ -45,6 +46,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     cashFlow,
     bills,
     goals,
+    tripGoals,
     plans,
     connections,
     recurring,
@@ -58,6 +60,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     getCashFlow(db, settings, today),
     listBills(db, today),
     listGoals(db, reading),
+    tripGoalIds(db),
     debtPlans(db, 0, today),
     listConnections(db),
     series.then(suggestionsOf),
@@ -86,6 +89,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       cashFlow,
       bills,
       goals,
+      tripGoalIds: tripGoals,
       debtGaps: plans.needsDetails,
       connections,
       untrackedRecurringCount: recurring.length,

@@ -9,7 +9,10 @@ CREATE TABLE trip_budgets (
   stay_cents bigint NOT NULL CHECK (stay_cents >= 0),
   food_per_day_cents bigint NOT NULL CHECK (food_per_day_cents >= 0),
   activities_cents bigint NOT NULL CHECK (activities_cents >= 0),
-  CHECK (ends_on >= starts_on)
+  CHECK (ends_on >= starts_on),
+  -- A budget is matched to its trip by the days they share, so one trip has
+  -- one budget only when no two budgets share a day. The index this builds
+  -- also finds the budgets on a stretch of days.
+  CONSTRAINT trip_budgets_one_per_trip
+    EXCLUDE USING gist (daterange(starts_on, ends_on, '[]') WITH &&)
 );
-
-CREATE INDEX trip_budgets_days ON trip_budgets (starts_on, ends_on);

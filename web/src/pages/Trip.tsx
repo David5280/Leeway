@@ -1,9 +1,11 @@
 // One trip: what it cost, by part (getting there, a place to stay, food and
-// things to do), against its budget when one was planned, and the
-// transactions that make it up. A trip still ahead with no budget offers one.
+// things to do) against its budget when one was planned, and the
+// transactions that make it up, each opening its sheet. A trip still ahead
+// offers to plan its budget, or to change the one planned.
 
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { TripDetail } from '../api/client'
+import type { Transaction, TripDetail } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Card } from '../components/design/Card'
 import { Money } from '../components/design/Money'
@@ -11,63 +13,44 @@ import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
-import { dayRange, SAVE_FOR_NAMES } from '../lib/calendar'
-import { TRIP_PART_NAMES, tripName } from '../lib/trips'
-import { TripBudgetForm } from './trips/TripBudgetForm'
+import { dayRange } from '../lib/calendar'
+import { tripName } from '../lib/trips'
+import { TransactionSheet } from './transactions/TransactionSheet'
+import { PlanBudget } from './trips/PlanBudget'
+import { TripParts } from './trips/TripParts'
 
 const STATUS = { upcoming: 'Coming up', under_way: 'Under way', past: 'Done' } as const
-const PARTS = ['travel', 'stay', 'food', 'activities'] as const
-
-function Parts({ trip }: { trip: TripDetail }) {
-  const { budget } = trip
-  return (
-    <Card static="list" label="By part" className="stack-sm">
-      <div className="row-between wrap">
-        <h2>By part</h2>
-        {budget && (
-          <span className={`small ${budget.leftCents < 0 ? 'over' : 'muted'}`}>
-            <Money cents={Math.abs(budget.leftCents)} />{' '}
-            {budget.leftCents < 0 ? 'over budget' : 'left of'}{' '}
-            {budget.leftCents < 0 ? '' : <Money cents={budget.plannedCents} />}
-          </span>
-        )}
-      </div>
-      {PARTS.map((part) => (
-        <div key={part} className="trip-part">
-          <span>{TRIP_PART_NAMES[part]}</span>
-          <span className="stack-sm" style={{ gap: 0 }}>
-            <Money cents={trip.spentByPart[part]} />
-            {budget && (
-              <span className={`small ${budget.leftByPart[part] < 0 ? 'over' : 'muted'}`}>
-                <Money cents={Math.abs(budget.leftByPart[part])} />{' '}
-                {budget.leftByPart[part] < 0 ? 'over' : 'left'}
-              </span>
-            )}
-          </span>
-        </div>
-      ))}
-    </Card>
-  )
-}
-
 function Transactions({ trip }: { trip: TripDetail }) {
   const { settings } = useApp()
+  const categories = useAction('list_categories').data ?? []
+  const [opened, setOpened] = useState<Transaction | null>(null)
   return (
-    <Card static="list" label="Transactions" className="stack-sm">
-      <h2>Transactions</h2>
-      {trip.transactions.length === 0 && <p className="empty">Nothing spent on it yet.</p>}
-      {trip.transactions.map((tx) => (
-        <div key={tx.id} className="list-row">
-          <span className="num small muted" style={{ width: 56, flex: 'none' }}>
-            {shortDate(tx.date, settings.locale)}
-          </span>
-          <span className="grow ellipsis" style={{ minWidth: 0 }}>
-            {tx.displayName}
-          </span>
-          <Money cents={tx.amountCents} sign="transaction" precision="cents" />
-        </div>
-      ))}
-    </Card>
+    <>
+      <Card static="list" label="Transactions" className="stack-sm">
+        <h2>Transactions</h2>
+        {trip.transactions.length === 0 && <p className="empty">Nothing spent on it yet.</p>}
+        {trip.transactions.map((tx) => (
+          <button key={tx.id} type="button" className="list-row" onClick={() => setOpened(tx)}>
+            <span className="num small muted" style={{ width: 56, flex: 'none' }}>
+              {shortDate(tx.date, settings.locale)}
+            </span>
+            <span className="grow ellipsis" style={{ minWidth: 0 }}>
+              {tx.displayName}
+            </span>
+            <Money cents={tx.amountCents} sign="transaction" precision="cents" />
+          </button>
+        ))}
+      </Card>
+      {opened && (
+        <TransactionSheet
+          key={opened.id}
+          initial={opened}
+          categories={categories}
+          onOpen={setOpened}
+          onClose={() => setOpened(null)}
+        />
+      )}
+    </>
   )
 }
 
@@ -96,7 +79,9 @@ export function TripPage() {
         </span>
       </div>
       <p>
-        <Money cents={detail.totalCents} size="lg" /> spent so far
+        {/* A trip still ahead or under way may cost more yet; a finished one is done. */}
+        <Money cents={detail.totalCents} size="lg" />{' '}
+        {detail.status === 'past' ? 'spent' : 'spent so far'}
         {detail.source !== 'spending' && (
           <span className="small muted">
             {' '}
@@ -104,19 +89,8 @@ export function TripPage() {
           </span>
         )}
       </p>
-      {detail.status === 'upcoming' && !detail.budget && (
-        <Card static="form" label="Plan a trip budget" className="stack">
-          <h2>Plan a trip budget</h2>
-          {/* The goal starts named by its kind, never the event's title, which can hold a person's name. */}
-          <TripBudgetForm
-            name={SAVE_FOR_NAMES.trip}
-            startsOn={detail.startsOn}
-            endsOn={detail.endsOn}
-            days={detail.days}
-          />
-        </Card>
-      )}
-      <Parts trip={detail} />
+      {detail.status === 'upcoming' && <PlanBudget trip={detail} />}
+      <TripParts trip={detail} />
       <Transactions trip={detail} />
     </Shell>
   )

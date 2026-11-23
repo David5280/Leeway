@@ -7,7 +7,8 @@ import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
-import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
+import { pretendCalendar } from './calendar'
+import { CALENDAR_SCREENS } from './calendar-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
@@ -292,19 +293,7 @@ export const SCREENS: Screen[] = [
     name: '/plan/net-worth changing a loan entered by hand',
     then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
   }),
-  // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
-  at('planSection', '/plan/ahead', {
-    name: '/plan/ahead with a calendar linked, noting events left out',
-    before: (page) => pretendCalendar(page),
-  }),
-  at('trip', SOON_TRIP_PATH, {
-    name: 'a trip ahead, planning its budget',
-    before: (page) => pretendCalendar(page),
-  }),
-  at('trip', SOON_TRIP_PATH, {
-    name: 'a trip under way, over its budget',
-    before: (page) => pretendCalendar(page, { budgeted: true }),
-  }),
+  ...CALENDAR_SCREENS,
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',

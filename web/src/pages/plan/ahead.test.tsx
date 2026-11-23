@@ -67,7 +67,7 @@ describe('Coming up', () => {
       screen.getByRole('region', { name: 'Nothing due the week of Dec 22' }),
     ).toHaveTextContent('Nothing due the week of Dec 22.')
     const trips = within(screen.getByRole('region', { name: 'Trips' }))
-    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
+    expect(await trips.findByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
       'href',
       '/trips/2026-12-10/2026-12-14',
     )
@@ -191,7 +191,7 @@ describe('Coming up', () => {
     expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
       '$60 in bills, $60 to set aside',
     )
-    expect(screen.getByText('No trips in the last year.')).toBeVisible()
+    expect(await screen.findByText('No recent or coming trips.')).toBeVisible()
   })
 
   it('shows no amount and no goal link for an event with nothing left to set aside', async () => {
@@ -214,7 +214,7 @@ describe('Coming up', () => {
       get_forecast: () => forecastOf(ITEMS, INCOMPLETE),
     })
     renderPlan('/plan/ahead')
-    await screen.findByRole('region', { name: 'This week' })
+    await screen.findByText('No recent or coming trips.')
     const note = screen.getByRole('status')
     expect(note).toHaveTextContent(INCOMPLETE)
     expect(note).toHaveClass('notice')
@@ -235,5 +235,21 @@ describe('Coming up', () => {
     )
     renderPlan('/plan/ahead')
     expect(await screen.findByRole('alert')).toHaveTextContent('Forecast broke')
+  })
+
+  it('shows the weeks while trips load, and when trips could not be read', async () => {
+    planServer(
+      { calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) },
+      { '/api/actions/list_trips': failing('Trips broke', 500) },
+    )
+    const answer = holdRequest('/api/actions/list_trips')
+    renderPlan('/plan/ahead')
+    // Before, Coming up waited on trips, and failed whole with them.
+    expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
+    const trips = within(screen.getByRole('region', { name: 'Trips' }))
+    expect(trips.getByText('Loading trips')).toBeInTheDocument()
+    answer()
+    expect(await trips.findByRole('alert')).toHaveTextContent('Trips broke')
+    expect(screen.getByRole('region', { name: 'This week' })).toBeVisible()
   })
 })

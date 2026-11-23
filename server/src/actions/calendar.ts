@@ -1,6 +1,6 @@
-// Actions for the linked calendar, the forecast of the weeks ahead, trips and
-// trip budgets. All are for the app only: the calendar's address is a secret
-// and its events are the owner's own, so none of this reaches an agent.
+// Actions for the linked calendar and the forecast of the weeks ahead. All
+// are for the app only: the calendar's address is a secret and its events
+// are the owner's own, so none of this reaches an agent.
 
 import { z } from 'zod'
 import type { AppContext } from '../context.js'
@@ -12,11 +12,8 @@ import {
   refreshCalendar,
 } from '../domain/calendar/store.js'
 import type { CalendarDeps } from '../domain/calendar/reading.js'
-import { createTripBudget, tripBudgetInputSchema } from '../domain/trips/budget.js'
-import { getTrip, listTrips, tripOfTransaction } from '../domain/trips/trips.js'
-import { isoDateSchema } from '../lib/schemas.js'
 import { defineAction } from './action.js'
-import { goalClock, settingsAndToday, today } from './today.js'
+import { settingsAndToday } from './today.js'
 
 /** What reading the calendar needs, from the context and the owner's time zone. */
 async function calendarDeps(ctx: AppContext): Promise<CalendarDeps> {
@@ -84,46 +81,4 @@ export const getForecastAction = defineAction({
     const { settings, today: date } = await settingsAndToday(ctx)
     return getForecast(ctx.db, settings, date)
   },
-})
-
-export const listTripsAction = defineAction({
-  name: 'list_trips',
-  title: 'Trips',
-  description:
-    'Recent and coming trips, from the calendar, trip budgets and runs of travel spending, each with its total.',
-  input: z.object({}),
-  scope: 'read',
-  surface: 'app',
-  run: async (ctx) => listTrips(ctx.db, await today(ctx)),
-})
-
-export const getTripAction = defineAction({
-  name: 'get_trip',
-  title: 'A trip',
-  description: "One trip's transactions and total, by part, against its budget when it has one.",
-  input: z.object({ startsOn: isoDateSchema, endsOn: isoDateSchema }),
-  scope: 'read',
-  surface: 'app',
-  run: async (ctx, { startsOn, endsOn }) => getTrip(ctx.db, startsOn, endsOn, await today(ctx)),
-})
-
-export const tripOfTransactionAction = defineAction({
-  name: 'trip_of_transaction',
-  title: "A transaction's trip",
-  description: 'The trip a transaction is part of, or null.',
-  input: z.object({ id: z.uuid() }),
-  scope: 'read',
-  surface: 'app',
-  run: async (ctx, { id }) => tripOfTransaction(ctx.db, id, await today(ctx)),
-})
-
-export const createTripBudgetAction = defineAction({
-  name: 'create_trip_budget',
-  title: 'Plan a trip budget',
-  description:
-    'Plan a trip: travel, a place to stay, food per day and things to do become one purchase goal named for the trip, set aside for by the day it starts.',
-  input: tripBudgetInputSchema,
-  scope: 'write',
-  surface: 'app',
-  run: async (ctx, input) => createTripBudget(ctx.db, input, await goalClock(ctx)),
 })

@@ -1,51 +1,59 @@
-// A trip budget before you go: travel, a place to stay, food per day and
-// things to do add up to one ordinary purchase goal, saved for by the day
-// the trip starts. The parts are kept beside the goal, so the trip can show
-// what is left of each as the spending comes in. Goals themselves are not
-// changed: deleting the goal deletes its plan.
+// A trip budget: what a trip is planned to cost, by part (travel, a place to
+// stay, food per day and things to do), kept beside the purchase goal that
+// saves for it. A budget belongs to the calendar trip it shares days with,
+// not to exact days, so it stays with an event moved a day or two. Planning
+// and changing one is in planBudget.ts.
 
 import { z } from 'zod'
-import type pg from 'pg'
-import { withTransaction, type Db } from '../../db/pool.js'
-import { AppError } from '../../errors.js'
-import { type IsoDate } from '../../lib/dates.js'
+import type { Db } from '../../db/pool.js'
+import { daysBetween, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
 import { isoDateSchema } from '../../lib/schemas.js'
-import { daysOf } from '../calendar/kinds.js'
-import type { Goal, GoalReading } from '../goalProgress.js'
-import { createGoal, goalInputSchema } from '../goals.js'
-import type { TripPart } from './parts.js'
+import { daysOf, MAX_TRIP_DAYS } from '../calendar/kinds.js'
+import { TRIP_PARTS, type TripPart } from './parts.js'
 
-/** The longest trip a budget plans, in days. */
-const MAX_DAYS = 60
 /** The most any part may be, in cents: a guard against a typo, not a limit on travel. */
 const MAX_PART_CENTS = 10_000_000
-/** The color trip goals start with: the travel category's. */
-const TRIP_COLOR = '#2fb3a6'
 
 const part = z.number().int().min(0).max(MAX_PART_CENTS)
 
-export const tripBudgetInputSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    startsOn: isoDateSchema,
-    endsOn: isoDateSchema,
-    travelCents: part,
-    stayCents: part,
-    foodPerDayCents: part,
-    activitiesCents: part,
-  })
-  .refine((input) => input.endsOn >= input.startsOn, {
-    message: 'The trip ends on or after the day it starts',
-    path: ['endsOn'],
-  })
-  .refine((input) => input.endsOn < input.startsOn || daysOf(input) <= MAX_DAYS, {
-    message: `Plan a trip of up to ${MAX_DAYS} days`,
-    path: ['endsOn'],
-  })
+/** What planning a budget takes; changing one takes the same, with its goal. */
+const planFields = z.object({
+  name: z.string().trim().min(1).max(80),
+  startsOn: isoDateSchema,
+  endsOn: isoDateSchema,
+  travelCents: part,
+  stayCents: part,
+  foodPerDayCents: part,
+  activitiesCents: part,
+})
+
+/** The checks on a budget's days, alike for planning and changing one. */
+function withDaysChecked<T extends z.ZodType<{ startsOn: IsoDate; endsOn: IsoDate }>>(schema: T) {
+  return schema
+    .refine((input) => input.endsOn >= input.startsOn, {
+      message: 'The trip ends on or after the day it starts',
+      path: ['endsOn'],
+    })
+    .refine((input) => input.endsOn < input.startsOn || daysOf(input) <= MAX_TRIP_DAYS, {
+      message: `Plan a trip of up to ${MAX_TRIP_DAYS} days`,
+      path: ['endsOn'],
+    })
+}
+
+export const tripBudgetInputSchema = withDaysChecked(planFields)
+export const tripBudgetUpdateSchema = withDaysChecked(planFields.extend({ goalId: z.uuid() }))
 
 export type TripBudgetInput = z.infer<typeof tripBudgetInputSchema>
 
-export interface TripBudget {
+/** The parts as planned: food per day, the rest for the whole trip. */
+export interface PlannedParts {
+  travelCents: number
+  stayCents: number
+  foodPerDayCents: number
+  activitiesCents: number
+}
+
+export interface TripBudget extends PlannedParts {
   goalId: string
   /** The goal's name, which is the trip's. */
   name: string
@@ -55,8 +63,16 @@ export interface TripBudget {
   plannedCents: number
 }
 
+/** A budget beside what its trip spent: what is left of each part, and in all. */
+export interface BudgetLeft extends TripBudget {
+  leftCents: number
+  leftByPart: Record<TripPart, number>
+}
+
 /** What each part plans to spend: food is per day, so it grows with the trip. */
-export function plannedParts(input: Omit<TripBudgetInput, 'name'>): Record<TripPart, number> {
+export function plannedParts(
+  input: PlannedParts & { startsOn: IsoDate; endsOn: IsoDate },
+): Record<TripPart, number> {
   return {
     travel: input.travelCents,
     stay: input.stayCents,
@@ -65,11 +81,12 @@ export function plannedParts(input: Omit<TripBudgetInput, 'name'>): Record<TripP
   }
 }
 
-const total = (parts: Record<TripPart, number>) =>
-  parts.travel + parts.stay + parts.food + parts.activities
+/** The parts added up. */
+export const totalOf = (parts: Record<TripPart, number>): number =>
+  TRIP_PARTS.reduce((sum, part) => sum + parts[part], 0)
 
-/** Every trip budget, soonest trip first. */
-export async function tripBudgets(db: Db): Promise<TripBudget[]> {
+/** The budgets sharing a day with a stretch of days, soonest first. */
+export async function budgetsBetween(db: Db, from: IsoDate, to: IsoDate): Promise<TripBudget[]> {
   const { rows } = await db.query<{
     goal_id: string
     name: string
@@ -83,75 +100,63 @@ export async function tripBudgets(db: Db): Promise<TripBudget[]> {
     `SELECT b.goal_id, g.name, b.starts_on::text, b.ends_on::text, b.travel_cents, b.stay_cents,
        b.food_per_day_cents, b.activities_cents
      FROM trip_budgets b JOIN goals g ON g.id = b.goal_id
-     ORDER BY b.starts_on, g.name`,
+     WHERE daterange(b.starts_on, b.ends_on, '[]') && daterange($1::date, $2::date, '[]')
+     ORDER BY b.starts_on`,
+    [from, to],
   )
   return rows.map((row) => {
-    const plannedByPart = plannedParts({
+    const planned = {
       startsOn: row.starts_on,
       endsOn: row.ends_on,
       travelCents: Number(row.travel_cents),
       stayCents: Number(row.stay_cents),
       foodPerDayCents: Number(row.food_per_day_cents),
       activitiesCents: Number(row.activities_cents),
-    })
+    }
+    const plannedByPart = plannedParts(planned)
     return {
+      ...planned,
       goalId: row.goal_id,
       name: row.name,
-      startsOn: row.starts_on,
-      endsOn: row.ends_on,
       plannedByPart,
-      plannedCents: total(plannedByPart),
+      plannedCents: totalOf(plannedByPart),
     }
   })
 }
 
+/** The goals that save for a trip budget. */
+export async function tripGoalIds(db: Db): Promise<Set<string>> {
+  const { rows } = await db.query<{ goal_id: string }>('SELECT goal_id FROM trip_budgets')
+  return new Set(rows.map((row) => row.goal_id))
+}
+
+type Days = { startsOn: IsoDate; endsOn: IsoDate }
+
+/** How many days two stretches share, counting both ends; 0 when they do not meet. */
+function sharedDays(a: Days, b: Days): number {
+  const from = maxDate(a.startsOn, b.startsOn)
+  const to = minDate(a.endsOn, b.endsOn)
+  return to < from ? 0 : daysBetween(from, to) + 1
+}
+
 /**
- * Makes the trip's goal: a purchase named for the trip, its target the parts
- * added up, wanted by the day the trip starts and set aside for each period
- * until then. One budget per trip; plan it before the trip starts.
+ * The budget of a trip on these days: the one sharing the most days with it,
+ * or null. No two budgets share a day, so a trip meets more than one only
+ * when it is longer than what was planned.
  */
-export async function createTripBudget(
-  pool: pg.Pool,
-  input: TripBudgetInput,
-  reading: GoalReading,
-): Promise<Goal> {
-  if (input.startsOn < reading.today) {
-    throw new AppError('invalid_input', 'Plan a trip budget before the trip starts')
+export function budgetOf<T extends Days>(budgets: T[], trip: Days): T | null {
+  let best: T | null = null
+  let bestDays = 0
+  for (const budget of budgets) {
+    const days = sharedDays(budget, trip)
+    if (days > bestDays) [best, bestDays] = [budget, days]
   }
-  const targetCents = total(plannedParts(input))
-  if (targetCents <= 0) throw new AppError('invalid_input', 'Give at least one part an amount')
-  return withTransaction(pool, async (db) => {
-    const { rowCount } = await db.query(
-      'SELECT 1 FROM trip_budgets WHERE starts_on = $1 AND ends_on = $2',
-      [input.startsOn, input.endsOn],
-    )
-    if (rowCount) throw new AppError('conflict', 'This trip already has a budget')
-    const goal = await createGoal(
-      db,
-      goalInputSchema.parse({
-        kind: 'purchase',
-        name: input.name,
-        targetCents,
-        targetDate: input.startsOn,
-        color: TRIP_COLOR,
-        setAside: true,
-      }),
-      reading,
-    )
-    await db.query(
-      `INSERT INTO trip_budgets (goal_id, starts_on, ends_on, travel_cents, stay_cents,
-         food_per_day_cents, activities_cents)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        goal.id,
-        input.startsOn,
-        input.endsOn,
-        input.travelCents,
-        input.stayCents,
-        input.foodPerDayCents,
-        input.activitiesCents,
-      ],
-    )
-    return goal
-  })
+  return best
+}
+
+/** What is left of each part of a budget once its trip spent this, and in all. */
+export function withLeft(budget: TripBudget, spent: Record<TripPart, number>): BudgetLeft {
+  const leftByPart = { ...budget.plannedByPart }
+  for (const part of TRIP_PARTS) leftByPart[part] -= spent[part]
+  return { ...budget, leftCents: budget.plannedCents - totalOf(spent), leftByPart }
 }

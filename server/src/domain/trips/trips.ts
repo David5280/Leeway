@@ -1,168 +1,136 @@
 // Trips: the spending around one time away, gathered into one view with its
-// total. A trip comes from the calendar (an event that reads as a trip), from
-// a trip budget, or from a run of travel spending (flights, hotels, rentals a
-// few days apart) when no calendar says so.
+// total. Which trips there are, and which purchases each holds, is decided
+// once (find.ts); the list, a trip's page and a transaction's sheet all read
+// that one claim, so they always agree with each other and with the forecast.
+// A trip's page sets its spending against its budget, when one was planned.
 
 import type { Db } from '../../db/pool.js'
-import { AppError } from '../../errors.js'
-import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
-import { costsOf, belongsSql, SPENT_SQL, TRAVEL_SQL } from '../calendar/costs.js'
-import { daysOf, kindOf } from '../calendar/kinds.js'
-import { eventsBetween } from '../calendar/store.js'
+import { AppError, notFound } from '../../errors.js'
+import { addDays, type IsoDate } from '../../lib/dates.js'
+import { claimedSql, COST_RULES, spanParams } from '../calendar/costs.js'
+import { daysOf } from '../calendar/kinds.js'
+import type { EventSpan } from '../calendar/spans.js'
 import { transactionsByIds, type Transaction } from '../transactions.js'
+import {
+  clusters,
+  FIND_DAYS,
+  findTrips,
+  isTrip,
+  MAX_TRIP_DAYS,
+  RUN_REACH_DAYS,
+  spansAround,
+  TRANSACTIONS_SQL,
+  unclaimedTravelSql,
+  type FoundTrip,
+  type TripSummary,
+} from './find.js'
 import { partOf, TRIP_PARTS, type TripPart } from './parts.js'
-import { tripBudgets, type TripBudget } from './budget.js'
+import { withLeft, type BudgetLeft } from './budget.js'
 
-/** The longest trip, in days. */
-export const MAX_TRIP_DAYS = 60
-/** Travel charges this many days apart or closer are one trip. */
-const CLUSTER_GAP_DAYS = 3
-/** A lone travel charge is a trip only from this much, in cents. */
-const LONE_CHARGE_CENTS = 10_000
-/** Trips are listed from this far back, and as far ahead. */
-const LIST_DAYS = 365
 /** The most trips listed. */
 const LIST_LIMIT = 24
-
-export type TripSource = 'calendar' | 'budget' | 'spending'
-
-export interface TripSummary {
-  startsOn: IsoDate
-  endsOn: IsoDate
-  /** The calendar event's or the budget's name; null for a run of travel spending. */
-  name: string | null
-  source: TripSource
-  totalCents: number
-  /** The trip budget's goal, when one was planned. */
-  goalId: string | null
-}
+/** The most transactions a trip's page shows; its totals count every one. */
+const SHOWN_LIMIT = 500
 
 export interface TripDetail extends TripSummary {
   days: number
   status: 'upcoming' | 'under_way' | 'past'
   spentByPart: Record<TripPart, number>
-  budget: (TripBudget & { leftCents: number; leftByPart: Record<TripPart, number> }) | null
+  /** The trip's budget beside what it spent; null when none was planned. */
+  budget: BudgetLeft | null
   transactions: Transaction[]
 }
 
-interface Charge {
-  date: IsoDate
-  cents: number
+/** A trip's days and name, as a transaction's sheet links to it. */
+export interface TripLink {
+  startsOn: IsoDate
+  endsOn: IsoDate
+  name: string | null
 }
 
-/** Travel charges grouped into runs: each a few days from the last. */
-export function clusters(
-  charges: Charge[],
-): { startsOn: IsoDate; endsOn: IsoDate; cents: number }[] {
-  const runs: { startsOn: IsoDate; endsOn: IsoDate; cents: number; count: number }[] = []
-  for (const charge of [...charges].sort((a, b) => a.date.localeCompare(b.date))) {
-    const last = runs.at(-1)
-    if (last && daysBetween(last.endsOn, charge.date) <= CLUSTER_GAP_DAYS) {
-      last.endsOn = charge.date
-      last.cents += charge.cents
-      last.count += 1
-    } else runs.push({ startsOn: charge.date, endsOn: charge.date, cents: charge.cents, count: 1 })
-  }
-  return runs
-    .filter((run) => run.cents > 0 && (run.count >= 2 || run.cents >= LONE_CHARGE_CENTS))
-    .filter((run) => daysOf(run) <= MAX_TRIP_DAYS)
-    .map(({ startsOn, endsOn, cents }) => ({ startsOn, endsOn, cents }))
-}
-
-/** Calendar events that read as trips, between two days. */
-async function calendarTrips(db: Db, from: IsoDate, to: IsoDate) {
-  return (await eventsBetween(db, from, to)).filter(
-    (event) => kindOf(event) === 'trip' && daysOf(event) <= MAX_TRIP_DAYS,
-  )
-}
-
-async function travelCharges(db: Db, from: IsoDate, to: IsoDate): Promise<Charge[]> {
-  const { rows } = await db.query<{ date: string; cents: string }>(
-    `SELECT t.date::text AS date, t.amount_cents AS cents
-     FROM transactions t JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.date >= $1 AND t.date <= $2 AND ${SPENT_SQL} AND ${TRAVEL_SQL}`,
-    [from, to],
-  )
-  return rows.map((row) => ({ date: row.date, cents: Number(row.cents) }))
-}
-
-const keyOf = (span: { startsOn: IsoDate; endsOn: IsoDate }) => `${span.startsOn} ${span.endsOn}`
+const summaryOf = ({
+  startsOn,
+  endsOn,
+  name,
+  source,
+  totalCents,
+  goalId,
+}: FoundTrip): TripSummary => ({
+  startsOn,
+  endsOn,
+  name,
+  source,
+  totalCents,
+  goalId,
+})
 
 /** Recent and coming trips, newest first. */
 export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> {
-  const from = addDays(today, -LIST_DAYS)
-  const to = addDays(today, LIST_DAYS)
-  const planned = new Map<string, TripSummary>()
-  for (const event of await calendarTrips(db, from, to)) {
-    const span = { startsOn: event.startsOn, endsOn: event.endsOn }
-    planned.set(keyOf(span), {
-      ...span,
-      name: event.title,
-      source: 'calendar',
-      totalCents: 0,
-      goalId: null,
-    })
-  }
-  for (const budget of await tripBudgets(db)) {
-    const found = planned.get(keyOf(budget))
-    if (found) found.goalId = budget.goalId
-    else {
-      planned.set(keyOf(budget), {
-        startsOn: budget.startsOn,
-        endsOn: budget.endsOn,
-        name: budget.name,
-        source: 'budget',
-        totalCents: 0,
-        goalId: budget.goalId,
-      })
+  const { trips } = await findTrips(db, today)
+  return trips.slice(0, LIST_LIMIT).map(summaryOf)
+}
+
+/**
+ * The SQL and parameters that read one trip's transactions, after the spans'
+ * $1 to $4: a calendar trip holds what its span claims, from the days its
+ * travel may be booked ahead; a run of spending holds the unclaimed travel on
+ * its days. $5 and $6 bound the days read, so the claim stays narrow.
+ */
+function holdingOf(trip: FoundTrip): { holds: string; params: unknown[] } {
+  if (trip.spanNumber === null) {
+    return {
+      holds: unclaimedTravelSql('$5::date', '$6::date'),
+      params: [trip.startsOn, trip.endsOn],
     }
   }
-  const known = [...planned.values()]
-  const costs = await costsOf(
-    db,
-    known.map((trip) => ({ kind: 'trip' as const, startsOn: trip.startsOn, endsOn: trip.endsOn })),
-  )
-  known.forEach((trip, i) => (trip.totalCents = costs[i]!.aheadCents + costs[i]!.duringCents))
-  // A run of travel charges inside a known trip, or booked in the two months before it, is that trip.
-  const spending = clusters(await travelCharges(db, from, today))
-    .filter(
-      (run) =>
-        !known.some(
-          (trip) => run.startsOn <= trip.endsOn && run.endsOn >= addDays(trip.startsOn, -60),
-        ),
-    )
-    .map((run) => ({
-      startsOn: run.startsOn,
-      endsOn: run.endsOn,
-      name: null,
-      source: 'spending' as const,
-      totalCents: run.cents,
-      goalId: null,
-    }))
-  return [...known, ...spending]
-    .sort((a, b) => b.startsOn.localeCompare(a.startsOn))
-    .slice(0, LIST_LIMIT)
+  const from = addDays(trip.startsOn, -COST_RULES.trip.aheadDays)
+  return {
+    holds: 'EXISTS (SELECT 1 FROM claimed WHERE claimed.id = t.id AND claimed.i = $7)',
+    params: [from, trip.endsOn, trip.spanNumber],
+  }
 }
 
-/** Where a trip on these days comes from, and its name. */
-async function sourceOf(
-  db: Db,
-  startsOn: IsoDate,
-  endsOn: IsoDate,
-  budget: TripBudget | undefined,
-) {
-  const event = (await calendarTrips(db, startsOn, endsOn)).find(
-    (e) => e.startsOn === startsOn && e.endsOn === endsOn,
+/** What a trip spent on each part, summed in full, and the newest of its transactions. */
+async function spendingOf(db: Db, spans: EventSpan[], trip: FoundTrip) {
+  const { holds, params } = holdingOf(trip)
+  const read = `WITH ${claimedSql('t.date >= $5::date AND t.date <= $6::date')}`
+  const where = `WHERE t.date >= $5::date AND t.date <= $6::date AND ${holds}`
+  const values = [...spanParams(spans), ...params]
+  // Sums by what tells a part apart, so each part is told once per kind of purchase.
+  const sums = await db.query<{
+    primary: string | null
+    detailed: string | null
+    category: string | null
+    merchant: string
+    cents: string
+  }>(
+    `${read}
+     SELECT t.provider_category_primary AS primary, t.provider_category_detailed AS detailed,
+       c.name AS category, coalesce(t.merchant_name, t.name) AS merchant,
+       sum(t.amount_cents) AS cents
+     FROM ${TRANSACTIONS_SQL} ${where}
+     GROUP BY 1, 2, 3, 4`,
+    values,
   )
-  if (event) return { name: event.title, source: 'calendar' as const }
-  if (budget) return { name: budget.name, source: 'budget' as const }
-  return { name: null, source: 'spending' as const }
+  const ids = await db.query<{ id: string }>(
+    `${read} SELECT t.id FROM ${TRANSACTIONS_SQL} ${where}
+     ORDER BY t.date DESC, t.id LIMIT ${SHOWN_LIMIT}`,
+    values,
+  )
+  const spentByPart: Record<TripPart, number> = { travel: 0, stay: 0, food: 0, activities: 0 }
+  for (const row of sums.rows) {
+    const part = partOf({
+      providerCategoryPrimary: row.primary,
+      providerCategoryDetailed: row.detailed,
+      categoryName: row.category,
+      merchant: row.merchant,
+    })
+    spentByPart[part] += Number(row.cents)
+  }
+  return { spentByPart, ids: ids.rows.map((row) => row.id) }
 }
 
-const zeroParts = (): Record<TripPart, number> => ({ travel: 0, stay: 0, food: 0, activities: 0 })
-
-/** One trip's spending, by part, against its budget when it has one. */
+/** One trip's spending, by part: the trip on exactly these days, or not found. */
 export async function getTrip(
   db: Db,
   startsOn: IsoDate,
@@ -172,88 +140,75 @@ export async function getTrip(
   if (endsOn < startsOn || daysOf({ startsOn, endsOn }) > MAX_TRIP_DAYS) {
     throw new AppError('invalid_input', `A trip runs forward, up to ${MAX_TRIP_DAYS} days`)
   }
-  const budget = (await tripBudgets(db)).find((b) => b.startsOn === startsOn && b.endsOn === endsOn)
-  const { name, source } = await sourceOf(db, startsOn, endsOn, budget)
-  // A run of travel spending is only its travel; a planned trip is everything on its days too.
-  const belongs =
-    source === 'spending'
-      ? `${SPENT_SQL} AND t.date >= $1 AND ${TRAVEL_SQL}`
-      : belongsSql('trip', '$1::date', '$2::date')
-  const { rows } = await db.query<{
-    id: string
-    cents: string
-    primary: string | null
-    detailed: string | null
-    category: string | null
-    merchant: string
-  }>(
-    `SELECT t.id, t.amount_cents AS cents, t.provider_category_primary AS primary,
-       t.provider_category_detailed AS detailed, c.name AS category,
-       coalesce(t.merchant_name, t.name) AS merchant
-     FROM transactions t JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.date >= $1::date - 60 AND t.date <= $2 AND ${belongs}
-     ORDER BY t.date DESC LIMIT 500`,
-    [startsOn, endsOn],
-  )
-  const spentByPart = zeroParts()
-  for (const row of rows) {
-    const part = partOf({
-      providerCategoryPrimary: row.primary,
-      providerCategoryDetailed: row.detailed,
-      categoryName: row.category,
-      merchant: row.merchant,
-    })
-    spentByPart[part] += Number(row.cents)
-  }
-  const totalCents = TRIP_PARTS.reduce((sum, part) => sum + spentByPart[part], 0)
+  const { spans, trips, budgets } = await findTrips(db, today)
+  const trip = trips.find((t) => t.startsOn === startsOn && t.endsOn === endsOn)
+  if (!trip) throw notFound('Trip')
+  const { spentByPart, ids } = await spendingOf(db, spans, trip)
+  const budget = budgets.find((b) => b.goalId === trip.goalId)
   let status: TripDetail['status'] = 'under_way'
   if (today < startsOn) status = 'upcoming'
   else if (today > endsOn) status = 'past'
   return {
-    startsOn,
-    endsOn,
-    name,
-    source,
-    totalCents,
-    goalId: budget?.goalId ?? null,
+    ...summaryOf(trip),
+    // The parts hold every purchase the list counted, so the two totals are one.
+    totalCents: TRIP_PARTS.reduce((sum, part) => sum + spentByPart[part], 0),
     days: daysOf({ startsOn, endsOn }),
     status,
     spentByPart,
     budget: budget ? withLeft(budget, spentByPart) : null,
-    transactions: await transactionsByIds(
-      db,
-      rows.map((row) => row.id),
-    ),
+    transactions: await transactionsByIds(db, ids),
   }
 }
 
-/** What is left of each part of the budget, and in all. */
-function withLeft(budget: TripBudget, spent: Record<TripPart, number>) {
-  const leftByPart = zeroParts()
-  for (const part of TRIP_PARTS) leftByPart[part] = budget.plannedByPart[part] - spent[part]
-  const spentCents = TRIP_PARTS.reduce((sum, part) => sum + spent[part], 0)
-  return { ...budget, leftCents: budget.plannedCents - spentCents, leftByPart }
+interface NearRow {
+  id: string
+  date: IsoDate
+  cents: string
+  /** The number of the span that claims it (w.i), or null. */
+  span: number | null
+  /** True for travel no span claims, what runs of spending are made of. */
+  travel: boolean
 }
 
-/** The trip a transaction belongs to, if any of the listed trips holds it. */
+/**
+ * In one query: the transaction, with the span that claims it, and the
+ * unclaimed travel near it that a run holding it could be made of.
+ */
+async function claimNear(db: Db, spans: EventSpan[], id: string, today: IsoDate) {
+  const near = `t.date >= (SELECT date FROM own) - ${RUN_REACH_DAYS}
+    AND t.date <= (SELECT date FROM own) + ${RUN_REACH_DAYS}`
+  const { rows } = await db.query<NearRow>(
+    `WITH own AS (SELECT date FROM transactions WHERE id = $5), ${claimedSql(near)}
+     SELECT * FROM (
+       SELECT t.id, t.date::text AS date, t.amount_cents AS cents, claimed.i AS span,
+         ${unclaimedTravelSql('$6::date', '$7::date')} AS travel
+       FROM ${TRANSACTIONS_SQL} LEFT JOIN claimed ON claimed.id = t.id
+       WHERE ${near}
+     ) found WHERE found.id = $5 OR found.travel`,
+    [...spanParams(spans), id, addDays(today, -FIND_DAYS), today],
+  )
+  return rows
+}
+
+/** The trip a transaction belongs to, by the same claim the list and the trip's page read. */
 export async function tripOfTransaction(
   db: Db,
   id: string,
   today: IsoDate,
-): Promise<{ startsOn: IsoDate; endsOn: IsoDate; name: string | null } | null> {
-  for (const trip of await listTrips(db, today)) {
-    const belongs =
-      trip.source === 'spending'
-        ? `${SPENT_SQL} AND t.date >= $2 AND ${TRAVEL_SQL}`
-        : belongsSql('trip', '$2::date', '$3::date')
-    const { rowCount } = await db.query(
-      `SELECT 1 FROM transactions t JOIN accounts a ON a.id = t.account_id
-       LEFT JOIN categories c ON c.id = t.category_id
-       WHERE t.id = $1 AND t.date >= $2::date - 60 AND t.date <= $3 AND ${belongs}`,
-      [id, trip.startsOn, trip.endsOn],
-    )
-    if (rowCount) return { startsOn: trip.startsOn, endsOn: trip.endsOn, name: trip.name }
+): Promise<TripLink | null> {
+  const spans = await spansAround(db, today)
+  if (!spans) return null
+  const rows = await claimNear(db, spans, id, today)
+  const own = rows.find((row) => row.id === id)
+  if (!own) return null
+  if (own.span !== null) {
+    const span = spans[own.span - 1]!
+    return isTrip(span) ? { startsOn: span.startsOn, endsOn: span.endsOn, name: span.title } : null
   }
-  return null
+  if (!own.travel) return null
+  const charges = rows
+    .filter((row) => row.travel)
+    .map((row) => ({ ...row, cents: Number(row.cents) }))
+  const run = clusters(charges).find((r) => r.startsOn <= own.date && own.date <= r.endsOn)
+  return run ? { startsOn: run.startsOn, endsOn: run.endsOn, name: null } : null
 }

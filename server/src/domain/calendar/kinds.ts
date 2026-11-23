@@ -44,6 +44,14 @@ export function daysOf(event: Pick<Classifiable, 'startsOn' | 'endsOn'>): number
   return daysBetween(event.startsOn, event.endsOn) + 1
 }
 
+/** The longest trip, in days: a longer stretch away is not one trip. */
+export const MAX_TRIP_DAYS = 60
+
+/** A span that is a trip with a page of its own: a trip's kind, and no longer than any trip. */
+export function isTrip(span: { kind: EventKind; startsOn: IsoDate; endsOn: IsoDate }): boolean {
+  return span.kind === 'trip' && daysOf(span) <= MAX_TRIP_DAYS
+}
+
 /** The kind the words of a title name, if any. */
 function kindByWords(title: string): EventKind | null {
   for (const [kind, words] of WORDS) if (words.test(title)) return kind

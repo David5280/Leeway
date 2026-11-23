@@ -33,6 +33,8 @@ export interface CoachSources {
   cashFlow: CashFlow
   bills: Bill[]
   goals: Goal[]
+  /** The goals that save for a trip budget, due the day the trip starts. */
+  tripGoalIds: ReadonlySet<string>
   debtGaps: DebtGap[]
   connections: Pick<Connection, 'institutionName' | 'status'>[]
   untrackedRecurringCount: number
@@ -142,9 +144,13 @@ function behindMessage(goal: Goal, money: Money): string {
   return `At its recent pace ${goal.name} would be reached ${goal.projectedDate}, after its date of ${goal.targetDate}. ${needs}`
 }
 
-function goalItems({ goals, cashFlow: { today } }: CoachSources, money: Money): AttentionItem[] {
+function goalItems(
+  { goals, tripGoalIds, cashFlow: { today } }: CoachSources,
+  money: Money,
+): AttentionItem[] {
   const pastDue = goals
-    .filter((g) => g.status === 'past_due')
+    // A trip budget's goal passes its date as the trip starts: that is the plan, not lateness.
+    .filter((g) => g.status === 'past_due' && !tripGoalIds.has(g.id))
     .map<AttentionItem>((g) => ({
       priority: 'soon',
       topic: 'goal',

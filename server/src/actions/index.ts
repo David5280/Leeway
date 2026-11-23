@@ -99,14 +99,17 @@ import {
 import {
   calendarStatusAction,
   connectCalendarAction,
-  createTripBudgetAction,
   disconnectCalendarAction,
   getForecastAction,
+  refreshCalendarAction,
+} from './calendar.js'
+import {
+  createTripBudgetAction,
   getTripAction,
   listTripsAction,
-  refreshCalendarAction,
   tripOfTransactionAction,
-} from './calendar.js'
+  updateTripBudgetAction,
+} from './trips.js'
 import { deletePaystubAction, getPaystubAction, savePaystubAction } from './paystubs.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import {
@@ -246,6 +249,7 @@ export const actionList = [
   getTripAction,
   tripOfTransactionAction,
   createTripBudgetAction,
+  updateTripBudgetAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

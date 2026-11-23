@@ -259,6 +259,7 @@ describe('linking a calendar', () => {
       'get_trip',
       'trip_of_transaction',
       'create_trip_budget',
+      'update_trip_budget',
     ]
     for (const name of names) expect(findAction(name)).toMatchObject({ surface: 'app' })
     const tools = agentTools('write').map((tool) => tool.name)

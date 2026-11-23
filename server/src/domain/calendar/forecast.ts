@@ -1,6 +1,7 @@
 // The weeks ahead with a calendar linked: paydays, bills due, and the events
 // likely to cost money, each with an amount to set aside when past events of
-// the same kind show what they usually cost.
+// the same kind show what they usually cost. A trip with a trip budget is
+// saved for by the budget's goal, so it suggests nothing more.
 
 import type { Db } from '../../db/pool.js'
 import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
@@ -8,8 +9,9 @@ import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
 import { nextPayday } from '../cashFlow.js'
 import type { Settings } from '../settings.js'
+import { budgetOf, budgetsBetween } from '../trips/budget.js'
 import { costsOf, type EventCost } from './costs.js'
-import { daysOf, kindOf, type EventKind } from './kinds.js'
+import { daysOf, isTrip, kindOf, type EventKind } from './kinds.js'
 import { mergeSpans, type EventSpan, type KindedEvent } from './spans.js'
 import { eventsBetween } from './store.js'
 import { FORECAST_WEEKS, intoWeeks, type Forecast, type ForecastItem } from './weeks.js'
@@ -89,6 +91,17 @@ export function setAsideFor(
   return once + usual.perDayCents * daysLeft
 }
 
+/** The calendar's money relevant events between two days, merged into one span per occasion. */
+export async function spansBetween(db: Db, from: IsoDate, to: IsoDate): Promise<EventSpan[]> {
+  const events = await eventsBetween(db, from, to)
+  return mergeSpans(
+    events.flatMap((event) => {
+      const kind = kindOf(event)
+      return kind ? [{ ...event, kind }] : []
+    }),
+  )
+}
+
 /**
  * Money relevant events from the calendar, with what to set aside for each.
  * Events that are one thing (a trip, its flight and its hotel) are merged
@@ -98,13 +111,7 @@ export function setAsideFor(
  * spent on it already.
  */
 async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
-  const events = await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
-  const spans = mergeSpans(
-    events.flatMap((event) => {
-      const kind = kindOf(event)
-      return kind ? [{ ...event, kind }] : []
-    }),
-  )
+  const spans = await spansBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
   if (!spans.some((span) => span.endsOn >= today)) return []
   const costs = await costsOf(db, spans)
   const costed = spans.map((span, i) => ({ span, cost: costs[i]! }))
@@ -115,8 +122,11 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
     const sameKind = past.filter(({ span }) => span.kind === kind)
     typical.set(kind, typicalCost(kind, sameKind))
   }
+  const budgets = await budgetsBetween(db, today, to)
   return upcoming.map(({ span, cost }) => {
-    const usual = typical.get(span.kind)
+    const usual = typical.get(span.kind) ?? null
+    // Matched by shared days, as the trip's page matches it, so a moved event keeps its budget.
+    const budgeted = span.kind === 'trip' && budgetOf(budgets, span) !== null
     return {
       type: 'event' as const,
       id: span.id,
@@ -124,10 +134,17 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
       endsOn: span.endsOn,
       title: span.title,
       kind: span.kind,
-      suggestedCents: usual ? roundUp(setAsideFor(span, usual, today, cost)) : null,
+      suggestedCents: budgeted ? 0 : suggestionOf(span, usual, today, cost),
       basedOn: usual?.basedOn ?? 0,
+      ...(isTrip(span) && { tripPage: true as const }),
+      ...(budgeted && { budgeted: true as const }),
     }
   })
+}
+
+/** What to set aside for an event coming up, or null without enough past ones to tell. */
+function suggestionOf(span: EventSpan, usual: Typical | null, today: IsoDate, cost: EventCost) {
+  return usual ? roundUp(setAsideFor(span, usual, today, cost)) : null
 }
 
 /** Paydays in the window: the next one and those after it, when how often pay comes is known. */
