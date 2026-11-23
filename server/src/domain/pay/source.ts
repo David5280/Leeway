@@ -3,12 +3,12 @@
 
 import type { Db } from '../../db/pool.js'
 import { addDays, type IsoDate } from '../../lib/dates.js'
-import type { Cadence } from '../../lib/periods.js'
 import { latestPaystub } from '../paystubs/paystubs.js'
 import { freshPaystub } from '../savings/payrollMonths.js'
 import { periodConfig, type Settings } from '../settings.js'
 import { currentPay, type CurrentPay } from './current.js'
 import type { Deposit } from './deposits.js'
+import type { GivenCadence } from './given.js'
 import { PAY_CADENCE } from './payday.js'
 
 /** How far back pay is read: long enough to see a job end and a long gap before the next. */
@@ -32,12 +32,22 @@ export async function readDeposits(db: Db, today: IsoDate): Promise<Deposit[]> {
   return rows
 }
 
-/** The cadence the owner gave: a recent paystub's, else a paycheck budget period's. */
-async function givenCadence(db: Db, settings: Settings, today: IsoDate): Promise<Cadence | null> {
+/**
+ * The cadence the owner gave: a recent paystub's, with what says which job
+ * it is from (given.ts), else a paycheck budget period's.
+ */
+async function givenCadence(
+  db: Db,
+  settings: Settings,
+  today: IsoDate,
+): Promise<GivenCadence | null> {
   const paystub = freshPaystub(await latestPaystub(db), today)
-  if (paystub?.payCadence) return paystub.payCadence
+  if (paystub?.payCadence) {
+    const { payCadence: cadence, payDate, employerName } = paystub
+    return { cadence, paystub: { payDate, employerName } }
+  }
   const config = periodConfig(settings)
-  return config.kind === 'paycheck' ? PAY_CADENCE[config.frequency] : null
+  return config.kind === 'paycheck' ? { cadence: PAY_CADENCE[config.frequency] } : null
 }
 
 /** The owner's pay now, read fresh: see current.ts. */

@@ -1469,6 +1469,97 @@ details.more[open] summary {
   overflow-wrap: anywhere;
 }
 
+/*
+ * The full paystub review (pages/paystub/): what the paystub adds up to in a
+ * row of key figures, then each section set apart by a rule, each line with
+ * its two amounts. On a phone a line's name sits above its two inputs; with
+ * room, the name and both amounts share one row.
+ */
+.review-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.review-key {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-key-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.review-subhead {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.review-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.review-line-name {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.review-line small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+/* The column names above a block: small, and with no name cell taking a row on a phone. */
+.review-heads {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.review-heads .review-line-name {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .review-line {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .review-line-name {
+    grid-column: auto;
+  }
+
+  .review-heads .review-line-name {
+    display: block;
+  }
+
+  .review-line small {
+    grid-column: 2 / -1;
+  }
+}
+
 .check-row {
   align-items: center;
   gap: 10px;

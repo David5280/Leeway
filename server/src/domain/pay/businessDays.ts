@@ -1,29 +1,29 @@
-// Business days, as payrolls count them: weekdays, with a weekend payday
-// moved to the business day before or after. Holidays are not known here.
-// Pure.
+// Business days, as payrolls count them: weekdays the banks are open, with
+// a payday that falls on a weekend or a bank holiday (holidays.ts) moved to
+// the business day before or after. Pure.
 
 import { addDays, dayOfWeek, toDayNumber, type IsoDate } from '../../lib/dates.js'
+import { bankHolidaysAfter, isBankHoliday } from './holidays.js'
 
 const isWeekend = (date: IsoDate) => dayOfWeek(date) === 0 || dayOfWeek(date) === 6
 
-/**
- * How a payroll moves a payday that falls on a weekend. Holidays are not
- * known here, so a payday moved for one is read from the paydays seen, and
- * the next one projected as if the day were open.
- */
+/** Whether banks are closed that day, so no payroll deposit lands. */
+const isClosed = (date: IsoDate) => isWeekend(date) || isBankHoliday(date)
+
+/** How a payroll moves a payday that falls on a day the banks are closed. */
 export type Roll = (date: IsoDate) => IsoDate
 
-/** The date, or the business day before it when it falls on a weekend: how most payrolls pay. */
+/** The date, or the business day before it when banks are closed: how most payrolls pay. */
 export const businessDayOnOrBefore: Roll = (date) => {
   let day = date
-  while (isWeekend(day)) day = addDays(day, -1)
+  while (isClosed(day)) day = addDays(day, -1)
   return day
 }
 
-/** The date, or the business day after it when it falls on a weekend: how some banks pay. */
+/** The date, or the business day after it when banks are closed: how some banks pay. */
 export const businessDayOnOrAfter: Roll = (date) => {
   let day = date
-  while (isWeekend(day)) day = addDays(day, 1)
+  while (isClosed(day)) day = addDays(day, 1)
   return day
 }
 
@@ -43,15 +43,21 @@ function weekdaysAfter(from: number, to: number): number {
 }
 
 /**
- * Business days between two dates, either way round: the weekdays after the
- * earlier one up to and including the later. A Friday paycheck for a Sunday
- * payday is 0 apart; one on the Monday after is 1.
+ * Business days between two day numbers, either way round: the weekdays
+ * banks are open after the earlier up to and including the later, so a
+ * payday the business day before a holiday sits on its day. For loops that
+ * would otherwise parse each date again.
  */
-export function businessDaysApart(a: IsoDate, b: IsoDate): number {
-  return weekdaysApart(toDayNumber(a), toDayNumber(b))
+export function openDaysApart(a: number, b: number): number {
+  const [from, to] = a <= b ? [a, b] : [b, a]
+  return weekdaysAfter(from, to) - bankHolidaysAfter(from, to)
 }
 
-/** businessDaysApart for day numbers, for loops that would otherwise parse each date again. */
-export function weekdaysApart(a: number, b: number): number {
-  return a <= b ? weekdaysAfter(a, b) : weekdaysAfter(b, a)
+/**
+ * Business days between two dates, as openDaysApart counts them. A Friday
+ * paycheck for a Sunday payday is 0 apart; one on the Monday after is 1, or
+ * 0 when that Monday is a holiday.
+ */
+export function businessDaysApart(a: IsoDate, b: IsoDate): number {
+  return openDaysApart(toDayNumber(a), toDayNumber(b))
 }

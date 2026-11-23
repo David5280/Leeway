@@ -154,6 +154,7 @@ describe('a typical month of essentials', () => {
       { categoryId: null, amountCents: 1_000, count: 1 },
     ],
     essentialCoded: [],
+    spentCents: 200_000 + fun + 1_000,
   })
 
   it('takes the last three whole months that history fully covers, for the fund', () => {
@@ -422,6 +423,28 @@ describe('profileDigest', () => {
     )
     expect(lines).toContain(
       'Typical month (spending since Sep 25, pay from paychecks only): $5,304 take-home pay in from the 2 current employers, $3,000 spent.',
+    )
+  })
+
+  it('never names an employer the bank does not name as a business', () => {
+    const unnamed = (cadence: 'semimonth' | 'biweek', cents: number) => ({
+      ...employer('', cadence, cents),
+      name: null,
+    })
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-20',
+        estimate: false,
+        employer: null,
+        employers: [unnamed('semimonth', 200_000), unnamed('biweek', 60_000)],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: the main employer twice a month since Sep 25, about $2,000 each; another employer every 2 weeks since Sep 25, about $600 each. Next payday Nov 20.',
     )
   })
 

@@ -10,6 +10,18 @@ import {
 
 // The test clock reads 2026-11-17, in UTC, and the database's own date is the real one.
 const NOW = new Date('2026-11-17T18:00:00Z')
+/**
+ * Fridays every two weeks, enough to settle the cadence: with five, Veterans
+ * Day on Wednesday Nov 11 lets the 11th and the 25th fit nearly as well.
+ */
+const SIX_FRIDAYS = [
+  '2026-08-28',
+  '2026-09-11',
+  '2026-09-25',
+  '2026-10-09',
+  '2026-10-23',
+  '2026-11-06',
+]
 let ctx: Awaited<ReturnType<typeof createTestContext>>
 const { call } = actionCaller(() => ctx)
 
@@ -273,8 +285,7 @@ describe('get_cash_flow', () => {
 
   it('finds payday from regular deposits, and never goes below zero per day', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
-    // Five Fridays, enough to settle every two weeks.
-    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
+    for (const date of SIX_FRIDAYS) {
       await insertBankTransaction(ctx.db, accountId, {
         date,
         name: 'ACME PAYROLL',
@@ -348,8 +359,7 @@ describe('get_cash_flow', () => {
       insertBankTransaction(ctx.db, accountId, { date, name, amountCents })
     for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03'])
       await deposit(date, 'Zelle payment from Jane Doughty', -200_000)
-    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'])
-      await deposit(date, 'ACME PAYROLL', -150_000)
+    for (const date of SIX_FRIDAYS) await deposit(date, 'ACME PAYROLL', -150_000)
     expect(await call('get_cash_flow')).toMatchObject({
       nextPayday: '2026-11-20',
       paydaySource: 'detected_income',

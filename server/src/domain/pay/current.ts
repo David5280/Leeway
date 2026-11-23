@@ -21,6 +21,7 @@ import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import { laterNextPayday, nextPaydayAfter } from './cadence.js'
 import { depositKind, type Deposit, type DepositKind } from './deposits.js'
+import { givenFor, type GivenCadence } from './given.js'
 import {
   groupPaychecks,
   runsOf,
@@ -113,7 +114,8 @@ function payRuns(deposits: Deposit[]): EmployerRun[] {
  * the later of the two next paydays, so no figure promises more than may come.
  */
 function cautiousReading(run: EmployerRun, today: IsoDate) {
-  const paydays = run.paychecks.map((paycheck) => paycheck.date)
+  // A bonus between paydays says nothing of when the next comes (offCycle.ts).
+  const paydays = run.cycle.map((paycheck) => paycheck.date)
   if (!run.ambiguous) {
     return {
       perYear: PER_YEAR[run.cadence],
@@ -155,21 +157,22 @@ const mostFirst = (a: Employer, b: Employer) => b.monthlyCents - a.monthlyCents
 const SIDE_JOB_MISSED_CYCLES = 1
 
 /**
- * The employers paying now, the main one first. `paystubCadence` is the
- * cadence a saved paystub gives, which overrides what the paydays suggest
- * for the main employer: the paystub is the owner's own word on it.
+ * The employers paying now, the main one first. `given` is the cadence the
+ * owner gave (given.ts), which overrides what the paydays suggest for the
+ * main employer when it speaks for that job: the owner's own word on it.
  */
 function payingEmployers(
   runs: EmployerRun[],
   today: IsoDate,
-  paystubCadence: Cadence | null,
+  given: GivenCadence | null,
 ): Employer[] {
   const paying = runs.filter((run) => stillPaying(run, today))
   const ranked = paying
     .map((run) => ({ run, employer: employerOf(run, today) }))
     .sort((a, b) => mostFirst(a.employer, b.employer))
-  if (paystubCadence && ranked[0]) {
-    const main = withGivenCadence(ranked[0].run, paystubCadence)
+  // A paystub from a job that has since ended says nothing of how the new one pays.
+  if (given && ranked[0] && givenFor(given, ranked[0].run)) {
+    const main = withGivenCadence(ranked[0].run, given.cadence)
     ranked[0] = { run: main, employer: employerOf(main, today) }
   }
   // The main job may miss a payroll; a side job that has missed one has likely stopped.
@@ -182,13 +185,13 @@ function payingEmployers(
 export function currentPay(
   deposits: Deposit[],
   today: IsoDate,
-  paystubCadence: Cadence | null = null,
+  given: GivenCadence | null = null,
 ): CurrentPay {
   const runs = payRuns(deposits)
   const paychecks = runs
     .flatMap((run) => run.paychecks)
     .sort((a, b) => a.date.localeCompare(b.date))
-  const employers = payingEmployers(runs, today, paystubCadence)
+  const employers = payingEmployers(runs, today, given)
   const main = employers[0]
   if (!main) return { ...NO_PAY, paychecks }
   return {

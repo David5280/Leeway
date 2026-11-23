@@ -238,7 +238,7 @@ describe('currentPay', () => {
       salary(date, 'ACME PAYROLL', 200_000),
     )
     expect(currentPay(fridays, TODAY).cadence).toBe('biweek')
-    expect(currentPay(fridays, TODAY, 'semimonth')).toMatchObject({
+    expect(currentPay(fridays, TODAY, { cadence: 'semimonth' })).toMatchObject({
       cadence: 'semimonth',
       estimate: false,
       monthlyCents: 400_000,
@@ -246,7 +246,7 @@ describe('currentPay', () => {
   })
 
   it('takes the cadence from a saved paystub while there is one paycheck', () => {
-    const pay = currentPay(history(), TODAY, 'biweek')
+    const pay = currentPay(history(), TODAY, { cadence: 'biweek' })
     // $2,100 every two weeks: 365.25 / 14 a year on average, as typical spending counts days.
     expect(pay).toMatchObject({
       cadence: 'biweek',
@@ -352,10 +352,16 @@ describe('currentPay', () => {
     const main = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'].map(
       (date) => salary(date, 'INITECH PAYROLL', 200_000),
     )
-    // Five Fridays: four could still be a schedule of two days, read cautiously.
-    const side = ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'].map(
-      (date) => salary(date, 'BLUTH CO PAYROLL', 60_000),
-    )
+    // Six Fridays: five could still fit a schedule of two days (the 11th and
+    // the 25th, with Veterans Day on Nov 11), read cautiously.
+    const side = [
+      '2026-08-28',
+      '2026-09-11',
+      '2026-09-25',
+      '2026-10-09',
+      '2026-10-23',
+      '2026-11-06',
+    ].map((date) => salary(date, 'BLUTH CO PAYROLL', 60_000))
     const pay = currentPay([...main, ...side], TODAY)
     expect(pay).toMatchObject({
       cadence: 'semimonth',

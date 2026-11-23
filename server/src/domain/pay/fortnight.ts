@@ -20,7 +20,7 @@
 
 import { toDayNumber, type IsoDate } from '../../lib/dates.js'
 import type { PayPattern } from './cadence.js'
-import { weekdaysApart } from './businessDays.js'
+import { openDaysApart } from './businessDays.js'
 import {
   bestSchedule,
   COMMON_SCHEDULES,
@@ -67,6 +67,15 @@ const SCHEDULE_OFF_PER_PAYDAY = 1
 const BIWEEKLY: PayPattern = { cadence: 'biweek', schedule: null, ambiguous: false }
 
 /**
+ * Business days between a payday and its day on the grid, either way a
+ * payroll moves a payday off a holiday: the Friday before a Monday holiday
+ * and the Tuesday after it are each 0 off. Counting a day earlier is what
+ * makes a day after a closure 0 off (semimonthly.ts does the same).
+ */
+const holidayAwareOff = (day: number, onGrid: number) =>
+  Math.min(openDaysApart(day, onGrid), openDaysApart(day - 1, onGrid - 1))
+
+/**
  * How far paydays sit off the 14-day grid that fits them best, in business
  * days added up, for some anchor among them: none more than GRID_SLACK off,
  * but for one stray in a run of CONFIRM_FROM or more, which counts as
@@ -83,7 +92,7 @@ export function gridOffBy(dates: IsoDate[]): number | null {
     let total = 0
     for (const day of days) {
       const onGrid = anchor + Math.round((day - anchor) / FORTNIGHT) * FORTNIGHT
-      const off = weekdaysApart(day, onGrid)
+      const off = holidayAwareOff(day, onGrid)
       if (off > GRID_SLACK) strays += 1
       total += Math.min(off, GRID_SLACK)
     }
