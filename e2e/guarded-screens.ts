@@ -5,11 +5,11 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
-import * as chat from './chat'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { pretendCalendar } from './calendar'
 import { CALENDAR_SCREENS } from './calendar-screens'
+import { CHAT_SCREENS } from './chat-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
@@ -254,13 +254,7 @@ export const SCREENS: Screen[] = [
     path: (seeded) => `/budgets/${seeded.categories[0]}`,
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
-  // Chat is hidden without a key, so it is turned on by stand-ins (chat.ts).
-  at('chat', '/chat', { name: '/chat before the first question', before: chat.pretendChatOn }),
-  at('chat', '/chat', {
-    name: '/chat with an answer and what Leeway remembers',
-    before: (page) => chat.pretendChatOn(page, true),
-    then: (page) => page.getByText('Leeway remembers 2 things').click(),
-  }),
+  ...CHAT_SCREENS,
   at('plan', '/plan'),
   at('plan', '/plan', {
     name: '/plan with cash that could earn more',
