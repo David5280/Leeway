@@ -84,7 +84,7 @@ export async function createTripBudget(
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         goal.id,
-        trip.uids,
+        trip.eventIds,
         input.startsOn,
         input.endsOn,
         input.travelCents,
@@ -121,7 +121,7 @@ export async function updateTripBudget(
        WHERE goal_id = $1`,
       [
         input.goalId,
-        trip.uids,
+        trip.eventIds,
         input.startsOn,
         input.endsOn,
         input.travelCents,

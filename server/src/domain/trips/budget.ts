@@ -83,20 +83,28 @@ export function plannedParts(
   }
 }
 
+/**
+ * What a trip_budgets row plans in all, in SQL: plannedParts added up, food
+ * once for each of its days. For a sum read under the row's own lock.
+ */
+export const PLANNED_CENTS_SQL = `travel_cents + stay_cents + activities_cents
+  + food_per_day_cents * (ends_on - starts_on + 1)`
+
 /** The parts added up. */
 export const totalOf = (parts: Record<TripPart, number>): number =>
   TRIP_PARTS.reduce((sum, part) => sum + parts[part], 0)
 
 /** A budget as kept: with the calendar events it was planned for, which find its trip again. */
 export interface StoredBudget extends TripBudget {
-  eventUids: string[]
+  /** Its trip's events (eventIdOf in calendar/ics.ts), kept in the event_uids column. */
+  eventIds: string[]
   /** False once no trip on the calendar matched it. */
   onCalendar: boolean
 }
 
 /** A budget as a trip's page shows it: without the calendar's ids, which are for matching. */
 export function shownBudget({
-  eventUids: _uids,
+  eventIds: _ids,
   onCalendar: _on,
   ...budget
 }: StoredBudget): TripBudget {
@@ -145,7 +153,7 @@ export async function listBudgets(db: Db): Promise<StoredBudget[]> {
       ...planned,
       goalId: row.goal_id,
       name: row.name,
-      eventUids: row.event_uids,
+      eventIds: row.event_uids,
       onCalendar: row.on_calendar,
       plannedByPart,
       plannedCents: totalOf(plannedByPart),

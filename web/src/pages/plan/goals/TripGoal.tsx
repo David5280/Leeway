@@ -1,6 +1,7 @@
 // What a trip budget's goal adds to its card: the way to its trip's page,
 // where its amount and days change; a word when its trip is gone from the
-// calendar; and, once the trip is done or gone, a way to close the goal.
+// calendar; and, once the trip is done or gone, a way to close the goal. Its
+// form shows the amount and date as the budget's, not as fields to change.
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -36,6 +37,22 @@ function CloseGoal({ goal }: { goal: Goal }) {
       </button>
       <ErrorNote error={remove.error} />
     </span>
+  )
+}
+
+/** A trip budget's goal's amount and date in its form: its budget's, changed on the trip's page. */
+export function TripTarget({ goal }: { goal: Goal }) {
+  const { trip } = goal
+  if (!trip) return null
+  return (
+    <p className="small muted">
+      Its amount and date come from its trip budget.{' '}
+      {trip.onCalendar ? (
+        <Link to={tripPath(trip)}>Change them on the trip's page</Link>
+      ) : (
+        'Put the trip back on your calendar to change them.'
+      )}
+    </p>
   )
 }
 

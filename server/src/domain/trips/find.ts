@@ -10,20 +10,18 @@ import type { Db } from '../../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
 import { claimedSql, costsOf, spanParams, SPENT_SQL, TRAVEL_SQL } from '../calendar/costs.js'
 import { spansBetween } from '../calendar/forecast.js'
-import { daysOf, isTrip, MAX_TRIP_DAYS } from '../calendar/kinds.js'
+import { daysOf, FIND_DAYS, isTrip, MAX_TRIP_DAYS } from '../calendar/kinds.js'
 import type { EventSpan } from '../calendar/spans.js'
 import { listBudgets, type StoredBudget } from './budget.js'
 import { assignBudgets, type TripKey } from './match.js'
 
 // Read here too by the trips that use them; they live with the event kinds.
-export { isTrip, MAX_TRIP_DAYS }
+export { FIND_DAYS, isTrip, MAX_TRIP_DAYS }
 
 /** Travel charges this many days apart or closer are one run. */
 const CLUSTER_GAP_DAYS = 3
 /** A lone travel charge is a trip only from this much, in cents. */
 const LONE_CHARGE_CENTS = 10_000
-/** Trips are found from this far back, and as far ahead. */
-export const FIND_DAYS = 365
 /**
  * How far from one day every charge of a run holding it can lie, and still
  * be told apart from a run too long to be a trip: a trip's run is

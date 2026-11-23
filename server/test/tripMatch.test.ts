@@ -1,20 +1,21 @@
 // Which trip each budget belongs to (assignBudgets), in pure terms: a budget
-// finds its trip by the trip's calendar events wherever they moved, falls
-// back to the days only when those events are gone, and budgets and trips
-// pair one to one, so trips back to back keep a budget each.
+// finds its trip by the trip's calendar events wherever they moved, a repeat
+// of a repeating event by its own id, never a neighbour's; it falls back to
+// the days only when those events are gone, and budgets and trips pair one
+// to one, so trips back to back keep a budget each.
 
 import { describe, expect, it } from 'vitest'
-import { assignBudgets, sharedDays, UID_REACH_DAYS } from '../src/domain/trips/match.js'
-import { addDays } from '../src/lib/dates.js'
+import { assignBudgets, sharedDays } from '../src/domain/trips/match.js'
 
-const trip = (uid: string, startsOn: string, endsOn: string) => ({
-  uids: [uid],
+/** A trip of one event; a repeat's id is its series' id and the day it was set for (eventIdOf). */
+const trip = (eventId: string, startsOn: string, endsOn: string) => ({
+  eventIds: [eventId],
   startsOn,
   endsOn,
 })
-const budget = (name: string, uids: string[], startsOn: string, endsOn: string) => ({
+const budget = (name: string, eventIds: string[], startsOn: string, endsOn: string) => ({
   name,
-  eventUids: uids,
+  eventIds,
   startsOn,
   endsOn,
 })
@@ -68,18 +69,31 @@ describe('assignBudgets', () => {
 
   it('never falls back by days while its own event is still on the calendar', () => {
     const rome = budget('Rome', ['rome'], '2026-12-10', '2026-12-14')
-    const far = trip('rome', addDays('2026-12-10', UID_REACH_DAYS + 7), '2027-06-20')
+    const far = trip('rome', '2027-06-15', '2027-06-20')
     const sameDays = trip('ski', '2026-12-10', '2026-12-14')
-    // Its event is there, too far to be this trip moved, so the trip on its old days is not it either.
-    expect(assigned([rome], [sameDays, far])).toEqual([null, null])
+    // Its one event moved far, and it follows; the trip on its old days is another.
+    expect(assigned([rome], [sameDays, far])).toEqual([null, 'Rome'])
   })
 
-  it('takes a repeating event’s nearest time, not one a year on', () => {
+  it('stays with its own repeat of a repeating event, never a neighbour', () => {
+    const december = budget('Acme', ['acme 2026-12-10'], '2026-12-10', '2026-12-12')
+    const november = trip('acme 2026-11-10', '2026-11-10', '2026-11-12')
+    const january = trip('acme 2027-01-10', '2027-01-10', '2027-01-12')
+    // Before, every repeat shared one id, and the budget went to November's.
+    expect(assigned([december], [november, january])).toEqual([null, null])
+    // December's repeat moved on its own keeps its id, and the budget follows it.
+    const moved = trip('acme 2026-12-10', '2027-01-25', '2027-01-27')
+    expect(assigned([december], [november, january, moved])).toEqual([null, null, 'Acme'])
+  })
+
+  it('holds an id on several trips only for one sharing its days', () => {
+    // Events read before repeats were told apart: every repeat has the series' id.
     const ski = budget('Ski', ['ski'], '2026-12-10', '2026-12-14')
     const thisYear = trip('ski', '2026-12-12', '2026-12-16')
     const nextYear = trip('ski', '2027-12-10', '2027-12-14')
+    const yearAfter = trip('ski', '2028-12-10', '2028-12-14')
     expect(assigned([ski], [nextYear, thisYear])).toEqual([null, 'Ski'])
-    expect(assigned([ski], [nextYear])).toEqual([null])
+    expect(assigned([ski], [nextYear, yearAfter])).toEqual([null, null])
   })
 
   it('pairs one to one: two budgets never share a trip', () => {

@@ -54,7 +54,9 @@ const SELECT = `
     g.emergency_own_target AS "emergencyOwnTarget", g.emergency_by_hand AS "emergencyByHand",
     a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf",
     CASE WHEN tb.goal_id IS NOT NULL THEN json_build_object('startsOn', tb.starts_on::text,
-      'endsOn', tb.ends_on::text, 'onCalendar', tb.on_calendar) END AS trip
+      'endsOn', tb.ends_on::text,
+      -- With no calendar linked, no trip is on it, nor has a page to open.
+      'onCalendar', tb.on_calendar AND EXISTS (SELECT 1 FROM calendar_feed)) END AS trip
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id
     LEFT JOIN trip_budgets tb ON tb.goal_id = g.id`
 

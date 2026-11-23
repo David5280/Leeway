@@ -179,3 +179,15 @@ describe('changing a trip budget’s goal', () => {
     })
   })
 })
+
+describe('a trip budget’s goal without a calendar', () => {
+  it('reads as off the calendar once the calendar is unlinked, and back on once linked', async () => {
+    const trip = await planLisbon()
+    await call('disconnect_calendar')
+    // Before, it still read as on the calendar, and its card linked to a page not found.
+    const goalTrip = async () => (await call('list_goals')).find((g) => g.id === trip.id)?.trip
+    expect(await goalTrip()).toMatchObject({ onCalendar: false })
+    await call('connect_calendar', { url: SECRET })
+    expect(await goalTrip()).toMatchObject({ onCalendar: true })
+  })
+})

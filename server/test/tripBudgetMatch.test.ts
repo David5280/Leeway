@@ -1,7 +1,7 @@
 // A trip budget belongs to its trip's calendar events: it stays with an
-// event moved however far, keeps its days and goal in step with the trip,
-// says when its trip is gone, and leaves the next trip, back to back, a
-// budget of its own. The trip is saved for in one place only, so the weeks
+// event moved however far, and with its own repeat of a repeating event,
+// keeps its days and goal in step with the trip, says when its trip is
+// gone, and leaves the next trip, back to back, a budget of its own. The trip is saved for in one place only, so the weeks
 // ahead suggest nothing more for it.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -163,6 +163,83 @@ describe('a budget and its trip', () => {
       goalId: lisbon.id,
       budget: { goalId: lisbon.id, stayCents: 60000 },
     })
+  })
+})
+
+/** "Work trip to Acme", the 10th to the 12th of each month from October, six times; `more` follows it. */
+function acmeTrips(...more: string[][]): string {
+  const series = [
+    'UID:acme',
+    'SUMMARY:Work trip to Acme',
+    'DTSTART;VALUE=DATE:20261010',
+    'DTEND;VALUE=DATE:20261013',
+    'RRULE:FREQ=MONTHLY;COUNT=6',
+  ]
+  const events = [series, ...more].flatMap((lines) => ['BEGIN:VEVENT', ...lines, 'END:VEVENT'])
+  return ['BEGIN:VCALENDAR', ...events, 'END:VCALENDAR'].join('\r\n')
+}
+
+const DECEMBER = { ...PLAN, name: 'Acme trip', startsOn: '2026-12-10', endsOn: '2026-12-12' }
+
+/** Each listed trip's first day and budget, soonest first. */
+async function tripsAndGoals() {
+  const trips = await call('list_trips')
+  return trips.map((t) => [t.startsOn, t.goalId]).reverse()
+}
+
+describe('a budget for one repeat of a repeating trip', () => {
+  beforeEach(async () => {
+    serving(acmeTrips())
+    await call('connect_calendar', { url: SECRET })
+  })
+
+  it('says it is off the calendar once that repeat is cancelled', async () => {
+    const goal = await call('create_trip_budget', DECEMBER)
+    serving(acmeTrips().replace('RRULE', 'EXDATE;VALUE=DATE:20261210\r\nRRULE'))
+    await call('refresh_calendar')
+    // Before, the budget went to November's repeat, past, and its goal read as the trip done.
+    expect((await tripsAndGoals()).every(([, goalId]) => goalId === null)).toBe(true)
+    expect(await call('list_goals')).toEqual([
+      expect.objectContaining({
+        id: goal.id,
+        targetDate: '2026-12-10',
+        status: 'in_progress',
+        trip: { startsOn: '2026-12-10', endsOn: '2026-12-12', onCalendar: false },
+      }),
+    ])
+  })
+
+  it('follows that repeat when it alone is moved', async () => {
+    const goal = await call('create_trip_budget', DECEMBER)
+    const moved = [
+      'UID:acme',
+      'SUMMARY:Work trip to Acme',
+      'RECURRENCE-ID;VALUE=DATE:20261210',
+      'DTSTART;VALUE=DATE:20270125',
+      'DTEND;VALUE=DATE:20270128',
+    ]
+    serving(acmeTrips(moved))
+    await call('refresh_calendar')
+    // Before, it went to November's repeat; now it stays with December's, moved to January 25th.
+    const trips = await tripsAndGoals()
+    expect(trips.filter(([, goalId]) => goalId !== null)).toEqual([['2027-01-25', goal.id]])
+    expect(await call('list_goals')).toEqual([
+      expect.objectContaining({
+        id: goal.id,
+        targetDate: '2027-01-25',
+        status: 'in_progress',
+        trip: { startsOn: '2027-01-25', endsOn: '2027-01-27', onCalendar: true },
+      }),
+    ])
+  })
+
+  it('still follows a trip that happens once, moved months away', async () => {
+    serving(ics([LISBON]))
+    await call('refresh_calendar')
+    const goal = await call('create_trip_budget', PLAN)
+    serving(ics([['lisbon', 'Lisbon trip', '2027-07-10', '2027-07-14']]))
+    await call('refresh_calendar')
+    expect(await tripsAndGoals()).toEqual([['2027-07-10', goal.id]])
   })
 })
 

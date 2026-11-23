@@ -199,3 +199,22 @@ describe('a trip and its budget', () => {
     })
   })
 })
+
+describe('a trip running past the weeks ahead', () => {
+  it('is the same trip in the forecast as in the list, so its row finds its page', async () => {
+    // The weeks ahead end December 28th; the hotel, and so the trip, runs on into January.
+    await linkTrips(
+      ['tokyo', 'Tokyo trip', '2026-12-24', '2026-12-28'],
+      ['hotel', 'Hotel Tokyo', '2026-12-29', '2027-01-03'],
+    )
+    const days = { startsOn: '2026-12-24', endsOn: '2027-01-03' }
+    expect((await call('list_trips')).map((t) => [t.startsOn, t.endsOn])).toEqual([
+      [days.startsOn, days.endsOn],
+    ])
+    const forecast = await call('get_forecast')
+    const row = forecast.weeks.flatMap((week) => week.items).find((i) => i.type === 'event')
+    // Before, the forecast read only to its last week and ended the trip on the 28th.
+    expect(row).toMatchObject({ date: days.startsOn, endsOn: days.endsOn, tripPage: true })
+    expect(await call('get_trip', days)).toMatchObject({ name: 'Tokyo trip' })
+  })
+})

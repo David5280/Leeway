@@ -8,6 +8,7 @@
 
 import { addDays, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
 import { returnDays } from './flightPairs.js'
+import { eventIdOf } from './ics.js'
 import { daysOf, type EventKind } from './kinds.js'
 import {
   holidayNames,
@@ -23,6 +24,8 @@ import { followsTrip, tripFit, tripReach, type Fit, type TripSoFar } from './tri
 export interface KindedEvent {
   /** The calendar's id for the event; with its first day, it tells one event from any other. */
   uid: string
+  /** For a repeat of a repeating event, the day it was set for (CalendarEvent); absent or null otherwise. */
+  repeatOn?: IsoDate | null
   title: string
   startsOn: IsoDate
   endsOn: IsoDate
@@ -33,8 +36,11 @@ export interface KindedEvent {
 export interface EventSpan extends KindedEvent {
   /** Stable for as long as the calendar is: its first event's id and first day. */
   id: string
-  /** The calendar ids of every event merged into it, which stay the same when an event moves. */
-  uids: string[]
+  /**
+   * Which events were merged into it (eventIdOf), each staying the same when
+   * its event moves, even a repeat moved on its own.
+   */
+  eventIds: string[]
 }
 
 /**
@@ -152,7 +158,7 @@ function homeOf(open: Building[], piece: Piece): Building | undefined {
 function startSpan(piece: Piece): Building {
   const { event } = piece
   return {
-    span: { ...event, id: `${event.uid} ${event.startsOn}`, uids: [event.uid] },
+    span: { ...event, id: `${event.uid} ${event.startsOn}`, eventIds: [eventIdOf(event)] },
     anchor: piece.words,
     anchorIsTravel: piece.travel,
     ownEnd: piece.travel ? null : event.endsOn,
@@ -182,7 +188,8 @@ function addPiece(building: Building, piece: Piece): void {
   const { span } = building
   const { event, words, travel } = piece
   span.endsOn = maxDate(span.endsOn, event.endsOn)
-  if (!span.uids.includes(event.uid)) span.uids.push(event.uid)
+  const eventId = eventIdOf(event)
+  if (!span.eventIds.includes(eventId)) span.eventIds.push(eventId)
   markTripDays(building, piece)
   // The first piece naming the occasion says what it is about; a trip's own
   // piece says it better than its travel ("Lisbon and Porto trip" over "Flight to Lisbon").
