@@ -1,20 +1,12 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { account, failing, holdRequest } from '../../../../test/fake'
-import { addPension, fromPaystub, review, serve } from '../../../../test/newPension'
+import { addPension, fromPaystub, review, serve, STATE_PLAN } from '../../../../test/newPension'
 import { noPensionRead, reads } from '../../../../test/paystub'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('a new pension from a paystub, on an account Leeway has', () => {
-  /** A plan linked from the bank, which the new pension could be. */
-  const STATE_PLAN = account({
-    id: '5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
-    name: 'State Plan',
-    type: 'investment',
-    subtype: 'other',
-  })
-
   it('offers no account to add it to when Leeway has none that could be a pension', async () => {
     serve({ accounts: [account({ id: 'acct-checking', name: 'Checking' })] })
     await fromPaystub()

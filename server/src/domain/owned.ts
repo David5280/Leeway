@@ -20,7 +20,7 @@ import {
   type Account,
   type AccountType,
 } from './accounts.js'
-import { loanHolder, loanLinks, saveLoanLink } from './loanLinks.js'
+import { loanHolder, loanLinks, loanOf, saveLoanLink } from './loanLinks.js'
 import {
   amountProblem,
   canCarryLoan,
@@ -196,8 +196,14 @@ function assertFits(item: Pick<Account, 'type' | 'subtype'>, change: HandEntered
   }
 }
 
-/** Ties a loan to a home or car, or unties it with null: only a loan, and only to one thing. */
+/**
+ * Ties a loan to a home or car, or unties it with null: only a loan, and only
+ * to one thing. Naming the loan it is tied to already changes nothing, so a
+ * form saved with its loan unchanged never trips over a tie made before these
+ * rules (one loan on two homes, say).
+ */
 async function linkLoan(db: Db, item: Account, loanId: string | null): Promise<void> {
+  if (loanId === (await loanOf(db, item.id))) return
   if (loanId !== null) {
     const loan = await getAccount(db, loanId)
     if (!isLoan(loan)) {

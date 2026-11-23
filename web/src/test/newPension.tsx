@@ -4,13 +4,38 @@
 
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { savePaystubSchema } from '../../../server/src/domain/paystubs/paystubs'
-import { settingsHandlers, type account } from './fake'
+import { savePaystubSchema } from '../../../server/src/domain/paystubs/save'
+import { account, settingsHandlers } from './fake'
 import { chosenFile, cityRead, paystubStatus, reads, savedPaystub } from './paystub'
 import { planServer, renderPlan, retirementOf } from './planning'
 import { pension } from './profile'
 
 const READ_ROUTE = '/api/paystubs/read'
+
+/** A plan linked from the bank, which a new pension could be. */
+export const STATE_PLAN = account({
+  id: '5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  name: 'State Plan',
+  type: 'investment',
+  subtype: 'other',
+})
+
+/** A route that gives each reply in turn, then the last one again, as a server that changes. */
+export function inTurn(...replies: (() => Response)[]): () => Response {
+  let calls = 0
+  return () => replies[Math.min(calls++, replies.length - 1)]!()
+}
+
+/** list_accounts answering with these accounts, as a route for inTurn. */
+export const listing = (accounts: ReturnType<typeof account>[]) => () =>
+  Response.json({ result: accounts })
+
+/** Presses Enter it myself, and gives back the form to type a new pension in. */
+export async function byHand() {
+  const { user, choosing } = await addPension()
+  await user.click(await choosing.findByRole('button', { name: 'Enter it myself' }))
+  return { user, form: within(await screen.findByRole('form', { name: 'New pension' })) }
+}
 
 /** The pension the fake server says it added. */
 const ADDED = pension({ payCadence: 'semimonth' }, { accountId: 'pension-new' })
