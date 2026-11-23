@@ -158,7 +158,7 @@ After changing `.env`, run `docker compose up -d` again to apply it.
 
 ### Run from source
 
-You need Node.js 22.12 or newer and PostgreSQL.
+You need Node.js 22.18 or newer and PostgreSQL.
 
 ```sh
 npm install

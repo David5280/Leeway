@@ -229,8 +229,8 @@ status bar, notch and home indicator simulated as an app installed to the
 home screen. `seed.ts` fills the install with the longest names Leeway takes
 first, once per Playwright worker, and removes them when the worker ends (a
 worker fixture rather than `beforeAll`, so each of the guard's tests stands
-alone and a sharded run can share them out one by one). Each screen fails if text overlaps text
-or a control, is cut off without an ellipsis (or squeezed to a sliver with
+alone and a sharded run can share them out one by one). Each screen fails
+if text overlaps text or a control, is cut off without an ellipsis (or squeezed to a sliver with
 one), breaks a word across lines, scrolls the page sideways, comes to rest
 under a fixed bar, or shows under the status bar, notch or home indicator
 with nothing opaque over it. It also fails on any control a finger's 44px tap

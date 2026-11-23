@@ -13,11 +13,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels its run still going. Every run on
-# main finishes, so each of its commits keeps a result.
+# A newer push to a pull request cancels its run still going. Each run on
+# main gets a group of its own (its run id), so none is ever cancelled or left
+# waiting, and every commit on main keeps a result.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -106,7 +107,9 @@ jobs:
   # one result: it fails when any shard failed or did not finish.
   e2e:
     needs: e2e-shard
-    if: ${{ !cancelled() }}
+    # always(), not !cancelled(): a skipped job counts as passed, so a cancelled
+    # run must still reach the last step and fail here.
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
