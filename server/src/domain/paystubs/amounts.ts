@@ -70,10 +70,14 @@ function negative(part: string): boolean {
   return PARENTHESES.test(plain) || MINUS.test(plain)
 }
 
-/** How an amount as printed is marked; null when it is not printed, blank or zero, which carry no sign. */
+/** Whether a printed amount or part holds a figure other than zero, the only kind that carries a sign. */
+const NOT_ZERO = /[1-9]/
+
+/** How an amount as printed is marked; null when it is not printed, blank or zero. A zero part has no say. */
 export function signOf(printed: string | null): Sign | null {
-  if (printed === null || !/[1-9]/.test(printed)) return null
-  const marks = printed.split('+').map(negative)
+  const parts = (printed ?? '').split('+').filter((part) => NOT_ZERO.test(part))
+  if (parts.length === 0) return null
+  const marks = parts.map(negative)
   if (marks.every(Boolean)) return 'minus'
   return marks.some(Boolean) ? 'mixed' : 'plus'
 }

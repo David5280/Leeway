@@ -30,6 +30,12 @@ describe('signOf', () => {
   it('gives a zero or a blank no sign, since neither is marked', () => {
     for (const printed of ['0.00', '-0.00', '(0.00)', '', ' ']) expect(signOf(printed)).toBeNull()
   })
+
+  it('reads a joined amount by its parts that are not zero', () => {
+    expect(signOf('0.00 + (12.50)')).toBe('minus')
+    expect(signOf('(0.00) + 12.50')).toBe('plus')
+    expect(signOf('0.00 + 0.00')).toBeNull()
+  })
 })
 
 describe('signedAgainst', () => {
