@@ -76,6 +76,11 @@ function couldBeANameWord(word: string): boolean {
   return NAME_WORD.test(word) && !POSSESSIVE.test(word) && nameInALine(word)
 }
 
+/** Whether any word of a text, alone, could be part of a person's name: "jane" in "jane medicine". */
+export function holdsANameWord(text: string): boolean {
+  return text.split(/\s+/).some((word) => couldBeANameWord(word) && !isCredential(word))
+}
+
 /** Whether a text has words and every one is an everyday word ("Rent", "House cleaner"). */
 export function onlyEverydayWords(text: string): boolean {
   const words = text.toLowerCase().match(/\p{L}+/gu) ?? []

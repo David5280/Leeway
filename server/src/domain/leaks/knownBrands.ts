@@ -1,9 +1,12 @@
-// National brands named in two or more plain words, which read like a
-// person's name ("Taco Bell", "Best Buy", "Warby Parker"). A line imported
-// from a CSV or entered by hand carries no merchant code for the bank to
-// vouch with, so this short list vouches instead, for a leak alert
-// (leakNames.ts) and for what Chat shows by name (modelLabels.ts). Only a
-// whole name matches, so "Jane Bell" or "Taco Bell Jane" never does. Pure.
+// National brands named in two or more plain words, which a leak alert may
+// name though they read like a person's name ("Taco Bell", "Best Buy"). A
+// line imported from a CSV or entered by hand carries no merchant code for the
+// bank to vouch with (leakNames.ts), so this short list vouches instead. Only
+// a whole name matches, so "Jane Bell" or "Taco Bell Jane" never does. A
+// brand that is a person's whole name too ("Lane Bryant", "Jack Henry") is
+// never added: a line naming that person would read as the brand. Chat's
+// labels (modelLabels.ts) read a medical practice's words beyond a brand
+// ("Johns Hopkins Medicine"). Pure.
 
 /**
  * The brands, as people write them. Each is matched the way brandKey reads a
@@ -16,7 +19,6 @@ const BRANDS = [
   'Bed Bath and Beyond',
   'Best Buy',
   'Big Lots',
-  'Bob Evans',
   'Buffalo Wild Wings',
   'Burger King',
   'Chick-fil-A',
@@ -31,18 +33,14 @@ const BRANDS = [
   'Five Guys',
   'Foot Locker',
   'Google Fi',
-  'Grant Thornton',
   'Great Clips',
   'Harbor Freight',
   'Hobby Lobby',
   'Home Depot',
-  'Hunter Douglas',
-  'Jack Henry',
   'Jack in the Box',
   "Jimmy John's",
   'Johns Hopkins',
   'Krispy Kreme',
-  'Lane Bryant',
   'Liberty Mutual',
   'Little Caesars',
   'Old Navy',
@@ -101,11 +99,12 @@ const LONGEST_FIRST = [...BRAND_KEYS].sort((a, b) => b.length - a.length)
 
 /**
  * A name with each known brand in it left out, as brandKey reads it (lower
- * case, store numbers gone): "GRANT THORNTON LLP PAYROLL" reads "llp
- * payroll". Whole words only, so "Jane Doe Grant Thornton" still reads "jane doe".
+ * case, store numbers gone), or null when it holds none: "JOHNS HOPKINS
+ * MEDICINE" reads "medicine". Whole words only, so "Jane Johns Hopkinson" holds none.
  */
-export function withoutKnownBrands(name: string): string {
-  let key = ` ${brandKey(name)} `
-  for (const brand of LONGEST_FIRST) key = key.split(` ${brand} `).join(' ')
-  return key.trim()
+export function withoutKnownBrands(name: string): string | null {
+  const key = ` ${brandKey(name)} `
+  let rest = key
+  for (const brand of LONGEST_FIRST) rest = rest.split(` ${brand} `).join(' ')
+  return rest === key ? null : rest.trim()
 }

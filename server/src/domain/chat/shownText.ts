@@ -10,7 +10,7 @@ import { APOSTROPHES } from '../personShape.js'
 const CURLY = new RegExp(`[${APOSTROPHES.replace("'", '')}]`, 'g')
 
 /** Text as shop names are compared with it: every apostrophe a straight one. */
-function straight(text: string): string {
+export function straight(text: string): string {
   return text.replace(CURLY, "'")
 }
 

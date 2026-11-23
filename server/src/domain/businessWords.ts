@@ -15,9 +15,10 @@ const BUSINESS_WORDS = new Set(
     'restaurant salon shack shop shoes spa sports station store studio supply sushi taco',
     'tacos tavern tea theater theatre tire tires tool tools toys travel tree trip wine',
     'farmers jewelers jewelry warehouse wholesale',
-    'bowl brewing castle chopper oven racing resort skin',
-    // Where a business is, or a practice's kind ("Cherry Creek", "Saint Joseph Hospital").
-    'creek meadows saint adventist animal dentistry parenthood rx',
+    'bowl brewing chopper oven racing resort skin',
+    // A practice's kind ("Adventist Health", "Animal Dentistry"). No place word that is
+    // a surname too ("Meadows", "Castle", "Saint", "Creek"): those would vouch for a person.
+    'adventist animal dentistry parenthood rx',
     // How a company or service is called.
     'agency airlines airways associates bros brothers center centre city company county',
     'department energy enterprises group guys insurance international lawn labs lessons',

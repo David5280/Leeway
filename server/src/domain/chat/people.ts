@@ -23,15 +23,8 @@ import { shownNameOf } from '../ruleText.js'
 import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
 import { labelBills, wordsOf, type BillShown, type StoredBill } from './billLabels.js'
-import { ownerLabels, namesInLabels } from './ownerText.js'
-import {
-  isBankWord,
-  namedLabels,
-  namesIn,
-  namesToHide,
-  type HiddenNames,
-  type NamedLabel,
-} from './personNames.js'
+import { ownerLabels, namesInLabels, type LabelWords } from './ownerText.js'
+import { isBankWord, namedLabels, namesIn, namesToHide, type HiddenNames } from './personNames.js'
 
 /** Text a labelled row hides, in lower case, beside its label, for refusing a search. */
 export interface HiddenText {
@@ -64,7 +57,7 @@ export interface PaymentPeople extends HiddenNames {
   /** The shops the owner buys from, which a search may always look for. */
   shops: KnownShops
   /** The owner's labels holding a word that could be a name, hidden within them alone. */
-  labels: readonly NamedLabel[]
+  labels: readonly LabelWords[]
 }
 
 /** No row labelled, no name and no bill hidden: nothing is replaced. */

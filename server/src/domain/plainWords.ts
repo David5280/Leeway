@@ -14,7 +14,7 @@ const PLAIN_WORDS = new Set(
     'how if in into is it its just last less me more most my new next no not now of off old',
     'on one only or other our out over own per same she so some than that the their them',
     'then there these they this those too two under up us was we were what when where which',
-    'who why you your great',
+    'who why you your great runs trips',
     // Time and how often.
     'annual annually biweekly daily day days month monthly months quarter quarterly today',
     'tomorrow week weekend weekly weeks year yearly years yesterday',

@@ -15,15 +15,14 @@
 // 3. It does not read as money moved or paid to someone (MOVED).
 // 4. Plaid vouched for the merchant as a business (merchantEntityId), or
 //    what it would show has no person's shape ("Odalys Larkspur",
-//    personShape.ts), or is a national brand that reads like one ("Warby
-//    Parker", leaks/knownBrands.ts). A medical one, or one a card processor
-//    ran ("SQ *", "TST*"), where sole traders go by their own names, needs
-//    Plaid's word; pay needs no person's name anywhere in its line beyond a
-//    brand (household payroll, but "GRANT THORNTON PAYROLL").
+//    personShape.ts). A medical one, or one a card processor ran ("SQ *",
+//    "TST*"), where sole traders go by their own names, needs Plaid's word;
+//    pay needs no person's name anywhere in its line (household payroll).
 // 5. A medical one does not name a clinician ("DR. JANE DOE LCSW"), nor hold
-//    a person's name anywhere beyond a brand ("JANE DOE COUNSELING", but
-//    "Johns Hopkins Medicine"): a practice is often named for the clinician,
-//    and Plaid vouches for it all the same.
+//    a person's name anywhere ("JANE DOE COUNSELING"): a practice is often
+//    named for the clinician, and Plaid vouches for it all the same. Beside
+//    a national brand ("Johns Hopkins Medicine", leaks/knownBrands.ts), no
+//    other word may be a name's ("JOHNS HOPKINS JANE").
 //
 // Every other row is shown by what kind of movement it is (LABELS): "Zelle
 // payment (sent)", "Rent payment", "Service payment", "Purchase or payment".
@@ -37,10 +36,11 @@
 
 import { appIn, merchantOf, paymentAppOf } from './betweenPeople.js'
 import { isKnownShop, NO_SHOPS, restAfterAShop, type KnownShops } from './knownShops.js'
-import { isKnownBrand, withoutKnownBrands } from './leaks/knownBrands.js'
+import { withoutKnownBrands } from './leaks/knownBrands.js'
 import { cleanMerchantName } from './merchantName.js'
 import {
   hasAPersonsShape,
+  holdsANameWord,
   holdsAPersonsName,
   namesAClinician,
   onlyEverydayWords,
@@ -175,9 +175,14 @@ function shownMerchant(tx: Movement): string {
   return merchantOf(tx) || cleanMerchantName(tx.name)
 }
 
-/** Whether a name holds a person's name once the national brands in it are left out. */
+/**
+ * Whether a practice's name holds a person's: with a national brand in it,
+ * any other word that could be a name's ("JOHNS HOPKINS JANE"); without,
+ * a person's name anywhere ("JANE DOE COUNSELING", holdsAPersonsName).
+ */
 function holdsANameBeyondBrands(name: string): boolean {
-  return holdsAPersonsName(withoutKnownBrands(name))
+  const rest = withoutKnownBrands(name)
+  return rest === null ? holdsAPersonsName(name) : holdsANameWord(rest)
 }
 
 /**
@@ -197,9 +202,8 @@ function showsItsName(tx: LabelSubject): boolean {
   if (vouched) return true
   if (PROCESSOR.test(tx.name)) return false
   // Pay names its payer anywhere in a line: "DIRECT DEP JOHN Q PUBLIC HOUSEHOLD PAYROLL".
-  if (code.startsWith('INCOME')) return !holdsANameBeyondBrands(shownMerchant(tx))
-  const shown = shownMerchant(tx)
-  return isKnownBrand(shown) || !hasAPersonsShape(shown)
+  if (code.startsWith('INCOME')) return !holdsAPersonsName(shownMerchant(tx))
+  return !hasAPersonsShape(shownMerchant(tx))
 }
 
 /**

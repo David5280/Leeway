@@ -172,19 +172,13 @@ export function namesToHide(
   }
 }
 
-/** An owner's label that holds a word that could be a name, and those words, hidden within it. */
-export interface NamedLabel {
-  label: string
-  words: string[]
-}
-
 /**
  * The owner's labels whose words could be a name (ownerText.ts), each with
  * the words hidden within it as a name's single word is (loneNames.ts), but
  * in any case, since they are hidden only there. A label left with none is
  * left out.
  */
-export function namedLabels(labels: readonly LabelWords[], shops: KnownShops): NamedLabel[] {
+export function namedLabels(labels: readonly LabelWords[], shops: KnownShops): LabelWords[] {
   return labels.flatMap(({ label, words }) => {
     const lone = loneNamesOf(
       words.map((name) => ({ name, owner: true })),

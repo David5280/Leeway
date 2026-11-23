@@ -9,11 +9,12 @@
 // eats at Ruby Tuesday (a shop's whole name is kept, chat/toolOutput.ts).
 // A longer part is hidden in any case; a short one only as a name is
 // written, with a capital or in capitals. A common word ("Will", "May",
-// "Rent") far more often means the word, so it is never hidden alone, but a
-// name that is also a word ("Grace") in a label the owner wrote is them.
+// "Rent") far more often means the word, so it is never hidden alone, but
+// one that a label the owner wrote names (chat/ownerText.ts: "Grace's fund",
+// "Bill's car") is them.
 
 import { isBusinessWord } from '../businessWords.js'
-import { isCommonWord, isNameAsWord } from './commonWords.js'
+import { isCommonWord } from './commonWords.js'
 import { startsAShop, type KnownShops } from '../knownShops.js'
 import { isMovementWord } from '../movementWords.js'
 import { APOSTROPHES, isCredential } from '../personShape.js'
@@ -29,8 +30,8 @@ const ANY_CASE_LENGTH = 4
 export interface NameSource {
   name: string
   /**
-   * Written in the owner's own label, so a name that is also a word
-   * ("Grace") is them, and so is one that starts a shop ("Ruby").
+   * Written in the owner's own label, so a common word read there as a name
+   * ("Grace", "Bill") is them, and so is one that starts a shop ("Ruby").
    */
   owner?: boolean
 }
@@ -54,8 +55,7 @@ function hiddenAs(
   if (!source.owner && startsAShop(shops, part)) return null
   // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
   if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null
-  if (source.owner && isNameAsWord(part)) return 'capital'
-  if (isCommonWord(part)) return null
+  if (isCommonWord(part)) return source.owner ? 'capital' : null
   return [...part].length >= ANY_CASE_LENGTH ? 'anyCase' : 'capital'
 }
 

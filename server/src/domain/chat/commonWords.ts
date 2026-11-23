@@ -6,10 +6,12 @@
 //   person's ("MARK OSTROWSKI", "JANE BROWN"), and an owner's label hides it
 //   ("Grace's college fund"). It is never hidden alone in other text, where
 //   it far more often means the word (loneNames.ts).
-// - Of those, a surname or a word a label is far more often named with
-//   ("Black Friday", "Summer vacation", "Will & Trust") reads as the word in
-//   the owner's labels, unless a person is named there ("For Rose"): a label
-//   names family by given name, so "Lily braces" hides and "Rose Garden" stays.
+// - Of those, a surname that is no given name ("Black Friday", "Price Club")
+//   reads as the word in the owner's labels, since a label names family by
+//   given name, unless it is owned ("Brown's tuition"), beside another name
+//   ("Hope Brown") or after a word a person is named after ("Venmo Brown").
+//   A given name ("Hope", "Rose", "Will") is a person in a label but in a
+//   few set phrases ("Hope chest", "Rose Garden", "Will & Trust").
 // - A word whose everyday sense wins in money text ("bill", "May") reads as
 //   the word in labels, and as a name only in a merchant or pay line.
 // - Months, days, banks and what a contact is saved as ("Mom", "Rent") are
@@ -28,12 +30,42 @@ const NAMES_AS_WORDS = wordSet([
   'summer walker ward wells white will winter wolf young',
 ])
 
-// Of NAMES_AS_WORDS, the surnames and words an owner's label means as the word
-// ("Price Club", "Hope chest", "Hunter Education"); given names stay out.
-const WORDS_IN_LABELS = wordSet([
-  'autumn baker black brown cook fox grant gray green grey hall hill holly hope hunter lane',
-  'love miles park price rose stone summer walker ward wells white will winter wolf young',
+// Of NAMES_AS_WORDS, the surnames and words an owner's label means as the
+// word ("Price Club", "Green fees"). No given name is ever one (givenNames.ts).
+export const WORDS_IN_LABELS = wordSet([
+  'baker black brown cook fox gray green grey hall hill love park price stone wells white young',
 ])
+
+// Set phrases a label means as words though they start with a given name.
+const EVERYDAY_PHRASES = [
+  'dog walker',
+  'hope chest',
+  'rose garden',
+  'rose bushes',
+  'summer camp',
+  'summer vacation',
+  'summer break',
+  'winter break',
+  'winter tires',
+  'hunter education',
+  'hunter safety',
+  'holly tree',
+  'will and trust',
+  'will & trust',
+  'living will',
+  'pell grant',
+  'grant money',
+  'airline miles',
+]
+
+/** A phrase as a RegExp source: its words with any spaces between ("Hope  Chest"). */
+const phraseSource = (phrase: string) => phrase.split(' ').join('\\s+')
+
+// The phrases as one pattern, whole words only, in any case.
+const PHRASES = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:${EVERYDAY_PHRASES.map(phraseSource).join('|')})(?![\\p{L}\\p{N}])`,
+  'giu',
+)
 
 // Names whose everyday sense wins in labels ("Electric bill", "May rent").
 const WORDS_AS_NAMES = wordSet(['bill april may june august'])
@@ -63,11 +95,16 @@ export function isNameAsWord(word: string): boolean {
 }
 
 /**
- * Whether a word, in any case, reads as the word in the owner's labels:
- * a surname or a word labels are named with ("Brown", "Summer", "Will").
+ * Whether a word, in any case, may read as the word in the owner's labels:
+ * a surname that is no given name ("Brown", "Price").
  */
 export function isWordInLabels(word: string): boolean {
   return WORDS_IN_LABELS.has(word.toLowerCase())
+}
+
+/** A label without the set phrases it means as words: "Hope chest for Ana" reads " for Ana". */
+export function withoutEverydayPhrases(text: string): string {
+  return text.replace(PHRASES, ' ')
 }
 
 /** Whether a common word could be a name in a merchant or pay line ("Mark", "Bill", "June"). */

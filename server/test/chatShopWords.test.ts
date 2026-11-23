@@ -115,4 +115,22 @@ describe("a word of the owner's label beside a shop's name", () => {
     const more = ['Holly Tree Service', 'Summer Vacation', 'someone braces', 'For someone']
     expect([...kept, ...more].filter((label) => !sent.includes(`"${label}"`))).toEqual([])
   })
+
+  it('shows a shop of one word named for no one, but no given name beside it', async () => {
+    for (const merchantName of ['Wegmans', 'Marshalls', 'Target'])
+      await pay(merchantName.toUpperCase(), 2_000, { merchantName, detailed: GROCERIES })
+    const kept = ['Wegmans groceries', 'Marshalls clothes', 'Target runs']
+    await categories([...kept, "Grant's birthday", 'Miles allowance'])
+    const [category] = (await sql(`SELECT id FROM categories LIMIT 1`)).rows as { id: string }[]
+    await sql(
+      `INSERT INTO rules (field, match_type, pattern, category_id, position)
+       VALUES ('description', 'contains', 'VENMO GRANT', $1, 1)`,
+      [category!.id],
+    )
+
+    const sent = await probe.sent('list_categories')
+    expect(kept.filter((label) => !sent.includes(`"${label}"`))).toEqual([])
+    expect(sent).toContain(`"someone's birthday"`)
+    expect((await probe.everything()).toLowerCase()).not.toMatch(/grant|miles/)
+  })
 })

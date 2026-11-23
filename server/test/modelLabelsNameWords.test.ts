@@ -69,21 +69,27 @@ describe('a medical practice named for its clinician', () => {
       'JANE DOE LAC',
       'JANE DOE CNM',
       'JANE DOE, OTR/L',
+      // A surname that is also a place word vouches for no one.
+      'JANE MEADOWS COUNSELING',
+      'OLIVIA CASTLE THERAPY',
+      // Nor does a brand for the name beside it.
+      'JOHNS HOPKINS JANE',
+      // Named for a place that reads as a person: hidden, as a name would be.
+      'CHERRY CREEK DENTAL',
+      'SAINT JOSEPH HOSPITAL',
     ]) {
       const label = labelled(name, 'MEDICAL_OTHER_MEDICAL', { merchantName: name, ...vouched })
       expect([name, label]).toEqual([name, 'Medical payment'])
     }
-    // A practice named for no one still shows, a place, a saint or a brand in its name included.
+    // A practice named for no one still shows, an owned saint or a brand in its name included.
     for (const name of [
       'Acme Physical Therapy',
       'VCA Animal Hospital',
-      'Cherry Creek Dental',
-      'Saint Joseph Hospital',
       'Porter Adventist Hospital',
+      "St Luke's Health",
       'Optum Rx',
       'Planned Parenthood',
       'Warby Parker',
-      'Park Meadows Dentistry',
       'Johns Hopkins Medicine',
     ]) {
       const practice = { merchantName: name, ...vouched }
@@ -96,18 +102,28 @@ describe('a medical practice named for its clinician', () => {
 })
 
 describe('pay from an employer whose name reads like a person', () => {
-  it('shows by name when the name is a school, a brewery or a brand', () => {
+  it('shows by name when the name is a school or a brewery', () => {
     const wages = { amountCents: -90_000 }
     for (const name of [
       'UNIVERSITY OF DENVER PAYROLL',
       'DENVER PUBLIC SCHOOLS',
       'GREAT DIVIDE BREWING',
-      'GRANT THORNTON LLP PAYROLL',
-      'JACK HENRY PAYROLL',
     ]) {
       expect([name, labelled(name, 'INCOME_WAGES', wages)]).toEqual([name, null])
     }
-    for (const name of ['JANE BROWN', 'PRIYA KING PAYROLL', 'MARK OSTROWSKI']) {
+  })
+
+  it('is a deposit when a name is in it, a brand named like a person included', () => {
+    const wages = { amountCents: -90_000 }
+    for (const name of [
+      'JANE BROWN',
+      'PRIYA KING PAYROLL',
+      'MARK OSTROWSKI',
+      'DIRECT DEP JANE MEADOWS HOUSEHOLD',
+      'DIRECT DEP LANE BRYANT IMOGEN',
+      'GRANT THORNTON LLP PAYROLL',
+      'JACK HENRY PAYROLL',
+    ]) {
       expect([name, labelled(name, 'INCOME_WAGES', wages)]).toEqual([name, 'Deposit'])
     }
   })
@@ -134,21 +150,40 @@ describe('the shops everyone buys from', () => {
     ['Burger King', 'FOOD_AND_DRINK_FAST_FOOD'],
     ['Jack in the Box', 'FOOD_AND_DRINK_FAST_FOOD'],
     ['Ruby Tuesday', 'FOOD_AND_DRINK_RESTAURANT'],
-    // Names made of name words, shown for a word businesses are named with or as a brand.
-    ['White Castle', 'FOOD_AND_DRINK_FAST_FOOD'],
+    // Names made of name words, shown for a word businesses are named with.
     ['Price Chopper', 'FOOD_AND_DRINK_GROCERIES'],
-    ['Lane Bryant', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES'],
     ['Fox Racing', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES'],
-    ['Park Meadows', 'GENERAL_MERCHANDISE_SUPERSTORES'],
     ['Stone Brewing', 'FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR'],
-    ['Hunter Douglas', 'HOME_IMPROVEMENT_FURNITURE'],
-    ['Bob Evans', 'FOOD_AND_DRINK_RESTAURANT'],
     ['Winter Park Resort', 'TRAVEL_LODGING'],
     ['June Oven', 'GENERAL_MERCHANDISE_ELECTRONICS'],
     ['April Skin', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
     ['Rose Bowl', 'ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS'],
-    ['Warby Parker', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
   ]
+
+  // Shaped like a person's name, word for word: only Plaid's word for the business shows them.
+  const NAMED_LIKE_PEOPLE: [string, string][] = [
+    ['White Castle', 'FOOD_AND_DRINK_FAST_FOOD'],
+    ['Lane Bryant', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES'],
+    ['Park Meadows', 'GENERAL_MERCHANDISE_SUPERSTORES'],
+    ['Hunter Douglas', 'HOME_IMPROVEMENT_FURNITURE'],
+    ['Bob Evans', 'FOOD_AND_DRINK_RESTAURANT'],
+    ['Warby Parker', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
+    ['Jane Meadows', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
+    ['Olivia Castle', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
+    ['Maria Saint', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
+  ]
+
+  it("show one named like a person only on Plaid's word for the business", () => {
+    for (const [name, code] of NAMED_LIKE_PEOPLE) {
+      const line = name.toUpperCase()
+      expect([name, labelled(line, code, { merchantName: name })]).toEqual([
+        name,
+        'Purchase or payment',
+      ])
+      const vouched = { merchantName: name, merchantEntityId: 'ent_fake_shop' }
+      expect([name, labelled(line, code, vouched)]).toEqual([name, null])
+    }
+  })
 
   it('show by name, from Plaid and from a file once the owner buys there', () => {
     for (const [name, code] of SHOPS) {

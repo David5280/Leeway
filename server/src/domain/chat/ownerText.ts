@@ -10,18 +10,30 @@
 // accounts. Every other word that could be a name is hidden within that
 // label wherever Chat writes it, so it reads "someone allowance", while
 // Leeway's own words around it ("Will I make it to payday?") stay whole.
+// When in doubt a word is hidden: a hidden shop costs a word, a shown name
+// someone's privacy.
 //
-// - A shop's single word vouches for nothing ("Max's car" beside HBO Max):
-//   only its whole name does.
-// - A surname or a word labels are named with ("Rose Garden", "Will &
-//   Trust") is the word (commonWords.ts), unless it follows "for", "with",
-//   "to" or "from", where a person is named ("For Rose").
+// - A shop's word vouches only as its whole name: "Wegmans groceries" stays,
+//   but not a shop named like a person ("Ross allowance", givenNames.ts),
+//   nor a word of a longer name ("Max's car" beside HBO Max).
+// - A surname that is no given name ("Price Club") is the word
+//   (commonWords.ts), unless it is owned ("Brown's tuition") or beside
+//   another name ("Hope Brown"). A given name is a person but in a few set
+//   phrases ("Hope chest", "Will & Trust").
+// - Nothing vouches for a word after one a person is named after: "for",
+//   "with", "to", "from" or a payment app ("For Rose", "Venmo Brown").
 
 import type { Db } from '../../db/pool.js'
 import { NO_SHOPS, type KnownShops } from '../knownShops.js'
 import { APOSTROPHES, isEverydayWord } from '../personShape.js'
 import { wordsOf } from './billLabels.js'
-import { isWordInLabels } from './commonWords.js'
+import {
+  isNameAsWord,
+  isNameInALine,
+  isWordInLabels,
+  withoutEverydayPhrases,
+} from './commonWords.js'
+import { isGivenName } from './givenNames.js'
 import { withoutShops } from './shownText.js'
 
 // A word of a label as written, with its inner apostrophes and hyphens: "O'Brien", "Mary-Kate".
@@ -34,13 +46,29 @@ const LOOSE_ENDS = new RegExp(`^[-${APOSTROPHES}]+|[-${APOSTROPHES}]+$`, 'gu')
 // The fewest letters a label's word needs to be hidden as a name: "TV", "Q4" and "Al" are not.
 const SHORTEST_NAME = 3
 
-// Words a person is named after ("gift for", "w/"), where a shown word vouches for nothing.
-const BEFORE_A_PERSON = new Set(['for', 'with', 'w', 'to', 'from'])
+// Words a person is named after ("gift for", "w/", "Venmo", "Cash App"), where nothing vouches.
+const BEFORE_A_PERSON = new Set([
+  'for',
+  'with',
+  'w',
+  'to',
+  'from',
+  'venmo',
+  'zelle',
+  'paypal',
+  'app',
+])
 
 /** Whether a word (wordsOf) is surely no one's beyond everyday words: one of the owner's accounts'. */
 type Plain = (word: string) => boolean
 
-/** A label the owner wrote, and its words that could be someone's name, as written. */
+/** What a label's words are read against: the owner's account words and their shops. */
+interface Reading {
+  plain: Plain
+  shops: KnownShops
+}
+
+/** A label the owner wrote, and its words that could be someone's name: as written, or as hidden (personNames.ts). */
 export interface LabelWords {
   label: string
   words: string[]
@@ -66,46 +94,89 @@ export async function ownerLabels(db: Db): Promise<string[]> {
   return rows.flatMap((row) => (row.text ? [row.text] : []))
 }
 
-/** A text's words as written, inner apostrophes and hyphens kept, shops' names left out. */
+/** A text's words as written, inner apostrophes and hyphens kept, shops and set phrases left out. */
 function writtenWords(text: string, shops: KnownShops): string[] {
-  return withoutShops(text.normalize('NFC'), shops).match(LABEL_WORDS) ?? []
+  return withoutEverydayPhrases(withoutShops(text.normalize('NFC'), shops)).match(LABEL_WORDS) ?? []
 }
 
-/** Whether a written word follows one a person is named after ("for"), where none is vouched. */
+/** The nearest word with a letter before (-1) or after (1) a written word, or null at an end. */
+function neighbour(words: readonly string[], at: number, step: -1 | 1): string | null {
+  for (let next = at + step; next >= 0 && next < words.length; next += step) {
+    if (/\p{L}/u.test(words[next]!)) return words[next]!
+  }
+  return null
+}
+
+/** Whether a written word follows one a person is named after ("for", "Venmo"). */
 function afterAPerson(words: readonly string[], at: number): boolean {
-  return at > 0 && BEFORE_A_PERSON.has(wordsOf(words[at - 1]!).join(''))
+  const before = neighbour(words, at, -1)
+  return before !== null && BEFORE_A_PERSON.has(wordsOf(before).join(''))
+}
+
+/** Whether a word (wordsOf) is a shop's whole name of one word that is named for no one ("target"). */
+function aShopsName(part: string, shops: KnownShops): boolean {
+  return shops.names.has(part) && !isGivenName(part) && !isNameAsWord(part)
+}
+
+/** Whether a part of a word is surely no one's on its own: everyday, an account's or a shop's name. */
+function plainAlone(part: string, reading: Reading): boolean {
+  return (
+    part.length < 2 ||
+    isEverydayWord(part) ||
+    reading.plain(part) ||
+    aShopsName(part, reading.shops)
+  )
+}
+
+/** Whether a written word next to this one could be a name, so the two may be one ("Hope Brown"). */
+function besideAName(words: readonly string[], at: number, reading: Reading): boolean {
+  const named = (word: string | null) =>
+    word !== null && !wordsOf(word).every((part) => plainAlone(part, reading))
+  return named(neighbour(words, at, -1)) || named(neighbour(words, at, 1))
+}
+
+/** Whether a written word is a name with an owner's "'s", always a person's ("Bill's", "Grant's"). */
+function ownedName(word: string): boolean {
+  if (!POSSESSIVE.test(word)) return false
+  const name = wordsOf(word.replace(POSSESSIVE, '')).join('')
+  return isGivenName(name) || isNameInALine(name) || isWordInLabels(name)
 }
 
 /**
- * Whether a written word is surely no one's: an everyday word with its own
- * "'s" ("Lowe's" is lowes), or every part of it everyday, or, where no person
- * is named, an account's word or one labels mean as the word ("Rose Garden").
+ * Whether a written word is surely no one's: never a name owned, but an
+ * everyday word with its own "'s" ("Lowe's" is lowes), or every part of it
+ * everyday, or, where no person is named, an account's word, a shop's name
+ * of one word, or a surname read as the word beside no other name ("Price Club").
  */
-function plainWord(words: readonly string[], at: number, plain: Plain): boolean {
+function plainWord(words: readonly string[], at: number, reading: Reading): boolean {
   const word = words[at]!
+  if (ownedName(word)) return false
   if (isEverydayWord(wordsOf(word).join(''))) return true
-  const vouched = (part: string) =>
-    !afterAPerson(words, at) && (plain(part) || isWordInLabels(part))
-  return wordsOf(word).every((part) => part.length < 2 || isEverydayWord(part) || vouched(part))
+  if (afterAPerson(words, at))
+    return wordsOf(word).every((part) => part.length < 2 || isEverydayWord(part))
+  const asWord = !POSSESSIVE.test(word) && !besideAName(words, at, reading)
+  return wordsOf(word).every(
+    (part) => plainAlone(part, reading) || (asWord && isWordInLabels(part)),
+  )
 }
 
 /**
  * The owner's labels that hold a word that could be someone's name, each
  * with those words as written and without an owner's "'s": every one long
  * enough that is surely no one's by none of the rules above ("Ignatius" in
- * "Ignatius allowance"). The whole names of shops the owner buys from are
- * read as shown ("Trader Joe's").
+ * "Ignatius allowance").
  */
 export function namesInLabels(
   labels: readonly string[],
   plain: Plain,
   shops: KnownShops = NO_SHOPS,
 ): LabelWords[] {
+  const reading = { plain, shops }
   const named = new Map<string, string[]>()
   for (const label of labels) {
     const written = writtenWords(label, shops)
     const words = written
-      .filter((_word, at) => !plainWord(written, at, plain))
+      .filter((_word, at) => !plainWord(written, at, reading))
       .map((word) => word.replace(POSSESSIVE, '').replace(LOOSE_ENDS, ''))
       .filter((word) => wordsOf(word).join('').length >= SHORTEST_NAME)
     if (words.length && !named.has(label)) named.set(label, [...new Set(words)])
