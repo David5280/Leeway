@@ -2,8 +2,9 @@
 // paydays, bills due and the events likely to cost money, each with what to
 // set aside where past ones show it. A bill opens its own form; an event
 // opens a purchase goal to save for it, unless nothing is left to set aside.
-// Weeks with nothing in them fold into one quiet line. Shown in Plan only
-// while a calendar is linked.
+// Weeks with nothing in them fold into one quiet line. Recent and coming
+// trips follow, each opening its own page. Shown in Plan only while a
+// calendar is linked.
 
 import { Link } from 'react-router-dom'
 import type { Forecast, ForecastItem } from '../../api/client'
@@ -21,6 +22,7 @@ import {
   saveForPath,
   weekLabel,
 } from '../../lib/calendar'
+import { tripName, tripPath } from '../../lib/trips'
 
 type Week = Forecast['weeks'][number]
 type Event = Extract<ForecastItem, { type: 'event' }>
@@ -165,6 +167,25 @@ function runsOf(weeks: Week[]): [number, Week[]][] {
   return runs
 }
 
+/** Recent and coming trips, each opening its page; loaded on its own, so the weeks never wait on it. */
+function Trips() {
+  const { settings } = useApp()
+  const trips = useAction('list_trips')
+  return (
+    <Card static="list" label="Trips" className="stack-sm">
+      <h2>Trips</h2>
+      {!trips.data && <LoadingOrError error={trips.error} label="Loading trips" />}
+      {trips.data?.length === 0 && <p className="empty">No recent or coming trips.</p>}
+      {trips.data?.map((trip) => (
+        <Link key={tripPath(trip)} to={tripPath(trip)} className="list-row clickrow">
+          <RowText name={tripName(trip)} detail={dayRange(trip, settings.locale)} />
+          <Money cents={trip.totalCents} />
+        </Link>
+      ))}
+    </Card>
+  )
+}
+
 export function AheadSection() {
   const forecast = useAction('get_forecast')
   if (!forecast.data) return <LoadingOrError error={forecast.error} />
@@ -184,6 +205,7 @@ export function AheadSection() {
           <WeekCard key={run[0]!.start} week={run[0]!} index={first} today={today} />
         ),
       )}
+      <Trips />
     </>
   )
 }

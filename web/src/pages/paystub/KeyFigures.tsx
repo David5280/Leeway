@@ -38,12 +38,16 @@ function yearlyNote(basis: YearlyBasis, detail: ConfirmedDetail): string {
   return notes[basis]
 }
 
+/** Whether the paystub shows money put in: a figure printed as 0.00 puts in nothing. */
+const putsIn = (cents: number | null) => cents !== null && cents > 0
+
 /** Who the retirement saving comes from: only those the paystub shows putting money in. */
 function savers(saving: SavingsRate | null): string {
-  if (saving === null) return 'You and your employer'
-  if (saving.employerCents === null) return 'You'
-  if (saving.employeeCents === null) return 'Your employer'
-  return 'You and your employer'
+  const you = putsIn(saving?.employeeCents ?? null)
+  const employer = putsIn(saving?.employerCents ?? null)
+  // Neither shown putting money in (or no figure at all): name both, as the plan is shared.
+  if (you === employer) return 'You and your employer'
+  return you ? 'You' : 'Your employer'
 }
 
 /** One key figure: what it is, the figure in bold, and what it rests on. */
