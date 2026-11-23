@@ -22,6 +22,7 @@ import { Plan } from './pages/Plan'
 import { OldSettingsAddress, SettingsPage } from './pages/Settings'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
+import { TripPage } from './pages/Trip'
 import { CONNECT_ROUTES, SCREEN_ROUTES } from './routes'
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,7 @@ function Screens() {
       <Route path={SCREEN_ROUTES.chat} element={<ChatPage />} />
       <Route path={SCREEN_ROUTES.plan} element={<Plan />} />
       <Route path={SCREEN_ROUTES.planSection} element={<Plan />} />
+      <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
       <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />
       <Route path={SCREEN_ROUTES.oldSettings} element={<OldSettingsAddress />} />
       <Route path="*" element={<Navigate to="/" replace />} />

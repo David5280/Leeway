@@ -12,6 +12,7 @@ import { ErrorNote, Icon, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { longDate, shortDate } from '../../lib/format'
 import { amountSign, isMove, movementTag } from '../../lib/transactions'
+import { TripFact } from './TripFact'
 import { useTransaction } from './useTransaction'
 
 /** How a transaction got its category, in words. */
@@ -83,7 +84,7 @@ export function TransactionDetails({
   )
 }
 
-/** Date, account, status, and for a transfer, its other side. */
+/** Date, account, status, and for a transfer, its other side; otherwise its trip, if any. */
 function Facts({ tx, onOpen }: { tx: Transaction; onOpen: (tx: Transaction) => void }) {
   const { settings } = useApp()
   return (
@@ -103,6 +104,7 @@ function Facts({ tx, onOpen }: { tx: Transaction; onOpen: (tx: Transaction) => v
       {tx.transfer && (
         <OtherSide transfer={tx.transfer} outgoing={tx.amountCents > 0} onOpen={onOpen} />
       )}
+      {!tx.transfer && <TripFact id={tx.id} />}
     </dl>
   )
 }

@@ -22,6 +22,8 @@ export const SCREEN_ROUTES = {
   chat: '/chat',
   plan: '/plan',
   planSection: '/plan/:section',
+  /** One trip, by its first and last day. */
+  trip: '/trips/:start/:end',
   /** Settings; the group is optional. */
   settings: '/settings/:group?',
   /** The address Settings had when it was called Customize; it now redirects. */

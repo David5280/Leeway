@@ -103,6 +103,7 @@ import {
   getForecastAction,
   refreshCalendarAction,
 } from './calendar.js'
+import { getTripAction, listTripsAction, tripOfTransactionAction } from './trips.js'
 import {
   deletePaystubAction,
   getPaystubAction,
@@ -249,6 +250,9 @@ export const actionList = [
   refreshCalendarAction,
   disconnectCalendarAction,
   getForecastAction,
+  listTripsAction,
+  getTripAction,
+  tripOfTransactionAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,

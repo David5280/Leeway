@@ -1,7 +1,7 @@
 // The calendar stays out of the way until linked, a link is checked before
-// anything is saved, and the weeks ahead show what is coming. No real
-// calendar can be reached from the tests, so a linked one, and a calendar
-// that does not answer, are stood in for (calendar.ts).
+// anything is saved, and the weeks ahead show what is coming and open a
+// trip. No real calendar can be reached from the tests, so a linked one, and
+// a calendar that does not answer, are stood in for (calendar.ts).
 
 import { expect, test } from '@playwright/test'
 import { calendarNotAnswering, LEFT_OUT, LONG_EVENT, LONG_TRIP, pretendCalendar } from './calendar'
@@ -43,7 +43,7 @@ test('a calendar link is checked before anything is saved', async ({ page }) => 
   expect(await action(page.request, 'calendar_status')).toMatchObject({ connected: false })
 })
 
-test('the weeks ahead show paydays, bills and events from the calendar', async ({ page }) => {
+test('the weeks ahead show paydays, bills and events, and open a trip', async ({ page }) => {
   await pretendCalendar(page)
   await page.goto('/plan/ahead')
   const sections = page.getByRole('group', { name: 'Plan section' })
@@ -63,9 +63,18 @@ test('the weeks ahead show paydays, bills and events from the calendar', async (
   await page.getByRole('link', { name: /Renters insurance/ }).click()
   await expect(page).toHaveURL(/\/plan\/bills\?bill=b1$/)
   await page.goBack()
-  await page.getByRole('link', { name: new RegExp(LONG_TRIP) }).click()
+  const nextWeek = page.getByRole('region', { name: 'Next week' })
+  await nextWeek.getByRole('link', { name: new RegExp(LONG_TRIP) }).click()
   await expect(page.getByRole('form', { name: 'New purchase' })).toBeVisible()
   // The purchase is named by the event's kind, never its title, which can
   // hold a person's name.
   await expect(page.getByLabel('What are you saving for?')).toHaveValue('Trip')
+  // A trip, recent or coming, opens its own page from the trips below the weeks.
+  await page.goBack()
+  await page
+    .getByRole('region', { name: 'Trips' })
+    .getByRole('link', { name: new RegExp(LONG_TRIP) })
+    .click()
+  await expect(page.getByRole('heading', { level: 1, name: LONG_TRIP })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'By part' })).toContainText('Getting there')
 })
