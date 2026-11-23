@@ -189,9 +189,9 @@ function flowTotals(
 
 /**
  * Spending in each range as a month's totals count it (see the top of this
- * file), less the card's side of every credit card payment
- * (the skipCardSide rule in categoryTotals.ts), with each range's category totals for working out
- * what is essential. Unfiled lines need no such rule: a card payment there
+ * file), less the card's side of every credit card payment (the
+ * skipCardSide rule in categoryTotals.ts), with each range's category
+ * totals. Unfiled lines need no such rule: a card payment there
  * pairs with its other side as a move between own accounts, or, paid to a
  * card Leeway cannot see, counts as the spending it stands for.
  */

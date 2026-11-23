@@ -154,6 +154,7 @@ describe('a typical month of essentials', () => {
       { categoryId: null, amountCents: 1_000, count: 1 },
     ],
     essentialCoded: [],
+    spentCents: 200_000 + fun + 1_000,
   })
 
   it('takes the last three whole months that history fully covers, for the fund', () => {

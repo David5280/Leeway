@@ -17,9 +17,8 @@ import { addDays, daysBetween, maxDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { accountMasks } from '../accounts.js'
 import { listCategories } from '../categories.js'
-import { essentialCodedByRange } from '../essentialCoded.js'
-import { essentialSpending } from '../essentialSpending.js'
-import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
+import { essentialCentsOf, readEssentialMonths } from '../essentialMonths.js'
+import { firstTransactionDay } from '../monthlyTotals.js'
 import type { CurrentPay, Employer } from '../pay/current.js'
 import { namesBusiness } from '../pay/deposits.js'
 import { readCurrentPay } from '../pay/source.js'
@@ -139,15 +138,13 @@ async function monthlySpending(
 ) {
   if (window === null) return { spendingCents: null, essentialSpendingCents: null }
   const range = { start: window.start, end: today }
-  const [spending] = await spendingByRange(db, [range])
-  const [essentialCoded] = await essentialCodedByRange(db, [range])
+  // The same reading the emergency fund's essentials go by (essentialMonths.ts).
+  const [month] = await readEssentialMonths(db, [range])
   const categories = await listCategories(db)
-  const ids = settings.savingsPlan.essentialCategoryIds
-  const month = { totals: spending!.totals, essentialCoded: essentialCoded! }
-  const essential = essentialSpending(categories, month, ids, spending!.spentCents)
+  const essential = essentialCentsOf(categories, month!, settings.savingsPlan.essentialCategoryIds)
   const perMonth = (cents: number) => Math.round((cents * DAYS_PER_MONTH) / window.days)
   return {
-    spendingCents: perMonth(spending!.spentCents),
+    spendingCents: perMonth(month!.spentCents),
     essentialSpendingCents: perMonth(essential),
   }
 }
