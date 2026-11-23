@@ -1,13 +1,16 @@
 // The Calendar section: linking a calendar by its private address, reading it again, unlinking.
 
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn } from '../../test/fake'
 import { INCOMPLETE, linked, unlinked } from '../../test/calendar'
-import { CalendarSection } from './Calendar'
+import { CalendarSection, READ_NOTE_MS } from './Calendar'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 const SECRET = 'https://calendar.google.com/calendar/ical/me/private-abc/basic.ics'
 
@@ -79,18 +82,24 @@ describe('Calendar', () => {
     expect(await screen.findByRole('button', { name: 'Connect a calendar' })).toBeVisible()
   })
 
-  it('says so briefly when a read asked for finishes', async () => {
+  it('says so briefly when a read asked for finishes, and only while it is true', async () => {
+    // Timers run as usual, but can be moved on to when the note should go.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     let status = linked({ eventCount: 1, lastError: 'The calendar did not answer.' })
     fakeServer({
       calendar_status: () => status,
       refresh_calendar: () => (status = linked({ eventCount: 2 })),
     })
     renderSignedIn(<CalendarSection />)
-    const user = userEvent.setup()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     await user.click(await screen.findByRole('button', { name: 'Read it now' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Read just now.')
     expect(await screen.findByText(/2 events that may cost money/)).toBeVisible()
     expect(screen.queryByText('The calendar did not answer.')).not.toBeInTheDocument()
+    // A little later "just now" is no longer true, so it goes; the line keeps when it was read.
+    act(() => vi.advanceTimersByTime(READ_NOTE_MS))
+    expect(screen.queryByText('Read just now.')).not.toBeInTheDocument()
+    expect(screen.getByText(/2 events that may cost money, read/)).toBeVisible()
   })
 
   it('shows why the link could not be read', async () => {

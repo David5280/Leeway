@@ -107,19 +107,82 @@ describe('yearlyGross', () => {
 
 describe('effectiveTaxRate', () => {
   it('divides every tax withheld by gross pay, from the year so far first', () => {
-    // 7,350.00 + 3,147.48 + 1,170.75 of 80,745.00. The local tax has no year column, so is left out.
-    expect(effectiveTaxRate(confirmedDetail())).toEqual({
-      rate: (735_000 + 314_748 + 117_075) / 8_074_500,
+    const detail = confirmedDetail()
+    detail.taxes.local = line(500, 10_500)
+    // 7,350.00 + 3,147.48 + 105.00 + 1,170.75 of 80,745.00.
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (735_000 + 314_748 + 10_500 + 117_075) / 8_074_500,
       basis: 'yearToDate',
     })
   })
 
-  it('falls back to this period when the year column shows no gross or no tax', () => {
+  it('falls back to this period when the year column shows no gross', () => {
     const detail = withPay({ gross: line(384_500) })
     expect(effectiveTaxRate(detail)).toEqual({
       rate: (35_000 + 14_988 + 500 + 5_575) / 384_500,
       basis: 'current',
     })
+  })
+
+  it('never drops a tax printed only this period: it reads this period instead', () => {
+    // 4,000.00 now, 40,000.00 so far; Social Security and Medicare print only this paycheck.
+    const detail = withPay({ gross: line(400_000, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(40_000, 400_000)
+    detail.taxes.socialSecurity = line(24_800)
+    detail.taxes.medicare = line(5_800)
+    // About 17.7%, not the 10.0% the federal tax alone gives for the year.
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (40_000 + 24_800 + 5_800) / 400_000,
+      basis: 'current',
+    })
+  })
+
+  it('reads a tax blank this period beside a printed year as nothing withheld this period', () => {
+    // A high earner past the Social Security wage base, with a city tax printed only this period.
+    const detail = withPay({ gross: line(1_000_000, 22_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(200_000, 4_000_000)
+    detail.taxes.socialSecurity = line(null, 1_091_820)
+    detail.taxes.medicare = line(14_500, 319_000)
+    detail.taxes.stateIncome = line(44_000, 968_000)
+    detail.taxes.local = line(575)
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (200_000 + 14_500 + 44_000 + 575) / 1_000_000,
+      basis: 'current',
+    })
+  })
+
+  it('never lets a tax printed only as 0.00 rule out a column', () => {
+    const detail = withPay({ gross: line(400_000, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(40_000, 400_000)
+    detail.taxes.socialSecurity = line(24_800)
+    detail.taxes.medicare = line(5_800)
+    detail.taxes.local = line(null, 0)
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (40_000 + 24_800 + 5_800) / 400_000,
+      basis: 'current',
+    })
+  })
+
+  it('never reads a stub that prints only the year for its taxes as this period', () => {
+    // Every tax printed for the year so far, and one city tax this period only.
+    const detail = withPay({ gross: line(400_000, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(null, 400_000)
+    detail.taxes.socialSecurity = line(null, 248_000)
+    detail.taxes.medicare = line(null, 58_000)
+    detail.taxes.local = line(575)
+    expect(effectiveTaxRate(detail)).toBeNull()
+  })
+
+  it('is null when the year misses a tax and this period shows no gross', () => {
+    const detail = withPay({ gross: line(null, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(null, 400_000)
+    detail.taxes.medicare = line(5_800)
+    expect(effectiveTaxRate(detail)).toBeNull()
   })
 
   it('is null when the paystub shows no tax, and never divides by zero', () => {
@@ -158,6 +221,45 @@ describe('retirementSavingsRate', () => {
     detail.postTax.roth457 = line(null)
     detail.employer.pension = line(null)
     expect(retirementSavingsRate(detail)).toBeNull()
+  })
+})
+
+/** A paystub of 4,000.00 now and 40,000.00 so far, with no retirement money on it yet. */
+function noRetirement() {
+  const detail = withPay({ gross: line(400_000, 4_000_000) })
+  detail.preTax.pension = line(null)
+  detail.preTax.plan457 = line(null)
+  detail.postTax.roth457 = line(null)
+  detail.employer.pension = line(null)
+  return detail
+}
+
+describe('retirementSavingsRate across columns', () => {
+  it('reads the year so far when the employer match prints only there', () => {
+    const detail = noRetirement()
+    detail.preTax.plan401k = line(20_000, 200_000)
+    detail.employer.match = line(null, 100_000)
+    // The match counts, so the employer is named too, not "You" alone.
+    expect(retirementSavingsRate(detail)).toEqual({
+      rate: (200_000 + 100_000) / 4_000_000,
+      basis: 'yearToDate',
+      employeeCents: 200_000,
+      employerCents: 100_000,
+    })
+  })
+
+  it('reads a plan stopped earlier in the year as nothing put in this period', () => {
+    const detail = noRetirement()
+    detail.preTax.plan401k = line(20_000, 200_000)
+    detail.postTax.roth401k = line(null, 50_000)
+    detail.employer.match = line(10_000)
+    const gross = detail.pay.gross.current!
+    expect(retirementSavingsRate(detail)).toEqual({
+      rate: (20_000 + 10_000) / gross,
+      basis: 'current',
+      employeeCents: 20_000,
+      employerCents: 10_000,
+    })
   })
 })
 
