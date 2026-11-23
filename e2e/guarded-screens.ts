@@ -8,6 +8,7 @@ import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { pretendCalendar } from './calendar'
+import { CALENDAR_SCREENS } from './calendar-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
@@ -171,6 +172,14 @@ export const SCREENS: Screen[] = [
     },
   }),
   at('transactions', '/transactions', {
+    name: "/transactions with a transaction's sheet open, part of a trip",
+    before: (page) => pretendCalendar(page),
+    then: async (page) => {
+      const sheet = await openTransaction(page)
+      await expect(sheet.getByRole('link', { name: /^Lisbon, Porto/ })).toBeVisible()
+    },
+  }),
+  at('transactions', '/transactions', {
     name: "/transactions changing a transaction's category",
     then: inTransaction(/Change$/, (sheet) => sheet.getByRole('list', { name: /^Category for / })),
   }),
@@ -284,11 +293,7 @@ export const SCREENS: Screen[] = [
     name: '/plan/net-worth changing a loan entered by hand',
     then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
   }),
-  // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
-  at('planSection', '/plan/ahead', {
-    name: '/plan/ahead with a calendar linked, noting events left out',
-    before: (page) => pretendCalendar(page),
-  }),
+  ...CALENDAR_SCREENS,
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',

@@ -4,7 +4,9 @@
 // owner can see whether it rests on one paycheck or the year so far.
 //
 // Rates are fractions (0.25 is 25%), rounded only when shown. A figure that
-// needs a line the paystub does not show is null, never a guess or 0.
+// needs a line the paystub does not show is null, never a guess or 0. The
+// one exception is the paystub's own convention (shareOf): a line blank this
+// period beside a printed year so far took nothing this period.
 // Pure, and shared with the web app, which shows these on the review screen.
 
 import { dateParts, makeDate, toDayNumber } from '../../lib/dates.js'
@@ -109,35 +111,67 @@ export function yearlyGross(detail: DerivableDetail, payDate: string | null): Ye
   return annualSalary === null ? null : { cents: annualSalary, basis: 'salary' }
 }
 
+/** Adds one column of the lines given. */
+const columnSum = (lines: readonly CentsLine[], column: Column) =>
+  sumKnown(lines.map((line) => line[column]))
+
+/** Whether a line shows an amount in the column given. */
+const shows = (line: CentsLine, column: Column) => line[column] !== null
+
+/** Whether a line prints an amount other than zero in either column: only those move a share. */
+const printsMoney = (line: CentsLine) =>
+  (line.current !== null && line.current !== 0) ||
+  (line.yearToDate !== null && line.yearToDate !== 0)
+
+/** A column's gross pay when it is above zero, the only kind a share can divide by. */
+function grossIn(detail: DerivableDetail, column: Column): number | null {
+  const gross = detail.pay.gross[column]
+  return gross !== null && gross > 0 ? gross : null
+}
+
 /**
- * A part of gross pay as a share of it, read from one column, trying the
- * preferred column first. A column counts only when it shows gross pay above
- * zero and at least one line of the part, so a share never mixes this
- * period's figures with the year's.
+ * A part of gross pay as a share of it, read from one column.
+ * - First, the preferred column that shows every line of the part printing
+ *   money in either column: a line printed only in the other column would
+ *   otherwise drop out and understate the share, and taking that one line
+ *   from the other column would mix this period's figures with the year's.
+ *   A line printed only as 0.00 moves no sum, so it never rules a column out.
+ * - Else this period, reading a blank beside a printed year so far as
+ *   nothing taken this period, as paystubs print it (a Social Security
+ *   wage base already reached, a Roth stopped earlier in the year). Only
+ *   when some line of the part prints money in both columns, which shows
+ *   the paystub prints this period's column for the part at all. The year
+ *   column gets no such reading: money taken this period is always in the
+ *   year so far, so a line missing there is truly unknown.
+ * Null when neither reading works, or the part prints nothing at all.
  */
 function shareOf(
   detail: DerivableDetail,
-  parts: (column: Column) => number | null,
+  lines: readonly CentsLine[],
   order: readonly Column[],
-): { rate: number; basis: Column; cents: number } | null {
+): Share | null {
+  const withMoney = lines.filter(printsMoney)
   for (const column of order) {
-    const gross = detail.pay.gross[column]
-    const cents = parts(column)
-    if (gross !== null && gross > 0 && cents !== null) {
-      return { rate: cents / gross, basis: column, cents }
+    const gross = grossIn(detail, column)
+    // Null when the part prints nothing in this column, so an empty part never reads as 0%.
+    const cents = columnSum(lines, column)
+    if (gross !== null && cents !== null && withMoney.every((line) => shows(line, column))) {
+      return { rate: cents / gross, basis: column }
     }
   }
-  return null
+  const periodPrinted = withMoney.some(
+    (line) => shows(line, 'current') && shows(line, 'yearToDate'),
+  )
+  const gross = grossIn(detail, 'current')
+  const cents = columnSum(lines, 'current')
+  if (!periodPrinted || gross === null || cents === null) return null
+  return { rate: cents / gross, basis: 'current' }
 }
 
 /** The year's figures first: withholding swings check to check (a bonus is taxed at its own rate). */
 const YEAR_FIRST: readonly Column[] = ['yearToDate', 'current']
 /** This period first: it shows today's elections and pay, which is what carries forward. */
 const PERIOD_FIRST: readonly Column[] = ['current', 'yearToDate']
-
-/** Adds one column of the lines given. */
-const columnSum = (lines: readonly CentsLine[], column: Column) =>
-  sumKnown(lines.map((line) => line[column]))
 
 /**
  * Effective tax rate: every tax withheld (federal, state, local, Social
@@ -146,9 +180,7 @@ const columnSum = (lines: readonly CentsLine[], column: Column) =>
  * settles the difference.
  */
 export function effectiveTaxRate(detail: DerivableDetail): Share | null {
-  const taxes = Object.values(detail.taxes)
-  const share = shareOf(detail, (column) => columnSum(taxes, column), YEAR_FIRST)
-  return share && { rate: share.rate, basis: share.basis }
+  return shareOf(detail, Object.values(detail.taxes), YEAR_FIRST)
 }
 
 /** The employee's own retirement contributions: traditional, Roth and after-tax plan money, and the pension. */
@@ -176,11 +208,7 @@ function employeeRetirement(detail: DerivableDetail): CentsLine[] {
 export function retirementSavingsRate(detail: DerivableDetail): SavingsRate | null {
   const employee = employeeRetirement(detail)
   const employer = [detail.employer.match, detail.employer.pension]
-  const share = shareOf(
-    detail,
-    (column) => sumKnown([columnSum(employee, column), columnSum(employer, column)]),
-    PERIOD_FIRST,
-  )
+  const share = shareOf(detail, [...employee, ...employer], PERIOD_FIRST)
   if (!share) return null
   return {
     rate: share.rate,
@@ -192,6 +220,5 @@ export function retirementSavingsRate(detail: DerivableDetail): SavingsRate | nu
 
 /** Take-home share: net pay divided by gross pay, the part of each paycheck that reaches the owner. */
 export function takeHomeShare(detail: DerivableDetail): Share | null {
-  const share = shareOf(detail, (column) => detail.pay.net[column], PERIOD_FIRST)
-  return share && { rate: share.rate, basis: share.basis }
+  return shareOf(detail, [detail.pay.net], PERIOD_FIRST)
 }

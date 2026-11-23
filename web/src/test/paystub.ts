@@ -108,6 +108,11 @@ export const noPensionRead = cityRead({
   pensionPlanName: null,
 })
 
+/** A paystub with an after-tax "other" line printed but unreadable, so it is low with no amount. */
+export const unreadableOtherRead = cityRead({
+  postTax: { ...CITY_READING.postTax, other: readLine('1,2?4.00', null, 'Garnishment 1,2?4.00') },
+})
+
 /** The upload route answering with a reading, as the server does. */
 export const reads = (read: PaystubRead) => () => Response.json({ result: read })
 

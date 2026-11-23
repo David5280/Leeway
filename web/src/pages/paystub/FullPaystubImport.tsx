@@ -1,4 +1,4 @@
-// Reading a whole paystub: choose a PDF or photo, Claude reads every line,
+// Reading a whole paystub: choose a PDF or photo, the AI reads every line,
 // and the owner checks each one before it is saved. Saving keeps the figures
 // only; applying them across Leeway (pay, taxes, savings, budgets) is a step
 // of its own. Ready for setup and Settings to open.

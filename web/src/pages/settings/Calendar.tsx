@@ -3,11 +3,14 @@
 // is a secret: it goes to the server once and is never shown again. Only
 // events likely to cost money are kept, and unlinking asks once more.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote, LoadingOrError } from '../../components/ui'
 import { timeAgo } from '../../lib/format'
 import { Section } from './Section'
+
+/** How long "Read just now." stays up; after that "just now" would no longer be true. */
+export const READ_NOTE_MS = 5000
 
 function ConnectForm() {
   const connect = useActionMutation('connect_calendar')
@@ -80,6 +83,13 @@ function Unlink() {
 export function CalendarSection() {
   const status = useAction('calendar_status')
   const refresh = useActionMutation('refresh_calendar')
+  const { isSuccess, reset } = refresh
+  useEffect(() => {
+    if (!isSuccess) return
+    // The note goes after a moment; the line above keeps the time of the last read.
+    const timer = setTimeout(reset, READ_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [isSuccess, reset])
   if (!status.data) {
     return (
       <Section id="calendar" title="Calendar">
