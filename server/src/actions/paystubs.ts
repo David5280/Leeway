@@ -5,12 +5,8 @@
 
 import { z } from 'zod'
 import { MAX_PAYSTUB_BYTES, PAYSTUB_TYPES } from '../domain/paystubs/files.js'
-import {
-  deletePaystub,
-  latestPaystub,
-  savePaystub,
-  savePaystubSchema,
-} from '../domain/paystubs/paystubs.js'
+import { deletePaystub, latestPaystub } from '../domain/paystubs/paystubs.js'
+import { savePaystub, savePaystubSchema } from '../domain/paystubs/save.js'
 import { defineAction } from './action.js'
 
 export const getPaystubAction = defineAction({
