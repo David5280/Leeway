@@ -65,5 +65,7 @@ test('the weeks ahead show paydays, bills and events from the calendar', async (
   await page.goBack()
   await page.getByRole('link', { name: new RegExp(LONG_TRIP) }).click()
   await expect(page.getByRole('form', { name: 'New purchase' })).toBeVisible()
-  await expect(page.getByLabel('What are you saving for?')).toHaveValue(LONG_TRIP)
+  // The purchase is named by the event's kind, never its title, which can
+  // hold a person's name.
+  await expect(page.getByLabel('What are you saving for?')).toHaveValue('Trip')
 })
