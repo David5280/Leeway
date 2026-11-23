@@ -81,8 +81,11 @@ const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCateg
 /** Who a "From Jane Doe" line says sent it, or undefined when it names no sender. */
 const senderOf = (tx: Deposit) => FROM_SOMEONE.exec(tx.name)?.groups?.sender
 
-/** Every payroll or pay word in a sender's text, to take off before reading its name. */
+/** Every payroll or pay word in a text, to take off before reading a name from it. */
 const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 'gi')
+
+/** The text with every payroll and pay word taken off ("ACME CORP DIR DEP" is "ACME CORP"). */
+export const withoutPayWords = (text: string) => text.replace(ANY_PAY_WORDS, ' ')
 
 /**
  * Whether a sender is a business, read from its clean name as namesBusiness
@@ -91,7 +94,7 @@ const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 
  * Colorado, where "ACME Corp direct deposit" is ACME Corp.
  */
 const senderIsBusiness = (sender: string) =>
-  BUSINESS_WORDS.test(cleanMerchantName(sender.replace(ANY_PAY_WORDS, ' ')))
+  BUSINESS_WORDS.test(cleanMerchantName(withoutPayWords(sender)))
 
 /**
  * A transfer in, by its words: some banks code a payroll's direct deposit

@@ -69,3 +69,13 @@ describe('a bonus that pays just what a payday does', () => {
     expect(pay).toMatchObject({ cadence: 'month', nextPayday: '2026-12-31' })
   })
 })
+
+describe('a bonus in a run of three', () => {
+  it('leaves a usual paycheck at what the paydays pay', () => {
+    const pay = payFrom(
+      [...paying(['2026-10-16']), ['2026-10-20', 500_000], ...paying(['2026-10-30'])],
+      '2026-10-31',
+    )
+    expect(pay).toMatchObject({ paycheckCents: 300_000 })
+  })
+})

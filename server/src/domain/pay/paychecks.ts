@@ -21,7 +21,7 @@ import { median } from '../../lib/money.js'
 import type { Cadence } from '../../lib/periods.js'
 import { textKey } from '../merchantKey.js'
 import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
-import { isBusinessEnding, type Deposit } from './deposits.js'
+import { isBusinessEnding, withoutPayWords, type Deposit } from './deposits.js'
 import { splitCycle } from './offCycle.js'
 import type { SemimonthSchedule } from './semimonthly.js'
 
@@ -93,41 +93,35 @@ export const CAUTIOUS_CADENCE: Cadence = 'month'
 /** Slack for a payroll that posts a few days late. */
 const SLACK_DAYS = 3
 
-/** Words that only say a deposit is pay, naming no payer: "PAYROLL", "DIR DEP". */
-const PAY_ONLY_WORDS = new Set([
-  'payroll',
-  'dir',
-  'dep',
-  'direct',
-  'deposit',
-  'salary',
-  'wage',
-  'wages',
-  'paycheck',
-  'des',
-  'ppd',
-])
-
 /** A word's key with its digits kept: "3M" is "3m", "7-ELEVEN" is "7eleven". */
 const keyWithDigits = (word: string) => word.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/**
+ * Whether a number in the bank text is what names the payer: when the
+ * other words, less pay words, are only business endings ("12345 INC",
+ * "3M CO PAYROLL"), or there are no other words at all ("7-ELEVEN"). Never
+ * beside pay words alone, where it is a date or trace number that changes
+ * with every paycheck ("PAYROLL 112026", "DIRECT DEP 11/20").
+ */
+function numberNamesPayer(otherWords: string[]): boolean {
+  if (otherWords.length === 0) return true
+  const rest = textKey(withoutPayWords(otherWords.join(' ')))
+  return rest !== '' && rest.split(' ').every(isBusinessEnding)
+}
 
 /**
  * Who paid a deposit, from its bank text without any word holding a digit,
  * as a transfer's name drops its reference: "ACME DES:PAYROLL ID:K3J9X"
  * carries a trace code that changes with every paycheck, and is still ACME.
- * When the words left name no one, only a business ending or pay words
- * ("12345 INC", "3M CO PAYROLL"), the first word holding a digit stays,
- * digits and all, so the key names the payer rather than reading "inc".
- * Each word is read as textKey reads it, but that one.
+ * Where a number names the payer (numberNamesPayer), the first word holding
+ * a digit stays, digits and all, so "12345 INC" never reads as just "inc".
+ * Every other word is read as textKey reads it.
  */
 export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): string {
   const words = (deposit.merchantName ?? deposit.name).trim().split(/\s+/)
   const holdsDigit = (word: string) => /\d/.test(word)
-  const named = textKey(words.filter((word) => !holdsDigit(word)).join(' '))
-  const namesSomeone = named
-    .split(' ')
-    .some((word) => word !== '' && !isBusinessEnding(word) && !PAY_ONLY_WORDS.has(word))
-  if (namesSomeone) return named
+  const otherWords = words.filter((word) => !holdsDigit(word))
+  if (!numberNamesPayer(otherWords)) return textKey(otherWords.join(' '))
   const first = words.findIndex(holdsDigit)
   // The first word holding a digit keeps it; any later one is a reference, dropped.
   return words

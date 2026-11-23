@@ -15,10 +15,10 @@
 //   before (a tie fills): a payday paid early for a holiday. Anything else
 //   is set aside. What it pays plays no part.
 // - Of two paychecks a short gap apart (two in one payday's slot), the one
-//   farther from the cycle's grid is set aside; equally far, or with no
-//   paycheck to set the grid by, the one whose amount is clearly farther
-//   from the run's middle, by more than the run's own spread; else the
-//   later. The newest is never set aside this way, only by its own rule,
+//   farther from the cycle's grid is set aside (a grid stepping by gaps
+//   no bonus split); equally far, or with no grid to go by, the one whose
+//   amount is clearly farther from the run's middle, by more than the run's
+//   own spread; else the later. The newest is never set aside this way, only by its own rule,
 //   as no paycheck after it shows which of the two kept the slot.
 //
 // Safety: when unsure, the reading that makes the next payday later wins,
@@ -65,39 +65,58 @@ export interface CycleSplit {
   offCycle: Paycheck[]
 }
 
-/** What one run usually looks like: its middle gap, its middle paycheck and how far amounts stray from it. */
+/** What one run usually looks like: its gaps, its middle paycheck and how far amounts stray from it. */
 interface Usual {
+  /** The gap a short one is measured against. */
   gapDays: number
+  /** The gap the run's grid steps by, or null when no gap is clean (see gapsOf). */
+  gridDays: number | null
   cents: number
   /** The median absolute deviation of its amounts: how much its pay swings. */
   spreadCents: number
 }
 
-/** The usual gap between paychecks: the middle one, the longer of two middles, as roughCadence reads it. */
-function usualGap(paychecks: Paycheck[]): number {
+/** The middle value, the longer of two middles, as roughCadence reads gaps. */
+const middleOf = (values: number[]) =>
+  [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!
+
+/**
+ * A run's usual gap and its grid's step. A paycheck between paydays splits
+ * a payday's gap in two, so the grid steps only by clean gaps: neither
+ * short nor beside a short one. A run of three or four with a bonus in it
+ * may hold none (Oct 16, a bonus Oct 20, Oct 30), and then has no grid to
+ * go by: read by its gaps alone, the bonus's own would line the grid up
+ * with it.
+ */
+function gapsOf(paychecks: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
   const gaps = paychecks
     .slice(1)
     .map((paycheck, i) => daysBetween(paychecks[i]!.date, paycheck.date))
-  return [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)]!
+  const rough = middleOf(gaps)
+  const short = gaps.map((gap) => gap < SHORT_GAP_SHARE * rough)
+  const clean = gaps.filter((gap, i) => !short[i] && !short[i - 1] && !short[i + 1])
+  const gridDays = clean.length ? middleOf(clean) : null
+  return { gapDays: gridDays ?? rough, gridDays }
 }
 
 function usualOf(paychecks: Paycheck[]): Usual {
   const amounts = paychecks.map((paycheck) => paycheck.amountCents)
   const cents = median(amounts)
   const spreadCents = median(amounts.map((amount) => Math.abs(amount - cents)))
-  return { gapDays: usualGap(paychecks), cents, spreadCents }
+  return { ...gapsOf(paychecks), cents, spreadCents }
 }
 
-/** Days a paycheck sits from the nearest payday on a grid a usual gap apart through `anchor`. */
-function daysOffGrid(anchor: Paycheck, paycheck: Paycheck, usual: Usual): number {
-  const rest = Math.abs(daysBetween(anchor.date, paycheck.date)) % usual.gapDays
-  return Math.min(rest, usual.gapDays - rest)
+/** Days a paycheck sits from the nearest payday on a grid `gridDays` apart through `anchor`. */
+function daysOffGrid(anchor: Paycheck, paycheck: Paycheck, gridDays: number): number {
+  const rest = Math.abs(daysBetween(anchor.date, paycheck.date)) % gridDays
+  return Math.min(rest, gridDays - rest)
 }
 
 /**
  * Of two paychecks a short gap apart, the one off the cycle. `anchor` sets
  * the grid: the paycheck on the cycle before the pair, else the one after
- * it, so a bonus first in a run is judged by timing too.
+ * it, so a bonus first in a run is judged by timing too. With no anchor or
+ * no grid, amounts decide.
  */
 function offOfPair(
   earlier: Paycheck,
@@ -105,9 +124,9 @@ function offOfPair(
   anchor: Paycheck | undefined,
   usual: Usual,
 ): Paycheck {
-  if (anchor) {
-    const earlierOff = daysOffGrid(anchor, earlier, usual)
-    const laterOff = daysOffGrid(anchor, later, usual)
+  if (anchor && usual.gridDays !== null) {
+    const earlierOff = daysOffGrid(anchor, earlier, usual.gridDays)
+    const laterOff = daysOffGrid(anchor, later, usual.gridDays)
     if (earlierOff !== laterOff) return earlierOff > laterOff ? earlier : later
   }
   // Amounts break the tie only when one strays from the middle by more than the run's pay swings.
@@ -168,8 +187,8 @@ export function splitCycle(paychecks: Paycheck[], given: Cadence | null = null):
       cycle.push(paycheck)
       return
     }
-    // paychecks[i + 2] is the one after this pair.
-    const aside = offOfPair(last, paycheck, cycle.at(-2) ?? paychecks[i + 2], usual)
+    const after = paychecks[i + 2]
+    const aside = offOfPair(last, paycheck, cycle.at(-2) ?? after, usual)
     if (aside === last) {
       // The earlier of the pair leaves the cycle, and this one takes its place.
       cycle.pop()

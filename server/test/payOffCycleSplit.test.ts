@@ -130,3 +130,25 @@ describe('two paychecks a short gap apart', () => {
     expect(datesOf(splitCycle(tied(PAY, PAY, Array(7).fill(PAY))).offCycle)).toEqual(['2026-09-19'])
   })
 })
+
+describe('a short run with a bonus in it', () => {
+  // Too few paychecks for a gap the bonus did not split: amounts decide.
+  it('sets aside a bonus between the first two paydays', () => {
+    const run = [paycheck('2026-10-16'), paycheck('2026-10-20', BONUS), paycheck('2026-10-30')]
+    const split = splitCycle(run)
+    expect(datesOf(split.offCycle)).toEqual(['2026-10-20'])
+    expect(datesOf(split.cycle)).toEqual(['2026-10-16', '2026-10-30'])
+  })
+
+  it('sets aside a bonus two days before a payday, and keeps that payday', () => {
+    const run = [
+      paycheck('2026-10-16'),
+      paycheck('2026-10-28', BONUS),
+      paycheck('2026-10-30'),
+      paycheck('2026-11-13'),
+    ]
+    const split = splitCycle(run)
+    expect(datesOf(split.offCycle)).toEqual(['2026-10-28'])
+    expect(datesOf(split.cycle)).toEqual(['2026-10-16', '2026-10-30', '2026-11-13'])
+  })
+})

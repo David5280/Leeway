@@ -211,4 +211,27 @@ describe('who paid a deposit', () => {
   it('drops the digits where the other words name the payer', () => {
     expect(key('ACME CORP PAYROLL 0012345')).toBe('acme corp payroll')
   })
+
+  it('drops a date or trace number beside pay words alone, which changes every paycheck', () => {
+    expect(key('PAYROLL 112026')).toBe('payroll')
+    expect(key('PAYROLL 120426')).toBe('payroll')
+    expect(key('DIRECT DEP 11/20')).toBe(key('DIRECT DEP 12/04'))
+    expect(key('SALARY 2026-11-20')).toBe('salary')
+    expect(key('DIR DEP 0042617')).toBe('dir dep')
+  })
+
+  it('reads paychecks dated in their text as one employer paying every two weeks', () => {
+    const dates = ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06', '2026-11-20']
+    // "PAYROLL 092526": the paycheck's own date, month, day and year.
+    const deposits = dates.map((date) =>
+      deposit(date, `PAYROLL ${date.slice(5, 7)}${date.slice(8)}26`),
+    )
+    const pay = currentPay(deposits, '2026-11-21')
+    expect(pay.employers).toHaveLength(1)
+    expect(pay).toMatchObject({
+      cadence: 'biweek',
+      nextPayday: '2026-12-04',
+      paycheckCents: 250_000,
+    })
+  })
 })
