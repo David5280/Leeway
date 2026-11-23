@@ -12,6 +12,9 @@ export const MAX_SOURCE_LENGTH = 120
 /** The longest employer name kept. */
 export const MAX_EMPLOYER_LENGTH = 80
 
+/** The longest pension plan name kept: the most a pension's name may be. */
+export const MAX_PLAN_NAME_LENGTH = 80
+
 /**
  * A Social Security number, plain or masked: 123-45-6789, 123 45 6789,
  * XXX-XX-6789, ***-**-6789. A mask is no word character, so the start is
@@ -25,7 +28,7 @@ const SSN = /(?<![\w*•])[\dXx*•]{3}[-\s.]?[\dXx*•]{2}[-\s.]?\d{4}\b/g
  * "#", so its end is "no word character next" rather than a word boundary.
  */
 const LABELED_ID =
-  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
+  /\b(?:ssn|soc(?:ial)?\.?\s*sec(?:urity)?|employee\s*(?:id|no|num(?:ber)?|#)|member\s*(?:id|no|num(?:ber)?|#)|emp\.?\s*(?:id|no|#)|acct|account|routing|aba|transit|file\s*(?:no|#)|badge|clock\s*(?:no|#)|tax\s*id|ein|id\s*(?:no|#))(?!\w).*$/gim
 
 /** A street address: a house number, up to four words, and a street word. */
 const STREET =
@@ -88,15 +91,20 @@ export function redactSource(text: string | null): string | null {
 }
 
 /**
- * The employer's name, redacted and cut to length. Only the name is kept: an
- * address printed after it, on the same line or after a comma, is dropped,
- * and so is everything after the first thing taken out, since a city and
- * state follow a street address ("1437 Bannock St Denver CO").
+ * The name at the start of a line, redacted and cut to `max`: an address or
+ * detail printed after it, on the same line or after a comma, is dropped, and
+ * so is everything after the first thing taken out, since a city and state
+ * follow a street address ("1437 Bannock St Denver CO").
  */
-export function redactEmployer(text: string | null): string | null {
+export function leadingName(text: string | null, max: number): string | null {
   if (text === null) return null
   const parts = redact(text.split(/[\n,]/)[0]!).split(REMOVED)
   // The name is what comes before the first removal, or after it when the line began with one.
   const name = parts.map((part) => part.trim()).find((part) => part !== '') ?? ''
-  return name === '' ? null : name.slice(0, MAX_EMPLOYER_LENGTH).trim()
+  return name === '' ? null : name.slice(0, max).trim()
+}
+
+/** The employer's name only, never the address printed after it. */
+export function redactEmployer(text: string | null): string | null {
+  return leadingName(text, MAX_EMPLOYER_LENGTH)
 }

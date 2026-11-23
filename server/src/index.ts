@@ -161,7 +161,7 @@ repeatEvery(
   CALENDAR_CHECK_MINUTES * MINUTE_MS,
   async () => {
     const { timeZone } = await getSettings(db)
-    await refreshIfStale(db, { key: config.encryptionKey, timeZone, now: ctx.now() })
+    await refreshIfStale(db, { key: config.encryptionKey, timeZone, now: ctx.now })
   },
   () => app.log.warn('Reading the linked calendar failed; it is tried again later'),
   { runNow: true },

@@ -9,7 +9,8 @@ import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
 import { CONNECT_SCREEN } from './connect-screen'
-import { importPaystub, mockReader } from './paystub'
+import { fakeIdleCash } from './idleCash'
+import { PAYSTUB_SCREENS } from './paystub-screens'
 import type { GuardedPhone } from './phone'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
 import { SETTINGS_GROUPS } from './settings-groups'
@@ -55,6 +56,18 @@ const open = (button: string | RegExp, opens: (page: Page) => ReturnType<Page['g
 /** Waits until nothing in it is still moving, like a sheet sliding up. */
 async function stillOn(locator: ReturnType<Page['getByRole']>) {
   await expect.poll(() => locator.evaluate((element) => element.getAnimations().length)).toBe(0)
+}
+
+/** Every account as the server lists it, with no APR, as a card is before one is added. */
+async function withoutAprs(page: Page) {
+  await page.route('**/api/actions/list_accounts', async (route) => {
+    const response = await route.fetch()
+    const { result } = (await response.json()) as { result: { aprPercent: number | null }[] }
+    await route.fulfill({
+      response,
+      json: { result: result.map((account) => ({ ...account, aprPercent: null })) },
+    })
+  })
 }
 
 /** The seeded transaction with the longest name, as its row and its sheet are named. */
@@ -125,6 +138,14 @@ export const SCREENS: Screen[] = [
     ...at('account', `the ${kind} account page`),
     path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
   })),
+  {
+    name: "the credit card account page asking for the card's APR",
+    route: 'account',
+    path: (seeded: Seeded) =>
+      `/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
+    // The seeded card has an APR; the prompt shows in its place without one.
+    before: withoutAprs,
+  },
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
   at('transactions', '/transactions'),
@@ -233,6 +254,12 @@ export const SCREENS: Screen[] = [
   },
   at('plan', '/plan'),
   at('plan', '/plan', {
+    name: '/plan with cash that could earn more',
+    // The shared install holds an overdrawn account, which hides the card, so
+    // the answer is stood in for (idle-cash.spec.ts reads the server's own).
+    before: fakeIdleCash,
+  }),
+  at('plan', '/plan', {
     name: '/plan adding a bill',
     then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
   }),
@@ -244,30 +271,30 @@ export const SCREENS: Screen[] = [
   at('planSection', '/plan/retirement'),
   at('planSection', '/plan/retirement', {
     name: '/plan/retirement adding a pension',
-    then: open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' })),
+    then: async (page) => {
+      await open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' }))(page)
+      // Unfold the plan's figures, so they are checked too.
+      await page.getByText('More details (optional)').click()
+    },
   }),
   at('planSection', '/plan/retirement', {
     name: "/plan/retirement changing a pension's figures",
     then: open('Edit figures', (page) => page.getByRole('form', { name: 'Pension figures' })),
   }),
-  at('planSection', '/plan/retirement', {
-    name: '/plan/retirement reviewing a paystub',
-    // No model reads it in the tests: the reader is stood in for (paystub.ts).
-    before: async (page) => {
-      await mockReader(page)
-    },
-    then: async (page) => {
-      await importPaystub(page)
-      // Open the folds, so the figures not found are checked too.
-      const review = page.getByRole('form', { name: 'Review the paystub' })
-      for (const fold of await review.locator('details summary').all()) await fold.click()
-    },
-  }),
+  ...PAYSTUB_SCREENS,
   at('planSection', '/plan/debts'),
   at('planSection', '/plan/net-worth'),
+  at('planSection', '/plan/net-worth', {
+    name: '/plan/net-worth adding something owned or owed',
+    then: open(/^Add$/, (page) => page.getByRole('form', { name: 'Add something' })),
+  }),
+  at('planSection', '/plan/net-worth', {
+    name: '/plan/net-worth changing a loan entered by hand',
+    then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
+  }),
   // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
   at('planSection', '/plan/ahead', {
-    name: '/plan/ahead with a calendar linked',
+    name: '/plan/ahead with a calendar linked, noting events left out',
     before: (page) => pretendCalendar(page),
   }),
   at('trip', SOON_TRIP_PATH, {
@@ -295,12 +322,19 @@ export const SCREENS: Screen[] = [
     before: ai.pretendModelTrouble,
     then: ai.seeModelTrouble,
   }),
+  at('settings', '/settings/data', {
+    name: '/settings/data with a tax year exported',
+    then: async (page) => {
+      await page.getByRole('button', { name: /^Download \d{4} CSV$/ }).click()
+      await expect(page.getByText('Interest', { exact: true })).toBeVisible()
+    },
+  }),
   at('settings', '/settings/widget', {
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
   }),
   at('settings', '/settings/calendar', {
-    name: '/settings/calendar linked, its last read failed',
+    name: '/settings/calendar linked, its last read failed, noting events left out',
     before: (page) => pretendCalendar(page),
   }),
   ...BANK_SCREENS,

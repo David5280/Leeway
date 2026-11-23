@@ -1,25 +1,24 @@
 // The owner's pensions: each with its benefit, where that figure came from,
-// and what goes in from pay and the employer, with a form to add one or
-// change its figures, or to fill them from a paystub. A pension is removed
-// like any account added by hand.
+// and what goes in from pay and the employer, with a way to add one (from a
+// paystub first, when one can be read) or change its figures. A pension is
+// removed like any account added by hand.
 
 import { Card } from '../../../components/design/Card'
 import { useState } from 'react'
-import { useAction, useActionMutation } from '../../../api/hooks'
-
+import { useAction } from '../../../api/hooks'
+import { Loading } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { longDate } from '../../../lib/format'
 import { FormCard } from '../FormCard'
-import { pensionCandidates, type PlanChange, type RetirementView } from './fields'
+import type { RetirementView } from './fields'
 import { Amount } from './money'
+import { NewPension } from './NewPension'
 import { PaystubImport } from './paystub/PaystubImport'
 import { pensionChoices } from './paystub/review'
-import { PensionForm, type NewPensionFields } from './PensionForm'
+import { PensionFigures, type PlanPension } from './PensionFigures'
 
 /** A pension in words, as the server put it. */
 type PensionWords = RetirementView['pensions'][number]
-/** A pension with its figures, as the projection counted it. */
-type PlanPension = RetirementView['plan']['pensions'][number]
 
 /** One pension, as the server put it in words. */
 function PensionRow({
@@ -61,73 +60,20 @@ function PensionRow({
   )
 }
 
-/** The offer to fill a kept pension's figures from a paystub instead of typing them. */
-function PaystubOffer({ onImport }: { onImport: () => void }) {
-  return (
-    <div className="row-between wrap paystub">
-      <span className="small">Have a paystub? Fill these figures from it.</span>
-      <button type="button" className="btn" onClick={onImport}>
-        Import a paystub
-      </button>
-    </div>
-  )
-}
-
-/**
- * The pension form: a new pension, or the figures of one already kept.
- * onImport, when given, offers to fill them from a paystub instead.
- */
-function PensionFigures({
-  pension,
-  onImport,
-  onClose,
-}: {
-  pension: PlanPension | null
-  onImport?: () => void
-  onClose: () => void
-}) {
-  const create = useActionMutation('create_pension')
-  const attach = useActionMutation('attach_pension')
-  const update = useActionMutation('update_pension')
-  // A new pension may belong on an account Leeway already has, such as one linked from the bank.
-  const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: !pension })
-  const close = { onSuccess: onClose }
-  function save(change: PlanChange, { accountId, ...created }: NewPensionFields) {
-    if (pension) update.mutate({ accountId: pension.accountId, ...change }, close)
-    else if (accountId) attach.mutate({ accountId, ...change }, close)
-    else create.mutate({ ...created, ...change }, close)
-  }
-  return (
-    <FormCard title={pension ? pension.name : 'Add a pension'}>
-      {onImport && <PaystubOffer onImport={onImport} />}
-      <PensionForm
-        plan={pension?.plan ?? null}
-        isNew={!pension}
-        candidates={pensionCandidates(accounts.data ?? [])}
-        busy={create.isPending || attach.isPending || update.isPending}
-        error={create.error ?? attach.error ?? update.error}
-        onSubmit={save}
-        onCancel={onClose}
-      />
-    </FormCard>
-  )
-}
-
-/** The open form, or, for a kept pension, a paystub import chosen in its place. */
-function PensionEditor({
+/** A kept pension's form, or a paystub import chosen in its place when one can be read. */
+function KeptPensionEditor({
   pension,
   view,
+  readerName,
   onClose,
 }: {
-  pension: PlanPension | null
+  pension: PlanPension
   view: RetirementView
+  readerName: string | null
   onClose: () => void
 }) {
   const [importing, setImporting] = useState(false)
-  // A paystub can fill a kept pension's figures, when the server can read one.
-  const reader = useAction('get_paystub', undefined, { enabled: pension !== null })
-  const readerName = reader.data?.available ? reader.data.readerName : null
-  if (!pension || !readerName) return <PensionFigures pension={pension} onClose={onClose} />
+  if (!readerName) return <PensionFigures pension={pension} onClose={onClose} />
   if (!importing) {
     return (
       <PensionFigures pension={pension} onImport={() => setImporting(true)} onClose={onClose} />
@@ -144,6 +90,38 @@ function PensionEditor({
       />
     </FormCard>
   )
+}
+
+/**
+ * The open form. A new pension starts from a paystub when one can be read, so
+ * adding waits to know; a kept pension's form shows at once, and offers the
+ * import when it turns out a paystub can be read.
+ */
+function PensionEditor({
+  pension,
+  view,
+  onClose,
+}: {
+  pension: PlanPension | null
+  view: RetirementView
+  onClose: () => void
+}) {
+  const reader = useAction('get_paystub')
+  const readerName = reader.data?.available ? reader.data.readerName : null
+  if (pension) {
+    return (
+      <KeptPensionEditor pension={pension} view={view} readerName={readerName} onClose={onClose} />
+    )
+  }
+  if (reader.isPending) {
+    return (
+      <FormCard title="Add a pension">
+        <Loading />
+      </FormCard>
+    )
+  }
+  if (readerName) return <NewPension readerName={readerName} onClose={onClose} />
+  return <PensionFigures pension={null} onClose={onClose} />
 }
 
 export function PensionsCard({ view }: { view: RetirementView }) {

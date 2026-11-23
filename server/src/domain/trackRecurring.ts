@@ -7,7 +7,7 @@ import { notFound } from '../errors.js'
 import type { Db } from '../db/pool.js'
 import type { IsoDate } from '../lib/dates.js'
 import { billInputSchema, createBill, type Bill } from './bills.js'
-import { untracked, type Untracked } from './recurring.js'
+import { untracked, type Untracked } from './untrackedRecurring.js'
 
 /** The longest bill name kept, as billInputSchema allows. */
 const NAME_LIMIT = 80

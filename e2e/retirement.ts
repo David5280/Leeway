@@ -3,7 +3,7 @@
 // projection, and putting the install back as it was for the specs after.
 
 import { expect, type Page } from '@playwright/test'
-import { addAccount } from './manual'
+import { action, addAccount } from './manual'
 
 export const PENSION = 'Colorado PERA'
 export const SAVINGS = 'Brokerage'
@@ -15,7 +15,9 @@ export async function addPension(page: Page): Promise<void> {
   const form = page.getByRole('form', { name: 'New pension' })
   await form.getByRole('textbox', { name: 'Name' }).fill(PENSION)
   await form.getByRole('textbox', { name: 'Member balance' }).fill('65000')
-  await form.getByRole('combobox', { name: 'Contribution type' }).selectOption('percent')
+  // The plan's figures are folded away until asked for.
+  await form.getByText('More details (optional)').click()
+  await form.getByRole('combobox', { name: 'Your contribution' }).selectOption('percent')
   await form.getByRole('textbox', { name: 'Percent of pay', exact: true }).fill('11')
   await form.getByRole('textbox', { name: 'Gross pay each paycheck' }).fill('2500')
   await form.getByRole('combobox', { name: 'Pay schedule' }).selectOption('biweek')
@@ -28,13 +30,17 @@ export async function addPension(page: Page): Promise<void> {
   await expect(page.getByRole('group', { name: PENSION })).toBeVisible()
 }
 
-/** Sets the birth year and the income wanted, or clears both when given blanks. */
-export async function setAssumptions(
-  page: Page,
-  { birthYear, income }: { birthYear: string; income: string },
-): Promise<void> {
+/** Answers the birth year card under the projection, which leaves once answered. */
+export async function giveBirthYear(page: Page, year: string): Promise<void> {
+  const card = page.getByRole('region', { name: 'What year were you born?' })
+  await card.getByRole('textbox', { name: 'Year you were born' }).fill(year)
+  await card.getByRole('button', { name: 'Save' }).click()
+  await expect(card).toBeHidden()
+}
+
+/** Sets the income wanted, or clears it when given a blank. */
+export async function setAssumptions(page: Page, { income }: { income: string }): Promise<void> {
   const form = page.getByRole('form', { name: 'Retirement assumptions' })
-  await form.getByRole('textbox', { name: 'Birth year' }).fill(birthYear)
   await form.getByRole('textbox', { name: 'Income you want a month' }).fill(income)
   await form.getByRole('button', { name: 'Save assumptions' }).click()
   await expect(form.getByRole('status')).toHaveText('Saved. The projection above uses them.')
@@ -44,13 +50,16 @@ export async function setAssumptions(
 export async function setUpRetirement(page: Page): Promise<void> {
   await addAccount(page, { name: SAVINGS, type: 'investment', balance: '40000' })
   await addPension(page)
-  await setAssumptions(page, { birthYear: '1986', income: '4000' })
+  await giveBirthYear(page, '1986')
+  await setAssumptions(page, { income: '4000' })
 }
 
 /** Removes what setUpRetirement added, since later specs share the install. */
 export async function tearDownRetirement(page: Page): Promise<void> {
-  await page.goto('/plan/retirement')
-  await setAssumptions(page, { birthYear: '', income: '' })
+  // Both go back in one call to the action, rather than through the two forms.
+  await action(page, 'update_settings', {
+    retirement: { birthYear: null, targetMonthlyIncomeCents: null },
+  })
   await page.goto('/settings/accounts')
   // The list must have loaded before an account's absence means anything: it
   // shows a switch for each account, or says there are none.

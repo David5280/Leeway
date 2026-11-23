@@ -3,7 +3,6 @@
 // the check-in, and projecting with what-ifs.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { AppContext } from '../src/context.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
 import { MAX_PENSIONS } from '../src/domain/retirement/pensions.js'
 import { patchPension } from '../src/domain/retirement/pensionStore.js'
@@ -11,6 +10,7 @@ import { countedNote, payrollNote } from '../src/domain/savings/rate.js'
 import { getSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
+import { PERA } from './fixtures/pension.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -19,7 +19,7 @@ import {
 } from './helpers.js'
 
 // The test clock reads 2026-11-19 at noon in Denver.
-let ctx: AppContext
+let ctx: Awaited<ReturnType<typeof createTestContext>>
 const { call, callError } = actionCaller(() => ctx)
 const TODAY = '2026-11-19'
 
@@ -35,19 +35,6 @@ beforeEach(async () => {
 })
 
 const profile = async () => getFinancialProfile(ctx.db, await getSettings(ctx.db), TODAY)
-
-/** A pension with a statement benefit and a contribution of $423 every two weeks. */
-const PERA = {
-  name: 'Colorado PERA',
-  balanceCents: 4_500_000,
-  contribution: { kind: 'amount', cents: 42_300 },
-  employerContributionPercent: 21.4,
-  grossPayCents: 384_500,
-  payCadence: 'biweek',
-  serviceYears: 9.5,
-  statementBenefitMonthlyCents: 218_000,
-  checkedOn: '2026-10-01',
-}
 
 /** Three whole months (Aug to Oct) of $5,000 take-home pay, filed as income. */
 async function paid() {
@@ -139,72 +126,6 @@ describe('create_pension and update_pension', () => {
     expect(before.savings.kinds.map((kind) => kind.kind)).not.toContain('retirement')
     const figures = await call('update_pension', { accountId: bank.accountId, serviceYears: 3 })
     expect(figures.plan.serviceYears).toBe(3)
-    expect((await profile()).retirement.pensions).toHaveLength(1)
-  })
-
-  it('attaches a plan to an account Leeway already has, instead of adding a second one', async () => {
-    const plan = await insertBankAccount(ctx.db, {
-      name: 'State Plan',
-      type: 'investment',
-      subtype: 'other',
-      balanceCents: 4_500_000,
-    })
-    const notYet = await callError('update_pension', { accountId: plan.accountId, serviceYears: 3 })
-    expect(notYet.message).toBe(
-      'This account is not a pension. Mark it as one first, or add a pension.',
-    )
-    const { name: _name, balanceCents: _balance, ...figures } = PERA
-    const attached = await call('attach_pension', { accountId: plan.accountId, ...figures })
-    expect(attached).toMatchObject({
-      accountId: plan.accountId,
-      balanceCents: 4_500_000,
-      plan: { serviceYears: 9.5, statementBenefitMonthlyCents: 218_000 },
-    })
-    const after = await profile()
-    expect(after.retirement.pensions).toHaveLength(1)
-    const accounts = await call('list_accounts')
-    expect(accounts.find((account) => account.id === plan.accountId)!.kind).toBe('pension')
-    // Attaching again replaces the plan on the same account.
-    await call('attach_pension', { accountId: plan.accountId, serviceYears: 10 })
-    expect((await profile()).retirement.pensions).toMatchObject([
-      { accountId: plan.accountId, plan: { serviceYears: 10, statementBenefitMonthlyCents: null } },
-    ])
-  })
-
-  it('attaches a plan only to an account that could be a pension', async () => {
-    const checking = await insertBankAccount(ctx.db, { subtype: 'checking' })
-    const cash = await callError('attach_pension', { accountId: checking.accountId })
-    expect(cash.message).toBe(
-      'A checking account cannot be a pension. Choose a retirement or investment account.',
-    )
-    const card = await insertBankAccount(ctx.db, { type: 'credit', subtype: 'credit card' })
-    const owed = await callError('attach_pension', { accountId: card.accountId })
-    expect(owed.message).toContain('A credit card cannot be a pension')
-    const other = await insertBankAccount(ctx.db, { type: 'other', subtype: null })
-    await call('update_account', { id: other.accountId, kind: 'other' })
-    expect((await call('attach_pension', { accountId: other.accountId })).plan.serviceYears).toBe(
-      null,
-    )
-  })
-
-  it('asks for a hidden account to be shown before a pension goes on it, so it never vanishes', async () => {
-    const plan = await insertBankAccount(ctx.db, {
-      name: 'State Plan',
-      type: 'investment',
-      subtype: 'other',
-    })
-    await call('update_account', { id: plan.accountId, hidden: true })
-    const hidden = await callError('attach_pension', { accountId: plan.accountId })
-    expect(hidden.message).toBe(
-      'Test State Plan is hidden, so a pension on it would not count. Show it under Settings, Accounts first.',
-    )
-    // Nothing changed: the account is neither a pension nor shown.
-    const after = (await call('list_accounts')).find((account) => account.id === plan.accountId)!
-    expect(after).toMatchObject({ kind: 'investment', hidden: true })
-    await call('update_account', { id: plan.accountId, hidden: false })
-    expect((await call('attach_pension', { accountId: plan.accountId })).accountId).toBe(
-      plan.accountId,
-    )
     expect((await profile()).retirement.pensions).toHaveLength(1)
   })
 
@@ -458,6 +379,13 @@ describe('project_retirement', () => {
     const error = await callError('project_retirement', { returnPercent: 40 })
     expect(error.message).toContain('Use 15% or less')
   })
+
+  it('refuses a what-if birth year still to come, rather than quietly not projecting', async () => {
+    const error = await callError('project_retirement', { birthYear: 2090 })
+    expect(error.message).toBe(
+      'birthYear: Use a birth year of 2026 or earlier, since 2090 is still to come.',
+    )
+  })
 })
 
 /**
@@ -564,5 +492,63 @@ describe('update_settings with retirement', () => {
       withdrawalPercent: 3.5,
       retirementAge: 65,
     })
+  })
+})
+
+describe("the birth year, checked against the install's today", () => {
+  /** Puts a year straight into the stored settings, as one saved before the check existed. */
+  async function storeBirthYear(year: number) {
+    await ctx.db.query(`UPDATE settings SET data = jsonb_set(data, '{retirement}', $1::jsonb)`, [
+      JSON.stringify({ birthYear: year }),
+    ])
+  }
+
+  it('takes this year and the year that makes the owner 110, the two ends of the range', async () => {
+    await call('update_settings', { retirement: { birthYear: 2026 } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(2026)
+    await call('update_settings', { retirement: { birthYear: 1916 } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(1916)
+  })
+
+  it('refuses a year still to come or further back than 110 years, and keeps the saved one', async () => {
+    await call('update_settings', { retirement: { birthYear: 1986 } })
+    const future = await callError('update_settings', { retirement: { birthYear: 2027 } })
+    expect(future.code).toBe('invalid_input')
+    expect(future.message).toBe(
+      'retirement.birthYear: Use a birth year of 2026 or earlier, since 2027 is still to come.',
+    )
+    const ancient = await callError('update_settings', { retirement: { birthYear: 1915 } })
+    expect(ancient.message).toBe('retirement.birthYear: Use a birth year of 1916 or later.')
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBe(1986)
+  })
+
+  it('counts the year where the owner lives, after a time zone change in the same patch', async () => {
+    // 11pm on New Year's Eve in Denver is already 2027 in Auckland.
+    ctx.setNow(new Date('2027-01-01T06:00:00Z'))
+    try {
+      await callError('update_settings', { retirement: { birthYear: 2027 } })
+      await call('update_settings', {
+        timeZone: 'Pacific/Auckland',
+        retirement: { birthYear: 2027 },
+      })
+      expect((await getSettings(ctx.db)).retirement.birthYear).toBe(2027)
+    } finally {
+      ctx.setNow(new Date('2026-11-19T19:00:00Z'))
+    }
+  })
+
+  it('lets a year still to come, saved before the check, be corrected or cleared', async () => {
+    await storeBirthYear(2090)
+    const waiting = await call('project_retirement')
+    expect(waiting.plan.projection).toBeNull()
+    expect(waiting.lens.answer.detail).toBe(
+      'Your birth year is saved as 2090, which is still to come. Correct it to see what your savings and any pension could pay.',
+    )
+    // The stored year never blocks saving anything else.
+    await call('update_settings', { retirement: { withdrawalPercent: 3.5 } })
+    await call('update_settings', { retirement: { birthYear: null } })
+    expect((await getSettings(ctx.db)).retirement.birthYear).toBeNull()
+    await call('update_settings', { retirement: { birthYear: 1986 } })
+    expect((await call('project_retirement')).plan.projection).toMatchObject({ age: 40 })
   })
 })

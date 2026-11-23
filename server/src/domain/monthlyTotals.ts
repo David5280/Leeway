@@ -14,26 +14,32 @@
 //   never lowers spending or makes it negative (the budget still nets them,
 //   as sumTotals does);
 // - any other unfiled deposit counts as money in, but in unfiledInCents, not
-//   incomeCents: pay is filed income only, so the savings rate agrees with
-//   the check-in, the profile and the agent. An unfiled refund lands here
+//   incomeCents, which is money filed as income. Neither is pay: the savings
+//   rate, the check-in, the profile and the agent read pay from paychecks
+//   alone (pay/current.ts). An unfiled refund lands here
 //   too, as money in, rather than lowering money out: matching it to a past
 //   purchase would be a guess, and counting it here counts it once.
 
 import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
+import { currentPeriod } from './budgetReport.js'
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
-  currentPeriod,
+  NOT_CARD_PAYMENT_SQL,
   rangeParams,
   sumTotals,
   type DateRange,
-} from './budgetReport.js'
+} from './categoryTotals.js'
 import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
-import { firstTransactionDay } from './profile/income.js'
 import type { Settings } from './settings.js'
-import { PAIR_WINDOW_DAYS, pairTransfers, unfiledLeg, type PairCandidate } from './transferPairs.js'
+import {
+  filedOrUnfiledLeg,
+  PAIR_WINDOW_DAYS,
+  pairTransfers,
+  type PairCandidate,
+} from './transferPairs.js'
 
 export interface MonthTotals {
   /** First day of the month. */
@@ -73,6 +79,15 @@ export function monthStarts(today: IsoDate, count: number): IsoDate[] {
   const { year, month } = dateParts(today)
   const thisMonth = makeDate(year, month, 1)
   return Array.from({ length: count }, (_, i) => addMonths(thisMonth, i - count + 1))
+}
+
+/** The earliest transaction held on any shown account: where the bank history starts. */
+export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
+  const { rows } = await db.query<{ first: IsoDate | null }>(
+    `SELECT min(t.date) AS first FROM transactions t
+     JOIN accounts a ON a.id = t.account_id WHERE NOT a.hidden`,
+  )
+  return rows[0]!.first
 }
 
 /** Totals for the last `count` calendar months, oldest first, ending with this one, and where the history starts. */
@@ -124,6 +139,7 @@ async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
+  skipCardPayments = false,
 ): Promise<Flows[]> {
   const margin = 2 * PAIR_WINDOW_DAYS
   const span = {
@@ -135,13 +151,15 @@ async function unfiledFlows(
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
        t.category_id IS NOT NULL AS "filedTransfer"
-     ${IN_RANGES_SQL}
+     ${IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
        AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
-  const filedIds = new Set(rows.filter((row) => row.filedTransfer).map((row) => row.id))
   // The owner filed a transfer leg as one, so it may pair whatever its line says.
-  const paired = pairTransfers(rows, (hint, tx) => filedIds.has(tx.id) || unfiledLeg(hint, tx))
+  const paired = pairTransfers(
+    rows,
+    filedOrUnfiledLeg((tx) => tx.filedTransfer),
+  )
   const flows = ranges.map((): Flows => ({ outCents: 0, inCents: 0 }))
   for (const tx of rows) {
     const i = ranges.findIndex((range) => tx.date >= range.start && tx.date < range.end)
@@ -169,4 +187,26 @@ function flowTotals(
     incomeCents: budget.incomeCents,
     unfiledInCents: inCents,
   }
+}
+
+/**
+ * Spending in each range as a month's totals count it (see the top of this
+ * file), less every credit card payment (NOT_CARD_PAYMENT_SQL), with each
+ * range's category totals for working out what is essential.
+ */
+export async function spendingByRange(
+  db: Db,
+  ranges: DateRange[],
+): Promise<{ spentCents: number; totals: CategoryTotal[] }[]> {
+  // Posted only: a typical month goes by what has settled.
+  const categories = await listCategories(db)
+  const totalsByRange = await categoryTotalsByRange(db, ranges, false, null, {
+    skipCardPayments: true,
+  })
+  const unfiled = await unfiledFlows(db, ranges, false, true)
+  return ranges.map((_, i) => {
+    const totals = totalsByRange[i]!
+    const flows = flowTotals(sumTotals(categories, totals), totals, unfiled[i]!)
+    return { spentCents: flows.spentCents, totals }
+  })
 }

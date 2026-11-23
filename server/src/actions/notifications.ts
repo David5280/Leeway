@@ -41,9 +41,11 @@ async function unread(ctx: AppContext): Promise<{ unread: number }> {
 }
 
 /**
- * A bill's change dismissed in the inbox takes its charge's amount as the
- * bill's usual one, so the alert clears on home and in the inbox alike. Its
- * subject is the bill's id and the charge's date (accountAlertSubject).
+ * A bill's change dismissed in the inbox takes its cycle's amount, paid once,
+ * as the bill's usual one, so the alert clears on home and in the inbox
+ * alike. A cycle only paid twice teaches nothing; the dismissal alone keeps
+ * it away on both. Its subject is the bill's id and the charge's date
+ * (accountAlertSubject).
  */
 async function acceptDismissedChange(ctx: AppContext, subject: string, now: Date): Promise<void> {
   const [billId, date] = subject.split(':')

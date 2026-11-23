@@ -5,12 +5,8 @@
 
 import { z } from 'zod'
 import { MAX_PAYSTUB_BYTES, PAYSTUB_TYPES } from '../domain/paystubs/files.js'
-import {
-  deletePaystub,
-  latestPaystub,
-  savePaystub,
-  savePaystubSchema,
-} from '../domain/paystubs/paystubs.js'
+import { deletePaystub, latestPaystub } from '../domain/paystubs/paystubs.js'
+import { savePaystub, savePaystubSchema } from '../domain/paystubs/save.js'
 import { defineAction } from './action.js'
 
 export const getPaystubAction = defineAction({
@@ -34,7 +30,7 @@ export const savePaystubAction = defineAction({
   name: 'save_paystub',
   title: 'Save a paystub',
   description:
-    'Saves the paystub figures the owner reviewed, in cents. pensionAccountId applies the pension contribution, gross pay, pay frequency and employer share to that pension; setRetirementContribution makes the 401(k), 457 and 403(b) figures the monthly retirement contribution.',
+    'Saves the paystub figures the owner reviewed, in cents. pensionAccountId applies the pension contribution, gross pay, pay frequency and employer share to that pension; newPension ({name, balanceCents}) instead adds a pension holding those figures as a new account, and attachAccountId makes an account Leeway already has (a retirement or investment account) that pension, so it is not counted twice; either happens in the same step, needs a paystub that shows a pension contribution, and only one of the three may be given; setRetirementContribution makes the 401(k), 457 and 403(b) figures the monthly retirement contribution.',
   input: savePaystubSchema,
   scope: 'write',
   surface: 'app',

@@ -295,6 +295,24 @@ describe('Saving for a purchase', () => {
     expect(screen.queryByRole('form', { name: 'New purchase' })).not.toBeInTheDocument()
   })
 
+  it('starts a purchase from an event coming up, with its name, price and day', async () => {
+    serve([])
+    renderPlan('/plan/goals?new=purchase&name=Lisbon+trip&price=125000&by=2026-12-10')
+    const form = within(await screen.findByRole('form', { name: 'New purchase' }))
+    expect(form.getByLabelText('What are you saving for?')).toHaveValue('Lisbon trip')
+    expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('1250')
+    expect(form.getByLabelText('Target date')).toHaveValue('2026-12-10')
+  })
+
+  it('leaves the price blank when the link gives none it can use', async () => {
+    serve([])
+    renderPlan('/plan/goals?new=purchase&name=Gala&price=lots')
+    const form = within(await screen.findByRole('form', { name: 'New purchase' }))
+    expect(form.getByLabelText('What are you saving for?')).toHaveValue('Gala')
+    expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('')
+    expect(form.getByLabelText('Target date')).toHaveValue('')
+  })
+
   it("shows a purchase's share held from the budget, its pace and its timeline", async () => {
     serve([bike])
     renderPlan('/plan/goals')
@@ -305,7 +323,7 @@ describe('Saving for a purchase', () => {
       card.getByText(sentence('$900 to go: set aside $160 each month to buy it by Apr 30, 2027.')),
     ).toBeInTheDocument()
     expect(card.getByText(sentence('$60 of $160 put aside this month.'))).toBeInTheDocument()
-    expect(card.getByText('On track: at your recent pace, ready by Apr 1, 2027.')).toHaveClass(
+    expect(card.getByText('On track: at its own recent pace, ready by Apr 1, 2027.')).toHaveClass(
       'good',
     )
     const timeline = card.getByRole('img', { name: 'Road bike timeline' })
@@ -323,7 +341,7 @@ describe('Saving for a purchase', () => {
     expect(card.getByRole('img', { name: 'Rainy day timeline' })).toHaveAccessibleDescription(
       'Today is Nov 17, 2026. At the recent pace it is ready Apr 1, 2027.',
     )
-    expect(card.getByText('At your recent pace, ready by Apr 1, 2027.')).toBeInTheDocument()
+    expect(card.getByText('At its own recent pace, ready by Apr 1, 2027.')).toBeInTheDocument()
   })
 
   it('says a purchase is ready to buy once it is saved, with no timeline left', async () => {
@@ -341,7 +359,7 @@ describe('Saving for a purchase', () => {
     renderPlan('/plan/goals')
     const card = within(await screen.findByRole('region', { name: 'Trip' }))
     expect(
-      card.getByText('Behind: at your recent pace, ready May 5, 2029, after Apr 30, 2027.'),
+      card.getByText('Behind: at its own recent pace, ready May 5, 2029, after Apr 30, 2027.'),
     ).toHaveClass('warn')
     const timeline = card.getByRole('img', { name: 'Trip timeline' })
     expect(timeline.querySelector('.timeline-pace')?.getAttribute('style')).toContain('var(--warn)')

@@ -5,13 +5,22 @@
 import { z } from 'zod'
 import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { dateParts, type IsoDate } from '../lib/dates.js'
+import type { IsoDate } from '../lib/dates.js'
 import { isoDateSchema } from '../lib/schemas.js'
-import { periodContaining, type PeriodConfig } from '../lib/periods.js'
+import { periodContaining } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
-import { accountNames } from './accounts.js'
+import { listAccounts, type Account } from './accounts.js'
+import { followedAlready, namesEmergencyFund } from './emergencyPlan.js'
+import { fundLinkTakenBy, fundsOf, goalLinks, GOALS_IN_ORDER, type FundRow } from './goalFunds.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
-import { planOf, type GoalPlan, type GoalProgressFacts, type GoalStatus } from './goalPlan.js'
+import {
+  goalOf,
+  progressOf,
+  type Goal,
+  type GoalClock,
+  type GoalReading,
+  type GoalRow,
+} from './goalProgress.js'
 
 const GOAL_KINDS = ['savings', 'purchase'] as const
 
@@ -38,120 +47,86 @@ export const goalPatchSchema = patchOf(goalInputSchema)
 
 export type GoalInput = z.infer<typeof goalInputSchema>
 
-/** A goal as stored, with its linked account's name and balance. */
-export interface GoalRow extends GoalInput {
-  id: string
-  accountName: string | null
-  accountBalanceCents: number | null
-  /**
-   * For a goal following an account its bank no longer shares: the day it
-   * stopped, which the balance and so the progress are as of. Null otherwise.
-   */
-  balanceAsOf: IsoDate | null
-  /** The day the goal was made. */
-  createdOn: IsoDate
-}
-
-export interface GoalProgress extends GoalRow {
-  /** Progress: the linked account's balance, or what was counted by hand. */
-  currentCents: number
-  remainingCents: number
-  /** 0 to 100. */
-  percent: number
-  /** Whole months left until the target date, counting the current one; null without a date. */
-  monthsLeft: number | null
-  /** What to set aside each month to make the date; null without a date, once reached, or stale. */
-  monthlyNeededCents: number | null
-  status: GoalStatus
-}
-
-export type Goal = GoalProgress & GoalPlan
-
-/** Today, and how the owner slices time into budget periods. */
-export interface GoalClock {
-  today: IsoDate
-  period: PeriodConfig
-}
-
-/** Months from today's month to the target's month, counting both: November to January is 3. */
-function monthsUntil(today: IsoDate, target: IsoDate): number {
-  const from = dateParts(today)
-  const to = dateParts(target)
-  return (to.year - from.year) * 12 + (to.month - from.month) + 1
-}
-
-function goalStatus(row: GoalRow, reached: boolean, today: IsoDate): GoalStatus {
-  // A balance frozen when the bank stopped sharing it says nothing about now,
-  // so the goal is neither reached nor behind; it is shown as of that day.
-  if (row.balanceAsOf !== null) return 'stale'
-  if (reached) return 'reached'
-  return row.targetDate !== null && row.targetDate < today ? 'past_due' : 'in_progress'
-}
-
-/** A goal's progress and what it takes each month to reach it on time. */
-export function progressOf(row: GoalRow, today: IsoDate): GoalProgress {
-  const current = row.accountId ? Math.max(0, row.accountBalanceCents ?? 0) : row.savedCents
-  const remaining = Math.max(0, row.targetCents - current)
-  const months = row.targetDate ? monthsUntil(today, row.targetDate) : null
-  const status = goalStatus(row, remaining === 0, today)
-  const planned = status === 'in_progress' || status === 'past_due'
-  return {
-    ...row,
-    currentCents: current,
-    remainingCents: remaining,
-    percent: Math.min(100, Math.floor((current / row.targetCents) * 100)),
-    monthsLeft: months === null ? null : Math.max(0, months),
-    // Past due, everything left is needed now.
-    monthlyNeededCents:
-      !planned || months === null ? null : Math.ceil(remaining / Math.max(1, months)),
-    status,
-  }
-}
-
-/** A goal in full: progress, plus its plan in the owner's budget periods. */
-export function goalOf(row: GoalRow, facts: GoalProgressFacts, clock: GoalClock): Goal {
-  const progress = progressOf(row, clock.today)
-  return { ...progress, ...planOf(progress, facts, clock.today, clock.period) }
-}
-
 const SELECT = `
   SELECT g.id, g.kind, g.name, g.target_cents AS "targetCents", g.target_date AS "targetDate",
     g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
-    g.created_at::date AS "createdOn",
+    g.created_at::date AS "createdOn", g.emergency_months AS "emergencyMonths",
+    g.emergency_own_target AS "emergencyOwnTarget", g.emergency_by_hand AS "emergencyByHand",
     a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
   FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
 
-type StoredGoal = Omit<GoalRow, 'accountName'>
+/** A goal as stored, with the fund's own columns, which goalFunds.ts reads and nothing shows. */
+type StoredGoal = Omit<GoalRow, 'accountName' | 'followedAccountIds'> &
+  Pick<FundRow, 'emergencyOwnTarget' | 'emergencyByHand'>
 
-/** Goals as read, with the account each follows named as everywhere else. */
-async function namedGoals(db: Db, rows: StoredGoal[]): Promise<GoalRow[]> {
-  const names = await accountNames(db)
-  return rows.map((row) => ({
-    ...row,
-    accountName: row.accountId === null ? null : (names.get(row.accountId) ?? null),
-  }))
+/**
+ * Goals as read: the account each follows named as everywhere else, the
+ * emergency fund's progress added up from the accounts it counts and its
+ * target sized from today's essentials, and each goal's plan.
+ */
+async function readGoals(db: Db, stored: StoredGoal[], reading: GoalReading): Promise<Goal[]> {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const accounts = await listAccounts(db)
+  const funds = await fundsOf(db, accounts, stored, reading)
+  const names = new Map(accounts.map((account) => [account.id, account.name]))
+  const rows = stored.map(({ emergencyOwnTarget: _own, emergencyByHand: _hand, ...row }) => {
+    const fund = funds.get(row.id)
+    return {
+      ...row,
+      accountName: row.accountId === null ? null : (names.get(row.accountId) ?? null),
+      accountBalanceCents: fund?.accountIds ? fund.balanceCents : row.accountBalanceCents,
+      targetCents: fund ? fund.targetCents : row.targetCents,
+      followedAccountIds: fund ? fund.accountIds : null,
+    }
+  })
+  return withPlans(db, rows, accounts, reading)
 }
 
-async function withPlans(db: Db, rows: GoalRow[], clock: GoalClock): Promise<Goal[]> {
+async function withPlans(
+  db: Db,
+  rows: GoalRow[],
+  accounts: Account[],
+  clock: GoalClock,
+): Promise<Goal[]> {
   const period = periodContaining(clock.today, clock.period)
-  const progress = rows.map((row) => progressOf(row, clock.today))
+  const balances = new Map(accounts.map((account) => [account.id, account.balanceCents ?? 0]))
+  const progress = rows.map((row) => ({
+    ...progressOf(row, clock.today),
+    // The fund's pace comes from the balances of the accounts it counts.
+    followedAccounts:
+      row.followedAccountIds?.map((id) => ({ id, balanceCents: balances.get(id) ?? 0 })) ?? null,
+  }))
   const facts = await progressFacts(db, progress, clock.today, period)
+  // progressFacts answers for every goal it is given, so each row has its facts.
   return rows.map((row) => goalOf(row, facts.get(row.id)!, clock))
 }
 
-export async function listGoals(db: Db, clock: GoalClock): Promise<Goal[]> {
-  const { rows } = await db.query<StoredGoal>(`${SELECT} ORDER BY g.created_at, g.name`)
-  return withPlans(db, await namedGoals(db, rows), clock)
+export async function listGoals(db: Db, reading: GoalReading): Promise<Goal[]> {
+  const { rows } = await db.query<StoredGoal>(`${SELECT} ${GOALS_IN_ORDER}`)
+  return readGoals(db, rows, reading)
 }
 
-async function getGoal(db: Db, id: string, clock: GoalClock): Promise<Goal> {
+export async function getGoal(db: Db, id: string, reading: GoalReading): Promise<Goal> {
   const { rows } = await db.query<StoredGoal>(`${SELECT} WHERE g.id = $1`, [id])
   if (!rows[0]) throw notFound('Goal')
-  return (await withPlans(db, await namedGoals(db, rows), clock))[0]!
+  const [goal] = await readGoals(db, rows, reading)
+  // readGoals gives back one goal for each row, and there is one row.
+  return goal!
+}
+
+/**
+ * A goal about to be saved: its fields, its id and fund step unless it is
+ * new, and whether it may newly link an account as the fund: its account
+ * changes, or a new name makes it read as the fund.
+ */
+type SavingGoal = GoalInput & {
+  id: string | null
+  emergencyMonths: number | null
+  linkChanges: boolean
 }
 
 /** The checks a goal must pass however it was made or changed. */
-async function assertValid(db: Db, goal: GoalInput): Promise<void> {
+async function assertValid(db: Db, goal: SavingGoal): Promise<void> {
   if (goal.setAside && goal.targetDate === null) {
     throw new AppError(
       'invalid_input',
@@ -161,10 +136,14 @@ async function assertValid(db: Db, goal: GoalInput): Promise<void> {
   if (!goal.accountId) return
   const { rowCount } = await db.query('SELECT 1 FROM accounts WHERE id = $1', [goal.accountId])
   if (!rowCount) throw notFound('Account')
+  if (!goal.linkChanges) return
+  // The emergency fund can't follow an account another goal follows: it would count twice.
+  const takenBy = fundLinkTakenBy(await goalLinks(db), { ...goal, accountId: goal.accountId })
+  if (takenBy !== null) throw new AppError('invalid_input', followedAlready(takenBy))
 }
 
-export async function createGoal(db: Db, input: GoalInput, clock: GoalClock): Promise<Goal> {
-  await assertValid(db, input)
+export async function createGoal(db: Db, input: GoalInput, reading: GoalReading): Promise<Goal> {
+  await assertValid(db, { ...input, id: null, emergencyMonths: null, linkChanges: true })
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO goals (kind, name, target_cents, target_date, account_id, saved_cents, color, set_aside)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -179,24 +158,34 @@ export async function createGoal(db: Db, input: GoalInput, clock: GoalClock): Pr
       input.setAside,
     ],
   )
-  return getGoal(db, rows[0]!.id, clock)
+  return getGoal(db, rows[0]!.id, reading)
 }
 
 /**
  * Changes only the fields given. A changed "saved so far" is a correction, not
- * a contribution, so it does not count toward recent progress.
+ * a contribution, so it does not count toward recent progress. A target typed
+ * for the emergency fund becomes its own, no longer sized from essentials; a
+ * save that leaves the target out (a new name, say) keeps it sized.
  */
 export async function updateGoal(
   db: Db,
   id: string,
   patch: z.infer<typeof goalPatchSchema>,
-  clock: GoalClock,
+  reading: GoalReading,
 ): Promise<Goal> {
-  const next = { ...(await getGoal(db, id, clock)), ...patch }
-  await assertValid(db, next)
+  const current = await getGoal(db, id, reading)
+  const next = { ...current, ...patch }
+  // A plain rename of a fund whose account another goal took since is no new link to refuse.
+  const namedFundNow = namesEmergencyFund(next.name) && !namesEmergencyFund(current.name)
+  await assertValid(db, {
+    ...next,
+    linkChanges: next.accountId !== current.accountId || namedFundNow,
+  })
+  const typedTarget = patch.targetCents !== undefined && patch.targetCents !== current.targetCents
+  const ownTarget = current.emergencyMonths !== null && typedTarget
   await db.query(
     `UPDATE goals SET kind = $2, name = $3, target_cents = $4, target_date = $5, account_id = $6,
-       saved_cents = $7, color = $8, set_aside = $9
+       saved_cents = $7, color = $8, set_aside = $9, emergency_own_target = emergency_own_target OR $10
      WHERE id = $1`,
     [
       id,
@@ -208,9 +197,10 @@ export async function updateGoal(
       next.savedCents,
       next.color,
       next.setAside,
+      ownTarget,
     ],
   )
-  return getGoal(db, id, clock)
+  return getGoal(db, id, reading)
 }
 
 /**
@@ -224,16 +214,17 @@ export async function addToGoal(
   id: string,
   amountCents: number,
   day: IsoDate,
-  clock: GoalClock,
+  reading: GoalReading,
 ): Promise<Goal> {
-  if (day > clock.today) {
+  if (day > reading.today) {
     throw new AppError('invalid_input', 'Record money on today or an earlier day')
   }
-  const goal = await getGoal(db, id, clock)
-  if (goal.accountId) {
+  const goal = await getGoal(db, id, reading)
+  if (goal.accountId || goal.followedAccountIds) {
+    const balance = goal.accountId ? `the balance of ${goal.accountName}` : 'your savings'
     throw new AppError(
       'invalid_input',
-      `${goal.name} follows the balance of ${goal.accountName}, so its progress updates on its own`,
+      `${goal.name} follows ${balance}, so its progress updates on its own`,
     )
   }
   const { rows } = await db.query<{ saved: number }>(
@@ -245,7 +236,7 @@ export async function addToGoal(
     throw new AppError('invalid_input', `Nothing is saved toward ${goal.name} yet to take back`)
   }
   await recordContribution(db, id, applied, day)
-  return getGoal(db, id, clock)
+  return getGoal(db, id, reading)
 }
 
 /** A goal's recent contributions, newest first. */

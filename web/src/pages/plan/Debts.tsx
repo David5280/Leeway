@@ -1,18 +1,21 @@
-// Debt payoff: the terms of each card and loan, and how fast each strategy clears them.
+// Debt payoff: what the cards cost in interest a month, the terms of each
+// card and loan, and how fast each strategy clears them.
 
 import { Card } from '../../components/design/Card'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
-import type { DebtPlans } from '../../api/client'
+import type { Account, DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
-import { isCounted, isOwed } from '../../lib/accounts'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
+import { cardInterestTotal, isCounted, isOwed } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { monthYear, parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
 import { DebtTerms } from './DebtTerms'
 import { durationText } from './text'
 import { Money } from '../../components/design/Money'
+import { CardsCostSentence } from '../accounts/CardInterest'
 
 type Strategy = 'avalanche' | 'snowball' | 'minimumsOnly'
 
@@ -89,9 +92,22 @@ function PayoffPlan({ extraCents }: { extraCents: number }) {
   )
 }
 
+/** What carrying the cards' balances costs a month, once at least one has its APR. */
+function CardsCost({ accounts }: { accounts: Account[] }) {
+  const total = cardInterestTotal(accounts)
+  if (total.cards.length === total.missingApr) return null
+  return (
+    <p style={{ fontSize: 17 }}>
+      <CardsCostSentence total={total} figureClassName="mid-number" />
+    </p>
+  )
+}
+
 export function DebtsSection() {
   const [extra, setExtra] = useState('')
-  const extraCents = useDebounced(Math.max(0, parseMoney(extra) ?? 0), 400)
+  const extraField = useAmountField(extra, { min: 0 })
+  // One that can't be read, or a negative one, counts as no extra, and its note says so.
+  const extraCents = useDebounced(extraField.note !== null ? 0 : (parseMoney(extra) ?? 0), 400)
   const accounts = useAction('list_accounts')
   if (!accounts.data) return <LoadingOrError error={accounts.error} />
   // The ones the payoff plan counts: shown, still shared by the bank, and owing.
@@ -107,6 +123,7 @@ export function DebtsSection() {
     <>
       <Card static="list" label="Your debts" className="stack-sm">
         <h2>Your debts</h2>
+        <CardsCost accounts={debts} />
         <p className="small muted">
           Banks rarely send interest rates. Find them on each statement and add them here.
         </p>
@@ -124,11 +141,14 @@ export function DebtsSection() {
               inputMode="decimal"
               aria-label="Extra each month"
               placeholder="0"
+              {...extraField.inputProps}
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
             />
           </Setting>
         </div>
+        {/* The plan then counts no extra, so say why rather than show it quietly. */}
+        <AmountNote id={extraField.id} text={extraField.shown} />
         <PayoffPlan extraCents={extraCents} />
       </Card>
     </>

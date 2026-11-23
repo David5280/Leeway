@@ -131,6 +131,32 @@ describe('RuleBuilder', () => {
     )
   })
 
+  it('refuses a limit it cannot read, rather than save the rule with no limit', async () => {
+    const server = serve()
+    const { user } = renderBuilder({ pattern: 'Costco', categoryId: groceries.id })
+    await user.click(screen.getByRole('button', { name: 'Limit by amount' }))
+    const largest = screen.getByLabelText('Largest amount')
+    await user.type(largest, '5k')
+    expect(saveButton()).toBeDisabled()
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
+    // One line serves both limits, and names the field it is about.
+    expect(largest).toHaveAccessibleDescription("Couldn't read that amount.")
+    expect(screen.getByLabelText('Smallest amount')).toHaveAttribute(
+      'aria-describedby',
+      largest.getAttribute('aria-describedby'),
+    )
+    await user.clear(largest)
+    await user.type(largest, '5,000')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await user.click(saveButton())
+    await waitFor(() =>
+      expect(server.actions('create_rule')).toEqual([
+        expect.objectContaining({ minAmountCents: null, maxAmountCents: 500000 }),
+      ]),
+    )
+  })
+
   it('shows amount limits from the start when the draft has them', () => {
     serve()
     renderBuilder({ pattern: 'Costco', minAmount: '5' })

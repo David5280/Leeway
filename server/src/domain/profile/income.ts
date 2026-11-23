@@ -1,153 +1,208 @@
-// The owner's pay and spending pattern: how often pay comes, and what comes
-// in and goes out in a typical month. Averages use whole calendar months that
-// Leeway holds every day of, so a half-synced month never drags them down.
+// The owner's typical month: pay in from the current employer, spending out
+// over the same recent stretch, and how often pay comes. Every number built
+// on income (the profile, the savings rate, the check-in, the AI's summary,
+// can-I-afford) reads it through typicalMonth, so none works out its own.
+//
+// Why it was wrong before: typical income was every deposit filed under an
+// income category, averaged over the last three calendar months. After a job
+// ended, those months held money family sent through Venmo or Zelle (filed
+// as "Received from people"), a tax refund and a lump moved in from another
+// bank, so they read as about $1,200 of pay a month, and spending was
+// averaged over months shaped by the old job and the gap. Now pay is
+// paychecks only (pay/current.ts), from the current employer's first
+// paycheck on, and spending is measured over the same recent stretch.
 
 import type { Db } from '../../db/pool.js'
-import { addMonths, dateParts, makeDate, type IsoDate } from '../../lib/dates.js'
+import { addDays, daysBetween, maxDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
-import type { CategoryTotal } from '../budget.js'
-import { categoryTotalsByRange, sumTotals, type DateRange } from '../budgetReport.js'
-import { nextPayday, type PaydaySource } from '../cashFlow.js'
-import { listCategories, type Category } from '../categories.js'
+import { accountMasks } from '../accounts.js'
+import { listCategories } from '../categories.js'
+import { essentialCodedByRange } from '../essentialCoded.js'
+import { essentialSpending } from '../essentialSpending.js'
+import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
+import type { CurrentPay } from '../pay/current.js'
+import { readCurrentPay } from '../pay/source.js'
+import { paydayFrom, type PaydaySource } from '../pay/payday.js'
 import type { Settings } from '../settings.js'
+import { merchantDisplayName } from '../transactionName.js'
 
-/** How many recent months the averages look at. */
-export const AVERAGE_MONTHS = 3
+/** About how many days a month has. */
+const DAYS_PER_MONTH = 365.25 / 12
+
+/** The longest stretch typical spending looks back over: about three months. */
+export const SPENDING_MAX_DAYS = 91
+
+/**
+ * The shortest: eight weeks back, even when the job started a week ago, so
+ * a month or two of spending is always behind the figure.
+ */
+export const SPENDING_MIN_DAYS = 56
+
+/** Less bank history than this is too little to call any month typical. */
+export const SPENDING_LEAST_DAYS = 28
+
+/** One employer paying now, named as the app names its deposits. */
+export interface PayingEmployer {
+  name: string
+  cadence: Cadence
+  /** A usual paycheck from it. */
+  typicalPayCents: number
+  /** A usual month of pay from it. */
+  monthlyCents: number
+  since: IsoDate
+  nextPayday: IsoDate
+  /** True while it has paid once, so its cadence is a guess. */
+  estimate: boolean
+}
 
 export interface PaySchedule {
-  /** How often pay comes; null when neither the budget period nor history says. */
+  /** How often the main employer pays; null when no employer is paying now. */
   cadence: Cadence | null
   /** Where the schedule came from; null when nothing gave one. */
   source: Exclude<PaydaySource, 'period_end'> | null
-  /** A typical paycheck, when one was found in history. */
+  /** A usual paycheck from the main employer, the one paying the most a month. */
   typicalPayCents: number | null
+  /** The main employer's next payday: what safe to spend runs until. */
   nextPayday: IsoDate | null
+  /** True while the main employer's cadence is unconfirmed: the next payday is a projection. */
+  estimate: boolean
+  /** The main employer, named as the app names its deposits, or null. */
+  employer: string | null
+  /** Every employer paying now, the main one first: a second job counts beside the first. */
+  employers: PayingEmployer[]
+  /** The first paycheck from any employer paying now: where typical income starts. */
+  since: IsoDate | null
 }
 
 export interface MonthlyAverages {
-  /** Whole months averaged, up to AVERAGE_MONTHS; 0 when history is too short. */
-  months: number
-  /**
-   * Money in through income categories, take-home. Null without a whole
-   * month, or when none came in: no income categorized is pay not seen,
-   * never pay of nothing.
-   */
+  /** A month of pay from the current employer, take-home; null when no employer is paying now. */
   incomeCents: number | null
-  /** Spending through expense categories (and uncategorized), transfers left out. */
+  /**
+   * True while any employer's cadence is unconfirmed (one paycheck, or
+   * paydays that fit two cadences): the month is the cautious projection.
+   */
+  incomeEstimated: boolean
+  /** Spending a month, transfers and card payments left out; null with too little history. */
   spendingCents: number | null
-  /** Spending in the categories the owner counts as essential (all spending by default). */
+  /**
+   * Spending in the essential categories: the owner's pick, or the ones found
+   * by their codes and names with loan and child care payments filed
+   * elsewhere (essentialSpending.ts), or all spending when none are.
+   */
   essentialSpendingCents: number | null
+  /** The first day spending was measured from, or null with too little history. */
+  spendingSince: IsoDate | null
+  /** The days spending was measured over, up to yesterday; 0 with too little history. */
+  spendingDays: number
+}
+
+/** The typical month and the pay it is built on, read once for every number that needs them. */
+export interface TypicalMonth {
+  pay: PaySchedule
+  monthly: MonthlyAverages
+  /** The paychecks themselves, for pay month by month (savings rates). */
+  currentPay: CurrentPay
 }
 
 /**
- * The last whole calendar months before today's month, oldest first, that
- * begin on or after the first day Leeway holds data for.
+ * The stretch typical spending is measured over, up to yesterday: from the
+ * current employer's first paycheck, kept between SPENDING_MIN_DAYS and
+ * SPENDING_MAX_DAYS, and never before the bank history starts. Null when that
+ * leaves less than SPENDING_LEAST_DAYS.
  */
-export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null): DateRange[] {
-  if (firstDataDay === null) return []
-  const { year, month } = dateParts(today)
-  const thisMonth = makeDate(year, month, 1)
-  const ranges: DateRange[] = []
-  for (let back = AVERAGE_MONTHS; back >= 1; back--) {
-    const start = addMonths(thisMonth, -back)
-    if (start >= firstDataDay) ranges.push({ start, end: addMonths(start, 1) })
-  }
-  return ranges
+export function spendingWindow(
+  today: IsoDate,
+  employerSince: IsoDate | null,
+  firstDataDay: IsoDate | null,
+): { start: IsoDate; days: number } | null {
+  if (firstDataDay === null) return null
+  const wanted = employerSince === null ? SPENDING_MAX_DAYS : daysBetween(employerSince, today)
+  const days = Math.min(SPENDING_MAX_DAYS, Math.max(SPENDING_MIN_DAYS, wanted))
+  const start = maxDate(addDays(today, -days), firstDataDay)
+  const held = daysBetween(start, today)
+  return held < SPENDING_LEAST_DAYS ? null : { start, days: held }
 }
 
-/**
- * The essential categories the owner picked that still exist as spending
- * categories, or null for every spending category. Settings can hold ids of
- * categories since deleted or replaced, so only current ones count, and a
- * pick with none left counts all spending rather than none.
- */
-export function currentEssentials(
-  categories: Category[],
-  essentialIds: string[] | null,
-): Set<string> | null {
-  if (essentialIds === null) return null
-  const picked = new Set(essentialIds)
-  const current = categories.filter((c) => c.kind === 'expense' && picked.has(c.id))
-  return current.length ? new Set(current.map((c) => c.id)) : null
-}
-
-/** Sums the essential categories' spending in one month's totals. Null ids count all spending. */
-export function essentialSpending(
-  categories: Category[],
-  totals: CategoryTotal[],
-  essentialIds: string[] | null,
-): number {
-  const essentials = currentEssentials(categories, essentialIds)
-  if (essentials === null) return sumTotals(categories, totals).spentCents
-  return totals
-    .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
-    .reduce((sum, total) => sum + total.amountCents, 0)
-}
-
-/** Averages each month's totals into a typical month. */
-export function averageMonths(
-  categories: Category[],
-  totalsByMonth: CategoryTotal[][],
-  essentialIds: string[] | null,
-): MonthlyAverages {
-  const months = totalsByMonth.length
-  if (months === 0) {
-    return { months, incomeCents: null, spendingCents: null, essentialSpendingCents: null }
-  }
-  let income = 0
-  let spending = 0
-  let essential = 0
-  for (const totals of totalsByMonth) {
-    const sums = sumTotals(categories, totals)
-    income += sums.incomeCents
-    spending += sums.spentCents
-    essential += essentialSpending(categories, totals, essentialIds)
-  }
-  return {
-    months,
-    incomeCents: income > 0 ? Math.round(income / months) : null,
-    spendingCents: Math.round(spending / months),
-    essentialSpendingCents: Math.round(essential / months),
-  }
-}
-
-/** The earliest transaction held on any shown account: where the bank history starts. */
-export async function firstTransactionDay(db: Db): Promise<IsoDate | null> {
-  const { rows } = await db.query<{ first: IsoDate | null }>(
-    `SELECT min(t.date) AS first FROM transactions t
-     JOIN accounts a ON a.id = t.account_id WHERE NOT a.hidden`,
-  )
-  return rows[0]!.first
-}
-
-/** A typical month of income and spending, from the last whole months held. */
-export async function monthlyAverages(
+/** Spending a month over the window, and its essential share. */
+async function monthlySpending(
   db: Db,
   settings: Settings,
+  window: { start: IsoDate; days: number } | null,
   today: IsoDate,
-): Promise<MonthlyAverages> {
-  const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
+) {
+  if (window === null) return { spendingCents: null, essentialSpendingCents: null }
+  const range = { start: window.start, end: today }
+  const [spending] = await spendingByRange(db, [range])
+  const [essentialCoded] = await essentialCodedByRange(db, [range])
   const categories = await listCategories(db)
-  // Posted transactions only: a month already over has nothing left pending that matters.
-  const totals = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
-  return averageMonths(categories, totals, settings.savingsPlan.essentialCategoryIds)
+  const ids = settings.savingsPlan.essentialCategoryIds
+  const month = { totals: spending!.totals, essentialCoded: essentialCoded! }
+  const essential = essentialSpending(categories, month, ids, spending!.spentCents)
+  const perMonth = (cents: number) => Math.round((cents * DAYS_PER_MONTH) / window.days)
+  return {
+    spendingCents: perMonth(spending!.spentCents),
+    essentialSpendingCents: perMonth(essential),
+  }
 }
 
-/** How often pay comes and when next, from the budget period or regular deposits. */
-export async function paySchedule(
+/** The first paycheck from any employer paying now, or null with none. */
+export function payingSince(pay: CurrentPay): IsoDate | null {
+  const firsts = pay.employers.map((employer) => employer.firstPaycheck).sort()
+  return firsts[0] ?? null
+}
+
+/** How often pay comes and when next, as the profile and an agent read it. */
+async function payScheduleOf(
   db: Db,
+  pay: CurrentPay,
   settings: Settings,
   today: IsoDate,
 ): Promise<PaySchedule> {
-  const payday = await nextPayday(db, settings, today)
-  // The end of a budget period is a stand-in, not a schedule.
-  if (payday.source === 'period_end') {
-    return { cadence: null, source: null, typicalPayCents: null, nextPayday: null }
-  }
+  const payday = paydayFrom(pay, settings, today)
+  const source = payday.source === 'period_end' ? null : payday.source
+  // Named only as the app names deposits: never an account number or mask.
+  const masks = await accountMasks(db)
+  const employers = pay.employers.map((employer) => ({
+    name: merchantDisplayName(employer.newest, { masks }),
+    cadence: employer.cadence,
+    typicalPayCents: employer.paycheckCents,
+    monthlyCents: employer.monthlyCents,
+    since: employer.firstPaycheck,
+    nextPayday: employer.nextPayday,
+    estimate: employer.estimate,
+  }))
   return {
-    cadence: payday.cadence,
-    source: payday.source,
-    typicalPayCents: payday.amountCents,
-    nextPayday: payday.date,
+    cadence: source ? payday.cadence : null,
+    source,
+    typicalPayCents: pay.paycheckCents,
+    nextPayday: source ? payday.date : null,
+    estimate: payday.estimate,
+    employer: employers[0]?.name ?? null,
+    employers,
+    since: payingSince(pay),
+  }
+}
+
+/** The owner's typical month as of today: the one place income and spending are worked out. */
+export async function typicalMonth(
+  db: Db,
+  settings: Settings,
+  today: IsoDate,
+): Promise<TypicalMonth> {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const currentPay = await readCurrentPay(db, settings, today)
+  const since = payingSince(currentPay)
+  const window = spendingWindow(today, since, await firstTransactionDay(db))
+  const spending = await monthlySpending(db, settings, window, today)
+  return {
+    pay: await payScheduleOf(db, currentPay, settings, today),
+    monthly: {
+      incomeCents: currentPay.monthlyCents,
+      incomeEstimated: currentPay.estimate,
+      ...spending,
+      spendingSince: window?.start ?? null,
+      spendingDays: window?.days ?? 0,
+    },
+    currentPay,
   }
 }

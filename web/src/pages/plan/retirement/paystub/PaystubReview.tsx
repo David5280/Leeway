@@ -1,226 +1,104 @@
 // The review screen: every figure Claude read from a paystub, each one
 // editable, with how sure Claude was and the line it came from, then where
-// the figures should go. Nothing is saved until the owner chooses Save.
+// the figures should go: a kept pension, or the new pension being added from
+// this paystub. Nothing is saved until the owner confirms.
 
-import { useId, useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Input } from '../../../../api/client'
 import { ErrorNote } from '../../../../components/ui'
 import {
-  CADENCE_WORDS,
-  CONFIDENCE_WORDS,
   CURRENT_LABELS,
+  readNewPension,
   readReview,
   reviewText,
   showsPlanFigures,
   YEAR_TO_DATE_LABELS,
-  type Extraction,
+  type NewPensionText,
   type PaystubRead,
   type PensionChoice,
   type ReviewText,
 } from './review'
+import { accountChoice, type AccountChoice } from '../fields'
+import type { Candidate } from '../PensionFields'
+import { FigureGroup, PaystubDetails } from './ReviewFields'
+import { NewPensionFields, SavingChoice, UseFigures } from './ReviewUse'
 
-type Figure = Extraction['current'][keyof Extraction['current']]
-
-/** How sure Claude was, as a badge; one to check closely stands out. */
-function Confidence({ figure }: { figure: Pick<Figure, 'confidence'> }) {
-  const low = figure.confidence === 'low'
-  return <span className={low ? 'badge warn' : 'badge'}>{CONFIDENCE_WORDS[figure.confidence]}</span>
-}
-
-/** One figure: its label, how sure Claude was, the amount to edit, and the line it came from. */
-function FigureField({
-  label,
-  group,
-  figure,
-  value,
-  onChange,
-}: {
-  label: string
-  group: string
-  figure: Figure
-  value: string
-  onChange: (value: string) => void
-}) {
-  const id = useId()
-  const found = figure.cents !== null || figure.source !== null
-  return (
-    <div className="review-figure">
-      <div className="row-between wrap">
-        <label htmlFor={id}>{label}</label>
-        {found && <Confidence figure={figure} />}
-      </div>
-      <input
-        id={id}
-        className="input num"
-        inputMode="decimal"
-        aria-label={`${group}: ${label}`}
-        aria-describedby={figure.source ? `${id}-source` : undefined}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {figure.source && (
-        <small id={`${id}-source`} className="muted">
-          From the line &ldquo;{figure.source}&rdquo;
-        </small>
-      )}
-    </div>
-  )
-}
-
-/**
- * A group of figures: the ones Claude found first, and the rest folded away
- * for the owner to add if Claude missed one, so a phone shows only what matters.
- */
-function FigureGroup<F extends string>({
-  legend,
-  labels,
-  figures,
-  text,
-  onChange,
-}: {
-  legend: string
-  labels: Record<F, string>
-  figures: Record<F, Figure>
-  text: Record<F, string>
-  onChange: (field: F, value: string) => void
-}) {
-  const fields = Object.keys(labels) as F[]
-  const isFound = (field: F) => figures[field].cents !== null || figures[field].source !== null
-  const field = (name: F) => (
-    <FigureField
-      key={name}
-      label={labels[name]}
-      group={legend}
-      figure={figures[name]}
-      value={text[name]}
-      onChange={(value) => onChange(name, value)}
-    />
-  )
-  const missed = fields.filter((name) => !isFound(name))
-  return (
-    <fieldset className="review-group">
-      <legend>{legend}</legend>
-      <div className="review-figures">{fields.filter(isFound).map(field)}</div>
-      {missed.length > 0 && (
-        <details className="more review-more">
-          <summary>Add a figure Claude did not find ({missed.length})</summary>
-          <div className="review-figures">{missed.map(field)}</div>
-        </details>
-      )}
-    </fieldset>
-  )
-}
-
-/** The paystub's own details: who paid, when, for which days, and how often. */
-function PaystubDetails({
-  extraction,
-  text,
-  set,
-}: {
-  extraction: Extraction
-  text: ReviewText
-  set: (change: Partial<ReviewText>) => void
-}) {
-  const cadence = extraction.payCadence
-  const cadenceId = useId()
-  return (
-    <div className="review-figures">
-      <label className="field">
-        Employer
-        <input
-          className="input"
-          maxLength={80}
-          value={text.employerName}
-          onChange={(e) => set({ employerName: e.target.value })}
-        />
-      </label>
-      <label className="field">
-        Pay date
-        <input
-          className="input"
-          type="date"
-          value={text.payDate}
-          onChange={(e) => set({ payDate: e.target.value })}
-        />
-      </label>
-      <label className="field">
-        Period from
-        <input
-          className="input"
-          type="date"
-          value={text.periodStart}
-          onChange={(e) => set({ periodStart: e.target.value })}
-        />
-      </label>
-      <label className="field">
-        Period to
-        <input
-          className="input"
-          type="date"
-          value={text.periodEnd}
-          onChange={(e) => set({ periodEnd: e.target.value })}
-        />
-      </label>
-      <div className="review-figure">
-        <div className="row-between wrap">
-          <label htmlFor={cadenceId}>Paid</label>
-          {cadence.value !== null && <Confidence figure={cadence} />}
-        </div>
-        <select
-          id={cadenceId}
-          className="input"
-          value={text.payCadence}
-          onChange={(e) => set({ payCadence: e.target.value as ReviewText['payCadence'] })}
-        >
-          <option value="">Not shown</option>
-          {Object.entries(CADENCE_WORDS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        {cadence.source && (
-          <small className="muted">From the line &ldquo;{cadence.source}&rdquo;</small>
-        )}
-      </div>
-    </div>
-  )
+/** The save button's words: a kept pension is saved, a pension made meanwhile updated. */
+function confirmLabel(adding: boolean, choice: AccountChoice): string {
+  if (!adding) return 'Save'
+  return choice.kind === 'kept' ? 'Update pension' : 'Add pension'
 }
 
 export function PaystubReview({
   read,
   pensions,
   pensionAccountId,
+  adding = false,
+  candidates = [],
   busy,
   error,
+  loadProblem,
   onSave,
   onCancel,
 }: {
   read: PaystubRead
+  /**
+   * The kept pensions the figures can update; when adding, those an account
+   * chosen may have become since it was offered.
+   */
   pensions: PensionChoice[]
   /** The pension chosen to start with, as when opened from that pension's form. */
   pensionAccountId: string | null
+  /** Adding a new pension from this paystub, named here, instead of updating a kept one. */
+  adding?: boolean
+  /** When adding: accounts Leeway already has that the new pension could be. */
+  candidates?: Candidate[]
   busy: boolean
   error: unknown
+  /** Why something the save needs could not load, such as the accounts, with a way to try again. */
+  loadProblem: ReactNode
   onSave: (input: Input<'save_paystub'>) => void
   onCancel: () => void
 }) {
   const { extraction, readerName } = read
   const [text, setText] = useState<ReviewText>(() => reviewText(extraction))
   const [pension, setPension] = useState(pensionAccountId ?? '')
+  // The new pension's name starts as the plan name on the paystub's pension line, if Claude read one.
+  const [typed, setCreated] = useState<NewPensionText>({
+    accountId: '',
+    name: extraction.pensionPlanName ?? '',
+    balance: '',
+  })
+  // An account chosen, then made a pension elsewhere, takes the figures as that pension.
+  const choice = accountChoice(typed.accountId, candidates, pensions)
   const [contribution, setContribution] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const set = (change: Partial<ReviewText>) => setText((current) => ({ ...current, ...change }))
   const plans = showsPlanFigures(text)
+  const confirm = confirmLabel(adding, choice)
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const result = readReview(text)
-    setProblem(result.ok ? null : result.error)
-    if (!result.ok) return
+    // An account that left the list for good waits for the owner to choose again.
+    if (choice.kind === 'gone') return
+    const reviewed = readReview(text)
+    if (!reviewed.ok) {
+      setProblem(reviewed.error)
+      return
+    }
+    // A pension made meanwhile is updated, as the server's refusal said; nothing new is added.
+    const kept = choice.kind === 'kept' ? choice.accountId : null
+    const target = adding && kept === null ? readNewPension(reviewed.paystub, typed) : null
+    if (target && !target.ok) {
+      setProblem(target.error)
+      return
+    }
+    setProblem(null)
     onSave({
-      paystub: result.paystub,
-      pensionAccountId: pension || null,
+      paystub: reviewed.paystub,
+      pensionAccountId: adding ? kept : pension || null,
+      newPension: target ? target.target.newPension : null,
+      attachAccountId: target ? target.target.attachAccountId : null,
       setRetirementContribution: plans && contribution,
     })
   }
@@ -229,7 +107,7 @@ export function PaystubReview({
     <form className="stack paystub" onSubmit={submit} aria-label="Review the paystub">
       <p className="small">
         {readerName} read these figures. Check each one against your paystub and fix any that are
-        wrong; a blank one was not on it. Nothing is saved until you choose Save.
+        wrong; a blank one was not on it. Nothing is saved until you choose {confirm}.
       </p>
       <PaystubDetails extraction={extraction} text={text} set={set} />
       <FigureGroup
@@ -246,44 +124,37 @@ export function PaystubReview({
         text={text.yearToDate}
         onChange={(field, value) => set({ yearToDate: { ...text.yearToDate, [field]: value } })}
       />
-      <fieldset className="review-group">
-        <legend>Use these figures</legend>
-        {pensions.length > 0 && (
-          <label className="field">
-            Update a pension with its contribution, gross pay, pay schedule and employer share
-            <select className="input" value={pension} onChange={(e) => setPension(e.target.value)}>
-              <option value="">No, keep the pension as it is</option>
-              {pensions.map((choice) => (
-                <option key={choice.accountId} value={choice.accountId}>
-                  {choice.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {plans && (
-          <label className="row small check check-row">
-            <input
-              type="checkbox"
-              checked={contribution}
-              onChange={(e) => setContribution(e.target.checked)}
-            />
-            Make the 401(k), 457 and 403(b) figures what you add to retirement savings each month
-          </label>
-        )}
-        {pensions.length === 0 && !plans && (
-          <p className="small muted">Leeway keeps the figures with your paystubs.</p>
-        )}
-      </fieldset>
+      {adding ? (
+        <>
+          <NewPensionFields
+            candidates={candidates}
+            typed={typed}
+            choice={choice}
+            confirm={confirm}
+            onChange={(change) => setCreated((current) => ({ ...current, ...change }))}
+          />
+          {plans && <SavingChoice checked={contribution} onChange={setContribution} />}
+        </>
+      ) : (
+        <UseFigures
+          pensions={pensions}
+          pension={pension}
+          onPension={setPension}
+          plans={plans}
+          contribution={contribution}
+          onContribution={setContribution}
+        />
+      )}
       {problem && (
         <p className="notice error" role="alert">
           {problem}
         </p>
       )}
       <ErrorNote error={error} />
+      {loadProblem}
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy}>
-          Save
+        <button type="submit" className="btn primary" disabled={busy || choice.kind === 'gone'}>
+          {confirm}
         </button>
         <button type="button" className="btn" onClick={onCancel}>
           Cancel

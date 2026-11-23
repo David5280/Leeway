@@ -1,7 +1,10 @@
 // Coming up: the next six weeks with a calendar linked, week by week, with
 // paydays, bills due and the events likely to cost money, each with what to
-// set aside where past ones show it. Recent and coming trips follow, each
-// opening its own page. Shown in Plan only while a calendar is linked.
+// set aside where past ones show it. A bill opens its own form; an event
+// opens a purchase goal to save for it, unless nothing is left to set aside.
+// Weeks with nothing in them fold into one quiet line. Recent and coming
+// trips follow, each opening its own page. Shown in Plan only while a
+// calendar is linked.
 
 import { Link } from 'react-router-dom'
 import type { Forecast, ForecastItem, TripSummary } from '../../api/client'
@@ -10,36 +13,55 @@ import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
 import { LoadingOrError } from '../../components/ui'
 import { useApp } from '../../lib/app'
-import { relativeDay } from '../../lib/format'
-import { dayRange, EVENT_KIND_NAMES, weekLabel } from '../../lib/calendar'
+import { relativeDay, shortDate } from '../../lib/format'
+import {
+  billPath,
+  dayRange,
+  EVENT_KIND_NAMES,
+  quietWeeksText,
+  saveForPath,
+  weekLabel,
+} from '../../lib/calendar'
 import { tripName, tripPath } from '../../lib/trips'
 
+type Week = Forecast['weeks'][number]
 type Event = Extract<ForecastItem, { type: 'event' }>
+type Bill = Extract<ForecastItem, { type: 'bill' }>
 
-/** "Set aside about $1,250, from 2 past trips", or why there is no amount. */
+/** Where the amount to set aside comes from ("From 2 past trips"), or why there is none. */
 function setAsideText(event: Event): string {
   if (event.suggestedCents === null) return 'No past ones to go by yet'
+  if (event.suggestedCents === 0) return 'Nothing left to set aside'
   const kind = EVENT_KIND_NAMES[event.kind].toLowerCase()
   return `From ${event.basedOn} past ${kind}s`
 }
 
+/** A row's name and what to say under it. */
+function RowText({ name, detail, tone }: { name: string; detail: string; tone?: string }) {
+  return (
+    <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
+      <span className="ellipsis" style={{ fontWeight: 500 }}>
+        {name}
+      </span>
+      <span className={`small ${tone ?? 'muted'}`}>{detail}</span>
+    </span>
+  )
+}
+
 function EventRow({ event, today }: { event: Event; today: string }) {
   const { settings } = useApp()
-  const content = (
+  const when =
+    event.date === event.endsOn
+      ? relativeDay(event.date, today, settings.locale)
+      : dayRange({ startsOn: event.date, endsOn: event.endsOn }, settings.locale)
+  const row = (
     <>
-      <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
-        <span className="ellipsis" style={{ fontWeight: 500 }}>
-          {event.title}
-        </span>
-        <span className="small muted">
-          {EVENT_KIND_NAMES[event.kind]},{' '}
-          {event.date === event.endsOn
-            ? relativeDay(event.date, today, settings.locale)
-            : dayRange({ startsOn: event.date, endsOn: event.endsOn }, settings.locale)}
-          . {setAsideText(event)}
-        </span>
-      </span>
-      {event.suggestedCents !== null && (
+      <RowText
+        name={event.title}
+        detail={`${EVENT_KIND_NAMES[event.kind]}, ${when}. ${setAsideText(event)}`}
+      />
+      {/* Nothing left to set aside shows no amount, never "$0 set aside". */}
+      {event.suggestedCents !== null && event.suggestedCents > 0 && (
         <span className="stack-sm" style={{ gap: 0, textAlign: 'right' }}>
           <Money cents={event.suggestedCents} />
           <span className="small muted">set aside</span>
@@ -47,13 +69,24 @@ function EventRow({ event, today }: { event: Event; today: string }) {
       )}
     </>
   )
-  if (event.kind !== 'trip') return <div className="list-row">{content}</div>
+  // With nothing left to set aside there is no goal to start, so the row opens nothing.
+  if (event.suggestedCents === 0) return <div className="list-row">{row}</div>
   return (
-    <Link
-      to={tripPath({ startsOn: event.date, endsOn: event.endsOn })}
-      className="list-row clickrow"
-    >
-      {content}
+    <Link to={saveForPath(event, today)} className="list-row clickrow">
+      {row}
+    </Link>
+  )
+}
+
+function BillRow({ bill, today }: { bill: Bill; today: string }) {
+  const { settings } = useApp()
+  const detail = bill.overdue
+    ? `Overdue since ${shortDate(bill.date, settings.locale)}`
+    : `Due ${relativeDay(bill.date, today, settings.locale)}`
+  return (
+    <Link to={billPath(bill.billId)} className="list-row clickrow">
+      <RowText name={bill.name} detail={detail} tone={bill.overdue ? 'over' : undefined} />
+      <Money cents={bill.amountCents} sign="transaction" />
     </Link>
   )
 }
@@ -61,34 +94,27 @@ function EventRow({ event, today }: { event: Event; today: string }) {
 function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
   const { settings } = useApp()
   if (item.type === 'event') return <EventRow event={item} today={today} />
-  const when = relativeDay(item.date, today, settings.locale)
+  if (item.type === 'bill') return <BillRow bill={item} today={today} />
   return (
     <div className="list-row">
-      <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
-        <span className="ellipsis" style={{ fontWeight: 500 }}>
-          {item.type === 'payday' ? 'Payday' : item.name}
-        </span>
-        <span className="small muted">{item.type === 'payday' ? when : `Due ${when}`}</span>
-      </span>
-      {item.amountCents !== null && (
-        <Money
-          cents={item.type === 'payday' ? -item.amountCents : item.amountCents}
-          sign="transaction"
-        />
-      )}
+      <RowText name="Payday" detail={relativeDay(item.date, today, settings.locale)} />
+      {item.amountCents !== null && <Money cents={-item.amountCents} sign="transaction" />}
     </div>
   )
 }
 
-function Week({
-  week,
-  index,
-  today,
-}: {
-  week: Forecast['weeks'][number]
-  index: number
-  today: string
-}) {
+/**
+ * A key unique within a week: one payday a day, a bill once per due day, and
+ * an event by the server's own id for it, since two of one kind can share a
+ * day (two friends' birthdays).
+ */
+function itemKey(item: ForecastItem): string {
+  if (item.type === 'payday') return `payday ${item.date}`
+  if (item.type === 'bill') return `bill ${item.billId} ${item.date}`
+  return `event ${item.id}`
+}
+
+function WeekCard({ week, index, today }: { week: Week; index: number; today: string }) {
   const { settings } = useApp()
   const label = weekLabel(index, week.start, settings.locale)
   return (
@@ -111,17 +137,34 @@ function Week({
           </span>
         )}
       </div>
-      {week.items.length === 0 && <p className="empty">Nothing due.</p>}
       {week.items.map((item) => (
-        <ItemRow key={`${item.type} ${item.date} ${itemName(item)}`} item={item} today={today} />
+        <ItemRow key={itemKey(item)} item={item} today={today} />
       ))}
     </Card>
   )
 }
 
-function itemName(item: ForecastItem): string {
-  if (item.type === 'payday') return ''
-  return item.type === 'bill' ? item.billId : item.title
+/** One or more weeks in a row with nothing in them, as a single quiet line. */
+function QuietWeeks({ first, weeks }: { first: number; weeks: Week[] }) {
+  const { settings } = useApp()
+  const text = quietWeeksText(first, weeks[0]!.start, weeks.at(-1)!.end, settings.locale)
+  return (
+    <Card static="empty" label={text}>
+      <p className="empty">{text}.</p>
+    </Card>
+  )
+}
+
+/** The weeks, with each run of empty ones gathered: [index of its first week, its weeks]. */
+function runsOf(weeks: Week[]): [number, Week[]][] {
+  const runs: [number, Week[]][] = []
+  weeks.forEach((week, index) => {
+    const last = runs.at(-1)
+    const quiet = week.items.length === 0
+    if (quiet && last && last[1].at(-1)!.items.length === 0) last[1].push(week)
+    else runs.push([index, [week]])
+  })
+  return runs
 }
 
 function Trips({ trips }: { trips: TripSummary[] }) {
@@ -132,12 +175,7 @@ function Trips({ trips }: { trips: TripSummary[] }) {
       {trips.length === 0 && <p className="empty">No trips in the last year.</p>}
       {trips.map((trip) => (
         <Link key={tripPath(trip)} to={tripPath(trip)} className="list-row clickrow">
-          <span className="grow stack-sm" style={{ gap: 0, minWidth: 0 }}>
-            <span className="ellipsis" style={{ fontWeight: 500 }}>
-              {tripName(trip)}
-            </span>
-            <span className="small muted">{dayRange(trip, settings.locale)}</span>
-          </span>
+          <RowText name={tripName(trip)} detail={dayRange(trip, settings.locale)} />
           <Money cents={trip.totalCents} />
         </Link>
       ))}
@@ -151,12 +189,22 @@ export function AheadSection() {
   if (!forecast.data || !trips.data) {
     return <LoadingOrError error={forecast.error ?? trips.error} />
   }
-  const { today, weeks } = forecast.data
+  const { today, weeks, note } = forecast.data
   return (
     <>
-      {weeks.map((week, index) => (
-        <Week key={week.start} week={week} index={index} today={today} />
-      ))}
+      {/* Some events may be missing from the weeks below, so they say so, quietly. */}
+      {note && (
+        <p className="notice" role="status">
+          {note}
+        </p>
+      )}
+      {runsOf(weeks).map(([first, run]) =>
+        run[0]!.items.length === 0 ? (
+          <QuietWeeks key={run[0]!.start} first={first} weeks={run} />
+        ) : (
+          <WeekCard key={run[0]!.start} week={run[0]!} index={first} today={today} />
+        ),
+      )}
       <Trips trips={trips.data} />
     </>
   )

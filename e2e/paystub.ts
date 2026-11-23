@@ -52,6 +52,7 @@ const CITY_READ = {
       plan403b: notShown,
       hsa: notShown,
     },
+    pensionPlanName: 'PERA',
   },
 }
 
@@ -85,6 +86,23 @@ export async function importPaystub(page: Page): Promise<void> {
     .getByRole('button', { name: 'Import a paystub' })
     .click()
   await page.getByLabel('Choose a paystub').setInputFiles(PAYSTUB_PDF)
+  await expect(page.getByRole('form', { name: 'Review the paystub' })).toBeVisible()
+}
+
+/**
+ * Starts adding a pension from the Pensions card the paystub way and chooses
+ * the PDF, waiting for the review that names the new pension.
+ */
+export async function addPensionFromPaystub(page: Page): Promise<void> {
+  await page
+    .getByRole('region', { name: 'Pensions' })
+    .getByRole('button', { name: 'Add a pension' })
+    .click()
+  await page.getByRole('button', { name: 'Fill it from a paystub' }).click()
+  await page
+    .getByRole('region', { name: 'Add a pension from a paystub' })
+    .getByLabel('Choose a paystub')
+    .setInputFiles(PAYSTUB_PDF)
   await expect(page.getByRole('form', { name: 'Review the paystub' })).toBeVisible()
 }
 

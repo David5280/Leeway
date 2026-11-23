@@ -9,7 +9,7 @@ import {
   listBills,
   updateBill,
 } from '../domain/bills.js'
-import { dismissRecurring, untrackedRecurring } from '../domain/recurring.js'
+import { dismissRecurring, untrackedRecurring } from '../domain/untrackedRecurring.js'
 import { trackRecurring } from '../domain/trackRecurring.js'
 import { defineAction } from './action.js'
 import { today } from './today.js'
@@ -55,7 +55,13 @@ export const updateBillAction = defineAction({
   scope: 'write',
   surface: 'all',
   run: async (ctx, { id, ...patch }) =>
-    updateBill(ctx.db, id, patch, await today(ctx), { byAssistant: ctx.agent }),
+    updateBill(
+      ctx.db,
+      id,
+      patch,
+      { today: await today(ctx), now: ctx.now() },
+      { byAssistant: ctx.agent },
+    ),
 })
 
 export const deleteBillAction = defineAction({

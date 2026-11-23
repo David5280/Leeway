@@ -77,10 +77,12 @@ export function leewayDrill(budget: Budget, money: Money): DrillDown {
   }
   const over = totals.leewayCents < 0
   const daysToSpend = period.daysLeft + 1
-  const note =
-    totals.safePerDayCents !== null && !over
-      ? `That is about ${money(totals.safePerDayCents)} a day for the next ${daysToSpend} ${daysToSpend === 1 ? 'day' : 'days'}. Spending without a budget is not counted here.`
-      : 'Spending in categories without a budget is not counted here.'
+  const cashNote = period.offset === 0 ? budget.spendable?.note : null
+  let note = 'Spending in categories without a budget is not counted here.'
+  if (cashNote) note = `${cashNote} Spending without a budget is not counted in the budget.`
+  else if (totals.safePerDayCents !== null && !over) {
+    note = `That is about ${money(totals.safePerDayCents)} a day for the next ${daysToSpend} ${daysToSpend === 1 ? 'day' : 'days'}. Spending without a budget is not counted here.`
+  }
   return {
     title: 'Left to spend',
     subtitle: `Day ${period.daysElapsed} of ${period.days}`,

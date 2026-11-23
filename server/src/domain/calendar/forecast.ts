@@ -3,13 +3,14 @@
 // the same kind show what they usually cost.
 
 import type { Db } from '../../db/pool.js'
-import { addDays, type IsoDate } from '../../lib/dates.js'
+import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
 import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
 import { nextPayday } from '../cashFlow.js'
 import type { Settings } from '../settings.js'
-import { costsOf } from './costs.js'
+import { costsOf, type EventCost } from './costs.js'
 import { daysOf, kindOf, type EventKind } from './kinds.js'
+import { mergeSpans, type EventSpan, type KindedEvent } from './spans.js'
 import { eventsBetween } from './store.js'
 import { FORECAST_WEEKS, intoWeeks, type Forecast, type ForecastItem } from './weeks.js'
 
@@ -30,60 +31,100 @@ function roundUp(cents: number): number {
   return Math.ceil(cents / 1000) * 1000
 }
 
-interface Typical {
-  /** Per day for a trip (trips scale with their length); per event otherwise. */
-  cents: number
+/** What past events of a kind usually cost, when enough of them show spending to tell. */
+export interface Typical {
+  /** Paid once per event: a trip's travel booked ahead, a wedding's gift, a show's tickets. */
+  perEventCents: number
+  /** Paid for each day on top: a trip's spending while away; 0 for the other kinds. */
+  perDayCents: number
   basedOn: number
 }
 
-/** What past events of a kind usually cost, when there are enough with spending to tell. */
-async function typicalCost(
-  db: Db,
-  kind: EventKind,
-  past: { startsOn: IsoDate; endsOn: IsoDate }[],
-): Promise<Typical | null> {
-  const costs = await costsOf(db, kind, past)
-  const spent = past
-    .map((event, i) => (kind === 'trip' ? costs[i]! / daysOf(event) : costs[i]!))
-    .filter((cents) => cents > 0)
-  if (spent.length < MIN_PAST_EVENTS) return null
-  return { cents: median(spent), basedOn: spent.length }
+/** An event with what was spent on it so far. */
+interface Costed {
+  span: EventSpan
+  cost: EventCost
 }
 
-/** Money relevant events from the calendar, with what to set aside for each. */
+/** What past trips usually cost: the booking once, the days by the day. */
+function typicalTrip(past: Costed[]): Typical | null {
+  const trips = past.filter(({ cost }) => cost.aheadCents + cost.duringCents > 0)
+  if (trips.length < MIN_PAST_EVENTS) return null
+  return {
+    perEventCents: median(trips.map(({ cost }) => cost.aheadCents)),
+    perDayCents: median(trips.map(({ span, cost }) => cost.duringCents / daysOf(span))),
+    basedOn: trips.length,
+  }
+}
+
+/** What past events of one kind usually cost; every kind but a trip is paid once. */
+function typicalCost(kind: EventKind, past: Costed[]): Typical | null {
+  if (kind === 'trip') return typicalTrip(past)
+  const spent = past
+    .map(({ cost }) => cost.aheadCents + cost.duringCents)
+    .filter((cents) => cents > 0)
+  if (spent.length < MIN_PAST_EVENTS) return null
+  return { perEventCents: median(spent), perDayCents: 0, basedOn: spent.length }
+}
+
+/**
+ * What is still to set aside for an event coming up, given what was spent on
+ * it so far. A trip already under way is booked already, so only the days it
+ * has left are still to pay for; one coming up still needs what its travel
+ * booked so far leaves of the usual booking. Any other kind is paid once (a
+ * gift, tickets), so what was bought for it already, ahead or on its days,
+ * comes off. Never below nothing.
+ */
+export function setAsideFor(
+  event: Pick<KindedEvent, 'kind' | 'startsOn' | 'endsOn'>,
+  usual: Typical,
+  today: IsoDate,
+  spent: EventCost,
+): number {
+  const trip = event.kind === 'trip'
+  const underWay = event.startsOn < today
+  const daysLeft = daysOf({ startsOn: maxDate(event.startsOn, today), endsOn: event.endsOn })
+  const paid = trip ? spent.aheadCents : spent.aheadCents + spent.duringCents
+  const once = underWay && trip ? 0 : Math.max(0, usual.perEventCents - paid)
+  return once + usual.perDayCents * daysLeft
+}
+
+/**
+ * Money relevant events from the calendar, with what to set aside for each.
+ * Events that are one thing (a trip, its flight and its hotel) are merged
+ * first, coming and past alike, so each is costed and listed once. All are
+ * costed together, so a purchase that could belong to two (a flight home for
+ * Christmas) counts for one only, and an event coming up shows what was
+ * spent on it already.
+ */
 async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
-  const upcoming = (await eventsBetween(db, today, to)).flatMap((event) => {
-    const kind = kindOf(event)
-    return kind ? [{ ...event, kind }] : []
-  })
-  if (!upcoming.length) return []
-  const past = (await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), addDays(today, -1)))
-    .filter((event) => event.endsOn < today)
-    .flatMap((event) => {
+  const events = await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
+  const spans = mergeSpans(
+    events.flatMap((event) => {
       const kind = kindOf(event)
       return kind ? [{ ...event, kind }] : []
-    })
+    }),
+  )
+  if (!spans.some((span) => span.endsOn >= today)) return []
+  const costs = await costsOf(db, spans)
+  const costed = spans.map((span, i) => ({ span, cost: costs[i]! }))
+  const upcoming = costed.filter(({ span }) => span.endsOn >= today)
+  const past = costed.filter(({ span }) => span.endsOn < today)
   const typical = new Map<EventKind, Typical | null>()
-  for (const kind of new Set(upcoming.map((event) => event.kind))) {
-    typical.set(
-      kind,
-      await typicalCost(
-        db,
-        kind,
-        past.filter((event) => event.kind === kind),
-      ),
-    )
+  for (const kind of new Set(upcoming.map(({ span }) => span.kind))) {
+    const sameKind = past.filter(({ span }) => span.kind === kind)
+    typical.set(kind, typicalCost(kind, sameKind))
   }
-  return upcoming.map((event) => {
-    const usual = typical.get(event.kind)
-    const cents = usual && (event.kind === 'trip' ? usual.cents * daysOf(event) : usual.cents)
+  return upcoming.map(({ span, cost }) => {
+    const usual = typical.get(span.kind)
     return {
       type: 'event' as const,
-      date: event.startsOn,
-      endsOn: event.endsOn,
-      title: event.title,
-      kind: event.kind,
-      suggestedCents: cents ? roundUp(cents) : null,
+      id: span.id,
+      date: span.startsOn,
+      endsOn: span.endsOn,
+      title: span.title,
+      kind: span.kind,
+      suggestedCents: usual ? roundUp(setAsideFor(span, usual, today, cost)) : null,
       basedOn: usual?.basedOn ?? 0,
     }
   })
@@ -106,29 +147,38 @@ async function paydayItems(
   }))
 }
 
+/**
+ * Bills due in the window. One overdue (its due day passed with no payment
+ * found) is shown too, on its due day, so it leads the first week rather
+ * than drop out of sight.
+ */
 async function billItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
   return (await listBills(db, today)).flatMap((bill) =>
     dueBefore(bill, addDays(to, 1))
-      .filter((date) => date >= today)
+      .filter((date) => date >= today || bill.status === 'overdue')
       .map((date) => ({
         type: 'bill' as const,
         date,
         billId: bill.id,
         name: bill.name,
         amountCents: bill.amountCents,
+        ...(date < today && { overdue: true }),
       })),
   )
 }
 
 /** The forecast, or nothing when no calendar is linked: it then stays out of the way. */
 export async function getForecast(db: Db, settings: Settings, today: IsoDate): Promise<Forecast> {
-  const { rowCount } = await db.query('SELECT 1 FROM calendar_feed')
-  if (!rowCount) return { connected: false, today, weeks: [] }
+  const { rows } = await db.query<{ read_note: string | null }>(
+    'SELECT read_note FROM calendar_feed',
+  )
+  const feed = rows[0]
+  if (!feed) return { connected: false, today, weeks: [], note: null }
   const to = addDays(today, FORECAST_WEEKS * 7 - 1)
   const items = [
     ...(await paydayItems(db, settings, today, to)),
     ...(await billItems(db, today, to)),
     ...(await eventItems(db, today, to)),
   ]
-  return { connected: true, today, weeks: intoWeeks(items, today) }
+  return { connected: true, today, weeks: intoWeeks(items, today), note: feed.read_note }
 }

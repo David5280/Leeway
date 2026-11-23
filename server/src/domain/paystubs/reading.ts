@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { isIsoDate, type IsoDate } from '../../lib/dates.js'
 import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
 import { PAY_CADENCES } from '../retirement/pensions.js'
+import { redactPlanName } from './planName.js'
 import { redactEmployer, redactSource } from './redact.js'
 
 /** How sure the reader is of a figure: the owner checks a low one first. */
@@ -71,6 +72,8 @@ export const paystubReadingSchema = z.object({
   }),
   current: figures(CURRENT_FIELDS),
   yearToDate: figures(YEAR_TO_DATE_FIELDS),
+  /** The pension line's plan name as printed, like "PERA", to name a new pension by. */
+  pensionPlanName: z.string().nullable(),
 })
 
 export type PaystubReading = z.infer<typeof paystubReadingSchema>
@@ -92,6 +95,8 @@ export interface PaystubExtraction {
   payCadence: { value: PayCadence | null; confidence: Confidence; source: string | null }
   current: Record<CurrentField, ReviewFigure>
   yearToDate: Record<YearToDateField, ReviewFigure>
+  /** The pension's plan name as the paystub prints it, offered as a new pension's name. */
+  pensionPlanName: string | null
 }
 
 /**
@@ -164,7 +169,8 @@ function dateOf(text: string | null): IsoDate | null {
 /**
  * The reading cleaned for review: amounts in cents, real dates only, and
  * every line of text redacted. Take-home pay above gross pay cannot be right,
- * so both are marked for a second look.
+ * so both are marked for a second look. The pension's plan name is kept only
+ * when the paystub shows a pension contribution for it to name.
  */
 export function extractionFrom(reading: PaystubReading): PaystubExtraction {
   const current = reviewFigures(CURRENT_FIELDS, reading.current, MAX_PERIOD_CENTS)
@@ -185,6 +191,9 @@ export function extractionFrom(reading: PaystubReading): PaystubExtraction {
     },
     current,
     yearToDate: reviewFigures(YEAR_TO_DATE_FIELDS, reading.yearToDate, MAX_YEAR_CENTS),
+    // A plan name only means something beside the contribution it labels.
+    pensionPlanName:
+      current.pension.cents === null ? null : redactPlanName(reading.pensionPlanName),
   }
 }
 

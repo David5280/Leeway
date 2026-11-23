@@ -20,11 +20,12 @@ export function useHomeAlerts() {
 
 type Target = Input<'hide_home_alert'>
 
-/** Whether an alert is the one being hidden: one alert per kind and account, and per bill. */
+/** Whether an alert is the one being hidden: one alert per kind and account, per bill and per charge. */
 const isTarget = (alert: AccountAlert, target: Target) =>
   alert.kind === target.kind &&
   alert.accountId === target.accountId &&
-  alert.bill?.id === target.billId
+  alert.bill?.id === target.billId &&
+  alert.charge?.id === target.chargeId
 
 /** Hides an alert from the home screen, taking its row away at once. */
 export function useHideHomeAlert() {

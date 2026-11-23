@@ -19,7 +19,8 @@ import {
   type PeriodFlow,
 } from './accountViewText.js'
 import { alertsFor, recentCharges, selectAccounts } from './alerts.js'
-import { categoryTotalsByRange, currentPeriod, type DateRange } from './budgetReport.js'
+import { currentPeriod } from './budgetReport.js'
+import { categoryTotalsByRange, type DateRange } from './categoryTotals.js'
 import { listCategories } from './categories.js'
 import { countedSql } from './counted.js'
 import { periodConfig, type Settings } from './settings.js'

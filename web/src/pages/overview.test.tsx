@@ -282,6 +282,8 @@ describe('account alerts on the Overview', () => {
           cadence: 'month',
           trackedOn: '2026-09-01',
           amountVaries: false,
+          amountSetOn: null,
+          followAfterOn: null,
           charges: [],
         },
         charge: { accountId: 'everyday', date: '2026-11-16', amountCents: 12000 },

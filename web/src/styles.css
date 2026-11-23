@@ -191,6 +191,13 @@ h2 {
   gap: 8px;
 }
 
+/* A short list read as one block, like a title over a few rows of amounts. */
+.stack-xs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -701,6 +708,19 @@ select.input {
 /* A starter category in setup: its amount drops under its name on a narrow phone. */
 .starter-item {
   flex-wrap: wrap;
+}
+
+/* The line under a money field that says why its amount can't be saved. It
+   takes a whole line, and keeps it while empty so nothing moves when it
+   shows; in a long list of fields (fit) it takes room only once it has words. */
+.amount-note {
+  display: block;
+  width: 100%;
+  min-height: 1.45em;
+}
+
+.amount-note.fit:empty {
+  display: none;
 }
 
 /* A checkbox and the words that name it, in one label, so tapping either ticks it. */
@@ -1973,6 +1993,8 @@ details.more[open] summary {
 
 .inline-budget-form {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
 }

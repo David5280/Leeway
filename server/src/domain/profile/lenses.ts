@@ -87,7 +87,7 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
   if (!rate) {
     const needs =
       profile.monthly.incomeCents === null
-        ? 'Leeway needs a whole month of pay to work out your savings rate.'
+        ? 'Leeway works out your savings rate once a paycheck from your current employer arrives.'
         : 'Leeway has not seen a month of transfers to savings or investments yet, so it cannot work out your savings rate.'
     return { ...shared, headline: null, detail: needs, tone: 'neutral', progress: null }
   }
@@ -105,7 +105,8 @@ function savingsRateMeter(profile: FinancialProfile, { money }: InsightFormat): 
   return {
     ...shared,
     headline: `${rate.percent}%`,
-    detail: `${of}${against}`,
+    // One paycheck cannot show how often pay comes, so the rate is said to be a guess until the second.
+    detail: `${of}${against}${profile.monthly.incomeEstimated ? ' Pay is estimated from your first paycheck until the second confirms how often it comes.' : ''}`,
     tone: target !== null && rate.percent >= target ? 'good' : 'neutral',
     progress: null,
   }

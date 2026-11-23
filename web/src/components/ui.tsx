@@ -224,6 +224,31 @@ export function ErrorNote({ error }: { error: unknown }) {
   )
 }
 
+/**
+ * Why something could not load, with a way to ask for it again. onRetry gets
+ * the button pressed, which may be gone once the retry starts, so the caller
+ * can tell where focus should go next.
+ */
+export function RetryNote({
+  error,
+  onRetry,
+}: {
+  error: unknown
+  onRetry: (button: HTMLButtonElement) => void
+}) {
+  if (!error) return null
+  return (
+    <div className="stack-sm">
+      <ErrorNote error={error} />
+      <div className="row">
+        <button type="button" className="btn" onClick={(e) => onRetry(e.currentTarget)}>
+          Try again
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Loading({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="row muted" role="status">

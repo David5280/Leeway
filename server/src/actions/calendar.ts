@@ -10,8 +10,8 @@ import {
   connectCalendar,
   disconnectCalendar,
   refreshCalendar,
-  type CalendarDeps,
 } from '../domain/calendar/store.js'
+import type { CalendarDeps } from '../domain/calendar/reading.js'
 import { getTrip, listTrips, tripOfTransaction } from '../domain/trips/trips.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { defineAction } from './action.js'
@@ -23,7 +23,8 @@ async function calendarDeps(ctx: AppContext): Promise<CalendarDeps> {
   return {
     key: ctx.config.encryptionKey,
     timeZone: settings.timeZone,
-    now: ctx.now(),
+    // Asked when each write is made, so a read that took a while is dated when it lands.
+    now: () => ctx.now(),
     fetcher: ctx.fetchCalendar,
   }
 }

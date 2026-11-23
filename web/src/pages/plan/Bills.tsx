@@ -1,8 +1,11 @@
 // Bills and subscriptions: what is due and when, and repeating charges found
 // in history, each tracked as a bill in one tap, with Undo in a toast.
+// "/plan/bills?bill=<id>" opens straight onto that bill, which is how Coming
+// up's rows get here.
 
 import { Card } from '../../components/design/Card'
 import { useCallback, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Bill, Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Toast } from '../../components/Toast'
@@ -115,6 +118,18 @@ function Suggestions() {
   )
 }
 
+/**
+ * What saving an existing bill sends: every field, but the amount only when
+ * the owner changed it. The server takes a sent amount as one the owner set,
+ * and a form opened before Leeway settled a new amount would send the old one
+ * back with a rename.
+ */
+function billUpdate(fields: BillFields, opened: BillFields): Partial<BillFields> {
+  if (fields.amountCents !== opened.amountCents) return fields
+  const { amountCents: _unchanged, ...rest } = fields
+  return rest
+}
+
 /** The open form, with the changes it can save. */
 function BillEditor({
   editing,
@@ -130,8 +145,10 @@ function BillEditor({
   const remove = useActionMutation('delete_bill')
   const { bill } = editing
   const close = { onSuccess: onClose }
-  const save = (fields: BillFields) =>
-    bill ? update.mutate({ id: bill.id, ...fields }, close) : create.mutate(fields, close)
+  const save = (fields: BillFields) => {
+    if (bill) update.mutate({ id: bill.id, ...billUpdate(fields, editing.initial) }, close)
+    else create.mutate(fields, close)
+  }
   return (
     <FormCard title={bill ? bill.name : 'New bill'}>
       <BillForm
@@ -150,7 +167,8 @@ function BillEditor({
 
 export function BillsSection() {
   const { settings } = useApp()
-  const [editing, setEditing] = useState<Editing>(null)
+  const [params, setParams] = useSearchParams()
+  const [chosen, setEditing] = useState<Editing>(null)
   const bills = useAction('list_bills')
   const categories = useAction('list_categories')
   const today = isoDaysAgo(0, settings.timeZone)
@@ -160,6 +178,15 @@ export function BillsSection() {
     return <LoadingOrError error={error} />
   }
   const { monthlyCents, subscriptionsMonthlyCents } = bills.data
+  // A bill the address asks for is open until closed, unless another is opened.
+  const asked = bills.data.bills.find((bill) => bill.id === params.get('bill'))
+  const editing = chosen ?? (asked ? { bill: asked, initial: billFields(asked, today) } : null)
+
+  function close() {
+    setEditing(null)
+    // Drop "?bill=" so a reload does not open the form again.
+    if (params.has('bill')) setParams({}, { replace: true })
+  }
 
   return (
     <>
@@ -169,7 +196,7 @@ export function BillsSection() {
           key={editing.bill?.id ?? editing.initial.name}
           editing={editing}
           categories={categories.data}
-          onClose={() => setEditing(null)}
+          onClose={close}
         />
       )}
 
