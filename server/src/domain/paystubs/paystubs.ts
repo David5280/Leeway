@@ -1,19 +1,19 @@
-// Saving a paystub the owner reviewed: the figures they confirmed, and, when
-// they choose, those figures applied to a pension (pension.ts) and to the
-// monthly retirement contribution. Nothing is saved until the owner says so,
-// and the file itself never is.
+// A paystub the owner confirmed: its figures, what it puts into a 401(k), 457
+// or 403(b), and the saved rows that keep it. Saving one, with its figures
+// applied to a pension or the retirement contribution, is save.ts.
+//
+// Nothing here may import pension.ts: pay/source.ts reads the newest paystub
+// from here, and pension.ts leads back to pay/source.ts through the accounts
+// modules, so that import would close a cycle (importCycles.test.ts).
 
-import type pg from 'pg'
 import { z } from 'zod'
-import { withTransaction, type Db } from '../../db/pool.js'
+import type { Db } from '../../db/pool.js'
 import { AppError, notFound } from '../../errors.js'
 import { formatWholeCents } from '../../lib/money.js'
 import { convertCadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
 import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
-import { PAY_CADENCES, type Pension } from '../retirement/pensions.js'
-import { getSettings, mergeSettings, saveSettings } from '../settings.js'
-import { applyToPension, newPaystubPensionSchema } from './pension.js'
+import { PAY_CADENCES } from '../retirement/pensions.js'
 import { MAX_EMPLOYER_LENGTH } from './redact.js'
 import {
   CURRENT_FIELDS,
@@ -68,47 +68,11 @@ export const paystubSchema = z
 
 export type Paystub = z.infer<typeof paystubSchema>
 
-/** Saving a paystub, and where else its figures go. */
-export const savePaystubSchema = z
-  .object({
-    paystub: paystubSchema,
-    /** The pension to update with this paystub's pension figures; null leaves every pension as it is. */
-    pensionAccountId: z.uuid().nullable().default(null),
-    /** A pension to add as a new account with this paystub's pension figures, in the same step. */
-    newPension: newPaystubPensionSchema.nullable().default(null),
-    /** An account Leeway already has to become a pension with these figures, so it counts once. */
-    attachAccountId: z.uuid().nullable().default(null),
-    /** Whether the 401(k), 457 and 403(b) figures become the monthly retirement contribution. */
-    setRetirementContribution: z.boolean().default(false),
-  })
-  // At most one place for the pension figures: a kept pension, a new account or an account Leeway has.
-  .refine(
-    ({ pensionAccountId, newPension, attachAccountId }) =>
-      [pensionAccountId, newPension, attachAccountId].filter((target) => target !== null).length <=
-      1,
-    {
-      message:
-        'Choose one pension for these figures: one you keep, a new one, or an account you have.',
-      path: ['newPension'],
-    },
-  )
-
-export type SavePaystub = z.infer<typeof savePaystubSchema>
-
 /** A saved paystub. */
 export interface SavedPaystub extends Paystub {
   id: string
   pensionAccountId: string | null
   savedAt: string
-}
-
-/** What saving changed besides the paystub itself. */
-export interface PaystubSaved {
-  paystub: SavedPaystub
-  /** The pension as it now stands, when one was chosen or added. */
-  pension: Pension | null
-  /** The monthly retirement contribution now set, when it was. */
-  retirementMonthlyContributionCents: number | null
 }
 
 /** The employee's own workplace plan contributions, which go into retirement savings. */
@@ -223,7 +187,15 @@ export async function latestPaystub(db: Db): Promise<SavedPaystub | null> {
   return rows[0] ? paystubFromRow(rows[0]) : null
 }
 
-async function insertPaystub(db: Db, paystub: Paystub, pensionAccountId: string | null) {
+/**
+ * Inserts a confirmed paystub, linked to the pension it was applied to if
+ * any, and returns it as saved. Used by save.ts inside its transaction.
+ */
+export async function insertPaystub(
+  db: Db,
+  paystub: Paystub,
+  pensionAccountId: string | null,
+): Promise<SavedPaystub> {
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO paystubs (employer_name, pay_date, period_start, period_end, pay_cadence,
        current_cents, year_to_date_cents, pension_account_id)
@@ -249,32 +221,6 @@ async function insertPaystub(db: Db, paystub: Paystub, pensionAccountId: string 
   )
   const saved = await db.query<PaystubRow>(`${SELECT_PAYSTUB} WHERE id = $1`, [id])
   return paystubFromRow(saved.rows[0]!)
-}
-
-/** Sets the monthly retirement contribution, leaving every other assumption as it is. */
-async function setRetirementContribution(db: Db, monthlyCents: number): Promise<void> {
-  const settings = await getSettings(db)
-  const retirement = { monthlyContributionCents: monthlyCents }
-  await saveSettings(db, mergeSettings(settings, { retirement }))
-}
-
-/**
- * Saves a paystub the owner confirmed and, as they chose, applies it to a
- * pension kept already or to a new one, and to the monthly retirement
- * contribution, all or nothing.
- */
-export async function savePaystub(pool: pg.Pool, input: SavePaystub): Promise<PaystubSaved> {
-  return withTransaction(pool, async (db) => {
-    const { paystub } = input
-    const contribution = input.setRetirementContribution ? monthlyPlanContribution(paystub) : null
-    const pension = await applyToPension(db, paystub, input)
-    if (contribution !== null) await setRetirementContribution(db, contribution)
-    return {
-      paystub: await insertPaystub(db, paystub, pension?.accountId ?? null),
-      pension,
-      retirementMonthlyContributionCents: contribution,
-    }
-  })
 }
 
 /** Deletes a saved paystub. A pension or contribution it set keeps its figures. */
