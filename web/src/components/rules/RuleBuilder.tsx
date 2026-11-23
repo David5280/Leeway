@@ -4,11 +4,11 @@ import { useState, type FormEvent } from 'react'
 import type { Category, Output } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { useApp } from '../../lib/app'
-import { parseMoney } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
 import { CategorySelect } from '../CategorySelect'
 import { ErrorNote, Icon, Segmented } from '../ui'
-import { FIELDS, MATCHES, type RuleDraft } from './rules'
+import { AmountNote, useAmountField, type AmountField } from '../AmountNote'
+import { amountLimits, FIELDS, MATCHES, type RuleDraft } from './rules'
 
 /**
  * Builds a rule with a live preview of what it would catch, so nothing
@@ -31,8 +31,7 @@ export function RuleBuilder({
   const set = (change: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...change }))
   const names = new Map(categories.map((c) => [c.id, c.name]))
 
-  const minAmountCents = draft.minAmount ? parseMoney(draft.minAmount) : null
-  const maxAmountCents = draft.maxAmount ? parseMoney(draft.maxAmount) : null
+  const { minAmountCents, maxAmountCents, unreadable: badLimit } = amountLimits(draft)
   const settled = useDebounced({
     field: draft.field,
     matchType: draft.matchType,
@@ -127,7 +126,7 @@ export function RuleBuilder({
         <button
           type="submit"
           className="btn primary"
-          disabled={!draft.categoryId || !draft.pattern.trim() || create.isPending}
+          disabled={!draft.categoryId || !draft.pattern.trim() || badLimit || create.isPending}
         >
           {create.isPending ? 'Saving' : 'Save rule and apply'}
         </button>
@@ -145,6 +144,9 @@ function AmountLimits({
   onChange: (change: Partial<RuleDraft>) => void
 }) {
   const [open, setOpen] = useState(Boolean(draft.minAmount || draft.maxAmount))
+  // Both limits share one line under them, so the row keeps one line's room.
+  const largest = useAmountField(draft.maxAmount ?? '')
+  const smallest = useAmountField(draft.minAmount ?? '', {}, largest.id)
   if (!open) {
     return (
       <div>
@@ -160,14 +162,17 @@ function AmountLimits({
       <AmountInput
         label="Smallest amount"
         value={draft.minAmount}
+        field={smallest}
         onChange={(minAmount) => onChange({ minAmount })}
       />
       <span>and</span>
       <AmountInput
         label="Largest amount"
         value={draft.maxAmount}
+        field={largest}
         onChange={(maxAmount) => onChange({ maxAmount })}
       />
+      <AmountNote id={largest.id} text={smallest.shown ?? largest.shown} />
     </div>
   )
 }
@@ -175,10 +180,12 @@ function AmountLimits({
 function AmountInput({
   label,
   value,
+  field,
   onChange,
 }: {
   label: string
   value: string | undefined
+  field: AmountField
   onChange: (value: string) => void
 }) {
   return (
@@ -188,6 +195,7 @@ function AmountInput({
       inputMode="decimal"
       placeholder="Any"
       aria-label={label}
+      {...field.inputProps}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
     />

@@ -44,18 +44,46 @@ const ALERT_WORDS: Record<
     push: (a) =>
       `${a.bill?.name ?? 'A bill'} cost ${a.amountCents > (a.bill?.usualCents ?? 0) ? 'more' : 'less'} than usual.`,
   },
+  // A merchant's name comes from the bank's text, so a locked screen shows none.
+  duplicate_charge: {
+    title: 'Charged twice?',
+    push: () => 'A charge may have gone through twice.',
+  },
+  price_rise: { title: 'Price went up', push: () => 'A repeating charge went up in price.' },
+}
+
+/**
+ * What a price rise is about: the account, the day of the first charge at the
+ * new price, the charge a cycle before it (so two like rises on one account
+ * and day stay apart), and the move from the old price to the new one. That
+ * day stays the same while the rise is news (priceRises.ts), so the same rise
+ * is never pushed or brought back twice. Not the latest charge's id, which
+ * can change when another charge posts the same day, and never a name:
+ * subjects are stored and reach the inbox, and a name, even a hashed one,
+ * could be a person's or hold bank text with an account number.
+ */
+function priceRiseSubject({
+  accountId,
+  amountCents,
+  date,
+  charge,
+}: Pick<AccountAlert, 'accountId' | 'amountCents' | 'date' | 'charge'>): string {
+  return `rise:${accountId}:${date}:${charge?.previousId}:${charge?.previousCents}:${amountCents}`
 }
 
 /**
  * What an account alert is about, as its notification and its hide on the
- * home screen both key it. A fee is news once per latest fee date, and a
- * bill's change once per bill and charge date; the others are conditions,
- * kept once per account while they last.
+ * home screen both key it. A fee is news once per latest fee date, a bill's
+ * change once per bill and charge date, a charge made twice once per charge,
+ * and a price rise once per day and price (priceRiseSubject); the others
+ * are conditions, kept once per account while they last.
  */
 export function accountAlertSubject(
-  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'date' | 'bill'>,
+  alert: Pick<AccountAlert, 'kind' | 'accountId' | 'amountCents' | 'date' | 'bill' | 'charge'>,
 ): string {
   if (alert.kind === 'bill_change') return `${alert.bill?.id}:${alert.date}`
+  if (alert.kind === 'price_rise') return priceRiseSubject(alert)
+  if (alert.kind === 'duplicate_charge') return `charge:${alert.charge?.id}`
   return alert.kind === 'overdraft_fee' ? `${alert.accountId}:${alert.date}` : alert.accountId
 }
 

@@ -1,18 +1,25 @@
-// Cash flow until the next paycheck: the cash in checking, the bills still
-// due before payday, and what that leaves at payday and to spend each day.
-// Savings is left out: it is money set aside, not what the bills come out of.
+// Safe to spend until the next paycheck: the one figure for what can be
+// spent now. Every place that says what is safe to spend (the Overview's
+// hero, Budgets, the widget, the check-in, the AI's summary, can-I-afford and
+// the actions an assistant calls) reads it from getCashFlow, so none works
+// out its own.
+//
+// It is the cash in checking (each account at the lower of its balance and
+// available balance; never savings, investments or retirement), less the
+// bills due by payday, less what an overdrawn account needs to get back to
+// zero, and never below zero: what those outrun the cash by is the
+// shortfall, a figure of its own.
 
 import type { Db } from '../db/pool.js'
-import { daysBetween, type IsoDate } from '../lib/dates.js'
-import { periodContaining, type Cadence } from '../lib/periods.js'
+import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
 import { paysBills } from './accountKinds.js'
-import { accountMasks, listAccounts } from './accounts.js'
+import { listAccounts, type Account } from './accounts.js'
 import { dueBefore, listBills, type Bill } from './bills.js'
-import { detectRecurring, recentHistory } from './recurring.js'
-import { periodConfig, type Settings } from './settings.js'
+import { paydayFrom, type Payday, type PaydaySource } from './pay/payday.js'
+import { readCurrentPay } from './pay/source.js'
+import type { Settings } from './settings.js'
 
-/** Where the payday came from, so the app and an agent can say how sure it is. */
-export type PaydaySource = 'pay_period' | 'detected_income' | 'period_end'
+export type { Payday, PaydaySource }
 
 export interface BillDue {
   billId: string
@@ -26,72 +33,36 @@ export interface CashFlow {
   today: IsoDate
   nextPayday: IsoDate
   paydaySource: PaydaySource
-  /** The paycheck detected from history, when that is where the payday came from. */
+  /** True while the main employer's cadence is unconfirmed, so the payday is a cautious projection. */
+  paydayEstimate: boolean
+  /** A usual paycheck from the current employer, when paychecks were found. */
   expectedPayCents: number | null
   daysUntilPayday: number
-  /** Available balance (or balance) across counted checking accounts. */
+  /** Whether any counted checking account has a balance: without one, the cash is unknown, not zero. */
+  cashKnown: boolean
+  /** Cash in counted checking accounts: each at the lower of its two balances, never below zero. */
   cashCents: number
   billsDue: BillDue[]
   billsDueCents: number
-  /** Cash minus the bills due before payday. Negative means the bills do not fit. */
-  leftAfterBillsCents: number
-  /** What is left per day until payday, counting today; never below zero. */
+  /** What overdrawn checking accounts need to get back to zero. */
+  overdraftCents: number
+  /** Cash less the bills before payday and any overdraft, never below zero. */
+  safeCents: number
+  /** How far the bills and overdrafts outrun the cash; 0 when they fit or the cash is unknown. */
+  shortfallCents: number
+  /** Safe to spend per day until payday, counting today. */
   perDayCents: number
 }
 
-export interface Payday {
-  date: IsoDate
-  source: PaydaySource
-  amountCents: number | null
-  /** How often pay comes, when the pay period or a regular deposit says. */
-  cadence: Cadence | null
-}
-
-/** A paycheck budget period's frequency, as a cadence. */
-const PAY_CADENCE: Record<'weekly' | 'biweekly' | 'semimonthly' | 'monthly', Cadence> = {
-  weekly: 'week',
-  biweekly: 'biweek',
-  semimonthly: 'semimonth',
-  monthly: 'month',
-}
-
 /**
- * The next payday. A paycheck budget period knows it exactly. Otherwise the
- * largest regular deposit in history is taken as pay, and failing that the
- * end of the budget period stands in.
+ * Every unpaid bill date up to and including payday, soonest first. A bill
+ * due on payday itself counts: nothing says the paycheck lands before it
+ * comes out, and a payday that is only an estimate may come later still.
  */
-export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Promise<Payday> {
-  const config = periodConfig(settings)
-  // `end` is exclusive: it is already the first day of the next period.
-  const nextPeriodStart = periodContaining(today, config).end
-  if (config.kind === 'paycheck') {
-    return {
-      date: nextPeriodStart,
-      source: 'pay_period',
-      amountCents: null,
-      cadence: PAY_CADENCE[config.frequency],
-    }
-  }
-
-  const income = detectRecurring(await recentHistory(db, today), today, await accountMasks(db))
-    .filter((s) => s.direction === 'in' && s.nextDate > today)
-    .sort((a, b) => b.typicalAmountCents - a.typicalAmountCents)[0]
-  if (income) {
-    return {
-      date: income.nextDate,
-      source: 'detected_income',
-      amountCents: income.typicalAmountCents,
-      cadence: income.cadence,
-    }
-  }
-  return { date: nextPeriodStart, source: 'period_end', amountCents: null, cadence: null }
-}
-
-/** Every unpaid bill date before payday, soonest first. */
 function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] {
   return bills
     .flatMap((bill) =>
-      dueBefore(bill, payday).map((dueDate) => ({
+      dueBefore(bill, addDays(payday, 1)).map((dueDate) => ({
         billId: bill.id,
         name: bill.name,
         dueDate,
@@ -102,36 +73,75 @@ function billsBefore(bills: Bill[], payday: IsoDate, today: IsoDate): BillDue[] 
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name))
 }
 
+type CheckingAccount = Pick<Account, 'availableCents' | 'balanceCents'>
+
 /**
- * Money the bills come out of before payday: counted checking accounts (see
- * paysBills). Available balance where the bank gives one, since it already
- * takes out pending charges.
+ * What one checking account holds to spend, and what it needs to get back
+ * to zero: the lower of its balance and available balance, whichever the
+ * bank gives. Available below the balance takes out pending charges;
+ * available above it is mostly an overdraft line, which is borrowing, not
+ * cash. An account with either below zero is overdrawn: it holds nothing to
+ * spend, and owes that much back, whatever protection shows as available.
+ * Idle cash counts checking the same way (idleCashSource.ts).
  */
-async function cashOnHand(db: Db): Promise<number> {
-  const accounts = await listAccounts(db, false)
-  return accounts
-    .filter(paysBills)
-    .reduce((sum, a) => sum + (a.availableCents ?? a.balanceCents ?? 0), 0)
+export function accountCash(account: CheckingAccount): {
+  cashCents: number
+  overdraftCents: number
+} {
+  const known = [account.balanceCents, account.availableCents].filter(
+    (cents): cents is number => cents !== null,
+  )
+  const lowest = known.length > 0 ? Math.min(...known) : 0
+  return { cashCents: Math.max(0, lowest), overdraftCents: Math.max(0, -lowest) }
 }
 
-export async function getCashFlow(db: Db, settings: Settings, today: IsoDate): Promise<CashFlow> {
-  const payday = await nextPayday(db, settings, today)
-  const billsDue = billsBefore(await listBills(db, today), payday.date, today)
+/** Safe to spend from checking, the bills before payday and the payday. Pure. */
+export function safeToSpend(
+  checking: CheckingAccount[],
+  billsDue: BillDue[],
+  payday: Payday,
+  today: IsoDate,
+): CashFlow {
+  const each = checking.map(accountCash)
+  const cashCents = each.reduce((sum, account) => sum + account.cashCents, 0)
+  const overdraftCents = each.reduce((sum, account) => sum + account.overdraftCents, 0)
   const billsDueCents = billsDue.reduce((sum, bill) => sum + bill.amountCents, 0)
-  const cashCents = await cashOnHand(db)
-  const leftAfterBillsCents = cashCents - billsDueCents
+  const cashKnown = checking.some(
+    (account) => (account.availableCents ?? account.balanceCents) !== null,
+  )
+  const left = cashCents - billsDueCents - overdraftCents
+  const safeCents = Math.max(0, left)
   const daysUntilPayday = daysBetween(today, payday.date)
   return {
     today,
     nextPayday: payday.date,
     paydaySource: payday.source,
+    paydayEstimate: payday.estimate,
     expectedPayCents: payday.amountCents,
     daysUntilPayday,
+    cashKnown,
     cashCents,
     billsDue,
     billsDueCents,
-    leftAfterBillsCents,
+    overdraftCents,
+    safeCents,
+    // With no balance to go by, bills cannot be said to outrun it.
+    shortfallCents: cashKnown ? Math.max(0, -left) : 0,
     // Today counts as a day to spend, so a payday tomorrow divides by one.
-    perDayCents: Math.max(0, Math.floor(leftAfterBillsCents / Math.max(1, daysUntilPayday))),
+    perDayCents: Math.floor(safeCents / Math.max(1, daysUntilPayday)),
   }
+}
+
+/** The next payday, from the current employer's paychecks or the budget period. */
+export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Promise<Payday> {
+  return paydayFrom(await readCurrentPay(db, settings, today), settings, today)
+}
+
+/** Safe to spend as of today, read fresh. */
+export async function getCashFlow(db: Db, settings: Settings, today: IsoDate): Promise<CashFlow> {
+  // One at a time: db may be a transaction's client, which runs one query at once.
+  const payday = await nextPayday(db, settings, today)
+  const bills = await listBills(db, today)
+  const checking = (await listAccounts(db, false)).filter(paysBills)
+  return safeToSpend(checking, billsBefore(bills, payday.date, today), payday, today)
 }

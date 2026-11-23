@@ -9,7 +9,7 @@ import { withTransaction, type Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { recategorize } from './categorize.js'
 import { categoryInputSchema, createCategory, listCategories } from './categories.js'
-import { currentEssentials } from './profile/income.js'
+import { currentEssentials } from './essentialSpending.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -43,8 +43,8 @@ export const portableConfigSchema = z.object({
     )
     .default([]),
   // The essential spending categories, by name like the rules, since ids differ
-  // between installs. Null counts every spending category; left out keeps
-  // the current pick on a merge.
+  // between installs. Null lets Leeway find them (essentials.ts); left out
+  // keeps the current pick on a merge.
   essentialCategories: z.array(z.string().min(1)).max(200).nullable().optional(),
 })
 

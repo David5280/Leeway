@@ -292,26 +292,29 @@ describe('PaceChart', () => {
       expect(label).toBeLessThan(today)
     })
 
-    it('keeps a moved label off the amount and inside the plot on the narrowest phones', () => {
-      fakeServer({})
-      const placed: string[] = []
-      // Every width from 300px to 320px, each day of a fortnight, at a few paces near steady.
-      const cases = [300, 305, 310, 315, 320].flatMap((width) =>
-        Array.from({ length: 14 }, (_, i) =>
-          [0.8, 0.9, 1, 1.1].map((rate) => ({ width, day: i + 1, rate })),
-        ).flat(),
-      )
-      for (const { width, day, rate } of cases) {
+    // One test per width keeps each sweep (56 renders) well inside the default
+    // time limit on slower machines, and names the width that fails.
+    it.each([300, 305, 310, 315, 320])(
+      'keeps a moved label off the amount and inside the plot at %ipx',
+      (width) => {
+        fakeServer({})
         vi.stubGlobal('ResizeObserver', observerOf(width))
-        const { container, unmount } = renderSignedIn(
-          <PaceChart pace={fortnight(day, rate)} isCurrent />,
-        )
-        const clash = movedLabelClash(container)
-        if (clash) placed.push(`${width}px, day ${day}, ${rate} of pace: ${clash}`)
-        unmount()
-      }
-      expect(placed).toEqual([])
-    })
+        const placed: string[] = []
+        // Each day of a fortnight, at a few paces near steady.
+        const cases = Array.from({ length: 14 }, (_, i) =>
+          [0.8, 0.9, 1, 1.1].map((rate) => ({ day: i + 1, rate })),
+        ).flat()
+        for (const { day, rate } of cases) {
+          const { container, unmount } = renderSignedIn(
+            <PaceChart pace={fortnight(day, rate)} isCurrent />,
+          )
+          const clash = movedLabelClash(container)
+          if (clash) placed.push(`day ${day}, ${rate} of pace: ${clash}`)
+          unmount()
+        }
+        expect(placed).toEqual([])
+      },
+    )
 
     it('draws a moved label over the spending line, ringed so it stays legible', () => {
       vi.stubGlobal('ResizeObserver', PhoneObserver)

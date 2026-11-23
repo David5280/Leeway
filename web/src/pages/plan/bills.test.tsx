@@ -128,6 +128,21 @@ describe('Bills', () => {
     expect(screen.queryByRole('form', { name: 'New bill' })).not.toBeInTheDocument()
   })
 
+  it('sends no amount when only other fields changed, so an old figure is never sent back', async () => {
+    const server = serve()
+    renderPlan('/plan/bills')
+    const user = userEvent.setup()
+    await user.click(within(await billsCard()).getByRole('button', { name: /Phone/ }))
+    const form = within(screen.getByRole('form', { name: 'Edit Phone' }))
+    await user.clear(form.getByLabelText('Name'))
+    await user.type(form.getByLabelText('Name'), 'Mobile')
+    await user.click(form.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(server.actions('update_bill')).toHaveLength(1))
+    const sent = server.actions('update_bill')[0]!
+    expect(sent).toMatchObject({ id: phone.id, name: 'Mobile', autopay: true })
+    expect(sent).not.toHaveProperty('amountCents')
+  })
+
   it('edits a bill, changing only what the form holds', async () => {
     const server = serve()
     renderPlan('/plan/bills')
@@ -147,6 +162,18 @@ describe('Bills', () => {
       anchorDate: '2026-11-20',
       autopay: true,
     })
+  })
+
+  it('opens straight onto a bill from its address, as Coming up links to it', async () => {
+    serve()
+    renderPlan(`/plan/bills?bill=${netflix.id}`)
+    expect(await screen.findByRole('form', { name: 'Edit Netflix' })).toBeInTheDocument()
+    const user = userEvent.setup()
+    // Another bill opened instead takes its place.
+    await user.click(within(await billsCard()).getByRole('button', { name: /Phone/ }))
+    expect(screen.getByRole('form', { name: 'Edit Phone' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: /Edit/ })).not.toBeInTheDocument()
   })
 
   it('deletes a bill', async () => {

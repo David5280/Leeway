@@ -11,7 +11,7 @@ import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
-import { dayRange } from '../lib/calendar'
+import { dayRange, SAVE_FOR_NAMES } from '../lib/calendar'
 import { TRIP_PART_NAMES, tripName } from '../lib/trips'
 import { TripBudgetForm } from './trips/TripBudgetForm'
 
@@ -107,8 +107,9 @@ export function TripPage() {
       {detail.status === 'upcoming' && !detail.budget && (
         <Card static="form" label="Plan a trip budget" className="stack">
           <h2>Plan a trip budget</h2>
+          {/* The goal starts named by its kind, never the event's title, which can hold a person's name. */}
           <TripBudgetForm
-            name={tripName(detail)}
+            name={SAVE_FOR_NAMES.trip}
             startsOn={detail.startsOn}
             endsOn={detail.endsOn}
             days={detail.days}

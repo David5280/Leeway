@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
 import { DIGEST_GOALS, nearestGoals, profileDigest } from '../src/domain/profile/digest.js'
 import {
-  averageMonths,
-  essentialSpending,
-  wholeMonthsBefore,
+  SPENDING_LEAST_DAYS,
+  SPENDING_MAX_DAYS,
+  SPENDING_MIN_DAYS,
+  spendingWindow,
 } from '../src/domain/profile/income.js'
+import { addDays } from '../src/lib/dates.js'
+import { averageEssentials, wholeMonthsBefore } from '../src/domain/monthlyEssentials.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
 import { RATE_GUARD_FOR_AI, savingsRate } from '../src/domain/savings/rate.js'
 import {
@@ -102,15 +105,58 @@ describe('savingsRate', () => {
   })
 })
 
-describe('monthly averages', () => {
-  const category = (id: string, kind: Category['kind']) => ({ id, kind }) as Category
-  const categories = [
-    category('rent', 'expense'),
-    category('fun', 'expense'),
-    category('pay', 'income'),
-  ]
+describe('typical spending window', () => {
+  it('runs from the current job, kept between eight weeks and three months', () => {
+    // Eight weeks and about three months, pinned as days: a changed constant fails here.
+    expect([SPENDING_MIN_DAYS, SPENDING_MAX_DAYS]).toEqual([56, 91])
+    // A job that started a week ago still looks back eight weeks.
+    expect(spendingWindow(TODAY, '2026-11-12', '2025-01-01')).toEqual({
+      start: addDays(TODAY, -56),
+      days: 56,
+    })
+    // So does one that started 40 days ago.
+    expect(spendingWindow(TODAY, addDays(TODAY, -40), '2025-01-01')!.days).toBe(56)
+    // One that started 70 days ago looks back to its first paycheck.
+    expect(spendingWindow(TODAY, addDays(TODAY, -70), '2025-01-01')).toEqual({
+      start: addDays(TODAY, -70),
+      days: 70,
+    })
+    // No job, or an old one, looks back three months.
+    expect(spendingWindow(TODAY, null, '2025-01-01')).toEqual({
+      start: addDays(TODAY, -SPENDING_MAX_DAYS),
+      days: SPENDING_MAX_DAYS,
+    })
+    expect(spendingWindow(TODAY, '2025-03-01', '2025-01-01')!.days).toBe(SPENDING_MAX_DAYS)
+  })
 
-  it('takes the last three whole months that history fully covers', () => {
+  it('starts no earlier than the history, and needs four weeks of it', () => {
+    expect(spendingWindow(TODAY, null, '2026-10-01')).toEqual({ start: '2026-10-01', days: 49 })
+    expect(spendingWindow(TODAY, null, addDays(TODAY, -SPENDING_LEAST_DAYS))!.days).toBe(28)
+    expect(spendingWindow(TODAY, null, addDays(TODAY, -27))).toBeNull()
+    expect(spendingWindow(TODAY, null, null)).toBeNull()
+  })
+})
+
+describe('a typical month of essentials', () => {
+  const category = (id: string, kind: Category['kind'], name: string) =>
+    ({ id, kind, name, providerCategories: [] }) as unknown as Category
+  const categories = [
+    category('rent', 'expense', 'Rent'),
+    category('fun', 'expense', 'Fun'),
+    category('pay', 'income', 'Paycheck'),
+  ]
+  /** A month of $2,000 rent, `fun` of fun, $10 unfiled and `pay` of pay, nothing coded essential. */
+  const month = (fun: number, pay: number) => ({
+    totals: [
+      { categoryId: 'rent', amountCents: 200_000, count: 1 },
+      { categoryId: 'fun', amountCents: fun, count: 1 },
+      { categoryId: 'pay', amountCents: -pay, count: 1 },
+      { categoryId: null, amountCents: 1_000, count: 1 },
+    ],
+    essentialCoded: [],
+  })
+
+  it('takes the last three whole months that history fully covers, for the fund', () => {
     expect(wholeMonthsBefore(TODAY, '2026-01-01')).toEqual([
       { start: '2026-08-01', end: '2026-09-01' },
       { start: '2026-09-01', end: '2026-10-01' },
@@ -124,46 +170,12 @@ describe('monthly averages', () => {
     expect(wholeMonthsBefore(TODAY, null)).toEqual([])
   })
 
-  it('averages income, spending and essentials over the months', () => {
-    const month = (rent: number, fun: number, pay: number) => [
-      { categoryId: 'rent', amountCents: rent, count: 1 },
-      { categoryId: 'fun', amountCents: fun, count: 1 },
-      { categoryId: 'pay', amountCents: -pay, count: 1 },
-      { categoryId: null, amountCents: 1_000, count: 1 },
-    ]
-    const totals = [month(200_000, 50_000, 600_000), month(200_000, 30_001, 600_000)]
-    expect(averageMonths(categories, totals, ['rent'])).toEqual({
-      months: 2,
-      incomeCents: 600_000,
-      spendingCents: 241_001,
-      essentialSpendingCents: 200_000,
-    })
-    // With no essentials picked, all spending counts, uncategorized included.
-    expect(essentialSpending(categories, totals[0]!, null)).toBe(251_000)
-    // Picks that are no longer expense categories (income, or deleted) are ignored,
-    // and none left means all spending, as if nothing had been picked.
-    expect(essentialSpending(categories, totals[0]!, ['pay', 'gone'])).toBe(251_000)
-    // A partly stale pick keeps the categories that still exist.
-    expect(essentialSpending(categories, totals[0]!, ['rent', 'gone'])).toBe(200_000)
-  })
-
-  it('reads take-home pay as unknown when no income was categorized', () => {
-    const noPay = [[{ categoryId: 'rent', amountCents: 200_000, count: 1 }]]
-    expect(averageMonths(categories, noPay, null)).toEqual({
-      months: 1,
-      incomeCents: null,
-      spendingCents: 200_000,
-      essentialSpendingCents: 200_000,
-    })
-  })
-
-  it('knows nothing without a whole month', () => {
-    expect(averageMonths(categories, [], null)).toEqual({
-      months: 0,
-      incomeCents: null,
-      spendingCents: null,
-      essentialSpendingCents: null,
-    })
+  it('averages the essentials over whole months, and knows nothing without one', () => {
+    const months = [month(50_000, 600_000), month(30_001, 600_000)]
+    expect(averageEssentials(categories, months, ['rent'])).toBe(200_000)
+    // Rent and Fun picked, the unfiled $10 left out: (250,000 + 230,001) / 2, rounded.
+    expect(averageEssentials(categories, months, ['rent', 'fun'])).toBe(240_001)
+    expect(averageEssentials(categories, [], null)).toBeNull()
   })
 })
 
@@ -172,7 +184,7 @@ describe('profileDigest', () => {
     expect(profileDigest(emptyProfile(), dollars)).toBe(
       [
         'Financial profile as of 2026-11-19. Amounts in USD.',
-        'Not known yet: pay schedule, a typical month of income and spending, savings rate.',
+        'Not known yet: pay schedule, a typical month of spending, take-home pay (no paychecks from a current employer), savings rate.',
       ].join('\n'),
     )
   })
@@ -184,12 +196,28 @@ describe('profileDigest', () => {
         source: 'detected_income',
         typicalPayCents: 240_000,
         nextPayday: '2026-12-04',
+        estimate: false,
+        employer: 'Acme Payroll',
+        employers: [
+          {
+            name: 'Acme Payroll',
+            cadence: 'biweek',
+            typicalPayCents: 240_000,
+            monthlyCents: 520_000,
+            since: '2026-06-05',
+            nextPayday: '2026-12-04',
+            estimate: false,
+          },
+        ],
+        since: '2026-06-05',
       },
       monthly: {
-        months: 3,
         incomeCents: 520_000,
+        incomeEstimated: false,
         spendingCents: 410_000,
         essentialSpendingCents: 300_000,
+        spendingSince: '2026-08-20',
+        spendingDays: 91,
       },
       bills: { count: 9, monthlyCents: 215_000 },
       accounts: [
@@ -246,8 +274,8 @@ describe('profileDigest', () => {
     const digest = profileDigest(profile, dollars)
     expect(digest.split('\n')).toEqual([
       'Financial profile as of 2026-11-19. Amounts in USD.',
-      'Pay: every 2 weeks, about $2,400 each, next on Dec 4.',
-      'Typical month (last 3 whole months): $5,200 take-home pay in, $4,100 spent, $3,000 of it essential.',
+      'Pay: every 2 weeks from Acme Payroll since Jun 5, about $2,400 each, next on Dec 4.',
+      'Typical month (spending since Aug 20, pay from paychecks only): $5,200 take-home pay in from the current employer, $4,100 spent.',
       'Bills: 9 tracked bills, $2,150 a month.',
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19, 2026.',
@@ -276,14 +304,30 @@ describe('profileDigest', () => {
       pay: {
         cadence: 'month',
         source: 'pay_period',
-        typicalPayCents: null,
+        typicalPayCents: 250_000,
         nextPayday: '2026-12-01',
+        estimate: true,
+        employer: 'Acme Payroll',
+        employers: [
+          {
+            name: 'Acme Payroll',
+            cadence: 'month',
+            typicalPayCents: 250_000,
+            monthlyCents: 250_000,
+            since: '2026-11-14',
+            nextPayday: '2026-12-01',
+            estimate: true,
+          },
+        ],
+        since: '2026-11-14',
       },
       monthly: {
-        months: 1,
         incomeCents: 500_000,
+        incomeEstimated: true,
         spendingCents: 300_000,
         essentialSpendingCents: 300_000,
+        spendingSince: '2026-09-24',
+        spendingDays: 56,
       },
       savings: savingsReport([kindReport('savings', 300_000)], {
         historyStartsOn: null,
@@ -329,8 +373,8 @@ describe('profileDigest', () => {
       ],
     })
     expect(profileDigest(profile, dollars).split('\n').slice(1, 6)).toEqual([
-      'Pay: monthly, next on Dec 1.',
-      'Typical month (last 1 whole month): $5,000 take-home pay in, $3,000 spent.',
+      'Pay: monthly from Acme Payroll since Nov 14, about $2,500 each, next on Dec 1. This is an estimate until more paychecks confirm how often pay comes.',
+      'Typical month (spending since Sep 24, pay from paychecks only): $5,000 take-home pay in from the current employer (estimated until more paychecks confirm it), $3,000 spent.',
       'Saved and invested: $3,000 (savings $3,000), down $200 since Nov 1.',
       'Emergency fund: savings cover 1 month of essentials ($3,000 a month); target 1 month ($3,000), met.',
       // The dated goal comes first: it is the nearer one.
@@ -338,23 +382,101 @@ describe('profileDigest', () => {
     ])
   })
 
-  it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
+  const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
+    name,
+    cadence,
+    typicalPayCents: cents,
+    monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
+    since: '2026-09-25',
+    nextPayday: '2026-11-20',
+    estimate: false,
+  })
+
+  it('names each employer paying now, and adds their pay up', () => {
     const profile = emptyProfile({
-      pay: { cadence: 'month', source: 'pay_period', typicalPayCents: null, nextPayday: null },
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-20',
+        estimate: false,
+        employer: 'Initech Payroll',
+        employers: [
+          employer('Initech Payroll', 'semimonth', 200_000),
+          employer('Bluth Co Payroll', 'biweek', 60_000),
+        ],
+        since: '2026-09-25',
+      },
       monthly: {
-        months: 2,
-        incomeCents: null,
+        incomeCents: 530_446,
+        incomeEstimated: false,
         spendingCents: 300_000,
         essentialSpendingCents: 300_000,
+        spendingSince: '2026-09-25',
+        spendingDays: 55,
+      },
+    })
+    const lines = profileDigest(profile, dollars).split('\n')
+    expect(lines).toContain(
+      'Pay: from 2 employers: Initech Payroll twice a month since Sep 25, about $2,000 each; Bluth Co Payroll every 2 weeks since Sep 25, about $600 each. Next payday Nov 20.',
+    )
+    expect(lines).toContain(
+      'Typical month (spending since Sep 25, pay from paychecks only): $5,304 take-home pay in from the 2 current employers, $3,000 spent.',
+    )
+  })
+
+  it("calls pay from several employers an estimate while a side job's cadence is a guess", () => {
+    // The main job is confirmed, so its payday is not a guess; the side job's amount is.
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-30',
+        estimate: false,
+        employer: 'Initech Payroll',
+        employers: [
+          employer('Initech Payroll', 'semimonth', 200_000),
+          { ...employer('Bluth Co Payroll', 'biweek', 60_000), estimate: true },
+        ],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: Initech Payroll twice a month since Sep 25, about $2,000 each; Bluth Co Payroll every 2 weeks since Sep 25, about $600 each. Next payday Nov 30. This is an estimate until more paychecks confirm how often each employer pays.',
+    )
+  })
+
+  it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'month',
+        source: 'pay_period',
+        typicalPayCents: null,
+        nextPayday: null,
+        estimate: false,
+        employer: null,
+        employers: [],
+        since: null,
+      },
+      monthly: {
+        incomeCents: null,
+        incomeEstimated: false,
+        spendingCents: 300_000,
+        essentialSpendingCents: 300_000,
+        spendingSince: '2026-08-20',
+        spendingDays: 91,
       },
       savings: savingsReport([kindReport('savings', 300_000)], { historyStartsOn: null }),
       emergencyFund: null,
     })
     const digest = profileDigest(profile, dollars)
-    expect(digest).toContain('Typical month (last 2 whole months): $3,000 spent.')
+    expect(digest).toContain(
+      'Typical month (spending since Aug 20, pay from paychecks only): $3,000 spent.',
+    )
     expect(digest).not.toMatch(/\$0 take-home/)
     expect(digest.split('\n').at(-1)).toBe(
-      'Not known yet: take-home pay, emergency fund, savings rate.',
+      'Not known yet: take-home pay (no paychecks from a current employer), emergency fund, savings rate.',
     )
   })
 

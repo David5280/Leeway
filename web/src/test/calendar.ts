@@ -11,6 +11,7 @@ export const unlinked: CalendarStatus = {
   connectedAt: null,
   fetchedAt: null,
   lastError: null,
+  note: null,
   eventCount: 0,
 }
 
@@ -21,21 +22,27 @@ export function linked(fields: Partial<CalendarStatus> = {}): CalendarStatus {
     connectedAt: '2026-11-17T17:00:00.000Z',
     fetchedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     lastError: null,
+    note: null,
     eventCount: 48,
     ...fields,
   }
 }
 
 /** The forecast of these items, sorted into weeks by the server's own code. */
-export function forecastOf(items: ForecastItem[]): Forecast {
-  return { connected: true, today: TODAY, weeks: intoWeeks(items, TODAY) }
+export function forecastOf(items: ForecastItem[], note: string | null = null): Forecast {
+  return { connected: true, today: TODAY, weeks: intoWeeks(items, TODAY), note }
 }
+
+/** What the server notes when some repeating events were left out of a read. */
+export const INCOMPLETE =
+  'Some repeating events had too many repeats to work out, so they were left out.'
 
 export const ITEMS: ForecastItem[] = [
   { type: 'payday', date: '2026-11-20', amountCents: 250000 },
   { type: 'bill', date: '2026-11-25', billId: 'b1', name: 'Rent', amountCents: 150000 },
   {
     type: 'event',
+    id: 'sam-bday 2026-12-01',
     date: '2026-12-01',
     endsOn: '2026-12-01',
     title: "Sam's birthday",
@@ -45,6 +52,7 @@ export const ITEMS: ForecastItem[] = [
   },
   {
     type: 'event',
+    id: 'lisbon 2026-12-10',
     date: '2026-12-10',
     endsOn: '2026-12-14',
     title: 'Lisbon trip',
@@ -54,6 +62,7 @@ export const ITEMS: ForecastItem[] = [
   },
   {
     type: 'event',
+    id: 'comedy 2026-12-18',
     date: '2026-12-18',
     endsOn: '2026-12-18',
     title: 'Comedy show',

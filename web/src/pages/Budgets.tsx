@@ -85,6 +85,10 @@ export function Budgets() {
               </span>
             </Link>
           )}
+          {/* When checking holds less than this, the server's one line says so. */}
+          {b.period.offset === 0 && b.spendable?.note && (
+            <p className={`small ${b.spendable.problem ? 'over' : 'muted'}`}>{b.spendable.note}</p>
+          )}
         </Card>
       </div>
 

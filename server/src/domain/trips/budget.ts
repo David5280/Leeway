@@ -11,7 +11,8 @@ import { AppError } from '../../errors.js'
 import { type IsoDate } from '../../lib/dates.js'
 import { isoDateSchema } from '../../lib/schemas.js'
 import { daysOf } from '../calendar/kinds.js'
-import { createGoal, goalInputSchema, type Goal, type GoalClock } from '../goals.js'
+import type { Goal, GoalReading } from '../goalProgress.js'
+import { createGoal, goalInputSchema } from '../goals.js'
 import type { TripPart } from './parts.js'
 
 /** The longest trip a budget plans, in days. */
@@ -112,9 +113,9 @@ export async function tripBudgets(db: Db): Promise<TripBudget[]> {
 export async function createTripBudget(
   pool: pg.Pool,
   input: TripBudgetInput,
-  clock: GoalClock,
+  reading: GoalReading,
 ): Promise<Goal> {
-  if (input.startsOn < clock.today) {
+  if (input.startsOn < reading.today) {
     throw new AppError('invalid_input', 'Plan a trip budget before the trip starts')
   }
   const targetCents = total(plannedParts(input))
@@ -135,7 +136,7 @@ export async function createTripBudget(
         color: TRIP_COLOR,
         setAside: true,
       }),
-      clock,
+      reading,
     )
     await db.query(
       `INSERT INTO trip_budgets (goal_id, starts_on, ends_on, travel_cents, stay_cents,

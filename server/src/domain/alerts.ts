@@ -1,6 +1,7 @@
 // Account alerts from stored data: loads balances and recent charges, then
 // lets accountAlerts.ts decide what is worth flagging, and adds the bills
-// whose latest charge cost more or less than usual (billChanges.ts).
+// whose latest charge cost more or less than usual (billChanges.ts) and the
+// money leaks: charges made twice and prices gone up (leaks/).
 
 import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
@@ -17,6 +18,8 @@ import {
 import { isShared } from './accountSharing.js'
 import { listAccounts, type Account } from './accounts.js'
 import { billChangeAlerts, listBillChanges } from './billChangeSource.js'
+import { withoutDoublePaid } from './leaks/doublePaidBills.js'
+import { leakAlerts, listLeaks, type LeakReader } from './leaks/leakSource.js'
 import type { Settings } from './settings.js'
 
 /**
@@ -37,30 +40,62 @@ export async function recentCharges(db: Db, today: IsoDate): Promise<FeeCandidat
   return rows
 }
 
+/** What listAlerts reads beyond balances and fees, and how a bill paid twice is told. */
+export interface AlertReads {
+  /** Whether to read bills' changes. */
+  bills?: boolean
+  /** Whether to read leaks, or a LeakReader that shares one read between lists. */
+  leaks?: boolean | LeakReader
+  /** Whether a bill paid twice is told as a charge made twice (doublePaidBills.ts). */
+  doublesTold?: boolean
+}
+
 /**
  * The alerts for these accounts, or for every account when none are given.
  * Hidden accounts are included: they stay out of budget totals, but an
  * overdraft on one still costs real money. A bill's change counts for the
- * account its charge came out of, hidden ones aside, as bills never read them.
- * Without `bills`, only the accounts' own alerts are read.
+ * account its charge came out of, hidden ones aside, as bills never read
+ * them. A leak counts for the account it was charged to.
+ *
+ * A bill paid twice in a cycle is told once, as a charge made twice
+ * (doublePaidBills.ts). With `doublesTold` false, as when charges made twice
+ * notify no one, the bill's change tells it instead. Without `bills` or
+ * `leaks`, those are not read, so a problem reading them never stands in the
+ * way of the rest. A caller that lists alerts more than once in a request
+ * passes a LeakReader as `leaks`, so the leaks are read once for all of them.
  */
 export async function listAlerts(
   db: Db,
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
   accountIds: string[] = [],
-  { bills = true }: { bills?: boolean } = {},
+  { bills = true, leaks = true, doublesTold = true }: AlertReads = {},
 ): Promise<AccountAlert[]> {
-  const [accounts, charges, changes] = await Promise.all([
+  const [accounts, charges, changes, found] = await Promise.all([
     listAccounts(db),
     recentCharges(db, today),
     bills ? listBillChanges(db, settings.timeZone, today) : [],
+    readLeaks(db, today, leaks),
   ])
   const picked = selectAccounts(accounts, accountIds)
   const names = new Map(picked.filter(isShared).map((account) => [account.id, account.name]))
-  const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
-  // Bill changes are the last kind (ALERT_KINDS), so they go after the rest.
-  return [...alertsFor(picked, charges, settings), ...billChangeAlerts(changes, names, { money })]
+  const format = {
+    money: (cents: number) => formatCents(cents, settings.currency, settings.locale),
+    date: (date: IsoDate) => shortDate(date, settings.locale),
+  }
+  const told = found && doublesTold ? withoutDoublePaid(changes, found.doubles, today) : changes
+  // Bill changes, then leaks, are the last kinds (ALERT_KINDS), so they go after the rest.
+  return [
+    ...alertsFor(picked, charges, settings),
+    ...billChangeAlerts(told, names, format),
+    ...(found ? leakAlerts(found, names, format) : []),
+  ]
+}
+
+/** The leaks as asked for: none, a fresh read, or the read a LeakReader shares. */
+function readLeaks(db: Db, today: IsoDate, leaks: boolean | LeakReader) {
+  if (leaks === false) return null
+  return leaks === true ? listLeaks(db, today) : leaks()
 }
 
 /**
@@ -91,13 +126,18 @@ export function selectAccounts<T extends { id: string }>(accounts: T[], ids: str
   return picked.length > 0 ? picked : accounts
 }
 
-/** Loads the alerts and words their counts for the server log. */
+/**
+ * Loads the alerts and words their counts for the server log. The line counts
+ * balances and fees only, so bills and leaks (about 400 days of history each
+ * sync) are not read for it.
+ */
 export async function alertLogLine(
   db: Db,
   settings: Pick<Settings, 'currency' | 'locale' | 'timeZone'>,
   today: IsoDate,
 ): Promise<string> {
-  return alertCountsLine(countAlerts(await listAlerts(db, settings, today)))
+  const alerts = await listAlerts(db, settings, today, [], { bills: false, leaks: false })
+  return alertCountsLine(countAlerts(alerts))
 }
 
 /**

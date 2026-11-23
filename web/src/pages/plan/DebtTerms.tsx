@@ -5,14 +5,9 @@ import { useState, type FormEvent } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { parseMoney } from '../../lib/format'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
+import { parseMoney, parseRate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
-
-/** "24.99" into 24.99, rounded to the hundredth; null when blank or not a number. */
-export function parseRate(text: string): number | null {
-  const value = Number.parseFloat(text.replace(/[^0-9.]/g, ''))
-  return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
-}
 
 export function DebtTerms({ account }: { account: Account }) {
   const [rate, setRate] = useState(account.aprPercent === null ? '' : String(account.aprPercent))
@@ -24,6 +19,11 @@ export function DebtTerms({ account }: { account: Account }) {
   const minimumPaymentCents = parseMoney(minimum)
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
+  // A blank rate or payment clears it, but one typed that cannot be read
+  // ("-5" or "150" for a rate, "6O" or "-5" for a payment) must not.
+  const badRate = aprPercent === null && rate.trim() !== ''
+  const paymentField = useAmountField(minimum, { min: 0 })
+  const badPayment = paymentField.note !== null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -57,12 +57,19 @@ export function DebtTerms({ account }: { account: Account }) {
         aria-label={`${account.name} monthly payment`}
         // A card's minimum can be estimated from its balance; a loan's cannot.
         placeholder={account.type === 'credit' ? 'Minimum, est.' : 'Payment'}
+        {...paymentField.inputProps}
         value={minimum}
         onChange={(e) => setMinimum(e.target.value)}
       />
-      <button type="submit" className="btn" disabled={unchanged || save.isPending}>
+      <button
+        type="submit"
+        className="btn"
+        disabled={unchanged || badRate || badPayment || save.isPending}
+      >
         Save
       </button>
+      {/* One row of a list, so the line takes room only once it has words. */}
+      <AmountNote id={paymentField.id} text={paymentField.shown} fit />
       <ErrorNote error={save.error} />
     </form>
   )

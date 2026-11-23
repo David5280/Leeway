@@ -20,10 +20,14 @@ export function useUpdateSettings() {
       await client.cancelQueries({ queryKey: SETTINGS_KEY })
       const previous = client.getQueryData<Settings>(SETTINGS_KEY)
       if (previous) {
+        // The parts the server merges field by field are merged here too, so a
+        // change to one field never blanks the rest while the save is on its way.
         client.setQueryData<Settings>(SETTINGS_KEY, {
           ...previous,
           ...(patch as Partial<Settings>),
           appearance: { ...previous.appearance, ...patch.appearance },
+          savingsPlan: { ...previous.savingsPlan, ...patch.savingsPlan },
+          retirement: { ...previous.retirement, ...patch.retirement },
         })
       }
       return { previous }

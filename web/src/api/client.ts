@@ -32,6 +32,7 @@ export type TripDetail = Output<'get_trip'>
 export type CashFlow = Output<'get_cash_flow'>
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
+export type TaxExport = Output<'export_tax_year'>
 
 /**
  * A failure the server explained: its HTTP status, error code, a message for

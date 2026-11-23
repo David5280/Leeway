@@ -20,10 +20,20 @@ interface MerchantText {
  * The merchant name reduced to its words: "NETFLIX.COM 8473 CA" and
  * "Netflix.com 1192 CA" both become "netflix com ca". The bank's merchant
  * name is read where it gave one, else its description. The SQL function
- * merchant_key() (migration 003) does the same for bills that read bank text.
+ * merchant_key() (migration 003) does the same for bills that read bank text
+ * and for the activity list's same-merchant filter (transactions.ts).
  */
 export function merchantKey(tx: MerchantText): string {
   return textKey(tx.merchantName ?? tx.name)
+}
+
+/**
+ * The merchant name and the bank's description together, reduced the same
+ * way: the text a bill that reads bank text finds its pattern in, as the SQL
+ * merchant_key(coalesce(merchant_name, '') || ' ' || name) does (bills.ts).
+ */
+export function bankTextKey(tx: MerchantText): string {
+  return textKey(`${tx.merchantName ?? ''} ${tx.name}`)
 }
 
 /** Any text reduced the same way: lower case, letters only, words split by single spaces. */

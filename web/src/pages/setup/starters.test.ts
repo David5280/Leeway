@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { category } from '../../test/fake'
-import { categoriesToCreate, defaultStart, starterRows, type StarterCategory } from './starters'
+import {
+  categoriesToCreate,
+  defaultStart,
+  hasBadAmount,
+  starterRows,
+  type StarterCategory,
+} from './starters'
 
 /** A starter category as get_starter_categories returns it (no id or position yet). */
 function starter(name: string, fields: Partial<StarterCategory> = {}): StarterCategory {
@@ -69,5 +75,24 @@ describe('categoriesToCreate', () => {
   it('treats a blank amount as no budget', () => {
     const rows = starterRows([groceries], [], { Groceries: { amount: '' } })
     expect(categoriesToCreate(rows)[0]!.budgetCents).toBeNull()
+  })
+})
+
+describe('hasBadAmount', () => {
+  it('is true when a ticked spending row holds an amount that cannot be read, or a negative one', () => {
+    for (const amount of ['6OO', '5k', '1.234', '-5', '(45)']) {
+      const rows = starterRows([groceries, dining], [], { Groceries: { amount } })
+      expect(hasBadAmount(rows)).toBe(true)
+    }
+  })
+
+  it('is false for blank or readable amounts, unticked rows and rows that take no budget', () => {
+    expect(hasBadAmount(starterRows([groceries, dining], [], {}))).toBe(false)
+    const blank = starterRows([groceries], [], { Groceries: { amount: '' } })
+    expect(hasBadAmount(blank)).toBe(false)
+    const unticked = starterRows([groceries], [], { Groceries: { amount: '6OO', include: false } })
+    expect(hasBadAmount(unticked)).toBe(false)
+    const income = starterRows([paycheck], [], { Paycheck: { amount: '6OO' } })
+    expect(hasBadAmount(income)).toBe(false)
   })
 })

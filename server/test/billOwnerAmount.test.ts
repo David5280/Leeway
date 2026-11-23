@@ -1,0 +1,196 @@
+// An amount the owner sets on a bill stands (billChanges.ts): no cycle from
+// before they set it moves it, following resumes with the next cycle, and a
+// steady bill still charged its old price after they set a new one is news.
+// Only the owner's own edits through update_bill count, never Leeway's.
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { billChangeOf, type WatchedBill } from '../src/domain/billChanges.js'
+import { settleBillChanges } from '../src/domain/billChangeSource.js'
+import type { BillCharge } from '../src/domain/billCycles.js'
+import { refreshInbox } from '../src/domain/notifications/notifier.js'
+import { actionCaller } from './actionCaller.js'
+import {
+  addCharges,
+  cityPower,
+  cityPowerCharged,
+  paid,
+  SWUNG,
+  TODAY,
+  usualOf,
+} from './fixtures/cityPower.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+} from './helpers.js'
+
+describe('billChangeOf with the amount kept when following began', () => {
+  const recent = [paid('2026-11-16', 9000), paid('2026-10-16', 14000), paid('2026-09-16', 8500)]
+
+  /** The bill at $200, charged `charges`, following begun on `followAfterOn`. */
+  const kept = (charges: BillCharge[], followAfterOn: string, fields: Partial<WatchedBill> = {}) =>
+    billChangeOf(cityPower(charges, { amountCents: 20000, followAfterOn, ...fields }), TODAY)
+
+  it('follows a varying bill only from a cycle that posted after following began', () => {
+    expect(kept(recent, '2026-11-17')).toBeNull()
+    expect(kept(recent, '2026-11-16')).toBeNull()
+    expect(kept(recent, '2026-11-10')).toMatchObject({ kind: 'settled', amountCents: 10500 })
+  })
+
+  it("never holds back a steady bill's price change or its settling", () => {
+    // Nothing says the owner set $15.49, so $22.99 after two of them is news at once.
+    const netflix = { name: 'Netflix', amountCents: 1549, amountVaries: false }
+    const raised = [paid('2026-11-15', 2299), paid('2026-10-15', 1549), paid('2026-09-15', 1549)]
+    expect(kept(raised, '2026-11-17', netflix)).toMatchObject({
+      kind: 'changed',
+      charge: { amountCents: 2299 },
+    })
+    const twice = [paid('2026-11-15', 2299), paid('2026-10-15', 2299), paid('2026-09-15', 1549)]
+    expect(kept(twice, '2026-11-17', netflix)).toMatchObject({ kind: 'settled', amountCents: 2299 })
+  })
+})
+
+describe('billChangeOf after the owner set the amount', () => {
+  // $90, $140 and $85 from September: following them settles at $105.
+  const recent = [paid('2026-11-16', 9000), paid('2026-10-16', 14000), paid('2026-09-16', 8500)]
+
+  /** The bill charged `charges`, its amount set to $200 by the owner on `setOn`. */
+  const setByOwner = (charges: BillCharge[], setOn: string, fields: Partial<WatchedBill> = {}) =>
+    billChangeOf(cityPower(charges, { amountCents: 20000, amountSetOn: setOn, ...fields }), TODAY)
+
+  it('settles nothing from a cycle that posted before or on the day the owner set it', () => {
+    expect(setByOwner(recent, '2026-11-17')).toBeNull()
+    // Set the same day the charge posted: it may have come first, so the owner's figure stands.
+    expect(setByOwner(recent, '2026-11-16')).toBeNull()
+  })
+
+  it('follows again from a cycle whose charges all posted after the owner set it', () => {
+    expect(setByOwner(recent, '2026-11-10')).toMatchObject({ kind: 'settled', amountCents: 10500 })
+    // A cycle paid in parts, one part before the edit, is not wholly after it.
+    const parts = [paid('2026-11-16', 4000), paid('2026-11-08', 5000), ...recent.slice(1)]
+    expect(setByOwner(parts, '2026-11-10')).toBeNull()
+  })
+
+  it('leaves a steady bill at the amount the owner set until a cycle comes after it', () => {
+    // $80 charged twice in a row would settle the owner's $200 back at $80.
+    const steady = [paid('2026-11-16', 8000), paid('2026-10-16', 8000), paid('2026-09-16', 8000)]
+    const notVarying = { amountVaries: false }
+    expect(setByOwner(steady, '2026-11-16', notVarying)).toBeNull()
+    // Both cycles after the edit: the old price is the price again.
+    expect(setByOwner(steady, '2026-10-01', notVarying)).toMatchObject({
+      kind: 'settled',
+      amountCents: 8000,
+    })
+  })
+
+  it('tells the owner when a steady bill is still charged its old price after they set a new one', () => {
+    // Netflix at $22.99; the owner sets $15.49 on Nov 10, and Nov 16 still charges $22.99.
+    const netflix = cityPower(
+      [paid('2026-11-16', 2299), paid('2026-10-16', 2299), paid('2026-09-16', 2299)],
+      { name: 'Netflix', amountCents: 1549, amountVaries: false, amountSetOn: '2026-11-10' },
+    )
+    expect(billChangeOf(netflix, TODAY)).toMatchObject({
+      kind: 'changed',
+      charge: { date: '2026-11-16', amountCents: 2299 },
+    })
+  })
+})
+
+describe('an amount the owner sets, end to end', () => {
+  let ctx: Awaited<ReturnType<typeof createTestContext>>
+  const caller = actionCaller(() => ctx)
+  const { call } = caller
+
+  beforeAll(async () => {
+    ctx = await createTestContext()
+  })
+  afterAll(async () => {
+    await ctx.db.end()
+  })
+  beforeEach(async () => {
+    await resetData(ctx.db)
+    ctx.setNow(new Date('2026-11-17T18:00:00Z'))
+  })
+
+  /** City Power charged $90 on Nov 16 after its swinging history: following settles at $103.33. */
+  const cityPowerInNovember = () =>
+    cityPowerCharged(ctx.db, caller, [...SWUNG, ['2026-11-16', 9000]])
+
+  const amountSetAt = async (billId: string) => {
+    const { rows } = await ctx.db.query<{ amount_set_at: Date | null }>(
+      'SELECT amount_set_at FROM bills WHERE id = $1',
+      [billId],
+    )
+    return rows[0]!.amount_set_at
+  }
+
+  const alerts = () => call('list_alerts', {})
+
+  it('keeps an amount the owner sets through a refresh, with no message', async () => {
+    const { billId } = await cityPowerInNovember()
+    await refreshInbox(ctx)
+    // $90, $130 and $90 average $103.33.
+    expect(await usualOf(caller, billId)).toBe(10333)
+    await call('update_bill', { id: billId, amountCents: 20000 })
+    await refreshInbox(ctx)
+    expect(await usualOf(caller, billId)).toBe(20000)
+    expect((await alerts()).map((alert) => alert.kind)).not.toContain('bill_change')
+  })
+
+  it('follows again from the next cycle that posts after the owner set the amount', async () => {
+    const { billId, accountId } = await cityPowerInNovember()
+    await call('update_bill', { id: billId, amountCents: 20000 })
+    ctx.setNow(new Date('2026-12-17T18:00:00Z'))
+    await addCharges(ctx.db, accountId, [['2026-12-16', 15000]])
+    await refreshInbox(ctx)
+    // $150, $90 and $130 average $123.33, under the latest $150.
+    expect(await usualOf(caller, billId)).toBe(15000)
+  })
+
+  it("never counts Leeway's own writes, or a save that keeps the amount, as the owner's", async () => {
+    const { billId, accountId } = await cityPowerInNovember()
+    expect(await settleBillChanges(ctx.db, 'UTC', TODAY)).toBe(1)
+    // Renaming it resends the settled amount: no new figure.
+    await call('update_bill', { id: billId, name: 'Home power', amountCents: 10333 })
+    expect(await amountSetAt(billId)).toBeNull()
+
+    // So a cheaper December moves it on, since no owner edit holds it.
+    ctx.setNow(new Date('2026-12-17T18:00:00Z'))
+    await addCharges(ctx.db, accountId, [['2026-12-16', 6000]])
+    await refreshInbox(ctx)
+    // $60, $90 and $130 average $93.33.
+    expect(await usualOf(caller, billId)).toBe(9333)
+    expect(await amountSetAt(billId)).toBeNull()
+  })
+
+  it('alerts, and keeps the amount, when a downgrade the owner set did not take', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { name: 'Everyday' })
+    const bill = await call('create_bill', {
+      name: 'Netflix',
+      amountCents: 2299,
+      cadence: 'month',
+      anchorDate: '2026-11-16',
+      matchPattern: 'netflix',
+    })
+    await ctx.db.query(`UPDATE bills SET created_at = '2026-06-25' WHERE id = $1`, [bill.id])
+    const netflix = (date: string) =>
+      insertBankTransaction(ctx.db, accountId, { date, name: 'NETFLIX', amountCents: 2299 })
+    await netflix('2026-09-16')
+    await netflix('2026-10-16')
+    ctx.setNow(new Date('2026-11-10T18:00:00Z'))
+    await call('update_bill', { id: bill.id, amountCents: 1549 })
+    ctx.setNow(new Date('2026-11-17T18:00:00Z'))
+    await netflix('2026-11-16')
+    await refreshInbox(ctx)
+    expect(await usualOf(caller, bill.id)).toBe(1549)
+    const messages = (await alerts()).map((alert) => alert.message)
+    expect(messages).toContain('Netflix was $22.99, usually $15.49.')
+  })
+
+  it('records the time the owner set the amount, from the app clock', async () => {
+    const { billId } = await cityPowerCharged(ctx.db, caller, [])
+    await call('update_bill', { id: billId, amountCents: 12000 })
+    expect(await amountSetAt(billId)).toEqual(new Date('2026-11-17T18:00:00Z'))
+  })
+})

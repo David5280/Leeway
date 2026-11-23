@@ -63,14 +63,14 @@ describe('planText', () => {
 describe('paceText', () => {
   it('says a goal is on track when recent progress lands before the date', () => {
     expect(paceText(goal(trip, quick), 'en-US')).toEqual({
-      text: 'On track: at your recent pace, ready by Apr 1, 2027.',
+      text: 'On track: at its own recent pace, ready by Apr 1, 2027.',
       tone: 'good',
     })
   })
 
   it('says a goal is behind, with when it would land or that nothing came in', () => {
     expect(paceText(goal(trip, slow), 'en-US')).toEqual({
-      text: 'Behind: at your recent pace, ready May 5, 2029, after Apr 30, 2027.',
+      text: 'Behind: at its own recent pace, ready May 5, 2029, after Apr 30, 2027.',
       tone: 'warn',
     })
     expect(paceText(goal(trip), 'en-US')).toEqual({
@@ -81,7 +81,7 @@ describe('paceText', () => {
 
   it('gives the projection alone without a date, and nothing once reached or idle', () => {
     expect(paceText(goal({ ...trip, targetDate: null }, quick), 'en-US')).toEqual({
-      text: 'At your recent pace, ready by Apr 1, 2027.',
+      text: 'At its own recent pace, ready by Apr 1, 2027.',
       tone: '',
     })
     expect(paceText(goal({ ...trip, targetDate: null }), 'en-US')).toBeNull()

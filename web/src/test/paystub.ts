@@ -56,6 +56,7 @@ const CITY_READING: PaystubReading = {
     ...noneShown(YEAR_TO_DATE_FIELDS),
     grossPay: readFigure('80,745.00', 'YTD Gross 80,745.00'),
   },
+  pensionPlanName: 'PERA',
 }
 
 /** What POST /api/paystubs/read answers for the city paystub, or one changed as given. */
@@ -66,6 +67,16 @@ export function cityRead(reading: Partial<PaystubReading> = {}): PaystubRead {
 /** A paystub with no 401(k), 457 or 403(b) figure, so there is no contribution to offer. */
 export const noPlansRead = cityRead({
   current: { ...CITY_READING.current, plan457: readFigure(null, null) },
+})
+
+/** A paystub with no pension line at all, so there is no pension to add from it. */
+export const noPensionRead = cityRead({
+  current: {
+    ...CITY_READING.current,
+    pension: readFigure(null, null),
+    pensionEmployer: readFigure(null, null),
+  },
+  pensionPlanName: null,
 })
 
 /** The upload route answering with a reading, as the server does. */

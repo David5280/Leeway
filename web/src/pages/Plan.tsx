@@ -1,16 +1,19 @@
 // The Plan screen: bills, goals, debts, net worth or retirement, one section
 // at a time. Cash until payday leads the bills, the section it answers for,
-// and stays off the others so each opens on its own subject. With a calendar
-// linked, Coming up shows the weeks ahead; without one it stays out of sight.
+// with any cash that could earn more in savings under it, and both stay off
+// the others so each opens on its own subject. With a calendar linked, Coming
+// up shows the weeks ahead; without one it stays out of sight.
 
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { Shell } from '../components/Shell'
 import { TabRow } from '../components/TabRow'
+import { LoadingOrError } from '../components/ui'
 import { AheadSection } from './plan/Ahead'
 import { BillsSection } from './plan/Bills'
 import { CashFlowCard } from './plan/CashFlow'
 import { DebtsSection } from './plan/Debts'
+import { IdleCashCard } from './plan/IdleCash'
 import { GoalsSection } from './plan/goals/GoalsSection'
 import { NetWorthSection } from './plan/NetWorth'
 import { RetirementSection } from './plan/retirement/RetirementSection'
@@ -36,6 +39,16 @@ export function Plan() {
   const { section } = useParams()
   const calendar = useAction('calendar_status')
   const linked = calendar.data?.connected === true
+  // Coming up is offered only once the calendar's status is known, so its own
+  // address waits for it rather than flash Bills first.
+  if (section === 'ahead' && !calendar.data && !calendar.error) {
+    return (
+      <Shell>
+        <h1>Plan</h1>
+        <LoadingOrError error={null} />
+      </Shell>
+    )
+  }
   const options = linked ? OPTIONS : OPTIONS.filter((option) => option.value !== 'ahead')
   // An unknown section in the address, or one not offered, shows bills rather than nothing.
   const offered = options.some((option) => option.value === section)
@@ -50,7 +63,12 @@ export function Plan() {
         options={options}
         onChange={(next) => navigate(`/plan/${next}`)}
       />
-      {current === 'bills' && <CashFlowCard />}
+      {current === 'bills' && (
+        <>
+          <CashFlowCard />
+          <IdleCashCard />
+        </>
+      )}
       <Content />
     </Shell>
   )

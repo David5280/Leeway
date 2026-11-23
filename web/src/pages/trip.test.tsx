@@ -46,6 +46,8 @@ describe('Trip page', () => {
     await user.type(form.getByRole('textbox', { name: 'Food per day' }), '50')
     await user.type(form.getByRole('textbox', { name: 'Things to do' }), 'lots')
     expect(form.getByText(/in all/)).toHaveTextContent('$1,650 in all')
+    // The name starts as the kind, not the calendar event's title.
+    expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue('Trip')
     await user.clear(form.getByRole('textbox', { name: 'Name' }))
     await user.type(form.getByRole('textbox', { name: 'Name' }), 'Portugal')
     await user.click(form.getByRole('button', { name: 'Make it a goal' }))

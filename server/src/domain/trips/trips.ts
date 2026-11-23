@@ -119,8 +119,11 @@ export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> 
     }
   }
   const known = [...planned.values()]
-  const costs = await costsOf(db, 'trip', known)
-  known.forEach((trip, i) => (trip.totalCents = costs[i]!))
+  const costs = await costsOf(
+    db,
+    known.map((trip) => ({ kind: 'trip' as const, startsOn: trip.startsOn, endsOn: trip.endsOn })),
+  )
+  known.forEach((trip, i) => (trip.totalCents = costs[i]!.aheadCents + costs[i]!.duringCents))
   // A run of travel charges inside a known trip, or booked in the two months before it, is that trip.
   const spending = clusters(await travelCharges(db, from, today))
     .filter(

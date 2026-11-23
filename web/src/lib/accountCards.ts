@@ -6,6 +6,7 @@
 import type { Account, Goal } from '../api/client'
 import type { IconName } from '../components/ui'
 import { isCounted, isOwed, overdrawn } from './accounts'
+import { percentText } from './money'
 
 export type AccountKind = Account['kind']
 
@@ -138,11 +139,12 @@ function growthFacts(balances: readonly number[]): AccountFact[] {
   ]
 }
 
-/** Loan: the rate and the monthly payment. */
-function loanFacts(account: Account): AccountFact[] {
+/** Loan: the rate, written as `locale` writes it, and the monthly payment. */
+function loanFacts(account: Account, locale: string): AccountFact[] {
   const facts: AccountFact[] = []
   if (account.aprPercent !== null) {
-    facts.push({ kind: 'text', label: 'rate', text: `${account.aprPercent}% APR` })
+    const rate = percentText(account.aprPercent, locale)
+    facts.push({ kind: 'text', label: 'rate', text: `${rate} APR` })
   }
   if (account.minimumPaymentCents !== null) {
     facts.push({ kind: 'money', label: 'a month', cents: account.minimumPaymentCents })
@@ -153,11 +155,15 @@ function loanFacts(account: Account): AccountFact[] {
 /**
  * The one or two facts that matter for an account of its kind. `balances`
  * are its daily balances for the last 30 days, oldest first; `goals` are the
- * goals that track it (goalsOn).
+ * goals that track it (goalsOn); `locale` writes a rate.
  */
 export function accountFacts(
   account: Account,
-  { balances = [], goals = [] }: { balances?: readonly number[]; goals?: readonly Goal[] } = {},
+  {
+    balances = [],
+    goals = [],
+    locale = 'en-US',
+  }: { balances?: readonly number[]; goals?: readonly Goal[]; locale?: string } = {},
 ): AccountFact[] {
   switch (account.kind) {
     case 'checking':
@@ -170,7 +176,7 @@ export function accountFacts(
     case 'retirement':
       return growthFacts(balances)
     case 'loan':
-      return loanFacts(account)
+      return loanFacts(account, locale)
     default:
       return changeFacts(balances)
   }

@@ -104,12 +104,12 @@ describe('monthRates', () => {
 
   it('counts the running month’s deductions only for the pay it has seen so far', () => {
     const half = month('2026-11-01', '2026-11-30', 200000, true)
-    const [, running] = monthRates([october, half], [], [stream('pension', 44000)])
-    // Half a usual month's pay so far, so half a month of the pension: $220 of $2,220.
+    const [, running] = monthRates([october, half], [], [stream('pension', 44000)], 400000)
+    // Half a typical month's pay so far, so half a month of the pension: $220 of $2,220.
     expect(running).toMatchObject({ percent: 10, savedCents: 22000, payCents: 222000 })
-    // With no finished month of pay to go by, the running month counts none yet.
-    const [alone] = monthRates([half], [], [stream('pension', 44000)])
-    expect(alone).toMatchObject({ percent: null, payCents: 200000 })
+    // With no typical month to go by (no current employer), the running month counts none yet.
+    const [, none] = monthRates([october, half], [], [stream('pension', 44000)])
+    expect(none).toMatchObject({ percent: null, payCents: 200000 })
   })
 
   it('keeps huge amounts whole', () => {
@@ -214,12 +214,24 @@ describe('get_savings_rates', () => {
       ],
       targetPercent: null,
       note: payrollNote({ pension: false, plan: false }),
+      payEstimated: false,
     })
 
     await call('update_settings', { savingsPlan: { savingsRateTargetPercent: 15 } })
     expect((await call('get_savings_rates', {})).targetPercent).toBe(15)
     // Six months asked, but the history starts in October, so the months before it are left off.
     expect((await call('get_savings_rates', {})).months).toHaveLength(2)
+  })
+
+  it('says pay is an estimate while a new employer has paid once', async () => {
+    const { accountId } = await insertBankAccount(ctx.db)
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'INITECH PAYROLL',
+      amountCents: -210000,
+      detailed: 'INCOME_SALARY',
+    })
+    expect((await call('get_savings_rates', { months: 2 })).payEstimated).toBe(true)
   })
 
   it('divides by filed pay only, leaving unfiled deposits out of pay', async () => {

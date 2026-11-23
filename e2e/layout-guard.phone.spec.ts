@@ -8,7 +8,7 @@
 // layout.ts. Every route the app answers (web/src/routes.ts) must have a
 // screen here; a test below makes sure.
 
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, type Screen } from './guarded-screens'
 import { SETTINGS_GROUPS } from './settings-groups'
@@ -22,7 +22,14 @@ import {
 import { OWNER, SETUP_CODE } from './owner'
 import { patchSettings } from './patchSettings'
 import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
-import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
+import { action } from './seed'
+import { test } from './seeded-test'
+
+// Every test stands alone (see seeded-test.ts), so a sharded run
+// (scripts/e2e) shares this file's hundreds of tests out across its shards
+// one by one, rather than give one shard them all. A plain run, with one
+// worker, still runs them in order.
+test.describe.configure({ mode: 'parallel' })
 
 /** Waits until the screen has its data, fonts and final layout. */
 async function settle(page: Page): Promise<void> {
@@ -115,18 +122,8 @@ for (const phone of GUARDED_PHONES) {
     test.use(phone.screen)
 
     test.describe('signed in', () => {
-      // Long names in every list while these run, gone again after.
-      const seeded: Seeded = emptySeed()
-      test.beforeAll(async ({ request }) => {
-        await seedEveryScreen(request, seeded)
-      })
-      test.afterAll(async ({ request }) => {
-        await removeSeed(request, seeded)
-        Object.assign(seeded, emptySeed())
-      })
-
       for (const screen of screensFor(phone)) {
-        test(`${screen.name} lays out cleanly`, async ({ page, request }) => {
+        test(`${screen.name} lays out cleanly`, async ({ page, request, seeded }) => {
           await open(page, screen, phone, await screen.path(seeded, request))
           expect(await problemsOn(page)).toEqual([])
         })
@@ -272,17 +269,8 @@ test.describe('in the widest theme, packed tight', () => {
   const phone = GUARDED_PHONES[0]!
   test.use(phone.screen)
 
-  const seeded: Seeded = emptySeed()
-  test.beforeAll(async ({ request }) => {
-    await seedEveryScreen(request, seeded)
-  })
-  test.afterAll(async ({ request }) => {
-    await removeSeed(request, seeded)
-    Object.assign(seeded, emptySeed())
-  })
-
   for (const screen of screensFor(phone)) {
-    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request }) => {
+    test(`${screen.name} lays out cleanly on ${phone.name}`, async ({ page, request, seeded }) => {
       // The look is changed on its way to the page, so the install keeps its own.
       await patchSettings(page, (settings) => ({
         ...settings,

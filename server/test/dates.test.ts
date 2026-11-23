@@ -5,11 +5,13 @@ import {
   dateParts,
   dayOfWeek,
   daysBetween,
+  fromDayNumber,
   isIsoDate,
   isValidTimeZone,
   maxDate,
   minDate,
   todayIn,
+  toDayNumber,
 } from '../src/lib/dates.js'
 
 describe('dates', () => {
@@ -65,5 +67,19 @@ describe('dates', () => {
     expect(minDate('2026-01-02', '2026-11-17')).toBe('2026-01-02')
     expect(maxDate('2026-11-17', '2026-01-02')).toBe('2026-11-17')
     expect(maxDate('2026-01-02', '2026-11-17')).toBe('2026-11-17')
+  })
+})
+
+describe('remembered day numbers', () => {
+  it('stays right across more days than it remembers at once', () => {
+    // 50,000 days both ways, past the 20,000 each map holds before it is emptied.
+    for (let day = -20_000; day < 30_000; day++) {
+      const date = new Date(day * 86_400_000).toISOString().slice(0, 10)
+      expect(toDayNumber(date)).toBe(day)
+      expect(fromDayNumber(day)).toBe(date)
+    }
+    // A date that is not one is refused every time, never remembered.
+    expect(() => toDayNumber('2026-02-30')).toThrow()
+    expect(() => toDayNumber('2026-02-30')).toThrow()
   })
 })
