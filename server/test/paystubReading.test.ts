@@ -18,21 +18,9 @@ import {
   redactSource,
   REMOVED,
 } from '../src/domain/paystubs/redact.js'
-import {
-  centsOf,
-  extractionFrom,
-  foundAnything,
-  paystubReadingSchema,
-} from '../src/domain/paystubs/reading.js'
-import {
-  CITY_READING,
-  heic,
-  jpeg,
-  NOT_A_PAYSTUB,
-  pdf,
-  png,
-  readFigure,
-} from './fixtures/paystub.js'
+import { hoursOf, rateCentsOf } from '../src/domain/paystubs/amounts.js'
+import { centsOf } from '../src/domain/paystubs/reading.js'
+import { heic, jpeg, pdf, png } from './fixtures/paystub.js'
 
 /** The AppError a check throws, so a test can read its code and message. */
 function failure(check: () => unknown): AppError {
@@ -127,6 +115,24 @@ describe('redact', () => {
     )
   })
 
+  it("takes out a person's name after a label or a title, but not a plan's name", () => {
+    expect(redact('Employee Name Jane Doe')).toBe(REMOVED)
+    expect(redact('Name: Jane Q. Doe')).toBe(REMOVED)
+    expect(redact('Net 2,611.42 Pay to the order of Jane Doe')).toBe(`Net 2,611.42 ${REMOVED}`)
+    expect(redact('Payee John Roe 100.00')).toBe(REMOVED)
+    expect(redact('Prepared for Ms. Jane Doe 3,845.00')).toBe(`Prepared for ${REMOVED} 3,845.00`)
+    expect(redact('Plan Name: PERA 422.95')).toBe('Plan Name: PERA 422.95')
+    expect(redact('Employee 401k 150.00')).toBe('Employee 401k 150.00')
+  })
+
+  it('takes out a masked account or card number, which keeps too few digits to look long', () => {
+    for (const masked of ['XXXXXX1234', '****1234', 'xx-1234', '••••5678']) {
+      expect(redact(`Direct deposit ${masked} 2,611.42`)).toBe(`Direct deposit ${REMOVED} 2,611.42`)
+    }
+    // A short amount or a plan number stays.
+    expect(redact('Roth 457 50.00')).toBe('Roth 457 50.00')
+  })
+
   it('reads several removals in a row as one', () => {
     expect(redact('SSN 123-45-6789')).toBe(REMOVED)
     expect(redact('5551234567 5559876543 Net 10.00')).toBe(`${REMOVED} Net 10.00`)
@@ -139,6 +145,19 @@ describe('redactSource and redactEmployer', () => {
     expect(redactSource('SSN 123-45-6789')).toBeNull()
     expect(redactSource('   ')).toBeNull()
     expect(redactSource(`Gross Pay ${'x'.repeat(200)}`)).toHaveLength(MAX_SOURCE_LENGTH)
+  })
+
+  it('drops a line that names a garnishment, levy or support order whole', () => {
+    for (const line of [
+      'Garnishment 150.00',
+      'Wage Garnish Case 4471 150.00',
+      'Child Support 200.00',
+      'IRS Levy 75.00',
+      'Ch 13 Bankruptcy Trustee 90.00',
+    ]) {
+      expect(redactSource(line)).toBeNull()
+    }
+    expect(redactSource('Union Dues 25.00')).toBe('Union Dues 25.00')
   })
 
   it('keeps only the employer name, never the address after it', () => {
@@ -185,88 +204,17 @@ describe('centsOf', () => {
   })
 })
 
-describe('extractionFrom', () => {
-  it('turns a reading into cents, with every identifier taken out', () => {
-    const extraction = extractionFrom(CITY_READING)
-    expect(extraction).toMatchObject({
-      employerName: 'City of Example',
-      payDate: '2026-11-13',
-      periodStart: '2026-10-26',
-      periodEnd: '2026-11-08',
-      payCadence: { value: 'semimonth', confidence: 'high', source: 'Pay Frequency: Semi-Monthly' },
-    })
-    expect(extraction.current).toMatchObject({
-      grossPay: { cents: 384_500, confidence: 'high', source: `Gross Pay 3,845.00 ${REMOVED}` },
-      netPay: { cents: 261_142, source: `Net Pay 2,611.42 Deposit to ${REMOVED}` },
-      pension: { cents: 42_295, source: 'PERA Member 11.00% 422.95' },
-      pensionEmployer: { cents: 82_283, confidence: 'medium' },
-      plan457: { cents: 20_000 },
-      plan401k: { cents: null, confidence: 'high', source: null },
-    })
-    expect(extraction.yearToDate.grossPay).toEqual({
-      cents: 8_074_500,
-      confidence: 'high',
-      source: `YTD Gross 80,745.00 ${REMOVED}`,
-    })
-    // Nothing that identifies the owner survives anywhere in it.
-    expect(JSON.stringify(extraction)).not.toMatch(/6789|000123456789|004417|Bannock|80202/)
+describe('rateCentsOf and hoursOf', () => {
+  it('reads a rate printed to four places, rounded to the cent', () => {
+    expect(rateCentsOf('31.2500')).toBe(3_125)
+    expect(rateCentsOf('$28.3750')).toBe(2_838)
+    expect(rateCentsOf('28.37501')).toBeNull()
   })
 
-  it('marks a printed figure it could not read, or one too large to be real, as low', () => {
-    const extraction = extractionFrom({
-      ...CITY_READING,
-      current: {
-        ...CITY_READING.current,
-        hsa: readFigure('about 50', 'HSA about 50'),
-        plan403b: readFigure('100,000.01', 'TSA 100,000.01'),
-        plan401k: readFigure('100,000.00', '401k 100,000.00'),
-      },
-      yearToDate: { ...CITY_READING.yearToDate, netPay: readFigure('1,000,000.01') },
-    })
-    expect(extraction.current.hsa).toMatchObject({ cents: null, confidence: 'low' })
-    expect(extraction.current.plan403b).toMatchObject({ cents: null, confidence: 'low' })
-    // At the limit itself, a figure is kept.
-    expect(extraction.current.plan401k).toMatchObject({ cents: 10_000_000, confidence: 'high' })
-    expect(extraction.yearToDate.netPay).toMatchObject({ cents: null, confidence: 'low' })
-  })
-
-  it('flags take-home pay above gross pay for a second look', () => {
-    const extraction = extractionFrom({
-      ...CITY_READING,
-      current: { ...CITY_READING.current, netPay: readFigure('3,900.00') },
-    })
-    expect(extraction.current.grossPay.confidence).toBe('low')
-    expect(extraction.current.netPay.confidence).toBe('low')
-  })
-
-  it('keeps only real dates', () => {
-    const extraction = extractionFrom({
-      ...CITY_READING,
-      payDate: '11/13/2026',
-      periodStart: '2026-02-30',
-      periodEnd: null,
-    })
-    expect(extraction).toMatchObject({ payDate: null, periodStart: null, periodEnd: null })
-  })
-})
-
-describe('foundAnything', () => {
-  it('needs a date or at least one amount', () => {
-    expect(foundAnything(extractionFrom(CITY_READING))).toBe(true)
-    expect(foundAnything(extractionFrom(NOT_A_PAYSTUB))).toBe(false)
-    expect(foundAnything(extractionFrom({ ...NOT_A_PAYSTUB, payDate: '2026-11-13' }))).toBe(true)
-    const ytdOnly = {
-      ...NOT_A_PAYSTUB,
-      yearToDate: { ...NOT_A_PAYSTUB.yearToDate, hsa: readFigure('600.00') },
-    }
-    expect(foundAnything(extractionFrom(ytdOnly))).toBe(true)
-  })
-})
-
-describe('paystubReadingSchema', () => {
-  it('asks only for strings, enums and nulls, and takes the fixture as written', () => {
-    expect(paystubReadingSchema.parse(CITY_READING)).toEqual(CITY_READING)
-    const wrong = { ...CITY_READING, current: { ...CITY_READING.current, grossPay: 3845 } }
-    expect(paystubReadingSchema.safeParse(wrong).success).toBe(false)
+  it('reads hours to the hundredth, adding regular and overtime hours', () => {
+    expect(hoursOf('80.00')).toBe(80)
+    expect(hoursOf('86.6667')).toBe(86.67)
+    expect(hoursOf('80 + 4.5')).toBe(84.5)
+    expect(hoursOf('eighty')).toBeNull()
   })
 })

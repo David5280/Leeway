@@ -9,17 +9,14 @@ import type { Paystub } from '../src/domain/paystubs/paystubs.js'
 import { pensionPatchFrom, showsPensionContribution } from '../src/domain/paystubs/pension.js'
 import { extractionFrom, type PaystubExtraction } from '../src/domain/paystubs/reading.js'
 import { MAX_PLAN_NAME_LENGTH, REMOVED } from '../src/domain/paystubs/redact.js'
-import { CITY_READING, confirmedPaystub, readFigure } from './fixtures/paystub.js'
+import { CITY_READING, confirmedPaystub, readLine } from './fixtures/paystub.js'
 
 /** The city paystub as the reader might give it, with the pension line as printed. */
 function readingWithPension(line: string, amount: string | null, planName: string | null) {
   return {
     ...CITY_READING,
-    current: {
-      ...CITY_READING.current,
-      pension: readFigure(amount, line),
-      pensionEmployer: readFigure(null),
-    },
+    preTax: { ...CITY_READING.preTax, pension: readLine(amount, null, line) },
+    employer: { ...CITY_READING.employer, pension: readLine(null) },
     pensionPlanName: planName,
   }
 }

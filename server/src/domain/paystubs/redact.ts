@@ -1,7 +1,8 @@
 // Takes identifiers out of text read from a paystub before anything keeps,
 // shows or logs it. A paystub carries a Social Security number, an employee
-// ID, bank account and routing numbers and a home address; Leeway keeps only
-// money figures, dates and the employer's name. Pure.
+// ID, bank account and routing numbers, a home address and the employee's
+// name; Leeway keeps only money figures, dates and the employer's name. A line
+// naming a garnishment or support order is dropped whole. Pure.
 
 /** Put where something was taken out, so the owner sees that it was. */
 export const REMOVED = '[removed]'
@@ -40,6 +41,29 @@ const PO_BOX = /\bp\.?\s*o\.?\s*box\s*\d+/gi
 /** A state and ZIP code, as at the end of an address: CO 80220 or CO 80220-1234. */
 const STATE_ZIP = /\b[A-Z]{2},?\s+\d{5}(?:-\d{4})?\b/g
 
+/**
+ * A label that introduces a person's name, with the rest of its line: "Name:"
+ * at the start of a line, "Employee Name Jane Doe", "Pay to the order of Jane
+ * Doe", "Payee Jane Doe". "Plan Name: PERA" is a plan, not a person, and stays.
+ */
+const LABELED_NAME =
+  /(?:^\s*name\b|\b(?:employee|emp\.?)\s+name\b|\bpay\s+to\s+the\s+order\s+of\b|\bpayee\b|\bdeposited\s+for\b)(?!\w).*$/gim
+
+/** A name after a title of address: "Ms. Jane Doe", "Dr Doe". */
+const TITLED_NAME =
+  /\b(?:[Mm]rs?|[Mm][sx]|[Mm]iss|[Dd]r)\.?\s+[A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,3}/g
+
+/**
+ * A masked account or card number, which keeps too few digits for the long
+ * number rule: XXXXXX1234, ****1234, xx-1234. A mask is no word character,
+ * so the start is "nothing like it before" rather than a word boundary.
+ */
+const MASKED_NUMBER = /(?<![\w*•])[Xx*•#]{2,}[-\s]?\d{2,}(?!\w)/g
+
+/** Words that mark a garnishment, levy or support order, which Leeway never names. */
+const SENSITIVE_DEDUCTION =
+  /\b(?:garnish\w*|levy|levies|child\s+support|support\s+order|wage\s+assignment|bankruptcy|chapter\s+13|creditor|tax\s+lien)\b/i
+
 /** An email address. */
 const EMAIL = /\S+@\S+/g
 
@@ -72,7 +96,17 @@ function escape(text: string): string {
 
 /** Text with every identifier this module knows replaced by REMOVED, on one line. */
 export function redact(text: string): string {
-  const patterns = [LABELED_ID, SSN, STREET, PO_BOX, STATE_ZIP, EMAIL]
+  const patterns = [
+    LABELED_ID,
+    LABELED_NAME,
+    SSN,
+    MASKED_NUMBER,
+    STREET,
+    PO_BOX,
+    STATE_ZIP,
+    EMAIL,
+    TITLED_NAME,
+  ]
   const scrubbed = patterns.reduce((current, pattern) => current.replace(pattern, REMOVED), text)
   return scrubbed
     .split(/\s+/)
@@ -83,9 +117,12 @@ export function redact(text: string): string {
     .trim()
 }
 
-/** A source line, redacted and cut to length; null when nothing useful is left. */
+/**
+ * A source line, redacted and cut to length; null when nothing useful is left,
+ * or when it names a garnishment or support order.
+ */
 export function redactSource(text: string | null): string | null {
-  if (text === null) return null
+  if (text === null || SENSITIVE_DEDUCTION.test(text)) return null
   const clean = redact(text).slice(0, MAX_SOURCE_LENGTH).trim()
   return clean === '' || clean === REMOVED ? null : clean
 }
