@@ -33,6 +33,14 @@ export function accountDetail(account: Pick<Account, 'institutionName' | 'mask' 
 // server's own rule, so a screen never adds up an account the server leaves out.
 export { isCounted, isShared } from '../../../server/src/domain/accountSharing'
 
+// What a card's balance costs in interest a month: the server's own math, so
+// a screen and an assistant always quote the same figure.
+export {
+  cardInterest,
+  cardInterestTotal,
+  type CardInterestTotal,
+} from '../../../server/src/domain/cardInterest'
+
 /** "No longer shared from Chase", for an account its bank stopped sharing. */
 export function unsharedLabel(account: Pick<Account, 'institutionName'>): string {
   return `No longer shared from ${account.institutionName ?? 'its bank'}`

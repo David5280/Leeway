@@ -1,5 +1,6 @@
-// The emergency fund: how many months of essential spending the owner's cash
-// savings would cover, against the target they set, and when the current
+// The emergency fund: how many months of essential spending it covers (what
+// its goal holds, or the savings accounts before there is one; see
+// emergencyPlan.ts), against the target the owner set, and when the current
 // pace of saving gets there. Pure.
 
 import { addMonths, type IsoDate } from '../../lib/dates.js'
@@ -34,6 +35,34 @@ export interface EmergencyFund {
   reachesTargetOn: IsoDate | null
 }
 
+/** What essential spending a month comes to, and how Leeway knows. */
+export interface EssentialsMeasure {
+  cents: number
+  from: EssentialsSource
+}
+
+/**
+ * Essential spending in a typical month: recent whole months of spending when
+ * they show any, otherwise the tracked bills, the best measure before a whole
+ * month is held (or when no spending reads as essential). Null when neither
+ * says, since a fund of zero months would mean nothing. The emergency fund's
+ * card and the financial profile both size the fund by this one rule.
+ */
+export function essentialsFrom(
+  essentialSpendingCents: number | null,
+  billsMonthlyCents: number,
+): EssentialsMeasure | null {
+  if (essentialSpendingCents !== null && essentialSpendingCents > 0) {
+    return { cents: essentialSpendingCents, from: 'spending' }
+  }
+  return billsMonthlyCents > 0 ? { cents: billsMonthlyCents, from: 'bills' } : null
+}
+
+/** Months of essentials some savings cover, to one decimal, rounded down so it never says more. */
+export function monthsCovered(savedCents: number, monthlyEssentialsCents: number): number {
+  return Math.floor((Math.max(0, savedCents) / monthlyEssentialsCents) * 10) / 10
+}
+
 /**
  * The fund's standing. Null when essential spending is unknown or zero: with
  * nothing to cover, "months covered" would mean nothing.
@@ -51,19 +80,18 @@ export function emergencyFund(input: {
   const saved = Math.max(0, savedCents)
   const targetCents = essentials * targetMonths
   const shortCents = Math.max(0, targetCents - saved)
-  // Rounded down, so the fund is never said to cover more than it does.
-  const monthsCovered = Math.floor((saved / essentials) * 10) / 10
+  const covered = monthsCovered(saved, essentials)
   const pace =
     input.monthlyPaceCents !== null && input.monthlyPaceCents > 0 ? input.monthlyPaceCents : null
   return {
     savedCents: saved,
     monthlyEssentialsCents: essentials,
     essentialsFrom: input.essentialsFrom,
-    monthsCovered,
+    monthsCovered: covered,
     targetMonths,
     targetCents,
     shortCents,
-    status: statusOf(shortCents, monthsCovered),
+    status: statusOf(shortCents, covered),
     monthlyPaceCents: input.monthlyPaceCents,
     reachesTargetOn: reachDate(shortCents, pace, today),
   }

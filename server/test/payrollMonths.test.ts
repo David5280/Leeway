@@ -206,18 +206,19 @@ describe('payrollStreams', () => {
 describe('runningPayShare', () => {
   const october = month('2026-10-01', '2026-10-31', 400000)
 
-  it('is the running month’s pay so far over a usual finished month’s', () => {
+  it('is the running month’s pay so far over a typical month from the current job', () => {
     const running = month('2026-11-01', '2026-11-30', 100000, true)
-    // An empty month is a gap, not a month of no pay.
-    const empty = month('2026-09-01', '2026-09-30', 0)
-    expect(runningPayShare([empty, october, running])).toBe(0.25)
+    expect(runningPayShare([october, running], 400000)).toBe(0.25)
+    // A month of the old, bigger job is not the yardstick: the typical month is.
+    expect(runningPayShare([october, running], 200000)).toBe(0.5)
   })
 
   it('never counts more than a whole month, and none without pay to go by', () => {
-    expect(runningPayShare([october, month('2026-11-01', '2026-11-30', 900000, true)])).toBe(1)
-    expect(runningPayShare([october, month('2026-11-01', '2026-11-30', 0, true)])).toBe(0)
-    expect(runningPayShare([month('2026-11-01', '2026-11-30', 5000, true)])).toBe(0)
-    expect(runningPayShare([october])).toBe(0)
+    const running = (cents: number) => month('2026-11-01', '2026-11-30', cents, true)
+    expect(runningPayShare([october, running(900000)], 400000)).toBe(1)
+    expect(runningPayShare([october, running(0)], 400000)).toBe(0)
+    expect(runningPayShare([running(5000)], null)).toBe(0)
+    expect(runningPayShare([october], 400000)).toBe(0)
   })
 })
 

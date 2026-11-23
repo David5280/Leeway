@@ -25,7 +25,9 @@ let app: FastifyInstance
 
 beforeAll(async () => {
   ctx = await createTestContext()
-  app = await buildApp(ctx, { webDir: null })
+  // Rate limits are checked on an app of their own below; here they are off, so
+  // a test that calls every MCP tool never spends another test's budget.
+  app = await buildApp(ctx, { webDir: null, rateLimit: false })
 })
 afterAll(async () => {
   await app.close()

@@ -2,14 +2,23 @@
 
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
-import { goalInputSchema, goalOf } from '../../../server/src/domain/goals'
+import { goalOf } from '../../../server/src/domain/goalProgress'
+import { goalInputSchema } from '../../../server/src/domain/goals'
 import { planPayoff, type Debt } from '../../../server/src/domain/payoff'
 import { retirementView } from '../../../server/src/domain/profile/views'
 import type { RetirementPatch } from '../../../server/src/domain/retirement/assumptions'
 import type { RetirementInput } from '../../../server/src/domain/retirement/plan'
 import { formatWholeCents } from '../../../server/src/lib/money'
 import { Route, Routes } from 'react-router-dom'
-import type { Account, Bill, CashFlow, DebtPlans, Goal, RecurringSeries } from '../api/client'
+import type {
+  Account,
+  Bill,
+  CashFlow,
+  DebtPlans,
+  Goal,
+  RecurringSeries,
+  Settings,
+} from '../api/client'
 import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
@@ -69,7 +78,16 @@ export function goal(
   fields: { name: string; targetCents: number } & Partial<Goal>,
   facts: GoalProgressFacts = NO_PROGRESS,
 ): Goal {
-  const { id, accountName, accountBalanceCents, balanceAsOf, createdOn, ...input } = fields
+  const {
+    id,
+    accountName,
+    accountBalanceCents,
+    balanceAsOf,
+    createdOn,
+    emergencyMonths,
+    followedAccountIds,
+    ...input
+  } = fields
   return goalOf(
     {
       // Test account ids are not UUIDs, so the account is checked apart from the schema.
@@ -80,6 +98,8 @@ export function goal(
       accountBalanceCents: accountBalanceCents ?? null,
       balanceAsOf: balanceAsOf ?? null,
       createdOn: createdOn ?? '2026-09-01',
+      emergencyMonths: emergencyMonths ?? null,
+      followedAccountIds: followedAccountIds ?? null,
     },
     facts,
     { today: TODAY, period: { kind: 'monthly', startDay: 1 } },
@@ -96,8 +116,10 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
     today: TODAY,
     nextPayday: '2026-11-27',
     paydaySource: 'pay_period',
+    paydayEstimate: false,
     expectedPayCents: null,
     daysUntilPayday: 10,
+    cashKnown: true,
     cashCents: 150000,
     billsDue: [
       {
@@ -109,8 +131,12 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
       },
     ],
     billsDueCents: 6000,
-    leftAfterBillsCents: 144000,
+    overdraftCents: 0,
+    safeCents: 144000,
+    shortfallCents: 0,
     perDayCents: 14400,
+    // The Plan screen reads the cash alone; the budget's lead is the Overview's.
+    spendable: null,
     ...fields,
   }
 }
@@ -143,19 +169,32 @@ export function debtPlans(
   }
 }
 
-/** The server for the Plan screen: cash flow is always there, the rest per test. */
+/**
+ * The server for the Plan screen: cash flow is always there, with no
+ * emergency fund to offer, no goal order and nothing entered by hand unless
+ * a test says otherwise; the rest per test.
+ */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
-  return fakeServer({ get_cash_flow: () => cashFlow(), ...handlers }, routes)
+  return fakeServer(
+    {
+      get_cash_flow: () => cashFlow(),
+      get_emergency_fund: () => null,
+      get_goal_order: () => ({ monthlyCents: 0, source: 'none', goals: [] }),
+      list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
+      ...handlers,
+    },
+    routes,
+  )
 }
 
-/** The Plan screen at an address, with its routes, as the app has them. */
-export function renderPlan(path = '/plan') {
+/** The Plan screen at an address, with its routes, as the app has them, and the settings given. */
+export function renderPlan(path = '/plan', settings?: Settings) {
   return renderSignedIn(
     <Routes>
       <Route path="/plan" element={<Plan />} />
       <Route path="/plan/:section" element={<Plan />} />
     </Routes>,
-    { route: path },
+    { route: path, settings },
   )
 }
 

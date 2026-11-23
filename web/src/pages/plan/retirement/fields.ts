@@ -32,9 +32,11 @@ export interface PlanText {
   checkedOn: string
 }
 
-/** Every assumption as the form's text. */
+/**
+ * Every assumption as the form's text, but the birth year, which is asked on
+ * its own (components/BirthYearForm.tsx) and kept in Settings.
+ */
 export interface AssumptionsText {
-  birthYear: string
   retirementAge: string
   returnPercent: string
   inflationPercent: string
@@ -137,7 +139,6 @@ export function pensionCandidates(accounts: Account[]): Account[] {
 
 export function assumptionsText(assumptions: Assumptions): AssumptionsText {
   return {
-    birthYear: numberText(assumptions.birthYear),
     retirementAge: String(assumptions.retirementAge),
     returnPercent: String(assumptions.returnPercent),
     inflationPercent: String(assumptions.inflationPercent),
@@ -232,7 +233,6 @@ export function readPlan(text: PlanText): ReadBack<PlanChange> {
 /** Every assumption, from the form; the server checks each value's range. */
 export function readAssumptions(text: AssumptionsText): ReadBack<AssumptionsChange> {
   return readBack((fields) => ({
-    birthYear: fields.number(text.birthYear, 'your birth year'),
     retirementAge: fields.required(text.retirementAge, 'a retirement age'),
     returnPercent: fields.required(text.returnPercent, 'a yearly return'),
     inflationPercent: fields.required(text.inflationPercent, 'inflation'),

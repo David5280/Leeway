@@ -6,6 +6,7 @@ import { AppError, notFound } from '../errors.js'
 import { distinctAccountNames } from './accountName.js'
 import { isCounted, isShared } from './accountSharing.js'
 import { recategorize } from './categorize.js'
+import { untieStaleLoans } from './loanLinks.js'
 import { possibleReturns } from './unshared.js'
 import {
   ACCOUNT_KINDS,
@@ -302,8 +303,15 @@ export async function updateAccount(db: Db, id: string, patch: AccountPatch): Pr
   // A card counted or left out changes whether payments to it are transfers.
   const hiddenChanged = patch.hidden !== undefined && patch.hidden !== account.hidden
   if (hiddenChanged && account.type === 'credit') await recategorize(db)
-  return getAccount(db, id)
+  const updated = await getAccount(db, id)
+  // What it is may have changed, so a loan tied to or from it may no longer fit.
+  if (changesWhatItIs(patch)) await untieStaleLoans(db, updated)
+  return updated
 }
+
+/** Whether a patch can change what an account is: its type, subtype or kind. */
+const changesWhatItIs = (patch: AccountPatch) =>
+  patch.type !== undefined || patch.subtype !== undefined || patch.kind !== undefined
 
 const stillShared = () =>
   new AppError(

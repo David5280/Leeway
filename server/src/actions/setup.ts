@@ -12,8 +12,10 @@ import {
   saveSettings,
   settingsPatchSchema,
 } from '../domain/settings.js'
+import { checkBirthYear } from '../domain/retirement/assumptions.js'
 import { addStarterRules } from '../domain/starterRules.js'
 import { STARTER_CATEGORIES } from '../domain/starters.js'
+import { todayIn } from '../lib/dates.js'
 import { defineAction } from './action.js'
 
 export const starterCategoriesAction = defineAction({
@@ -40,6 +42,10 @@ export const completeSetupAction = defineAction({
   surface: 'app',
   run: (ctx, input) =>
     withTransaction(ctx.db, async (db) => {
+      const settings = mergeSettings(await getSettings(db), input.settings)
+      // Checked before anything is created, so a refused year leaves setup as it was.
+      const today = todayIn(settings.timeZone, ctx.now())
+      checkBirthYear(input.settings.retirement?.birthYear, today, 'settings.retirement.birthYear')
       const existing = new Set((await listCategories(db)).map((c) => c.name.toLowerCase()))
       for (const category of input.categories) {
         if (existing.has(category.name.toLowerCase())) continue
@@ -48,7 +54,7 @@ export const completeSetupAction = defineAction({
       }
       // Rules for well-known subscriptions, for whichever of their categories were picked.
       await addStarterRules(db)
-      await saveSettings(db, mergeSettings(await getSettings(db), input.settings))
+      await saveSettings(db, settings)
       await recategorize(db)
       await markOnboarded(db)
       return { done: true }

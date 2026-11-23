@@ -1,21 +1,25 @@
 // Reads each bill's last few posted charges to see whether its amount
 // changed (billChanges.ts), and writes the new usual amount once the owner
-// dismisses the alert or the new amount comes twice in a row.
+// dismisses the alert, the new amount comes twice in a row, or a varying
+// bill's recent cycles say it costs something else now. None of these
+// writes counts as the owner setting the amount (amount_set_at): only
+// update_bill does.
 
 import type { Db } from '../db/pool.js'
 import { addDays, todayIn, type IsoDate } from '../lib/dates.js'
 import type { Cadence } from '../lib/periods.js'
 import type { AccountAlert, AlertFormat } from './accountAlerts.js'
 import { accountMasks } from './accounts.js'
+import { isAmountChange } from './billAmountChange.js'
 import { PAYMENT } from './billPayments.js'
 import {
   billChangeAlert,
   billChangeOf,
   CHARGES_READ,
   type BillChange,
-  type BillCharge,
   type WatchedBill,
 } from './billChanges.js'
+import { paidOnceCents, type BillCharge } from './billCycles.js'
 import { textKey } from './merchantKey.js'
 import { shownNameOf } from './ruleText.js'
 import type { RuleReads } from './rules.js'
@@ -34,6 +38,8 @@ interface BillAndCharges {
   matchPattern: string
   createdAt: Date
   amountVaries: boolean
+  /** When the owner last set the amount; null when never since tracking. */
+  amountSetAt: Date | null
   charges: BillCharge[]
 }
 
@@ -45,7 +51,7 @@ async function billsWithCharges(db: Db, today: IsoDate): Promise<BillAndCharges[
   const { rows } = await db.query<BillAndCharges>(
     `SELECT b.id, b.name, b.amount_cents::int AS "amountCents", b.cadence, b.reads,
        b.match_pattern AS "matchPattern", b.created_at AS "createdAt",
-       b.amount_varies AS "amountVaries",
+       b.amount_varies AS "amountVaries", b.amount_set_at AS "amountSetAt",
        coalesce(json_agg(json_build_object('accountId', p.account_id,
          'date', to_char(p.date, 'YYYY-MM-DD'), 'amountCents', p.amount_cents)
          ORDER BY p.date DESC) FILTER (WHERE p.date IS NOT NULL), '[]') AS charges
@@ -116,6 +122,7 @@ export async function listBillChanges(
       cadence: bill.cadence,
       trackedOn: todayIn(timeZone, bill.createdAt),
       amountVaries: bill.amountVaries,
+      amountSetOn: bill.amountSetAt ? todayIn(timeZone, bill.amountSetAt) : null,
       charges: bill.charges,
     }))
     .map((bill) => billChangeOf(bill, today))
@@ -139,7 +146,11 @@ async function setUsual(db: Db, billId: string, amountCents: number): Promise<vo
   await db.query('UPDATE bills SET amount_cents = $2 WHERE id = $1', [billId, amountCents])
 }
 
-/** Takes the new amount as usual for bills charged it twice in a row, which clears their alerts. */
+/**
+ * Writes each settled bill's new usual amount: a steady bill charged it twice
+ * in a row, which clears its alert, or a varying bill following its recent
+ * cycles. Returns how many bills it wrote.
+ */
 export async function settleBillChanges(db: Db, timeZone: string, today: IsoDate): Promise<number> {
   const settled = (await listBillChanges(db, timeZone, today)).filter(
     (change) => change.kind === 'settled',
@@ -149,9 +160,12 @@ export async function settleBillChanges(db: Db, timeZone: string, today: IsoDate
 }
 
 /**
- * Takes a changed charge's amount as the bill's usual one, as dismissing or
+ * Takes a changed cycle's amount as the bill's usual one, as dismissing or
  * hiding its alert does, so the alert clears and never comes back for that
- * charge. False when the bill's latest charge is no longer a change.
+ * charge. A charge made twice in the cycle counts once (paidOnceCents), so
+ * the usual amount never becomes a doubled total. False when nothing was
+ * learned: the bill's latest charge is no longer a change, or its cycle was
+ * only paid twice and costs the usual amount paid once.
  */
 export async function acceptBillChange(
   db: Db,
@@ -164,6 +178,8 @@ export async function acceptBillChange(
       one.kind === 'changed' && one.bill.id === target.billId && one.charge.date === target.date,
   )
   if (change?.kind !== 'changed') return false
-  await setUsual(db, change.bill.id, change.charge.amountCents)
+  const usualCents = paidOnceCents(change.cycle)
+  if (!isAmountChange(change.bill.amountCents, usualCents)) return false
+  await setUsual(db, change.bill.id, usualCents)
   return true
 }
