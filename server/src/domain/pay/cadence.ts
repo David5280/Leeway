@@ -58,9 +58,14 @@ export function roughCadence(dates: IsoDate[]): PayCadence | null {
   const gaps = dates.slice(1).map((date, i) => daysBetween(dates[i]!, date))
   if (gaps.length === 0) return null
   const middle = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)]!
-  if (within(middle, GAP_RANGES.week)) return 'week'
-  if (within(middle, GAP_RANGES.fortnight)) return 'semimonth'
-  if (within(middle, GAP_RANGES.month)) return 'month'
+  return gapCadence(middle)
+}
+
+/** The cadence one gap between paydays fits, about two weeks as twice a month, or null. */
+export function gapCadence(days: number): PayCadence | null {
+  if (within(days, GAP_RANGES.week)) return 'week'
+  if (within(days, GAP_RANGES.fortnight)) return 'semimonth'
+  if (within(days, GAP_RANGES.month)) return 'month'
   return null
 }
 

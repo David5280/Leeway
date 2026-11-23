@@ -21,6 +21,9 @@
 //   own spread; else the later. The newest is never set aside this way,
 //   only by its own rule, as no paycheck after it shows which of the two
 //   kept the slot.
+// - "Short" is against the usual gap, which a bonus in a run of three or
+//   four can lower to its own; such a run's gap is read without it
+//   (shortRun.ts), by amount only in a run of three, too short for timing.
 //
 // Safety: when unsure, the reading that makes the next payday later wins,
 // so safe to spend stays cautious (spread over more days, with more bills
@@ -35,6 +38,7 @@ import { median } from '../../lib/money.js'
 import type { Cadence } from '../../lib/periods.js'
 import { expectedPaydayAfter, readingsOf } from './expectedPayday.js'
 import type { Paycheck } from './paychecks.js'
+import { shortRunPaydays } from './shortRun.js'
 
 /**
  * A gap shorter than this share of the usual one is not a cycle: the
@@ -87,9 +91,11 @@ const middleOf = (values: number[]) =>
  * short nor beside a short one. A run of three or four with a bonus in it
  * may hold none (Oct 16, a bonus Oct 20, Oct 30), and then has no grid to
  * go by: read by its gaps alone, the bonus's own would line the grid up
- * with it.
+ * with it. Where its bonus would be the middle gap, a short run's gaps are
+ * read without it (shortRun.ts).
  */
-function gapsOf(paychecks: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
+function gapsOf(run: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
+  const paychecks = shortRunPaydays(run) ?? run
   const gaps = paychecks
     .slice(1)
     .map((paycheck, i) => daysBetween(paychecks[i]!.date, paycheck.date))
