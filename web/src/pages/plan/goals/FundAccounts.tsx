@@ -1,7 +1,8 @@
 // Choosing what the emergency fund counts: every savings account, only the
 // accounts the owner picks, or (for a goal that keeps a count by hand) what
-// is added by hand, which stays a choice after switching to accounts. Each account says why it is left out when it is: hidden, or
-// followed by another goal, which keeps it out so no dollar counts twice.
+// is added by hand, which stays a choice after switching to accounts. Each
+// account says why it is left out when it is: hidden, or followed by another
+// goal, which keeps it out so no dollar counts twice.
 
 import { useState, type FormEvent } from 'react'
 import { useActionMutation } from '../../../api/hooks'
@@ -141,6 +142,9 @@ export function FundAccountsForm({
       <div className="row wrap">
         <button type="submit" className="btn primary" disabled={change.isPending || pickedNone}>
           Save
+        </button>
+        <button type="button" className="btn" disabled={change.isPending} onClick={onDone}>
+          Cancel
         </button>
       </div>
     </form>

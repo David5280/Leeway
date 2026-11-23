@@ -2,7 +2,8 @@
 // fund is sized by: a tick for each spending category, what counts now first
 // and the rest under their groups, saved to the essential categories
 // setting, or handed back to Leeway to find. A tick on a category with no
-// recent spending says it adds nothing, so a quiet pick never surprises.
+// recent spending says it adds nothing, so a quiet pick never surprises, and
+// a note names the categories Leeway counts only in part, which no tick shows.
 
 import { useState, type FormEvent } from 'react'
 import { useAction, useActionMutation } from '../../../api/hooks'
@@ -13,7 +14,7 @@ import {
   startingTicks,
   type EssentialSection,
 } from '../../../lib/essentialChoice'
-import { quietNote, type EmergencyView } from '../../../lib/emergencyText'
+import { partlyNote, quietNote, type EmergencyView } from '../../../lib/emergencyText'
 
 /** Whether two lists hold the same ids, in any order. */
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
@@ -79,6 +80,7 @@ export function EssentialCategoriesForm({
 
   if (!categories.data) return <LoadingOrError error={categories.error} />
   const quiet = quietNote(quietPicks(spending, shown, view.essentialsChoice.spentIds))
+  const partly = partlyNote(view.essentials?.partlyCounted ?? [])
   return (
     <form className="stack-sm" onSubmit={submit} aria-label="Essential categories">
       <span className="small muted">
@@ -88,6 +90,7 @@ export function EssentialCategoriesForm({
       {essentialSections(spending, start).map((section) => (
         <SectionTicks key={section.title} section={section} ticked={shown} onToggle={toggle} />
       ))}
+      {partly && <span className="small muted">{partly}</span>}
       {quiet && <span className="small muted">{quiet}</span>}
       {shown.length === 0 && <span className="small muted">Tick at least one to save.</span>}
       <ErrorNote error={save.error} />

@@ -12,6 +12,8 @@ import { incomeTotals, type PaySource } from './income.js'
 
 export const MONEY_OUT_NOT_CATEGORIZED = 'Money out, not categorized'
 export const MONEY_IN_NOT_CATEGORIZED = 'Money in, not categorized'
+/** The summary's line for money in with no category that could be pay (see unfiledInCents). */
+export const MONEY_IN_TO_CATEGORIZE = 'Possible income to categorize'
 
 /** The category a counted transaction is filed under. Transfers never count, so none is one. */
 export interface TaxRowCategory {
@@ -58,7 +60,10 @@ export interface TaxSummary {
   taxRefundCents: number
   /** Card rewards and cash back. */
   rewardsCents: number
-  /** Money in with no category: it may be pay, interest or a refund, so it counts on no line yet. */
+  /**
+   * Money in with no category that may be pay, interest or a refund, so it
+   * counts on no line yet. Payments from people are left out: they are never pay.
+   */
   unfiledInCents: number
 }
 
@@ -123,6 +128,13 @@ function categoryLines(rows: TaxRow[]): Map<string, TaxCategory> {
   return lines
 }
 
+/** Money in with no category, less payments from people (see TaxSummary.unfiledInCents). */
+function unfiledInCents(rows: TaxRow[]): number {
+  return rows
+    .filter(({ tx, category }) => category === null && tx.amountCents < 0 && !tx.person)
+    .reduce((sum, { tx }) => sum - tx.amountCents, 0)
+}
+
 /** The year's summary from its counted rows. */
 export function summarize(year: number, rows: TaxRow[]): TaxSummary {
   const lines = categoryLines(rows)
@@ -140,6 +152,6 @@ export function summarize(year: number, rows: TaxRow[]): TaxSummary {
     retirementCents: totals.retirement,
     taxRefundCents: totals.tax_refund,
     rewardsCents: totals.rewards,
-    unfiledInCents: lines.get(UNFILED_IN)?.totalCents ?? 0,
+    unfiledInCents: unfiledInCents(rows),
   }
 }

@@ -40,7 +40,8 @@ bank, and nothing in Leeway can ever move money.
 - **A tax-ready export**: a year of transactions from every account, hidden
   ones included, as a CSV grouped by category with totals. A summary at the
   end gives pay by source, interest, dividends, benefits, tax refunds and
-  rewards, and "Money in, not categorized" for deposits still to sort.
+  rewards, and "Possible income to categorize" for deposits still to sort.
+  Support payments and money from people are never counted as pay.
   Transfers between your own accounts are left out, and categories that may
   be deductible are flagged for you to check with a tax pro (Settings, then
   Data). It is a summary, not tax advice.
