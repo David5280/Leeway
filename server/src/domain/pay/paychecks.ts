@@ -61,6 +61,13 @@ export interface EmployerRun {
   /** False while the cadence is only a guess: one paycheck, paydays that fit no cadence, or two. */
   cadenceConfirmed: boolean
   /**
+   * True while the cadence rests on a short run read without one of its
+   * paychecks (shortRun.ts), with no cadence the owner gave: an estimate a
+   * fifth paycheck settles. Kept apart from cadenceConfirmed, which also
+   * sets how long a run counts as still paying.
+   */
+  shortRunGuess: boolean
+  /**
    * Paychecks left out of what a usual one is: more than OUTLIER_SHARE times
    * the middle one at the end of a run, like a final check that pays out
    * unused leave.
@@ -202,12 +209,13 @@ function outliersOf(paychecks: Paycheck[]): Paycheck[] {
 
 /** A run of a payer's paychecks, its cadence read from those on its cycle (or given). */
 export function runOf(paychecks: Paycheck[], newest: Deposit, given: Cadence | null): EmployerRun {
-  const { cycle } = splitCycle(paychecks, given)
+  const { cycle, shortRun } = splitCycle(paychecks, given)
   return {
     payerKey: paychecks[0]!.payerKey,
     newest,
     paychecks,
     cycle,
+    shortRunGuess: shortRun && given === null,
     ...runPattern(
       cycle.map((p) => p.date),
       given,
