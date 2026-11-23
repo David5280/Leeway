@@ -1,7 +1,8 @@
 // The merchant id migration (037) is numbered after ones main and other
 // branches add (032, 034, and 029 to 036 held elsewhere). The runner applies
-// files by name, in name order, so a database that ran all of those still
-// gets 037, last, and one that ran it under an earlier name is not broken.
+// any file it has not run, in name order, so a database that ran all of the
+// others, later ones included, still gets 037, and one that ran it under an
+// earlier name is not broken.
 
 import { copyFile, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -43,10 +44,11 @@ async function withoutEntity(): Promise<string[]> {
 }
 
 describe('the merchant id migration', () => {
-  it('is the only one numbered 037, and sorts after every other one', async () => {
+  it('is the only one numbered 037, and sorts after every one numbered before it', async () => {
     const files = (await readdir(MIGRATIONS)).filter((file) => file.endsWith('.sql')).sort()
     expect(files.filter((file) => file.startsWith('037_'))).toEqual([ENTITY])
-    expect(files.at(-1)).toBe(ENTITY)
+    const earlier = files.filter((file) => file < '037_')
+    expect(files.indexOf(ENTITY)).toBe(earlier.length)
   })
 
   it('runs last on a database that already ran every other one, and keeps its rows', async () => {
