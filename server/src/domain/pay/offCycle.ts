@@ -15,11 +15,12 @@
 //   before (a tie fills): a payday paid early for a holiday. Anything else
 //   is set aside. What it pays plays no part.
 // - Of two paychecks a short gap apart (two in one payday's slot), the one
-//   farther from the cycle's grid is set aside (a grid stepping by gaps
-//   no bonus split); equally far, or with no grid to go by, the one whose
+//   farther from the cycle's grid, which steps only by gaps no bonus
+//   split, is set aside; equally far, or with no grid to go by, the one whose
 //   amount is clearly farther from the run's middle, by more than the run's
-//   own spread; else the later. The newest is never set aside this way, only by its own rule,
-//   as no paycheck after it shows which of the two kept the slot.
+//   own spread; else the later. The newest is never set aside this way,
+//   only by its own rule, as no paycheck after it shows which of the two
+//   kept the slot.
 //
 // Safety: when unsure, the reading that makes the next payday later wins,
 // so safe to spend stays cautious (spread over more days, with more bills
@@ -65,7 +66,7 @@ export interface CycleSplit {
   offCycle: Paycheck[]
 }
 
-/** What one run usually looks like: its gaps, its middle paycheck and how far amounts stray from it. */
+/** What one run usually looks like: its gaps, its middle paycheck and how far amounts stray. */
 interface Usual {
   /** The gap a short one is measured against. */
   gapDays: number

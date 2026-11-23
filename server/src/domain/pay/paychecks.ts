@@ -96,17 +96,24 @@ const SLACK_DAYS = 3
 /** A word's key with its digits kept: "3M" is "3m", "7-ELEVEN" is "7eleven". */
 const keyWithDigits = (word: string) => word.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
+/** An ACH line's own labels, "DES:" and "PPD", which name no payer. */
+const ACH_LABELS = /\b(des|ppd)\b/gi
+/** A name spelled with a number first, "7-ELEVEN" or "3M", never a code like "K3J9X". */
+const NUMBER_NAME = /^\d+-?[a-z]+$/i
+
 /**
  * Whether a number in the bank text is what names the payer: when the
- * other words, less pay words, are only business endings ("12345 INC",
- * "3M CO PAYROLL"), or there are no other words at all ("7-ELEVEN"). Never
- * beside pay words alone, where it is a date or trace number that changes
- * with every paycheck ("PAYROLL 112026", "DIRECT DEP 11/20").
+ * other words, less pay words and ACH labels, are only business endings
+ * ("12345 INC", "3M CO DES:PAYROLL"), or there are no other words at all.
+ * Beside pay words alone it names the payer only when it is spelled like a
+ * name ("7-ELEVEN DIR DEP"); a bare number there is a date or trace number
+ * that changes with every paycheck ("PAYROLL 112026", "DIRECT DEP 11/20").
  */
-function numberNamesPayer(otherWords: string[]): boolean {
+function numberNamesPayer(words: string[], otherWords: string[]): boolean {
   if (otherWords.length === 0) return true
-  const rest = textKey(withoutPayWords(otherWords.join(' ')))
-  return rest !== '' && rest.split(' ').every(isBusinessEnding)
+  const rest = textKey(withoutPayWords(otherWords.join(' ')).replace(ACH_LABELS, ' '))
+  if (rest === '') return NUMBER_NAME.test(words.find((word) => /\d/.test(word)) ?? '')
+  return rest.split(' ').every(isBusinessEnding)
 }
 
 /**
@@ -121,7 +128,7 @@ export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): str
   const words = (deposit.merchantName ?? deposit.name).trim().split(/\s+/)
   const holdsDigit = (word: string) => /\d/.test(word)
   const otherWords = words.filter((word) => !holdsDigit(word))
-  if (!numberNamesPayer(otherWords)) return textKey(otherWords.join(' '))
+  if (!numberNamesPayer(words, otherWords)) return textKey(otherWords.join(' '))
   const first = words.findIndex(holdsDigit)
   // The first word holding a digit keeps it; any later one is a reference, dropped.
   return words

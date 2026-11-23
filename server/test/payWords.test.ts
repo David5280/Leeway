@@ -208,6 +208,19 @@ describe('who paid a deposit', () => {
     expect(key('3M CO PAYROLL 0012345')).toBe('3m co payroll')
   })
 
+  it("reads past an ACH line's own labels to a number that names the payer", () => {
+    expect(key('12345 INC DES:PAYROLL ID:K3J9X')).toBe('12345 inc des payroll')
+    expect(key('12345 INC DES:PAYROLL ID:K3J9X')).not.toBe(key('67890 INC DES:PAYROLL'))
+    expect(key('3M CO DES:PAYROLL')).toBe('3m co des payroll')
+    expect(key('3M CO PPD')).toBe('3m co ppd')
+  })
+
+  it('keeps a name spelled with a number beside pay words, never a code', () => {
+    expect(key('7-ELEVEN DIR DEP')).toBe('7eleven dir dep')
+    expect(key('7-ELEVEN DIR DEP 0012345')).toBe(key('7-ELEVEN DIR DEP 0067890'))
+    expect(key('PAYROLL ID:K3J9X')).toBe(key('PAYROLL ID:Q7Z2W'))
+  })
+
   it('drops the digits where the other words name the payer', () => {
     expect(key('ACME CORP PAYROLL 0012345')).toBe('acme corp payroll')
   })
