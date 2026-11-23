@@ -134,3 +134,25 @@ describe("a word of the owner's label beside a shop's name", () => {
     expect((await probe.everything()).toLowerCase()).not.toMatch(/grant|miles/)
   })
 })
+
+describe('a name the owner wrote that is a word too, end to end', () => {
+  it('is hidden in every tool, a rule pattern and a label one word with a shop included', async () => {
+    await pay('ROSS STORES', 2_000, { merchantName: 'Ross', detailed: CLOTHES })
+    await categories(['Gift for Bill', 'Bill tuition', 'Zelle to June', 'Uncle Bill'])
+    await categories(["Ross's", 'For/Ross', 'Ross-allowance', 'Zelle to Ed', 'Electric bill'])
+    await goals(['Bill college fund', 'Loan from June Ostrowski', 'Braces - Bill'])
+    const [category] = (await sql(`SELECT id FROM categories LIMIT 1`)).rows as { id: string }[]
+    await sql(
+      `INSERT INTO rules (field, match_type, pattern, category_id, position)
+       VALUES ('description', 'contains', 'VENMO BILL', $1, 1)`,
+      [category!.id],
+    )
+
+    const everything = await probe.everything()
+    expect(everything).not.toMatch(/venmo bill|for bill|bill tuition|bill college|uncle bill/)
+    expect(everything).not.toMatch(/june|ostrowski|- bill|ross's|ross-|\/ross|to ed\b/)
+    // The shop and the everyday word still show.
+    expect(await probe.merchants()).toContain('Ross')
+    expect(await probe.sent('list_categories')).toContain('"Electric bill"')
+  }, 30_000)
+})

@@ -80,6 +80,7 @@ describe('brandKey', () => {
     expect(brandKey('Chick-fil-A')).toBe('chick fil a')
     expect(brandKey('TRADER JOE S')).toBe('trader joes')
     expect(brandKey("Trader Joe's")).toBe('trader joes')
+    expect(brandKey('JOHNS HOPKINS/JANE (DOE)')).toBe('johns hopkins jane doe')
   })
 })
 
@@ -87,6 +88,8 @@ describe('withoutKnownBrands', () => {
   it('leaves each whole brand out of a name, and the rest as brandKey reads it', () => {
     expect(withoutKnownBrands('Johns Hopkins Medicine')).toBe('medicine')
     expect(withoutKnownBrands('JOHNS HOPKINS JANE')).toBe('jane')
+    expect(withoutKnownBrands('Johns Hopkins (Jane Doe)')).toBe('jane doe')
+    expect(withoutKnownBrands('JOHNS HOPKINS/JANE')).toBe('jane')
     expect(withoutKnownBrands('Whole Foods Market #10')).toBe('')
     expect(withoutKnownBrands('Jane Doe Planned Parenthood')).toBe('jane doe')
   })

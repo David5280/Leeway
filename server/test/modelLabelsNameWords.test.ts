@@ -72,8 +72,13 @@ describe('a medical practice named for its clinician', () => {
       // A surname that is also a place word vouches for no one.
       'JANE MEADOWS COUNSELING',
       'OLIVIA CASTLE THERAPY',
-      // Nor does a brand for the name beside it.
+      // Nor does a brand for the name beside it, whatever marks part them.
       'JOHNS HOPKINS JANE',
+      'Johns Hopkins (Jane Doe)',
+      'JOHNS HOPKINS/JANE',
+      // Nor more name words than a name has, nor ones parted by a mark.
+      'MARIA JOSE GARCIA LOPEZ PEREZ THERAPY',
+      'DOE*JANE COUNSELING',
       // Named for a place that reads as a person: hidden, as a name would be.
       'CHERRY CREEK DENTAL',
       'SAINT JOSEPH HOSPITAL',
@@ -97,6 +102,16 @@ describe('a medical practice named for its clinician', () => {
         name,
         null,
       ])
+    }
+  })
+})
+
+describe('a primary care visit at a brand beside a clinician', () => {
+  it('is a medical payment whatever mark parts the brand and the name', () => {
+    const vouched = { merchantEntityId: 'ent_fake_hopkins' }
+    for (const name of ['Johns Hopkins (Jane Doe)', 'JOHNS HOPKINS/JANE']) {
+      const label = labelled(name, 'MEDICAL_PRIMARY_CARE', { merchantName: name, ...vouched })
+      expect([name, label]).toEqual([name, 'Medical payment'])
     }
   })
 })

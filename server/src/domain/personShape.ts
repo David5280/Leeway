@@ -17,6 +17,13 @@ export const APOSTROPHES = "'’‘ʼ"
 const NAME_WORD = new RegExp(`^\\p{L}[\\p{L}${APOSTROPHES}-]*\\p{L}$`, 'u')
 const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'i')
 
+// A word of a line, between any marks but inner apostrophes and hyphens:
+// "Johns Hopkins (Jane Doe)" holds "Jane", "HOPKINS/JANE" holds "JANE".
+const LINE_WORD = new RegExp(`\\p{L}(?:[\\p{L}${APOSTROPHES}-]*\\p{L})?`, 'gu')
+// What parts a line's words for reading a name in it: anything but letters, digits, dots,
+// apostrophes and hyphens, so "DOE*JANE" reads "DOE JANE" and "Jane Q. Doe" keeps its dot.
+const LINE_BREAKS = new RegExp(`[^\\p{L}\\p{N}.${APOSTROPHES}-]+`, 'u')
+
 // An initial, with or without its dot: "Jane Q. Doe", "J PEMBERTON".
 const INITIAL = /^\p{L}\.?$/u
 
@@ -78,7 +85,8 @@ function couldBeANameWord(word: string): boolean {
 
 /** Whether any word of a text, alone, could be part of a person's name: "jane" in "jane medicine". */
 export function holdsANameWord(text: string): boolean {
-  return text.split(/\s+/).some((word) => couldBeANameWord(word) && !isCredential(word))
+  const words = text.match(LINE_WORD) ?? []
+  return words.some((word) => couldBeANameWord(word) && !isCredential(word))
 }
 
 /** Whether a text has words and every one is an everyday word ("Rent", "House cleaner"). */
@@ -108,15 +116,19 @@ export function hasAPersonsShape(name: string): boolean {
  * Public", "JANE DOE COUNSELING" holds "JANE DOE". What is left once those
  * are gone is read as a name (hasAPersonsShape). A name that is also a word
  * stays, so "DIRECT DEP MARK WHITLOCK" or "BILL WHITLOCK" never leaves a lone
- * surname too short to read as one.
+ * surname too short to read as one. Words are parted by any mark ("DOE*JANE
+ * COUNSELING"), and more name words than a name has hold one anywhere in
+ * them ("MARIA JOSE GARCIA LOPEZ PEREZ THERAPY").
  */
 export function holdsAPersonsName(line: string): boolean {
   const words = line
-    .split(/\s+/)
+    .split(LINE_BREAKS)
     .map((word) => word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, ''))
     .filter((word) => word && !/\d/.test(word) && !isCredential(word))
     .filter((word) => nameInALine(word.replace(/\.$/, '')))
-  return hasAPersonsShape(words.join(' '))
+  if (words.length <= MOST_NAME_WORDS) return hasAPersonsShape(words.join(' '))
+  // Any two words side by side that read as a name, as every longer one holds such a pair.
+  return words.slice(1).some((word, at) => hasAPersonsShape(`${words[at]} ${word}`))
 }
 
 /** Whether a line or merchant reads as a clinician by name: a title, or a name then a credential. */

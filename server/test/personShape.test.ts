@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { isBusinessWord } from '../src/domain/businessWords.js'
 import {
   hasAPersonsShape,
+  holdsANameWord,
   holdsAPersonsName,
   isCredential,
   namesAClinician,
@@ -68,8 +69,20 @@ describe("a person's shape", () => {
     expect(holdsAPersonsName('DIRECT DEP BILL WHITLOCK HOUSEHOLD PAYROLL')).toBe(true)
     expect(holdsAPersonsName('JANE DOE, OTR/L')).toBe(true)
     expect(holdsAPersonsName('JANE DOE COUNSELING')).toBe(true)
+    expect(holdsAPersonsName('DOE*JANE COUNSELING')).toBe(true)
+    expect(holdsAPersonsName('MARIA JOSE GARCIA LOPEZ PEREZ THERAPY')).toBe(true)
     expect(holdsAPersonsName('KING SOOPERS PAYROLL')).toBe(false)
     expect(holdsAPersonsName('ACME PHYSICAL THERAPY')).toBe(false)
+  })
+})
+
+describe('a name word anywhere in a text', () => {
+  it('is read between any marks, inner apostrophes and hyphens kept', () => {
+    expect(holdsANameWord('(jane doe)')).toBe(true)
+    expect(holdsANameWord('hopkins/jane')).toBe(true)
+    expect(holdsANameWord("o'brien-ostrowski")).toBe(true)
+    expect(holdsANameWord('(medicine)')).toBe(false)
+    expect(holdsANameWord('medicine / dr.')).toBe(false)
   })
 })
 

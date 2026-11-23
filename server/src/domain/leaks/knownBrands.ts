@@ -69,17 +69,17 @@ const BRANDS = [
 
 /**
  * A name as it is compared with the brands: lower case, "&" read as "and",
- * hyphens as spaces, apostrophes gone, a lone "s" a bank split off joined
- * back ("JOE S" reads "joes"), and words with no letter (a store number like
- * "#031") left out.
+ * apostrophes gone, every other mark as a space ("Chick-Fil-A", "JOHNS
+ * HOPKINS/JANE"), a lone "s" a bank split off joined back ("JOE S" reads
+ * "joes"), and words with no letter (a store number like "#031") left out.
  */
 export function brandKey(name: string): string {
   return name
     .normalize('NFKC')
     .toLowerCase()
     .replace(/&/g, ' and ')
-    .replace(/-/g, ' ')
     .replace(/['’]/g, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter((word) => /\p{L}/u.test(word))
     .join(' ')

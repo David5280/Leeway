@@ -6,6 +6,7 @@
 // patterns it builds (namePatterns.ts), which the domain never imports. Pure.
 
 import { wordsOf } from '../domain/chat/billLabels.js'
+import { isNamedLikeAPerson } from '../domain/chat/givenNames.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 import { straight } from '../domain/chat/shownText.js'
 import {
@@ -38,7 +39,9 @@ export interface HiddenNames {
  * The names of shops the owner buys from that hold a word hidden alone, each
  * kept as written: Chat shows them anyway, and "Trader Joe's" must not read
  * "Trader someone's" because the owner paid a Joe through Zelle, nor "HBO
- * Max" read "HBO someone" because the owner has a category "Max".
+ * Max" read "HBO someone" because the owner has a category "Max". A shop
+ * of one word named like a person ("Ross") keeps nothing, so a label
+ * "Ross's" or "Venmo/Ross" still reads without the name (ownerText.ts).
  */
 function shopsKept(people: PaymentPeople): Replacement[] {
   const alone = [
@@ -48,8 +51,9 @@ function shopsKept(people: PaymentPeople): Replacement[] {
     ...people.labels.flatMap(({ words }) => words),
   ]
   const hidden = new Set(alone.flatMap(wordsOf))
+  const namedLikeAPerson = (shop: string) => !/\s/.test(shop) && isNamedLikeAPerson(shop)
   return [...people.shops.names]
-    .filter((shop) => wordsOf(shop).some((word) => hidden.has(word)))
+    .filter((shop) => !namedLikeAPerson(shop) && wordsOf(shop).some((word) => hidden.has(word)))
     .map((shop) => ({ pattern: fullNamePattern(shop), with: null }))
 }
 

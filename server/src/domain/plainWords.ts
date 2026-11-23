@@ -81,6 +81,8 @@ const PLAIN_WORDS = new Set(
     'due moved rest run took take total used went',
     // More words goals and notes are written with ("Car payoff", "Giving", "Cleaning lady").
     'bread ending giving lady payoff projects support',
+    // More words budgets are named with ("Pay off", "Oil Change", "Coffee Shops", "Meal Prep").
+    'cell cells change changes halloween hotels pay plant plants prep shops',
   ]
     .join(' ')
     .split(' '),

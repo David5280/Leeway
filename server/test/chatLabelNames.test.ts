@@ -1,30 +1,13 @@
 // Which words of a label the owner wrote Chat reads as a person's, from the
 // label as written to what a tool's output shows of it: a given name is a
-// person but in a few set phrases, a surname is the word only alone and not
-// owned, and a shop of one word keeps its name unless it is named like a
-// person. When in doubt a word is hidden. Every name is made up.
+// person but in a few set phrases, a surname is the word unless owned or
+// beside a name, and a shop of one word keeps its name unless it is named
+// like a person. When in doubt a word is hidden. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
-import { chatToolText } from '../src/chat/toolOutput.js'
 import { WORDS_IN_LABELS } from '../src/domain/chat/commonWords.js'
 import { isGivenName } from '../src/domain/chat/givenNames.js'
-import { namesInLabels } from '../src/domain/chat/ownerText.js'
-import { NO_PEOPLE } from '../src/domain/chat/people.js'
-import { namedLabels } from '../src/domain/chat/personNames.js'
-import { knownShops } from '../src/domain/knownShops.js'
-
-// Shops the owner buys from: one-word ones named for no one, and ones named like a person.
-const SHOPS = knownShops(['Wegmans', 'Marshalls', 'Target', 'Ross', 'Ruby', "Trader Joe's"])
-
-/** Each label as a tool's output shows it, read through every step Chat takes. */
-function shown(labels: readonly string[]): string[] {
-  const words = namesInLabels(labels, () => false, SHOPS)
-  const people = { ...NO_PEOPLE, shops: SHOPS, labels: namedLabels(words, SHOPS) }
-  return (JSON.parse(chatToolText({ labels }, people)) as { labels: string[] }).labels
-}
-
-/** Each label beside how it is shown, so a failure names the label. */
-const pairs = (labels: readonly string[]) => labels.map((label, at) => [label, shown(labels)[at]])
+import { pairs, shown } from './labelsShown.js'
 
 describe('a given name in a label', () => {
   it('is a person, whatever word it is beside', () => {
@@ -83,12 +66,26 @@ describe('a surname that is also a word', () => {
     expect(shown(words)).toEqual(words)
   })
 
-  it('is a person when owned or beside another name', () => {
-    expect(pairs(["Brown's tuition", 'Hope Brown', 'Brown Ignatius'])).toEqual([
+  it('is a person when owned, after a word that could be a name, or before a given name', () => {
+    expect(pairs(["Brown's tuition", 'Hope Brown', 'Ignatius Brown', 'Brown Hope'])).toEqual([
       ["Brown's tuition", "someone's tuition"],
       ['Hope Brown', 'someone someone'],
-      ['Brown Ignatius', 'someone someone'],
+      ['Ignatius Brown', 'someone someone'],
+      ['Brown Hope', 'someone someone'],
     ])
+  })
+
+  it('stays the word beside an ordinary word, which is hidden alone when no rule vouches for it', () => {
+    const labels = ['Brown rice', 'Young Living', 'Hill Country', 'Love Sac', 'Stone countertops']
+    expect(pairs(labels)).toEqual([
+      ['Brown rice', 'Brown someone'],
+      ['Young Living', 'Young someone'],
+      ['Hill Country', 'Hill someone'],
+      ['Love Sac', 'Love someone'],
+      ['Stone countertops', 'Stone someone'],
+    ])
+    // A surname first beside an unknown word reads as the word, as "Hill Country" does.
+    expect(shown(['Brown Ignatius'])).toEqual(['Brown someone'])
   })
 })
 
