@@ -4,7 +4,8 @@
 // monthly retirement saving.
 
 import { useId } from 'react'
-import { PensionAccount, type Candidate } from '../PensionFields'
+import type { AccountChoice } from '../fields'
+import { LeftNote, leftOption, PensionAccount, type Candidate } from '../PensionFields'
 import type { NewPensionText, PensionChoice } from './review'
 
 /** The offer to make the 401(k), 457 and 403(b) figures the monthly retirement saving. */
@@ -90,10 +91,16 @@ export function SavingChoice({
 export function NewPensionFields({
   candidates,
   typed,
+  choice,
+  confirm,
   onChange,
 }: {
   candidates: Candidate[]
   typed: NewPensionText
+  /** Where the figures go, read against the accounts as listed now. */
+  choice: AccountChoice
+  /** The save button's words, which the note on a pension made meanwhile names. */
+  confirm: string
   onChange: (change: Partial<NewPensionText>) => void
 }) {
   const balanceId = useId()
@@ -103,15 +110,17 @@ export function NewPensionFields({
       <p className="small muted">
         It takes the pension contribution, gross pay, pay schedule and employer share above.
       </p>
-      {candidates.length > 0 && (
+      {(candidates.length > 0 || typed.accountId !== '') && (
         <PensionAccount
           candidates={candidates}
           accountId={typed.accountId}
+          left={leftOption(choice)}
           onChange={(accountId) => onChange({ accountId })}
         />
       )}
+      <LeftNote choice={choice} confirm={confirm} />
       {/* An account Leeway already has keeps its own name and balance. */}
-      {typed.accountId === '' && (
+      {choice.kind === 'new' && (
         <div className="review-figures">
           <label className="field">
             Pension name

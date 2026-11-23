@@ -10,6 +10,7 @@ import { countedNote, payrollNote } from '../src/domain/savings/rate.js'
 import { getSettings } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
 import { confirmedPaystub } from './fixtures/paystub.js'
+import { PERA } from './fixtures/pension.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -34,19 +35,6 @@ beforeEach(async () => {
 })
 
 const profile = async () => getFinancialProfile(ctx.db, await getSettings(ctx.db), TODAY)
-
-/** A pension with a statement benefit and a contribution of $423 every two weeks. */
-const PERA = {
-  name: 'Colorado PERA',
-  balanceCents: 4_500_000,
-  contribution: { kind: 'amount', cents: 42_300 },
-  employerContributionPercent: 21.4,
-  grossPayCents: 384_500,
-  payCadence: 'biweek',
-  serviceYears: 9.5,
-  statementBenefitMonthlyCents: 218_000,
-  checkedOn: '2026-10-01',
-}
 
 /** Three whole months (Aug to Oct) of $5,000 take-home pay, filed as income. */
 async function paid() {
@@ -138,72 +126,6 @@ describe('create_pension and update_pension', () => {
     expect(before.savings.kinds.map((kind) => kind.kind)).not.toContain('retirement')
     const figures = await call('update_pension', { accountId: bank.accountId, serviceYears: 3 })
     expect(figures.plan.serviceYears).toBe(3)
-    expect((await profile()).retirement.pensions).toHaveLength(1)
-  })
-
-  it('attaches a plan to an account Leeway already has, instead of adding a second one', async () => {
-    const plan = await insertBankAccount(ctx.db, {
-      name: 'State Plan',
-      type: 'investment',
-      subtype: 'other',
-      balanceCents: 4_500_000,
-    })
-    const notYet = await callError('update_pension', { accountId: plan.accountId, serviceYears: 3 })
-    expect(notYet.message).toBe(
-      'This account is not a pension. Mark it as one first, or add a pension.',
-    )
-    const { name: _name, balanceCents: _balance, ...figures } = PERA
-    const attached = await call('attach_pension', { accountId: plan.accountId, ...figures })
-    expect(attached).toMatchObject({
-      accountId: plan.accountId,
-      balanceCents: 4_500_000,
-      plan: { serviceYears: 9.5, statementBenefitMonthlyCents: 218_000 },
-    })
-    const after = await profile()
-    expect(after.retirement.pensions).toHaveLength(1)
-    const accounts = await call('list_accounts')
-    expect(accounts.find((account) => account.id === plan.accountId)!.kind).toBe('pension')
-    // Attaching again replaces the plan on the same account.
-    await call('attach_pension', { accountId: plan.accountId, serviceYears: 10 })
-    expect((await profile()).retirement.pensions).toMatchObject([
-      { accountId: plan.accountId, plan: { serviceYears: 10, statementBenefitMonthlyCents: null } },
-    ])
-  })
-
-  it('attaches a plan only to an account that could be a pension', async () => {
-    const checking = await insertBankAccount(ctx.db, { subtype: 'checking' })
-    const cash = await callError('attach_pension', { accountId: checking.accountId })
-    expect(cash.message).toBe(
-      'A checking account cannot be a pension. Choose a retirement or investment account.',
-    )
-    const card = await insertBankAccount(ctx.db, { type: 'credit', subtype: 'credit card' })
-    const owed = await callError('attach_pension', { accountId: card.accountId })
-    expect(owed.message).toContain('A credit card cannot be a pension')
-    const other = await insertBankAccount(ctx.db, { type: 'other', subtype: null })
-    await call('update_account', { id: other.accountId, kind: 'other' })
-    expect((await call('attach_pension', { accountId: other.accountId })).plan.serviceYears).toBe(
-      null,
-    )
-  })
-
-  it('asks for a hidden account to be shown before a pension goes on it, so it never vanishes', async () => {
-    const plan = await insertBankAccount(ctx.db, {
-      name: 'State Plan',
-      type: 'investment',
-      subtype: 'other',
-    })
-    await call('update_account', { id: plan.accountId, hidden: true })
-    const hidden = await callError('attach_pension', { accountId: plan.accountId })
-    expect(hidden.message).toBe(
-      'Test State Plan is hidden, so a pension on it would not count. Show it under Settings, Accounts first.',
-    )
-    // Nothing changed: the account is neither a pension nor shown.
-    const after = (await call('list_accounts')).find((account) => account.id === plan.accountId)!
-    expect(after).toMatchObject({ kind: 'investment', hidden: true })
-    await call('update_account', { id: plan.accountId, hidden: false })
-    expect((await call('attach_pension', { accountId: plan.accountId })).accountId).toBe(
-      plan.accountId,
-    )
     expect((await profile()).retirement.pensions).toHaveLength(1)
   })
 
