@@ -113,10 +113,16 @@ export function CalendarSection() {
               disabled={refresh.isPending}
               onClick={() => refresh.mutate({})}
             >
-              Read it now
+              {refresh.isPending ? 'Reading…' : 'Read it now'}
             </button>
             <Unlink />
           </div>
+          {/* A read that did not work says why above, from the status, so only a good one is told here. */}
+          {refresh.isSuccess && !refresh.data.lastError && (
+            <span className="small muted" role="status">
+              Read just now.
+            </span>
+          )}
           <ErrorNote error={refresh.error} />
         </>
       ) : (

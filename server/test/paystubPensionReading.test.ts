@@ -109,7 +109,11 @@ describe('a pension line, read and mapped', () => {
     expect(named(`${REMOVED}`)).toBeNull()
     expect(named('   ')).toBeNull()
     expect(named(null)).toBeNull()
-    expect(named('P'.repeat(200))).toHaveLength(MAX_PLAN_NAME_LENGTH)
+    // A word no plan uses is never kept, and a long real name stops short of the limit.
+    expect(named('P'.repeat(200))).toBeNull()
+    const long = named(`PERA ${'Retirement '.repeat(20)}`)!
+    expect(long.length).toBeLessThanOrEqual(MAX_PLAN_NAME_LENGTH)
+    expect(long.length).toBeGreaterThan(MAX_PLAN_NAME_LENGTH - 'Retirement '.length)
   })
 
   it('gives the employer share only when the paystub prints it, as a share of gross pay', () => {

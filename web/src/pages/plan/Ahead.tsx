@@ -1,8 +1,9 @@
 // Coming up: the next six weeks with a calendar linked, week by week, with
 // paydays, bills due and the events likely to cost money, each with what to
 // set aside where past ones show it. A bill opens its own form; an event
-// opens a purchase goal to save for it. Weeks with nothing in them fold into
-// one quiet line. Shown in Plan only while a calendar is linked.
+// opens a purchase goal to save for it, unless nothing is left to set aside.
+// Weeks with nothing in them fold into one quiet line. Shown in Plan only
+// while a calendar is linked.
 
 import { Link } from 'react-router-dom'
 import type { Forecast, ForecastItem } from '../../api/client'
@@ -28,6 +29,7 @@ type Bill = Extract<ForecastItem, { type: 'bill' }>
 /** Where the amount to set aside comes from ("From 2 past trips"), or why there is none. */
 function setAsideText(event: Event): string {
   if (event.suggestedCents === null) return 'No past ones to go by yet'
+  if (event.suggestedCents === 0) return 'Nothing left to set aside'
   const kind = EVENT_KIND_NAMES[event.kind].toLowerCase()
   return `From ${event.basedOn} past ${kind}s`
 }
@@ -50,18 +52,26 @@ function EventRow({ event, today }: { event: Event; today: string }) {
     event.date === event.endsOn
       ? relativeDay(event.date, today, settings.locale)
       : dayRange({ startsOn: event.date, endsOn: event.endsOn }, settings.locale)
-  return (
-    <Link to={saveForPath(event, today)} className="list-row clickrow">
+  const row = (
+    <>
       <RowText
         name={event.title}
         detail={`${EVENT_KIND_NAMES[event.kind]}, ${when}. ${setAsideText(event)}`}
       />
-      {event.suggestedCents !== null && (
+      {/* Nothing left to set aside shows no amount, never "$0 set aside". */}
+      {event.suggestedCents !== null && event.suggestedCents > 0 && (
         <span className="stack-sm" style={{ gap: 0, textAlign: 'right' }}>
           <Money cents={event.suggestedCents} />
           <span className="small muted">set aside</span>
         </span>
       )}
+    </>
+  )
+  // With nothing left to set aside there is no goal to start, so the row opens nothing.
+  if (event.suggestedCents === 0) return <div className="list-row">{row}</div>
+  return (
+    <Link to={saveForPath(event, today)} className="list-row clickrow">
+      {row}
     </Link>
   )
 }

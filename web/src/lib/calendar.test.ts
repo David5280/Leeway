@@ -14,21 +14,35 @@ describe('calendar words', () => {
   })
   it('links a bill to its form, and an event to a purchase to save for it', () => {
     expect(billPath('b 1')).toBe('/plan/bills?bill=b+1')
-    const trip = { title: 'Rome & Florence', date: '2026-12-10', suggestedCents: 150000 }
+    const trip = { kind: 'trip' as const, date: '2026-12-10', suggestedCents: 150000 }
     expect(saveForPath(trip, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Rome+%26+Florence&by=2026-12-10&price=150000',
+      '/plan/goals?new=purchase&name=Trip&by=2026-12-10&price=150000',
     )
     expect(saveForPath({ ...trip, suggestedCents: null }, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Rome+%26+Florence&by=2026-12-10',
+      '/plan/goals?new=purchase&name=Trip&by=2026-12-10',
     )
+    // Nothing left to set aside prices nothing.
+    expect(saveForPath({ ...trip, suggestedCents: 0 }, '2026-11-17')).not.toContain('price')
     // Starting today is wanted by today.
     expect(saveForPath(trip, '2026-12-10')).toContain('by=2026-12-10&')
   })
 
+  it('names a purchase for an event by its kind, never a title that may name a person', () => {
+    const named = (kind: Parameters<typeof saveForPath>[0]['kind']) =>
+      new URLSearchParams(
+        saveForPath({ kind, date: '2026-12-01', suggestedCents: 6000 }, '2026-11-17').split('?')[1],
+      ).get('name')
+    expect(named('birthday')).toBe('Birthday gift')
+    expect(named('wedding')).toBe('Wedding')
+    expect(named('trip')).toBe('Trip')
+    expect(named('holiday')).toBe('Holiday')
+    expect(named('show')).toBe('Show')
+  })
+
   it('wants a purchase for an event already under way by today, never a day gone by', () => {
-    const trip = { title: 'Lisbon trip', date: '2026-11-15', suggestedCents: 20000 }
+    const trip = { kind: 'trip' as const, date: '2026-11-15', suggestedCents: 20000 }
     expect(saveForPath(trip, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Lisbon+trip&by=2026-11-17&price=20000',
+      '/plan/goals?new=purchase&name=Trip&by=2026-11-17&price=20000',
     )
   })
 
