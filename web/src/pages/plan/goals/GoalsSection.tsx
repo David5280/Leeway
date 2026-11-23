@@ -1,6 +1,7 @@
 // The Goals section of the Plan tab, most general first: the emergency fund
-// offer while there is none, then each goal (purchases being saved for among
-// them) with what each budget period needs and whether recent progress makes it.
+// offer while there is none, then which goal comes first and when each lands,
+// then each goal (purchases being saved for among them) with what each budget
+// period needs and whether recent progress makes it.
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here. When the fund alone
 // fails to load, the goals still show, with a way to try the fund again.
@@ -16,6 +17,7 @@ import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
 import type { EmergencyView } from '../../../lib/emergencyText'
 import { GoalCard } from './GoalCard'
 import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
+import { GoalOrderCard } from './GoalOrder'
 
 /** What the form is open on: a new goal of a kind, or an existing goal. */
 interface Editing {
@@ -75,21 +77,28 @@ function GoalEditor({
   )
 }
 
-/** Every goal's card, in the owner's order; the emergency fund draws its own. */
+/**
+ * Every goal's card, in the owner's order; the emergency fund draws its own.
+ * While the fund fails to load, its goal draws nothing, since a plain card
+ * would show a target the fund has not just worked out.
+ */
 function GoalCards({
   goals,
   emergency,
+  fundFailed,
   today,
   onEdit,
 }: {
   goals: Goal[]
   emergency: EmergencyView | null
+  fundFailed: boolean
   today: string
   onEdit: (goal: Goal) => void
 }) {
+  const shown = fundFailed ? goals.filter((goal) => goal.emergencyMonths === null) : goals
   return (
     <div className="grid">
-      {goals.map((goal) =>
+      {shown.map((goal) =>
         // The fund's goal, marked or only named as one, draws the fund's card.
         emergency && goal.id === emergency.goalId ? (
           <EmergencyCard key={goal.id} goal={goal} view={emergency} onEdit={() => onEdit(goal)} />
@@ -101,18 +110,32 @@ function GoalCards({
   )
 }
 
+/** Goals still being saved for compete for the same money; two or more make an order worth setting. */
+const competing = (goals: Goal[]) =>
+  goals.filter((goal) => goal.status === 'in_progress' || goal.status === 'past_due').length >= 2
+
 /**
  * How a first goal starts: the emergency fund offer when there is one,
- * otherwise, with no goals yet, a line on what to save for.
+ * otherwise, with no goals yet, a line on what to save for. While the fund
+ * fails to load, the line leaves it out, since the retry beside it says so.
  */
-function GoalsStart({ goals, emergency }: { goals: Goal[]; emergency: EmergencyView | null }) {
+function GoalsStart({
+  goals,
+  emergency,
+  fundFailed,
+}: {
+  goals: Goal[]
+  emergency: EmergencyView | null
+  fundFailed: boolean
+}) {
   if (emergency && emergency.goalId === null) return <EmergencyOffer view={emergency} />
   if (goals.length > 0) return null
   return (
     <Card static="empty" label="No goals">
       <p className="empty">
-        No goals yet. Save for something you want to buy, or start an emergency fund once a month of
-        spending is in.
+        {fundFailed
+          ? 'No goals yet. Save for something you want to buy.'
+          : 'No goals yet. Save for something you want to buy, or start an emergency fund once a month of spending is in.'}
       </p>
     </Card>
   )
@@ -188,10 +211,12 @@ export function GoalsSection() {
       {emergency.isError && (
         <FundTrouble retrying={emergency.isFetching} onRetry={() => void emergency.refetch()} />
       )}
-      <GoalsStart goals={goals.data} emergency={fund} />
+      <GoalsStart goals={goals.data} emergency={fund} fundFailed={emergency.isError} />
+      {competing(goals.data) && <GoalOrderCard today={cash.data.today} />}
       <GoalCards
         goals={goals.data}
         emergency={fund}
+        fundFailed={emergency.isError}
         today={cash.data.today}
         onEdit={(goal) => setEditing({ goal, kind: goal.kind })}
       />

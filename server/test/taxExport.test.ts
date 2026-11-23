@@ -139,7 +139,7 @@ describe('the tax export', () => {
       'Pension and retirement,,,,,0.00,',
       'Tax refunds,,,,,0.00,',
       'Card rewards and cash back,,,,,0.00,',
-      `Money in to categorize,,,,,200.00,"${CATEGORIZE_HINT}"`,
+      `Possible income to categorize,,,,,200.00,"${CATEGORIZE_HINT}"`,
     ])
   })
 
@@ -250,7 +250,7 @@ describe('the tax export', () => {
       '',
       expect.stringMatching(/^Summary/),
     ])
-    expect(csv).toContain('\r\nMoney in to categorize,,,,,0.00,\r\n')
+    expect(csv).toContain('\r\nPossible income to categorize,,,,,0.00,\r\n')
     expect(summary).toMatchObject({ categories: [], income: [], payCents: 0, unfiledInCents: 0 })
   })
 

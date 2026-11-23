@@ -1,7 +1,7 @@
 // Counting a month's essential spending and essential bills
-// (essentialSpending.ts): whole essential categories, essential payments
-// filed in other categories by their own bank code, and the owner's pick.
-// Pure, so no database.
+// (essentialSpending.ts): whole essential categories, loan and child care
+// payments filed in other categories by their own bank code, unfiled
+// essential payments, and the owner's pick. Pure, so no database.
 
 import { describe, expect, it } from 'vitest'
 import type { CategoryTotal } from '../src/domain/budget.js'
@@ -12,17 +12,26 @@ import {
   partlyCounted,
   type MonthSpending,
 } from '../src/domain/essentialSpending.js'
-import { ESSENTIAL_CODES, looksEssential } from '../src/domain/essentials.js'
+import { sumTotals } from '../src/domain/categoryTotals.js'
+import {
+  COUNTED_ANYWHERE_CODES,
+  ESSENTIAL_CODES,
+  looksEssential,
+} from '../src/domain/essentials.js'
 import { STARTER_CATEGORIES } from '../src/domain/starters.js'
 
 /** The starter categories as stored, each known by its name. */
 const starters = STARTER_CATEGORIES.map((c) => ({ ...c, id: c.name }) as unknown as Category)
 
-/** One payment of a dollar with a bank code, filed under a category. */
+/** One payment of a dollar with a bank code, filed under a category or none (null). */
 interface Payment {
-  categoryId: string
+  categoryId: string | null
   code: string
 }
+
+/** Whether essentialCoded.ts reads a payment as essential by code: loans and child care, any code unfiled. */
+const coded = ({ categoryId, code }: Payment) =>
+  (categoryId === null ? ESSENTIAL_CODES : COUNTED_ANYWHERE_CODES).has(code)
 
 /** A month of these payments, a dollar each, as the two totals queries add them up. */
 function monthOf(payments: Payment[]): MonthSpending {
@@ -34,15 +43,19 @@ function monthOf(payments: Payment[]): MonthSpending {
   }
   return {
     totals: payments.reduce(add, []),
-    essentialCoded: payments.filter((p) => ESSENTIAL_CODES.has(p.code)).reduce(add, []),
+    essentialCoded: payments.filter(coded).reduce(add, []),
   }
 }
+
+/** Essential spending in a month, with spending summed as the callers sum it. */
+const counted = (categories: Category[], month: MonthSpending, picked: string[] | null) =>
+  essentialSpending(categories, month, picked, sumTotals(categories, month.totals).spentCents)
 
 /** A child care payment: Plaid's detailed code, filed under the starter "Services" by its broad code. */
 const CHILD_CARE = { categoryId: 'Services', code: 'GENERAL_SERVICES_CHILDCARE' }
 
 describe('essential spending on the starter categories', () => {
-  it('counts a payment exactly when its category is essential or its own code is', () => {
+  it('counts a payment exactly when its category is essential or it is a loan or child care', () => {
     const spending = starters.filter((c) => c.kind === 'expense')
     // Every code each spending starter claims, paid once, plus child care under Services.
     const payments = spending.flatMap((c) =>
@@ -50,9 +63,9 @@ describe('essential spending on the starter categories', () => {
     )
     for (const payment of [...payments, CHILD_CARE]) {
       const category = starters.find((c) => c.id === payment.categoryId)!
-      const essential = looksEssential(category) || ESSENTIAL_CODES.has(payment.code)
-      const counted = essentialSpending(starters, monthOf([payment]), null)
-      expect(counted, `${payment.code} in ${category.name}`).toBe(essential ? 100 : 0)
+      const essential = looksEssential(category) || COUNTED_ANYWHERE_CODES.has(payment.code)
+      const cents = counted(starters, monthOf([payment]), null)
+      expect(cents, `${payment.code} in ${category.name}`).toBe(essential ? 100 : 0)
     }
   })
 
@@ -66,17 +79,41 @@ describe('essential spending on the starter categories', () => {
       { categoryId: 'Services', code: 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES' },
       { categoryId: 'Rent and mortgage', code: 'RENT_AND_UTILITIES_RENT' },
     ])
-    expect(essentialSpending(starters, month, null)).toBe(400)
+    expect(counted(starters, month, null)).toBe(400)
     expect(partlyCounted(starters, [month], null)).toEqual(['Services', 'Debt payments'])
   })
 
-  it("counts the owner's pick whole, card payments included, and nothing in part", () => {
+  it('keeps any other essential code where the owner filed it', () => {
+    // A ride and airport parking under Travel, groceries for a party under Gifts.
+    const month = monthOf([
+      { categoryId: 'Travel', code: 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES' },
+      { categoryId: 'Travel', code: 'TRANSPORTATION_PARKING' },
+      { categoryId: 'Gifts and donations', code: 'FOOD_AND_DRINK_GROCERIES' },
+    ])
+    expect(counted(starters, month, null)).toBe(0)
+    expect(partlyCounted(starters, [month], null)).toEqual([])
+  })
+
+  it('counts an unfiled payment under any essential code, in its own find only', () => {
+    const month = monthOf([
+      { categoryId: null, code: 'RENT_AND_UTILITIES_RENT' },
+      { categoryId: null, code: 'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT' },
+      { categoryId: null, code: 'FOOD_AND_DRINK_RESTAURANT' },
+    ])
+    expect(counted(starters, month, null)).toBe(200)
+    // Nothing is named in part for it: there is no category to name.
+    expect(partlyCounted(starters, [month], null)).toEqual([])
+    // The owner's pick counts what they ticked and nothing unfiled.
+    expect(counted(starters, month, ['Rent and mortgage'])).toBe(0)
+  })
+
+  it("counts the owner's pick whole and nothing in part", () => {
     const month = monthOf([
       { categoryId: 'Debt payments', code: 'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT' },
-      { categoryId: 'Debt payments', code: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' },
+      { categoryId: 'Debt payments', code: 'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT' },
       CHILD_CARE,
     ])
-    expect(essentialSpending(starters, month, ['Debt payments'])).toBe(200)
+    expect(counted(starters, month, ['Debt payments'])).toBe(200)
     expect(partlyCounted(starters, [month], ['Debt payments'])).toEqual([])
   })
 
@@ -93,7 +130,7 @@ describe('essential spending on the starter categories', () => {
   it('counts all spending, and names nothing in part, when nothing reads as essential', () => {
     const plain = [{ id: 'fun', name: 'Fun', kind: 'expense', providerCategories: [] }] as never
     const month = monthOf([{ categoryId: 'fun', code: 'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT' }])
-    expect(essentialSpending(plain, month, null)).toBe(100)
+    expect(counted(plain, month, null)).toBe(100)
     expect(partlyCounted(plain, [month], null)).toEqual([])
   })
 })

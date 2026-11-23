@@ -15,8 +15,10 @@ export interface PurchasePlan {
   /** What would go toward it each budget period; null when there is nothing to spare. */
   perPeriodCents: number | null
   basis: SavingBasis | null
-  /** Income minus spending, averaged over recent full periods; null without history. */
+  /** A typical period's pay less spending (surplus.ts); null with no employer paying or too little history. */
   surplusPerPeriodCents: number | null
+  /** True while the pay behind the surplus is an estimate (one paycheck, or paydays that fit two cadences). */
+  surplusEstimated: boolean
   /** What goals in progress need each period, which comes out of the surplus first. */
   goalsNeedPerPeriodCents: number
   /** Budget periods of saving it takes, counting the current one; 0 when it fits today. */
@@ -33,13 +35,18 @@ export interface PurchaseInputs {
   savedCents: number
   today: IsoDate
   check: Affordability
-  /** An amount the owner says they can save each period, instead of the recent surplus. */
+  /** An amount the owner says they can save each period, instead of the usual surplus. */
   perPeriodCents: number | null
   surplusPerPeriodCents: number | null
+  surplusEstimated: boolean
   goalsNeedPerPeriodCents: number
   config: PeriodConfig
   money: (cents: number) => string
 }
+
+/** Said with a date read from a surplus whose pay is still an estimate. */
+export const ESTIMATE_CAVEAT =
+  'That is an estimate: pay has not come often enough yet to be sure how much or how often it comes.'
 
 /** The last day of the period `count` periods on from today's, counting today's as the first. */
 function lastDayAfter(today: IsoDate, count: number, config: PeriodConfig): IsoDate {
@@ -62,6 +69,7 @@ export function planPurchase(inputs: PurchaseInputs): PurchasePlan {
     amountCents,
     today: check,
     surplusPerPeriodCents: inputs.surplusPerPeriodCents,
+    surplusEstimated: inputs.surplusEstimated,
     goalsNeedPerPeriodCents: inputs.goalsNeedPerPeriodCents,
   }
   if (check.verdict === 'yes') {
@@ -83,19 +91,22 @@ export function planPurchase(inputs: PurchaseInputs): PurchasePlan {
       periodsNeeded: null,
       affordableBy: null,
       message:
-        'Not today, and recent periods left nothing over after spending and goals. Ask how much the owner could put aside each period, or save for it with a purchase goal.',
+        'Not today, and a typical period leaves nothing over after spending and goals, or no employer is paying yet. Ask how much the owner could put aside each period, or save for it with a purchase goal.',
     }
   }
   const toSave = Math.max(0, amountCents - inputs.savedCents)
   const periodsNeeded = Math.max(1, Math.ceil(toSave / rate.cents))
   const affordableBy = lastDayAfter(inputs.today, periodsNeeded, inputs.config)
-  const from = rate.basis === 'given' ? 'Putting aside' : 'At the recent surplus of'
+  const from = rate.basis === 'given' ? 'Putting aside' : 'At your usual surplus of'
+  // A date from estimated pay says so, so it is never passed on as settled.
+  const caveat =
+    rate.basis === 'recent_surplus' && inputs.surplusEstimated ? ` ${ESTIMATE_CAVEAT}` : ''
   return {
     ...base,
     perPeriodCents: rate.cents,
     basis: rate.basis,
     periodsNeeded,
     affordableBy,
-    message: `Not today. ${from} ${money(rate.cents)} each budget period, it is affordable by ${affordableBy} (${periodsNeeded} ${periodsNeeded === 1 ? 'period' : 'periods'}).`,
+    message: `Not today. ${from} ${money(rate.cents)} each budget period, it is affordable by ${affordableBy} (${periodsNeeded} ${periodsNeeded === 1 ? 'period' : 'periods'}).${caveat}`,
   }
 }

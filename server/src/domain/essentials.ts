@@ -3,18 +3,19 @@
 // child care and the fixed payments on a home, a car or a loan). The
 // emergency fund is measured in months of these. The owner's own pick wins;
 // without one they are found from each category's bank codes, or its name
-// when it has none, and essential payments filed in other categories count
-// by their own bank code (see essentialSpending.ts). Pure, so the rules read
-// and test alone.
+// when it has none, and loan or child care payments filed in other
+// categories count by their own bank code (see essentialSpending.ts). Pure,
+// so the rules read and test alone.
 
 import type { Category } from './categories.js'
 
 /**
  * Bank codes (Plaid's personal finance categories) that are essential, each
  * listed exactly. A category with bank codes is essential only when every one
- * of them is, so a mixed category ("Pets": vet bills and toys) is not. In a
- * category that is not, a payment whose own code is listed here still counts
- * (see essentialSpending.ts): a student loan in the starter "Debt payments".
+ * of them is, so a mixed category ("Pets": vet bills and toys) is not. A
+ * payment with no category counts when its own code is listed here, and a
+ * loan or child care payment counts in any category (COUNTED_ANYWHERE_CODES;
+ * see essentialSpending.ts).
  *
  * Debt is the careful part. A car, mortgage, student or personal loan is paid
  * in fixed installments, so its payment is the minimum that keeps coming due.
@@ -54,6 +55,21 @@ export const ESSENTIAL_CODES: ReadonlySet<string> = new Set([
   'MEDICAL_PHARMACIES_AND_SUPPLEMENTS',
   'MEDICAL_OTHER_MEDICAL',
   'GENERAL_SERVICES_INSURANCE',
+  'GENERAL_SERVICES_CHILDCARE',
+])
+
+/**
+ * The essential codes that count wherever a payment is filed, in Leeway's own
+ * find: the fixed loan payments and child care. Only these, since each is a
+ * cost that keeps coming due whatever category it sits in ("Debt payments",
+ * "Services"). A ride or groceries the owner filed under "Travel" or "Gifts"
+ * stays where they put it.
+ */
+export const COUNTED_ANYWHERE_CODES: ReadonlySet<string> = new Set([
+  'LOAN_PAYMENTS_MORTGAGE_PAYMENT',
+  'LOAN_PAYMENTS_CAR_PAYMENT',
+  'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT',
+  'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT',
   'GENERAL_SERVICES_CHILDCARE',
 ])
 

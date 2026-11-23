@@ -66,7 +66,7 @@ describe('the line about the essentials', () => {
   it('notes the categories counted only in part, and that a pick counts whole ones', () => {
     expect(partlyNote([])).toBeNull()
     expect(partlyNote(['Services', 'Debt payments'])).toBe(
-      'Also counted: only the essential payments in Services and Debt payments, like loans or child care, never card payments. Your own pick counts whole categories.',
+      'Also counted: the loan and child care payments in Services and Debt payments. Card payments never count. Your own pick counts whole categories.',
     )
   })
 
@@ -91,11 +91,13 @@ describe('the target', () => {
     expect(targetWords({ months: null, ownTarget: true })).toBe('Your own target')
   })
 
-  it('tells an own amount under half a month as less than one, never "About 0 months"', () => {
+  it('tells any own amount under a month as less than one, never "About 0 months"', () => {
     // A $100 target against $3,000 of essentials a month.
     expect(targetWords({ months: 0, ownTarget: true })).toBe('Less than a month of essentials')
     expect(targetWords({ months: 0.4, ownTarget: true })).toBe('Less than a month of essentials')
-    expect(targetWords({ months: 0.5, ownTarget: true })).toBe('About 0.5 months of essentials')
+    expect(targetWords({ months: 0.7, ownTarget: true })).toBe('Less than a month of essentials')
+    expect(targetWords({ months: 1, ownTarget: true })).toBe('About 1 month of essentials')
+    expect(targetWords({ months: 1.5, ownTarget: true })).toBe('About 1.5 months of essentials')
   })
 
   it('hints in the form how the target is sized, and how to change that', () => {

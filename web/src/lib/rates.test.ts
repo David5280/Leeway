@@ -50,7 +50,7 @@ describe('rateLevel', () => {
   const months = [rate('2026-10-01', 8)]
 
   it('reads against the owner’s own target when they set one', () => {
-    expect(rateLevel({ months, targetPercent: 15, note: '' })).toEqual({
+    expect(rateLevel({ months, targetPercent: 15, note: '', payEstimated: false })).toEqual({
       percent: 15,
       label: 'Your target',
     })
@@ -59,11 +59,11 @@ describe('rateLevel', () => {
   })
 
   it('reads against the usual month otherwise, and never judges one short', () => {
-    expect(rateLevel({ months, targetPercent: null, note: '' })).toEqual({
+    expect(rateLevel({ months, targetPercent: null, note: '', payEstimated: false })).toEqual({
       percent: 8,
       label: 'Usual',
     })
-    expect(rateLevel({ months: [], targetPercent: null, note: '' })).toBeNull()
+    expect(rateLevel({ months: [], targetPercent: null, note: '', payEstimated: false })).toBeNull()
     expect(reachedTarget(rate('2026-10-01', 90), null)).toBe(false)
     expect(reachedTarget(rate('2026-10-01', null), 5)).toBe(false)
   })

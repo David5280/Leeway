@@ -8,6 +8,7 @@ import type { IsoDate } from '../lib/dates.js'
 import type { CategoryTotal } from './budget.js'
 import type { Category } from './categories.js'
 import { countedSql, countsAsSpending } from './counted.js'
+import { CARD_PAYMENT_CODE } from './transfers.js'
 
 /** A span of days: `end` is exclusive, like a Period's. */
 export interface DateRange {
@@ -35,6 +36,14 @@ export const IN_RANGES_SQL = `
 export const COUNTED_IN_RANGES_SQL = `${IN_RANGES_SQL}
     AND ${countedSql()}`
 
+/**
+ * Leaves out credit card payments, either side, wherever they are filed: a
+ * typical month's spending counts the purchases, never the payment for them,
+ * nor money paid into a card from an account Leeway cannot see.
+ */
+export const NOT_CARD_PAYMENT_SQL = `
+    AND coalesce(t.provider_category_detailed, '') <> '${CARD_PAYMENT_CODE}'`
+
 /** COUNTED_IN_RANGES_SQL's parameters, in order. */
 export function rangeParams(
   ranges: DateRange[],
@@ -45,31 +54,6 @@ export function rangeParams(
 }
 
 /**
- * Net amount per category in each range of the counted transactions, less
- * any that `filterSql` leaves out, returned in the ranges' order. `params`
- * are COUNTED_IN_RANGES_SQL's, then any that `filterSql` reads.
- */
-async function totalsInRanges(
-  db: Db,
-  ranges: DateRange[],
-  params: unknown[],
-  filterSql = '',
-): Promise<CategoryTotal[][]> {
-  const { rows } = await db.query<CategoryTotal & { range: number }>(
-    `SELECT r.n::int AS range, t.category_id AS "categoryId",
-       sum(t.amount_cents)::bigint AS "amountCents", count(*)::int AS count
-     ${COUNTED_IN_RANGES_SQL} ${filterSql}
-     GROUP BY r.n, t.category_id
-     ORDER BY r.n, t.category_id NULLS LAST`,
-    params,
-  )
-  const totals = ranges.map((): CategoryTotal[] => [])
-  // WITH ORDINALITY counts from 1.
-  for (const { range, ...total } of rows) totals[range - 1]!.push(total)
-  return totals
-}
-
-/**
  * Net amount per category in each range, in one query however many ranges
  * there are, returned in the ranges' order. Transfers, excluded transactions,
  * hidden accounts and (if the owner says so) pending transactions are left out.
@@ -77,31 +61,25 @@ async function totalsInRanges(
  * Given account ids, only those accounts count, hidden or not: an account
  * picked by hand is wanted even if it is left out of budgets.
  */
-export function categoryTotalsByRange(
+export async function categoryTotalsByRange(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
   accountIds: string[] | null = null,
+  { skipCardPayments = false } = {},
 ): Promise<CategoryTotal[][]> {
-  return totalsInRanges(db, ranges, rangeParams(ranges, includePending, accountIds))
-}
-
-/**
- * Net amount per category in each range of only the posted transactions
- * whose own bank code (detailed, else primary) is one of `codes`, counted as
- * categoryTotalsByRange counts them.
- */
-export function codedTotalsByRange(
-  db: Db,
-  ranges: DateRange[],
-  codes: readonly string[],
-): Promise<CategoryTotal[][]> {
-  return totalsInRanges(
-    db,
-    ranges,
-    [...rangeParams(ranges, false), codes],
-    'AND coalesce(t.provider_category_detailed, t.provider_category_primary) = ANY($5::text[])',
+  const { rows } = await db.query<CategoryTotal & { range: number }>(
+    `SELECT r.n::int AS range, t.category_id AS "categoryId",
+       sum(t.amount_cents)::bigint AS "amountCents", count(*)::int AS count
+     ${COUNTED_IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
+     GROUP BY r.n, t.category_id
+     ORDER BY r.n, t.category_id NULLS LAST`,
+    rangeParams(ranges, includePending, accountIds),
   )
+  const totals = ranges.map((): CategoryTotal[] => [])
+  // WITH ORDINALITY counts from 1.
+  for (const { range, ...total } of rows) totals[range - 1]!.push(total)
+  return totals
 }
 
 /** Net amount per category in [start, end), as categoryTotalsByRange counts it. */

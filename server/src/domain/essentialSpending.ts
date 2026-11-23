@@ -1,21 +1,22 @@
-// How much of a month's spending is essential, and which tracked bills are.
+// How much of a stretch's spending is essential, and which tracked bills are.
 // The owner's pick counts the categories they ticked, whole, and nothing
-// else. Leeway's own find counts its essential categories whole and, in every
-// other spending category, the payments whose own bank code is essential: a
-// student or personal loan in the starter "Debt payments", child care in
-// "Services". A card payment in the same category never counts, since it pays
-// off spending already counted where it was made. Pure.
+// else. Leeway's own find counts its essential categories whole and, in
+// every other spending category, the loan and child care payments by their
+// own bank code: a student loan in the starter "Debt payments", child care
+// in "Services". An unfiled payment counts under any essential code. Card
+// payments never count: the totals read here already leave them out
+// (NOT_CARD_PAYMENT_SQL), since they pay off spending counted where it was
+// made. Pure.
 
 import type { CategoryTotal } from './budget.js'
 import type { Bill } from './bills.js'
 import type { Category } from './categories.js'
-import { sumTotals } from './categoryTotals.js'
 import { essentialIdsOf, nameIsEssential } from './essentials.js'
 
-/** One month's totals by category, beside the part of each under essential bank codes. */
+/** A stretch's totals by category, beside the part of each that is essential by its code. */
 export interface MonthSpending {
   totals: CategoryTotal[]
-  /** Each category's net of the transactions whose own bank code is essential (ESSENTIAL_CODES). */
+  /** Each category's net (null for unfiled) of the payments essential by code (essentialCoded.ts). */
   essentialCoded: CategoryTotal[]
 }
 
@@ -40,8 +41,8 @@ export function currentEssentials(
 interface EssentialCount {
   /** The categories counted whole; null when all spending counts. */
   whole: Set<string> | null
-  /** The other spending categories, whose essential payments count too: only in Leeway's find. */
-  inPart: Set<string>
+  /** Where coded payments count too (null for unfiled): only in Leeway's own find. */
+  inPart: Set<string | null>
 }
 
 /** What counts as essential for these categories and the owner's pick, if any. */
@@ -51,34 +52,35 @@ function essentialCount(categories: Category[], essentialIds: string[] | null): 
   // The owner's pick is exactly what they ticked; all spending counting holds every part already.
   if (picked !== null || whole === null) return { whole, inPart: new Set() }
   const others = categories.filter((c) => c.kind === 'expense' && !whole.has(c.id))
-  return { whole, inPart: new Set(others.map((c) => c.id)) }
+  return { whole, inPart: new Set([null, ...others.map((c) => c.id)]) }
 }
 
-/** The sum of the totals filed under any of these categories. */
-function sumIn(totals: CategoryTotal[], ids: Set<string>): number {
+/** The sum of the totals filed under any of these categories (null for unfiled). */
+function sumIn(totals: CategoryTotal[], ids: ReadonlySet<string | null>): number {
   return totals
-    .filter((total) => total.categoryId !== null && ids.has(total.categoryId))
+    .filter((total) => ids.has(total.categoryId))
     .reduce((sum, total) => sum + total.amountCents, 0)
 }
 
 /**
- * Essential spending in one month: the whole categories, plus, in Leeway's
- * own find, the essential payments in every other spending category. All
- * spending counts when nothing reads as essential.
+ * Essential spending in one stretch: the whole categories, plus, in Leeway's
+ * own find, the coded payments elsewhere. All of `spentCents` counts when
+ * nothing reads as essential.
  */
 export function essentialSpending(
   categories: Category[],
   month: MonthSpending,
   essentialIds: string[] | null,
+  spentCents: number,
 ): number {
   const { whole, inPart } = essentialCount(categories, essentialIds)
-  if (whole === null) return sumTotals(categories, month.totals).spentCents
+  if (whole === null) return spentCents
   return sumIn(month.totals, whole) + sumIn(month.essentialCoded, inPart)
 }
 
 /**
  * The categories counted in part over these months, by name: not essential
- * as a whole, but holding essential payments, in Leeway's own find only.
+ * as a whole, but holding loan or child care payments, in Leeway's own find.
  */
 export function partlyCounted(
   categories: Category[],
@@ -97,7 +99,7 @@ export function partlyCounted(
  * whole month of spending says. A subscription never is. A bill counts when
  * it has no category, or its category counts whole; in Leeway's own find, a
  * bill named as an essential cost ("Student loan") counts in any category,
- * as an essential payment does.
+ * as a loan payment does.
  */
 export function essentialBillsCents(
   bills: Pick<Bill, 'kind' | 'categoryId' | 'name' | 'monthlyCents'>[],

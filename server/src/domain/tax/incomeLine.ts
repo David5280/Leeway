@@ -18,6 +18,7 @@ export type IncomeLine =
   | 'rewards'
   | 'veterans'
   | 'support'
+  | 'charge_back'
   | 'person'
   | 'moved_in'
 
@@ -36,6 +37,10 @@ export const INCOME_LINES: Record<IncomeLine, { label: string; note: string }> =
   rewards: { label: 'Card rewards and cash back', note: 'Card rewards or cash back, not pay' },
   veterans: { label: 'Veterans benefits', note: 'Veterans benefits, not pay' },
   support: { label: 'Support payments', note: 'Support payment, not pay' },
+  charge_back: {
+    label: 'Charges given back',
+    note: 'An interest charge or fee given back, not pay',
+  },
   person: { label: 'From people', note: 'Payment from a person, not pay' },
   moved_in: { label: 'Moved in', note: 'Money moved in from another account, not pay' },
 }
@@ -52,20 +57,23 @@ const LINE_BY_CODE: Record<string, IncomeLine> = {
 /** Codes that say only that money came in, not what kind, so a line's words may say more. */
 const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 
-// For a line with no code or only a broad one, its words are read in four
+// For a line with no code or only a broad one, its words are read in five
 // tiers, surest first:
-// 1. Support words and an agency's ACH text say exactly what the money is,
-//    whatever else the line says. Child support or alimony is never income,
-//    so it wins first. "DIR DEP IRS TREAS 310 TAX REF" is a refund that came
-//    by direct deposit, which says only how it arrived. Treasury 310 pays
+// 1. An agency's ACH text says exactly what the money is, whatever else the
+//    line says. "DIR DEP IRS TREAS 310 TAX REF" is a refund that came by
+//    direct deposit, which says only how it arrived. Treasury 310 pays
 //    refunds and benefits, but 220 pays salaries and vendors, so "IRS TREAS
 //    220" is pay unless it says TAX REF. A pension's own payroll ("OPERS
 //    PENSION PAYROLL") is a pension.
 // 2. An employer's words say pay, an agency's own staff included:
-//    "TEXAS WORKFORCE COMMISSION PAYROLL" is pay.
-// 3. An agency's name says what it pays out: "Ohio Unemployment" as the
+//    "TEXAS WORKFORCE COMMISSION PAYROLL" and "DEPT OF CHILD SUPPORT
+//    SERVICES PAYROLL" are pay.
+// 3. Support words: child support or alimony is never income. "Support" alone
+//    is not enough ("TECH SUPPORT PAYMENT" is a freelancer's pay); it needs a
+//    child, spousal or State Disbursement Unit (SDU) word beside it.
+// 4. An agency's name says what it pays out: "Ohio Unemployment" as the
 //    merchant of a bare "DIRECT DEP" is unemployment.
-// 4. Looser words name a kind, read in the bank's description only: a
+// 5. Looser words name a kind, read in the bank's description only: a
 //    merchant name is the payer's own, so a business called "Cash Back Car
 //    Wash" paying by direct deposit is still pay.
 // What none of them names, a bare direct deposit included, is pay.
@@ -76,16 +84,8 @@ const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
  */
 const taxRefund = (ref: string) => String.raw`(?<!sales\s+)tax\s?${ref}(?!\W*adv)`
 
-/** Tier one: support words and agency ACH texts, read in the description and the merchant name. */
+/** Tier one: agency ACH texts, read in the description and the merchant name. */
 const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
-  // A State Disbursement Unit (SDU) passes on child support.
-  [
-    anyOf(
-      String.raw`child\s+support|sdu|support\s+(pmt|payment)`,
-      String.raw`alimony|spousal\s+support`,
-    ),
-    'support',
-  ],
   // SSI is paid by the SSA too, though it is not taxed.
   [anyOf(String.raw`soc\s+sec|(ssa|ssi)\s+treas`), 'social_security'],
   [
@@ -99,14 +99,35 @@ const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
   [anyOf(String.raw`irs\s+treas\s+220`), 'pay'],
   [anyOf(String.raw`ui\s+(benefits?|dd)|(uc|uia)\s+benefits?|twc\W+benefits?`), 'unemployment'],
   [anyOf(String.raw`(pension|annuity)\s+payroll`), 'retirement'],
-  // VA disability and pension, as Treasury sends them ("VACP TREAS 310").
-  [anyOf(String.raw`va\s+benefits?|vacp\s+treas`), 'veterans'],
+  // VA disability and pension, as Treasury sends them ("VACP TREAS 310", "US TREASURY VA").
+  [
+    anyOf(
+      String.raw`va\s+(benefits?|disability|pension|comp(ensation)?)`,
+      String.raw`vacp\s+treas|treas(ury)?\s+va`,
+    ),
+    'veterans',
+  ],
 ]
 
 /** Tier two: an employer paying, by any route. */
 const EMPLOYER_WORDS = /\b(payroll|salary|wages?|paycheck)\b/i
 
-/** Tier three: agency names, read in the description and the merchant name. */
+/**
+ * Tier three: words that say support on their own, read in the description
+ * and the merchant name. A State Disbursement Unit (SDU) passes on child
+ * support, so anything from one is support.
+ */
+const SUPPORT_WORDS = anyOf(String.raw`(child|spousal)\s+support|alimony|sdu|state\s+disbursement`)
+
+/** "SUPPORT PMT" is support only beside a child or spousal word, never a tech support job. */
+const SUPPORT_PAYMENT = anyOf(String.raw`support\s+(pmt|payment)`)
+const SUPPORT_SIGNAL = anyOf(String.raw`child|spousal`)
+
+/** Whether a line's words say it is child support or alimony (tier three). */
+const isSupport = (text: string) =>
+  SUPPORT_WORDS.test(text) || (SUPPORT_PAYMENT.test(text) && SUPPORT_SIGNAL.test(text))
+
+/** Tier four: agency names, read in the description and the merchant name. */
 const AGENCY_NAMES: [RegExp, IncomeLine][] = [
   [anyOf(String.raw`social\s+security\s+admin(istration)?`), 'social_security'],
   [anyOf(String.raw`irs|internal\s+revenue\s+service`), 'tax_refund'],
@@ -121,11 +142,13 @@ const AGENCY_NAMES: [RegExp, IncomeLine][] = [
 ]
 
 /**
- * Tier four: looser words, read in the description only. Interest and
+ * Tier five: looser words, read in the description only. Interest and
  * dividends count in full anywhere ("INTEREST PAID", "Dividend Deposit"),
  * but their short forms only beside a paid word ("INT PD", "DIV EARNED"),
- * since "INT" and "DIV" are often part of other names. An interest charge
- * paid back is not interest earned.
+ * since "INT" and "DIV" are often part of other names. An interest charge or
+ * fee given back ("INT CHG REVERSAL", "INTEREST REFUND") is not interest
+ * earned, and neither is a direct deposit, whose payer is named before it
+ * ("PUBLIC INTEREST NETWORK DIR DEP").
  */
 const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [/\bsocial\s+security\b/i, 'social_security'],
@@ -133,7 +156,17 @@ const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [/\b(pension|annuity)\b/i, 'retirement'],
   [/\b(cash\s?back|rewards?|statement\s+credit\s+redemption)\b/i, 'rewards'],
   [
-    anyOf(String.raw`interest(?!\W*(charged?|chg|fee))`, String.raw`int\.?\s+(${PAID_IN_FORMS})`),
+    anyOf(
+      String.raw`(interest|int|finance)\W+(charges?|chg)(\W+\w+)?\W+(reversal|rev|refund|credit|adj(ustment)?)`,
+      String.raw`interest\W+(refund|reversal|adj(ustment)?)|finance\s+charge|fee\W+(reversal|refund)`,
+    ),
+    'charge_back',
+  ],
+  [
+    anyOf(
+      String.raw`interest(?!\W*(charged?|chg|fee))(?!.*\bdir(ect)?\W+dep)`,
+      String.raw`int\.?\s+(${PAID_IN_FORMS})`,
+    ),
     'interest',
   ],
   [anyOf(String.raw`dividends?`, String.raw`divs?\.?\s+(${PAID_IN_FORMS})`), 'dividends'],
@@ -149,6 +182,7 @@ function lineFromWords({ name, merchantName }: Pick<Transaction, 'name' | 'merch
   const agencyText = firstNamed(AGENCY_TEXTS, allWords)
   if (agencyText) return agencyText
   if (EMPLOYER_WORDS.test(allWords)) return 'pay'
+  if (isSupport(allWords)) return 'support'
   return firstNamed(AGENCY_NAMES, allWords) ?? firstNamed(LOOSE_WORDS, name) ?? 'pay'
 }
 
@@ -165,7 +199,10 @@ export function incomeLine(
   if (byCode) return byCode
   // One person paying another through an app like Zelle (see personToPersonApp).
   if (tx.person) return 'person'
-  // The bank says the money moved in from another account, not that it was earned.
-  if (code.startsWith('TRANSFER_IN')) return 'moved_in'
+  // The bank says the money moved in from another account, not that it was earned,
+  // though its words may say it is child support sent that way.
+  if (code.startsWith('TRANSFER_IN')) {
+    return isSupport(`${tx.name} ${tx.merchantName ?? ''}`) ? 'support' : 'moved_in'
+  }
   return BROAD_CODES.has(code) ? lineFromWords(tx) : 'pay'
 }

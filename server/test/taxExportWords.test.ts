@@ -71,7 +71,7 @@ describe('the tax export of lines with no bank code', () => {
     expect(csv).not.toMatch(/Pay from .*(SUPPORT|ALIMONY|VA BENEFITS)/i)
   })
 
-  it('leaves money from people with no category out of money in to categorize', async () => {
+  it('leaves money from people with no category out of what may be income', async () => {
     const checking = (await insertBankAccount(ctx.db, { name: 'Checking' })).accountId
     await transaction(checking, '2026-04-02', 'Zelle from Sam', -5000, null)
     await transaction(checking, '2026-04-03', 'Mystery deposit', -20000, null)
@@ -82,7 +82,7 @@ describe('the tax export of lines with no bank code', () => {
     ])
     expect(summary.unfiledInCents).toBe(20000)
     expect(csv).toContain(',50.00,"Payment from a person, not pay"\r\n')
-    expect(csv).toContain(`\r\nMoney in to categorize,,,,,200.00,"${CATEGORIZE_HINT}"\r\n`)
+    expect(csv).toContain(`\r\nPossible income to categorize,,,,,200.00,"${CATEGORIZE_HINT}"\r\n`)
   })
 
   it('gives no hint to categorize when only money from people has no category', async () => {
@@ -90,6 +90,6 @@ describe('the tax export of lines with no bank code', () => {
     await transaction(checking, '2026-04-02', 'Zelle from Sam', -5000, null)
     const { summary, csv } = await call('export_tax_year', { year: 2026 })
     expect(summary.unfiledInCents).toBe(0)
-    expect(csv).toContain('\r\nMoney in to categorize,,,,,0.00,\r\n')
+    expect(csv).toContain('\r\nPossible income to categorize,,,,,0.00,\r\n')
   })
 })

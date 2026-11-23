@@ -210,13 +210,23 @@ describe('the emergency fund when it fails to load', () => {
     renderPlan('/plan/goals')
     expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
     expect(screen.getByRole('region', { name: 'Trip' })).toBeVisible()
-    // The fund's goal shows as a plain goal until the fund loads.
-    const plain = within(screen.getByRole('region', { name: 'Emergency fund' }))
-    expect(plain.queryByText(/months? of essentials/)).toBeNull()
+    // The fund's goal draws nothing until the fund loads, never a plain card with an old target.
+    expect(screen.queryByRole('region', { name: 'Emergency fund' })).toBeNull()
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
     const fund = await fundCard()
     expect(await fund.findByText('1 month of essentials')).toBeVisible()
     expect(screen.queryByText('The emergency fund did not load.')).toBeNull()
+  })
+
+  it('keeps the line on goals from offering the fund that did not load', async () => {
+    planServer(
+      { list_goals: () => [], list_accounts: () => [] },
+      { '/api/actions/get_emergency_fund': failingOnce() },
+    )
+    renderPlan('/plan/goals')
+    expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
+    expect(screen.getByText('No goals yet. Save for something you want to buy.')).toBeVisible()
+    expect(screen.queryByText(/start an emergency fund/)).toBeNull()
   })
 })

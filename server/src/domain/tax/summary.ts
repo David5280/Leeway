@@ -13,7 +13,7 @@ import { incomeTotals, type PaySource } from './income.js'
 export const MONEY_OUT_NOT_CATEGORIZED = 'Money out, not categorized'
 export const MONEY_IN_NOT_CATEGORIZED = 'Money in, not categorized'
 /** The summary's line for money in with no category that could be pay (see unfiledInCents). */
-export const MONEY_IN_TO_CATEGORIZE = 'Money in to categorize'
+export const MONEY_IN_TO_CATEGORIZE = 'Possible income to categorize'
 
 /** The category a counted transaction is filed under. Transfers never count, so none is one. */
 export interface TaxRowCategory {

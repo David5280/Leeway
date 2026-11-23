@@ -88,24 +88,79 @@ describe('essentials on the starter categories', () => {
     expect(essentials!.partlyCounted).toEqual(['Services', 'Debt payments'])
   })
 
-  it("counts the owner's pick whole, card payments too, and nothing in part", async () => {
+  it("counts the owner's pick whole but never its card payments, and nothing in part", async () => {
     const id = await starterHousehold()
     const picked = [id('Rent and mortgage'), id('Debt payments')]
     await call('update_settings', { savingsPlan: { essentialCategoryIds: picked } })
     const { essentials } = (await call('get_emergency_fund'))!
+    // The $1,200 card payment in Debt payments pays off spending counted where it was made.
     expect(essentials).toMatchObject({
-      cents: 150_000 + 30_000 + 20_000 + 120_000,
+      cents: 150_000 + 30_000 + 20_000,
       categories: ['Rent and mortgage', 'Debt payments'],
       partlyCounted: [],
       picked: true,
     })
   })
 
-  it('agrees with the profile on the essentials it is sized by', async () => {
+  it('keeps a ride or groceries where the owner filed them', async () => {
+    const id = await starterHousehold()
+    const checking = (
+      await ctx.db.query<{ id: string }>(`SELECT id FROM accounts WHERE subtype = 'checking'`)
+    ).rows[0]!.id
+    for (const [name, cents, primary, detailed, category] of [
+      ['Rideshare', 4_000, 'TRANSPORTATION', 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES', 'Travel'],
+      ['Grocer', 6_000, 'FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES', 'Gifts and donations'],
+    ] as const) {
+      const transactionId = await insertBankTransaction(ctx.db, checking, {
+        date: '2026-10-05',
+        name,
+        amountCents: cents,
+        primary,
+        detailed,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = $1 WHERE id = $2', [
+        id(category),
+        transactionId,
+      ])
+    }
+    const { essentials } = (await call('get_emergency_fund'))!
+    expect(essentials).toMatchObject({ cents: ESSENTIAL_MONTH })
+    expect(essentials!.partlyCounted).toEqual(['Services', 'Debt payments'])
+  })
+
+  it('counts an unfiled essential payment, never an unfiled card payment', async () => {
+    await starterHousehold()
+    const checking = (
+      await ctx.db.query<{ id: string }>(`SELECT id FROM accounts WHERE subtype = 'checking'`)
+    ).rows[0]!.id
+    // Filed by nobody: the owner cleared their categories after setup.
+    for (const [name, cents, detailed] of [
+      ['Water utility', 9_000, 'RENT_AND_UTILITIES_WATER'],
+      ['Card payment', 60_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'],
+    ] as const) {
+      const transactionId = await insertBankTransaction(ctx.db, checking, {
+        date: '2026-10-05',
+        name,
+        amountCents: cents,
+        primary: detailed.startsWith('LOAN') ? 'LOAN_PAYMENTS' : 'RENT_AND_UTILITIES',
+        detailed,
+      })
+      await ctx.db.query('UPDATE transactions SET category_id = NULL WHERE id = $1', [
+        transactionId,
+      ])
+    }
+    const { essentials } = (await call('get_emergency_fund'))!
+    // A third of the $90 water bill, averaged over the three months.
+    expect(essentials).toMatchObject({ cents: ESSENTIAL_MONTH + 3_000 })
+  })
+
+  it('agrees with the profile, whose typical month counts the loans and child care too', async () => {
     await starterHousehold()
     const profile = await getFinancialProfile(ctx.db, await getSettings(ctx.db), TODAY)
-    expect(profile.monthly.essentialSpendingCents).toBe(ESSENTIAL_MONTH)
     expect(profile.emergencyFund!.monthlyEssentialsCents).toBe(ESSENTIAL_MONTH)
+    // With no pay, the typical month runs 91 days back (Aug 20): the Sep and Oct months.
+    const perMonth = Math.round((2 * ESSENTIAL_MONTH * (365.25 / 12)) / 91)
+    expect(profile.monthly.essentialSpendingCents).toBe(perMonth)
   })
 })
 

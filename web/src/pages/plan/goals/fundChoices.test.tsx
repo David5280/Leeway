@@ -188,7 +188,7 @@ describe('the essentials it is sized by', () => {
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
     const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
     expect(
-      form.getByText(/^Also counted: only the essential payments in Debt payments/),
+      form.getByText(/^Also counted: the loan and child care payments in Debt payments/),
     ).toBeVisible()
   })
 

@@ -7,16 +7,17 @@ import type { Transaction } from '../transactions.js'
 import { incomeLine, type IncomeLine } from './incomeLine.js'
 
 /**
- * The lines the summary leaves out. Payments from people, child support and
- * money moved in from another account are neither earned nor taxed as pay,
- * and veterans benefits are not taxed, so each stays in its category's total
- * with a note (see INCOME_LINES), on no line here.
+ * The lines the summary leaves out. Payments from people, child support,
+ * charges given back and money moved in from another account are neither
+ * earned nor taxed as pay, and veterans benefits are not taxed, so each stays
+ * in its category's total with a note (see INCOME_LINES), on no line here.
  */
-type UnsummedLine = 'veterans' | 'support' | 'person' | 'moved_in'
+type UnsummedLine = 'veterans' | 'support' | 'charge_back' | 'person' | 'moved_in'
 
 const UNSUMMED_LINES: ReadonlySet<IncomeLine> = new Set<UnsummedLine>([
   'veterans',
   'support',
+  'charge_back',
   'person',
   'moved_in',
 ])

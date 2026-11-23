@@ -11,7 +11,7 @@ import { periodContaining } from '../lib/periods.js'
 import { patchOf } from '../lib/schemas.js'
 import { listAccounts, type Account } from './accounts.js'
 import { followedAlready, namesEmergencyFund } from './emergencyPlan.js'
-import { fundLinkTakenBy, fundsOf, goalLinks, type FundRow } from './goalFunds.js'
+import { fundLinkTakenBy, fundsOf, goalLinks, GOALS_IN_ORDER, type FundRow } from './goalFunds.js'
 import { listContributions, progressFacts, recordContribution } from './goalHistory.js'
 import {
   goalOf,
@@ -102,7 +102,7 @@ async function withPlans(
 }
 
 export async function listGoals(db: Db, reading: GoalReading): Promise<Goal[]> {
-  const { rows } = await db.query<StoredGoal>(`${SELECT} ORDER BY g.created_at, g.name`)
+  const { rows } = await db.query<StoredGoal>(`${SELECT} ${GOALS_IN_ORDER}`)
   return readGoals(db, rows, reading)
 }
 

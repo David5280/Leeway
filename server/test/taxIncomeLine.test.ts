@@ -3,6 +3,7 @@
 // database.
 
 import { describe, expect, it } from 'vitest'
+import { incomeTotals } from '../src/domain/tax/income.js'
 import { incomeLine } from '../src/domain/tax/incomeLine.js'
 import type { Transaction } from '../src/domain/transactions.js'
 import { madeUpTransaction } from './fixtures/transaction.js'
@@ -164,6 +165,15 @@ describe('the income line of money filed as income', () => {
     expect(lineOf({ bankCategory: 'TRANSFER_IN_DEPOSIT' })).toBe('moved_in')
   })
 
+  it('notes child support the bank calls money moved in as support', () => {
+    expect(lineOf({ name: 'CO CHILD SUPPORT SDU', bankCategory: 'TRANSFER_IN_DEPOSIT' })).toBe(
+      'support',
+    )
+    expect(lineOf({ name: 'TRANSFER FROM SAVINGS', bankCategory: 'TRANSFER_IN_ACCOUNT' })).toBe(
+      'moved_in',
+    )
+  })
+
   it('reads interest and dividends from a file import or a hand entry, which carry no code', () => {
     const lines: [Partial<Transaction>, string][] = [
       [{ name: 'INTEREST PAID', bankCategory: null }, 'interest'],
@@ -189,13 +199,42 @@ describe('the income line of money filed as income', () => {
       // "INT" and "DIV" alone are often part of another name.
       { name: "INT'L SIGNS LLC" },
       { name: 'STATE DIV OF PARKS' },
-      // An interest charge paid back is not interest earned.
-      { name: 'INTEREST CHARGE REVERSAL' },
     ]) {
       expect(lineOf(fields), fields.name).toBe('pay')
     }
     // Words in the merchant name are the payer's own.
     expect(lineOf({ name: 'DIRECT DEP', merchantName: 'Interest Media' })).toBe('pay')
+    // So are the words before a direct deposit.
+    expect(lineOf({ name: 'PUBLIC INTEREST NETWORK DIR DEP' })).toBe('pay')
+    expect(lineOf({ name: 'PUBLIC INTEREST NETWORK DIRECT DEPOSIT' })).toBe('pay')
+  })
+
+  it('reads an interest charge or fee given back as neither pay nor interest earned', () => {
+    for (const name of [
+      'INTEREST CHARGE REVERSAL',
+      'INT CHG REVERSAL',
+      'INTEREST CHARGE PURCHASE REVERSAL',
+      'INTEREST REFUND',
+      'INTEREST ADJUSTMENT',
+      'FINANCE CHARGE INTEREST',
+      'LATE FEE REVERSAL',
+    ]) {
+      expect(lineOf({ name }), name).toBe('charge_back')
+    }
+    expect(lineOf({ name: 'INTEREST PAID' })).toBe('interest')
+  })
+
+  it('adds a charge given back, support and a VA benefit to no summed line', () => {
+    const deposit = (name: string) => madeUpTransaction({ amountCents: -1000, name })
+    const { totals, sources } = incomeTotals([
+      deposit('INT CHG REVERSAL'),
+      deposit('TX CHILD SUPPORT SDU'),
+      deposit('US TREASURY VA DISABILITY'),
+      deposit('ACME PAYROLL'),
+    ])
+    expect(totals.pay).toBe(1000)
+    expect(totals.interest).toBe(0)
+    expect(sources).toHaveLength(1)
   })
 
   it('never reads child support or alimony as pay, with or without a broad code', () => {
@@ -206,14 +245,33 @@ describe('the income line of money filed as income', () => {
       { name: 'SPOUSAL SUPPORT' },
       { name: 'CA SDU DIR DEP' },
       { name: 'SUPPORT PMT', merchantName: 'State Disbursement' },
+      { name: 'DEPT OF CHILD SUPPORT SERVICES' },
+      { name: 'SUPPORT PAYMENT', merchantName: 'County Child Services' },
     ]) {
       expect(lineOf(fields), fields.name).toBe('support')
+    }
+  })
+
+  it('reads payroll, salary and wages over support words, and support alone as pay', () => {
+    for (const fields of [
+      // A child support agency's own staff are paid wages.
+      { name: 'DEPT OF CHILD SUPPORT SERVICES PAYROLL' },
+      { name: 'SDU SALARY' },
+      { name: 'CHILD SUPPORT AGENCY WAGES' },
+      // A freelancer's support work, with no child or spousal word.
+      { name: 'TECH SUPPORT PAYMENT', bankCategory: 'INCOME_OTHER_INCOME' },
+      { name: 'IT SUPPORT PMT' },
+    ]) {
+      expect(lineOf(fields), fields.name).toBe('pay')
     }
   })
 
   it('reads veterans benefits, which are not taxed, apart from pay', () => {
     expect(lineOf({ name: 'VA BENEFITS TREAS 310' })).toBe('veterans')
     expect(lineOf({ name: 'VACP TREAS 310' })).toBe('veterans')
+    expect(lineOf({ name: 'US TREASURY VA DISABILITY' })).toBe('veterans')
+    expect(lineOf({ name: 'VA DISABILITY COMP' })).toBe('veterans')
+    expect(lineOf({ name: 'US TREAS VA PENSION' })).toBe('veterans')
     expect(lineOf({ name: 'ACH CREDIT', merchantName: 'Veterans Affairs' })).toBe('veterans')
     // The agency's own staff are paid wages.
     expect(lineOf({ name: 'VETERANS AFFAIRS PAYROLL' })).toBe('pay')

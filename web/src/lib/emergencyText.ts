@@ -51,12 +51,12 @@ export function essentialsSentence(
 
 /**
  * A note in the picker on the categories Leeway counts in part, which a tick
- * cannot show: only their essential payments count, and a pick of the
- * owner's own counts whole categories. Null when there are none.
+ * cannot show: only their loan and child care payments count, and a pick of
+ * the owner's own counts whole categories. Null when there are none.
  */
 export function partlyNote(names: string[]): string | null {
   if (names.length === 0) return null
-  return `Also counted: only the essential payments in ${listed(names)}, like loans or child care, never card payments. Your own pick counts whole categories.`
+  return `Also counted: the loan and child care payments in ${listed(names)}. Card payments never count. Your own pick counts whole categories.`
 }
 
 /** A note on ticked essentials that add nothing, having had no spending; null when none. */
@@ -72,8 +72,8 @@ export function quietNote(names: string[]): string | null {
  */
 export function targetWords(view: Pick<EmergencyView, 'months' | 'ownTarget'>): string {
   if (view.months === null) return 'Your own target'
-  // "About 0 months" says nothing, so a target under half a month is told as less than one.
-  if (view.ownTarget && view.months < 0.5) return 'Less than a month of essentials'
+  // "About 0 months" says nothing, so any own target under a month is told as less than one.
+  if (view.ownTarget && view.months < 1) return 'Less than a month of essentials'
   if (view.ownTarget) return `About ${monthsWord(view.months)} of essentials`
   return `${monthsWord(view.months)} of essentials`
 }
