@@ -83,6 +83,17 @@ describe("a person's shape", () => {
       expect([line, holdsAPersonsName(line)]).toEqual([line, false])
     }
   })
+
+  it('reads a name beside a web address, an abbreviation or a hyphen', () => {
+    const lines = ['Jane Doe Therapy.com', 'Ignatius Pemberton.us', 'Jane Doe, Therapy.net']
+    for (const line of [...lines, 'Jane Doe St. Clinic', 'JANE-DOE THERAPY', 'Jane Doe.']) {
+      expect([line, holdsAPersonsName(line)]).toEqual([line, true])
+    }
+    // An abbreviation and the word after it name a place, never a person.
+    for (const line of ['FT.COLLINS FAMILY MED', 'ST. JOSEPH MERCY CLINIC', 'ACME PH.D']) {
+      expect([line, holdsAPersonsName(line)]).toEqual([line, false])
+    }
+  })
 })
 
 describe('a name word anywhere in a text', () => {

@@ -20,12 +20,13 @@ const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'i')
 // A word of a line, between any marks but inner apostrophes and hyphens:
 // "Johns Hopkins (Jane Doe)" holds "Jane", "HOPKINS/JANE" holds "JANE".
 const LINE_WORD = new RegExp(`\\p{L}(?:[\\p{L}${APOSTROPHES}-]*\\p{L})?`, 'gu')
-// What parts a line's words for reading a name in it: anything but letters, digits, dots,
-// apostrophes and hyphens, so "DOE*JANE" reads "DOE JANE" and "Jane Q. Doe" keeps its dot.
-const LINE_BREAKS = new RegExp(`[^\\p{L}\\p{N}.${APOSTROPHES}-]+`, 'u')
+// What parts a line's words for reading a name in it: anything but letters, digits, dots
+// and apostrophes, so "DOE*JANE" and "JANE-DOE" read as two words and "Jane Q. Doe" keeps
+// its dot. Every hyphen parts one, so "JANE-DOE" reads as "JANE\u2010DOE" does.
+const LINE_BREAKS = new RegExp(`[^\\p{L}\\p{N}.${APOSTROPHES}]+`, 'u')
 // A dot between letters, which parts two words too ("JANE.DOE", "J.OSTROWSKI").
 const JOINING_DOT = /(?<=\p{L})\.(?=\p{L})/u
-// A web address, whose dots join no name ("BETTERHELP.COM").
+// A web address's ending, whose dot joins no name: "Therapy.com" reads "Therapy".
 const WEB_ADDRESS = /\.(?:com|net|org|io|co|us|health)$/i
 // Short words written with a dot, which keep it when parted ("ST.JOSEPH" reads "ST. JOSEPH").
 const ABBREVIATIONS = new Set(['st', 'mt', 'ft'])
@@ -74,6 +75,28 @@ function partedAtDots(word: string): string[] {
   const parts = word.split(JOINING_DOT)
   return parts.map((part, at) =>
     at < parts.length - 1 && ABBREVIATIONS.has(part.toLowerCase()) ? `${part}.` : part,
+  )
+}
+
+/**
+ * A word of a line as a name is read in it: without marks at its ends, a web
+ * address's ending ("Pemberton.us" reads "Pemberton") or a trailing dot ("Doe."),
+ * but an abbreviation keeps its dot ("ST." of "ST.JOSEPH"), which no name has.
+ */
+function asALineWord(word: string): string {
+  const bare = word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, '').replace(WEB_ADDRESS, '')
+  const undotted = bare.replace(/\.+$/, '')
+  return ABBREVIATIONS.has(undotted.toLowerCase()) && bare !== undotted ? `${undotted}.` : undotted
+}
+
+/**
+ * Whether a line's word is an abbreviation with its dot ("ST."). It and the
+ * word after it name a place ("ST. JOSEPH", "FT. COLLINS"), never a person,
+ * so both are left out: "Jane Doe St. Clinic" still holds "Jane Doe".
+ */
+function isAbbreviated(word: string | undefined): boolean {
+  return (
+    word !== undefined && word.endsWith('.') && ABBREVIATIONS.has(word.slice(0, -1).toLowerCase())
   )
 }
 
@@ -132,22 +155,23 @@ export function hasAPersonsShape(name: string): boolean {
 /**
  * Whether a line holds a person's name among everyday words, numbers and
  * credentials: "Direct Dep John Q Public Household Payroll" holds "John Q
- * Public", "JANE DOE COUNSELING" holds "JANE DOE". What is left once those
- * are gone is read as a name (hasAPersonsShape). A name that is also a word
- * stays, so "DIRECT DEP MARK WHITLOCK" or "BILL WHITLOCK" never leaves a lone
- * surname too short to read as one. Words are parted by any mark ("DOE*JANE
- * COUNSELING", "JANE.DOE COUNSELING"), and more name words than a name has
- * hold one anywhere in them ("MARIA JOSE GARCIA LOPEZ PEREZ THERAPY").
+ * Public", "JANE DOE COUNSELING" holds "JANE DOE". Once those are gone, any
+ * two words left side by side are read as a name (hasAPersonsShape). A name
+ * that is also a word stays, so "DIRECT DEP MARK WHITLOCK" or "BILL WHITLOCK"
+ * never leaves a lone surname too short to read as one. Words are parted by
+ * any mark ("DOE*JANE COUNSELING", "JANE.DOE COUNSELING", "JANE-DOE"), and a
+ * web address is read by its name ("Jane Doe Therapy.com" holds "Jane Doe").
  */
 export function holdsAPersonsName(line: string): boolean {
   const words = line
     .split(LINE_BREAKS)
     .flatMap(partedAtDots)
-    .map((word) => word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, ''))
+    .map(asALineWord)
+    .filter((word, at, all) => !isAbbreviated(word) && !isAbbreviated(all[at - 1]))
     .filter((word) => word && !/\d/.test(word) && !isCredential(word))
     .filter((word) => nameInALine(word.replace(/\.$/, '')))
-  if (words.length <= MOST_NAME_WORDS) return hasAPersonsShape(words.join(' '))
-  // Any two words side by side that read as a name, as every longer one holds such a pair.
+  // Any two words side by side that read as a name, as every name holds such a pair. A word
+  // no name has ("Joe's") only parts the line, so "Jane Doe Joe's Clinic" still holds "Jane Doe".
   return words.slice(1).some((word, at) => hasAPersonsShape(`${words[at]} ${word}`))
 }
 

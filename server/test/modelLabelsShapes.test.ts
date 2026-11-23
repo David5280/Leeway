@@ -60,6 +60,21 @@ describe("a person's name under a business's code, and a shop's imported row", (
     for (const name of ['CVS', 'Walgreens', 'BetterHelp', 'BETTERHELP.COM']) {
       expect([name, labelOf(name, { ...practice, merchantName: name })]).toEqual([name, null])
     }
+    // A name beside a web address, an abbreviation or an ASCII hyphen is still a person's.
+    const webNames = ['Jane Doe Therapy.com', 'Ignatius Pemberton.us', 'Jane Doe Therapy.org']
+    for (const name of [...webNames, 'Jane Doe, Therapy.net', 'Jane Doe St. Clinic']) {
+      expect([name, label(name, { ...practice, merchantName: name })]).toEqual([
+        name,
+        'Medical payment',
+      ])
+    }
+    expect(label('JANE-DOE THERAPY', { ...practice, merchantName: 'JANE-DOE THERAPY' })).toBe(
+      'Medical payment',
+    )
+    // An abbreviation and the word after it name a place ("ACME PH.D" is a clinician's title).
+    for (const name of ['ST.JOSEPH HOSPITAL', 'FT.COLLINS FAMILY MED']) {
+      expect([name, labelOf(name, { ...practice, merchantName: name })]).toEqual([name, null])
+    }
     const wages = coded('INCOME_WAGES', { amountCents: -90_000 })
     for (const name of ['DOE*JANE PAYROLL', 'IGNATIUS*PEMBERTON HOUSEHOLD PAYROLL']) {
       expect([name, label(name, wages)]).toEqual([name, 'Deposit'])
