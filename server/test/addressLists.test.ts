@@ -64,6 +64,18 @@ describe('the fetch guard', () => {
     expect(isFetchableAddress('::ffff:808:808')).toBe(false)
   })
 
+  it('refuses IPv4-translated addresses, which a translator could carry to a private network', () => {
+    for (const address of [
+      '::ffff:0:10.0.0.1',
+      '::ffff:0:a00:1',
+      '::ffff:0:127.0.0.1',
+      '::ffff:0:8.8.8.8',
+    ]) {
+      expect(isFetchableAddress(address), address).toBe(false)
+      expect(isLocalProxyAddress(address), address).toBe(false)
+    }
+  })
+
   it('allows public addresses, including those just outside a refused range', () => {
     for (const address of ['8.8.8.8', '11.0.0.1', '100.128.0.1', '172.32.0.1', '2606:4700::1111']) {
       expect(isFetchableAddress(address), address).toBe(true)

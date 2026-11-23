@@ -18,7 +18,7 @@ const LOCAL_PROXY = rangeList({
     ['169.254.0.0', 16], // link-local
     // Shared address space (RFC 6598) is not routed on the public internet.
     // Overlay networks like Tailscale use it, so a proxy on another node of
-    // the owner's own tailnet is believed, as it was before this list split.
+    // the owner's own tailnet is believed.
     ['100.64.0.0', 10],
   ],
   ipv6: [
