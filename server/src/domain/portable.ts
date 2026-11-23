@@ -9,7 +9,7 @@ import { withTransaction, type Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { recategorize } from './categorize.js'
 import { categoryInputSchema, createCategory, listCategories } from './categories.js'
-import { currentEssentials } from './profile/income.js'
+import { currentEssentials } from './essentialSpending.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,

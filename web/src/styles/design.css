@@ -582,6 +582,18 @@ tspan.money-neutral {
   font-weight: var(--weight-medium);
 }
 
+/* A list of amounts turns the usual split around: the figure keeps its full
+   width and a long label wraps beside it, since an amount never breaks. */
+.facts-amounts dt {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.facts-amounts dd {
+  flex: none;
+}
+
 /* A value that opens something lines up like any other value. */
 .facts dd button {
   display: block;

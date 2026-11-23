@@ -7,3 +7,9 @@ export const PAYCHECK_WORDS =
 
 /** "PAYMENT THANK YOU" as card issuers write it, "PAYMENT - THANK YOU" too (transfer pairing reads it as well). */
 export const PAYMENT_THANK_YOU = String.raw`payment\W*thank you`
+
+/**
+ * Words after a short "INT" or "DIV" that say the money was paid in: "INT
+ * PD", "DIV EARNED". Tax time and transfer pairing both read them.
+ */
+export const PAID_IN_FORMS = String.raw`paid|pd|payment|earned|credit`

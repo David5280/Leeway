@@ -81,6 +81,8 @@ describe('transferHint', () => {
       'INTEREST PAID',
       'INT PD 11/30',
       'Dividend paid',
+      'DIVIDENDS PAID',
+      'INTEREST CREDIT',
       'Interest',
       'CASH BACK REWARD',
     ]) {

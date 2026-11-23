@@ -69,7 +69,8 @@ export const SEEDED_ACCOUNTS = ['checking', 'savings', 'credit card', 'loan', 'o
  * Adds five accounts (checking, savings, a credit card, a loan and a second
  * checking account that is overdrawn, in that order in `seeded.accounts`),
  * a category, spending, bills, goals, a rule, an
- * assistant key, and a pension with the birth year a projection needs.
+ * assistant key, a pension with the birth year a projection needs, and a
+ * hidden account with last year's interest for the tax export.
  */
 export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded): Promise<void> {
   /**
@@ -231,6 +232,28 @@ export async function seedEveryScreen(request: APIRequestContext, seeded: Seeded
   await action(request, 'update_settings', {
     retirement: { birthYear: 1986, targetMonthlyIncomeCents: 400_000 },
   })
+  seeded.accounts.push(await addLastYearInterest(request))
+}
+
+/**
+ * Adds a hidden account holding a small interest deposit dated in last year,
+ * as the app counts years (its own time zone, never this machine's clock),
+ * so the tax year the export opens on has a summary to show. Hidden, so no
+ * other screen counts it or starts its history a year back; the tax export
+ * counts hidden accounts too. Returns the account's id, to delete it by.
+ */
+export async function addLastYearInterest(request: APIRequestContext): Promise<string> {
+  const { id } = await action<{ id: string }>(request, 'create_account', {
+    name: 'Old savings',
+    type: 'depository',
+    balanceCents: 10_000,
+  })
+  await action(request, 'update_account', { id, hidden: true })
+  const { today } = await action<{ today: string }>(request, 'get_cash_flow')
+  const date = `${Number(today.slice(0, 4)) - 1}-01-15`
+  const deposit = { accountId: id, date, name: 'INTEREST PAID', amountCents: -125 }
+  await action(request, 'create_transaction', deposit)
+  return id
 }
 
 /** Removes everything seedEveryScreen added, however far it got. */

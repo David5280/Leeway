@@ -1,10 +1,11 @@
 // Essential spending in a typical month, read from stored data: recent whole
-// months of the essential categories, or the tracked bills before those say
-// anything (savings/emergency.ts holds the rule). The emergency fund is sized
-// by it, on its card, in its goal's target, in the financial profile and in
-// the check-in, so all of them say the same. With it comes the owner's own
-// pick of essentials, kept even when bills size the fund or nothing does, so
-// the pick can always be changed or handed back.
+// months of the essential categories (essentialSpending.ts holds what
+// counts), or the essential tracked bills before those say anything
+// (savings/emergency.ts holds the rule). The emergency fund is sized by it,
+// on its card, in its goal's target, in the financial profile and in the
+// check-in, so all of them say the same. With it comes the owner's own pick
+// of essentials, kept even when bills size the fund or nothing does, so the
+// pick can always be changed or handed back.
 //
 // Whole calendar months, unlike the typical month's spending (profile/
 // income.ts), which runs over the stretch since the current job's first
@@ -13,13 +14,19 @@
 
 import type { Db } from '../db/pool.js'
 import { addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
-import type { CategoryTotal } from './budget.js'
 import { listBills } from './bills.js'
 import { listCategories, type Category } from './categories.js'
 import { categoryTotalsByRange, sumTotals, type DateRange } from './categoryTotals.js'
+import { essentialCodedByRange } from './essentialCoded.js'
 import { essentialIdsOf } from './essentials.js'
+import {
+  currentEssentials,
+  essentialBillsCents,
+  essentialSpending,
+  partlyCounted,
+  type MonthSpending,
+} from './essentialSpending.js'
 import { firstTransactionDay } from './monthlyTotals.js'
-import { currentEssentials, essentialSpending } from './profile/income.js'
 import { essentialsFrom, type EssentialsMeasure } from './savings/emergency.js'
 import type { Settings } from './settings.js'
 
@@ -32,6 +39,12 @@ export interface MonthlyEssentials extends EssentialsMeasure {
   categories: string[] | null
   /** The same categories by id, for the owner to change which count; null alongside categories. */
   categoryIds: string[] | null
+  /**
+   * Other spending categories whose loan or child care payments count too, by
+   * name: a student loan in "Debt payments". Only while Leeway finds the
+   * essentials; null alongside categories.
+   */
+  partlyCounted: string[] | null
   /** Whether the owner picked the essential categories, rather than Leeway finding them. */
   picked: boolean
 }
@@ -66,34 +79,47 @@ export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null):
   return ranges
 }
 
-/** Essential spending averaged over each month's totals, or null without a whole month. */
+/** Essential spending averaged over each month, or null without a whole month. */
 export function averageEssentials(
   categories: Category[],
-  totalsByMonth: CategoryTotal[][],
+  months: MonthSpending[],
   essentialIds: string[] | null,
 ): number | null {
-  if (totalsByMonth.length === 0) return null
-  const essential = totalsByMonth.reduce((sum, totals) => {
-    const { spentCents } = sumTotals(categories, totals)
-    return sum + essentialSpending(categories, totals, essentialIds, spentCents)
+  if (months.length === 0) return null
+  const essential = months.reduce((sum, month) => {
+    const { spentCents } = sumTotals(categories, month.totals)
+    return sum + essentialSpending(categories, month, essentialIds, spentCents)
   }, 0)
-  return Math.round(essential / totalsByMonth.length)
+  return Math.round(essential / months.length)
 }
 
-/** The categories, and each of the last whole months' totals by category. */
-async function recentMonths(db: Db, today: IsoDate) {
+/** The categories, and each of the last whole months' spending by category. */
+async function recentMonths(
+  db: Db,
+  today: IsoDate,
+): Promise<{ categories: Category[]; months: MonthSpending[] }> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
   const categories = await listCategories(db)
-  // Posted transactions only: a month already over has nothing left pending that matters.
-  const totalsByMonth = ranges.length ? await categoryTotalsByRange(db, ranges, false) : []
-  return { categories, totalsByMonth }
+  if (ranges.length === 0) return { categories, months: [] }
+  // Posted only (a month already over has settled), card payments left out wherever filed.
+  const totalsByMonth = await categoryTotalsByRange(db, ranges, false, null, {
+    skipCardPayments: true,
+  })
+  const codedByMonth = await essentialCodedByRange(db, ranges)
+  const months = totalsByMonth.map((totals, at) => ({
+    totals,
+    essentialCoded: codedByMonth[at]!,
+  }))
+  return { categories, months }
 }
 
 /** The spending categories that had any spending across the months given. */
-function spentIn(categories: Category[], totalsByMonth: CategoryTotal[][]): string[] {
+function spentIn(categories: Category[], months: MonthSpending[]): string[] {
   const spent = new Set(
-    totalsByMonth.flat().flatMap((total) => (total.amountCents > 0 ? [total.categoryId] : [])),
+    months
+      .flatMap((month) => month.totals)
+      .flatMap((total) => (total.amountCents > 0 ? [total.categoryId] : [])),
   )
   return categories.filter((c) => c.kind === 'expense' && spent.has(c.id)).map((c) => c.id)
 }
@@ -105,23 +131,26 @@ export async function readEssentials(
   today: IsoDate,
 ): Promise<EssentialsReading> {
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const { categories, totalsByMonth } = await recentMonths(db, today)
+  const { categories, months } = await recentMonths(db, today)
   const bills = await listBills(db, today)
   const picked = settings.savingsPlan.essentialCategoryIds
   const ownPick = currentEssentials(categories, picked)
   const choice = {
     pickedIds: ownPick && [...ownPick],
-    spentIds: spentIn(categories, totalsByMonth),
+    spentIds: spentIn(categories, months),
   }
   const measure = essentialsFrom(
-    averageEssentials(categories, totalsByMonth, picked),
-    bills.reduce((sum, bill) => sum + bill.monthlyCents, 0),
+    averageEssentials(categories, months, picked),
+    essentialBillsCents(bills, categories, picked),
   )
   if (measure === null) return { essentials: null, choice }
   const base = { ...measure, picked: ownPick !== null }
   // The bills are a total, with no categories behind it.
   if (measure.from === 'bills') {
-    return { essentials: { ...base, categories: null, categoryIds: null }, choice }
+    return {
+      essentials: { ...base, categories: null, categoryIds: null, partlyCounted: null },
+      choice,
+    }
   }
   const ids = essentialIdsOf(categories, ownPick)
   const counted = ids === null ? null : categories.filter((c) => ids.has(c.id))
@@ -129,6 +158,7 @@ export async function readEssentials(
     ...base,
     categories: counted && counted.map((c) => c.name),
     categoryIds: counted && counted.map((c) => c.id),
+    partlyCounted: counted && partlyCounted(categories, months, picked),
   }
   return { essentials, choice }
 }

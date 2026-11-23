@@ -91,7 +91,7 @@ describe('Tax export', () => {
     expect(screen.getByText('$15.00')).toBeVisible()
     expect(screen.getByText('$0.00')).toBeVisible()
     expect(screen.getByText('−$10.00')).toBeVisible()
-    expect(screen.queryByText('Money in, not categorized')).not.toBeInTheDocument()
+    expect(screen.queryByText('Possible income to categorize')).not.toBeInTheDocument()
     expect(screen.queryByText('Tax refunds')).not.toBeInTheDocument()
     expect(screen.getByText('May be deductible, check with a tax pro:')).toBeVisible()
     expect(screen.getByText('Health')).toBeVisible()
@@ -101,10 +101,7 @@ describe('Tax export', () => {
 
   it('exports another year, clearing the summary of the last', async () => {
     const server = fakeServer({
-      export_tax_year: () => ({
-        ...exported,
-        summary: { ...exported.summary, income: [], categories: [] },
-      }),
+      export_tax_year: () => ({ ...exported, summary: { ...exported.summary, income: [] } }),
     })
     renderSignedIn(<TaxSection />)
     const user = userEvent.setup()
@@ -128,7 +125,10 @@ describe('Tax export', () => {
     })
     renderSignedIn(<TaxSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
-    expect(await screen.findByText('Money in, not categorized')).toBeVisible()
+    const label = await screen.findByText('Possible income to categorize')
+    expect(label).toBeVisible()
+    // Its long label wraps on a narrow phone rather than squeezing the amount.
+    expect(label.closest('dl')).toHaveClass('facts-amounts')
     expect(screen.getByText('$3,000.00')).toBeVisible()
     expect(screen.getByText(/could be pay, interest or a refund/)).toBeVisible()
   })
@@ -159,6 +159,33 @@ describe('Tax export', () => {
     expect(screen.getByText('$25.00')).toBeVisible()
     expect(screen.getByText('Card rewards and cash back')).toBeVisible()
     expect(screen.getByText('$12.34')).toBeVisible()
+  })
+
+  it('says a year with no transactions has none, rather than listing $0.00 lines', async () => {
+    fakeServer({
+      export_tax_year: () => ({
+        ...exported,
+        summary: { ...exported.summary, categories: [], income: [], payCents: 0, interestCents: 0 },
+      }),
+    })
+    renderSignedIn(<TaxSection />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
+    expect(await screen.findByText('No transactions in 2025.')).toBeVisible()
+    expect(screen.queryByText('Interest')).not.toBeInTheDocument()
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
+  })
+
+  it('reads "Preparing..." and stays disabled while the year builds', async () => {
+    let answer: (response: Response) => void = () => {}
+    const building = () => new Promise<Response>((resolve) => (answer = resolve)) as never
+    fakeServer({}, { '/api/actions/export_tax_year': building })
+    renderSignedIn(<TaxSection />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
+    const preparing = await screen.findByRole('button', { name: 'Preparing...' })
+    expect(preparing).toBeDisabled()
+    answer(Response.json({ result: exported }))
+    expect(await screen.findByRole('button', { name: 'Download 2025 CSV' })).toBeEnabled()
+    expect(downloads).toHaveLength(1)
   })
 
   it('says why an export failed', async () => {
