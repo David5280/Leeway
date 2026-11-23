@@ -19,7 +19,6 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
-import { laterNextPayday, nextPaydayAfter } from './cadence.js'
 import { depositKind, type Deposit, type DepositKind } from './deposits.js'
 import { givenFor, type GivenCadence } from './given.js'
 import {
@@ -31,6 +30,7 @@ import {
   type EmployerRun,
   type Paycheck,
 } from './paychecks.js'
+import { paydayAfter, projectionOf, type PayProjection } from './projection.js'
 
 /** An employer paying now, as far as the owner needs to see it. */
 export interface Employer {
@@ -48,6 +48,8 @@ export interface Employer {
   monthlyCents: number
   /** When its next paycheck is expected, after today. */
   nextPayday: IsoDate
+  /** What its paydays to come are projected from: the next one and those after it. */
+  projection: PayProjection
 }
 
 export interface CurrentPay {
@@ -109,30 +111,18 @@ function payRuns(deposits: Deposit[]): EmployerRun[] {
 }
 
 /**
- * Paychecks a year and the next payday. Paydays that fit every two weeks and
- * twice a month alike take the fewer paychecks a year (twice a month) and
- * the later of the two next paydays, so no figure promises more than may come.
+ * Paychecks a year. Paydays that fit every two weeks and twice a month alike
+ * take the fewer (twice a month), so no figure promises more than may come;
+ * the next payday is the later of the two the same way (projection.ts).
  */
-function cautiousReading(run: EmployerRun, today: IsoDate) {
-  // A bonus between paydays says nothing of when the next comes (offCycle.ts).
-  const paydays = run.cycle.map((paycheck) => paycheck.date)
-  if (!run.ambiguous) {
-    return {
-      perYear: PER_YEAR[run.cadence],
-      nextPayday: nextPaydayAfter(paydays, run.cadence, today, run.schedule ?? undefined),
-    }
-  }
-  return {
-    perYear: Math.min(PER_YEAR.biweek, PER_YEAR.semimonth),
-    nextPayday: laterNextPayday(paydays, today, run.schedule!),
-  }
-}
+const paychecksAYear = (run: EmployerRun) =>
+  run.ambiguous ? Math.min(PER_YEAR.biweek, PER_YEAR.semimonth) : PER_YEAR[run.cadence]
 
 /** What a run still paying comes to. */
 function employerOf(run: EmployerRun, today: IsoDate): Employer {
   const paycheckCents = usualPaycheckCents(run)
   const last = run.paychecks.at(-1)!.date
-  const { perYear, nextPayday } = cautiousReading(run, today)
+  const projection = projectionOf(run)
   return {
     newest: run.newest,
     firstPaycheck: run.paychecks[0]!.date,
@@ -141,8 +131,9 @@ function employerOf(run: EmployerRun, today: IsoDate): Employer {
     cadence: run.cadence,
     estimate: !run.cadenceConfirmed,
     paycheckCents,
-    monthlyCents: Math.round((paycheckCents * perYear) / 12),
-    nextPayday,
+    monthlyCents: Math.round((paycheckCents * paychecksAYear(run)) / 12),
+    nextPayday: paydayAfter(projection, today),
+    projection,
   }
 }
 
@@ -170,9 +161,19 @@ function payingEmployers(
   const ranked = paying
     .map((run) => ({ run, employer: employerOf(run, today) }))
     .sort((a, b) => mostFirst(a.employer, b.employer))
-  // A paystub from a job that has since ended says nothing of how the new one pays.
-  if (given && ranked[0] && givenFor(given, ranked[0].run)) {
-    const main = withGivenCadence(ranked[0].run, given.cadence)
+  // A paystub from a job that has since ended says nothing of how the new one
+  // pays: every other run seen, an old job's included, may be the one it names.
+  const top = ranked[0]?.run
+  if (
+    given &&
+    top &&
+    givenFor(
+      given,
+      top,
+      runs.filter((run) => run !== top),
+    )
+  ) {
+    const main = withGivenCadence(top, given.cadence)
     ranked[0] = { run: main, employer: employerOf(main, today) }
   }
   // The main job may miss a payroll; a side job that has missed one has likely stopped.

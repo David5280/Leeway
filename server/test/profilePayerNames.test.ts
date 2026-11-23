@@ -79,26 +79,37 @@ describe('the payers the profile names', () => {
   })
 
   // A household or a sole trader paying by direct deposit under their own
-  // name, as banks write it: an ACH line's "CO" labels name no company.
-  const PERSON_PAYERS = [
-    'JOHN SMITH DIR DEP',
-    'ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD',
-    'JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD',
+  // name, as banks write it: an ACH line's "CO" labels name no company, nor
+  // does a trailing state with a pay word after it ("DENVER CO DIR DEP"),
+  // nor a word an ACH line prints after its pay word ("DES:PAYROLL CO ID").
+  // A bank code, where given, is the one some banks put on such a line.
+  const PERSON_PAYERS: [name: string, code: string | null][] = [
+    ['JOHN SMITH DIR DEP', null],
+    ['ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', null],
+    ['JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', null],
+    ['JOHN SMITH DES:PAYROLL CO ID:XXXXX PPD', null],
+    ['JOHN SMITH DENVER CO DIR DEP', null],
+    ['JANE DOE CO PAYROLL', 'TRANSFER_IN_DEPOSIT'],
   ]
 
-  /** Five biweekly paychecks of $1,500 under the given bank text, and the profile they make. */
-  async function paidBy(name: string) {
+  /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
+  async function paidBy(name: string, detailed: string | null = null) {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 300_000 })
     for (const date of ['2026-09-04', '2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30']) {
-      await insertBankTransaction(ctx.db, checking.accountId, { date, name, amountCents: -150_000 })
+      await insertBankTransaction(ctx.db, checking.accountId, {
+        date,
+        name,
+        amountCents: -150_000,
+        detailed,
+      })
     }
     return profile()
   }
 
   it.each(PERSON_PAYERS)(
     'never names a person who pays a wage, in the profile or the digest the AI reads: %s',
-    async (name) => {
-      const result = await paidBy(name)
+    async (name, code) => {
+      const result = await paidBy(name, code)
       expect(result.pay).toMatchObject({
         cadence: 'biweek',
         employer: null,
@@ -107,7 +118,7 @@ describe('the payers the profile names', () => {
       expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
       const { digest } = await call('get_financial_profile')
       expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
-      expect(digest).not.toMatch(/john|smith|jane|doe|dir dep/i)
+      expect(digest).not.toMatch(/john|smith|jane|doe|denver|dir dep/i)
     },
   )
 
@@ -116,6 +127,16 @@ describe('the payers the profile names', () => {
       'ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD IND NAME:JANE DOE',
     )
     expect(result.pay.employer).toBe('Acme Corp')
+    expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)
+  })
+
+  it.each([
+    ['ACME CO PAYROLL', 'Acme Co Payroll'],
+    ['3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', '3m Co Payroll'],
+    ['GREAT DIVIDE BREWING CO DIR DEP', 'Great Divide Brewing Co Dir Dep'],
+  ])('still names a business whose name ends in Co: %s', async (name, shown) => {
+    const result = await paidBy(name)
+    expect(result.pay.employer).toBe(shown)
     expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)
   })
 })

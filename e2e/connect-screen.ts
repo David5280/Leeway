@@ -4,7 +4,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { expect, type APIRequestContext } from '@playwright/test'
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 
 export const CONNECT_SCREEN: Screen = {
   name: "an assistant's connect screen",

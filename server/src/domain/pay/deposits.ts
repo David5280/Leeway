@@ -59,16 +59,6 @@ const BUSINESS_ENDING_WORD = new RegExp(`^(${BUSINESS_ENDINGS})\\.?$`, 'i')
 /** Whether a single word only ends a business's name ("Co", "Inc."), naming no one. */
 export const isBusinessEnding = (word: string) => BUSINESS_ENDING_WORD.test(word)
 
-/**
- * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
- * a person. Read from the clean names the app shows, not the raw text: an ACH
- * line's own labels ("ORIG CO NAME:", "CO ENTRY DESCR:", "CO ID:") and a
- * trailing state ("DENVER CO") hold a "CO" that names no company.
- */
-export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
-  const merchant = tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : ''
-  return BUSINESS_WORDS.test(`${cleanMerchantName(tx.name)} ${merchant}`)
-}
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
 const TAX_REFUND_WORDS = /\btax\s+refund\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
@@ -88,13 +78,28 @@ const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 
 export const withoutPayWords = (text: string) => text.replace(ANY_PAY_WORDS, ' ')
 
 /**
- * Whether a sender is a business, read from its clean name as namesBusiness
- * reads a deposit's, with the pay words taken off first so a trailing state
- * still reads as one: "Jane Doe Denver CO direct deposit" is Jane Doe in
- * Colorado, where "ACME Corp direct deposit" is ACME Corp.
+ * Whether a bank's text names a business, read from the clean name the app
+ * shows, which drops an ACH line's own labels ("ORIG CO NAME:", "CO ID:")
+ * and a trailing state. It is read twice, as written and with the pay words
+ * taken off, and both readings must find a business ending:
+ * - Without the pay words a state is last again and goes, so "JANE DOE
+ *   DENVER CO DIR DEP" is Jane Doe in Colorado, not a company.
+ * - As written, a word after a pay word cannot stand in for it, so "JANE DOE
+ *   DES:PAYROLL CO ID:..." keeps reading as Jane Doe.
+ * The one reading namesBusiness and a "From ..." sender both go by.
  */
-const senderIsBusiness = (sender: string) =>
-  BUSINESS_WORDS.test(cleanMerchantName(withoutPayWords(sender)))
+const textNamesBusiness = (text: string) =>
+  BUSINESS_WORDS.test(cleanMerchantName(text)) &&
+  BUSINESS_WORDS.test(cleanMerchantName(withoutPayWords(text)))
+
+/**
+ * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
+ * a person, by its bank text or the merchant name Plaid gave.
+ */
+export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
+  const merchant = tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : ''
+  return textNamesBusiness(tx.name) || BUSINESS_WORDS.test(merchant)
+}
 
 /**
  * A transfer in, by its words: some banks code a payroll's direct deposit
@@ -104,7 +109,7 @@ const senderIsBusiness = (sender: string) =>
  */
 function transferInKind(tx: Deposit): DepositKind {
   const sender = senderOf(tx)
-  if (sender !== undefined && !senderIsBusiness(sender)) return 'deposit'
+  if (sender !== undefined && !textNamesBusiness(sender)) return 'deposit'
   return kindFromWords(tx) === 'payroll' ? 'payroll' : 'deposit'
 }
 
@@ -122,7 +127,7 @@ function kindFromWords(tx: Deposit): DepositKind {
   if (sender !== undefined) {
     // "From Jane Doe paycheck share" is money someone passed on, whatever it
     // was to them; "Transfer From ACME Corp Salary" is a business paying.
-    return PAY_WORDS.test(words) && senderIsBusiness(sender) ? 'payroll' : 'deposit'
+    return PAY_WORDS.test(words) && textNamesBusiness(sender) ? 'payroll' : 'deposit'
   }
   if (PAY_WORDS.test(words)) return 'payroll'
   if (INTEREST_WORDS.test(words)) return 'interest'

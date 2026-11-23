@@ -2,7 +2,7 @@
 // calendar cannot be linked in the tests, so each is stood in for at the
 // network (calendar.ts): the weeks ahead with events left out, and a trip's page.
 
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
 
 export const CALENDAR_SCREENS: Screen[] = [

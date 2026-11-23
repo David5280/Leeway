@@ -93,6 +93,7 @@ export function tripDetail(fields: Partial<TripDetail> = {}): TripDetail {
     status: 'upcoming',
     spentByPart: { ...NO_PARTS, travel: 70000 },
     transactions: [],
+    moreTransactions: false,
     ...fields,
   }
 }

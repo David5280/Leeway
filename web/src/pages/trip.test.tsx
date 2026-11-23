@@ -92,9 +92,33 @@ describe('Trip page', () => {
     expect(screen.queryByText(/booked in the two months before/)).not.toBeInTheDocument()
   })
 
-  it('says why the trip could not be read', async () => {
+  it('says why the trip could not be read, with a way back', async () => {
     fakeServer({}, { '/api/actions/get_trip': failing('A trip runs forward', 400) })
     renderTrip('/trips/2026-07-03/2026-07-01')
     expect(await screen.findByRole('alert')).toHaveTextContent('A trip runs forward')
+    expect(screen.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan/ahead')
+  })
+
+  it('leads back to Coming up from a trip that is not there', async () => {
+    fakeServer({}, { '/api/actions/get_trip': failing('Trip not found', 404) })
+    renderTrip('/trips/2026-01-01/2026-01-02')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Trip not found')
+    expect(screen.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan/ahead')
+  })
+
+  it('says when the list shows only the newest of a trip’s transactions', async () => {
+    const shown = [transaction({ id: 't1', date: '2026-12-11', name: 'Hotel Lisboa' })]
+    fakeServer({ get_trip: () => tripDetail({ transactions: shown, moreTransactions: true }) })
+    renderTrip()
+    expect(
+      await screen.findByText('Showing the newest 1. The totals count them all.'),
+    ).toBeVisible()
+  })
+
+  it('says nothing of a limit when the list shows every transaction', async () => {
+    fakeServer({ get_trip: () => tripDetail() })
+    renderTrip()
+    await screen.findByRole('heading', { name: 'Lisbon trip' })
+    expect(screen.queryByText(/Showing the newest/)).not.toBeInTheDocument()
   })
 })

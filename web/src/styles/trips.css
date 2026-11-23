@@ -1,4 +1,9 @@
-/* Trips: the trip page's parts. */
+/* Trips: the trip page's parts and transactions. */
+
+/* The link back to Coming up, its arrow close to its words. */
+.trip-back {
+  gap: 4px;
+}
 
 /* A part of a trip: what it is, then what it cost. */
 .trip-part {
@@ -18,4 +23,10 @@
 .trip-part > :last-child {
   flex: none;
   text-align: right;
+}
+
+/* A transaction's day, in a column of one width down the list. */
+.trip-date {
+  width: 56px;
+  flex: none;
 }
