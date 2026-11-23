@@ -243,7 +243,8 @@ describe('long biweekly runs through holidays', () => {
     }
     const misread = runs.filter((dates) => cadenceOfDates(dates) === 'semimonth')
     expect(misread).toEqual([])
-  })
+    // Thousands of runs: far past the default 5 seconds under CI coverage.
+  }, 30_000)
 
   it('keeps a Monday payroll paid early for MLK Day and Presidents Day on every two weeks', () => {
     // Jan 15 and Feb 12, 2027 were paid the Friday before, as the 1st and the
