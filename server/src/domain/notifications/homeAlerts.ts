@@ -182,3 +182,35 @@ export async function trackHomeHides(db: Db, alerts: AccountAlert[], now: Date):
     [alerts.map(alertKey), now],
   )
 }
+
+/**
+ * Moves hides of one kind to new subjects, when what an alert is about is
+ * known by a new subject (see inbox.ts moveSubjects, which moves its
+ * notifications). One already kept under the new subject gives way to the
+ * one moved, the owner's earlier hide. The alert is current, so the hide is
+ * no longer marked gone.
+ */
+export async function moveHides(
+  db: Db,
+  kind: AlertKind,
+  moves: { from: string; to: string }[],
+): Promise<void> {
+  const changed = [
+    ...new Map(moves.filter(({ from, to }) => from !== to).map((m) => [m.to, m])).values(),
+  ]
+  if (changed.length === 0) return
+  const from = changed.map((move) => move.from)
+  const to = changed.map((move) => move.to)
+  await db.query(
+    `DELETE FROM alert_hides h USING unnest($2::text[], $3::text[]) AS m(old, new)
+     WHERE h.kind = $1 AND h.subject = m.new
+       AND EXISTS (SELECT 1 FROM alert_hides o WHERE o.kind = $1 AND o.subject = m.old)`,
+    [kind, from, to],
+  )
+  await db.query(
+    `UPDATE alert_hides h SET subject = m.new, cleared_at = NULL
+     FROM unnest($2::text[], $3::text[]) AS m(old, new)
+     WHERE h.kind = $1 AND h.subject = m.old`,
+    [kind, from, to],
+  )
+}

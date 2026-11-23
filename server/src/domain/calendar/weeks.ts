@@ -27,7 +27,11 @@ export type ForecastItem =
       endsOn: IsoDate
       title: string
       kind: EventKind
-      /** What to set aside, from what past events of this kind cost; null without enough history. */
+      /**
+       * What to set aside, from what past events of this kind cost less what
+       * was spent on this one already: 0 when nothing is left to set aside,
+       * null without enough history to tell.
+       */
       suggestedCents: number | null
       /** How many past events the suggestion comes from. */
       basedOn: number

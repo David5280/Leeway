@@ -68,6 +68,8 @@ describe('Calendar', () => {
     expect(screen.getByText('The calendar did not answer.')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Read it now' }))
     await waitFor(() => expect(server.actions('refresh_calendar')).toHaveLength(1))
+    // A read that failed again says so above, not that it was read.
+    expect(screen.queryByText('Read just now.')).not.toBeInTheDocument()
     // Unlinking asks once more, and can be called off.
     await user.click(screen.getByRole('button', { name: 'Unlink' }))
     await user.click(screen.getByRole('button', { name: 'Keep it' }))
@@ -75,6 +77,20 @@ describe('Calendar', () => {
     await user.click(screen.getByRole('button', { name: 'Unlink' }))
     await user.click(screen.getByRole('button', { name: 'Unlink the calendar' }))
     expect(await screen.findByRole('button', { name: 'Connect a calendar' })).toBeVisible()
+  })
+
+  it('says so briefly when a read asked for finishes', async () => {
+    let status = linked({ eventCount: 1, lastError: 'The calendar did not answer.' })
+    fakeServer({
+      calendar_status: () => status,
+      refresh_calendar: () => (status = linked({ eventCount: 2 })),
+    })
+    renderSignedIn(<CalendarSection />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Read it now' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Read just now.')
+    expect(await screen.findByText(/2 events that may cost money/)).toBeVisible()
+    expect(screen.queryByText('The calendar did not answer.')).not.toBeInTheDocument()
   })
 
   it('shows why the link could not be read', async () => {
