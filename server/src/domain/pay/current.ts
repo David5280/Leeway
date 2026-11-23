@@ -11,8 +11,9 @@
 // With one paycheck from an employer the cadence is a guess (a saved
 // paystub's, else the cautious monthly one), and paydays that fit every two
 // weeks and twice a month alike are read the cautious way for each figure:
-// the fewer paychecks a year, and the later next payday. Either way the
-// figures are an estimate until more paychecks settle it.
+// the fewer paychecks a year, and the later next payday. A run of three or
+// four read without a bonus between its paydays (shortRun.ts) is a guess
+// too. Each way the figures are an estimate until more paychecks settle it.
 //
 // The next payday is the main employer's: safe to spend counts the bills due
 // before it, and a side job's smaller paycheck may not cover them first.
@@ -40,7 +41,10 @@ export interface Employer {
   lastPaycheck: IsoDate
   paychecks: number
   cadence: Cadence
-  /** True until paychecks confirm the cadence: one so far, or paydays that fit two cadences. */
+  /**
+   * True until paychecks confirm the cadence: one so far, paydays that fit
+   * two cadences, or a short run read without a bonus (shortRun.ts).
+   */
   estimate: boolean
   /** A usual paycheck: the middle of the newest few, leaving out a final check. */
   paycheckCents: number
@@ -139,7 +143,7 @@ function employerOf(run: EmployerRun, today: IsoDate): Employer {
     lastPaycheck: last,
     paychecks: run.paychecks.length,
     cadence: run.cadence,
-    estimate: !run.cadenceConfirmed,
+    estimate: !run.cadenceConfirmed || run.shortRunGuess,
     paycheckCents,
     monthlyCents: Math.round((paycheckCents * perYear) / 12),
     nextPayday,
