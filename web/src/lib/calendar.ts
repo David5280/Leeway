@@ -38,22 +38,35 @@ export function billPath(billId: string): string {
 
 /** What a calendar event needs to become a purchase to save for. */
 interface Saveable {
-  title: string
+  kind: keyof typeof EVENT_KIND_NAMES
   date: string
   suggestedCents: number | null
 }
 
 /**
- * A new purchase goal for an event coming up: named for it, priced at what
- * to set aside when that is known, to be ready by the day it starts. One
- * already under way (a trip that started yesterday) is wanted by today, since
- * a goal dated in the past would open as overdue.
+ * The name a purchase to save for an event starts with: its kind, never the
+ * event's own title, which often names a person ("Jane Doe's birthday") and
+ * would reach assistants and the AI through the goal's name.
  */
-export function saveForPath({ title, date, suggestedCents }: Saveable, today: string): string {
+export const SAVE_FOR_NAMES: Record<keyof typeof EVENT_KIND_NAMES, string> = {
+  trip: 'Trip',
+  wedding: 'Wedding',
+  birthday: 'Birthday gift',
+  show: 'Show',
+  holiday: 'Holiday',
+}
+
+/**
+ * A new purchase goal for an event coming up: named for its kind, priced at
+ * what is left to set aside when that is known, to be ready by the day it
+ * starts. One already under way (a trip that started yesterday) is wanted by
+ * today, since a goal dated in the past would open as overdue.
+ */
+export function saveForPath({ kind, date, suggestedCents }: Saveable, today: string): string {
   // ISO days sort as text, so the later of the two is the greater string.
   const by = date < today ? today : date
-  const params = new URLSearchParams({ new: 'purchase', name: title, by })
-  if (suggestedCents !== null) params.set('price', String(suggestedCents))
+  const params = new URLSearchParams({ new: 'purchase', name: SAVE_FOR_NAMES[kind], by })
+  if (suggestedCents) params.set('price', String(suggestedCents))
   return `/plan/goals?${params}`
 }
 

@@ -28,6 +28,7 @@ type Bill = Extract<ForecastItem, { type: 'bill' }>
 /** Where the amount to set aside comes from ("From 2 past trips"), or why there is none. */
 function setAsideText(event: Event): string {
   if (event.suggestedCents === null) return 'No past ones to go by yet'
+  if (event.suggestedCents === 0) return 'Nothing left to set aside'
   const kind = EVENT_KIND_NAMES[event.kind].toLowerCase()
   return `From ${event.basedOn} past ${kind}s`
 }
@@ -56,7 +57,8 @@ function EventRow({ event, today }: { event: Event; today: string }) {
         name={event.title}
         detail={`${EVENT_KIND_NAMES[event.kind]}, ${when}. ${setAsideText(event)}`}
       />
-      {event.suggestedCents !== null && (
+      {/* Nothing left to set aside shows no amount, never "$0 set aside". */}
+      {event.suggestedCents !== null && event.suggestedCents > 0 && (
         <span className="stack-sm" style={{ gap: 0, textAlign: 'right' }}>
           <Money cents={event.suggestedCents} />
           <span className="small muted">set aside</span>

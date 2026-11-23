@@ -1,12 +1,13 @@
 // What an event cost: the spending that belongs to it, by simple rules for
 // each kind. A trip is what was spent on its days plus travel booked in the
 // two months before; a wedding or birthday is gifts in the two weeks before;
-// a show is entertainment bought ahead; a holiday is gifts and travel.
+// a show is entertainment bought ahead; a holiday is gifts and travel. Each
+// purchase belongs to one event only, so overlapping events never share it.
 
 import type { Db } from '../../db/pool.js'
 import type { IsoDate } from '../../lib/dates.js'
 import { spendingSql } from '../counted.js'
-import type { EventKind } from './kinds.js'
+import { EVENT_KINDS, type EventKind } from './kinds.js'
 
 /** Booked ahead: flights, hotels and rentals, by the bank's category or the owner's. */
 export const TRAVEL_SQL = `(t.provider_category_primary = 'TRAVEL' OR c.name ILIKE 'travel%')`
@@ -27,95 +28,98 @@ interface CostRule {
   ahead: string
   /** What counts on its days. */
   during: string
+  /**
+   * Its own kind of spending, which it keeps even inside a trip's days or
+   * booking weeks (a gift bought while away for a wedding); 'false' for a
+   * trip, which needs no such word.
+   */
+  keeps: string
 }
 
 export const COST_RULES: Record<EventKind, CostRule> = {
-  trip: { aheadDays: 60, ahead: TRAVEL_SQL, during: ON_TRIP_SQL },
-  wedding: { aheadDays: 14, ahead: GIFTS_SQL, during: GIFTS_SQL },
-  birthday: { aheadDays: 14, ahead: GIFTS_SQL, during: GIFTS_SQL },
-  show: { aheadDays: 60, ahead: FUN_SQL, during: FUN_SQL },
+  trip: { aheadDays: 60, ahead: TRAVEL_SQL, during: ON_TRIP_SQL, keeps: 'false' },
+  wedding: { aheadDays: 14, ahead: GIFTS_SQL, during: GIFTS_SQL, keeps: GIFTS_SQL },
+  birthday: { aheadDays: 14, ahead: GIFTS_SQL, during: GIFTS_SQL, keeps: GIFTS_SQL },
+  show: { aheadDays: 60, ahead: FUN_SQL, during: FUN_SQL, keeps: FUN_SQL },
   holiday: {
     aheadDays: 30,
     ahead: `(${GIFTS_SQL} OR ${TRAVEL_SQL})`,
     during: `(${GIFTS_SQL} OR ${TRAVEL_SQL})`,
+    keeps: GIFTS_SQL,
   },
 }
 
+/** The most days ahead any kind counts spending for. */
+const MOST_AHEAD_DAYS = Math.max(...EVENT_KINDS.map((kind) => COST_RULES[kind].aheadDays))
+
+/** An event to cost: its kind, which says what spending is its, and its days. */
 export interface Span {
+  kind: EventKind
   startsOn: IsoDate
   endsOn: IsoDate
 }
 
-/** The SQL test that a transaction (t, a, c) belongs to an event of this kind on $from..$to. */
-export function belongsSql(kind: EventKind, from: string, to: string): string {
-  const rule = COST_RULES[kind]
-  return `${SPENT_SQL} AND (
-    (t.date >= ${from} AND t.date <= ${to} AND ${rule.during})
-    OR (t.date >= ${from}::date - ${rule.aheadDays} AND t.date < ${from} AND ${rule.ahead}))`
+/** What an event cost, in two parts. */
+export interface EventCost {
+  /** Spent in the days before it: a trip's travel booked ahead, a gift bought ahead. */
+  aheadCents: number
+  /** Spent on its own days. */
+  duringCents: number
 }
+
+/** One CASE over the events' kinds (w.kind), each giving its own rule's SQL. */
+function byKind(sql: (rule: CostRule) => string): string {
+  const cases = EVENT_KINDS.map((kind) => `WHEN '${kind}' THEN (${sql(COST_RULES[kind])})`)
+  return `CASE w.kind ${cases.join(' ')} ELSE false END`
+}
+
+/** The SQL test that a transaction (t, a, c) belongs to the event w by its kind's rule. */
+const BELONGS_SQL = `${SPENT_SQL} AND ${byKind(
+  (rule) => `(t.date >= w.from_day AND t.date <= w.to_day AND ${rule.during})
+    OR (t.date >= w.from_day - ${rule.aheadDays} AND t.date < w.from_day AND ${rule.ahead})`,
+)}`
 
 /**
- * The SQL, with $1 and $2 the events' first and last days and $3 how far
- * ahead spending counts, for `claimed`: each transaction that belongs to an
- * event of this kind, claimed by one event only (i, its place in the list),
- * so two events close together (birthdays two days apart, sharing their
- * weeks of gift buying) never both count the same purchase. It goes to the
- * event that started soonest among those it could belong to: the one whose
- * days it falls on, since that one started before it, and otherwise the next
- * event after it.
+ * Which of the events a transaction belongs to claims it, lowest first: an
+ * occasion's own kind of spending (a gift, tickets) stays with the occasion,
+ * then a trip takes the rest, so travel booked for a trip over Christmas, and
+ * what is spent while away, is the trip's. What is left (a holiday's travel
+ * with no trip around it) goes to the occasion.
  */
-function claimedSql(kind: EventKind): string {
-  return `w AS (
-      SELECT * FROM unnest($1::date[], $2::date[]) WITH ORDINALITY AS w(from_day, to_day, i)
-    ),
-    claimed AS (
-      SELECT DISTINCT ON (t.id) w.i, t.date, t.amount_cents
-      FROM w
-      JOIN (transactions t
-        JOIN accounts a ON a.id = t.account_id
-        LEFT JOIN categories c ON c.id = t.category_id)
-        ON t.date >= w.from_day - $3::int AND t.date <= w.to_day
-          AND ${belongsSql(kind, 'w.from_day', 'w.to_day')}
-      ORDER BY t.id, w.from_day, w.i
-    )`
-}
-
-/** What each event of one kind cost, in the order given, in one query. */
-export async function costsOf(db: Db, kind: EventKind, spans: Span[]): Promise<number[]> {
-  if (!spans.length) return []
-  const { rows } = await db.query<{ i: number; cents: string }>(
-    `WITH ${claimedSql(kind)}
-     SELECT w.i, coalesce(sum(claimed.amount_cents), 0) AS cents
-     FROM w LEFT JOIN claimed ON claimed.i = w.i
-     GROUP BY w.i ORDER BY w.i`,
-    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), COST_RULES[kind].aheadDays],
-  )
-  return rows.map((row) => Number(row.cents))
-}
-
-/** What a trip cost, in its two parts. */
-export interface TripCost {
-  /** Travel booked in the weeks before: paid once per trip, however long. */
-  bookedCents: number
-  /** Spent on its own days: grows with the trip's length. */
-  onTripCents: number
-}
+const CLAIM_ORDER_SQL = `CASE WHEN w.kind = 'trip' THEN 1 WHEN ${byKind((rule) => rule.keeps)}
+  THEN 0 ELSE 2 END`
 
 /**
- * What each trip cost, split into travel booked ahead and spending on its
- * days, in the order given, in one query. Split so a short trip's flight is
- * never stretched into a daily rate.
+ * What each event cost, in the order given, in one query. Each transaction
+ * is claimed by one event only, whatever their kinds, so two events close
+ * together (birthdays two days apart sharing their weeks of gift buying, or
+ * Christmas inside a trip home) never both count the same purchase. Among
+ * those it could belong to, CLAIM_ORDER_SQL picks first; then it goes to the
+ * event that started soonest: the one whose days it falls on, since that one
+ * started before it, and otherwise the next event after it.
  */
-export async function tripCostsOf(db: Db, spans: Span[]): Promise<TripCost[]> {
+export async function costsOf(db: Db, spans: Span[]): Promise<EventCost[]> {
   if (!spans.length) return []
-  const { rows } = await db.query<{ booked: string; on_trip: string }>(
-    `WITH ${claimedSql('trip')}
+  const { rows } = await db.query<{ ahead: string; during: string }>(
+    `WITH w AS (
+       SELECT * FROM unnest($1::date[], $2::date[], $3::text[])
+         WITH ORDINALITY AS w(from_day, to_day, kind, i)
+     ),
+     claimed AS (
+       SELECT DISTINCT ON (t.id) w.i, t.amount_cents, t.date < w.from_day AS ahead
+       FROM w
+       JOIN (transactions t
+         JOIN accounts a ON a.id = t.account_id
+         LEFT JOIN categories c ON c.id = t.category_id)
+         ON t.date >= w.from_day - ${MOST_AHEAD_DAYS} AND t.date <= w.to_day AND ${BELONGS_SQL}
+       ORDER BY t.id, ${CLAIM_ORDER_SQL}, w.from_day, w.i
+     )
      SELECT w.i,
-       coalesce(sum(claimed.amount_cents) FILTER (WHERE claimed.date < w.from_day), 0) AS booked,
-       coalesce(sum(claimed.amount_cents) FILTER (WHERE claimed.date >= w.from_day), 0) AS on_trip
+       coalesce(sum(claimed.amount_cents) FILTER (WHERE claimed.ahead), 0) AS ahead,
+       coalesce(sum(claimed.amount_cents) FILTER (WHERE NOT claimed.ahead), 0) AS during
      FROM w LEFT JOIN claimed ON claimed.i = w.i
      GROUP BY w.i ORDER BY w.i`,
-    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), COST_RULES.trip.aheadDays],
+    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), spans.map((s) => s.kind)],
   )
-  return rows.map((row) => ({ bookedCents: Number(row.booked), onTripCents: Number(row.on_trip) }))
+  return rows.map((row) => ({ aheadCents: Number(row.ahead), duringCents: Number(row.during) }))
 }

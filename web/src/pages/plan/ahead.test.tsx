@@ -62,7 +62,7 @@ describe('Coming up', () => {
     expect(rent).toHaveAttribute('href', '/plan/bills?bill=b1')
     expect(screen.getByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
       'href',
-      '/plan/goals?new=purchase&name=Lisbon+trip&by=2026-12-10&price=125000',
+      '/plan/goals?new=purchase&name=Trip&by=2026-12-10&price=125000',
     )
     // A payday has nothing to open.
     expect(screen.queryByRole('link', { name: /Payday/ })).not.toBeInTheDocument()
@@ -165,6 +165,22 @@ describe('Coming up', () => {
     renderPlan('/plan/ahead')
     expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
       '$60 in bills, $60 to set aside',
+    )
+  })
+
+  it('shows no amount for an event with nothing left to set aside', async () => {
+    const lisbon = ITEMS[3] as Extract<ForecastItem, { type: 'event' }>
+    planServer({
+      calendar_status: () => linked(),
+      get_forecast: () => forecastOf([{ ...lisbon, suggestedCents: 0 }]),
+    })
+    renderPlan('/plan/ahead')
+    const week = await screen.findByRole('region', { name: 'Week of Dec 8' })
+    expect(week).toHaveTextContent('Lisbon tripTrip, Dec 10 to Dec 14. Nothing left to set aside')
+    expect(week).not.toHaveTextContent('$0')
+    expect(within(week).getByRole('link')).toHaveAttribute(
+      'href',
+      '/plan/goals?new=purchase&name=Trip&by=2026-12-10',
     )
   })
 
