@@ -51,9 +51,6 @@ const TAX_CODE = /^\d{3}\([a-z]\)$/
 /** A tax code section written plain: "401k", "403b", "457". */
 const PLAIN_TAX_CODE = /^(?:401|403|409|414|457)[a-z]?$/
 
-/** A union local's number and letters: "1199SEIU", "32BJ". */
-const UNION_LOCAL = /^\d{1,4}\p{Lu}{2,}$/u
-
 /** A plan's own number after "Plan" or "Tier", from 1 to 99: "PERS Plan 2", "Tier 10". */
 const PLAN_NUMBER = /^[1-9]\d?$/
 
@@ -88,10 +85,9 @@ function tokenize(line: string): Token[] {
 }
 
 /** What a word is by itself, before its neighbours are weighed. */
-function ownRole({ text, form }: Token): Role | null {
+function ownRole({ form }: Token): Role | null {
   if (PLAN_WORDS.has(form) || SYSTEMS.has(form) || UNIONS.has(form)) return 'plan'
-  if (TAX_CODE.test(form) || PLAIN_TAX_CODE.test(form)) return 'plan'
-  if (UNION_LOCAL.test(text.replace(/[.:]+$/, ''))) return 'plan'
+  if (isTaxCode(form)) return 'plan'
   if (BRANDS.has(form)) return 'provider'
   if (GROUP_WORDS.has(form)) return 'group'
   return null
@@ -120,11 +116,17 @@ function markPhrases(tokens: Token[], roles: (Role | null)[]): void {
   })
 }
 
-/** Whether plan words follow the label at `index`, past any other labels. */
+/** Whether a tax code section names the word: "401(k)", "457b". */
+function isTaxCode(form: string): boolean {
+  return TAX_CODE.test(form) || PLAIN_TAX_CODE.test(form)
+}
+
+/** Whether plan words or a tax code follow the label at `index`, past any other labels. */
 function opensPlan(tokens: Token[], index: number): boolean {
   let next = index + 1
   while (next < tokens.length && LABEL_WORDS.has(tokens[next]!.form)) next++
-  return PLAN_WORDS.has(tokens[next]?.form ?? '')
+  const form = tokens[next]?.form ?? ''
+  return PLAN_WORDS.has(form) || isTaxCode(form)
 }
 
 /**

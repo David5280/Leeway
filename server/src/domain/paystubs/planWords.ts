@@ -1,7 +1,9 @@
 // The words a pension plan's name may keep, for redactPlanName. Every list
 // holds words in their matching form: lower case, with no closing "." or ":"
-// and no possessive "'s". Nothing here is a common given name or surname, so
-// a person's name read off a paystub never matches. Pure data.
+// and no possessive "'s". Words that are also common names (Roth, Ira) are
+// left out of the core lists and kept only in a plan's shape ("Roth 401(k)",
+// "Roth IRA"). A rare name that is itself a listed word (a surname Schwab)
+// can still match. Pure data.
 
 /** Builds a set from words written on one line, split on spaces. */
 const words = (line: string): ReadonlySet<string> => new Set(line.trim().split(/\s+/))
@@ -10,7 +12,7 @@ const words = (line: string): ReadonlySet<string> => new Set(line.trim().split(/
 export const PLAN_WORDS = words(`
   plan plans pension pensions retirement savings system systems fund funds trust
   annuity annuities deferred compensation comp benefit benefits association
-  thrift db dc hybrid roth ira
+  thrift db dc hybrid
 `)
 
 /**
@@ -47,6 +49,9 @@ export const BRAND_PHRASES: readonly (readonly string[])[] = [
 export const PLAN_PHRASES: readonly (readonly string[])[] = [
   ['defined', 'benefit'],
   ['defined', 'contribution'],
+  ['roth', 'ira'],
+  ['simple', 'ira'],
+  ['sep', 'ira'],
 ]
 
 /** Words a provider's name may go on with, kept only right after the provider. */
@@ -54,12 +59,13 @@ export const PROVIDER_SUFFIXES = words('investments financial group')
 
 /** Unions that sponsor plans, which name a plan as much as a plan word does. */
 export const UNIONS = words(`
-  teamsters ibew seiu afscme aft nea uaw ufcw liuna iuoe cwa
+  teamsters ibew seiu afscme aft nea uaw ufcw liuna iuoe cwa 1199seiu 32bj
 `)
 
 /**
  * Words naming whose plan it is ("State Employees", "Police and Fire") or
- * which part of it ("Tier", "Match"): kept beside a plan, but no plan alone.
+ * which part of it ("Tier", "Match"): kept wherever they stand on a line that
+ * names a plan, but no plan alone.
  */
 export const GROUP_WORDS = words(`
   employees teachers educators police fire firefighters sheriffs officers peace
@@ -73,13 +79,15 @@ export const GROUP_WORDS = words(`
 export const CONNECTORS = words('of and & for')
 
 /**
- * Words a pension line prints for the member or the deduction. One is kept
- * only where plan words follow it, other labels aside ("Member Retirement
- * Plan", "Employee Pre-tax Savings Plan"); otherwise it goes, as in "PERA EE".
+ * Words a pension line prints for the member, the deduction or the account
+ * kind. One is kept only where plan words or a tax code follow it, other
+ * labels aside ("Member Retirement Plan", "Employee Pre-tax Savings Plan",
+ * "Roth 401(k)"); otherwise it goes, as in "PERA EE". Roth is here, not a plan
+ * word, because it is also a surname: "PERA Jane Roth" is "PERA".
  */
 export const LABEL_WORDS = words(`
   member mbr employee ee employer er participant pre-tax pretax post-tax
-  after-tax contribution contrib deduction ded
+  after-tax contribution contrib deduction ded roth
 `)
 
 /** The words before a plan's own number: "PERS Plan 2", "IMRF Tier 3". */

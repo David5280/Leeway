@@ -48,10 +48,24 @@ describe('redactPlanName drops a person in every shape around the plan', () => {
     ['PERA Doe Jr, Jane', 'PERA'],
     ['PERA Jane Q Doe', 'PERA'],
     ['PERA Jane Q. Doe', 'PERA'],
-    ['Doe, Jane Employee 401(k)', '401(k)'],
+    ['Doe, Jane Employee 401(k)', 'Employee 401(k)'],
     ['Jane Doe', null],
     ['DOE, JANE Q', null],
   ])('drops one word names, initials and surnames first in "%s"', keeps)
+
+  it.each<Case>([
+    ['PERA Jane Roth', 'PERA'],
+    ['PERA Ira Glass', 'PERA'],
+    ['Ira Glass PERA', 'PERA'],
+    ['Ira Doe', null],
+    ['Roth', null],
+  ])('drops Roth and Ira read as names in "%s"', keeps)
+
+  it.each<Case>([
+    ['Jane Doe 4417JD', null],
+    ['PERA 4417JD', 'PERA'],
+    ['PERA 12AB', 'PERA'],
+  ])('drops an ID of digits and initials in "%s"', keeps)
 
   it.each<Case>([
     ['PERA 123-45-6789', 'PERA'],
@@ -93,6 +107,15 @@ describe('redactPlanName keeps a real plan name whole', () => {
     ['John Hancock 401k', 'John Hancock 401k'],
     ['Vanguard 457 (b)', 'Vanguard 457 (b)'],
   ])('keeps a provider and its tax code in "%s"', keeps)
+
+  it.each<Case>([
+    ['Roth 401(k)', 'Roth 401(k)'],
+    ['Employee Roth 401k', 'Employee Roth 401k'],
+    ['Pre-tax 401(k)', 'Pre-tax 401(k)'],
+    ['Roth IRA', 'Roth IRA'],
+    ['1199SEIU Pension Fund', '1199SEIU Pension Fund'],
+    ['32BJ Pension', '32BJ Pension'],
+  ])('keeps an account kind and a named union local in "%s"', keeps)
 
   it.each<Case>([
     ['Texas TRS', 'Texas TRS'],
