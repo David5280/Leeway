@@ -70,8 +70,9 @@ function subjectLine({ budget, alerts, spendable }: Checkin, money: Money, word:
   if (budget.leewayCents < 0) {
     return `Your week in Leeway: ${money(-budget.leewayCents)} over this ${word}`
   }
-  // Checking holds less than the budgets have room for, so the cash leads.
-  if (spendable?.limitedBy === 'cash') {
+  // Checking holds less than the budgets have room for, so the cash leads;
+  // never with no checking balance, which is unknown, not $0.
+  if (spendable?.limitedBy === 'cash' && spendable.cashKnown) {
     return `Your week in Leeway: ${money(spendable.safeCents)} safe to spend`
   }
   return `Your week in Leeway: ${money(budget.leewayCents)} left this ${word}`
@@ -84,7 +85,7 @@ function periodFigures({ budget, spendable }: Checkin, money: Money, locale: str
   }
   // What is left after money set aside for goals, as the dashboard's Leeway card shows it.
   const figures: EmailItem[] = [{ text: 'Left to spend', detail: money(budget.leewayCents) }]
-  if (spendable?.limitedBy === 'cash') {
+  if (spendable?.limitedBy === 'cash' && spendable.cashKnown) {
     figures.push({ text: 'Safe to spend before payday', detail: money(spendable.safeCents) })
   }
   // Held to the cash, as everywhere (spendable.ts).

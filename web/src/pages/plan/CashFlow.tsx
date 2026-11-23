@@ -5,6 +5,8 @@
 // the math (lib/drills/plan.ts), and under them a line shows checking
 // stepping down with each bill to payday; if it would go below $0, that part
 // is red and the card says when. The Overview's widget shows the answer alone.
+// With no checking balance known yet, there is no cash to judge: the card
+// says so, with no figure, line or warning that would read as $0.
 
 import { Card } from '../../components/design/Card'
 import type { CashFlow } from '../../api/client'
@@ -97,9 +99,28 @@ function BelowZero({ point, today, locale }: { point: CashPoint; today: string; 
   )
 }
 
+/** What can be said with no checking balance: the bills due, and when payday is. */
+function UnknownCash({ flow }: { flow: CashFlow }) {
+  const { money, settings } = useApp()
+  return (
+    <>
+      <p style={{ fontSize: 17 }}>Checking&apos;s balance isn&apos;t known yet.</p>
+      <span className="small muted">
+        {flow.billsDueCents > 0 && (
+          <>
+            <Money cents={flow.billsDueCents} /> in bills due before payday.{' '}
+          </>
+        )}
+        {paydayText(flow, money, settings.locale)}
+      </span>
+    </>
+  )
+}
+
 /** The answer and the sum behind it: what checking holds, less the bills, and when payday is. */
 export function CashFacts({ flow }: { flow: CashFlow }) {
   const { money, settings } = useApp()
+  if (!flow.cashKnown) return <UnknownCash flow={flow} />
   return (
     <>
       <Headline flow={flow} />
@@ -123,7 +144,7 @@ function CashDetails({ flow }: { flow: CashFlow }) {
   const { settings } = useApp()
   return (
     <>
-      <CashPathChart flow={flow} />
+      {flow.cashKnown && <CashPathChart flow={flow} />}
       {flow.billsDue.map((bill) => (
         <div key={`${bill.billId}-${bill.dueDate}`} className="list-row">
           <span className="num small muted" style={{ width: 56, flex: 'none' }}>

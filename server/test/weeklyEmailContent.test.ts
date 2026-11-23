@@ -78,6 +78,18 @@ describe('weeklyEmailContent', () => {
     expect(unbudgeted.figures[0]).toEqual({ text: 'Spent so far', detail: '$99' })
   })
 
+  it('leads with safe to spend when checking holds less, and never with an unknown balance', () => {
+    const cashLeads = { limitedBy: 'cash', safeCents: 30_000, cashKnown: true } as const
+    const short = content({ checkin: checkin({ spendable: cashLeads as never }) })
+    expect(short.subject).toBe('Your week in Leeway: $300 safe to spend')
+    expect(short.figures).toContainEqual({ text: 'Safe to spend before payday', detail: '$300' })
+    // No checking balance: $0 would be a guess, so the budget's room leads alone.
+    const unknown = { ...cashLeads, safeCents: 0, cashKnown: false }
+    const email = content({ checkin: checkin({ spendable: unknown as never }) })
+    expect(email.subject).toBe('Your week in Leeway: $1,200 left this month')
+    expect(JSON.stringify(email.figures)).not.toMatch(/safe to spend/i)
+  })
+
   it('names the period the owner budgets by', () => {
     const weekly = { period: { kind: 'weekly' as const, weekStartsOn: 1 }, locale: 'en-US' }
     expect(content({ settings: weekly }).figuresTitle).toBe('This week')

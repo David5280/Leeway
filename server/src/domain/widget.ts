@@ -49,6 +49,12 @@ export type WidgetHeadline =
       kind: 'until_payday'
       /** Safe to spend until payday (see cashFlow.ts), never below zero, as the Overview shows it. */
       cents: number
+      /**
+       * Whether a checking balance is known. Without one, cents is 0 only
+       * because nothing is known, and the widget says so instead of $0.
+       * Added after version 2 without a bump: an older script reads it as before.
+       */
+      cashKnown: boolean
       /** How far the bills due by payday outrun the cash; 0 when they fit. */
       shortfallCents: number
       perDayCents: number
@@ -142,6 +148,7 @@ function headlineOf(budget: WithRoom<BudgetSummary>, cashFlow: CashFlow): Widget
   return {
     kind: 'until_payday',
     cents: cashFlow.safeCents,
+    cashKnown: cashFlow.cashKnown,
     shortfallCents: cashFlow.shortfallCents,
     perDayCents: room?.perDayCents ?? cashFlow.perDayCents,
     payday: cashFlow.nextPayday,

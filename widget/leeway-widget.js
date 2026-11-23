@@ -307,9 +307,10 @@ function leewayNote(summary) {
 }
 
 /**
- * The leading number, as the Overview leads: safe to spend, or before any
- * budget is set, cash until payday. A problem is in red and in words ("over",
- * "short"), so color is never the only sign.
+ * The leading number, in the app's words: the budgets' room is left to
+ * spend, and the cash until payday, leading when checking holds less or
+ * before any budget is set, is safe to spend. A problem is in red and in
+ * words ("over", "short"), so color is never the only sign.
  * @param {Summary} summary
  * @returns {{ label: string, value: string, tone: Tone, note: string }}
  */
@@ -319,10 +320,20 @@ function headlineOf(summary) {
   if (headline.kind === 'leeway') {
     const short = headline.cents < 0
     return {
-      label: 'Safe to spend',
+      label: 'Left to spend',
       value: short ? `${amount} over` : amount,
       tone: short ? 'over' : 'ink',
       note: leewayNote(summary),
+    }
+  }
+  // With no checking balance there is no cash to go by: not known, never $0.
+  // A summary from before cashKnown has none, and reads as known.
+  if (headline.cashKnown === false) {
+    return {
+      label: 'Safe to spend',
+      value: 'Not known yet',
+      tone: 'muted',
+      note: "Checking's balance isn't known yet",
     }
   }
   const payday = shortDate(headline.payday, locale)
@@ -330,7 +341,7 @@ function headlineOf(summary) {
   // the cash is its own line.
   const shortfall = headline.shortfallCents > 0
   return {
-    label: 'Until payday',
+    label: 'Safe to spend',
     value: money(Math.max(0, headline.cents), summary),
     // Red only when short before a payday read from paychecks, as on the Overview.
     tone: shortfall && !headline.paydayEstimate ? 'over' : 'ink',
