@@ -308,8 +308,9 @@ no page.
   and it remembers it. **Leeway remembers** under the conversation lists each
   thing, and **Forget** deletes it. **Start over** deletes the conversation
   and keeps what it remembers.
-- Account numbers, masks, bank file names and the bank's own transaction text
-  are never sent, and people you pay or are paid by appear as "someone".
+- Account numbers, masks, bank file names, the bank's own transaction text
+  and your notes on transactions are never sent, and people you pay or are
+  paid by, or name in a category, goal or account, appear as "someone".
 - The conversation is kept on your server: only the words of each question
   and answer, saved once the answer is finished.
 - Chat runs on Claude Haiku 5.5 unless you pick another model in **Settings**,

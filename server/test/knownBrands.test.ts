@@ -2,7 +2,7 @@
 // (leaks/knownBrands.ts): whole names only, however a bank or a CSV writes them.
 
 import { describe, expect, it } from 'vitest'
-import { brandKey, isKnownBrand } from '../src/domain/leaks/knownBrands.js'
+import { brandKey, isKnownBrand, withoutKnownBrands } from '../src/domain/leaks/knownBrands.js'
 
 describe('isKnownBrand', () => {
   it.each([
@@ -42,6 +42,17 @@ describe('isKnownBrand', () => {
     'American Eagle',
     'T-Mobile',
     'Sirius XM',
+    'Warby Parker',
+    'Johns Hopkins',
+    'Planned Parenthood',
+    'Optum Rx',
+    'Grant Thornton',
+    'Jack Henry',
+    'Hunter Douglas',
+    'Bob Evans',
+    'Lane Bryant',
+    'White Castle',
+    'Price Chopper',
   ])('knows %s', (name) => {
     expect(isKnownBrand(name)).toBe(true)
   })
@@ -66,5 +77,16 @@ describe('brandKey', () => {
     expect(brandKey('Chick-fil-A')).toBe('chick fil a')
     expect(brandKey('TRADER JOE S')).toBe('trader joes')
     expect(brandKey("Trader Joe's")).toBe('trader joes')
+  })
+})
+
+describe('withoutKnownBrands', () => {
+  it('leaves each whole brand out of a name, and the rest as brandKey reads it', () => {
+    expect(withoutKnownBrands('GRANT THORNTON LLP PAYROLL')).toBe('llp payroll')
+    expect(withoutKnownBrands('Johns Hopkins Medicine')).toBe('medicine')
+    expect(withoutKnownBrands('Whole Foods Market #10')).toBe('')
+    // A person's name beside a brand, or a brand's word alone, stays.
+    expect(withoutKnownBrands('Jane Doe Grant Thornton')).toBe('jane doe')
+    expect(withoutKnownBrands('Grant Doe')).toBe('grant doe')
   })
 })

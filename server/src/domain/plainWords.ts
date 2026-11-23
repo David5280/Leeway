@@ -2,9 +2,9 @@
 // name: "Dining out", "New roof", "Gift for mom", "Joint savings". With the
 // common, business and movement words, they make up the everyday words that
 // telling a person from a shop reads (personShape.ts), and the only words a
-// note or a row typed in may hold for Chat to send it (chat/). A word that is
-// also a given name or surname ("Rose", "Baker") is never added here.
-// Pure.
+// label or a row typed in may hold for Chat to show it as written (chat/).
+// A word that is also a given name or surname ("Rose", "Baker") is never
+// added here. Pure.
 
 const PLAIN_WORDS = new Set(
   [
@@ -14,7 +14,7 @@ const PLAIN_WORDS = new Set(
     'how if in into is it its just last less me more most my new next no not now of off old',
     'on one only or other our out over own per same she so some than that the their them',
     'then there these they this those too two under up us was we were what when where which',
-    'who why you your',
+    'who why you your great',
     // Time and how often.
     'annual annually biweekly daily day days month monthly months quarter quarterly today',
     'tomorrow week weekend weekly weeks year yearly years yesterday',
@@ -24,7 +24,7 @@ const PLAIN_WORDS = new Set(
     // Home.
     'appliance appliances bathroom bedroom cable decor deck electricity fence furnace hvac',
     'household housing improvement internet maintenance moving remodel repairs roof sewer',
-    'solar trash upkeep yard',
+    'solar trash upkeep yard chest',
     // Getting around.
     'bike bus car cars commute flight flights getting gasoline maintenance mileage parking',
     'registration rideshare taxi tolls train transit transportation vacation vehicle',

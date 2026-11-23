@@ -174,14 +174,18 @@ const SELECT = `
  * Transactions matching a filter, newest first. A search matches the bank's
  * description and merchant name or the note, unless `searchBankText` is
  * false: then it matches only what the caller can read, the display name and
- * the note. Agents search that way (see context.ts).
+ * the note, or the display name alone when `searchNotes` is false too.
+ * Agents search that way, and Chat without notes (see context.ts).
  */
 export async function listTransactions(
   db: Db,
   filter: TransactionFilter,
-  { searchBankText = true }: { searchBankText?: boolean } = {},
+  {
+    searchBankText = true,
+    searchNotes = true,
+  }: { searchBankText?: boolean; searchNotes?: boolean } = {},
 ): Promise<{ transactions: Transaction[]; total: number }> {
-  if (filter.search && !searchBankText) return searchDisplayNames(db, filter)
+  if (filter.search && !searchBankText) return searchDisplayNames(db, filter, searchNotes)
   const { whereSql, params } = filterSql(filter)
   const [list, count] = await Promise.all([
     db.query<StoredTransaction>(
@@ -242,13 +246,15 @@ function filterSql(filter: TransactionFilter, withSearch = true) {
 }
 
 /**
- * A search matched against what an agent can read: the display name and the
- * note, never the bank's own text. Display names are worked out in code, so
- * every transaction the other filters allow is read, then matched and paged.
+ * A search matched against what an agent can read: the display name and,
+ * with `searchNotes`, the note, never the bank's own text. Display names are
+ * worked out in code, so every transaction the other filters allow is read,
+ * then matched and paged.
  */
 async function searchDisplayNames(
   db: Db,
   filter: TransactionFilter,
+  searchNotes: boolean,
 ): Promise<{ transactions: Transaction[]; total: number }> {
   const { whereSql, params } = filterSql(filter, false)
   const { rows } = await db.query<StoredTransaction>(
@@ -257,11 +263,11 @@ async function searchDisplayNames(
   )
   const context = await presenting(db, rows)
   const term = filter.search!.toLowerCase()
+  const searched = (tx: Transaction) =>
+    searchNotes ? [tx.displayName, tx.note ?? ''] : [tx.displayName]
   const matches = rows
     .map((row) => present(row, context))
-    .filter((tx) =>
-      [tx.displayName, tx.note ?? ''].some((text) => text.toLowerCase().includes(term)),
-    )
+    .filter((tx) => searched(tx).some((text) => text.toLowerCase().includes(term)))
   return {
     transactions: matches.slice(filter.offset, filter.offset + filter.limit),
     total: matches.length,

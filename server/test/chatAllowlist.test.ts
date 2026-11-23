@@ -207,7 +207,7 @@ describe('a search', () => {
     }
     for (const [search, found] of [
       ['samsung', 'Samsung'],
-      ['hbo max', 'Hbo Max'],
+      ['hbo max', 'HBO Max'],
     ]) {
       const { transactions } = JSON.parse(await probe.sent('list_transactions', { search })) as {
         transactions: { displayName: string }[]

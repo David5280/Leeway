@@ -29,6 +29,7 @@ describe('a name that is also an everyday word', () => {
       ['MARK OSTROWSKI', 'HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE'],
       ['JANE BROWN', 'HOME_IMPROVEMENT_HARDWARE'],
       ['ODALYS KING', 'FOOD_AND_DRINK_RESTAURANT'],
+      ['PRIYA KING', 'FOOD_AND_DRINK_RESTAURANT'],
       ['JUNE PARKER', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
     ]
     for (const [name, code] of cases) {
@@ -72,9 +73,43 @@ describe('a medical practice named for its clinician', () => {
       const label = labelled(name, 'MEDICAL_OTHER_MEDICAL', { merchantName: name, ...vouched })
       expect([name, label]).toEqual([name, 'Medical payment'])
     }
-    // A practice named for no one still shows.
-    const practice = { merchantName: 'Acme Physical Therapy', ...vouched }
-    expect(labelled('ACME PHYSICAL THERAPY', 'MEDICAL_OTHER_MEDICAL', practice)).toBeNull()
+    // A practice named for no one still shows, a place, a saint or a brand in its name included.
+    for (const name of [
+      'Acme Physical Therapy',
+      'VCA Animal Hospital',
+      'Cherry Creek Dental',
+      'Saint Joseph Hospital',
+      'Porter Adventist Hospital',
+      'Optum Rx',
+      'Planned Parenthood',
+      'Warby Parker',
+      'Park Meadows Dentistry',
+      'Johns Hopkins Medicine',
+    ]) {
+      const practice = { merchantName: name, ...vouched }
+      expect([name, labelled(name.toUpperCase(), 'MEDICAL_OTHER_MEDICAL', practice)]).toEqual([
+        name,
+        null,
+      ])
+    }
+  })
+})
+
+describe('pay from an employer whose name reads like a person', () => {
+  it('shows by name when the name is a school, a brewery or a brand', () => {
+    const wages = { amountCents: -90_000 }
+    for (const name of [
+      'UNIVERSITY OF DENVER PAYROLL',
+      'DENVER PUBLIC SCHOOLS',
+      'GREAT DIVIDE BREWING',
+      'GRANT THORNTON LLP PAYROLL',
+      'JACK HENRY PAYROLL',
+    ]) {
+      expect([name, labelled(name, 'INCOME_WAGES', wages)]).toEqual([name, null])
+    }
+    for (const name of ['JANE BROWN', 'PRIYA KING PAYROLL', 'MARK OSTROWSKI']) {
+      expect([name, labelled(name, 'INCOME_WAGES', wages)]).toEqual([name, 'Deposit'])
+    }
   })
 })
 
@@ -95,6 +130,24 @@ describe('the shops everyone buys from', () => {
     ['Shell', 'TRANSPORTATION_GAS'],
     ["Dick's Sporting Goods", 'GENERAL_MERCHANDISE_SPORTING_GOODS'],
     ['Panera Bread', 'FOOD_AND_DRINK_RESTAURANT'],
+    ["McDonald's", 'FOOD_AND_DRINK_FAST_FOOD'],
+    ['Burger King', 'FOOD_AND_DRINK_FAST_FOOD'],
+    ['Jack in the Box', 'FOOD_AND_DRINK_FAST_FOOD'],
+    ['Ruby Tuesday', 'FOOD_AND_DRINK_RESTAURANT'],
+    // Names made of name words, shown for a word businesses are named with or as a brand.
+    ['White Castle', 'FOOD_AND_DRINK_FAST_FOOD'],
+    ['Price Chopper', 'FOOD_AND_DRINK_GROCERIES'],
+    ['Lane Bryant', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES'],
+    ['Fox Racing', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES'],
+    ['Park Meadows', 'GENERAL_MERCHANDISE_SUPERSTORES'],
+    ['Stone Brewing', 'FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR'],
+    ['Hunter Douglas', 'HOME_IMPROVEMENT_FURNITURE'],
+    ['Bob Evans', 'FOOD_AND_DRINK_RESTAURANT'],
+    ['Winter Park Resort', 'TRAVEL_LODGING'],
+    ['June Oven', 'GENERAL_MERCHANDISE_ELECTRONICS'],
+    ['April Skin', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
+    ['Rose Bowl', 'ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS'],
+    ['Warby Parker', 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'],
   ]
 
   it('show by name, from Plaid and from a file once the owner buys there', () => {

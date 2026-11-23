@@ -42,6 +42,7 @@ const ACRONYMS = new Set([
   'CD',
   'CVS',
   'DMV',
+  'HBO',
   'HSA',
   'HSBC',
   'IKEA',
@@ -58,6 +59,7 @@ const ACRONYMS = new Set([
   'USA',
   'USAA',
   'USPS',
+  'VCA',
 ])
 
 /** Small words that stay lowercase inside a name, as in "Bank of America". */

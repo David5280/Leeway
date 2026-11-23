@@ -3,15 +3,14 @@
 // so Chat can hide those too. A hyphenated part is hidden whole and each of
 // its parts alone ("Mary-Kate", "Mary", "Kate"). Pure.
 //
-// A part is never hidden when it is how a known shop is called, or a word
-// businesses are named with (businessWords.ts). A longer part is hidden in
-// any case; a short one only as a name is written, with a capital or in
-// capitals. A common word ("Will", "May", "Rent") is a person
-// only when an app's line named it as the person paid ("Zelle payment to
-// RENT"), and even then only in the owner's notes, where they write about
-// people: everywhere else it far more often means the word. A name that is
-// also a word ("Grace") in a label the owner wrote is them, so it is hidden
-// as a name is written ("Grace's college fund", never "grace").
+// A part is never hidden when it is a word businesses are named with
+// (businessWords.ts), nor when it is how a known shop is called, unless the
+// owner wrote it in a label: "Ruby's Savings" names Ruby though the owner
+// eats at Ruby Tuesday (a shop's whole name is kept, chat/toolOutput.ts).
+// A longer part is hidden in any case; a short one only as a name is
+// written, with a capital or in capitals. A common word ("Will", "May",
+// "Rent") far more often means the word, so it is never hidden alone, but a
+// name that is also a word ("Grace") in a label the owner wrote is them.
 
 import { isBusinessWord } from '../businessWords.js'
 import { isCommonWord, isNameAsWord } from './commonWords.js'
@@ -29,9 +28,10 @@ const ANY_CASE_LENGTH = 4
 /** A name to take parts from, and what may be hidden of it. */
 export interface NameSource {
   name: string
-  /** Named by an app's line as the person paid, so even a common word of it is them. */
-  paid?: boolean
-  /** Written in the owner's own label, so a name that is also a word ("Grace") is them. */
+  /**
+   * Written in the owner's own label, so a name that is also a word
+   * ("Grace") is them, and so is one that starts a shop ("Ruby").
+   */
   owner?: boolean
 }
 
@@ -41,8 +41,6 @@ export interface LoneNames {
   capital: string[]
   /** Hidden in any case. */
   anyCase: string[]
-  /** Common words, hidden only in notes, with a capital or in capitals. */
-  inNotes: string[]
 }
 
 /** How a word of a name is hidden alone, or null when it is not. */
@@ -52,12 +50,12 @@ function hiddenAs(
   shops: KnownShops,
   skip: ReadonlySet<string>,
 ): keyof LoneNames | null {
-  if (!NAME_PART.test(part) || isMovementWord(part) || startsAShop(shops, part)) return null
-  if (isCredential(part)) return null
+  if (!NAME_PART.test(part) || isMovementWord(part) || isCredential(part)) return null
+  if (!source.owner && startsAShop(shops, part)) return null
   // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
   if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null
   if (source.owner && isNameAsWord(part)) return 'capital'
-  if (isCommonWord(part)) return source.paid ? 'inNotes' : null
+  if (isCommonWord(part)) return null
   return [...part].length >= ANY_CASE_LENGTH ? 'anyCase' : 'capital'
 }
 
@@ -82,7 +80,7 @@ export function loneNamesOf(
   shops: KnownShops,
   skip: ReadonlySet<string> = new Set(),
 ): LoneNames {
-  const found: LoneNames = { capital: [], anyCase: [], inNotes: [] }
+  const found: LoneNames = { capital: [], anyCase: [] }
   for (const source of sources) {
     for (const part of source.name.trim().split(/\s+/).flatMap(partsOf)) {
       const how = hiddenAs(part, source, shops, skip)

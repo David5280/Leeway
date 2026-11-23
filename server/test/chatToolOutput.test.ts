@@ -28,6 +28,7 @@ describe('a labelled transaction', () => {
       transactions: [
         {
           id: 'z',
+          date: '2026-11-15',
           displayName: 'To Jane Doe',
           name: 'Zelle payment to JANE DOE 4417',
           merchantName: null,
@@ -41,20 +42,15 @@ describe('a labelled transaction', () => {
     }
     expect(sent(result, hiding({ rows }))).toEqual({
       transactions: [
-        { id: 'z', displayName: ZELLE.label, amountCents: 5_000, note: null, person: null },
+        { id: 'z', date: '2026-11-15', displayName: ZELLE.label, amountCents: 5_000, person: null },
       ],
       accounts: [{ name: 'Checking' }],
       at: '2026-11-17T00:00:00.000Z',
     })
   })
 
-  it("keeps a transfer's note in everyday words, and a paired transfer its own name", () => {
-    const row = {
-      id: 't',
-      displayName: 'Transfer to Clara Thornbury',
-      amountCents: 9,
-      note: 'Rent split',
-    }
+  it("keeps a paired transfer its own name, made of the owner's accounts", () => {
+    const row = { id: 't', displayName: 'Transfer to Clara Thornbury', amountCents: 9 }
     const paired = {
       id: 't',
       displayName: 'Checking to Savings',
@@ -62,13 +58,7 @@ describe('a labelled transaction', () => {
       transfer: { id: 'u' },
     }
     const people = hiding({ rows, loneAnyCase: ['Clara'] })
-    expect(sent([row, paired], people)).toEqual([
-      { ...row, displayName: TRANSFER.label, note: 'Rent split' },
-      paired,
-    ])
-    // A note naming someone is left out whole.
-    const named = sent([{ ...row, note: 'Rent, Clara' }], people) as Record<string, unknown>[]
-    expect(named[0]!.note).toBeNull()
+    expect(sent([row, paired], people)).toEqual([{ ...row, displayName: TRANSFER.label }, paired])
   })
 
   it("is a leak's charge too, its alert's words replaced by what it would have shown", () => {
@@ -191,7 +181,7 @@ describe('a hidden name anywhere else', () => {
     )
   })
 
-  it('goes as a single word from labels too, but an account word stays outside notes', () => {
+  it('goes as a single word from labels too, but an account word stays', () => {
     const people = hiding({
       loneAnyCase: ['Kettering'],
       loneNames: ['Chase'],
@@ -200,20 +190,12 @@ describe('a hidden name anywhere else', () => {
     const result = {
       categories: [{ name: 'Kettering loan' }, { name: 'kettering fund' }],
       accounts: [{ name: 'Chase Checking' }],
-      note: 'Chase paid back too',
+      message: 'Chase Checking is below zero.',
     }
     expect(sent(result, people)).toEqual({
       categories: [{ name: 'someone loan' }, { name: 'someone fund' }],
       accounts: [{ name: 'Chase Checking' }],
-      note: 'someone paid back too',
-    })
-  })
-
-  it('goes as a common word an app named as the person paid only from notes', () => {
-    const people = hiding({ noteNames: ['Rent'] })
-    expect(sent({ category: 'Rent', note: 'Rent paid me back; rent is due' }, people)).toEqual({
-      category: 'Rent',
-      note: 'someone paid me back; rent is due',
+      message: 'Chase Checking is below zero.',
     })
   })
 
@@ -249,11 +231,11 @@ describe('what the owner wrote', () => {
       masks: ['4417'],
     })
     const result = [
-      { name: 'Larkspur wedding fund 4417', note: 'acct 4417' },
+      { name: 'Larkspur wedding fund 4417', detail: 'acct 4417' },
       { pattern: 'acct 4417', matchPattern: 'xfer 4417', label: 'Card 4417' },
     ]
     expect(sent(result, people)).toEqual([
-      { name: 'someone wedding fund ••••', note: 'acct ••••' },
+      { name: 'someone wedding fund ••••', detail: 'acct ••••' },
       { pattern: 'acct ••••', matchPattern: 'xfer ••••', label: 'Card ••••' },
     ])
   })

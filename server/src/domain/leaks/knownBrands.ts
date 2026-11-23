@@ -1,8 +1,9 @@
-// National brands named in two or more plain words, which a leak alert may
-// name though they read like a person's name ("Taco Bell", "Best Buy"). A
-// line imported from a CSV or entered by hand carries no merchant code for the
-// bank to vouch with (leakNames.ts), so this short list vouches instead. Only
-// a whole name matches, so "Jane Bell" or "Taco Bell Jane" never does. Pure.
+// National brands named in two or more plain words, which read like a
+// person's name ("Taco Bell", "Best Buy", "Warby Parker"). A line imported
+// from a CSV or entered by hand carries no merchant code for the bank to
+// vouch with, so this short list vouches instead, for a leak alert
+// (leakNames.ts) and for what Chat shows by name (modelLabels.ts). Only a
+// whole name matches, so "Jane Bell" or "Taco Bell Jane" never does. Pure.
 
 /**
  * The brands, as people write them. Each is matched the way brandKey reads a
@@ -15,6 +16,7 @@ const BRANDS = [
   'Bed Bath and Beyond',
   'Best Buy',
   'Big Lots',
+  'Bob Evans',
   'Buffalo Wild Wings',
   'Burger King',
   'Chick-fil-A',
@@ -29,22 +31,29 @@ const BRANDS = [
   'Five Guys',
   'Foot Locker',
   'Google Fi',
+  'Grant Thornton',
   'Great Clips',
   'Harbor Freight',
   'Hobby Lobby',
   'Home Depot',
-  'The Home Depot',
+  'Hunter Douglas',
+  'Jack Henry',
   'Jack in the Box',
   "Jimmy John's",
+  'Johns Hopkins',
   'Krispy Kreme',
+  'Lane Bryant',
   'Liberty Mutual',
   'Little Caesars',
   'Old Navy',
   'Olive Garden',
+  'Optum Rx',
   'Panda Express',
   "Papa John's",
   'Pizza Hut',
   'Planet Fitness',
+  'Planned Parenthood',
+  'Price Chopper',
   "Sam's Club",
   'Shake Shack',
   'Sirius XM',
@@ -52,7 +61,10 @@ const BRANDS = [
   'T Mobile',
   'Taco Bell',
   "Taco John's",
+  'The Home Depot',
   "Trader Joe's",
+  'Warby Parker',
+  'White Castle',
   'Whole Foods',
   'Whole Foods Market',
 ]
@@ -82,4 +94,18 @@ const BRAND_KEYS: ReadonlySet<string> = new Set(BRANDS.map(brandKey))
 /** Whether the name, as shown, is one of the known national brands (BRANDS). */
 export function isKnownBrand(name: string): boolean {
   return BRAND_KEYS.has(brandKey(name))
+}
+
+/** Every brand's key (brandKey), longest first, so "Whole Foods Market" goes before "Whole Foods". */
+const LONGEST_FIRST = [...BRAND_KEYS].sort((a, b) => b.length - a.length)
+
+/**
+ * A name with each known brand in it left out, as brandKey reads it (lower
+ * case, store numbers gone): "GRANT THORNTON LLP PAYROLL" reads "llp
+ * payroll". Whole words only, so "Jane Doe Grant Thornton" still reads "jane doe".
+ */
+export function withoutKnownBrands(name: string): string {
+  let key = ` ${brandKey(name)} `
+  for (const brand of LONGEST_FIRST) key = key.split(` ${brand} `).join(' ')
+  return key.trim()
 }

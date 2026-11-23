@@ -6,9 +6,10 @@
 // only when it is surely a purchase from a business. Every other row is
 // labelled ("Zelle payment (sent)", "Service payment"), and what it would
 // have been shown as is replaced by that label wherever else it is written.
-// The names read from the labelled rows (personNames.ts), and the words of
-// the owner's own labels that could be a name (ownerText.ts), are hidden
-// everywhere too, and no search may find them (chat/searchGuard.ts).
+// The names read from the labelled rows (personNames.ts) are hidden
+// everywhere too, and no search may find them (chat/searchGuard.ts). The
+// words of the owner's own labels that could be a name (ownerText.ts) are
+// hidden within those labels only, so Leeway's own words stay whole.
 
 import type { Db } from '../../db/pool.js'
 import { accountMasks } from '../accounts.js'
@@ -23,13 +24,13 @@ import type { AccountMasks } from '../safeName.js'
 import { merchantDisplayName } from '../transactionName.js'
 import { labelBills, wordsOf, type BillShown, type StoredBill } from './billLabels.js'
 import { ownerLabels, namesInLabels } from './ownerText.js'
-import { shownWordsOf } from './shownText.js'
 import {
   isBankWord,
+  namedLabels,
   namesIn,
   namesToHide,
-  withOwnerWords,
   type HiddenNames,
+  type NamedLabel,
 } from './personNames.js'
 
 /** Text a labelled row hides, in lower case, beside its label, for refusing a search. */
@@ -55,18 +56,15 @@ export interface PaymentPeople extends HiddenNames {
   hiddenTexts: readonly HiddenText[]
   /**
    * Every word of the owner's account names, in lower case: a single word of
-   * a name that is one of these is hidden only in notes, so account names stay.
+   * a name that is one of these is never hidden alone, so account names stay.
    */
   accountWords: readonly string[]
   /** The owner's account masks, hidden wherever they are written (a goal "Pay off card 4417"). */
   masks: readonly string[]
   /** The shops the owner buys from, which a search may always look for. */
   shops: KnownShops
-  /**
-   * The words of the rows shown by name (wordsOf), which a note may hold: a
-   * word Chat shows anyway is no hidden name (but see shownText.ts).
-   */
-  shownWords: ReadonlySet<string>
+  /** The owner's labels holding a word that could be a name, hidden within them alone. */
+  labels: readonly NamedLabel[]
 }
 
 /** No row labelled, no name and no bill hidden: nothing is replaced. */
@@ -74,7 +72,6 @@ export const NO_PEOPLE: PaymentPeople = {
   names: [],
   loneNames: [],
   loneAnyCase: [],
-  noteNames: [],
   rows: new Map(),
   bills: new Map(),
   phrases: [],
@@ -83,10 +80,10 @@ export const NO_PEOPLE: PaymentPeople = {
   accountWords: [],
   masks: [],
   shops: NO_SHOPS,
-  shownWords: new Set(),
+  labels: [],
 }
 
-type Row = LabelSubject & { id: string; note: string | null }
+type Row = LabelSubject & { id: string }
 type Labelled = RowLabel & { tx: Row }
 
 /**
@@ -98,7 +95,7 @@ async function allRows(db: Db): Promise<Row[]> {
   const { rows } = await db.query<Row>(
     `SELECT id::text, name, merchant_name AS "merchantName", amount_cents AS "amountCents",
        provider_category_primary AS "providerCategoryPrimary",
-       provider_category_detailed AS "providerCategoryDetailed", note,
+       provider_category_detailed AS "providerCategoryDetailed",
        merchant_entity_id AS "merchantEntityId",
        (provider_transaction_id IS NULL) AS "typedOrImported"
      FROM transactions`,
@@ -182,15 +179,11 @@ function phrasesOf(
   return [...phrases].sort(([a], [b]) => b.length - a.length)
 }
 
-/**
- * What each labelled row hides from a search: its shown names, its line and
- * merchant, and the note of a payment through an app, which is never shown.
- */
+/** What each labelled row hides from a search: its shown names, its line and merchant. */
 function hiddenTextsOf(labelled: readonly Labelled[], masks: AccountMasks): HiddenText[] {
   const texts = new Map<string, HiddenText>()
-  for (const { tx, label, kind } of labelled) {
-    const note = kind === 'app' ? tx.note : null
-    for (const text of [...shownForms(tx, masks), tx.name, tx.merchantName, note]) {
+  for (const { tx, label } of labelled) {
+    for (const text of [...shownForms(tx, masks), tx.name, tx.merchantName]) {
       const hidden = { text: (text ?? '').toLowerCase(), label: label.toLowerCase() }
       if (hidden.text) texts.set(`${hidden.text}\n${hidden.label}`, hidden)
     }
@@ -211,21 +204,14 @@ function searchWordsOf(word: string): string[] {
 
 /** The words a name could be found by alone: no account or movement word, nor a lone letter. */
 function searchWords(hidden: HiddenNames): string[] {
-  const alone = [...hidden.loneNames, ...hidden.loneAnyCase, ...hidden.noteNames]
+  const alone = [...hidden.loneNames, ...hidden.loneAnyCase]
   return [...new Set(alone.flatMap(searchWordsOf))]
 }
 
 /** Every hidden name and word, in lower case. */
 function hiddenSet(hidden: HiddenNames): Set<string> {
-  const all = [...hidden.names, ...hidden.loneNames, ...hidden.loneAnyCase, ...hidden.noteNames]
+  const all = [...hidden.names, ...hidden.loneNames, ...hidden.loneAnyCase]
   return new Set(all.map((name) => name.toLowerCase()))
-}
-
-/** The words of the rows shown by name: their lines, merchants and shown names (shownWordsOf). */
-function wordsShownIn(rows: readonly Row[], masks: AccountMasks): Set<string> {
-  return shownWordsOf(
-    rows.flatMap((tx) => [tx.name, tx.merchantName ?? '', ...shownForms(tx, masks)]),
-  )
 }
 
 /** Every labelled row, bill and name Chat hides from a model, and what it shows instead. */
@@ -237,17 +223,11 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
     const label = neutralLabel(tx, shops)
     return label ? [{ tx, ...label }] : []
   })
-  const labelledIds = new Set(labelled.map(({ tx }) => tx.id))
-  const shownWords = wordsShownIn(
-    rows.filter((tx) => !labelledIds.has(tx.id)),
-    masks,
-  )
-  // A label's word is plain when Chat shows it anyway, or it names the owner's own accounts.
-  const plain = (word: string) => shownWords.has(word) || ownWords.has(word)
   const found = labelled.flatMap(({ tx, kind }) => namesIn(tx, kind, shops))
-  const ofPeople = namesToHide(found, shops, ownWords)
-  const hidden = withOwnerWords(ofPeople, namesInLabels(labels, plain, shops), shops)
+  const hidden = namesToHide(found, shops, ownWords)
   const hiddenWords = searchWords(hidden)
+  // A label's word is plain when it names the owner's own accounts; no shop's single word vouches.
+  const labelWords = namesInLabels(labels, (word) => ownWords.has(word), shops)
   // A bill's payments are money out, matched by its pattern's whole words.
   const payments = labelled
     .filter(({ tx }) => tx.amountCents > 0)
@@ -257,7 +237,7 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
       shownKey: textKey(shownNameOf(tx, masks)),
     }))
   // Only a name read from a labelled row makes a bill track a person, never the bill's own words.
-  const shown = labelBills(bills, payments, new Set(searchWords(ofPeople)), hidden.names)
+  const shown = labelBills(bills, payments, new Set(hiddenWords), hidden.names)
   return {
     ...hidden,
     rows: new Map(labelled.map(({ tx, label, kind }) => [tx.id, { label, kind }])),
@@ -273,6 +253,6 @@ export async function paymentPeople(db: Db): Promise<PaymentPeople> {
     accountWords: [...ownWords],
     masks,
     shops,
-    shownWords,
+    labels: namedLabels(labelWords, shops),
   }
 }

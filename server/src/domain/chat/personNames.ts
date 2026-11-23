@@ -26,6 +26,7 @@ import { withoutCredential } from '../personShape.js'
 import { plainLetters } from '../plainLetters.js'
 import { nameAfterToOrFrom, type Movement } from '../transfers.js'
 import { loneNamesOf, type NameSource } from './loneNames.js'
+import type { LabelWords } from './ownerText.js'
 
 /** A name read from a labelled row, and where it came from. */
 export interface FoundName extends NameSource {
@@ -71,10 +72,7 @@ export function namesIn(tx: Movement, kind: LabelKind, shops: KnownShops): Found
   const named = nameAfterToOrFrom(line)
   const paid = named && !namesOwnAppAccount(named) ? personWords(named) : ''
   const shop = !merchant || appIn(merchant) !== null || isKnownShop(shops, merchant)
-  const found: FoundName[] = [
-    { name: paid, paid: kind === 'app' },
-    { name: shop ? '' : personInLine(merchant) },
-  ]
+  const found: FoundName[] = [{ name: paid }, { name: shop ? '' : personInLine(merchant) }]
   // A line naming no one after "to" or "from" may still hold them ("ZELLE; DOE, JANE",
   // "BILL PAY JANE DOE"), unless it is a shop the owner buys from ("MARIGOLD CAFE
   // 0042"); an app's is read only when nothing else named them.
@@ -135,8 +133,6 @@ export interface HiddenNames {
   loneNames: string[]
   /** Single words of names long enough to hide in any case ("jane"). */
   loneAnyCase: string[]
-  /** Common words an app named as the person paid ("Will"), hidden only in notes. */
-  noteNames: string[]
 }
 
 /**
@@ -147,7 +143,7 @@ export interface HiddenNames {
  *   rule called "Gifts for Jane Doe"), in any case, accents and joining aside.
  * - A single word, whether part of a full name or a name of one word, is
  *   hidden in every field too ("Kettering loan"), unless it is how a shop is
- *   called; a common word only in notes (loneNames.ts). A business ending
+ *   called or a common word (loneNames.ts). A business ending
  *   ("Pc") or an account word ("Checking") is never one.
  * - A bank transfer often names the owner's own account, so a name read from
  *   one made only of their accounts' words is no one's, and those words are
@@ -173,36 +169,29 @@ export function namesToHide(
     names: names.filter((name) => name.split(/\s+/).length > 1),
     loneNames: lone.capital,
     loneAnyCase: lone.anyCase,
-    noteNames: lone.inNotes,
   }
 }
 
-/** Words without a second of any in any case, first kept: "JANE" and "Jane" are one. */
-function unique(words: readonly string[]): string[] {
-  const seen = new Set<string>()
-  return words.filter((word) => !seen.has(word.toLowerCase()) && seen.add(word.toLowerCase()))
+/** An owner's label that holds a word that could be a name, and those words, hidden within it. */
+export interface NamedLabel {
+  label: string
+  words: string[]
 }
 
 /**
- * The hidden names with the words of the owner's labels that could be a
- * name (ownerText.ts) added, each hidden alone as a name's single word is.
+ * The owner's labels whose words could be a name (ownerText.ts), each with
+ * the words hidden within it as a name's single word is (loneNames.ts), but
+ * in any case, since they are hidden only there. A label left with none is
+ * left out.
  */
-export function withOwnerWords(
-  hidden: HiddenNames,
-  ownerWords: readonly string[],
-  shops: KnownShops,
-): HiddenNames {
-  const owner = loneNamesOf(
-    ownerWords.map((name) => ({ name, owner: true })),
-    shops,
-    ACCOUNT_WORDS,
-  )
-  const anyCase = unique([...hidden.loneAnyCase, ...owner.anyCase])
-  const inAnyCase = new Set(anyCase.map((word) => word.toLowerCase()))
-  const capital = unique([...hidden.loneNames, ...owner.capital])
-  return {
-    ...hidden,
-    loneAnyCase: anyCase,
-    loneNames: capital.filter((word) => !inAnyCase.has(word.toLowerCase())),
-  }
+export function namedLabels(labels: readonly LabelWords[], shops: KnownShops): NamedLabel[] {
+  return labels.flatMap(({ label, words }) => {
+    const lone = loneNamesOf(
+      words.map((name) => ({ name, owner: true })),
+      shops,
+      ACCOUNT_WORDS,
+    )
+    const hidden = [...lone.anyCase, ...lone.capital]
+    return hidden.length ? [{ label, words: hidden }] : []
+  })
 }

@@ -56,7 +56,7 @@ describe('a search', () => {
     await pay('Zelle payment to JANE PRYCEWOOD', 2_000, { note: 'concert tickets' })
     await pay('KING SOOPERS', 900, { merchantName: 'King Soopers', detailed: GROCERIES })
 
-    for (const search of ['prycewood', 'Pryce', 'concert']) {
+    for (const search of ['prycewood', 'Pryce']) {
       const result = await probe.run('list_transactions', { search })
       expect([search, result]).toEqual([
         search,
@@ -65,6 +65,9 @@ describe('a search', () => {
     }
     const preview = await probe.run('preview_rule', { pattern: 'PRYCEWOOD' })
     expect(preview.content).toBe(HIDDEN_SEARCH_MESSAGE)
+    // A note is never searched, so a word only in one finds nothing.
+    const concert = JSON.parse(await probe.sent('list_transactions', { search: 'concert' }))
+    expect(concert.total).toBe(0)
   })
 
   it('runs for anything else, a label included', async () => {

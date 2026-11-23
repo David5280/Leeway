@@ -1,9 +1,11 @@
-// What Chat sends of the owner's notes and labels that hold a name that is
-// also an everyday word ("Max", "Grace", "Hope"), or the given name a shop
-// is named for ("Joe" of Trader Joe's), and of ids beside an account mask.
-// Every name is made up.
+// What Chat sends of the owner's notes (never) and of labels that hold a
+// name that is also an everyday word ("Max", "Grace"), or a word of a shop's
+// name ("Joe" of Trader Joe's, "Ruby" of Ruby Tuesday), and of ids beside an
+// account mask. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
+import { runAction } from '../src/actions/action.js'
+import { listTransactionsAction } from '../src/actions/transactions.js'
 import { chatToolText } from '../src/chat/toolOutput.js'
 import { NO_PEOPLE } from '../src/domain/chat/people.js'
 import { knownShops } from '../src/domain/knownShops.js'
@@ -15,27 +17,32 @@ const { pay } = probe
 /** Runs some SQL on the probe's database. */
 const sql = (text: string, values: unknown[] = []) => probe.ctx.db.query(text, values)
 
-describe('a note on a row shown by name', () => {
-  it("is left out when it could name someone, though a shop's word is in it", async () => {
+describe("the owner's note on a transaction", () => {
+  it('is never sent, labelled row or shown, nor found by a search', async () => {
     const shop = (merchantName: string, detailed: string, note: string) =>
       pay(merchantName.toUpperCase(), 2_000, { merchantName, detailed, note })
-    await shop('Amazon', 'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES', 'gift for Max')
-    await shop("Trader Joe's", GROCERIES, 'birthday gift for Joe')
-    await shop("Wendy's", 'FOOD_AND_DRINK_FAST_FOOD', 'dinner with Wendy')
-    await shop("Sam's Club", 'GENERAL_MERCHANDISE_SUPERSTORES', "Sam's birthday")
-    await shop('Ross', 'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES', 'gift for Ross')
-    await shop('HBO Max', 'ENTERTAINMENT_TV_AND_MOVIES', 'Will paid me back')
-    // The shop's own whole name, and everyday words, still go.
-    await shop("Trader Joe's", GROCERIES, "Trader Joe's run")
-    await shop("Sam's Club", 'GENERAL_MERCHANDISE_SUPERSTORES', "Sam's Club run for the party")
-    await shop('Costco', GROCERIES, 'Costco run for the week')
+    await shop('Costco', GROCERIES, 'dinner with Jack')
+    await shop('Amazon', 'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES', 'Costco run for the week')
+    await pay('Zelle payment to JANE PRYCEWOOD', 2_000, { note: 'concert tickets' })
 
-    expect((await probe.notes()).sort()).toEqual([
-      'Costco run for the week',
-      "Sam's Club run for the party",
-      "Trader Joe's run",
-    ])
-  })
+    const sent = await probe.transactions()
+    expect(sent).toHaveLength(3)
+    expect(sent.filter((tx) => 'note' in tx)).toEqual([])
+    const text = await probe.everything()
+    expect(['dinner', 'jack', 'concert', 'week'].filter((word) => text.includes(word))).toEqual([])
+
+    const total = (search: string) =>
+      probe.sent('list_transactions', { search }).then((out) => JSON.parse(out).total as number)
+    for (const search of ['jack', 'dinner', 'concert', 'week']) {
+      expect([search, await total(search)]).toEqual([search, 0])
+    }
+    expect(await total('costco')).toBe(1)
+    // An assistant over MCP reads notes, so its search still matches them.
+    const mcp = await runAction({ ...probe.ctx, agent: true }, listTransactionsAction, {
+      search: 'jack',
+    })
+    expect(mcp.total).toBe(1)
+  }, 30_000)
 })
 
 describe("the owner's labels", () => {
@@ -44,7 +51,7 @@ describe("the owner's labels", () => {
     await pay('KING SOOPERS #12', 2_000, { merchantName: 'King Soopers', detailed: GROCERIES })
     await sql(
       `INSERT INTO goals (name, target_cents) VALUES
-         ('Grace''s college fund', 5000), ('Lily braces', 5000), ('Hope support', 5000),
+         ('Grace''s college fund', 5000), ('Lily braces', 5000), ('Hope chest', 5000),
          ('Car payoff', 5000), ('Italy trip', 5000), ('Joe''s birthday', 5000)`,
     )
     await sql(
@@ -61,7 +68,7 @@ describe("the owner's labels", () => {
     for (const goal of [
       "someone's college fund",
       'someone braces',
-      'someone support',
+      'Hope chest',
       'Car payoff',
       'Italy trip',
       "someone's birthday",

@@ -16,7 +16,7 @@ const { pay } = probe
 const transfer = { detailed: ACCOUNT_TRANSFER }
 
 describe('a bank transfer', () => {
-  it('reads as its kind by its code, keeping its note with names hidden', async () => {
+  it('reads as its kind by its code, with no note and no name', async () => {
     const lines = [
       'ONLINE TRANSFER TO THORNBURY C EVERYDAY CHECKING XXXXXX9081 REF #IBEXYZ ON 11/15/26',
       'Online Transfer to Clara Thornbury',
@@ -38,7 +38,7 @@ describe('a bank transfer', () => {
       ...lines.map(() => 'Transfer to another account'),
       'Transfer to investments',
     ])
-    // A note naming someone is left out whole.
+    // No note is ever sent.
     expect(await probe.notes()).toEqual([])
   })
 
@@ -73,18 +73,13 @@ describe('a bank transfer', () => {
     await insertBankAccount(probe.ctx.db, { name: 'Ally Savings' })
     await pay('ONLINE TRANSFER TO ALLY SAVINGS', 10_000, transfer)
     await pay('Online Transfer to Chase Checking', 10_000, transfer)
-    await pay('KING SOOPERS', 900, {
-      merchantName: 'King Soopers',
-      detailed: GROCERIES,
-      note: 'Moved the rest to Ally Savings and Chase Checking',
-    })
+    await pay('KING SOOPERS', 900, { merchantName: 'King Soopers', detailed: GROCERIES })
 
     expect(await paymentPeople(probe.ctx.db)).toMatchObject({
       names: [],
       loneNames: [],
       loneAnyCase: [],
     })
-    expect(await probe.notes()).toEqual(['Moved the rest to Ally Savings and Chase Checking'])
     expect(await probe.sent('list_accounts')).toMatch(/Ally Savings.*|Chase Total Checking/)
   })
 
@@ -135,7 +130,7 @@ describe('a line with no code, as an import brings', () => {
       'Venmo payment (sent)',
       'Zelle payment (sent)',
     ])
-    // A name read from a line with no code is hidden like any other; a note naming one goes.
+    // A name read from a line with no code is hidden like any other; no note is sent.
     expect(await probe.notes()).toEqual([])
     expect(JSON.stringify(transactions)).not.toMatch(/prycewood|halloway|foxhall|mossgiel/i)
   })

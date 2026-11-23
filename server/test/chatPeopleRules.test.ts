@@ -26,7 +26,7 @@ const movement = (fields: Partial<Movement>): Movement => ({
   ...fields,
 })
 
-/** Names as found on a payment app's line, named as the person paid when `paid`. */
+/** Names as found on a labelled row's line. */
 const found = (...names: string[]): FoundName[] => names.map((name) => ({ name }))
 
 describe('the names read from a labelled row', () => {
@@ -34,10 +34,7 @@ describe('the names read from a labelled row', () => {
 
   it('are the name after "to" or "from" and the merchant, unless the merchant is a shop', () => {
     const tx = movement({ name: 'Zelle payment to JANE DOE 4417', merchantName: 'JANE Q DOE' })
-    expect(namesIn(tx, 'app', shops)).toEqual([
-      { name: 'Jane Doe', paid: true },
-      { name: 'Jane Q Doe' },
-    ])
+    expect(namesIn(tx, 'app', shops)).toEqual([{ name: 'Jane Doe' }, { name: 'Jane Q Doe' }])
     const shop = movement({ name: 'PAYPAL INST XFER', merchantName: 'EBAY' })
     expect(namesIn(shop, 'app', shops)).toEqual([])
   })
@@ -53,7 +50,7 @@ describe('the names read from a labelled row', () => {
       namesIn(movement({ name: 'Online Payment to Venmo Credit Card' }), 'app', shops),
     ).toEqual([])
     expect(namesIn(movement({ name: 'XFER TO JANE OSTROVSKA' }), 'transfer', shops)).toEqual([
-      { name: 'Jane Ostrovska', paid: false, transfer: true },
+      { name: 'Jane Ostrovska', transfer: true },
     ])
   })
 
@@ -105,7 +102,6 @@ describe('the words of a name hidden alone', () => {
     expect(loneNamesOf(names, NO_SHOPS)).toEqual({
       capital: ['Q', 'Doe', 'Roe'].filter((word) => word.length > 1),
       anyCase: ['Jane', 'José', 'María', 'Núñez', 'Quillon', 'D’Arcy', 'Vane'],
-      inNotes: [],
     })
   })
 
@@ -124,7 +120,6 @@ describe('the words of a name hidden alone', () => {
         'Núñez',
         'García',
       ],
-      inNotes: [],
     })
   })
 
@@ -133,18 +128,20 @@ describe('the words of a name hidden alone', () => {
     expect(loneNamesOf([...names, ...found('J. Doe')], NO_SHOPS)).toEqual({
       capital: ['Doe'],
       anyCase: ['Chen', 'Fennwick'],
-      inNotes: [],
     })
     expect(isCommonWord('JUNE')).toBe(true)
     expect(isCommonWord('Jane')).toBe(false)
   })
 
-  it('keep a common word an app named as the person paid, for notes only', () => {
-    expect(loneNamesOf([{ name: 'CHASE', paid: true }], NO_SHOPS)).toEqual({
-      capital: [],
-      anyCase: [],
-      inNotes: ['CHASE'],
-    })
+  it('leave out a common word even an app named as the person paid', () => {
+    expect(loneNamesOf(found('CHASE', 'Will'), NO_SHOPS)).toEqual({ capital: [], anyCase: [] })
+  })
+
+  it("keep a word of the owner's label that starts a shop, or is a name that is a word", () => {
+    const shops = knownShops(['Ruby Tuesday', 'Ross'])
+    const owner = ['Ruby', 'Ross', 'Grace', 'Lawn'].map((name) => ({ name, owner: true }))
+    expect(loneNamesOf(owner, shops)).toEqual({ capital: ['Ruby', 'Grace'], anyCase: ['Ross'] })
+    expect(loneNamesOf(found('Ruby', 'Ross'), shops)).toEqual({ capital: [], anyCase: [] })
   })
 
   it('leave out how a shop is called, a word to skip, but not a word a shop only contains', () => {
@@ -154,7 +151,6 @@ describe('the words of a name hidden alone', () => {
       capital: [],
       // "Bakery" is a business word, so never a name alone.
       anyCase: ['Pettiwhistle', 'Wendy', 'Clara'],
-      inNotes: [],
     })
   })
 })
@@ -165,7 +161,6 @@ describe('where each name is hidden', () => {
       names: ['Jane Doe', 'Doe Jane'],
       loneNames: ['Doe'],
       loneAnyCase: ['Jane', 'Quillon'],
-      noteNames: [],
     })
   })
 
@@ -175,13 +170,11 @@ describe('where each name is hidden', () => {
       names: ['Jane Doe Pc', 'Jane Doe', 'Doe Jane'],
       loneNames: ['Doe'],
       loneAnyCase: ['Jane'],
-      noteNames: [],
     })
     expect(namesToHide(found('Vale Co'), NO_SHOPS)).toEqual({
       names: ['Vale Co', 'Co Vale'],
       loneNames: [],
       loneAnyCase: ['Vale'],
-      noteNames: [],
     })
   })
 
@@ -190,7 +183,6 @@ describe('where each name is hidden', () => {
       names: ['Clara Thornbury Everyday Checking', 'Clara Thornbury', 'Thornbury Clara'],
       loneNames: [],
       loneAnyCase: ['Clara', 'Thornbury'],
-      noteNames: [],
     })
   })
 
@@ -204,7 +196,6 @@ describe('where each name is hidden', () => {
       names: ['Ally Pellworth', 'Pellworth Ally'],
       loneNames: [],
       loneAnyCase: ['Pellworth'],
-      noteNames: [],
     })
   })
 

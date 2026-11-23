@@ -1,6 +1,6 @@
 // What Chat sends a model about payments through an app, read from real rows
-// through the tools: the payment reads as its app and direction, its note
-// and person go, the person's names are hidden everywhere else, and shops,
+// through the tools: the payment reads as its app and direction, its person
+// goes (no note is ever sent), the person's names are hidden everywhere else, and shops,
 // banks and the owner's own labels keep their names. Bank transfers are in
 // chatTransfers.test.ts. Every name is made up.
 
@@ -35,7 +35,7 @@ describe('a shop paid through PayPal', () => {
       'Spotify',
       'eBay',
     ])
-    expect(await probe.notes()).toEqual(['eBay and Spotify'])
+    expect(await probe.notes()).toEqual([])
     // The eBay total holds payments shown by their app, so it is too.
     expect((await probe.merchants()).sort()).toEqual(['PayPal payment (sent)', 'Spotify'])
   })
@@ -163,13 +163,11 @@ describe('a person paid through an app', () => {
 })
 
 describe('a name of one word that is also a word', () => {
-  it('goes from notes only, so a bill, a category, an account and a merchant keep it', async () => {
+  it('is never hidden alone, so a bill, a category, an account and a merchant keep it', async () => {
     for (const person of ['BILL', 'RENT', 'WILL', 'CHASE'])
       await pay(`Zelle payment to ${person}`, 1_000)
     await pay('CHASE CREDIT CRD AUTOPAY', 30_000, {
       detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-      // "Will" is a name as much as a word, so a note holding it would not be sent at all.
-      note: 'Chase card, Bill it',
     })
     await probe.ctx.db.query(
       `INSERT INTO categories (name, color, kind, position) VALUES ('Rent', '#000000', 'expense', 90)`,
@@ -184,7 +182,6 @@ describe('a name of one word that is also a word', () => {
     expect(transactions).toContainEqual(
       expect.objectContaining({ displayName: expect.stringMatching(/^chase/i) }),
     )
-    expect(await probe.notes()).toEqual(['someone card, someone it'])
     expect(await probe.sent('list_categories')).toContain('"Rent"')
     expect(await probe.sent('list_bills')).toContain('"Water bill"')
     expect(await probe.sent('summarize_accounts')).toContain('Chase Total Checking')
@@ -192,7 +189,7 @@ describe('a name of one word that is also a word', () => {
 })
 
 describe('the owner’s own labels', () => {
-  it('lose a full name and a word of it, but keep the shop a word names', async () => {
+  it("lose a full name and a word of it, and a shop's word alone, but keep its whole name", async () => {
     await pay('Zelle payment to JANE DOE', 5_000)
     await pay('Zelle payment to LEOPOLD MARCHETTI', 5_000)
     await pay('BLACKWOOD BAKERY', 900, {
@@ -203,7 +200,8 @@ describe('the owner’s own labels', () => {
     const { rows } = await probe.ctx.db.query<{ id: string }>(
       `INSERT INTO categories (name, color, kind, position) VALUES
          ('Gifts for Jane Doe', '#000000', 'expense', 90), ('Marchetti wedding', '#000000', 'expense', 91),
-         ('Blackwood treats', '#000000', 'expense', 92)
+         ('Blackwood treats', '#000000', 'expense', 92),
+         ('Blackwood Bakery treats', '#000000', 'expense', 93)
        RETURNING id`,
     )
     await probe.ctx.db.query(
@@ -218,7 +216,9 @@ describe('the owner’s own labels', () => {
     const categories = await probe.sent('list_categories')
     expect(categories).toContain('"Gifts for someone"')
     expect(categories).toContain('"someone wedding"')
-    expect(categories).toContain('"Blackwood treats"')
+    // "Blackwood" alone may be the person paid, though it starts the bakery's name.
+    expect(categories).toContain('"someone treats"')
+    expect(categories).toContain('"Blackwood Bakery treats"')
     const goals = await probe.sent('list_goals')
     expect(goals).toContain('"Trip with someone"')
     expect(goals).toContain(`"someone's party"`)
@@ -280,8 +280,7 @@ describe('a payment app paying a card or the owner', () => {
     })
 
     const people = await paymentPeople(probe.ctx.db)
-    expect(people).toMatchObject({ names: [], loneNames: [], loneAnyCase: [], noteNames: [] })
+    expect(people).toMatchObject({ names: [], loneNames: [], loneAnyCase: [] })
     expect(people.rows.size).toBe(3)
-    expect((await probe.notes()).sort()).toEqual(['Card and Funds from Venmo'])
   })
 })

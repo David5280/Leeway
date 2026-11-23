@@ -73,7 +73,7 @@ export async function runChatTool(
   const grouped = byLabel(call.name, call.input, people)
   try {
     const result: unknown = await runAction(
-      { ...ctx, agent: true },
+      { ...ctx, agent: true, chat: true },
       action,
       grouped?.input ?? call.input,
     )

@@ -4,25 +4,30 @@
 // the people they pay never chose that. Pure.
 //
 // Chat hides by default (domain/modelLabels.ts). A transaction whose name is
-// not surely a merchant's reads as its label ("Zelle payment (sent)"); a
-// payment app's also loses its note and person. A merchant total or series
-// of them reads as the label too, one row per label (labelledRows.ts), and a
-// bill tracking them loses its pattern, and its name when that could be a
-// person's (domain/chat/billLabels.ts). Then, as each string is walked, so
-// no escaping in the JSON can hide one, what those rows would have been shown
-// as is replaced by their label (one word alone by "someone": "Brightwater
-// rent" is about a person), and the names read from them by "someone", full
-// names and single words alike; a single word that is a common word or one
-// of the owner's account names' words only in their notes, so "Rent" and
-// account names stay. A note goes only when every word of it is surely no
-// one's (domain/chat/ownerText.ts). No string shows an account mask.
+// not surely a merchant's reads as its label ("Zelle payment (sent)"), with
+// no person. A merchant total or series of them reads as the label too, one
+// row per label (labelledRows.ts), and a bill tracking them loses its
+// pattern, and its name when that could be a person's
+// (domain/chat/billLabels.ts). Then, as each string is walked, so no
+// escaping in the JSON can hide one:
+//
+// - an owner's label holding a word that could be a name reads with that
+//   word as "someone" ("someone's college fund"), wherever the label is
+//   written, but nowhere else ("Will I make it to payday?" stays);
+// - what labelled rows would have been shown as is replaced by their label
+//   (one word alone by "someone": "Brightwater rent" is about a person);
+// - the names read from them go as "someone", full names and single words
+//   alike, but a common word or one of the owner's account names' words;
+// - no string shows an account mask.
+//
+// A transaction's note, the owner's own words about it, is never sent.
 
 import { wordsOf } from '../domain/chat/billLabels.js'
-import { noteMaySend } from '../domain/chat/ownerText.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 import type { RowLabel } from '../domain/modelLabels.js'
 import { agentJson } from '../mcp/agentOutput.js'
 import { withoutBankText } from '../mcp/withoutBankText.js'
+import { APOSTROPHES } from '../domain/personShape.js'
 import { mergedByLabel } from './labelledRows.js'
 import {
   fullNamePattern,
@@ -38,17 +43,20 @@ export const SOMEONE = 'someone'
 /** Stands in for an account mask wherever one is written. */
 export const MASKED = '••••'
 
+// Every apostrophe that is not a straight one, as shops' names are compared without.
+const CURLY = new RegExp(`[${APOSTROPHES.replace("'", '')}]`, 'g')
+
 /** What Chat hides in a tool's result. */
 interface Hidden {
   people: PaymentPeople
   /**
-   * Shown names by their label, then full names, then single words of names
-   * by "someone", but a word of the owner's account names, which stay; then
-   * account masks.
+   * Owner's labels holding a name as they read without it, then shown names
+   * by their label, full names, and single words of names by "someone", but
+   * a word of the owner's account names, which stay.
    */
-  everywhere: Replacement[]
-  /** All of those, with account words and common words of names too, for notes. */
-  inNotes: Replacement[]
+  names: Replacement[]
+  /** Account masks, looked for once names are gone, so one inside a kept shop's name goes too. */
+  masks: Replacement[]
 }
 
 type Row = Record<string, unknown>
@@ -61,8 +69,20 @@ const NAME_FIELDS = ['displayName', 'merchant', 'name', 'key'] as const
 const AN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** A text with anything hidden in it replaced, but an id kept whole so a tool can take it back. */
-function scrubbed(text: string, replacements: readonly Replacement[]): string {
-  return AN_ID.test(text) ? text : replacedIn(text, replacements)
+function scrubbed(text: string, hidden: Hidden): string {
+  return AN_ID.test(text) ? text : replacedIn(replacedIn(text, hidden.names), hidden.masks)
+}
+
+/**
+ * A row without its note when it is money that moved (a transaction, a held
+ * charge: a date and an amount). That note is the owner's own words about
+ * it, which may name anyone; Leeway's own notes, like a plan's, are on rows
+ * with no date and amount, and stay.
+ */
+function withoutOwnersNote(row: Row): Row {
+  if (!('date' in row && 'amountCents' in row)) return row
+  const { note: _note, ...rest } = row
+  return rest
 }
 
 /** A row's naming fields, each that is set reading as the label. */
@@ -78,8 +98,7 @@ function transactionLabel(row: Row, people: PaymentPeople): RowLabel | undefined
 }
 
 /**
- * A labelled transaction reads as its label, with no person; a payment
- * app's drops its note too, as the owner's words about a person. A transfer
+ * A labelled transaction reads as its label, with no person. A transfer
  * paired between two of the owner's own accounts keeps the name it is shown
  * by, which is made of their accounts' names.
  */
@@ -87,7 +106,6 @@ function asTransaction(row: Row, shown: RowLabel): Row {
   const fields = row.transfer ? NAME_FIELDS.filter((field) => field !== 'displayName') : NAME_FIELDS
   const relabelled = named(row, shown.label, fields)
   if ('person' in row) relabelled.person = null
-  if (shown.kind === 'app' && 'note' in row) relabelled.note = null
   return relabelled
 }
 
@@ -116,33 +134,25 @@ function relabelled(row: Row, people: PaymentPeople): Row {
  * on a key already taken ("someone", "someone 2"), so no value is lost.
  */
 function freeKey(key: string, taken: ReadonlySet<string>, hidden: Hidden): string {
-  const replaced = scrubbed(key, hidden.everywhere)
+  const replaced = scrubbed(key, hidden)
   if (!taken.has(replaced)) return replaced
   let number = 2
   while (taken.has(`${replaced} ${number}`)) number += 1
   return `${replaced} ${number}`
 }
 
-/** A note as sent: only one whose every word is surely no one's, with anything hidden replaced. */
-function noteOf(note: string, hidden: Hidden): string | null {
-  const { shownWords, accountWords, shops } = hidden.people
-  const plain = (word: string) => shownWords.has(word) || accountWords.includes(word)
-  return noteMaySend(note, plain, shops) ? replacedIn(note, hidden.inNotes) : null
-}
-
 /** One field of an object, with anything hidden in it replaced. */
 function cleanField(key: string, value: unknown, hidden: Hidden): unknown {
   if (key === 'counterparty') return null
   if (typeof value !== 'string') return walked(value, hidden)
-  if (key === 'note') return noteOf(value, hidden)
-  return scrubbed(value, hidden.everywhere)
+  return scrubbed(value, hidden)
 }
 
-/** An object shown by its label where it has one, then with every key and field cleaned. */
+/** An object with no owner's note, shown by its label where it has one, every key and field cleaned. */
 function cleanRow(row: Row, hidden: Hidden): Row {
   const cleaned: Row = {}
   const taken = new Set<string>()
-  for (const [key, field] of Object.entries(relabelled(row, hidden.people))) {
+  for (const [key, field] of Object.entries(relabelled(withoutOwnersNote(row), hidden.people))) {
     const free = freeKey(key, taken, hidden)
     taken.add(free)
     cleaned[free] = cleanField(key, field, hidden)
@@ -152,7 +162,7 @@ function cleanRow(row: Row, hidden: Hidden): Row {
 
 /** The result with every labelled row shown by its label and every hidden name replaced. */
 function walked(value: unknown, hidden: Hidden): unknown {
-  if (typeof value === 'string') return scrubbed(value, hidden.everywhere)
+  if (typeof value === 'string') return scrubbed(value, hidden)
   if (Array.isArray(value)) return mergedByLabel(value.map((item) => walked(item, hidden)))
   if (value === null || typeof value !== 'object' || value instanceof Date) return value
   return cleanRow(value as Row, hidden)
@@ -161,18 +171,60 @@ function walked(value: unknown, hidden: Hidden): unknown {
 /**
  * The names of shops the owner buys from that hold a word hidden alone, each
  * kept as written: Chat shows them anyway, and "Trader Joe's" must not read
- * "Trader someone's" because the owner wrote a goal "Joe's birthday".
+ * "Trader someone's" because the owner paid a Joe through Zelle, nor "HBO
+ * Max" read "HBO someone" because the owner has a category "Max".
  */
 function shopsKept(people: PaymentPeople): Replacement[] {
   const alone = [
     ...people.loneAnyCase,
     ...people.loneNames,
     ...people.phrases.map(([phrase]) => phrase),
+    ...people.labels.flatMap(({ words }) => words),
   ]
   const hidden = new Set(alone.flatMap(wordsOf))
   return [...people.shops.names]
     .filter((shop) => wordsOf(shop).some((word) => hidden.has(word)))
     .map((shop) => ({ pattern: fullNamePattern(shop), with: null }))
+}
+
+/** The names Chat hides that were read from labelled rows, in the order they are looked for. */
+interface OfPeople {
+  /** What labelled rows would have been shown as, and full names: looked for first. */
+  phrases: Replacement[]
+  /** Single words: one-word phrases, then words of names. */
+  words: Replacement[]
+}
+
+/**
+ * Each owner's label holding a word that could be a name, as it reads with
+ * those words (and any other hidden name) as "someone", longest first, so
+ * the label goes wherever it is written and its words nowhere else. The
+ * whole name of a shop of two words or more stays ("Trader Joe's with Joe"
+ * reads "Trader Joe's with someone"); a word that is or starts a shop's name
+ * goes ("Ross allowance", "Ruby's Savings"). Labels of one word come apart,
+ * looked for only after the shops kept, so a category "Max" leaves "HBO Max".
+ */
+function labelsAsShown(people: PaymentPeople, ofPeople: OfPeople): OfPeople {
+  const shopsIn = (label: string) => {
+    const plain = label.toLowerCase().replace(CURLY, "'")
+    return [...people.shops.names]
+      .filter((shop) => /\s/.test(shop) && plain.includes(shop))
+      .map((shop) => ({ pattern: fullNamePattern(shop), with: null }))
+  }
+  const asSomeone = (words: readonly string[]) =>
+    words.map((word) => ({ pattern: fullNamePattern(word), with: SOMEONE }))
+  const shown = [...people.labels]
+    .sort((a, b) => b.label.length - a.label.length)
+    .flatMap(({ label, words }) => {
+      const order = [...shopsIn(label), ...ofPeople.phrases, ...asSomeone(words), ...ofPeople.words]
+      const reads = replacedIn(label, order)
+      return reads === label ? [] : [{ label, pattern: fullNamePattern(label), with: reads }]
+    })
+  const oneWord = ({ label }: { label: string }) => !/\s/.test(label.trim())
+  return {
+    phrases: shown.filter((one) => !oneWord(one)),
+    words: shown.filter(oneWord),
+  }
 }
 
 /** What replaces each hidden thing, in the order they are looked for. */
@@ -189,24 +241,27 @@ function replacementsOf(people: PaymentPeople): Omit<Hidden, 'people'> {
     .filter((name) => name.trim())
     .sort((a, b) => b.length - a.length)
     .map((name) => ({ pattern: fullNamePattern(name), with: SOMEONE }))
+  // A single word of the owner's account names is never hidden alone, so account names stay.
+  const account = new Set(people.accountWords)
   const lone = [
     ...people.loneAnyCase.map((word) => ({ word, pattern: fullNamePattern(word) })),
     ...people.loneNames.map((word) => ({ word, pattern: loneNamePattern(word) })),
   ]
-  const account = new Set(people.accountWords)
-  const ofAccounts = ({ word }: { word: string }) => account.has(word.toLowerCase())
-  const asSomeone = ({ pattern }: { pattern: RegExp }) => ({ pattern, with: SOMEONE })
-  const named = [
-    ...phrases,
-    ...names,
-    ...shopsKept(people),
-    ...words,
-    ...lone.filter((one) => !ofAccounts(one)).map(asSomeone),
-  ]
-  const common = people.noteNames.map((word) => ({ pattern: loneNamePattern(word), with: SOMEONE }))
+    .filter(({ word }) => !account.has(word.toLowerCase()))
+    .map(({ pattern }) => ({ pattern, with: SOMEONE }))
+  const ofPeople = { phrases: [...phrases, ...names], words: [...words, ...lone] }
+  const labels = labelsAsShown(people, ofPeople)
   const masks = people.masks.map((mask) => ({ pattern: maskPattern(mask), with: MASKED }))
-  const inNotes = [...named, ...lone.filter(ofAccounts).map(asSomeone), ...common, ...masks]
-  return { everywhere: [...named, ...masks], inNotes }
+  return {
+    names: [
+      ...labels.phrases,
+      ...ofPeople.phrases,
+      ...shopsKept(people),
+      ...labels.words,
+      ...ofPeople.words,
+    ],
+    masks,
+  }
 }
 
 /**

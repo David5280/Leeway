@@ -15,6 +15,9 @@ const BUSINESS_WORDS = new Set(
     'restaurant salon shack shop shoes spa sports station store studio supply sushi taco',
     'tacos tavern tea theater theatre tire tires tool tools toys travel tree trip wine',
     'farmers jewelers jewelry warehouse wholesale',
+    'bowl brewing castle chopper oven racing resort skin',
+    // Where a business is, or a practice's kind ("Cherry Creek", "Saint Joseph Hospital").
+    'creek meadows saint adventist animal dentistry parenthood rx',
     // How a company or service is called.
     'agency airlines airways associates bros brothers center centre city company county',
     'department energy enterprises group guys insurance international lawn labs lessons',
@@ -22,6 +25,7 @@ const BUSINESS_WORDS = new Set(
     'service solutions state supplies systems tech trust tuition utility water wireless',
     'air airline bank capital charity church co corp cross donation fee financial',
     'foundation fund inc interest llc ltd oil premium rewards union',
+    'schools university',
     // What a budget or bill is for.
     'allowance babysitting bills care childcare daycare dues fees gifts groceries',
     'loan lunch mortgage payment phone piano rent savings subscription taxes tutor tutoring',

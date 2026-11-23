@@ -15,12 +15,15 @@
 // 3. It does not read as money moved or paid to someone (MOVED).
 // 4. Plaid vouched for the merchant as a business (merchantEntityId), or
 //    what it would show has no person's shape ("Odalys Larkspur",
-//    personShape.ts). A medical one, or one a card processor ran ("SQ *",
-//    "TST*"), where sole traders go by their own names, needs Plaid's word;
-//    pay needs no person's name anywhere in its line (household payroll).
+//    personShape.ts), or is a national brand that reads like one ("Warby
+//    Parker", leaks/knownBrands.ts). A medical one, or one a card processor
+//    ran ("SQ *", "TST*"), where sole traders go by their own names, needs
+//    Plaid's word; pay needs no person's name anywhere in its line beyond a
+//    brand (household payroll, but "GRANT THORNTON PAYROLL").
 // 5. A medical one does not name a clinician ("DR. JANE DOE LCSW"), nor hold
-//    a person's name anywhere ("JANE DOE COUNSELING"): a practice is often
-//    named for the clinician, and Plaid vouches for it all the same.
+//    a person's name anywhere beyond a brand ("JANE DOE COUNSELING", but
+//    "Johns Hopkins Medicine"): a practice is often named for the clinician,
+//    and Plaid vouches for it all the same.
 //
 // Every other row is shown by what kind of movement it is (LABELS): "Zelle
 // payment (sent)", "Rent payment", "Service payment", "Purchase or payment".
@@ -34,6 +37,7 @@
 
 import { appIn, merchantOf, paymentAppOf } from './betweenPeople.js'
 import { isKnownShop, NO_SHOPS, restAfterAShop, type KnownShops } from './knownShops.js'
+import { isKnownBrand, withoutKnownBrands } from './leaks/knownBrands.js'
 import { cleanMerchantName } from './merchantName.js'
 import {
   hasAPersonsShape,
@@ -171,6 +175,11 @@ function shownMerchant(tx: Movement): string {
   return merchantOf(tx) || cleanMerchantName(tx.name)
 }
 
+/** Whether a name holds a person's name once the national brands in it are left out. */
+function holdsANameBeyondBrands(name: string): boolean {
+  return holdsAPersonsName(withoutKnownBrands(name))
+}
+
 /**
  * Whether a row may show its own name: a shown code, no movement in its
  * line, and either Plaid's word for the business or no person's name in it
@@ -183,13 +192,14 @@ function showsItsName(tx: LabelSubject): boolean {
   // A clinician is a person even when Plaid knows their practice.
   if (code.startsWith('MEDICAL')) {
     if (!vouched || [tx.name, merchantOf(tx)].some(namesAClinician)) return false
-    return !holdsAPersonsName(shownMerchant(tx))
+    return !holdsANameBeyondBrands(shownMerchant(tx))
   }
   if (vouched) return true
   if (PROCESSOR.test(tx.name)) return false
   // Pay names its payer anywhere in a line: "DIRECT DEP JOHN Q PUBLIC HOUSEHOLD PAYROLL".
-  if (code.startsWith('INCOME')) return !holdsAPersonsName(shownMerchant(tx))
-  return !hasAPersonsShape(shownMerchant(tx))
+  if (code.startsWith('INCOME')) return !holdsANameBeyondBrands(shownMerchant(tx))
+  const shown = shownMerchant(tx)
+  return isKnownBrand(shown) || !hasAPersonsShape(shown)
 }
 
 /**

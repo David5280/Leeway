@@ -3,11 +3,15 @@
 //
 // - A name that is also an everyday word ("Mark", "Grace", "King") could
 //   still be someone, so a merchant or pay line made of name words is a
-//   person's ("MARK OSTROWSKI", "JANE BROWN"), a note holding one is not sent,
-//   and an owner's label hides it ("Grace's college fund"). It is never hidden
-//   alone in other text, where it far more often means the word (loneNames.ts).
+//   person's ("MARK OSTROWSKI", "JANE BROWN"), and an owner's label hides it
+//   ("Grace's college fund"). It is never hidden alone in other text, where
+//   it far more often means the word (loneNames.ts).
+// - Of those, a surname or a word a label is far more often named with
+//   ("Black Friday", "Summer vacation", "Will & Trust") reads as the word in
+//   the owner's labels, unless a person is named there ("For Rose"): a label
+//   names family by given name, so "Lily braces" hides and "Rose Garden" stays.
 // - A word whose everyday sense wins in money text ("bill", "May") reads as
-//   the word in notes and labels, and as a name only in a merchant or pay line.
+//   the word in labels, and as a name only in a merchant or pay line.
 // - Months, days, banks and what a contact is saved as ("Mom", "Rent") are
 //   never a name.
 
@@ -24,7 +28,14 @@ const NAMES_AS_WORDS = wordSet([
   'summer walker ward wells white will winter wolf young',
 ])
 
-// Names whose everyday sense wins in notes and labels ("Electric bill", "May rent").
+// Of NAMES_AS_WORDS, the surnames and words an owner's label means as the word
+// ("Price Club", "Hope chest", "Hunter Education"); given names stay out.
+const WORDS_IN_LABELS = wordSet([
+  'autumn baker black brown cook fox grant gray green grey hall hill holly hope hunter lane',
+  'love miles park price rose stone summer walker ward wells white will winter wolf young',
+])
+
+// Names whose everyday sense wins in labels ("Electric bill", "May rent").
 const WORDS_AS_NAMES = wordSet(['bill april may june august'])
 
 // Never a name: everyday words, months and days, banks, and contacts.
@@ -51,13 +62,21 @@ export function isNameAsWord(word: string): boolean {
   return NAMES_AS_WORDS.has(word.toLowerCase())
 }
 
+/**
+ * Whether a word, in any case, reads as the word in the owner's labels:
+ * a surname or a word labels are named with ("Brown", "Summer", "Will").
+ */
+export function isWordInLabels(word: string): boolean {
+  return WORDS_IN_LABELS.has(word.toLowerCase())
+}
+
 /** Whether a common word could be a name in a merchant or pay line ("Mark", "Bill", "June"). */
 export function isNameInALine(word: string): boolean {
   const lower = word.toLowerCase()
   return NAMES_AS_WORDS.has(lower) || WORDS_AS_NAMES.has(lower)
 }
 
-/** Whether a common word reads as no one's in notes and labels ("bill", "May", "Mom", "Chase"). */
+/** Whether a common word reads as no one's in labels ("bill", "May", "Mom", "Chase"). */
 export function isEverydayCommonWord(word: string): boolean {
   const lower = word.toLowerCase()
   return WORDS_AS_NAMES.has(lower) || NEVER_NAMES.has(lower)

@@ -1,12 +1,11 @@
 // What Chat sends of rows Plaid coded as a business but that may still be a
-// person's, of names only the owner wrote (notes, labels, accounts), and of
-// shops a search or a statement file names. Every name is made up.
+// person's, of names only the owner wrote (labels, accounts; notes are never
+// sent), and of shops a search or a statement file names. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
 import { HIDDEN_SEARCH_MESSAGE } from '../src/chat/searchGuard.js'
-import { namesInLabels, noteMaySend } from '../src/domain/chat/ownerText.js'
+import { namesInLabels } from '../src/domain/chat/ownerText.js'
 import { paymentPeople } from '../src/domain/chat/people.js'
-import { shownWordsOf } from '../src/domain/chat/shownText.js'
 import { knownShops } from '../src/domain/knownShops.js'
 import { ACCOUNT_TRANSFER, GROCERIES, useChatProbe } from './chatProbe.js'
 
@@ -126,7 +125,7 @@ describe('what only the owner wrote', () => {
     const text = await probe.everything()
     const names = 'ignatius thorne ottilie fairbanks bettina ferdinand ostrowski 4417'
     expect(names.split(' ').filter((name) => text.includes(name))).toEqual([])
-    expect(await probe.notes()).toEqual(['Costco run for the week, acct ••••'])
+    expect(await probe.notes()).toEqual([])
     const categories = await probe.sent('list_categories')
     expect(categories).toContain('"someone allowance"')
     expect(categories).toContain('"Dining out"')
@@ -162,10 +161,13 @@ describe('a shop the owner buys from', () => {
 })
 
 describe("the owner's own words", () => {
-  /** Words a shown row holds, as a test stands them in. */
-  const shown = (word: string) => ['amzn', 'mktp', 'marigold'].includes(word)
+  /** The words of the owner's own accounts, as a test stands them in. */
+  const account = (word: string) => ['sapphire', 'quorvex'].includes(word)
+  /** Each label's words that could be a name. */
+  const named = (labels: string[], shops = knownShops([])) =>
+    namesInLabels(labels, account, shops).map(({ label, words }) => [label, words])
 
-  it('hide what could be a name in a label, but no everyday, brand or shown word', () => {
+  it("hide what could be a name in a label, but no everyday, brand or account's word", () => {
     const labels = [
       'Ignatius allowance',
       'Bettina’s Savings',
@@ -174,40 +176,44 @@ describe("the owner's own words", () => {
       'TV fund',
       'Al',
       'Colorado PERA',
-      'amzn mktp',
-      'Marigold-',
+      'Sapphire Quorvex',
+      'Fennwick-',
       'Mary-Kate gifts',
     ]
-    expect(namesInLabels(labels, shown)).toEqual(['Ignatius', 'Bettina', 'Mary-Kate'])
+    expect(named(labels)).toEqual([
+      ['Ignatius allowance', ['Ignatius']],
+      ['Bettina’s Savings', ['Bettina']],
+      ['Fennwick-', ['Fennwick']],
+      ['Mary-Kate gifts', ['Mary-Kate']],
+    ])
   })
 
-  it("send a note only when every word of it is surely no one's", () => {
-    for (const note of ['Costco run for the week', 'Gift for mom', 'Marigold, order #1234', '']) {
-      expect([note, noteMaySend(note, shown)]).toEqual([note, true])
-    }
-    for (const note of ['gift for Ignatius Thorne', 'Lunch w/ Jo', 'Rent to John']) {
-      expect([note, noteMaySend(note, shown)]).toEqual([note, false])
-    }
+  it('read a given name that is also a word as a name, and a surname as the word', () => {
+    const labels = ['Max allowance', "Grace's college fund", 'Lily braces', 'Joint w/ Grace']
+    expect(named([...labels, 'Kids - Lily', 'For Rose', "Ruby's Savings"])).toEqual([
+      ['Max allowance', ['Max']],
+      ["Grace's college fund", ['Grace']],
+      ['Lily braces', ['Lily']],
+      ['Joint w/ Grace', ['Grace']],
+      ['Kids - Lily', ['Lily']],
+      ['For Rose', ['Rose']],
+      ["Ruby's Savings", ['Ruby']],
+    ])
+    const words = ['Black Friday', 'Green Energy', 'Love Gifts', 'Price Club', 'Gray Water']
+    const more = ['Rose Garden', 'Hunter Education', 'Holly Tree Service', 'Summer Vacation']
+    const everyday = ['Will & Trust', 'Hope chest', 'Electric bill', 'May rent', 'Mom']
+    expect(named([...words, ...more, ...everyday])).toEqual([])
   })
 
-  it('read a name that is also a word as a name, and a shown word after "for" as no proof', () => {
-    const labels = ['Max allowance', "Grace's college fund", 'Hope support', 'Lily braces']
-    expect(namesInLabels(labels, shown)).toEqual(['Max', 'Grace', 'Hope', 'Lily'])
-    expect(namesInLabels(['Electric bill', 'May rent', 'Mom', 'Car payoff'], shown)).toEqual([])
-    expect(noteMaySend('gift for Max', shown)).toBe(false)
-    expect(noteMaySend('order for Marigold', shown)).toBe(false)
-    expect(noteMaySend('Marigold order', shown)).toBe(true)
-  })
-
-  it("take a shop's whole name as shown, but never the given name it is named for", () => {
-    const words = shownWordsOf(["Trader Joe's", "Sam's Club", 'HBO Max', 'Ross Stores'])
-    expect([...words].sort()).toEqual(['club', 'hbo', 'ross', 's', 'stores', 'trader'])
-    const plain = (word: string) => words.has(word)
-    const shops = knownShops(["Trader Joe's", "Sam's Club"])
-    expect(noteMaySend('Trader Joe’s run', plain, shops)).toBe(true)
-    expect(noteMaySend('birthday gift for Joe', plain, shops)).toBe(false)
-    expect(noteMaySend("Sam's birthday", plain, shops)).toBe(false)
-    expect(namesInLabels(["Trader Joe's", "Joe's birthday"], plain, shops)).toEqual(['Joe'])
+  it("take only a shop's whole name as shown, never one of its words", () => {
+    const shops = knownShops(["Trader Joe's", 'HBO Max', 'Michael Kors', 'Ross'])
+    const labels = ['Trader Joe’s run', "Joe's birthday", "Max's car", "Michael's college fund"]
+    expect(named([...labels, 'Ross allowance', 'HBO Max'], shops)).toEqual([
+      ["Joe's birthday", ['Joe']],
+      ["Max's car", ['Max']],
+      ["Michael's college fund", ['Michael']],
+      ['Ross allowance', ['Ross']],
+    ])
   })
 })
 

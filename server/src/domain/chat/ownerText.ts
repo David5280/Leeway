@@ -1,24 +1,27 @@
-// What Chat sends of the text the owner wrote: their notes on transactions,
-// and the names they gave categories, goals, bills, rules and accounts.
+// What Chat sends of the labels the owner wrote: the names they gave
+// categories, goals, bills, rules and accounts. Their notes on transactions
+// are never sent (chat/toolOutput.ts), nor searched.
 //
 // Hiding the names read from labelled rows (personNames.ts) can't cover a
-// name the owner only ever wrote ("gift for Ignatius Thorne", a category
-// "Ignatius allowance", a loan "Loan from Ferdinand Ostrowski"), so their
-// text is read the way the rows are, by what is surely no one's name:
+// name the owner only ever wrote (a category "Ignatius allowance", a loan
+// "Loan from Ferdinand Ostrowski"), so a label keeps only the words that are
+// surely no one's: everyday words (personShape.ts), the whole names of shops
+// the owner buys from ("Trader Joe's run"), and the words of their own
+// accounts. Every other word that could be a name is hidden within that
+// label wherever Chat writes it, so it reads "someone allowance", while
+// Leeway's own words around it ("Will I make it to payday?") stay whole.
 //
-// - A note is sent only when every word of it is an everyday word
-//   (personShape.ts) or one a shown row is called by ("Costco run",
-//   shownText.ts); any other note could be about someone, so it is left out.
-// - A label keeps such words, and every other word that could be a name is
-//   hidden alone wherever Chat writes it (loneNames.ts), so the label reads
-//   "someone allowance" and the model is never told the name some other way.
-// - A shown row's word is no proof right after "for", "with", "to" or
-//   "from", where a person is named ("gift for Ross" with Ross Stores shown).
+// - A shop's single word vouches for nothing ("Max's car" beside HBO Max):
+//   only its whole name does.
+// - A surname or a word labels are named with ("Rose Garden", "Will &
+//   Trust") is the word (commonWords.ts), unless it follows "for", "with",
+//   "to" or "from", where a person is named ("For Rose").
 
 import type { Db } from '../../db/pool.js'
 import { NO_SHOPS, type KnownShops } from '../knownShops.js'
 import { APOSTROPHES, isEverydayWord } from '../personShape.js'
 import { wordsOf } from './billLabels.js'
+import { isWordInLabels } from './commonWords.js'
 import { withoutShops } from './shownText.js'
 
 // A word of a label as written, with its inner apostrophes and hyphens: "O'Brien", "Mary-Kate".
@@ -34,8 +37,14 @@ const SHORTEST_NAME = 3
 // Words a person is named after ("gift for", "w/"), where a shown word vouches for nothing.
 const BEFORE_A_PERSON = new Set(['for', 'with', 'w', 'to', 'from'])
 
-/** Whether a word (wordsOf) is surely no one's: an everyday word, or one Chat shows anyway. */
+/** Whether a word (wordsOf) is surely no one's beyond everyday words: one of the owner's accounts'. */
 type Plain = (word: string) => boolean
+
+/** A label the owner wrote, and its words that could be someone's name, as written. */
+export interface LabelWords {
+  label: string
+  words: string[]
+}
 
 /**
  * Every label the owner wrote: categories and their groups, goals, bills and
@@ -57,11 +66,6 @@ export async function ownerLabels(db: Db): Promise<string[]> {
   return rows.flatMap((row) => (row.text ? [row.text] : []))
 }
 
-/** Whether every word of a text is surely no one's (short ones like a possessive's "s" aside). */
-function allPlain(text: string, plain: Plain): boolean {
-  return wordsOf(text).every((word) => word.length < 2 || isEverydayWord(word) || plain(word))
-}
-
 /** A text's words as written, inner apostrophes and hyphens kept, shops' names left out. */
 function writtenWords(text: string, shops: KnownShops): string[] {
   return withoutShops(text.normalize('NFC'), shops).match(LABEL_WORDS) ?? []
@@ -74,38 +78,37 @@ function afterAPerson(words: readonly string[], at: number): boolean {
 
 /**
  * Whether a written word is surely no one's: an everyday word with its own
- * "'s" ("Lowe's" is lowes), or every part of it everyday or shown where no
- * person is named.
+ * "'s" ("Lowe's" is lowes), or every part of it everyday, or, where no person
+ * is named, an account's word or one labels mean as the word ("Rose Garden").
  */
 function plainWord(words: readonly string[], at: number, plain: Plain): boolean {
   const word = words[at]!
   if (isEverydayWord(wordsOf(word).join(''))) return true
-  return allPlain(word, afterAPerson(words, at) ? () => false : plain)
-}
-
-/** Whether a note may be sent as it is: every word of it surely no one's. */
-export function noteMaySend(note: string, plain: Plain, shops: KnownShops = NO_SHOPS): boolean {
-  const words = writtenWords(note, shops)
-  return words.every((_word, at) => plainWord(words, at, plain))
+  const vouched = (part: string) =>
+    !afterAPerson(words, at) && (plain(part) || isWordInLabels(part))
+  return wordsOf(word).every((part) => part.length < 2 || isEverydayWord(part) || vouched(part))
 }
 
 /**
- * The words of the owner's labels that could be someone's name, as written
- * and without an owner's "'s": every one long enough that is no everyday
- * word and no word Chat shows anyway ("Ignatius" in "Ignatius allowance").
- * The whole names of shops the owner buys from are read as shown ("Trader Joe's").
+ * The owner's labels that hold a word that could be someone's name, each
+ * with those words as written and without an owner's "'s": every one long
+ * enough that is surely no one's by none of the rules above ("Ignatius" in
+ * "Ignatius allowance"). The whole names of shops the owner buys from are
+ * read as shown ("Trader Joe's").
  */
 export function namesInLabels(
   labels: readonly string[],
   plain: Plain,
   shops: KnownShops = NO_SHOPS,
-): string[] {
-  const names = labels.flatMap((label) => {
-    const words = writtenWords(label, shops)
-    return words
-      .filter((_word, at) => !plainWord(words, at, plain))
+): LabelWords[] {
+  const named = new Map<string, string[]>()
+  for (const label of labels) {
+    const written = writtenWords(label, shops)
+    const words = written
+      .filter((_word, at) => !plainWord(written, at, plain))
       .map((word) => word.replace(POSSESSIVE, '').replace(LOOSE_ENDS, ''))
       .filter((word) => wordsOf(word).join('').length >= SHORTEST_NAME)
-  })
-  return [...new Set(names)]
+    if (words.length && !named.has(label)) named.set(label, [...new Set(words)])
+  }
+  return [...named].map(([label, words]) => ({ label, words }))
 }

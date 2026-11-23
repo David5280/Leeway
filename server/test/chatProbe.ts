@@ -31,7 +31,8 @@ export interface PayFields {
 export interface SentTransaction {
   id: string
   displayName: string
-  note: string | null
+  /** Never sent: here so a test can show it is absent. */
+  note?: string | null
 }
 
 export interface ChatProbe {
@@ -45,7 +46,7 @@ export interface ChatProbe {
   run(tool: string, input?: unknown): Promise<{ content: string; isError: boolean }>
   /** The transactions list_transactions sends. */
   transactions(): Promise<SentTransaction[]>
-  /** The notes of those transactions, leaving out the empty ones. */
+  /** The notes of those transactions, leaving out the empty ones: never any, as none is sent. */
   notes(): Promise<string[]>
   /** The merchants top_merchants sends, in its order. */
   merchants(): Promise<string[]>
