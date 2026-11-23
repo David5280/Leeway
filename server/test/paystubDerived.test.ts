@@ -166,6 +166,17 @@ describe('effectiveTaxRate', () => {
     })
   })
 
+  it('never reads a stub that prints only the year for its taxes as this period', () => {
+    // Every tax printed for the year so far, and one city tax this period only.
+    const detail = withPay({ gross: line(400_000, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(null, 400_000)
+    detail.taxes.socialSecurity = line(null, 248_000)
+    detail.taxes.medicare = line(null, 58_000)
+    detail.taxes.local = line(575)
+    expect(effectiveTaxRate(detail)).toBeNull()
+  })
+
   it('is null when the year misses a tax and this period shows no gross', () => {
     const detail = withPay({ gross: line(null, 4_000_000) })
     for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))

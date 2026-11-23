@@ -4,7 +4,9 @@
 // owner can see whether it rests on one paycheck or the year so far.
 //
 // Rates are fractions (0.25 is 25%), rounded only when shown. A figure that
-// needs a line the paystub does not show is null, never a guess or 0.
+// needs a line the paystub does not show is null, never a guess or 0. The
+// one exception is the paystub's own convention (shareOf): a line blank this
+// period beside a printed year so far took nothing this period.
 // Pure, and shared with the web app, which shows these on the review screen.
 
 import { dateParts, makeDate, toDayNumber } from '../../lib/dates.js'
@@ -116,7 +118,7 @@ const columnSum = (lines: readonly CentsLine[], column: Column) =>
 /** Whether a line shows an amount in the column given. */
 const shows = (line: CentsLine, column: Column) => line[column] !== null
 
-/** Whether a line prints an amount other than zero in either column, the only kind that can move a share. */
+/** Whether a line prints an amount other than zero in either column: only those move a share. */
 const printsMoney = (line: CentsLine) =>
   (line.current !== null && line.current !== 0) ||
   (line.yearToDate !== null && line.yearToDate !== 0)
@@ -136,9 +138,11 @@ function grossIn(detail: DerivableDetail, column: Column): number | null {
  *   A line printed only as 0.00 moves no sum, so it never rules a column out.
  * - Else this period, reading a blank beside a printed year so far as
  *   nothing taken this period, as paystubs print it (a Social Security
- *   wage base already reached, a Roth stopped earlier in the year). The
- *   year column gets no such reading: money taken this period is always in
- *   the year so far, so a line missing there is truly unknown.
+ *   wage base already reached, a Roth stopped earlier in the year). Only
+ *   when some line of the part prints money in both columns, which shows
+ *   the paystub prints this period's column for the part at all. The year
+ *   column gets no such reading: money taken this period is always in the
+ *   year so far, so a line missing there is truly unknown.
  * Null when neither reading works, or the part prints nothing at all.
  */
 function shareOf(
@@ -149,15 +153,19 @@ function shareOf(
   const withMoney = lines.filter(printsMoney)
   for (const column of order) {
     const gross = grossIn(detail, column)
-    // Null when the part prints nothing in this column (every() is true for no lines).
+    // Null when the part prints nothing in this column, so an empty part never reads as 0%.
     const cents = columnSum(lines, column)
     if (gross !== null && cents !== null && withMoney.every((line) => shows(line, column))) {
       return { rate: cents / gross, basis: column }
     }
   }
+  const periodPrinted = withMoney.some(
+    (line) => shows(line, 'current') && shows(line, 'yearToDate'),
+  )
   const gross = grossIn(detail, 'current')
   const cents = columnSum(lines, 'current')
-  return gross !== null && cents !== null ? { rate: cents / gross, basis: 'current' } : null
+  if (!periodPrinted || gross === null || cents === null) return null
+  return { rate: cents / gross, basis: 'current' }
 }
 
 /** The year's figures first: withholding swings check to check (a bonus is taxed at its own rate). */
