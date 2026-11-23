@@ -1,10 +1,10 @@
-// Coming up in Plan: offered only with a calendar linked, then the weeks ahead.
+// Coming up in Plan: offered only with a calendar linked, then the weeks ahead and trips.
 
 import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastItem } from '../../api/client'
 import { failing, holdRequest } from '../../test/fake'
-import { forecastOf, INCOMPLETE, ITEMS, linked, unlinked } from '../../test/calendar'
+import { forecastOf, INCOMPLETE, ITEMS, linked, tripSummary, unlinked } from '../../test/calendar'
 import { planServer, renderPlan } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -24,8 +24,21 @@ describe('Coming up', () => {
     expect(sections.queryByRole('button', { name: 'Coming up' })).not.toBeInTheDocument()
   })
 
-  it('lays out the weeks ahead, with what to set aside for each event', async () => {
-    planServer({ calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) })
+  it('lays out the weeks ahead, with what to set aside and trips opening their page', async () => {
+    planServer({
+      calendar_status: () => linked(),
+      get_forecast: () => forecastOf(ITEMS),
+      list_trips: () => [
+        tripSummary(),
+        tripSummary({
+          name: null,
+          source: 'spending',
+          startsOn: '2026-07-01',
+          endsOn: '2026-07-01',
+          totalCents: 15000,
+        }),
+      ],
+    })
     renderPlan('/plan/ahead')
     const thisWeek = await screen.findByRole('region', { name: 'This week' })
     const sections = within(screen.getByRole('group', { name: 'Plan section' }))
@@ -53,6 +66,16 @@ describe('Coming up', () => {
     expect(
       screen.getByRole('region', { name: 'Nothing due the week of Dec 22' }),
     ).toHaveTextContent('Nothing due the week of Dec 22.')
+    const trips = within(screen.getByRole('region', { name: 'Trips' }))
+    expect(await trips.findByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
+      'href',
+      '/trips/2026-12-10/2026-12-14',
+    )
+    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveTextContent('Dec 10 to Dec 14')
+    expect(trips.getByRole('link', { name: /Travel/ })).toHaveAttribute(
+      'href',
+      '/trips/2026-07-01/2026-07-01',
+    )
   })
 
   it('opens a bill’s own form, and a purchase to save for an event', async () => {
@@ -153,7 +176,7 @@ describe('Coming up', () => {
     expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
   })
 
-  it('shows bills and set-asides in one week together', async () => {
+  it('says when there are no trips, and shows bills and set-asides in one week together', async () => {
     planServer({
       calendar_status: () => linked(),
       get_forecast: () =>
@@ -166,6 +189,7 @@ describe('Coming up', () => {
     expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
       '$60 in bills, $60 to set aside',
     )
+    expect(await screen.findByText('No recent or coming trips.')).toBeVisible()
   })
 
   it('shows no amount and no goal link for an event with nothing left to set aside', async () => {
@@ -188,7 +212,7 @@ describe('Coming up', () => {
       get_forecast: () => forecastOf(ITEMS, INCOMPLETE),
     })
     renderPlan('/plan/ahead')
-    await screen.findByRole('region', { name: 'This week' })
+    await screen.findByText('No recent or coming trips.')
     const note = screen.getByRole('status')
     expect(note).toHaveTextContent(INCOMPLETE)
     expect(note).toHaveClass('notice')
@@ -209,5 +233,21 @@ describe('Coming up', () => {
     )
     renderPlan('/plan/ahead')
     expect(await screen.findByRole('alert')).toHaveTextContent('Forecast broke')
+  })
+
+  it('shows the weeks while trips load, and when trips could not be read', async () => {
+    planServer(
+      { calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) },
+      { '/api/actions/list_trips': failing('Trips broke', 500) },
+    )
+    const answer = holdRequest('/api/actions/list_trips')
+    renderPlan('/plan/ahead')
+    // Before, Coming up waited on trips, and failed whole with them.
+    expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
+    const trips = within(screen.getByRole('region', { name: 'Trips' }))
+    expect(trips.getByText('Loading trips')).toBeInTheDocument()
+    answer()
+    expect(await trips.findByRole('alert')).toHaveTextContent('Trips broke')
+    expect(screen.getByRole('region', { name: 'This week' })).toBeVisible()
   })
 })
