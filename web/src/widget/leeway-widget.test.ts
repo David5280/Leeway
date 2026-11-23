@@ -25,6 +25,7 @@ import {
   parseJson,
   REFRESH_MINUTES,
   shortDate,
+  SUMMARY_VERSION,
   summaryUrl,
   THEME_COLORS,
   THEME_MODES,
@@ -118,7 +119,8 @@ describe('connecting', () => {
     expect(outcomeOf(500, {})).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, null)).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, 'text')).toEqual({ ok: false, problem: 'server' })
-    expect(outcomeOf(200, { ...summary, version: 2 })).toEqual({ ok: false, problem: 'outdated' })
+    // A summary of another shape: an older script on a newer server says to update.
+    expect(outcomeOf(200, { ...summary, version: 3 })).toEqual({ ok: false, problem: 'outdated' })
   })
 
   it('reads JSON, or nothing', () => {
@@ -210,23 +212,73 @@ describe('what the widget says', () => {
     })
   })
 
-  it('leads with cash until payday before any budget is set, "short" in red when bills do not fit', () => {
-    const until = (cents: number) =>
+  it('leads with cash until payday before any budget is set, $0 in red when bills do not fit', () => {
+    const until = (cents: number, shortfallCents: number, paydayEstimate = false) =>
       widgetSummary({
-        headline: { kind: 'until_payday', cents, perDayCents: 2_000, payday: '2026-11-28' },
+        headline: {
+          kind: 'until_payday',
+          cents,
+          shortfallCents,
+          perDayCents: 2_000,
+          payday: '2026-11-28',
+          paydayEstimate,
+        },
       })
-    expect(headlineOf(until(22_000))).toEqual({
+    expect(headlineOf(until(22_000, 0))).toEqual({
       label: 'Until payday',
       value: '$220',
       tone: 'ink',
       note: 'About $20 a day until Nov 28',
     })
-    expect(headlineOf(until(-4_000))).toEqual({
+    // $0, as the Overview shows it, with the shortfall on its own line.
+    expect(headlineOf(until(0, 4_000))).toEqual({
       label: 'Until payday',
-      value: '$40 short',
+      value: '$0',
       tone: 'over',
-      note: 'Bills due before Nov 28 are more than your cash',
+      note: 'Checking is $40 short of bills due by Nov 28',
     })
+    // Against a payday that is only a guess, the shortfall may be less: said, not red.
+    expect(headlineOf(until(0, 4_000, true))).toEqual({
+      label: 'Until payday',
+      value: '$0',
+      tone: 'ink',
+      note: 'Checking may be $40 short of bills due by about Nov 28',
+    })
+  })
+
+  it('says checking is short of the bills when over budget too, as the Overview does', () => {
+    const over = troubledWidgetSummary()
+    const short = { ...over, headline: { ...over.headline, shortfallCents: 12_000 } }
+    expect(headlineOf(short as typeof over)).toEqual({
+      label: 'Safe to spend',
+      value: '$50 over',
+      tone: 'over',
+      note: 'Checking is $120 short of bills due by Nov 28',
+    })
+  })
+
+  it('is version 2: a script from before the shortfall had its own field asks to be updated', () => {
+    // Version 1 sent the shortfall as a negative figure; that script would show $0 and no shortfall.
+    expect(SUMMARY_VERSION).toBe(2)
+    expect(outcomeOf(200, { ...widgetSummary(), version: 3 })).toEqual({
+      ok: false,
+      problem: 'outdated',
+    })
+  })
+
+  it('asks for Leeway itself to be updated when this script is the newer one', () => {
+    // A version 1 server cannot send the shortfall field this script reads.
+    expect(outcomeOf(200, { ...widgetSummary(), version: 1 })).toEqual({
+      ok: false,
+      problem: 'server_outdated',
+    })
+    expect(MESSAGES.server_outdated).toEqual({
+      title: 'Update your Leeway',
+      detail:
+        'This script is newer than your Leeway. Update Leeway, or copy the script again from Settings > Widget.',
+    })
+    // The older-script message never says the server is the newer one here.
+    expect(MESSAGES.outdated.detail).toContain('Your Leeway is newer than this script')
   })
 
   it('lists budget left, net worth and the next bill', () => {
@@ -386,7 +438,14 @@ describe('problem messages', () => {
     for (const problem of ['offline', 'busy', 'server'] as const) {
       expect(MESSAGES[problem].detail).toContain(`${REFRESH_MINUTES} minutes`)
     }
-    for (const problem of ['setup', 'bad_token', 'bad_address', 'outdated'] as const) {
+    const settingsHelps = [
+      'setup',
+      'bad_token',
+      'bad_address',
+      'outdated',
+      'server_outdated',
+    ] as const
+    for (const problem of settingsHelps) {
       expect(MESSAGES[problem].detail).toMatch(/Settings > Widget/)
     }
   })

@@ -2,9 +2,10 @@
 // (savings/rate.ts): money the bank labeled as moved to savings or
 // investments, plus the payroll deductions Leeway knows (a pension the owner
 // entered, a 401(k), 457 or 403(b) a recent paystub shows), out of each
-// month's pay. Each deduction counts only from when it is known to exist, and
-// the running month only in proportion to the pay it has seen so far
-// (savings/payrollMonths.ts). A month that began before the bank history did
+// month's pay. A month's pay is the paychecks that landed in it (see
+// pay/current.ts), never money from people, refunds or transfers in. Each
+// deduction counts only from when it is known to exist, and the running month
+// only in proportion to the pay it has seen so far (savings/payrollMonths.ts). A month that began before the bank history did
 // is left off, since it holds only part of its pay. A month with no pay seen,
 // or nothing saved that Leeway can see, has no rate rather than a rate of
 // zero, since a payroll deduction it does not know never reaches the bank.
@@ -16,7 +17,8 @@ import { listAccounts } from './accounts.js'
 import { currentPeriod } from './budgetReport.js'
 import { monthlyTotals, wholeMonths, type MonthTotals } from './monthlyTotals.js'
 import { latestPaystub } from './paystubs/paystubs.js'
-import { paySchedule } from './profile/income.js'
+import { paidBetween } from './pay/current.js'
+import { typicalMonth } from './profile/income.js'
 import { pensionsOf } from './retirement/pensionStore.js'
 import { savingsTransferDestination, type TransferCandidate } from './savings/contributions.js'
 import {
@@ -50,6 +52,8 @@ export interface SavingsRates {
   targetPercent: number | null
   /** What was counted, said beside the chart, naming only what was not and how to add it. */
   note: string
+  /** True while the current employer has paid once, so a typical month of pay is a projection. */
+  payEstimated: boolean
 }
 
 /** Net money moved to savings and investments in each month, never below zero. */
@@ -64,14 +68,19 @@ function savedByMonth(months: MonthTotals[], transfers: TransferCandidate[]): nu
   })
 }
 
-/** Each month's rate from its pay, what moved to savings, and the payroll deductions known then. */
+/**
+ * Each month's rate from its pay (incomeCents: the paychecks that landed in
+ * it), what moved to savings, and the payroll deductions known then.
+ * `typicalMonthCents` is a typical month of pay, for the month still running.
+ */
 export function monthRates(
   months: MonthTotals[],
   transfers: TransferCandidate[],
   payroll: PayrollStream[],
+  typicalMonthCents: number | null = null,
 ): MonthRate[] {
   const saved = savedByMonth(months, transfers)
-  const runningShare = runningPayShare(months)
+  const runningShare = runningPayShare(months, typicalMonthCents)
   return months.map((month, i) => {
     const { pensionCents, planCents } = monthPayroll(payroll, month, runningShare)
     const sources: SavingSource[] = [
@@ -102,7 +111,7 @@ export async function savingsRates(
 ): Promise<SavingsRates> {
   const { today } = currentPeriod(settings, now)
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const months = wholeMonths(await monthlyTotals(db, settings, now, count))
+  const totals = wholeMonths(await monthlyTotals(db, settings, now, count))
   const accounts = await listAccounts(db, false)
   const transfers = await transferCandidates(
     db,
@@ -111,12 +120,18 @@ export async function savingsRates(
     today,
   )
   const pensions = await pensionsOf(db, accounts)
-  const pay = await paySchedule(db, settings, today)
+  const { pay, monthly, currentPay } = await typicalMonth(db, settings, today)
   const paystub = await latestPaystub(db)
   const payroll = payrollStreams(pensions, pay.cadence, paystub, today)
+  // Pay is paychecks alone, not every deposit filed as income.
+  const months = totals.map((month) => ({
+    ...month,
+    incomeCents: paidBetween(currentPay, month.start, month.end),
+  }))
   return {
-    months: monthRates(months, transfers, payroll),
+    months: monthRates(months, transfers, payroll, monthly.incomeCents),
     targetPercent: settings.savingsPlan.savingsRateTargetPercent,
     note: payrollNote({ ...streamKinds(payroll), stalePlan: paystubPlan(paystub, today).stale }),
+    payEstimated: monthly.incomeEstimated,
   }
 }

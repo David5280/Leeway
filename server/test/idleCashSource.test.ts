@@ -1,19 +1,12 @@
 // Reading idle cash's inputs (idleCashSource.ts) and get_idle_cash end to
-// end: checking counted without an overdraft line, card balances kept back,
-// bills due on payday counted, bill payments out of typical spending, and
-// nothing said without a known payday or spending to go by.
+// end: checking, payday and the bills due by then as the cash flow reads
+// them (so never an overdraft line), card balances kept back, bill payments
+// out of typical spending, and nothing said without a known balance, payday
+// or spending to go by.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Account } from '../src/domain/accounts.js'
-import { scheduleOf, type Bill } from '../src/domain/bills.js'
-import {
-  anyOverdrawn,
-  billsByPayday,
-  cardsOwed,
-  checkingCash,
-  dailySpend,
-  isTight,
-} from '../src/domain/idleCashSource.js'
+import { anyOverdrawn, cardsOwed, dailySpend, isTight } from '../src/domain/idleCashSource.js'
 import type { MonthTotals } from '../src/domain/monthlyTotals.js'
 import { settingsSchema } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
@@ -43,30 +36,6 @@ const account = (fields: Partial<Account> = {}): Account =>
 const card = (balanceCents: number, fields: Partial<Account> = {}) =>
   account({ type: 'credit', subtype: 'credit card', kind: 'credit_card', balanceCents, ...fields })
 
-describe('checkingCash', () => {
-  it('counts each checking account at the lower of its balance and available balance', () => {
-    // A $9,000 available balance on $1,000 is mostly an overdraft line: borrowing, not cash.
-    expect(checkingCash([account({ balanceCents: 100_000, availableCents: 900_000 })])).toBe(
-      100_000,
-    )
-    // Pending charges bring available below the balance.
-    expect(checkingCash([account({ balanceCents: 100_000, availableCents: 80_000 })])).toBe(80_000)
-    expect(checkingCash([account({ balanceCents: null, availableCents: 70_000 })])).toBe(70_000)
-    expect(checkingCash([account({ balanceCents: null })])).toBe(0)
-  })
-
-  it('adds up counted checking only', () => {
-    const accounts = [
-      account(),
-      account({ balanceCents: 20_000 }),
-      account({ kind: 'savings', subtype: 'savings', balanceCents: 1_000_000 }),
-      account({ hidden: true, balanceCents: 1_000_000 }),
-      account({ unsharedAt: '2026-11-01', balanceCents: 1_000_000 }),
-    ]
-    expect(checkingCash(accounts)).toBe(30_000)
-  })
-})
-
 describe('cardsOwed', () => {
   it('adds up what counted cards owe, and nothing for one in credit', () => {
     const cards = [
@@ -79,41 +48,6 @@ describe('cardsOwed', () => {
       account({ balanceCents: 900_000 }),
     ]
     expect(cardsOwed(cards)).toBe(50_000)
-  })
-})
-
-describe('billsByPayday', () => {
-  const rent = (anchorDate: string, fields: Partial<Bill> = {}) =>
-    scheduleOf(
-      {
-        id: 'rent',
-        name: 'Rent',
-        kind: 'bill',
-        amountCents: 200_000,
-        cadence: 'month',
-        anchorDate,
-        matchPattern: null,
-        categoryId: null,
-        autopay: false,
-        reads: 'bank_text',
-        accountId: null,
-        lastPaidDate: null,
-        lastPaidCents: null,
-        ...fields,
-      },
-      '2026-11-17',
-    )
-
-  it('counts a bill due on payday itself, since pay can land after it is drawn', () => {
-    expect(billsByPayday([rent('2026-11-27')], '2026-11-27')).toBe(200_000)
-    expect(billsByPayday([rent('2026-11-26')], '2026-11-27')).toBe(200_000)
-    expect(billsByPayday([rent('2026-11-28')], '2026-11-27')).toBe(0)
-  })
-
-  it('counts every time a bill falls due by then', () => {
-    const weekly = rent('2026-11-18', { cadence: 'week', amountCents: 1_000 })
-    // Nov 18 and Nov 25 fall before a payday of Nov 27.
-    expect(billsByPayday([weekly, rent('2026-11-20')], '2026-11-27')).toBe(202_000)
   })
 })
 
@@ -169,13 +103,12 @@ describe('anyOverdrawn', () => {
 })
 
 describe('isTight', () => {
-  const cash = { checkingCents: 100_000, billsCents: 50_000 }
+  const cash = { shortfallCents: 0 }
   const totals = { budgetedCents: 80_000, leewayCents: 1 }
 
-  it('is tight when the bills by payday outrun the cash in checking', () => {
+  it('is tight when the cash flow is short of the bills by payday', () => {
     expect(isTight(cash, totals)).toBe(false)
-    expect(isTight({ ...cash, billsCents: 100_000 }, totals)).toBe(false)
-    expect(isTight({ ...cash, billsCents: 100_001 }, totals)).toBe(true)
+    expect(isTight({ shortfallCents: 1 }, totals)).toBe(true)
   })
 
   it('is tight when the budgets are spent to what they allow, or past it', () => {
@@ -208,10 +141,11 @@ describe('get_idle_cash', () => {
     })
 
   /**
-   * Checking holding `balance`, with $50 a day spent over August, September
-   * and October ($1,550, $1,500 and $1,550), each from the first of the month.
+   * Checking holding `balance` (null when the bank gives none), with $50 a
+   * day spent over August, September and October ($1,550, $1,500 and
+   * $1,550), each from the first of the month.
    */
-  async function checking(balanceCents: number) {
+  async function checking(balanceCents: number | null) {
     const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents })
     const spent = { '2026-08-01': 155_000, '2026-09-01': 150_000, '2026-10-01': 155_000 }
     for (const [date, amountCents] of Object.entries(spent)) {
@@ -265,6 +199,45 @@ describe('get_idle_cash', () => {
     })
   })
 
+  it('holds back spending to the next paycheck when today’s is still pending', async () => {
+    ctx.setNow(new Date('2026-11-20T18:00:00Z'))
+    const accountId = await checking(1_000_000)
+    const deposit = (date: string, name: string, amountCents: number, pending = false) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents, pending })
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'])
+      await deposit(date, 'ACME PAYROLL', -250_000)
+    // Today's paycheck is still pending; $30 from Etsy lands on the 22nd each month.
+    await deposit('2026-11-20', 'ACME PAYROLL', -250_000, true)
+    for (const date of ['2026-08-22', '2026-09-22', '2026-10-22'])
+      await deposit(date, 'ETSY PAYOUT', -3_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 200_000,
+      cadence: 'month',
+      anchorDate: '2026-12-01',
+    })
+    // Rent on Dec 1 and 14 days of spending to the paycheck on Dec 4, as the cash flow reads it.
+    expect(await call('get_idle_cash')).toMatchObject({
+      nextPayday: '2026-12-04',
+      billsCents: 200_000,
+      spendingCents: 70_000,
+    })
+    const flow = await call('get_cash_flow')
+    expect(flow).toMatchObject({ nextPayday: '2026-12-04', billsDueCents: 200_000 })
+  })
+
+  it('says nothing when only money from a person comes in regularly', async () => {
+    const accountId = await checking(1_500_000)
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Zelle payment from Jane Doughty',
+        amountCents: -200_000,
+      })
+    }
+    expect(await call('get_idle_cash')).toMatchObject({ suggested: false, reason: 'no_payday' })
+  })
+
   it('counts a bill due on payday itself', async () => {
     await paidBiweekly()
     await checking(1_500_000)
@@ -277,6 +250,17 @@ describe('get_idle_cash', () => {
     expect(await call('get_idle_cash')).toMatchObject({
       billsCents: 200_000,
       idleCents: 1_180_000,
+    })
+  })
+
+  it('says no balance is known when the bank gives checking none', async () => {
+    await paidBiweekly()
+    await checking(null)
+    expect(await call('get_idle_cash')).toMatchObject({
+      suggested: false,
+      reason: 'no_balance',
+      checkingCents: 0,
+      idleCents: 0,
     })
   })
 

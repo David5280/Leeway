@@ -32,22 +32,53 @@ function paceWords(onTrack: boolean | null): string {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
-  if (!pay.cadence || !pay.nextPayday) return null
-  const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
-  return `Pay: ${CADENCE_WORDS[pay.cadence]}${amount}, next on ${shortDate(pay.nextPayday, locale)}.`
+/** "Initech twice a month since Nov 13, about $2,000 each", for one of several employers. */
+function employerWords(
+  employer: FinancialProfile['pay']['employers'][number],
+  locale: string,
+  money: Money,
+): string {
+  const since = shortDate(employer.since, locale)
+  return `${employer.name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
 }
 
-function monthLine({ monthly }: FinancialProfile, money: Money): string | null {
-  if (monthly.months === 0) return null
-  const essential =
-    monthly.essentialSpendingCents === monthly.spendingCents
-      ? ''
-      : `, ${money(monthly.essentialSpendingCents!)} of it essential`
+function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
+  if (!pay.cadence || !pay.nextPayday) return null
+  if (pay.employers.length > 1) {
+    // Each employer's amount is listed, so a side job's guess is said too.
+    const estimate = pay.employers.some((employer) => employer.estimate)
+      ? ' This is an estimate until more paychecks confirm how often each employer pays.'
+      : ''
+    // A second job counts beside the first, so each is named with its own schedule.
+    const each = pay.employers.map((employer) => employerWords(employer, locale, money))
+    return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${estimate}`
+  }
+  const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
+  const from = pay.employer ? ` from ${pay.employer}` : ''
+  const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
+  // Too few paychecks cannot show how often pay comes, so the schedule is said to be a guess.
+  const estimate = pay.estimate
+    ? ' This is an estimate until more paychecks confirm how often pay comes.'
+    : ''
+  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${estimate}`
+}
+
+/** "current employer", or "2 current employers" when a second job pays too. */
+function employersWord({ employers }: FinancialProfile['pay']): string {
+  return employers.length > 1 ? `${employers.length} current employers` : 'current employer'
+}
+
+function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): string | null {
+  if (monthly.spendingCents === null) return null
   // Pay not seen is left out here and listed as not known, never shown as $0.
+  const estimated = monthly.incomeEstimated ? ' (estimated until more paychecks confirm it)' : ''
   const payIn =
-    monthly.incomeCents === null ? '' : `${money(monthly.incomeCents)} take-home pay in, `
-  return `Typical month (last ${plural(monthly.months, 'whole month')}): ${payIn}${money(monthly.spendingCents!)} spent${essential}.`
+    monthly.incomeCents === null
+      ? ''
+      : `${money(monthly.incomeCents)} take-home pay in from the ${employersWord(pay)}${estimated}, `
+  const since = shortDate(monthly.spendingSince!, locale)
+  // Essentials are left to the emergency fund line, so the digest gives one figure to quote.
+  return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent.`
 }
 
 function accountsLine({ accounts }: FinancialProfile, money: Money): string | null {
@@ -216,8 +247,9 @@ function pensionRule({ retirement }: FinancialProfile): string | null {
 function unknownsLine(profile: FinancialProfile): string | null {
   const unknown: string[] = []
   if (!profile.pay.cadence) unknown.push('pay schedule')
-  if (profile.monthly.months === 0) unknown.push('a typical month of income and spending')
-  else if (profile.monthly.incomeCents === null) unknown.push('take-home pay')
+  if (profile.monthly.spendingCents === null) unknown.push('a typical month of spending')
+  if (profile.monthly.incomeCents === null)
+    unknown.push('take-home pay (no paychecks from a current employer)')
   if (profile.savings.hasSavings && !profile.emergencyFund) unknown.push('emergency fund')
   if (!profile.savingsRate) unknown.push('savings rate')
   const retirementMatters =

@@ -2,11 +2,12 @@
 // words. Pure: the check-in comes in, sentences come out, nothing is read here.
 // It is always available, and it is the fallback when an AI writer is off or fails.
 
-import { daysBetween, type IsoDate } from '../lib/dates.js'
+import { daysBetween } from '../lib/dates.js'
 import { periodWord, shortDate } from '../lib/words.js'
 import type { AccountAlert } from './accountAlerts.js'
 import type { Checkin } from './checkin.js'
 import type { Settings } from './settings.js'
+import { spendableNote, untilWords, type NoteFacts } from './spendable.js'
 
 /** A headline and a few short points, the shape every summary writer returns. */
 export interface SummaryText {
@@ -29,11 +30,12 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  * `onTrack` opens the on-track sentence, so it can read as a point under an alert.
  */
 function budgetSentence(
-  { budget }: Checkin,
+  checkin: Checkin,
   money: Money,
-  word: string,
+  { word, locale }: { word: string; locale: string },
   onTrack = "You're on track",
 ): string {
+  const { budget } = checkin
   // Today still counts, as it does for the money left per day.
   const days = plural(budget.daysLeft + 1, 'day', 'days')
   if (budget.budgetedCents === 0) {
@@ -52,6 +54,10 @@ function budgetSentence(
   if (budget.leewayCents < 0) {
     return `Spending has dipped ${money(-budget.leewayCents)} into what you set aside for goals.`
   }
+  // The budget has more room than checking can cover: the cash is what can be spent.
+  // While the budget leads, an overdraft's line is a point of its own instead.
+  const cashLine = cashNote(checkin, money, locale)
+  if (cashLine && checkin.spendable?.limitedBy !== 'budget') return cashLine
   const afterGoals =
     budget.setAsideCents > 0 ? ` after ${money(budget.setAsideCents)} set aside for goals` : ''
   const perDay =
@@ -63,7 +69,7 @@ function budgetSentence(
  * The alert that outranks the budget: an overdrawn account or a card over its
  * limit. Alerts arrive most serious first, so it can only be the first one.
  */
-function urgentAlert({ alerts }: Checkin): AccountAlert | null {
+export function urgentAlert({ alerts }: Checkin): AccountAlert | null {
   const [first] = alerts
   return first?.severity === 'urgent' ? first : null
 }
@@ -73,8 +79,12 @@ function urgentAlert({ alerts }: Checkin): AccountAlert | null {
  * since a budget can be on track while an account is below zero. Otherwise,
  * how the period is going.
  */
-export function headline(checkin: Checkin, money: Money, word: string): string {
-  return urgentAlert(checkin)?.summary ?? budgetSentence(checkin, money, word)
+export function headline(
+  checkin: Checkin,
+  money: Money,
+  words: { word: string; locale: string },
+): string {
+  return urgentAlert(checkin)?.summary ?? budgetSentence(checkin, money, words)
 }
 
 /**
@@ -93,9 +103,13 @@ function alertPoint(checkin: Checkin): string | null {
 }
 
 /** How the budget is going, as a point once an urgent alert has taken the headline. */
-function budgetPoint(checkin: Checkin, money: Money, word: string): string | null {
+function budgetPoint(
+  checkin: Checkin,
+  money: Money,
+  words: { word: string; locale: string },
+): string | null {
   if (!urgentAlert(checkin)) return null
-  return budgetSentence(checkin, money, word, 'Your budgets are on track')
+  return budgetSentence(checkin, money, words, 'Your budgets are on track')
 }
 
 /** How many other things the Heads up list says need doing today, if any. */
@@ -106,17 +120,51 @@ function urgentPoint({ attention }: Checkin): string | null {
   return `${plural(now, 'thing needs', 'things need')} you today. See Heads up.`
 }
 
-function cashPoint({ cashFlow, today }: Checkin, money: Money, locale: string): string | null {
-  // No cash accounts means nothing worth saying about payday.
-  if (cashFlow.cashCents === 0 && cashFlow.billsDueCents === 0) return null
-  const payday = shortDate(cashFlow.nextPayday, locale)
-  if (cashFlow.leftAfterBillsCents < 0) {
-    return `Bills before payday on ${payday} come to ${money(cashFlow.billsDueCents)}, ${money(-cashFlow.leftAfterBillsCents)} more than your cash.`
-  }
-  const days = daysBetween(today, cashFlow.nextPayday)
-  const until = days <= 0 ? 'payday today' : `payday on ${payday}`
-  return `${money(cashFlow.leftAfterBillsCents)} is free until ${until}, after bills.`
+/**
+ * The spendable note (spendable.ts) in the summary's own money format: the
+ * cash falling short, or the budget having more room than the cash.
+ */
+export function cashNote(checkin: Checkin, money: Money, locale: string): string | null {
+  const { spendable, cashFlow, budget } = checkin
+  // Without a budget period to compare, the cash alone leads, and can still fall short.
+  const facts: NoteFacts = spendable
+    ? { ...spendable, afterGoals: budget.setAsideCents > 0 }
+    : {
+        ...spendableOf(cashFlow),
+        ...cashFlow,
+        budgetLeftCents: null,
+        limitedBy: 'cash',
+        afterGoals: false,
+      }
+  return spendableNote(facts, money, locale)
 }
+
+/** Safe to spend until payday, unless a line already said what the cash allows. */
+function cashPoint(
+  checkin: Checkin,
+  money: Money,
+  locale: string,
+  said: (string | null)[],
+): string | null {
+  const { cashFlow, today } = checkin
+  // No checking balance means nothing worth saying about payday.
+  if (!cashFlow.cashKnown) return null
+  const note = cashNote(checkin, money, locale)
+  if (note) return said.includes(note) ? null : note
+  // While the budget leads, the budget line already said what can be spent;
+  // the cash behind it would read as a second, larger figure to spend.
+  if (checkin.spendable?.limitedBy === 'budget') return null
+  const days = daysBetween(today, cashFlow.nextPayday)
+  const until = days <= 0 ? 'until payday today' : untilWords(spendableOf(cashFlow), locale)
+  return `${money(cashFlow.safeCents)} is safe to spend ${until}, after bills.`
+}
+
+/** The payday facts of a cash flow, as the words for it read them. */
+const spendableOf = (cashFlow: Checkin['cashFlow']) => ({
+  payday: cashFlow.nextPayday,
+  paydaySource: cashFlow.paydaySource,
+  paydayEstimate: cashFlow.paydayEstimate,
+})
 
 function pacePoint({ budget }: Checkin, money: Money, word: string): string | null {
   const diff = budget.spentCents - budget.previousSpentToDateCents
@@ -155,95 +203,21 @@ export function plainSummary(
   money: Money,
 ): SummaryText {
   const word = periodWord(settings.period.kind)
+  const words = { word, locale: settings.locale }
+  const top = headline(checkin, money, words)
+  const budgetLine = budgetPoint(checkin, money, words)
   const points = [
     alertPoint(checkin),
-    budgetPoint(checkin, money, word),
+    budgetLine,
     urgentPoint(checkin),
-    cashPoint(checkin, money, settings.locale),
+    // The cash line is left out when the headline or budget line already said it.
+    cashPoint(checkin, money, settings.locale, [top, budgetLine]),
     pacePoint(checkin, money, word),
     goalPoint(checkin, money, settings.locale),
     netWorthPoint(checkin, money),
   ].filter((point): point is string => point !== null)
-  return { headline: headline(checkin, money, word), points: points.slice(0, MAX_POINTS) }
+  return { headline: top, points: points.slice(0, MAX_POINTS) }
 }
-
-/**
- * What an AI writer is told: the check-in's numbers, already formatted as
- * money and dates so nothing has to be converted from cents. Only totals,
- * the heads-up list, account alerts with the account's display name, and
- * bill and goal names: no account numbers or transactions.
- */
-export function summaryFacts(
-  checkin: Checkin,
-  settings: Pick<Settings, 'period' | 'locale'>,
-  money: Money,
-) {
-  const { budget, cashFlow } = checkin
-  const date = (iso: IsoDate) => shortDate(iso, settings.locale)
-  return {
-    today: date(checkin.today),
-    period: {
-      kind: periodWord(settings.period.kind),
-      ends: date(budget.periodEnd),
-      daysLeftCountingToday: budget.daysLeft + 1,
-      budgeted: money(budget.budgetedCents),
-      spent: money(budget.spentCents),
-      left: money(budget.leftCents),
-      setAsideForGoals: money(budget.setAsideCents),
-      leftAfterGoals: money(budget.leewayCents),
-      safeToSpendPerDay: budget.safePerDayCents === null ? null : money(budget.safePerDayCents),
-      budgetedSpendingByPeriodEndAtThisPace: money(budget.projectedBudgetedCents),
-      income: money(budget.incomeCents),
-      spentByThisPointLastPeriod: money(budget.previousSpentToDateCents),
-    },
-    untilPayday: {
-      payday: date(cashFlow.nextPayday),
-      cashInChecking: money(cashFlow.cashCents),
-      billsDueBeforePayday: money(cashFlow.billsDueCents),
-      leftAfterBills: money(cashFlow.leftAfterBillsCents),
-    },
-    // Account alerts have their own list below, so the heads-up list leaves them out.
-    headsUp: checkin.attention
-      .filter((item) => item.topic !== 'account')
-      .map(({ priority, message }) => ({ priority, message })),
-    accountAlerts: checkin.alerts.map((alert) => alert.summary),
-    // An overdrawn account or a card over its limit outranks the budget, so the
-    // writer is handed the headline rather than trusted to lead with it.
-    fixedHeadline: urgentAlert(checkin)?.summary ?? null,
-    goals: checkin.goals.map((g) => ({
-      name: g.name,
-      kind: g.kind,
-      percentDone: g.percent,
-      stillToGo: money(g.remainingCents),
-      targetDate: g.targetDate && date(g.targetDate),
-      setAsideEachPeriod: g.perPeriodCents === null ? null : money(g.perPeriodCents),
-      onTrack: g.onTrack,
-      status: g.status,
-    })),
-    debts: checkin.debts && {
-      owed: money(checkin.debts.owedCents),
-      debtFreeDate: checkin.debts.debtFreeDate,
-    },
-    netWorthChangeLast30Days: money(checkin.netWorth.changeCents),
-    // With only a pension there is no balance to speak of, so nothing is said.
-    savingsAndInvestments: checkin.savings?.hasSavingsAccounts
-      ? {
-          total: money(checkin.savings.totalCents),
-          changeThisMonth:
-            checkin.savings.changeThisMonthCents === null
-              ? null
-              : money(checkin.savings.changeThisMonthCents),
-          changeMeasuredSince: checkin.savings.changeSince && date(checkin.savings.changeSince),
-          emergencyFundMonthsCovered: checkin.savings.emergencyFundMonths,
-          emergencyFundTargetMonths: checkin.savings.emergencyFundTargetMonths,
-          // No savings rate or pension figures: the bank sees only part of what is saved,
-          // and the summary needs neither to say how things are going.
-        }
-      : null,
-  }
-}
-
-export type SummaryFacts = ReturnType<typeof summaryFacts>
 
 /**
  * The summary without the lines an alert list beside it already says, for

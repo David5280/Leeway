@@ -1,6 +1,10 @@
 // The headline widget and the Overview's hero: how much room is left in the
-// budget, what that is per day, and a ring of how much of the budget is used against how far through the period
-// today is. Tapping it shows the math (lib/drills/budget.ts).
+// budget, held to what is safe to spend before payday (the server's
+// spendable), what that is per day, and a ring of how much of the budget is
+// used against how far through the period today is. When checking holds less
+// than the budget has left, the cash leads and one line says why; it is red
+// only for an overdraft or a shortfall. Tapping it shows the math
+// (lib/drills/budget.ts).
 
 import { Link } from 'react-router-dom'
 import type { Budget } from '../api/client'
@@ -12,7 +16,7 @@ import type { Status } from '../components/design/StatusPill'
 import { Dot } from '../components/ui'
 import { useApp } from '../lib/app'
 import { leewayDrill } from '../lib/drills/budget'
-import { periodWord } from '../lib/format'
+import { dayLabel, periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
 
 /** Each goal's share held back this period, which the drill-down's math takes out. */
@@ -63,9 +67,43 @@ export function paceWords(used: number, through: number): string {
   return used < through ? "You're under pace." : "You're over pace."
 }
 
+/** The budget's room held to the cash, in this period only, while the cash is the lesser. */
+function cashLead(budget: Budget): Budget['spendable'] {
+  const { spendable, period, totals } = budget
+  if (!spendable || period.offset !== 0 || totals.leewayCents < 0) return null
+  return spendable.limitedBy === 'cash' ? spendable : null
+}
+
+/** The hero's label: over budget, the cash leading, or the budget's room. */
+function heroLabel(over: boolean, cash: Budget['spendable']): string {
+  if (over) return 'Over budget'
+  return cash ? 'Safe to spend' : 'Left to spend'
+}
+
+/** The server's one line on the cash, red only for an overdraft or a shortfall. */
+function CashNote({ budget }: { budget: Budget }) {
+  const { spendable, period } = budget
+  // It shows in this period whenever the server wrote one, over budget too.
+  if (period.offset !== 0 || !spendable?.note) return null
+  return <p className={`small ${spendable.problem ? 'over' : 'muted'}`}>{spendable.note}</p>
+}
+
 /** What the room left means, in words: per day now, or plainly over. */
 function Caption({ budget }: { budget: Budget }) {
+  const { settings } = useApp()
   const { totals, period } = budget
+  const cash = cashLead(budget)
+  if (cash) {
+    return (
+      <>
+        About{' '}
+        <b>
+          <Money cents={cash.perDayCents} />
+        </b>{' '}
+        a day until {dayLabel(cash.payday, settings.locale)}
+      </>
+    )
+  }
   const daysToSpend = period.daysLeft + 1
   if (totals.leewayCents < 0) {
     return (
@@ -102,12 +140,13 @@ export function LeewayWidget({ budget }: WidgetProps) {
   const over = totals.leewayCents < 0
   const used = Math.round((totals.budgetedSpentCents / totals.budgetedCents) * 100)
   const through = isCurrent ? Math.round((period.daysElapsed / period.days) * 100) : null
+  const cash = cashLead(budget)
   return (
     <Card drill={leewayDrill(budget, money)} label="Your leeway" className="hero stack">
       <HeroFigure
-        label={over ? 'Over budget' : 'Left to spend'}
-        cents={Math.abs(totals.leewayCents)}
-        tone={over ? 'problem' : undefined}
+        label={heroLabel(over, cash)}
+        cents={cash ? cash.leadCents : Math.abs(totals.leewayCents)}
+        tone={over || cash?.problem ? 'problem' : undefined}
         caption={<Caption budget={budget} />}
         aside={
           <ProgressRing
@@ -119,6 +158,7 @@ export function LeewayWidget({ budget }: WidgetProps) {
           />
         }
       />
+      <CashNote budget={budget} />
       <SetAsideList setAsides={budget.setAsides} />
       {through !== null && (
         // The ring shows the share used and marks today; this says what the two mean together.
