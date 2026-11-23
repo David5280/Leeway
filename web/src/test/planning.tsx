@@ -86,6 +86,7 @@ export function goal(
     createdOn,
     emergencyMonths,
     followedAccountIds,
+    trip,
     ...input
   } = fields
   return goalOf(
@@ -100,6 +101,7 @@ export function goal(
       createdOn: createdOn ?? '2026-09-01',
       emergencyMonths: emergencyMonths ?? null,
       followedAccountIds: followedAccountIds ?? null,
+      trip: trip ?? null,
     },
     facts,
     { today: TODAY, period: { kind: 'monthly', startDay: 1 } },

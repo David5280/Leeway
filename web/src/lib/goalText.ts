@@ -15,9 +15,19 @@ export interface ToneText {
   tone: Tone
 }
 
+/** A trip budget's goal once its trip starts: spent on the trip, so it reads as the trip. */
+const TRIP_STAGE_TEXT = {
+  trip_under_way: 'Trip under way. This goal is being spent on it.',
+  trip_done: 'Trip done. Close the goal when you are ready.',
+} as const
+
 /** What still stands between the goal and done, as a sentence. */
 export function planText(goal: Goal, money: Money, word: string, locale: string): string {
+  if (goal.status === 'trip_under_way' || goal.status === 'trip_done') {
+    return TRIP_STAGE_TEXT[goal.status]
+  }
   if (goal.status === 'reached') {
+    if (goal.trip) return `Ready for the trip. You have saved the full ${money(goal.targetCents)}.`
     return goal.kind === 'purchase'
       ? `Ready to buy. You have saved the full ${money(goal.targetCents)}.`
       : 'Reached. Nice work.'
@@ -38,12 +48,12 @@ export function planText(goal: Goal, money: Money, word: string, locale: string)
 
 /**
  * Whether recent progress makes the date, from the server's projection.
- * Null when there is nothing worth saying (reached, stale, or no date and no pace).
+ * Null when there is nothing worth saying (reached, stale, a trip started, or no date and no pace).
  * Said as the goal's own pace, so it never reads against the month the goal
  * order gives it when one amount fills goals one after another.
  */
 export function paceText(goal: Goal, locale: string): ToneText | null {
-  if (goal.status === 'reached' || goal.status === 'stale') return null
+  if (goal.status !== 'in_progress' && goal.status !== 'past_due') return null
   const projected = goal.projectedDate && longDate(goal.projectedDate, locale)
   if (goal.onTrack === true) {
     return { text: `On track: at its own recent pace, ready by ${projected}.`, tone: 'good' }
@@ -67,8 +77,11 @@ export function thisPeriodText(goal: Goal, money: Money, word: string): string |
 
 /** A few words for the overview: "$150 a month, on track". */
 export function shortPlan(goal: Goal, money: Money, word: string): ToneText {
+  if (goal.status === 'trip_under_way') return { text: 'Trip under way', tone: '' }
+  if (goal.status === 'trip_done') return { text: 'Trip done', tone: '' }
   if (goal.status === 'reached') {
-    return { text: goal.kind === 'purchase' ? 'Ready to buy' : 'Reached', tone: 'good' }
+    const ready = goal.trip ? 'Ready for the trip' : 'Ready to buy'
+    return { text: goal.kind === 'purchase' ? ready : 'Reached', tone: 'good' }
   }
   if (goal.status === 'past_due') return { text: 'Date passed', tone: 'over' }
   if (goal.status === 'stale') return { text: 'Account no longer shared', tone: 'warn' }

@@ -34,6 +34,7 @@ describe('progressOf', () => {
     createdOn: '2026-11-01',
     emergencyMonths: null,
     followedAccountIds: null as string[] | null,
+    trip: null,
   }
 
   it('works out what to set aside each month, counting this month', () => {

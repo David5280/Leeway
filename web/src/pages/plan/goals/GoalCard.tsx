@@ -1,5 +1,6 @@
 // One goal's card: how much is saved, what each budget period needs, whether
-// recent progress makes the date, and a timeline that shows it.
+// recent progress makes the date, and a timeline that shows it. A trip
+// budget's goal also links to its trip (TripGoal.tsx).
 
 import { Card } from '../../../components/design/Card'
 import type { Goal } from '../../../api/client'
@@ -9,6 +10,7 @@ import { useApp } from '../../../lib/app'
 import { periodWord } from '../../../lib/format'
 import { paceText, planText, thisPeriodText } from '../../../lib/goalText'
 import { AddMoney, History } from './Contributions'
+import { TripGoal } from './TripGoal'
 import { Money } from '../../../components/design/Money'
 
 /** Small labels by the name: what kind of goal, and whether the budget holds money for it. */
@@ -59,6 +61,7 @@ export function GoalCard({
       {thisPeriod && <span className="small muted">{thisPeriod}</span>}
       <GoalTimeline goal={goal} today={today} />
       {pace && <span className={`small ${pace.tone}`}>{pace.text}</span>}
+      <TripGoal goal={goal} />
       {goal.accountId ? (
         <span className="small muted">Follows the balance of {goal.accountName}.</span>
       ) : (

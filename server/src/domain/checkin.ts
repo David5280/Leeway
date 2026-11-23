@@ -153,6 +153,8 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       heldBackCents: g.heldBackCents,
       status: g.status,
       balanceAsOf: g.balanceAsOf,
+      /** True for a trip budget's goal, which is spent on the trip rather than bought. */
+      forTrip: g.trip !== null,
     })),
     debts:
       plans.debts.length === 0

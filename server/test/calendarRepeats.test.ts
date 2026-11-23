@@ -2,7 +2,7 @@
 // applied, which repeats are kept, and how a rule's days reach the window.
 
 import { describe, expect, it } from 'vitest'
-import type { CalendarEvent } from '../src/domain/calendar/ics.js'
+import { eventIdOf, type CalendarEvent } from '../src/domain/calendar/ics.js'
 import { kindOf, mayHaveKind } from '../src/domain/calendar/kinds.js'
 import { eventsIn, ics } from './fixtures/calendarFile.js'
 
@@ -231,6 +231,54 @@ describe('repeating events in a file', () => {
     ])
     expect(spans(eventsIn(text, 'UTC', { from: '2026-07-01', to: '2026-07-31' }))).toEqual([
       ['2026-06-25', '2026-07-09'],
+    ])
+  })
+
+  it('knows each repeat by the day it was set for, a repeat moved on its own too', () => {
+    const text = ics(
+      [
+        'UID:acme',
+        'SUMMARY:Work trip to Acme',
+        'DTSTART;VALUE=DATE:20261010',
+        'DTEND;VALUE=DATE:20261013',
+        'RRULE:FREQ=MONTHLY;COUNT=3',
+      ],
+      [
+        'UID:acme',
+        'SUMMARY:Work trip to Acme',
+        'RECURRENCE-ID;VALUE=DATE:20261110',
+        'DTSTART;VALUE=DATE:20261201',
+        'DTEND;VALUE=DATE:20261204',
+      ],
+      ['UID:once', 'SUMMARY:Lisbon trip', 'DTSTART;VALUE=DATE:20261220'],
+    )
+    expect(eventsIn(text, 'UTC', window).map((e) => [e.startsOn, eventIdOf(e)])).toEqual([
+      ['2026-10-10', 'acme 2026-10-10'],
+      ['2026-12-01', 'acme 2026-11-10'],
+      ['2026-12-10', 'acme 2026-12-10'],
+      ['2026-12-20', 'once'],
+    ])
+  })
+
+  it('reads a RECURRENCE-ID written in UTC on its series’ own clock', () => {
+    const text = ics(
+      [
+        'UID:class',
+        'SUMMARY:Pottery class',
+        // Half past midnight in Rome is still the day before in UTC.
+        'DTSTART;TZID=Europe/Rome:20261103T003000',
+        'RRULE:FREQ=WEEKLY;COUNT=2',
+      ],
+      [
+        'UID:class',
+        'SUMMARY:Pottery class',
+        'RECURRENCE-ID:20261109T233000Z',
+        'DTSTART;TZID=Europe/Rome:20261111T003000',
+      ],
+    )
+    expect(eventsIn(text, 'Europe/Rome', window).map((e) => e.repeatOn)).toEqual([
+      '2026-11-03',
+      '2026-11-10',
     ])
   })
 })

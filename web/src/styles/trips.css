@@ -1,6 +1,13 @@
-/* Trips: the trip page's parts. */
+/* Trips: the trip page's parts and the trip budget form. */
 
-/* A part of a trip: what it is, then what it cost. */
+/* The four parts of a trip budget, two across where there is room. */
+.trip-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+/* A part of a trip: what it is, then spent against planned. */
 .trip-part {
   display: flex;
   align-items: baseline;
