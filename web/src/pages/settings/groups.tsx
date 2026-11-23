@@ -8,6 +8,7 @@ import { AgentSection } from './Agent'
 import { AiModelsSection } from './AiModels'
 import { BanksSection } from './Banks'
 import { BudgetingSection } from './Budgeting'
+import { CalendarSection } from './Calendar'
 import { DataSection } from './Data'
 import { EmailSection } from './Email'
 import { LayoutSection } from './Layout'
@@ -84,6 +85,12 @@ export const SETTINGS_GROUPS = [
     title: 'AI models',
     description: 'The Claude model for each AI job, and a monthly limit on what they spend.',
     sections: [AiModelsSection],
+  },
+  {
+    id: 'calendar',
+    title: 'Calendar',
+    description: 'Connect a calendar to see trips and events coming up next to your bills.',
+    sections: [CalendarSection],
   },
   {
     id: 'widget',

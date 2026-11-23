@@ -295,6 +295,24 @@ describe('Saving for a purchase', () => {
     expect(screen.queryByRole('form', { name: 'New purchase' })).not.toBeInTheDocument()
   })
 
+  it('starts a purchase from an event coming up, with its name, price and day', async () => {
+    serve([])
+    renderPlan('/plan/goals?new=purchase&name=Lisbon+trip&price=125000&by=2026-12-10')
+    const form = within(await screen.findByRole('form', { name: 'New purchase' }))
+    expect(form.getByLabelText('What are you saving for?')).toHaveValue('Lisbon trip')
+    expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('1250')
+    expect(form.getByLabelText('Target date')).toHaveValue('2026-12-10')
+  })
+
+  it('leaves the price blank when the link gives none it can use', async () => {
+    serve([])
+    renderPlan('/plan/goals?new=purchase&name=Gala&price=lots')
+    const form = within(await screen.findByRole('form', { name: 'New purchase' }))
+    expect(form.getByLabelText('What are you saving for?')).toHaveValue('Gala')
+    expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('')
+    expect(form.getByLabelText('Target date')).toHaveValue('')
+  })
+
   it("shows a purchase's share held from the budget, its pace and its timeline", async () => {
     serve([bike])
     renderPlan('/plan/goals')

@@ -96,6 +96,13 @@ import {
   removeConnectionAction,
   syncBanksAction,
 } from './connections.js'
+import {
+  calendarStatusAction,
+  connectCalendarAction,
+  disconnectCalendarAction,
+  getForecastAction,
+  refreshCalendarAction,
+} from './calendar.js'
 import { deletePaystubAction, getPaystubAction, savePaystubAction } from './paystubs.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import {
@@ -226,6 +233,11 @@ export const actionList = [
   planDebtPayoffAction,
   getCashFlowAction,
   getIdleCashAction,
+  calendarStatusAction,
+  connectCalendarAction,
+  refreshCalendarAction,
+  disconnectCalendarAction,
+  getForecastAction,
   listConnectionsAction,
   syncBanksAction,
   createLinkTokenAction,
