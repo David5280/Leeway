@@ -314,7 +314,23 @@ describe('can_i_afford', () => {
     const result = await call('can_i_afford', { amountCents: 150000 })
     expect(result).toMatchObject({ verdict: 'no', leftAfterBillsCents: -6000, perDayAfterCents: 0 })
     expect(result.reasons[0]).toBe(
-      'It would leave $60 too little for the bills due before payday on 2026-11-27.',
+      'It would leave $60 too little for the bills due before payday on Nov 27.',
+    )
+  })
+
+  it('says when the payday it weighs against is only a guess', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100000 })
+    // One paycheck so far: how often pay comes is a guess.
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'ACME PAYROLL',
+      amountCents: -200000,
+      detailed: 'INCOME_SALARY',
+    })
+    const result = await call('can_i_afford', { amountCents: 150000 })
+    expect(result.verdict).toBe('no')
+    expect(result.reasons[0]).toMatch(
+      /^It would leave \$500 too little for the bills due before payday, best guess [A-Z][a-z]{2} \d{1,2}\.$/,
     )
   })
 

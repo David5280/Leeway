@@ -6,7 +6,7 @@
 
 import type { BudgetSummary } from './budget.js'
 import type { CashFlow } from './cashFlow.js'
-import { dailyRoom, type Spendable } from './spendable.js'
+import { dailyRoom, untilWords, type Spendable } from './spendable.js'
 
 export type Verdict = 'yes' | 'tight' | 'no'
 
@@ -57,17 +57,26 @@ function heldFor(budget: BudgetSummary, money: Money): string {
     : `the ${amount} set aside for your goals`
 }
 
+/** What a purchase is weighed against: the cash, the budget, and the budget's room held to the cash. */
+interface Weighed {
+  cashFlow: CashFlow
+  budget: BudgetSummary
+  room: Spendable
+}
+
 /** Whether the cash covers the purchase, the bills before payday and the goals, and how it squeezes each day. */
 function cashReason(
-  cashFlow: CashFlow,
-  budget: BudgetSummary,
+  { cashFlow, budget, room }: Weighed,
   leftAfterBills: number,
   money: Money,
+  locale: string,
 ): Reason | null {
   if (leftAfterBills < 0) {
+    const owed = cashFlow.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
+    // "before payday on Nov 27", or "before payday, best guess Nov 27" while payday is a guess.
     return {
       level: 'no',
-      text: `It would leave ${money(-leftAfterBills)} too little for the bills${cashFlow.overdraftCents > 0 ? ' and overdraft' : ''} due before payday on ${cashFlow.nextPayday}.`,
+      text: `It would leave ${money(-leftAfterBills)} too little for ${owed} due ${untilWords(room, locale)}.`,
     }
   }
   if (leftAfterBills < budget.totals.setAsideCents) {
@@ -147,10 +156,12 @@ function fitsReason(room: Spendable, perDayAfter: number, money: Money): string 
  */
 export function affordability(
   amountCents: number,
-  { cashFlow, budget, room }: { cashFlow: CashFlow; budget: BudgetSummary; room: Spendable },
+  weighed: Weighed,
   categoryId: string | null,
   money: Money,
+  locale: string,
 ): Affordability {
+  const { cashFlow, budget, room } = weighed
   const cashKnown = cashFlow.cashKnown
   // Safe to spend, or below zero by the shortfall when the bills already do not fit.
   const leftAfterBills = cashFlow.safeCents - cashFlow.shortfallCents - amountCents
@@ -166,7 +177,7 @@ export function affordability(
     ),
   }
   const reasons = [
-    cashKnown ? cashReason(cashFlow, budget, leftAfterBills, money) : null,
+    cashKnown ? cashReason(weighed, leftAfterBills, money, locale) : null,
     budgetReason(budgetRow, budget, money),
     squeezeReason(perDay, money),
   ].filter((reason) => reason !== null)

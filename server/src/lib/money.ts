@@ -1,4 +1,4 @@
-// Money as integer cents: converting bank amounts and formatting for agents.
+// Money as integer cents: converting bank amounts, formatting for agents, and the middle of a set.
 
 /**
  * Converts a decimal amount from a bank API (e.g. 12.34) to integer cents.
@@ -30,4 +30,13 @@ export function formatWholeCents(cents: number, currency = 'USD', locale = 'en-U
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Math.round(cents / 100))
+}
+
+/** The middle amount, rounded; the average of the two middles for an even count. */
+export function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2
+    ? sorted[middle]!
+    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
 }

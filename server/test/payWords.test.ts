@@ -6,7 +6,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { currentPay } from '../src/domain/pay/current.js'
-import { depositKind, type Deposit } from '../src/domain/pay/deposits.js'
+import { depositKind, namesBusiness, type Deposit } from '../src/domain/pay/deposits.js'
+import { payerKeyOf } from '../src/domain/pay/paychecks.js'
 import { biweeklyPaid } from './fixtures/paydays.js'
 
 const TODAY = '2026-11-17'
@@ -50,6 +51,8 @@ const FROM_A_PERSON = [
   'From Jane Doe paycheck share',
   // "co" in "co-worker" is no "Co" ending a business's name.
   'From Jane Doe co-worker paycheck',
+  // Nor is a state after a person's name, "CO" for Colorado.
+  'From Jane Doe Denver CO salary',
 ]
 
 describe('a deposit read by its words', () => {
@@ -96,6 +99,42 @@ describe('a deposit read by its words', () => {
   })
 })
 
+describe('a deposit coded as a transfer in', () => {
+  const TRANSFER_IN: Partial<Deposit> = { providerCategoryDetailed: 'TRANSFER_IN_DEPOSIT' }
+
+  it("reads a payroll's own words as pay, as some banks code a direct deposit", () => {
+    expect(kind('ACME CORP DIR DEP', TRANSFER_IN)).toBe('payroll')
+    expect(kind('ACME DES:PAYROLL ID:K3J9X', TRANSFER_IN)).toBe('payroll')
+    expect(kind('Transfer From ACME Corp Salary', TRANSFER_IN)).toBe('payroll')
+    expect(kind('Transfer from ACME Corp Payroll', TRANSFER_IN)).toBe('payroll')
+    expect(kind('Transfer from Acme Co direct deposit', TRANSFER_IN)).toBe('payroll')
+  })
+
+  it('keeps everything else a deposit, a person passing on pay included', () => {
+    expect(kind('Online Transfer from Savings', TRANSFER_IN)).toBe('deposit')
+    for (const name of FROM_A_PERSON) expect(kind(name, TRANSFER_IN), name).toBe('deposit')
+    // A person's transfer that carries a payroll's words, as a forwarded direct deposit can.
+    expect(kind('Transfer from Jane Doe direct deposit', TRANSFER_IN)).toBe('deposit')
+    expect(kind('From Jane Doe payroll', TRANSFER_IN)).toBe('deposit')
+    // A state after the person's name is no "Co" ending a business's name.
+    expect(kind('Transfer from Jane Doe Denver CO direct deposit', TRANSFER_IN)).toBe('deposit')
+    expect(
+      kind('Zelle from Jane Doe payroll', { ...TRANSFER_IN, name: 'Zelle from Jane Doe payroll' }),
+    ).toBe('person')
+    expect(kind('PAYROLL TAX REFUND', TRANSFER_IN)).toBe('deposit')
+  })
+})
+
+describe('money back with pay words', () => {
+  it('is never pay', () => {
+    expect(kind('WAGE WORKS REFUND')).toBe('refund')
+    expect(kind('WAGE WORKS REFUND', BROAD_INCOME)).toBe('refund')
+    expect(kind('ACME PAYROLL EXPENSE REIMBURSEMENT')).toBe('refund')
+    expect(kind('PAYROLL TAX REFUND')).toBe('tax_refund')
+    expect(kind('STATE TAX REFUND', BROAD_INCOME)).toBe('tax_refund')
+  })
+})
+
 describe('pay found from words alone', () => {
   /** What pay reads from ten Fridays two weeks apart under this name. */
   const payFrom = (name: string, fields: Partial<Deposit> = {}) =>
@@ -114,9 +153,107 @@ describe('pay found from words alone', () => {
     }
   })
 
+  it('finds one employer when every paycheck carries its own trace code', () => {
+    const codes = ['K3J9X', 'P7Q2M', 'Z8W4R', 'B5N1T', 'H2D6F', 'C9L3V', 'M4X8J', 'R1T5Y']
+    const deposits = biweeklyPaid('2026-07-31', 8).map((date, i) =>
+      deposit(date, `ACME DES:PAYROLL ID:${codes[i]}`),
+    )
+    const pay = currentPay(deposits, TODAY)
+    expect(pay.employers).toHaveLength(1)
+    expect(pay).toMatchObject({ cadence: 'biweek', nextPayday: '2026-11-20', estimate: false })
+  })
+
   it('finds no employer in a person passing on a share of their pay', () => {
     for (const name of FROM_A_PERSON) {
       expect(payFrom(name)).toMatchObject({ employers: [], nextPayday: null })
     }
+  })
+})
+
+describe('a deposit that names a business', () => {
+  const names = (name: string, merchantName: string | null = null) =>
+    namesBusiness({ name, merchantName })
+
+  it('reads the ending of a business name, in the bank text or the merchant name', () => {
+    expect(names('ACME CORP DIR DEP')).toBe(true)
+    expect(names('BLUTH CO PAYROLL')).toBe(true)
+    expect(names('ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(true)
+    expect(names('DIRECT DEP', 'Initech LLC')).toBe(true)
+  })
+
+  it("never reads an ACH line's own labels or a trailing state as a company", () => {
+    expect(names('ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(false)
+    expect(names('JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(false)
+    expect(names('JANE DOE DENVER CO')).toBe(false)
+    expect(names('JOHN SMITH DIR DEP')).toBe(false)
+  })
+})
+
+describe('who paid a deposit', () => {
+  const key = (name: string) => payerKeyOf({ name, merchantName: null })
+
+  it('drops a trace code that changes with every paycheck', () => {
+    expect(key('ACME DES:PAYROLL ID:K3J9X')).toBe(key('ACME DES:PAYROLL ID:Q7Z2W'))
+  })
+
+  it('keeps a name that holds digits when nothing else would name the payer', () => {
+    // Digits and all, so the key never reads as a bare "inc" or "company".
+    expect(key('7-ELEVEN')).toBe('7eleven')
+    expect(key('3M COMPANY')).toBe('3m company')
+    expect(key('12345 INC')).toBe('12345 inc')
+    expect(key('3M CO PAYROLL')).toBe('3m co payroll')
+    expect(key('3M CO DIR DEP')).toBe('3m co dir dep')
+    // Still one payer across paychecks: only the first word with a digit is kept.
+    expect(key('7-ELEVEN 0012345')).toBe(key('7-ELEVEN 0067890'))
+    expect(key('3M CO PAYROLL 0012345')).toBe('3m co payroll')
+  })
+
+  it("reads past an ACH line's own labels to a number that names the payer", () => {
+    expect(key('12345 INC DES:PAYROLL ID:K3J9X')).toBe('12345 inc des payroll')
+    expect(key('12345 INC DES:PAYROLL ID:K3J9X')).not.toBe(key('67890 INC DES:PAYROLL'))
+    expect(key('3M CO DES:PAYROLL')).toBe('3m co des payroll')
+    expect(key('3M CO PPD')).toBe('3m co ppd')
+  })
+
+  it('keeps a name spelled with a number beside pay words, never a code', () => {
+    expect(key('7-ELEVEN DIR DEP')).toBe('7eleven dir dep')
+    expect(key('7-ELEVEN DIR DEP 0012345')).toBe(key('7-ELEVEN DIR DEP 0067890'))
+    expect(key('PAYROLL ID:K3J9X')).toBe(key('PAYROLL ID:Q7Z2W'))
+    expect(key('7-ELEVEN, DIR DEP')).toBe('7eleven dir dep')
+  })
+
+  it('drops a date written with letters beside pay words alone', () => {
+    expect(key('PAYROLL 20NOV')).toBe('payroll')
+    expect(key('PAYROLL 04DEC')).toBe('payroll')
+    expect(key('PAYROLL 2026-NOV')).toBe('payroll')
+    expect(key('DIR DEP 1ST')).toBe('dir dep')
+    expect(key('DIR DEP 15TH')).toBe('dir dep')
+  })
+
+  it('drops the digits where the other words name the payer', () => {
+    expect(key('ACME CORP PAYROLL 0012345')).toBe('acme corp payroll')
+  })
+
+  it('drops a date or trace number beside pay words alone, which changes every paycheck', () => {
+    expect(key('PAYROLL 112026')).toBe('payroll')
+    expect(key('PAYROLL 120426')).toBe('payroll')
+    expect(key('DIRECT DEP 11/20')).toBe(key('DIRECT DEP 12/04'))
+    expect(key('SALARY 2026-11-20')).toBe('salary')
+    expect(key('DIR DEP 0042617')).toBe('dir dep')
+  })
+
+  it('reads paychecks dated in their text as one employer paying every two weeks', () => {
+    const dates = ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06', '2026-11-20']
+    // "PAYROLL 092526": the paycheck's own date, month, day and year.
+    const deposits = dates.map((date) =>
+      deposit(date, `PAYROLL ${date.slice(5, 7)}${date.slice(8)}26`),
+    )
+    const pay = currentPay(deposits, '2026-11-21')
+    expect(pay.employers).toHaveLength(1)
+    expect(pay).toMatchObject({
+      cadence: 'biweek',
+      nextPayday: '2026-12-04',
+      paycheckCents: 250_000,
+    })
   })
 })

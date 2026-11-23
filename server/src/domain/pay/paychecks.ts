@@ -17,15 +17,17 @@
 // a long gap, is told apart from one still paying.
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
+import { median } from '../../lib/money.js'
 import type { Cadence } from '../../lib/periods.js'
-import { merchantKey } from '../merchantKey.js'
+import { textKey } from '../merchantKey.js'
 import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
-import type { Deposit } from './deposits.js'
+import { isBusinessEnding, withoutPayWords, type Deposit } from './deposits.js'
+import { splitCycle } from './offCycle.js'
 import type { SemimonthSchedule } from './semimonthly.js'
 
 /** One paycheck: every deposit one payer made within a few days, added up. */
 export interface Paycheck {
-  /** Who paid, as merchantKey reads the bank's text. */
+  /** Who paid, as payerKeyOf reads the bank's text. */
   payerKey: string
   /** The day its first part landed. */
   date: IsoDate
@@ -41,6 +43,12 @@ export interface EmployerRun {
   /** The newest deposit, for naming the payer the way the app names it. */
   newest: Deposit
   paychecks: Paycheck[]
+  /**
+   * The paychecks on the payroll's cycle: all but the bonuses and the like
+   * paid between paydays (offCycle.ts). The cadence, the next payday and a
+   * usual paycheck are read from these; pay month by month counts them all.
+   */
+  cycle: Paycheck[]
   /** How often it pays: from its paychecks, a paystub's, or a cautious guess from one. */
   cadence: Cadence
   /** For twice a month, the two days of the month it pays on (or may, when ambiguous); else null. */
@@ -85,13 +93,61 @@ export const CAUTIOUS_CADENCE: Cadence = 'month'
 /** Slack for a payroll that posts a few days late. */
 const SLACK_DAYS = 3
 
-/** The middle amount, rounded; the average of the two middles for an even count. */
-export function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2
-    ? sorted[middle]!
-    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
+/** A word's key with its digits kept: "3M" is "3m", "7-ELEVEN" is "7eleven". */
+const keyWithDigits = (word: string) => word.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/** An ACH line's own labels, "DES:" and "PPD", which name no payer. */
+const ACH_LABELS = /\b(des|ppd)\b/gi
+/** A word spelled number first, "7-ELEVEN" or "3M", never a code like "K3J9X"; letters captured. */
+const NUMBER_FIRST = /^\d+-?(?<letters>[a-z]+)$/i
+/** Letters that make a number-first word a date, not a name: "1ST", "15TH", "20NOV". */
+const DATE_LETTERS = new Set(
+  'st nd rd th jan feb mar apr may jun jul aug sep sept oct nov dec'.split(' '),
+)
+
+/** Whether a word is a name spelled number first, trailing punctuation aside ("7-ELEVEN,"). */
+function isNumberName(word: string): boolean {
+  const letters = NUMBER_FIRST.exec(word.replace(/[.,;:]+$/, ''))?.groups?.letters
+  return letters !== undefined && !DATE_LETTERS.has(letters.toLowerCase())
+}
+
+/**
+ * Whether a number in the bank text is what names the payer: when the
+ * other words, less pay words and ACH labels, are only business endings
+ * ("12345 INC", "3M CO DES:PAYROLL"), or there are no other words at all.
+ * Beside pay words alone it names the payer only when it is spelled like a
+ * name ("7-ELEVEN DIR DEP"); a bare number there is a date or trace number
+ * that changes with every paycheck ("PAYROLL 112026", "DIRECT DEP 11/20").
+ */
+function numberNamesPayer(firstNumber: string, otherWords: string[]): boolean {
+  if (otherWords.length === 0) return true
+  const rest = textKey(withoutPayWords(otherWords.join(' ')).replace(ACH_LABELS, ' '))
+  if (rest === '') return isNumberName(firstNumber)
+  return rest.split(' ').every(isBusinessEnding)
+}
+
+/**
+ * Who paid a deposit, from its bank text without any word holding a digit,
+ * as a transfer's name drops its reference: "ACME DES:PAYROLL ID:K3J9X"
+ * carries a trace code that changes with every paycheck, and is still ACME.
+ * Where a number names the payer (numberNamesPayer), the first word holding
+ * a digit stays, digits and all, so "12345 INC" never reads as just "inc".
+ * Every other word is read as textKey reads it.
+ */
+export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): string {
+  const words = (deposit.merchantName ?? deposit.name).trim().split(/\s+/)
+  const holdsDigit = (word: string) => /\d/.test(word)
+  const otherWords = words.filter((word) => !holdsDigit(word))
+  const first = words.findIndex(holdsDigit)
+  if (!numberNamesPayer(words[first] ?? '', otherWords)) return textKey(otherWords.join(' '))
+  // The first word holding a digit keeps it; any later one is a reference, dropped.
+  return words
+    .map((word, i) => {
+      if (i === first) return keyWithDigits(word)
+      return holdsDigit(word) ? '' : textKey(word)
+    })
+    .filter((key) => key !== '')
+    .join(' ')
 }
 
 /**
@@ -100,7 +156,7 @@ export function median(values: number[]): number {
  */
 export function groupPaychecks(deposits: Deposit[]): Paycheck[] {
   const keyed = deposits
-    .map((deposit) => ({ deposit, payerKey: merchantKey(deposit) }))
+    .map((deposit) => ({ deposit, payerKey: payerKeyOf(deposit) }))
     .sort(
       (a, b) =>
         a.payerKey.localeCompare(b.payerKey) || a.deposit.date.localeCompare(b.deposit.date),
@@ -144,17 +200,19 @@ function outliersOf(paychecks: Paycheck[]): Paycheck[] {
   return paychecks.slice(-2).filter((paycheck) => paycheck.amountCents > OUTLIER_SHARE * usual)
 }
 
-/** A run of a payer's paychecks, its cadence read from them (or given). */
+/** A run of a payer's paychecks, its cadence read from those on its cycle (or given). */
 export function runOf(paychecks: Paycheck[], newest: Deposit, given: Cadence | null): EmployerRun {
+  const { cycle } = splitCycle(paychecks, given)
   return {
     payerKey: paychecks[0]!.payerKey,
     newest,
     paychecks,
+    cycle,
     ...runPattern(
-      paychecks.map((p) => p.date),
+      cycle.map((p) => p.date),
       given,
     ),
-    outliers: outliersOf(paychecks),
+    outliers: outliersOf(cycle),
   }
 }
 
@@ -207,10 +265,10 @@ export function stillPaying(run: EmployerRun, today: IsoDate, missed = MISSED_CY
   return daysBetween(run.paychecks.at(-1)!.date, today) <= missed * CYCLE_DAYS[cycle] + SLACK_DAYS
 }
 
-/** A usual paycheck in a run: the middle of the newest few, leaving out the outliers. */
+/** A usual paycheck in a run: the middle of the newest few on its cycle, leaving out the outliers. */
 export function usualPaycheckCents(run: EmployerRun): number {
   const outliers = new Set(run.outliers)
   // Recent paychecks say most about pay now, after a raise.
-  const usual = run.paychecks.filter((paycheck) => !outliers.has(paycheck)).slice(-RECENT_PAYCHECKS)
+  const usual = run.cycle.filter((paycheck) => !outliers.has(paycheck)).slice(-RECENT_PAYCHECKS)
   return median(usual.map((paycheck) => paycheck.amountCents))
 }
