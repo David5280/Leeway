@@ -16,7 +16,7 @@ import {
   protectedResourceMetadata,
 } from '../../src/oauth/metadata.js'
 import { isValidChallenge, verifierMatches } from '../../src/oauth/pkce.js'
-import { isPublicAddress, publicOnlyLookup } from '../../src/lib/publicAddress.js'
+import { isFetchableAddress, publicOnlyLookup } from '../../src/lib/publicAddress.js'
 import {
   describeRedirect,
   redirectMatches,
@@ -155,7 +155,7 @@ describe('public addresses', () => {
     const publicOnes = ['8.8.8.8', '160.79.104.10', '2606:4700::1111', '::ffff:8.8.8.8']
     // Next door to the 6to4 relay range, still public.
     for (const address of [...publicOnes, '192.88.98.1', '192.88.100.1']) {
-      expect(isPublicAddress(address)).toBe(true)
+      expect(isFetchableAddress(address)).toBe(true)
     }
     for (const address of [
       '127.0.0.1',
@@ -185,7 +185,7 @@ describe('public addresses', () => {
       'feff:ffff::1',
       'not-an-ip',
     ]) {
-      expect(isPublicAddress(address)).toBe(false)
+      expect(isFetchableAddress(address)).toBe(false)
     }
   })
 
