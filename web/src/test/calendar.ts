@@ -59,6 +59,7 @@ export const ITEMS: ForecastItem[] = [
     kind: 'trip',
     suggestedCents: 125000,
     basedOn: 3,
+    tripPage: true,
   },
   {
     type: 'event',
@@ -86,6 +87,25 @@ export function tripSummary(fields: Partial<TripSummary> = {}): TripSummary {
 }
 
 const NO_PARTS = { travel: 0, stay: 0, food: 0, activities: 0 }
+
+/** A planned budget beside what its trip spent, as a trip's page receives it. */
+export function budgetLeft(fields: Partial<NonNullable<TripDetail['budget']>> = {}) {
+  return {
+    goalId: 'g1',
+    name: 'Lisbon trip',
+    startsOn: '2026-12-10',
+    endsOn: '2026-12-14',
+    travelCents: 80000,
+    stayCents: 60000,
+    foodPerDayCents: 5000,
+    activitiesCents: 20000,
+    plannedByPart: { travel: 80000, stay: 60000, food: 25000, activities: 20000 },
+    plannedCents: 185000,
+    leftCents: 115000,
+    leftByPart: { travel: 10000, stay: 60000, food: 25000, activities: 20000 },
+    ...fields,
+  }
+}
 
 export function tripDetail(fields: Partial<TripDetail> = {}): TripDetail {
   return {

@@ -4,7 +4,7 @@
 // saved for by the budget's goal, so it suggests nothing more.
 
 import type { Db } from '../../db/pool.js'
-import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
+import { addDays, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
 import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
 import { nextPayday } from '../cashFlow.js'
@@ -122,7 +122,10 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
     const sameKind = past.filter(({ span }) => span.kind === kind)
     typical.set(kind, typicalCost(kind, sameKind))
   }
-  const budgets = await budgetsBetween(db, today, to)
+  // Every day of the events listed, even before today or past the window, as a trip's page reads them.
+  const firstDay = upcoming.reduce((first, { span }) => minDate(first, span.startsOn), today)
+  const lastDay = upcoming.reduce((last, { span }) => maxDate(last, span.endsOn), to)
+  const budgets = await budgetsBetween(db, firstDay, lastDay)
   return upcoming.map(({ span, cost }) => {
     const usual = typical.get(span.kind) ?? null
     // Matched by shared days, as the trip's page matches it, so a moved event keeps its budget.

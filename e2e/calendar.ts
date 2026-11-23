@@ -74,6 +74,7 @@ function forecast() {
             kind: 'trip',
             suggestedCents: 1234500,
             basedOn: 12,
+            tripPage: true,
           },
         ],
         0,
@@ -154,7 +155,8 @@ function tripDetail(budgeted: boolean) {
   }
 }
 
-/** The path of the trip the stand-ins describe. */
+/** The trip the stand-ins describe: its days, and the path of its page. */
+export const SOON_TRIP = SOON
 export const SOON_TRIP_PATH = `/trips/${SOON.startsOn}/${SOON.endsOn}`
 
 async function answer(page: Page, action: string, result: unknown) {
