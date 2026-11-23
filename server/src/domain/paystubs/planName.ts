@@ -1,177 +1,220 @@
 // The pension plan's name kept from a paystub's pension line, to name a new
-// pension by. Digits come into a name only in the shapes a plan's own name
-// takes; any other word holding one may be a member number, so the name ends
-// there. Labels for the member or the deduction end it too, and a person's
-// name left after the plan's own words ("PERA Jane Doe", "PERA Doe, Jane")
-// goes, since the name reaches assistants and the AI. Pure.
+// pension by. The name reaches assistants and the AI, so it is built by
+// allow-list, never by spotting the person: the line is split into words, and
+// only words of a plan's own vocabulary are kept (plan words, known systems
+// and providers, unions, whose plan it is, a plan's own number, and a state
+// that opens the name). Everything else goes, so a member's name, number or
+// city can never survive unless it is itself one of those words. A name with
+// no plan, system or provider word left is no name at all. Pure.
 
-import { looksLikePerson } from '../leaks/personNames.js'
-import { leadingName, MAX_PLAN_NAME_LENGTH } from './redact.js'
+import {
+  BRAND_PHRASES,
+  BRANDS,
+  CONNECTORS,
+  GROUP_WORDS,
+  LABEL_WORDS,
+  NUMBERED_WORDS,
+  PLAN_PHRASES,
+  PLAN_WORDS,
+  PROVIDER_SUFFIXES,
+  STATE_CODES,
+  STATE_NAMES,
+  SYSTEMS,
+  UNIONS,
+} from './planWords.js'
+import { MAX_PLAN_NAME_LENGTH, redact } from './redact.js'
 
-/** A plan's own number after "Plan" or "Tier", from 1 to 99: "PERS Plan 2", "Tier 10". */
-const PLAN_NUMBER = /^[1-9]\d?$/
-const NUMBERED_WORDS = new Set(['plan', 'tier'])
+/**
+ * Why a word is kept. A plan or provider word is the core a name needs; the
+ * others are kept only beside one.
+ */
+type Role = 'plan' | 'provider' | 'group' | 'number' | 'label' | 'state' | 'connector'
+
+/** A word of the line, with the separators printed either side of it. */
+interface Token {
+  text: string
+  form: string
+  before: string
+  after: string
+}
+
+/**
+ * A word, split on spaces and punctuation. A tax code keeps its brackets
+ * ("401(k)", "457 (b)") and "Pre-tax" its hyphen; a dot stays inside a word,
+ * so "2.5" and "No.4417" are never read as a plan's number.
+ */
+const WORD = /\d{3}\s?\([a-z]\)|(?:pre|post|after)-tax|[^\s,/()[\]{}:;|\u2013\u2014-]+/giu
+
+/** A tax code section: "401(a)", "457(b)", "414(h)". */
+const TAX_CODE = /^\d{3}\([a-z]\)$/
+
+/** A tax code section written plain: "401k", "403b", "457". */
+const PLAIN_TAX_CODE = /^(?:401|403|409|414|457)[a-z]?$/
 
 /** A union local's number and letters: "1199SEIU", "32BJ". */
 const UNION_LOCAL = /^\d{1,4}\p{Lu}{2,}$/u
 
-/** A tax code section: "401(a)", "457(b)", "403(b)". */
-const TAX_CODE = /^\d{3}\([a-z]\)$/i
+/** A plan's own number after "Plan" or "Tier", from 1 to 99: "PERS Plan 2", "Tier 10". */
+const PLAN_NUMBER = /^[1-9]\d?$/
 
-/** Words labelling a member number, so whatever follows them is no part of the plan's name. */
-const ID_LABELS = new Set(['no', 'id'])
+/** A union local's number after "Local": "Local 727". */
+const LOCAL_NUMBER = /^[1-9]\d{0,3}$/
 
-/**
- * Words a pension line prints for the member or the deduction, so whatever
- * follows them, such as the member's name or number, is no part of the plan's
- * name. One opens a name only when plan words follow it, other labels aside,
- * as in "Member Retirement Plan", "Employee Savings Plan" or "Defined
- * Contribution Plan", so "Member Jane Doe" and "PERA EE Jane Doe" still lose
- * the person's name.
- */
-const LABEL_WORDS = new Set([
-  'member',
-  'mbr',
-  'employee',
-  'ee',
-  'participant',
-  'pre-tax',
-  'pretax',
-  'contribution',
-  'contrib',
-  'deduction',
-  'ded',
-])
-
-/** Words that say a plan's own name goes on: what a label may open, and what anchors a name. */
-const PLAN_WORDS = new Set(
-  'retirement pension pensions plan plans benefit benefits savings system fund trust annuity association'.split(
-    ' ',
-  ),
-)
-
-/** Words naming whose plan it is ("State Employees", "Police and Fire"), part of its own name. */
-const GROUP_WORDS = new Set(
-  'employees teachers workers police fire firefighters public state county city municipal school schools national'.split(
-    ' ',
-  ),
-)
-
-/** A word with any closing ".", ":" or "," taken off, as a shape is matched. */
-const bare = (word: string) => word.replace(/[.:,]+$/, '')
-
-/**
- * A word as the label sets hold it: lower case, with no brackets around it
- * and no closing punctuation, so "(Member)", "No." and "ID:" count.
- */
-const labelForm = (word: string) => bare(word.toLowerCase().replace(/^[([]+|[)\]]+$/g, ''))
-
-/** Whether a word holding a digit is in a shape a plan's own name takes. */
-function digitsFitName(word: string, before: string | undefined): boolean {
-  const shape = bare(word)
-  if (UNION_LOCAL.test(shape) || TAX_CODE.test(shape)) return true
-  return PLAN_NUMBER.test(shape) && NUMBERED_WORDS.has(labelForm(before ?? ''))
+/** A word as the lists hold it: lower case, no spaces, quotes, possessive or closing "." and ":". */
+function formOf(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/^['\u2019"]+/, '')
+    .replace(/['\u2019]s$/, '')
+    .replace(/['\u2019".:]+$/, '')
 }
 
-/**
- * Whether the label at `index` labels the member or deduction here, rather
- * than opening a name: true unless plan words follow it, past any other labels.
- */
-function labelsMember(words: string[], index: number): boolean {
+/** The words of a line, each with the separators around it. */
+function tokenize(line: string): Token[] {
+  const matches = [...line.matchAll(WORD)]
+  return matches.map((match, index) => {
+    const start = match.index
+    const end = start + match[0].length
+    const previous = matches[index - 1]
+    const next = matches[index + 1]
+    return {
+      text: match[0],
+      form: formOf(match[0]),
+      before: line.slice(previous ? previous.index + previous[0].length : 0, start),
+      after: line.slice(end, next ? next.index : line.length),
+    }
+  })
+}
+
+/** What a word is by itself, before its neighbours are weighed. */
+function ownRole({ text, form }: Token): Role | null {
+  if (PLAN_WORDS.has(form) || SYSTEMS.has(form) || UNIONS.has(form)) return 'plan'
+  if (TAX_CODE.test(form) || PLAIN_TAX_CODE.test(form)) return 'plan'
+  if (UNION_LOCAL.test(text.replace(/[.:]+$/, ''))) return 'plan'
+  if (BRANDS.has(form)) return 'provider'
+  if (GROUP_WORDS.has(form)) return 'group'
+  return null
+}
+
+/** Whether the word at `index` is there and kept, for any reason. */
+function isKept(roles: (Role | null)[], index: number): boolean {
+  return (roles[index] ?? null) !== null
+}
+
+/** Whether the words from `index` on spell `phrase`. */
+function spells(tokens: Token[], index: number, phrase: readonly string[]): boolean {
+  return phrase.every((word, offset) => tokens[index + offset]?.form === word)
+}
+
+/** Marks each provider or plan kind named by more than one word ("T. Rowe Price"). */
+function markPhrases(tokens: Token[], roles: (Role | null)[]): void {
+  const phrases = [
+    ...BRAND_PHRASES.map((phrase) => [phrase, 'provider'] as const),
+    ...PLAN_PHRASES.map((phrase) => [phrase, 'plan'] as const),
+  ]
+  tokens.forEach((_token, index) => {
+    for (const [phrase, role] of phrases) {
+      if (spells(tokens, index, phrase)) roles.fill(role, index, index + phrase.length)
+    }
+  })
+}
+
+/** Whether plan words follow the label at `index`, past any other labels. */
+function opensPlan(tokens: Token[], index: number): boolean {
   let next = index + 1
-  while (next < words.length && LABEL_WORDS.has(labelForm(words[next]!))) next++
-  return !PLAN_WORDS.has(labelForm(words[next] ?? ''))
+  while (next < tokens.length && LABEL_WORDS.has(tokens[next]!.form)) next++
+  return PLAN_WORDS.has(tokens[next]?.form ?? '')
 }
 
 /**
- * Whether the word at `index` ends a plan's name: an ID label, a label that
- * labels the member, a figure holding #, % or $, or a digit in any shape but
- * a plan's own, as in "A1234", "ID:4417" or "4417A".
+ * What a word is beside its neighbours: a provider's suffix ("Fidelity
+ * Investments"), a plan's or local's own number, or a label that opens a
+ * plan's name ("Member Retirement Plan").
  */
-function endsName(words: string[], index: number): boolean {
-  const word = words[index]!
-  const label = labelForm(word)
-  if (ID_LABELS.has(label)) return true
-  if (LABEL_WORDS.has(label) && labelsMember(words, index)) return true
-  if (/[#%$]/.test(word)) return true
-  return /\d/.test(word) && !digitsFitName(word, words[index - 1])
+function roleBeside(tokens: Token[], roles: (Role | null)[], index: number): Role | null {
+  const { form } = tokens[index]!
+  const before = tokens[index - 1]?.form ?? ''
+  if (PROVIDER_SUFFIXES.has(form) && roles[index - 1] === 'provider') return 'provider'
+  if (PLAN_NUMBER.test(form) && NUMBERED_WORDS.has(before)) return 'number'
+  if (LOCAL_NUMBER.test(form) && before === 'local') return 'number'
+  if (LABEL_WORDS.has(form) && opensPlan(tokens, index)) return 'label'
+  return null
+}
+
+/** How many words from `index` name a state: a name, or a postal code in capitals. */
+function stateLength(tokens: Token[], index: number): number {
+  const name = STATE_NAMES.find((phrase) => spells(tokens, index, phrase))
+  if (name) return name.length
+  return STATE_CODES.has(tokens[index]!.text) ? 1 : 0
 }
 
 /**
- * Whether a word left at the end of a name labels the deduction rather than
- * naming the plan, or is bare punctuation, like a bracket left open where a
- * member number was taken out.
+ * Marks a state that is part of the plan's name: one that opens the line
+ * right before a kept word ("Ohio PERS", "New York State Teachers"), or one
+ * after "of" after a kept word ("Teachers Retirement System of Texas"). A
+ * state anywhere else, like a city and state printed after the name, goes.
  */
-function isTrailingLabel(word: string): boolean {
-  const form = labelForm(word)
-  return LABEL_WORDS.has(form) || !/[\p{L}\p{N}]/u.test(form)
+function markStates(tokens: Token[], roles: (Role | null)[]): void {
+  tokens.forEach((_token, index) => {
+    const length = stateLength(tokens, index)
+    if (length === 0 || roles[index] !== null) return
+    const next = index + length
+    const opensName = index === 0 && isKept(roles, next) && tokens[next]!.before.trim() === ''
+    const afterOf = tokens[index - 1]?.form === 'of' && isKept(roles, index - 2)
+    if (opensName || afterOf) roles.fill('state', index, next)
+  })
+}
+
+/** Marks a joining word between two kept words ("Police and Fire"). */
+function markConnectors(tokens: Token[], roles: (Role | null)[]): void {
+  tokens.forEach((token, index) => {
+    const between = isKept(roles, index - 1) && isKept(roles, index + 1)
+    if (roles[index] === null && CONNECTORS.has(token.form) && between) roles[index] = 'connector'
+  })
 }
 
 /**
- * Whether a word kept is the plan's own: a plan or group word, a number in a
- * plan's shape (only those are left by now), or, where the name is not all
- * capitals, an acronym ("PERA", "CalPERS"). In a name all in capitals an
- * acronym and a person's name look alike, so neither counts.
+ * A kept word as shown: its closing "." or ":" dropped, except on an initial
+ * ("T. Rowe Price"), and its brackets kept when it stood alone in them ("PERA (DB)").
  */
-function isPlansOwn(word: string, mixedCase: boolean): boolean {
-  const form = labelForm(word)
-  if (PLAN_WORDS.has(form) || GROUP_WORDS.has(form) || /\d/.test(word)) return true
-  return mixedCase && /\p{Lu}{2,}/u.test(word)
+function shown({ text, before, after }: Token): string {
+  const word = /^\p{L}\.$/u.test(text) ? text : text.replace(/[.:]+$/, '')
+  const open = before.trim().at(-1)
+  const close = after.trim()[0]
+  const bracketed = (open === '(' || open === '[') && (close === ')' || close === ']')
+  return bracketed ? `${open}${word}${close}` : word
+}
+
+/** The kept words joined, stopping before a word that would pass the longest name. */
+function joined(words: string[]): string {
+  let name = ''
+  for (const word of words) {
+    const longer = name === '' ? word : `${name} ${word}`
+    if (longer.length > MAX_PLAN_NAME_LENGTH) break
+    name = longer
+  }
+  return name
 }
 
 /**
- * Drops a person's name left after the plan's own words: the words after the
- * last one that is the plan's own, when together they read as a person
- * ("PERA Jane Doe" is "PERA"). A name with none of its own is judged whole.
- */
-function dropPersonTail(kept: string[], mixedCase: boolean): void {
-  const own = kept.findLastIndex((word) => isPlansOwn(word, mixedCase))
-  if (looksLikePerson(kept.slice(own + 1).join(' '))) kept.length = own + 1
-}
-
-/** The first word after the first comma on the line, as "Jane" in "PERA Doe, Jane". */
-function wordAfterComma(text: string): string | undefined {
-  const after = text.split('\n')[0]!.split(',')[1]
-  return after?.trim().split(/\s+/)[0] || undefined
-}
-
-/**
- * Drops a surname written "Surname, Given" at the end of a name, which
- * reading up to the comma left on it: "PERA Doe, Jane" is "PERA".
- */
-function dropSurname(kept: string[], given: string | undefined, mixedCase: boolean): void {
-  const last = kept.at(-1)
-  if (!given || !last || isPlansOwn(last, mixedCase)) return
-  if (looksLikePerson(`${last} ${given}`)) kept.pop()
-}
-
-/** Takes label words and bare punctuation off the end of a name. */
-function dropTrailingLabels(kept: string[]): void {
-  while (kept.length > 0 && isTrailingLabel(kept.at(-1)!)) kept.pop()
-}
-
-/**
- * The pension plan's name only, like "PERA" or "PERS Plan 2", short enough to
- * name a pension by: everything from the first label, figure or member
- * number on is dropped, then any label words left at its end, a person's
- * name and a trailing colon. "PERA Member 11.00% 422.95", "PERA ID:4417",
- * "PERA (Member)", "PERA EE Jane Doe" and "PERA Doe, Jane" are all "PERA";
- * "PERA (DB)" and "1199SEIU Pension" are kept whole.
+ * The pension plan's name only, like "PERA", "Ohio PERS" or "PERS Plan 2",
+ * from the first line of what the paystub printed: "PERA Member 11.00%
+ * 422.95", "PERA Doe, Jane" and "Jane Doe PERA" are all "PERA"; "Jane Doe
+ * 422.95" is null.
  */
 export function redactPlanName(text: string | null): string | null {
   if (text === null) return null
-  const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
-  if (name === null) return null
-  const words = name.split(' ')
-  const mixedCase = /\p{Ll}/u.test(name)
-  const cut = words.findIndex((_word, index) => endsName(words, index))
-  const kept = cut === -1 ? words : words.slice(0, cut)
-  dropTrailingLabels(kept)
-  // Only a name read all the way to the comma can end in a surname before it.
-  if (cut === -1) dropSurname(kept, wordAfterComma(text), mixedCase)
-  dropPersonTail(kept, mixedCase)
-  dropTrailingLabels(kept)
-  // A label's colon may be left on the name itself, as in "PERA: 422.95".
-  const named = kept.join(' ').replace(/:$/, '')
-  return named === '' ? null : named
+  // Identifiers such as a Social Security number go before the words are read.
+  const tokens = tokenize(redact(text.split('\n')[0]!))
+  const roles = tokens.map(ownRole)
+  markPhrases(tokens, roles)
+  tokens.forEach((_token, index) => {
+    roles[index] ??= roleBeside(tokens, roles, index)
+  })
+  markStates(tokens, roles)
+  markConnectors(tokens, roles)
+  if (!roles.some((role) => role === 'plan' || role === 'provider')) return null
+  const name = joined(tokens.filter((_token, index) => isKept(roles, index)).map(shown))
+  return name === '' ? null : name
 }

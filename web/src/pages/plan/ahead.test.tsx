@@ -168,7 +168,7 @@ describe('Coming up', () => {
     )
   })
 
-  it('shows no amount for an event with nothing left to set aside', async () => {
+  it('shows no amount and no goal link for an event with nothing left to set aside', async () => {
     const lisbon = ITEMS[3] as Extract<ForecastItem, { type: 'event' }>
     planServer({
       calendar_status: () => linked(),
@@ -178,10 +178,8 @@ describe('Coming up', () => {
     const week = await screen.findByRole('region', { name: 'Week of Dec 8' })
     expect(week).toHaveTextContent('Lisbon tripTrip, Dec 10 to Dec 14. Nothing left to set aside')
     expect(week).not.toHaveTextContent('$0')
-    expect(within(week).getByRole('link')).toHaveAttribute(
-      'href',
-      '/plan/goals?new=purchase&name=Trip&by=2026-12-10',
-    )
+    // There is nothing to save for, so the row starts no purchase goal.
+    expect(within(week).queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('notes quietly when some repeating events were left out of the weeks', async () => {

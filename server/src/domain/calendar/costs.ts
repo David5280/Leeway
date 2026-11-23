@@ -49,9 +49,6 @@ export const COST_RULES: Record<EventKind, CostRule> = {
   },
 }
 
-/** The most days ahead any kind counts spending for. */
-const MOST_AHEAD_DAYS = Math.max(...EVENT_KINDS.map((kind) => COST_RULES[kind].aheadDays))
-
 /** An event to cost: its kind, which says what spending is its, and its days. */
 export interface Span {
   kind: EventKind
@@ -84,7 +81,10 @@ const BELONGS_SQL = `${SPENT_SQL} AND ${byKind(
  * occasion's own kind of spending (a gift, tickets) stays with the occasion,
  * then a trip takes the rest, so travel booked for a trip over Christmas, and
  * what is spent while away, is the trip's. What is left (a holiday's travel
- * with no trip around it) goes to the occasion.
+ * with no trip around it) goes to the occasion. Events of the same rank tie
+ * here; costsOf breaks the tie by the earliest start (w.from_day), which is
+ * the event whose days the purchase falls on, or else the next one after it,
+ * and then by the order the events were given (w.i).
  */
 const CLAIM_ORDER_SQL = `CASE WHEN w.kind = 'trip' THEN 1 WHEN ${byKind((rule) => rule.keeps)}
   THEN 0 ELSE 2 END`
@@ -102,8 +102,8 @@ export async function costsOf(db: Db, spans: Span[]): Promise<EventCost[]> {
   if (!spans.length) return []
   const { rows } = await db.query<{ ahead: string; during: string }>(
     `WITH w AS (
-       SELECT * FROM unnest($1::date[], $2::date[], $3::text[])
-         WITH ORDINALITY AS w(from_day, to_day, kind, i)
+       SELECT * FROM unnest($1::date[], $2::date[], $3::text[], $4::int[])
+         WITH ORDINALITY AS w(from_day, to_day, kind, ahead_days, i)
      ),
      claimed AS (
        SELECT DISTINCT ON (t.id) w.i, t.amount_cents, t.date < w.from_day AS ahead
@@ -111,7 +111,8 @@ export async function costsOf(db: Db, spans: Span[]): Promise<EventCost[]> {
        JOIN (transactions t
          JOIN accounts a ON a.id = t.account_id
          LEFT JOIN categories c ON c.id = t.category_id)
-         ON t.date >= w.from_day - ${MOST_AHEAD_DAYS} AND t.date <= w.to_day AND ${BELONGS_SQL}
+         -- Each event scans only its own kind's days ahead, so the join stays narrow.
+         ON t.date >= w.from_day - w.ahead_days AND t.date <= w.to_day AND ${BELONGS_SQL}
        ORDER BY t.id, ${CLAIM_ORDER_SQL}, w.from_day, w.i
      )
      SELECT w.i,
@@ -119,7 +120,12 @@ export async function costsOf(db: Db, spans: Span[]): Promise<EventCost[]> {
        coalesce(sum(claimed.amount_cents) FILTER (WHERE NOT claimed.ahead), 0) AS during
      FROM w LEFT JOIN claimed ON claimed.i = w.i
      GROUP BY w.i ORDER BY w.i`,
-    [spans.map((s) => s.startsOn), spans.map((s) => s.endsOn), spans.map((s) => s.kind)],
+    [
+      spans.map((s) => s.startsOn),
+      spans.map((s) => s.endsOn),
+      spans.map((s) => s.kind),
+      spans.map((s) => COST_RULES[s.kind].aheadDays),
+    ],
   )
   return rows.map((row) => ({ aheadCents: Number(row.ahead), duringCents: Number(row.during) }))
 }

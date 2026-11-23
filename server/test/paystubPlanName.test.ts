@@ -1,7 +1,8 @@
 // The plan name kept from a paystub's pension line to name a new pension:
 // the plan's own words and numbers stay, while member numbers, figures, a
 // member's name and the labels printed beside them go. Pure; every name here
-// is made up or a public plan's name.
+// is made up or a public plan's name. More shapes are in
+// paystubPlanNameAllowList.test.ts.
 
 import { describe, expect, it } from 'vitest'
 import { redactPlanName } from '../src/domain/paystubs/planName.js'
@@ -87,7 +88,7 @@ describe('redactPlanName cuts labels and what follows a member label', () => {
     // A leading member word keeps the name only before a plan word, so a
     // person's name after it is never kept.
     ['Member Jane Doe 4417', null],
-    ['Mbr: Jane Doe PERA 422.95', null],
+    ['Mbr: Jane Doe PERA 422.95', 'PERA'],
     ['Member Name Jane Doe', null],
     ['Member Pension Plan 4417', 'Member Pension Plan'],
     ['Mbr Retirement Plan 422.95', 'Mbr Retirement Plan'],
@@ -130,7 +131,7 @@ describe('redactPlanName never keeps a person’s name', () => {
     ['CalPERS Jane Q Doe 422.95', 'CalPERS'],
     ['PERS Plan 2 Jane Doe', 'PERS Plan 2'],
     ['Jane Doe 422.95', null],
-    ['PERA JANE DOE', null],
+    ['PERA JANE DOE', 'PERA'],
   ])('drops a person’s name left after the plan’s own words in "%s"', keeps)
 
   it.each<Case>([
