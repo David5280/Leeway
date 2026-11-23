@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { confirmedDetailSchema } from '../../../../server/src/domain/paystubs/confirmed'
 import { failing, fakeServer, renderSignedIn, settingsHandlers } from '../../test/fake'
-import { chosenFile, cityRead, reads, savedPaystub } from '../../test/paystub'
+import {
+  chosenFile,
+  cityRead,
+  noPensionRead,
+  reads,
+  savedPaystub,
+  unreadableOtherRead,
+} from '../../test/paystub'
 import { FullPaystubImport } from './FullPaystubImport'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -52,9 +59,9 @@ describe('the full paystub review', () => {
     expect(keys.getByText('This paycheck, paid twice a month')).toBeVisible()
     // 2,611.42 of 3,845.00.
     expect(keys.getByText('67.9%')).toBeVisible()
-    // 11,668.23 withheld of 80,745.00 so far this year.
-    expect(keys.getByText('14.5%')).toBeVisible()
-    expect(keys.getByText('Withheld, from the year so far')).toBeVisible()
+    // 560.63 withheld of 3,845.00: the Denver tax prints only this paycheck, so the year is not used.
+    expect(keys.getByText('14.6%')).toBeVisible()
+    expect(keys.getByText('Withheld, from this paycheck')).toBeVisible()
     // 422.95 + 150.00 + 50.00 + 822.83 of 3,845.00.
     expect(keys.getByText('37.6%')).toBeVisible()
   })
@@ -101,6 +108,25 @@ describe('the full paystub review', () => {
     expect(
       form.getByRole('textbox', { name: 'Taxes: Social Security, this paycheck' }),
     ).not.toBeVisible()
+  })
+
+  it('names the reader as the server does, in the lines it found and missed', async () => {
+    serve({ read: reads({ ...noPensionRead, readerName: 'Acme Reader' }) })
+    const { form } = await chooseFile()
+    const taxes = within(form.getByRole('group', { name: 'Taxes' }))
+    expect(taxes.getByText('Add a line Acme Reader did not find (2)')).toBeInTheDocument()
+    const employer = within(form.getByRole('group', { name: 'Employer contributions' }))
+    expect(employer.getByText('Acme Reader found none of these.')).toBeVisible()
+  })
+
+  it('keeps an unreadable line in view with its flag, though its source is never shown', async () => {
+    serve({ read: reads(unreadableOtherRead) })
+    const { form } = await chooseFile()
+    const other = form.getByRole('textbox', { name: 'After tax: Other, after tax, this paycheck' })
+    expect(other).toBeVisible()
+    expect(other).toHaveValue('')
+    expect(other).not.toHaveAccessibleDescription()
+    expect(within(other.closest('.review-line')!).getByText('Check closely')).toBeVisible()
   })
 
   it('takes hours and an hourly rate for hourly pay', async () => {

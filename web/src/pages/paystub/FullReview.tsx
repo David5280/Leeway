@@ -72,7 +72,13 @@ function PayFields({ extraction, text, setText }: Editing) {
 }
 
 /** One section: its heading, and each block of lines under it. */
-function SectionFields({ section, extraction, text, setText }: Editing & { section: Section }) {
+function SectionFields({
+  section,
+  readerName,
+  extraction,
+  text,
+  setText,
+}: Editing & { section: Section; readerName: string }) {
   return (
     <fieldset className="review-group review-section">
       <legend>{section.title}</legend>
@@ -82,6 +88,7 @@ function SectionFields({ section, extraction, text, setText }: Editing & { secti
           key={group}
           context={heading ?? section.title}
           heading={heading}
+          readerName={readerName}
           labels={LINE_LABELS[group] as Record<string, string>}
           lines={extraction.detail[group] as Record<string, ReviewLine>}
           text={text.groups[group] as Record<string, LineText>}
@@ -142,6 +149,7 @@ export function FullReview({
         <SectionFields
           key={section.id}
           section={section}
+          readerName={readerName}
           extraction={extraction}
           text={text}
           setText={setText}
