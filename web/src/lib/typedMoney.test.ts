@@ -33,6 +33,11 @@ describe('parseMoney', () => {
     ['1 234,56', 123456],
     ['1 234,56', 123456],
     ["1'234.50", 123450],
+    ['1’234.50', 123450],
+    ['1 234 567,89', 123456789],
+    ['1 234.56', 123456],
+    ['$ 1 200', 120000],
+    ['1 234 €', 123400],
   ])('reads thousands in %j as %i cents', (text, cents) => {
     expect(parseMoney(text)).toBe(cents)
   })
@@ -53,6 +58,23 @@ describe('parseMoney', () => {
     '1.234,5.6',
     '1,234.5,6',
     '1234,567',
+    // A comma decimal takes one or two digits: "1,0000" is likelier a slipped 1,000 than $1.00.
+    '1,0000',
+    '10,0000',
+    '12,3456',
+    '1.234,567',
+    '1.234,5678',
+    '1 234,5678',
+    // A space or apostrophe that groups no thousands, or a mix of them.
+    '1,000 000',
+    '1,234 567',
+    '12 50',
+    "12'50",
+    '1 0000',
+    '1 23',
+    '1234 567',
+    "1 234'567",
+    '1 234 56',
   ])('refuses %j, whose marks could mean two amounts or none', (text) => {
     expect(parseMoney(text)).toBeNull()
   })
@@ -96,6 +118,25 @@ describe('parseMoney', () => {
     expect(parseMoney(text)).toBeNull()
   })
 
+  it.each([
+    ['12,5', 1250],
+    ['12,50', 1250],
+    ['12,', 1200],
+    [',5', 50],
+    ['1.234,5', 123450],
+  ])('reads the comma decimal %j as %i cents', (text, cents) => {
+    expect(parseMoney(text)).toBe(cents)
+  })
+
+  it('refuses a paste longer than any amount, without reading it', () => {
+    const padded = `${' '.repeat(60)}1200`
+    expect(parseMoney(padded)).toBe(120000)
+    expect(parseMoney(` ${padded}`)).toBeNull()
+    const started = performance.now()
+    expect(parseMoney(`${'a'.repeat(100_000)}1`)).toBeNull()
+    expect(performance.now() - started).toBeLessThan(50)
+  })
+
   it('refuses an amount too large to count in cents exactly', () => {
     expect(parseMoney('99999999999999999')).toBeNull()
     expect(parseMoney('90071992547409.91')).toBe(9007199254740991)
@@ -126,6 +167,20 @@ describe('parseMoney with a sign', () => {
     expect(parseMoney('(0.00)')).toBe(0)
   })
 
+  it.each([
+    // A currency sign in the middle, or more than one.
+    '12€50',
+    '1$5',
+    '12 €50',
+    '$5$',
+    '$-$5',
+    '€12 €',
+    '$$5',
+    '5 - $',
+  ])('refuses %j, its currency sign out of place', (text) => {
+    expect(parseMoney(text)).toBeNull()
+  })
+
   it.each(['(-45)', '(+45)', '(45', '45)', '((45))', '-(45)', '$(45)', '5-', '--5', '+-5', '5-3'])(
     'refuses %j, whose sign makes no sense',
     (text) => {
@@ -144,11 +199,16 @@ describe('parseMoney with a currency', () => {
     ['CHF 12.50', 1250],
     ['12 USD', 1200],
     ['USD1,200', 120000],
-    ['EUR.50', 50],
+    ['USD .50', 50],
     ['120kr', 12000],
     ['kr. 50', 5000],
     ['US$5', 500],
     ['NZ$5', 500],
+    ['US $5', 500],
+    ['C$5', 500],
+    ['A$5', 500],
+    ['HK$5', 500],
+    ['S$5', 500],
     ['12 zł', 1200],
     ['Rs. 500', 50000],
     ['500 Rs.', 50000],
@@ -167,8 +227,14 @@ describe('parseMoney with a currency', () => {
     // A currency in the middle, or one named twice at one end.
     '12 USD 5',
     '5 EUR EUR',
-    // Letters on a sign that are no currency's, or too many of them.
+    // A code on a dot: 50 cents, or a slipped 50?
+    'USD.50',
+    'EUR.50',
+    // Letters on a sign that are no dollar's: typos, not a currency.
     'ABCD$5',
+    'OO$5',
+    'lO$5',
+    'mm$5',
     // A currency outside brackets: written either way round, it stays unread.
     'USD (45)',
     'EUR',

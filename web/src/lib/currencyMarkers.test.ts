@@ -11,6 +11,9 @@ describe('withoutCurrencyLetters', () => {
     ['500 Rs.', '500 '],
     ['US$5', '$5'],
     ['R$ 12', '$ 12'],
+    ['US $5', ' $5'],
+    ['HK$5', '$5'],
+    ['USD .50', ' .50'],
     ['12 zł', '12 '],
     ['50 лв', '50 '],
     ['EUR 5 EUR', ' 5 '],
@@ -30,8 +33,21 @@ describe('withoutCurrencyLetters', () => {
     'APR 5',
     '12 USD.',
     'ABCD$5',
+    'OO$5',
+    'mm$5',
+    'USD.50',
+    'EUR.50',
+    'US5',
   ])('keeps the letters of %j, which are no currency, for the reader to refuse', (text) => {
     expect(withoutCurrencyLetters(text)).toBe(text)
+  })
+
+  it('reads a long run of letters in one pass, not once per letter', () => {
+    const letters = `${'a'.repeat(100_000)}1`
+    const started = performance.now()
+    expect(withoutCurrencyLetters(letters)).toBe(letters)
+    // Trying the run from each letter took over 25 seconds here.
+    expect(performance.now() - started).toBeLessThan(500)
   })
 
   it('leaves text without letters as it is', () => {

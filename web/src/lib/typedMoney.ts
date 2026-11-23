@@ -19,11 +19,34 @@ const GROUPED = {
 
 type Mark = keyof typeof GROUPED
 
+/** No amount is longer than this; anything longer is refused before reading it. */
+const LONGEST_AMOUNT = 64
+
+/** A space (plain, no-break, thin or narrow no-break) or apostrophe between thousands. */
+const GROUP_SPACE = "[ \\u00A0\\u2009\\u202F'’]"
+
 /**
- * Spaces, currency signs and apostrophes, which only space out or label an
- * amount ("$ 1 200", "1'234.50"). Any other character refuses it.
+ * The shape of an amount: a sign and at most one currency sign at its ends,
+ * around digits and marks that may be spaced out ("$ -1 234,56", "12,50 €").
+ * A sign or currency sign in the middle ("12€50", "1$5") does not fit.
  */
-const SPACING_AND_SIGNS = /[\s\p{Sc}'’]/gu
+const AMOUNT_SHAPE = new RegExp(
+  `^\\s*\\p{Sc}?\\s*([+-]?)\\s*\\p{Sc}?\\s*([\\d.,]+(?:${GROUP_SPACE}[\\d.,]+)*)\\s*\\p{Sc}?\\s*$`,
+  'u',
+)
+
+/**
+ * Thousands spaced out by one kind of space or apostrophe throughout, with
+ * any decimal after: "1 234", "1'234.50", "1 234 567,89". Anything else with
+ * a space inside ("12 50", "1,000 000", "1 0000") could mean two amounts.
+ */
+const SPACED_GROUPS = new RegExp(`^\\d{1,3}(${GROUP_SPACE})\\d{3}(?:\\1\\d{3})*(?:[.,]\\d*)?$`, 'u')
+
+/** Every currency sign, to count them: an amount has one at most. */
+const CURRENCY_SIGN = /\p{Sc}/gu
+
+/** Every thousands space or apostrophe, to take out once they are known to group thousands. */
+const ANY_GROUP_SPACE = new RegExp(GROUP_SPACE, 'gu')
 
 /** An amount in brackets, as accounts write money owed: "(45.00)". */
 const BRACKETED = /^\s*\(([^()]*)\)\s*$/
@@ -47,7 +70,17 @@ function splitOneMark(body: string, mark: Mark): Digits | null {
       ? { whole: whole + fraction, fraction: '' }
       : null
   }
-  return { whole, fraction }
+  return decimalFits(mark, fraction) ? { whole, fraction } : null
+}
+
+/**
+ * Whether `fraction` can follow `mark` as a decimal mark. A comma decimal
+ * takes one or two digits ("12,5", "12,50"): "1,0000" is far likelier a
+ * slipped 1,000 than $1.00, so four or more is refused. A dot takes any
+ * number, since "1.0050" is plainly a dollar and half a cent.
+ */
+function decimalFits(mark: Mark, fraction: string): boolean {
+  return mark === '.' ? /^\d*$/.test(fraction) : /^\d{0,2}$/.test(fraction)
 }
 
 /** Both marks: the last is the decimal mark and the other groups thousands, "1,234.56" or "1.234,56". */
@@ -57,7 +90,7 @@ function splitBothMarks(body: string): Digits | null {
   const at = body.lastIndexOf(decimal)
   const whole = body.slice(0, at)
   const fraction = body.slice(at + 1)
-  if (!GROUPED[group].test(whole) || !/^\d*$/.test(fraction)) return null
+  if (!GROUPED[group].test(whole) || !decimalFits(decimal, fraction)) return null
   return { whole: whole.split(group).join(''), fraction }
 }
 
@@ -80,9 +113,17 @@ function centsOf({ whole, fraction }: Digits): number | null {
   return Number.isSafeInteger(cents) ? cents : null
 }
 
+/** `body`'s digits and marks with any thousands spaces taken out; null when the spaces group nothing. */
+function withoutGroupSpaces(body: string): string | null {
+  const unspaced = body.replace(ANY_GROUP_SPACE, '')
+  if (unspaced === body) return body
+  return SPACED_GROUPS.test(body) ? unspaced : null
+}
+
 /**
  * The amount's sign and the rest: a minus sign (the true one too) or brackets
- * make it negative. Null when it holds a letter that is not a currency, or
+ * make it negative. Null when it holds a letter that is not a currency, a
+ * second currency sign, a sign or space where an amount never has one, or
  * any character an amount never holds.
  */
 function readSigned(text: string): { negative: boolean; body: string } | null {
@@ -90,11 +131,14 @@ function readSigned(text: string): { negative: boolean; body: string } | null {
   const bracketed = BRACKETED.exec(plain)
   const inner = withoutCurrencyLetters(bracketed ? bracketed[1]! : plain)
   if (/\p{L}/u.test(inner)) return null
-  const signed = /^([+-]?)([\d.,]+)$/.exec(inner.replace(SPACING_AND_SIGNS, ''))
-  if (!signed) return null
-  const [, sign, body = ''] = signed
+  if ((inner.match(CURRENCY_SIGN) ?? []).length > 1) return null
+  const shaped = AMOUNT_SHAPE.exec(inner)
+  if (!shaped) return null
+  const [, sign, spaced = ''] = shaped
   // "(-45)" says negative twice; it is a typo, not a positive amount.
   if (bracketed && sign !== '') return null
+  const body = withoutGroupSpaces(spaced)
+  if (body === null) return null
   return { negative: bracketed !== null || sign === '-', body }
 }
 
@@ -103,10 +147,13 @@ function readSigned(text: string): { negative: boolean; body: string } | null {
  * cents; null if it is not an amount. A currency in letters may come before
  * or after it, but any other letter refuses it, so "5OO", "5k", "2MM",
  * "5 mil" and "99 ct" are all null, as is "1.234", which could be 1234 or
- * 1.23. A minus sign or brackets make it negative; each form decides whether
- * it takes a negative amount.
+ * 1.23, "1,0000" (a slipped 1,000?) and "12€50" (a sign mid-amount). A minus
+ * sign or brackets make it negative; each form decides whether it takes a
+ * negative amount.
  */
 export function parseMoney(text: string): number | null {
+  // A cap keeps a long paste from slowing every keystroke's read.
+  if (text.length > LONGEST_AMOUNT) return null
   const signed = readSigned(text)
   if (signed === null) return null
   const digits = splitDigits(signed.body)

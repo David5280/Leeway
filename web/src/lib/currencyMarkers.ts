@@ -26,12 +26,17 @@ const CURRENCY_CODES = wordsOf(`
  */
 const LETTER_SYMBOLS = wordsOf('kr kč zł zl ft lei лв rs rp rm tl r fr')
 
-/** The most letters that may sit right on a currency sign, as in "US$5" or "NZ$5". */
-const LETTERS_ON_A_SIGN = 3
+/**
+ * The letters that name which dollar (or real) a "$" is, as in "US$5",
+ * "C$ 12", "NZ$5" or "R$ 12,50". Only these: "OO$5" is a typo, not a currency.
+ */
+const DOLLAR_PREFIXES = wordsOf('us c ca can a au nz hk s sg r mx mex nt j tt bz')
 
 const LEADING_LETTERS = /^\s*(\p{L}+)/u
-const TRAILING_LETTERS = /(\p{L}+)(\.?)\s*$/u
-const STARTS_WITH_SIGN = /^\p{Sc}/u
+// The lookbehind starts a match only where a run of letters starts, so a
+// long run is not tried again from each of its letters (slow on a long paste).
+const TRAILING_LETTERS = /(?<!\p{L})(\p{L}+)(\.?)\s*$/u
+const STARTS_WITH_DOLLAR = /^\s*\$/
 
 /** `text` without a currency written before the amount: "CHF 12", "Rs.500", "US$5". */
 function withoutLeading(text: string): string {
@@ -39,10 +44,11 @@ function withoutLeading(text: string): string {
   if (letters === undefined) return text
   const rest = text.trimStart().slice(letters.length)
   const key = letters.toLowerCase()
-  if (CURRENCY_CODES.has(key)) return rest
+  // A code is never written with a dot, so "USD.50" (50 cents or 50?) keeps its letters and is refused.
+  if (CURRENCY_CODES.has(key)) return rest.startsWith('.') ? text : rest
   if (LETTER_SYMBOLS.has(key)) return rest.replace(/^\./, '')
-  // A few letters right on a sign name which dollar or real it is: "US$5", "R$ 12".
-  if (letters.length <= LETTERS_ON_A_SIGN && STARTS_WITH_SIGN.test(rest)) return rest
+  // A dollar's own letters before its sign: "US$5", "US $5", "R$ 12".
+  if (DOLLAR_PREFIXES.has(key) && STARTS_WITH_DOLLAR.test(rest)) return rest
   return text
 }
 
