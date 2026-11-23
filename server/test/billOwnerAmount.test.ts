@@ -25,6 +25,32 @@ import {
   resetData,
 } from './helpers.js'
 
+describe('billChangeOf with the amount kept when following began', () => {
+  const recent = [paid('2026-11-16', 9000), paid('2026-10-16', 14000), paid('2026-09-16', 8500)]
+
+  /** The bill at $200, charged `charges`, following begun on `followAfterOn`. */
+  const kept = (charges: BillCharge[], followAfterOn: string, fields: Partial<WatchedBill> = {}) =>
+    billChangeOf(cityPower(charges, { amountCents: 20000, followAfterOn, ...fields }), TODAY)
+
+  it('follows a varying bill only from a cycle that posted after following began', () => {
+    expect(kept(recent, '2026-11-17')).toBeNull()
+    expect(kept(recent, '2026-11-16')).toBeNull()
+    expect(kept(recent, '2026-11-10')).toMatchObject({ kind: 'settled', amountCents: 10500 })
+  })
+
+  it("never holds back a steady bill's price change or its settling", () => {
+    // Nothing says the owner set $15.49, so $22.99 after two of them is news at once.
+    const netflix = { name: 'Netflix', amountCents: 1549, amountVaries: false }
+    const raised = [paid('2026-11-15', 2299), paid('2026-10-15', 1549), paid('2026-09-15', 1549)]
+    expect(kept(raised, '2026-11-17', netflix)).toMatchObject({
+      kind: 'changed',
+      charge: { amountCents: 2299 },
+    })
+    const twice = [paid('2026-11-15', 2299), paid('2026-10-15', 2299), paid('2026-09-15', 1549)]
+    expect(kept(twice, '2026-11-17', netflix)).toMatchObject({ kind: 'settled', amountCents: 2299 })
+  })
+})
+
 describe('billChangeOf after the owner set the amount', () => {
   // $90, $140 and $85 from September: following them settles at $105.
   const recent = [paid('2026-11-16', 9000), paid('2026-10-16', 14000), paid('2026-09-16', 8500)]

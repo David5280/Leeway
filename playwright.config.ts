@@ -2,7 +2,7 @@
 // Run with `npm run e2e` after `npm run build`. See CONTRIBUTING.md.
 
 import { defineConfig, devices } from '@playwright/test'
-import { SETUP_CODE } from './e2e/owner'
+import { OWNER_STATE, SETUP_CODE } from './e2e/owner'
 
 // E2E_PORT lets a second checkout run its tests while another holds 3100.
 const PORT = Number(process.env.E2E_PORT ?? 3100)
@@ -20,7 +20,11 @@ if (!WEBKIT && process.env.TEST_WORKER_INDEX === undefined) {
 
 export default defineConfig({
   testDir: 'e2e',
-  // Every test shares one install, so they run in order, one at a time.
+  // Playwright empties this folder when a run starts, so each shard of a
+  // sharded run (scripts/e2e) gets its own through E2E_OUTPUT_DIR.
+  outputDir: process.env.E2E_OUTPUT_DIR ?? 'test-results',
+  // Every test shares one install, so they run in order, one at a time. A
+  // sharded run (npm run e2e:full, or CI) splits them across installs instead.
   fullyParallel: false,
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
@@ -39,13 +43,13 @@ export default defineConfig({
       name: 'desktop',
       testIgnore: /(setup|phone)\.spec\.ts/,
       dependencies: ['setup'],
-      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
+      use: { ...devices['Desktop Chrome'], storageState: OWNER_STATE },
     },
     {
       name: 'phone',
       testMatch: /phone\.spec\.ts/,
       dependencies: ['setup'],
-      use: { ...devices['Pixel 7'], storageState: 'e2e/.auth/owner.json' },
+      use: { ...devices['Pixel 7'], storageState: OWNER_STATE },
     },
     // Layout that has differed between engines, checked in Safari's too. Only
     // these specs run here, so the suite takes about as long as before. See
@@ -57,7 +61,7 @@ export default defineConfig({
             name: 'webkit',
             testMatch: /switch-layout\.spec\.ts/,
             dependencies: ['setup'],
-            use: { ...devices['Desktop Safari'], storageState: 'e2e/.auth/owner.json' },
+            use: { ...devices['Desktop Safari'], storageState: OWNER_STATE },
           },
         ]),
   ],

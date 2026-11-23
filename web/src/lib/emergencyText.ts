@@ -21,17 +21,28 @@ function listed(names: string[]): string {
 /** How many category names to say before "and 3 more". */
 const NAMED = 3
 
+/** What a category counted in part adds: only its loan and child care payments. */
+const IN_PART = 'loans and child care'
+
+/** Whole categories by name: "Rent, Groceries and Gas", or "Rent, Groceries, Gas and 2 more". */
+function namedWords(names: string[]): string {
+  if (names.length <= NAMED) return listed(names)
+  return `${names.slice(0, NAMED).join(', ')} and ${names.length - NAMED} more`
+}
+
 /**
  * What the essentials are, finishing "What ... cost in a typical month":
- * "Rent, Groceries and Gas", "your bills", or "your spending".
+ * "Rent, Groceries and Gas", "your bills", or "your spending". A category
+ * counted in part adds only its loans and child care, so those are said in
+ * place of its name: "Rent plus loans and child care".
  */
 export function essentialsWords(essentials: EmergencyView['essentials']): string {
   if (!essentials || essentials.from === 'bills') return 'your bills'
-  const names = essentials.categories
-  if (!names || names.length === 0) return 'your spending'
-  if (names.length <= NAMED) return listed(names)
-  const more = names.length - NAMED
-  return `${names.slice(0, NAMED).join(', ')} and ${more} more`
+  if (!essentials.categories) return 'your spending'
+  const whole = essentials.categories
+  const inPart = (essentials.partlyCounted ?? []).length > 0
+  if (whole.length === 0) return inPart ? IN_PART : 'your spending'
+  return inPart ? `${namedWords(whole)} plus ${IN_PART}` : namedWords(whole)
 }
 
 /**
@@ -47,6 +58,16 @@ export function essentialsSentence(
   return `What ${essentialsWords(view.essentials)} cost in a typical month.`
 }
 
+/**
+ * A note in the picker on the categories Leeway counts in part, which a tick
+ * cannot show: only their loan and child care payments count, and a pick of
+ * the owner's own counts whole categories. Null when there are none.
+ */
+export function partlyNote(names: string[]): string | null {
+  if (names.length === 0) return null
+  return `Also counted: the loan and child care payments in ${listed(names)}. Card payments never count. Your own pick counts whole categories.`
+}
+
 /** A note on ticked essentials that add nothing, having had no spending; null when none. */
 export function quietNote(names: string[]): string | null {
   if (names.length === 0) return null
@@ -60,6 +81,8 @@ export function quietNote(names: string[]): string | null {
  */
 export function targetWords(view: Pick<EmergencyView, 'months' | 'ownTarget'>): string {
   if (view.months === null) return 'Your own target'
+  // "About 0 months" says nothing, so any own target under a month is told as less than one.
+  if (view.ownTarget && view.months < 1) return 'Less than a month of essentials'
   if (view.ownTarget) return `About ${monthsWord(view.months)} of essentials`
   return `${monthsWord(view.months)} of essentials`
 }

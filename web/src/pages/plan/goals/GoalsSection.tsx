@@ -5,6 +5,8 @@
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here; Coming up adds the
 // event's name, price and day (&name=, &price= in cents, &by=) to start from.
+// When the fund alone fails to load, the goals still show, with a way to try
+// the fund again.
 
 import { Card } from '../../../components/design/Card'
 import { useState } from 'react'
@@ -92,21 +94,28 @@ function GoalEditor({
   )
 }
 
-/** Every goal's card, in the owner's order; the emergency fund draws its own. */
+/**
+ * Every goal's card, in the owner's order; the emergency fund draws its own.
+ * While the fund fails to load, its goal draws nothing, since a plain card
+ * would show a target the fund has not just worked out.
+ */
 function GoalCards({
   goals,
   emergency,
+  fundFailed,
   today,
   onEdit,
 }: {
   goals: Goal[]
   emergency: EmergencyView | null
+  fundFailed: boolean
   today: string
   onEdit: (goal: Goal) => void
 }) {
+  const shown = fundFailed ? goals.filter((goal) => goal.emergencyMonths === null) : goals
   return (
     <div className="grid">
-      {goals.map((goal) =>
+      {shown.map((goal) =>
         // The fund's goal, marked or only named as one, draws the fund's card.
         emergency && goal.id === emergency.goalId ? (
           <EmergencyCard key={goal.id} goal={goal} view={emergency} onEdit={() => onEdit(goal)} />
@@ -124,18 +133,43 @@ const competing = (goals: Goal[]) =>
 
 /**
  * How a first goal starts: the emergency fund offer when there is one,
- * otherwise, with no goals yet, a line on what to save for.
+ * otherwise, with no goals yet, a line on what to save for. While the fund
+ * fails to load, neither offers it, since the retry beside them says so and
+ * an offer from an earlier load may be out of date.
  */
-function GoalsStart({ goals, emergency }: { goals: Goal[]; emergency: EmergencyView | null }) {
-  if (emergency && emergency.goalId === null) return <EmergencyOffer view={emergency} />
+function GoalsStart({
+  goals,
+  emergency,
+  fundFailed,
+}: {
+  goals: Goal[]
+  emergency: EmergencyView | null
+  fundFailed: boolean
+}) {
+  if (!fundFailed && emergency && emergency.goalId === null) {
+    return <EmergencyOffer view={emergency} />
+  }
   if (goals.length > 0) return null
   return (
     <Card static="empty" label="No goals">
       <p className="empty">
-        No goals yet. Save for something you want to buy, or start an emergency fund once a month of
-        spending is in.
+        {fundFailed
+          ? 'No goals yet. Save for something you want to buy.'
+          : 'No goals yet. Save for something you want to buy, or start an emergency fund once a month of spending is in.'}
       </p>
     </Card>
+  )
+}
+
+/** In place of the fund's card or offer when it could not load: a line and a retry. */
+function FundTrouble({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <p className="small muted">
+      The emergency fund did not load.{' '}
+      <button type="button" className="linkbtn small tap" disabled={retrying} onClick={onRetry}>
+        Try again
+      </button>
+    </p>
   )
 }
 
@@ -149,10 +183,11 @@ export function GoalsSection() {
   const cash = useAction('get_cash_flow')
   const emergency = useAction('get_emergency_fund')
 
-  if (!goals.data || !accounts.data || !cash.data || emergency.data === undefined) {
-    const error = goals.error ?? accounts.error ?? cash.error ?? emergency.error
-    return <LoadingOrError error={error} />
+  // Waits on the fund only while it loads: an error drops its card, never the goals.
+  if (!goals.data || !accounts.data || !cash.data || emergency.isPending) {
+    return <LoadingOrError error={goals.error ?? accounts.error ?? cash.error} />
   }
+  const fund = emergency.data ?? null
 
   function close() {
     setEditing(null)
@@ -167,7 +202,7 @@ export function GoalsSection() {
           key={editing.goal?.id ?? `new-${editing.kind}`}
           editing={editing}
           accounts={accounts.data}
-          emergency={emergency.data}
+          emergency={fund}
           onClose={close}
         />
       )}
@@ -191,11 +226,15 @@ export function GoalsSection() {
           </button>
         </div>
       </div>
-      <GoalsStart goals={goals.data} emergency={emergency.data} />
+      {emergency.isError && (
+        <FundTrouble retrying={emergency.isFetching} onRetry={() => void emergency.refetch()} />
+      )}
+      <GoalsStart goals={goals.data} emergency={fund} fundFailed={emergency.isError} />
       {competing(goals.data) && <GoalOrderCard today={cash.data.today} />}
       <GoalCards
         goals={goals.data}
-        emergency={emergency.data}
+        emergency={fund}
+        fundFailed={emergency.isError}
         today={cash.data.today}
         onEdit={(goal) => setEditing({ goal, kind: goal.kind })}
       />

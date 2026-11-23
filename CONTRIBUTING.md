@@ -157,6 +157,11 @@ assistant: POST /mcp                 http/mcp.ts, OAuth token or agent key
   against stand-ins that record what it draws, sends and saves, and
   `autorun.test.ts` checks the last line starts it when those globals exist.
   The web coverage floors include the script.
+- `scripts/e2e/`: the sharded browser test runner (see "Sharded runs"),
+  tested with vitest by `npm run test:scripts`, which `npm test` and
+  `npm run test:coverage` include. Everything but the entry point is covered
+  in full; the database test creates and drops a database of its own on
+  `TEST_DATABASE_URL`'s server.
 - Name tests as sentences about behavior ("refuses a rule whose minimum is
   above its maximum"), and control time through the context's clock
   (`ctx.setNow`) rather than waiting on real timers.
@@ -207,8 +212,10 @@ phone-sized screens.
 layouts as HTML previews and checks nothing spills out; with
 `WIDGET_SCREENSHOTS` set to a folder, the widget specs also save pictures of
 Settings > Widget and the previews there.
-They share one install and run in order; `setup.spec.ts` creates the owner and
-saves the signed-in session the others reuse.
+Within a run they share one install and run in order; `setup.spec.ts` creates
+the owner and saves the signed-in session the others reuse. A sharded run
+(below) gives each shard an install of its own, so a spec must not count on
+what another spec file left behind.
 The test server runs with no Anthropic key, so no browser test can reach a
 model. The paystub specs stand in for the reader at the network
 (`e2e/paystub.ts` answers the upload and tells `get_paystub` the server can
@@ -220,8 +227,10 @@ and the forms people open on them (`guarded-screens.ts`), on each phone in
 320pt first SE upright, and the first two turned sideways, each with its
 status bar, notch and home indicator simulated as an app installed to the
 home screen. `seed.ts` fills the install with the longest names Leeway takes
-first, and removes them afterwards. Each screen fails if text overlaps text
-or a control, is cut off without an ellipsis (or squeezed to a sliver with
+first, once per Playwright worker, and removes them when the worker ends (a
+worker fixture rather than `beforeAll`, so each of the guard's tests stands
+alone and a sharded run can share them out one by one). Each screen fails
+if text overlaps text or a control, is cut off without an ellipsis (or squeezed to a sliver with
 one), breaks a word across lines, scrolls the page sideways, comes to rest
 under a fixed bar, or shows under the status bar, notch or home indicator
 with nothing opaque over it. It also fails on any control a finger's 44px tap
@@ -259,8 +268,57 @@ On a machine where Playwright's browsers will not install, run them in
 Playwright's own image instead: `e2e/run-in-docker.sh`. A failed test leaves a
 screenshot and a trace in `test-results/`.
 
-CI (`.github/workflows/ci.yml`) runs `npm run check`, a production build, the
-browser tests and the Docker image build on every push and pull request.
+#### Sharded runs
+
+`npm run e2e` runs every test one at a time against one install. For a
+faster run, `npm run e2e:full` splits the suite into Playwright shards
+(`--shard=i/N`) that run side by side, each with its own server, port,
+database, signed-in session (`e2e/.auth/shard-i.json`) and output folder, and
+each running `setup.spec.ts` for itself. It then merges the shards' blob
+reports, prints the totals and every failure, and exits with an error if any
+test failed, any shard failed, or any listed test was never reported.
+`npm run e2e:some -- <spec files>` does the same for chosen files, with as
+many shards as they have tests for (one for every 20 or so). Both need a
+build first and Node 22.18 or newer, which runs the runner's TypeScript
+(`scripts/e2e/`) as it is.
+
+| Variable             | Default                                         | What it sets                                                                                       |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `E2E_SHARDS`         | the machine's cores, at most 4                  | The most shards to run.                                                                            |
+| `E2E_PORT_BASE`      | `3110`                                          | Shard 1's port; shard 2 takes the next, and so on. Give each checkout its own block.               |
+| `E2E_DATABASE_URL`   | `postgres://postgres@localhost:5432/leeway_e2e` | The server, and the name the shards' databases are named after (`leeway_e2e_shard1`, ...).         |
+| `E2E_KEEP_DATABASES` | unset                                           | `1` keeps the shards' databases after the run, to look into a failure. Otherwise they are dropped. |
+
+The runner creates the databases itself (the Postgres user needs to be
+allowed to), and refuses to start when a shard's port is taken. Each shard's
+output is in `test-results/shards/shard-i.log`, its traces and screenshots
+in `test-results/shards/shard-i/`, and the merged report in
+`playwright-report/` (`npx playwright show-report`).
+
+Several checkouts can run sharded suites at once on one machine as long as
+each sets its own `E2E_PORT_BASE` and `E2E_DATABASE_URL`.
+
+#### Which tests to run when
+
+- **While building, and to re-check a review's fixes:** `npm test` (or
+  `npm run test:coverage`) for the unit and server tests, plus the specs for
+  the screens the change touches, through `npm run e2e:some`. When the change
+  touches a route or how a screen lays out, include the phone layout guard:
+
+  ```sh
+  npm run e2e:some -- e2e/budgets.spec.ts e2e/layout-guard.phone.spec.ts
+  ```
+
+- **Before merging:** `npm run check`, then the whole suite with
+  `npm run e2e:full`. CI runs both again.
+
+CI (`.github/workflows/ci.yml`) runs on every push to `main`, every pull
+request, and on demand; a newer push to a pull request cancels its run still
+going. It runs `npm run check`, a production build,
+the Docker image build, and the browser tests (WebKit included) as four
+shard jobs, each with its own Postgres. A last job, `e2e`, merges their blob
+reports into one `playwright-report` artifact, with screenshots and traces of
+any failure, and fails unless every shard passed.
 
 ## The Railway template
 

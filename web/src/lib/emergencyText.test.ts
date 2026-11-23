@@ -8,6 +8,7 @@ import {
   fundTargetHint,
   leftOutNotes,
   monthsWord,
+  partlyNote,
   quietNote,
   targetWords,
 } from './emergencyText'
@@ -37,6 +38,21 @@ describe('what counts as essential', () => {
     expect(essentialsWords(essentials({ categories: null }))).toBe('your spending')
     expect(essentialsWords(essentials({ categories: [] }))).toBe('your spending')
   })
+
+  it('says what a category counted in part adds, never its name as if all of it counted', () => {
+    const partly = essentials({ categories: ['Rent'], partlyCounted: ['Debt payments'] })
+    expect(essentialsWords(partly)).toBe('Rent plus loans and child care')
+    const many = essentials({ partlyCounted: ['Services', 'Debt payments'] })
+    expect(essentialsWords(many)).toBe('Rent and Groceries plus loans and child care')
+    const lots = essentials({
+      categories: ['Rent', 'Groceries', 'Gas', 'Insurance'],
+      partlyCounted: ['Services'],
+    })
+    expect(essentialsWords(lots)).toBe('Rent, Groceries, Gas and 1 more plus loans and child care')
+    expect(essentialsWords(essentials({ categories: [], partlyCounted: ['Services'] }))).toBe(
+      'loans and child care',
+    )
+  })
 })
 
 describe('the line about the essentials', () => {
@@ -49,6 +65,13 @@ describe('the line about the essentials', () => {
     // Unknown with no pick: only bills could size it.
     expect(essentialsSentence(fundView({ essentials: null }))).toBe(
       'What your bills cost in a typical month.',
+    )
+  })
+
+  it('notes the categories counted only in part, and that a pick counts whole ones', () => {
+    expect(partlyNote([])).toBeNull()
+    expect(partlyNote(['Services', 'Debt payments'])).toBe(
+      'Also counted: the loan and child care payments in Services and Debt payments. Card payments never count. Your own pick counts whole categories.',
     )
   })
 
@@ -71,6 +94,15 @@ describe('the target', () => {
   it("tells the owner's own amount in months, never as a step it is not", () => {
     expect(targetWords({ months: 2.3, ownTarget: true })).toBe('About 2.3 months of essentials')
     expect(targetWords({ months: null, ownTarget: true })).toBe('Your own target')
+  })
+
+  it('tells any own amount under a month as less than one, never "About 0 months"', () => {
+    // A $100 target against $3,000 of essentials a month.
+    expect(targetWords({ months: 0, ownTarget: true })).toBe('Less than a month of essentials')
+    expect(targetWords({ months: 0.4, ownTarget: true })).toBe('Less than a month of essentials')
+    expect(targetWords({ months: 0.7, ownTarget: true })).toBe('Less than a month of essentials')
+    expect(targetWords({ months: 1, ownTarget: true })).toBe('About 1 month of essentials')
+    expect(targetWords({ months: 1.5, ownTarget: true })).toBe('About 1.5 months of essentials')
   })
 
   it('hints in the form how the target is sized, and how to change that', () => {

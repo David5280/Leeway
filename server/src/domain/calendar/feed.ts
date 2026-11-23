@@ -5,7 +5,7 @@
 
 import { isIP } from 'node:net'
 import { AppError } from '../../errors.js'
-import { isPublicAddress } from '../../lib/publicAddress.js'
+import { isFetchableAddress } from '../../lib/publicAddress.js'
 import { guardedFetch, type Fetcher } from './transport.js'
 
 export type { Fetcher } from './transport.js'
@@ -41,7 +41,7 @@ const UNREADABLE = 'The calendar could not be read just now. Try again later.'
 export function isLocalHost(hostname: string): boolean {
   // URL keeps an IPv6 host in brackets, and a name may end in the root's dot.
   const host = hostname.replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '')
-  if (isIP(host)) return !isPublicAddress(host)
+  if (isIP(host)) return !isFetchableAddress(host)
   return /^localhost$|\.(localhost|local|internal)$/i.test(host)
 }
 

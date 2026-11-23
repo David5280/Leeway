@@ -17,6 +17,7 @@ backups/
 # Test output
 e2e/.auth/
 playwright-report/
+blob-report/
 test-results/
 
 # Logs and system files
