@@ -3,6 +3,7 @@
 // transactions and what the owner tracks or dismissed). Pure.
 
 import { daysBetween, type IsoDate } from '../lib/dates.js'
+import { median } from '../lib/money.js'
 import { addCadence, type Cadence } from '../lib/periods.js'
 import { CADENCE_BANDS, type CadenceBand } from './cadenceBands.js'
 import { merchantKey } from './merchantKey.js'
@@ -49,14 +50,6 @@ export interface RecurringSeries {
 const REGULAR_SHARE = 0.75
 /** Amounts within this share of the median count as the same price. */
 const FIXED_AMOUNT_TOLERANCE = 0.05
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2
-    ? sorted[middle]!
-    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
-}
 
 /**
  * The cadence whose band most gaps fall in, if enough of them do. The bands

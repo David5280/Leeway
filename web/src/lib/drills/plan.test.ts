@@ -72,6 +72,62 @@ describe('cashFlowDrill', () => {
     expect(end.subtitle).toBe('To on 2026-11-27, when the budget period ends')
   })
 
+  it('says a shortfall against a guessed payday may be, in amber, not red', () => {
+    const drill = cashFlowDrill(
+      cashFlow({ cashCents: 5000, billsDueCents: 9000, safeCents: 0, shortfallCents: 4000 }),
+      date,
+    )
+    expect(drill.figure).toEqual({ cents: 4000, tone: 'problem' })
+    const guess = cashFlowDrill(
+      cashFlow({
+        cashCents: 5000,
+        billsDueCents: 9000,
+        safeCents: 0,
+        shortfallCents: 4000,
+        paydayEstimate: true,
+      }),
+      date,
+    )
+    expect(guess.figure).toEqual({ cents: 4000, tone: 'warn' })
+    expect(guess.math.result.value).toEqual({ cents: 4000, tone: 'warn' })
+    expect(guess.math.note).toBe(
+      'The bills due before payday may come to more than checking holds.',
+    )
+  })
+
+  it('says an overdraft alone is what falls short, with no bills due', () => {
+    const drill = cashFlowDrill(
+      cashFlow({
+        cashCents: 0,
+        billsDue: [],
+        billsDueCents: 0,
+        overdraftCents: 2500,
+        safeCents: 0,
+        shortfallCents: 2500,
+      }),
+      date,
+    )
+    expect(drill.math.note).toBe('An overdrawn account needs this much to get back to zero.')
+    const both = cashFlowDrill(
+      cashFlow({ cashCents: 0, overdraftCents: 2500, safeCents: 0, shortfallCents: 8500 }),
+      date,
+    )
+    expect(both.math.note).toBe(
+      'The bills and the overdraft due before payday come to more than checking holds.',
+    )
+  })
+
+  it('says what is not known with no checking balance, never $0', () => {
+    const drill = cashFlowDrill(cashFlow({ cashKnown: false, cashCents: 0, safeCents: 0 }), date)
+    expect(drill.figure).toEqual({ text: 'Not known yet' })
+    expect(said(drill)).toBe(
+      'Safe to spend Not known yet = In checking Not known yet minus bills due before payday $60',
+    )
+    expect(drill.math.note).toBe(
+      "Checking's balance isn't known yet, so what is safe to spend isn't either.",
+    )
+  })
+
   it('lists no bills when none are due', () => {
     const drill = cashFlowDrill(cashFlow({ daysUntilPayday: 0, billsDue: [] }), date)
     expect(drill.items).toBeUndefined()

@@ -25,8 +25,8 @@ import {
   businessDayOnOrAfter,
   businessDayOnOrBefore,
   businessDaysApart,
+  openDaysApart,
   type Roll,
-  weekdaysApart,
 } from './businessDays.js'
 import {
   MONTH_END,
@@ -119,7 +119,7 @@ const MONTH_DAYS = Array.from({ length: MONTH_END }, (_, index) => index + 1)
 function weightedOff(payday: IsoDate, dayOfMonth: number, shift: number): number {
   const at = toDayNumber(payday)
   const nominal = toDayNumber(nearestDayOfMonth(payday, dayOfMonth))
-  const off = weekdaysApart(at - shift, nominal - shift)
+  const off = openDaysApart(at - shift, nominal - shift)
   return at > nominal ? LATE_WEIGHT * off : off
 }
 
@@ -197,8 +197,10 @@ function usualDayOfMonth(paydays: IsoDate[]): { dayOfMonth: number; roll: Roll }
  */
 export function nominalPayday(paydays: IsoDate[], cadence: Cadence): NominalPayday {
   if (cadence === 'week' || cadence === 'biweek') {
-    // A weekday payroll never meets a weekend; a holiday it meets is not known here.
-    return { date: onUsualWeekday(paydays), roll: businessDayOnOrBefore }
+    // A weekday payroll never meets a weekend, only a holiday, moved as its paydays show.
+    const date = onUsualWeekday(paydays)
+    const roll = rollOf(paydays, (payday) => movedTo(payday, dayOfWeek(date)))
+    return { date, roll }
   }
   const { dayOfMonth, roll } = usualDayOfMonth(paydays)
   return { date: nearestDayOfMonth(paydays.at(-1)!, dayOfMonth), dayOfMonth, roll }

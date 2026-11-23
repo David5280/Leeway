@@ -22,10 +22,13 @@ export interface Spendable {
   overdraftCents: number
   /** Left in the budgets after what goals hold back; null when nothing is budgeted. */
   budgetLeftCents: number | null
-  /** The figure to lead with: the lesser of the budget's room and safe to spend. */
+  /** The figure to lead with: the lesser of the budget's room and safe to spend; 0 when neither is known. */
   leadCents: number
-  /** Which of the two the lead figure is. */
-  limitedBy: 'budget' | 'cash'
+  /**
+   * Which of the two the lead figure is, or 'none' with neither a budget nor
+   * a checking balance: then nothing is known to spend, which is not $0.
+   */
+  limitedBy: 'budget' | 'cash' | 'none'
   /**
    * What can be spent a day, counting today: the lesser of the budget's room
    * a day for the rest of the period and the cash's a day until payday (see
@@ -140,10 +143,13 @@ export function spendable(
 ): Spendable {
   const budgeted = budget.totals.budgetedCents > 0
   const budgetLeftCents = budgeted ? budget.totals.leewayCents : null
-  // No checking balance to go by (none linked yet): the budget alone says what is left.
-  const byCash =
-    budgetLeftCents === null || (cashFlow.cashKnown && cashFlow.safeCents < budgetLeftCents)
-  const limitedBy: Spendable['limitedBy'] = byCash ? 'cash' : 'budget'
+  // No checking balance to go by (none linked yet): the budget alone says
+  // what is left, and with no budget either, nothing is known.
+  const cashLeads =
+    cashFlow.cashKnown && (budgetLeftCents === null || cashFlow.safeCents < budgetLeftCents)
+  let limitedBy: Spendable['limitedBy'] = 'none'
+  if (cashLeads) limitedBy = 'cash'
+  else if (budgetLeftCents !== null) limitedBy = 'budget'
   const shown = {
     safeCents: cashFlow.safeCents,
     shortfallCents: cashFlow.shortfallCents,
@@ -161,7 +167,7 @@ export function spendable(
   const surelyShort = cashFlow.shortfallCents > 0 && !cashFlow.paydayEstimate
   return {
     ...shown,
-    leadCents: limitedBy === 'cash' ? cashFlow.safeCents : budgetLeftCents!,
+    leadCents: { budget: budgetLeftCents ?? 0, cash: cashFlow.safeCents, none: 0 }[limitedBy],
     perDayCents: dailyRoom(
       budgetLeftCents === null
         ? null

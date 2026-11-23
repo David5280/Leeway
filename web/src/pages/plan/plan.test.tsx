@@ -112,6 +112,26 @@ describe('Until payday', () => {
     vi.restoreAllMocks()
   })
 
+  it('says checking is not known yet with no balance, never $0 or a false warning', async () => {
+    planServer({
+      ...quietBills,
+      get_cash_flow: () => cashFlow({ cashKnown: false, cashCents: 0, safeCents: 0 }),
+    })
+    renderPlan('/plan')
+    await screen.findByText(/balance isn.t known yet/)
+    const card = screen.getByRole('region', { name: 'Until payday' })
+    expect(card).toHaveTextContent("Checking's balance isn't known yet.")
+    expect(card).toHaveTextContent('$60 in bills due before payday. Next payday Fri, Nov 27.')
+    expect(card).not.toHaveTextContent('safe to spend')
+    expect(card).not.toHaveTextContent('goes below')
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
+    // The bill is still listed, and the math says what is not known.
+    expect(within(card).getByText('Phone')).toBeVisible()
+    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    await userEvent.setup().click(open)
+    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Not known yet')
+  })
+
   it('leaves the line out when no bill comes before payday, or payday is today', async () => {
     const quiet = await show(cashFlow({ billsDue: [], billsDueCents: 0 }))
     expect(within(quiet).queryByRole('img')).not.toBeInTheDocument()

@@ -70,7 +70,8 @@ function subjectLine({ budget, alerts, spendable }: Checkin, money: Money, word:
   if (budget.leewayCents < 0) {
     return `Your week in Leeway: ${money(-budget.leewayCents)} over this ${word}`
   }
-  // Checking holds less than the budgets have room for, so the cash leads.
+  // Checking holds less than the budgets have room for, so the cash leads;
+  // never with no checking balance, which spendable.ts never lets lead.
   if (spendable?.limitedBy === 'cash') {
     return `Your week in Leeway: ${money(spendable.safeCents)} safe to spend`
   }

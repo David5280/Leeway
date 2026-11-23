@@ -16,16 +16,10 @@ import type { Db } from '../db/pool.js'
 import { addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
 import { listBills } from './bills.js'
 import { listCategories, type Category } from './categories.js'
-import { categoryTotalsByRange, sumTotals, type DateRange } from './categoryTotals.js'
-import { essentialCodedByRange } from './essentialCoded.js'
+import type { DateRange } from './categoryTotals.js'
+import { essentialCentsOf, readEssentialMonths, type EssentialMonth } from './essentialMonths.js'
 import { essentialIdsOf } from './essentials.js'
-import {
-  currentEssentials,
-  essentialBillsCents,
-  essentialSpending,
-  partlyCounted,
-  type MonthSpending,
-} from './essentialSpending.js'
+import { currentEssentials, essentialBillsCents, partlyCounted } from './essentialSpending.js'
 import { firstTransactionDay } from './monthlyTotals.js'
 import { essentialsFrom, type EssentialsMeasure } from './savings/emergency.js'
 import type { Settings } from './settings.js'
@@ -82,14 +76,14 @@ export function wholeMonthsBefore(today: IsoDate, firstDataDay: IsoDate | null):
 /** Essential spending averaged over each month, or null without a whole month. */
 export function averageEssentials(
   categories: Category[],
-  months: MonthSpending[],
+  months: EssentialMonth[],
   essentialIds: string[] | null,
 ): number | null {
   if (months.length === 0) return null
-  const essential = months.reduce((sum, month) => {
-    const { spentCents } = sumTotals(categories, month.totals)
-    return sum + essentialSpending(categories, month, essentialIds, spentCents)
-  }, 0)
+  const essential = months.reduce(
+    (sum, month) => sum + essentialCentsOf(categories, month, essentialIds),
+    0,
+  )
   return Math.round(essential / months.length)
 }
 
@@ -97,25 +91,17 @@ export function averageEssentials(
 async function recentMonths(
   db: Db,
   today: IsoDate,
-): Promise<{ categories: Category[]; months: MonthSpending[] }> {
+): Promise<{ categories: Category[]; months: EssentialMonth[] }> {
   // One at a time: db may be a transaction's client, which runs one query at once.
   const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
   const categories = await listCategories(db)
   if (ranges.length === 0) return { categories, months: [] }
-  // Posted only (a month already over has settled), card payments left out wherever filed.
-  const totalsByMonth = await categoryTotalsByRange(db, ranges, false, null, {
-    skipCardPayments: true,
-  })
-  const codedByMonth = await essentialCodedByRange(db, ranges)
-  const months = totalsByMonth.map((totals, at) => ({
-    totals,
-    essentialCoded: codedByMonth[at]!,
-  }))
+  const months = await readEssentialMonths(db, ranges)
   return { categories, months }
 }
 
 /** The spending categories that had any spending across the months given. */
-function spentIn(categories: Category[], months: MonthSpending[]): string[] {
+function spentIn(categories: Category[], months: EssentialMonth[]): string[] {
   const spent = new Set(
     months
       .flatMap((month) => month.totals)

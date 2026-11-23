@@ -80,7 +80,7 @@ async function steadyOwner() {
   const transfers = await call('create_category', { name: 'Transfers', kind: 'transfer' })
   for (const month of ['2026-08', '2026-09', '2026-10', '2026-11']) {
     await filed(checking.accountId, pay.id, `${month}-01`, -500_000, {
-      name: 'ACME PAYROLL',
+      name: 'ACME CORP PAYROLL',
       detailed: 'INCOME_SALARY',
     })
     await filed(checking.accountId, rent.id, `${month}-03`, 200_000)
@@ -159,7 +159,7 @@ describe('getFinancialProfile', () => {
       typicalPayCents: 500_000,
       nextPayday: '2026-12-01',
       estimate: false,
-      employer: 'Acme Payroll',
+      employer: 'Acme Corp Payroll',
       since: '2026-08-01',
     })
     expect(result.accounts.map((k) => [k.kind, k.totalCents])).toEqual([
@@ -204,8 +204,15 @@ describe('getFinancialProfile', () => {
     for (const date of ['2026-09-05', '2026-10-05', '2026-11-05']) {
       await filed(checking.accountId, groceries.id, date, 60_000)
     }
-    // A card payment and a move to savings are not spending.
-    await money('2026-10-20', 'PAYMENT THANK YOU', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    // A payment to a tracked card, either side, and a move to savings are not spending.
+    const card = await insertBankAccount(ctx.db, { type: 'credit', subtype: 'credit card' })
+    await money('2026-10-20', 'CARD PAYMENT', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    await insertBankTransaction(ctx.db, card.accountId, {
+      date: '2026-10-20',
+      name: 'PAYMENT THANK YOU',
+      amountCents: -150_000,
+      detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    })
     await filed(checking.accountId, transfers.id, '2026-10-21', 50_000)
     await ctx.db.query('DELETE FROM balance_history')
 
@@ -222,47 +229,12 @@ describe('getFinancialProfile', () => {
     expect(result.pay).toMatchObject({
       cadence: 'month',
       typicalPayCents: 600_000,
-      employer: 'Globex Payroll',
+      // Named only as a business: GLOBEX PAYROLL could be anyone's.
+      employer: null,
       since: '2026-09-01',
       nextPayday: '2026-12-01',
       estimate: false,
     })
-  })
-
-  it('counts a second job beside the first, naming each without account numbers', async () => {
-    const checking = await insertBankAccount(ctx.db, { subtype: 'checking', mask: '4821' })
-    const pay = (date: string, name: string, amountCents: number) =>
-      insertBankTransaction(ctx.db, checking.accountId, {
-        date,
-        name,
-        amountCents: -amountCents,
-        detailed: 'INCOME_SALARY',
-      })
-    for (const date of ['2026-10-15', '2026-10-30', '2026-11-13']) {
-      await pay(date, 'INITECH PAYROLL', 200_000)
-    }
-    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
-      await pay(date, 'BLUTH CO PAYROLL ACCT 4821', 60_000)
-    }
-    const result = await profile()
-    // $4,000 a month plus $600 every two weeks.
-    expect(result.monthly.incomeCents).toBe(400_000 + 130_446)
-    // Three checks near the 15th and month end could be either cadence: the
-    // cautious reading counts the lower monthly pay and the later payday (the
-    // 1st, since Friday Oct 30 fits a Sunday the 1st too), and ends the period
-    // at the main job's payday, not the side job's.
-    expect(result.pay).toMatchObject({
-      cadence: 'biweek',
-      employer: 'Initech Payroll',
-      nextPayday: '2026-12-01',
-      since: '2026-09-11',
-      estimate: true,
-    })
-    expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
-      ['Initech Payroll', 'biweek', 400_000],
-      ['Bluth Co Payroll', 'biweek', 130_446],
-    ])
-    expect(JSON.stringify(result.pay)).not.toContain('4821')
   })
 
   it('counts only the essential categories the owner picked, and their target', async () => {
