@@ -116,31 +116,48 @@ const columnSum = (lines: readonly CentsLine[], column: Column) =>
 /** Whether a line shows an amount in the column given. */
 const shows = (line: CentsLine, column: Column) => line[column] !== null
 
+/** Whether a line prints an amount other than zero in either column, the only kind that can move a share. */
+const printsMoney = (line: CentsLine) =>
+  (line.current !== null && line.current !== 0) ||
+  (line.yearToDate !== null && line.yearToDate !== 0)
+
+/** A column's gross pay when it is above zero, the only kind a share can divide by. */
+function grossIn(detail: DerivableDetail, column: Column): number | null {
+  const gross = detail.pay.gross[column]
+  return gross !== null && gross > 0 ? gross : null
+}
+
 /**
- * A part of gross pay as a share of it, read from one column, trying the
- * preferred column first. A column counts only when it shows gross pay above
- * zero and every line of the part that the paystub prints at all, in either
- * column. A line printed only in the other column would otherwise drop out
- * and understate the share, and taking that one line from the other column
- * would mix this period's figures with the year's. Null when no column shows
- * the whole part.
+ * A part of gross pay as a share of it, read from one column.
+ * - First, the preferred column that shows every line of the part printing
+ *   money in either column: a line printed only in the other column would
+ *   otherwise drop out and understate the share, and taking that one line
+ *   from the other column would mix this period's figures with the year's.
+ *   A line printed only as 0.00 moves no sum, so it never rules a column out.
+ * - Else this period, reading a blank beside a printed year so far as
+ *   nothing taken this period, as paystubs print it (a Social Security
+ *   wage base already reached, a Roth stopped earlier in the year). The
+ *   year column gets no such reading: money taken this period is always in
+ *   the year so far, so a line missing there is truly unknown.
+ * Null when neither reading works, or the part prints nothing at all.
  */
 function shareOf(
   detail: DerivableDetail,
   lines: readonly CentsLine[],
   order: readonly Column[],
 ): Share | null {
-  const printed = lines.filter((line) => shows(line, 'current') || shows(line, 'yearToDate'))
+  const withMoney = lines.filter(printsMoney)
   for (const column of order) {
-    const gross = detail.pay.gross[column]
-    // Null when the part prints nothing at all.
-    const cents = columnSum(printed, column)
-    const whole = printed.every((line) => shows(line, column))
-    if (gross !== null && gross > 0 && cents !== null && whole) {
+    const gross = grossIn(detail, column)
+    // Null when the part prints nothing in this column (every() is true for no lines).
+    const cents = columnSum(lines, column)
+    if (gross !== null && cents !== null && withMoney.every((line) => shows(line, column))) {
       return { rate: cents / gross, basis: column }
     }
   }
-  return null
+  const gross = grossIn(detail, 'current')
+  const cents = columnSum(lines, 'current')
+  return gross !== null && cents !== null ? { rate: cents / gross, basis: 'current' } : null
 }
 
 /** The year's figures first: withholding swings check to check (a bonus is taxed at its own rate). */

@@ -138,8 +138,36 @@ describe('effectiveTaxRate', () => {
     })
   })
 
-  it('is null when no column shows every tax the paystub prints', () => {
+  it('reads a tax blank this period beside a printed year as nothing withheld this period', () => {
+    // A high earner past the Social Security wage base, with a city tax printed only this period.
+    const detail = withPay({ gross: line(1_000_000, 22_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(200_000, 4_000_000)
+    detail.taxes.socialSecurity = line(null, 1_091_820)
+    detail.taxes.medicare = line(14_500, 319_000)
+    detail.taxes.stateIncome = line(44_000, 968_000)
+    detail.taxes.local = line(575)
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (200_000 + 14_500 + 44_000 + 575) / 1_000_000,
+      basis: 'current',
+    })
+  })
+
+  it('never lets a tax printed only as 0.00 rule out a column', () => {
     const detail = withPay({ gross: line(400_000, 4_000_000) })
+    for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
+    detail.taxes.federalIncome = line(40_000, 400_000)
+    detail.taxes.socialSecurity = line(24_800)
+    detail.taxes.medicare = line(5_800)
+    detail.taxes.local = line(null, 0)
+    expect(effectiveTaxRate(detail)).toEqual({
+      rate: (40_000 + 24_800 + 5_800) / 400_000,
+      basis: 'current',
+    })
+  })
+
+  it('is null when the year misses a tax and this period shows no gross', () => {
+    const detail = withPay({ gross: line(null, 4_000_000) })
     for (const tax of Object.values(detail.taxes)) Object.assign(tax, line(null))
     detail.taxes.federalIncome = line(null, 400_000)
     detail.taxes.medicare = line(5_800)
@@ -209,11 +237,18 @@ describe('retirementSavingsRate across columns', () => {
     })
   })
 
-  it('is null when no column shows every retirement line the paystub prints', () => {
+  it('reads a plan stopped earlier in the year as nothing put in this period', () => {
     const detail = noRetirement()
-    detail.preTax.plan401k = line(20_000)
-    detail.employer.match = line(null, 100_000)
-    expect(retirementSavingsRate(detail)).toBeNull()
+    detail.preTax.plan401k = line(20_000, 200_000)
+    detail.postTax.roth401k = line(null, 50_000)
+    detail.employer.match = line(10_000)
+    const gross = detail.pay.gross.current!
+    expect(retirementSavingsRate(detail)).toEqual({
+      rate: (20_000 + 10_000) / gross,
+      basis: 'current',
+      employeeCents: 20_000,
+      employerCents: 10_000,
+    })
   })
 })
 

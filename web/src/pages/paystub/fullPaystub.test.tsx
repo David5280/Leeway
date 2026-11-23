@@ -179,7 +179,8 @@ describe('the full paystub review', () => {
     detail.pay.gross = { ...detail.pay.gross, current: 1_384_500 }
     detail.earnings.bonus = { ...none, current: 1_000_000 }
     detail.pay.annualSalary = { value: null, confidence: 'high', source: null }
-    detail.employer.pension = none
+    // An employer share printed as 0.00 puts in nothing, so only the owner saves.
+    detail.employer.pension = { ...none, current: 0 }
     serve({ read: reads(bonus) })
     const { form } = await chooseFile()
     const keys = within(form.getByRole('region', { name: 'What this paystub adds up to' }))

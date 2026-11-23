@@ -1,5 +1,5 @@
 // The full paystub review: what the paystub adds up to first, then who paid
-// and when, then every line Claude read, grouped as the owner thinks of
+// and when, then every line the AI read, grouped as the owner thinks of
 // them: pay, taxes, deductions and savings, and what the employer adds.
 // Every figure is editable, and nothing is saved until the owner confirms.
 
