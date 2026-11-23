@@ -49,7 +49,7 @@ const STATE_ZIP = /\b[A-Z]{2},?\s+\d{5}(?:-\d{4})?\b/g
  * Where a "to" names an account or a column, not a person: "Gross Pay To
  * Date", "Net Pay to Checking", "Deposited to Savings".
  */
-const NOT_A_PERSON = String.raw`(?!\s+(?:date|checking|savings|account|acct)\b)`
+const NOT_A_PERSON = String.raw`(?!\s+(?:date|dt|checking|chk|savings|account|acct)\b)`
 
 /**
  * Labels that introduce a person's name. "Plan Name: PERA" is a plan, not a

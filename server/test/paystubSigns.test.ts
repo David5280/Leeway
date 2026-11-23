@@ -26,6 +26,10 @@ describe('signOf', () => {
     }
     expect(signOf('150.00 + (50.00)')).toBe('mixed')
   })
+
+  it('gives a zero or a blank no sign, since neither is marked', () => {
+    for (const printed of ['0.00', '-0.00', '(0.00)', '', ' ']) expect(signOf(printed)).toBeNull()
+  })
 })
 
 describe('signedAgainst', () => {
@@ -45,6 +49,25 @@ describe('signedAgainst', () => {
       }
     })
     const flags = signedAgainst(signed)
+    expect(flags.taxes.federalIncome).toEqual(neither)
+    expect(flags.preTax.plan457).toEqual(neither)
+  })
+
+  it('lets no printed zero vote, so set-up deductions at 0.00 flag nothing', () => {
+    // Deductions negative this period, plain for the year, with five set-up deductions at zero.
+    const signed = cityWith((reading) => {
+      for (const group of [reading.taxes, reading.preTax, reading.postTax]) {
+        for (const line of Object.values(group)) {
+          if (line.current !== null) line.current = `-${line.current}`
+        }
+      }
+      reading.preTax.hsa = readLine('0.00', '500.00')
+      for (const kind of ['fsa', 'dental', 'vision', 'commuter'] as const) {
+        reading.preTax[kind] = readLine('0.00', '0.00')
+      }
+    })
+    const flags = signedAgainst(signed)
+    expect(flags.preTax.hsa).toEqual(neither)
     expect(flags.taxes.federalIncome).toEqual(neither)
     expect(flags.preTax.plan457).toEqual(neither)
   })

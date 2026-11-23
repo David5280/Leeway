@@ -70,9 +70,9 @@ function negative(part: string): boolean {
   return PARENTHESES.test(plain) || MINUS.test(plain)
 }
 
-/** How an amount as printed is marked; null when it is not printed. */
+/** How an amount as printed is marked; null when it is not printed, blank or zero, which carry no sign. */
 export function signOf(printed: string | null): Sign | null {
-  if (printed === null) return null
+  if (printed === null || !/[1-9]/.test(printed)) return null
   const marks = printed.split('+').map(negative)
   if (marks.every(Boolean)) return 'minus'
   return marks.some(Boolean) ? 'mixed' : 'plus'
