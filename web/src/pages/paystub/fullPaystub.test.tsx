@@ -146,6 +146,23 @@ describe('the full paystub review', () => {
     expect(keys.getByText('Your stated salary')).toBeVisible()
   })
 
+  it('leaves a bonus out of yearly pay, and names only who saves for retirement', async () => {
+    const bonus = cityRead()
+    const { detail } = bonus.extraction
+    const none = { current: null, yearToDate: null, confidence: 'high' as const, source: null }
+    detail.pay.gross = { ...detail.pay.gross, current: 1_384_500 }
+    detail.earnings.bonus = { ...none, current: 1_000_000 }
+    detail.pay.annualSalary = { value: null, confidence: 'high', source: null }
+    detail.employer.pension = none
+    serve({ read: reads(bonus) })
+    const { form } = await chooseFile()
+    const keys = within(form.getByRole('region', { name: 'What this paystub adds up to' }))
+    // 13,845.00 less the 10,000.00 bonus, x 24.
+    expect(keys.getByText('$92,280')).toBeVisible()
+    expect(keys.getByText('This paycheck less one-off pay, paid twice a month')).toBeVisible()
+    expect(keys.getByText('You, from this paycheck')).toBeVisible()
+  })
+
   it('says a key figure is not shown when the paystub gives nothing to work it out', async () => {
     const bare = cityRead({ payFrequency: { value: null, confidence: 'low', source: null } })
     bare.extraction.detail.pay.gross = {

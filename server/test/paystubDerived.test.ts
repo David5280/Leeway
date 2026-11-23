@@ -44,10 +44,43 @@ describe('yearlyGross', () => {
 
   it('never scales up the first months, where a one-off would be multiplied many times', () => {
     const detail = { ...confirmedDetail(), payCadence: null }
-    // Day 89 falls back to the stated salary.
+    // Day 89 falls back to the stated salary; day 90 is 31 March.
     expect(yearlyGross(detail, '2026-03-30')).toEqual({ cents: 9_228_000, basis: 'salary' })
     expect(yearlyGross(detail, '2026-03-31')?.basis).toBe('yearToDate')
     expect(yearlyGross(detail, null)).toEqual({ cents: 9_228_000, basis: 'salary' })
+  })
+
+  it('never multiplies a bonus: the stated salary first, else this paycheck less one-off pay', () => {
+    // The city paycheck with a 10,000.00 bonus on top.
+    const withBonus = (annualSalary: number | null) => {
+      const detail = withPay({ gross: line(1_384_500, 9_074_500), annualSalary })
+      detail.earnings.bonus = line(1_000_000)
+      return detail
+    }
+    expect(yearlyGross(withBonus(9_228_000), '2026-11-13')).toEqual({
+      cents: 9_228_000,
+      basis: 'salary',
+    })
+    expect(yearlyGross(withBonus(null), '2026-11-13')).toEqual({
+      cents: 384_500 * 24,
+      basis: 'regularPay',
+    })
+    // Commission and other earnings are left out the same way.
+    const mixed = withBonus(null)
+    mixed.earnings.bonus = line(null)
+    mixed.earnings.commission = line(600_000)
+    mixed.earnings.other = line(400_000)
+    expect(yearlyGross(mixed, '2026-11-13')).toEqual({ cents: 384_500 * 24, basis: 'regularPay' })
+  })
+
+  it('uses the year so far for a paycheck that is all bonus, with nothing regular to multiply', () => {
+    const bonusOnly = withPay({ gross: line(1_000_000, 9_074_500), annualSalary: null })
+    bonusOnly.earnings.regular = line(null, 8_074_500)
+    bonusOnly.earnings.bonus = line(1_000_000)
+    expect(yearlyGross(bonusOnly, '2026-11-13')).toEqual({
+      cents: Math.round((9_074_500 * 365) / 317),
+      basis: 'yearToDate',
+    })
   })
 
   it('is null when nothing on the paystub gives a year of pay', () => {

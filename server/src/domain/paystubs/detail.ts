@@ -1,7 +1,8 @@
 // A paystub reading turned into the full detail the owner reviews: every
 // line, both columns. legacy.ts works out the import figures from it.
 // Amounts become cents here; one too large to be real, or printed in a way
-// that is not an amount, is dropped and marked to check closely. Pure.
+// that is not an amount, is dropped and marked to check closely. A line
+// whose amount this period is above its year to date is marked too. Pure.
 
 import { MAX_MONTHLY_CENTS } from '../retirement/assumptions.js'
 import { centsOf, hoursOf, rateCentsOf } from './amounts.js'
@@ -58,15 +59,26 @@ function plausible(
   return { value: kept ? value : null, unreadable: !kept }
 }
 
-/** One line for review: both amounts in cents, flagged low when either was printed but unreadable. */
+/** Whether a period's amount is above the year so far, as no real line is: the columns are swapped. */
+function columnsSwapped(current: number | null, yearToDate: number | null): boolean {
+  return current !== null && yearToDate !== null && current > yearToDate
+}
+
+/**
+ * One line for review: both amounts in cents, flagged low when either was
+ * printed but unreadable, or when the two columns cannot both be right. Its
+ * source is redacted wherever the reader filed it, so a support order filed
+ * under any line is never named.
+ */
 function reviewLine(read: ReadLine): ReviewLine {
   const current = plausible(read.current, centsOf, MAX_PERIOD_CENTS)
   const yearToDate = plausible(read.yearToDate, centsOf, MAX_YEAR_CENTS)
-  const unreadable = current.unreadable || yearToDate.unreadable
+  const doubtful =
+    current.unreadable || yearToDate.unreadable || columnsSwapped(current.value, yearToDate.value)
   return {
     current: current.value,
     yearToDate: yearToDate.value,
-    confidence: unreadable ? 'low' : read.confidence,
+    confidence: doubtful ? 'low' : read.confidence,
     source: redactSource(read.source),
   }
 }
@@ -99,7 +111,8 @@ export function detailFrom(reading: PaystubReading): ExtractedDetail {
   const groups = eachGroup((group, line) =>
     reviewLine((reading[group] as Record<string, ReadLine>)[line]!),
   )
-  // A garnishment or support order is never named, not even by its own paystub line.
+  // After-tax "other" is where a garnishment or support order belongs, so its
+  // line is never shown, even in words redaction does not know.
   groups.postTax.other.source = null
   return {
     pay: {

@@ -86,23 +86,34 @@ export function legacyCents(
   return cents !== null && cents > max ? null : cents
 }
 
+/**
+ * Whether a line may have been printed in a column but dropped: it holds no
+ * amount there and is marked low, as a line with an unreadable or too large
+ * amount always is. Its share of a figure is then unknown.
+ */
+function maybeDropped(line: ReviewLine, column: keyof CentsLine): boolean {
+  return line[column] === null && line.confidence === 'low'
+}
+
 /** One import figure for review, from its lines in one column. */
 function legacyFigure(
   lines: readonly ReviewLine[],
   column: keyof CentsLine,
   max: number,
 ): ReviewFigure {
-  const cents = legacyCents(lines, column, max)
-  const shown = lines.filter((line) => line[column] !== null)
-  // Sure as the weakest line it adds; a total too large to be real is the one to check.
-  const confidence = (shown.length > 0 ? shown : lines).map((line) => line.confidence).reduce(lower)
-  const tooLarge = cents === null && shown.length > 0
-  const sources = [...new Set(shown.map((line) => line.source).filter((text) => text !== null))]
-  return {
-    cents,
-    confidence: tooLarge ? 'low' : confidence,
-    source: sources.length === 0 ? null : sources.join(' + ').slice(0, MAX_SOURCE_LENGTH).trim(),
-  }
+  const dropped = lines.filter((line) => maybeDropped(line, column))
+  // The lines the figure rests on: those with an amount, and those that lost one.
+  const used = lines.filter((line) => line[column] !== null || dropped.includes(line))
+  const sources = [...new Set(used.map((line) => line.source).filter((text) => text !== null))]
+  const source =
+    sources.length === 0 ? null : sources.join(' + ').slice(0, MAX_SOURCE_LENGTH).trim()
+  // A sum missing a part would save too little without a word, so there is
+  // no figure, only one to check. So too for a total too large to be real.
+  const cents = dropped.length > 0 ? null : legacyCents(lines, column, max)
+  if (cents === null && used.length > 0) return { cents, confidence: 'low', source }
+  // Otherwise as sure as the weakest line it adds.
+  const confidence = (used.length > 0 ? used : lines).map((line) => line.confidence).reduce(lower)
+  return { cents, confidence, source }
 }
 
 /** The figures the pension and retirement import uses, worked out from the full detail. */

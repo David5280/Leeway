@@ -21,7 +21,7 @@ export type DerivableDetail = { pay: Pay<CentsLine, number | null> } & Groups<Ce
 export type Column = keyof CentsLine
 
 /** How yearly pay was worked out. */
-export type YearlyBasis = 'frequency' | 'yearToDate' | 'salary'
+export type YearlyBasis = 'frequency' | 'regularPay' | 'yearToDate' | 'salary'
 
 export interface YearlyGross {
   cents: number
@@ -53,10 +53,19 @@ function dayOfYear(date: string): { day: number; daysInYear: number } {
 }
 
 /**
- * Below this day of the year, year-to-date pay is too little of the year to
- * scale up: a January bonus would read as a raise for the whole year.
+ * Below this day of the year (31 March, or 30 March in a leap year),
+ * year-to-date pay is too little of the year to scale up: a January bonus
+ * would read as a raise for the whole year.
  */
 export const MIN_DAY_FOR_YEAR_TO_DATE = 90
+
+/** Earnings that do not come every paycheck, so are never multiplied by a year of paychecks. */
+const ONE_OFF_EARNINGS = ['bonus', 'commission', 'other'] as const
+
+/** This paycheck's one-off earnings, in cents: 0 when it shows none. */
+function oneOffCents(detail: DerivableDetail): number {
+  return sumKnown(ONE_OFF_EARNINGS.map((line) => detail.earnings[line].current)) ?? 0
+}
 
 /**
  * Yearly gross pay, in the most dependable way the paystub allows:
@@ -65,17 +74,27 @@ export const MIN_DAY_FOR_YEAR_TO_DATE = 90
  *    a month; about 26.09 every two weeks, counting the extra paycheck some
  *    years bring, as Leeway does everywhere). Steady pay makes this
  *    dependable, so it comes first.
- * 2. yearToDate: year-to-date gross scaled to a full year by how far the pay
+ * 2. When this paycheck has a bonus, commission or other one-off earnings,
+ *    multiplying it would count them every paycheck. Then the yearly salary
+ *    the paystub states comes first (salary), and without one, this period's
+ *    gross less the one-off earnings times the paychecks in a year
+ *    (regularPay).
+ * 3. yearToDate: year-to-date gross scaled to a full year by how far the pay
  *    date is into it: ytd x (days in year / day of year). Used only when how
- *    often pay comes is unknown, and only from April on, since a one-off
+ *    often pay comes is unknown, and only from day 90 on, since a one-off
  *    early in the year would be multiplied many times over.
- * 3. salary: the yearly salary the paystub states. Last, as it leaves out
+ * 4. salary: the yearly salary the paystub states. Last, as it leaves out
  *    overtime, bonuses and commission.
  */
 export function yearlyGross(detail: DerivableDetail, payDate: string | null): YearlyGross | null {
   const { gross, annualSalary } = detail.pay
-  if (gross.current !== null && detail.payCadence !== null) {
-    return { cents: Math.round(gross.current * PER_YEAR[detail.payCadence]), basis: 'frequency' }
+  const oneOff = oneOffCents(detail)
+  if (oneOff > 0 && annualSalary !== null) return { cents: annualSalary, basis: 'salary' }
+  // A paycheck with no regular pay, such as one that is all bonus, has nothing to multiply.
+  const regular = gross.current === null ? null : gross.current - oneOff
+  if (regular !== null && regular > 0 && detail.payCadence !== null) {
+    const cents = Math.round(regular * PER_YEAR[detail.payCadence])
+    return { cents, basis: oneOff > 0 ? 'regularPay' : 'frequency' }
   }
   if (gross.yearToDate !== null && payDate !== null) {
     const { day, daysInYear } = dayOfYear(payDate)

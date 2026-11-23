@@ -5,16 +5,20 @@
 /** One number as printed: "1,234.56", "1234.5", "$275" or "31.2500", with no sign. */
 const NUMBER = /^\$?\s?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?$/
 
+/** Parentheses around an amount, with or without a dollar sign before them: "(12.50)", "$(12.50)". */
+const PARENTHESES = /^\$?\((.*)\)$/
+
+/** One minus sign, before or after an amount: "-12.50", "12.50-". */
+const MINUS = /^-|-$/
+
 /**
  * A single number as printed, or null when it is not one or has more decimal
- * places than allowed. "(12.50)" and "-12.50" read as positive, since a
- * deduction's sign only says which column it is in.
+ * places than allowed. "(12.50)", "$(12.50)", "-12.50" and "12.50-" read as
+ * positive, since a deduction's sign only says which column it is in.
  */
 function plainNumber(printed: string, maxDecimals: number): number | null {
-  const plain = printed
-    .trim()
-    .replace(/^\((.*)\)$/, '$1')
-    .replace(/^-/, '')
+  // Each mark is taken off once, so "-12.50-" is no number.
+  const plain = printed.trim().replace(PARENTHESES, '$1').replace(MINUS, '')
   const match = NUMBER.exec(plain)
   if (!match || (match[1]?.length ?? 0) > maxDecimals) return null
   return Number(plain.replace(/[$,\s]/g, ''))

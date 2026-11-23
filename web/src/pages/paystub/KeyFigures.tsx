@@ -9,6 +9,7 @@ import {
   takeHomeShare,
   yearlyGross,
   type Column,
+  type SavingsRate,
   type Share,
   type YearlyBasis,
 } from '../../../../server/src/domain/paystubs/derived'
@@ -30,10 +31,18 @@ function yearlyNote(basis: YearlyBasis, detail: ConfirmedDetail): string {
   const cadence = detail.payCadence ? CADENCE_WORDS[detail.payCadence].toLowerCase() : ''
   const notes: Record<YearlyBasis, string> = {
     frequency: `This paycheck, paid ${cadence}`,
+    regularPay: `This paycheck less one-off pay, paid ${cadence}`,
     yearToDate: 'The year so far, for a full year',
     salary: 'Your stated salary',
   }
   return notes[basis]
+}
+
+/** Who the retirement saving comes from: only those the paystub shows putting money in. */
+function savers(saving: SavingsRate | null): string {
+  if (saving?.employerCents === null) return 'You'
+  if (saving?.employeeCents === null) return 'Your employer'
+  return 'You and your employer'
 }
 
 /** One key figure: what it is, the figure in bold, and what it rests on. */
@@ -81,7 +90,7 @@ export function KeyFigures({ detail }: { detail: ConfirmedDetail }) {
       <KeyFigure label="Taxes" note={from(taxes, 'Withheld')}>
         {percent(taxes)}
       </KeyFigure>
-      <KeyFigure label="Retirement saving" note={from(saving, 'You and your employer')}>
+      <KeyFigure label="Retirement saving" note={from(saving, savers(saving))}>
         {percent(saving)}
       </KeyFigure>
     </section>

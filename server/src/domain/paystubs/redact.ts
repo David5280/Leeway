@@ -3,6 +3,10 @@
 // ID, bank account and routing numbers, a home address and the employee's
 // name; Leeway keeps only money figures, dates and the employer's name. A line
 // naming a garnishment or support order is dropped whole. Pure.
+//
+// A name is caught here only beside a label or a title ("Employee: Jane Doe",
+// "Ms. Doe"). A bare name like "DOE, JANE" looks like any other words, so
+// only the reader's prompt can keep it out, and the prompt forbids names.
 
 /** Put where something was taken out, so the owner sees that it was. */
 export const REMOVED = '[removed]'
@@ -43,11 +47,12 @@ const STATE_ZIP = /\b[A-Z]{2},?\s+\d{5}(?:-\d{4})?\b/g
 
 /**
  * A label that introduces a person's name, with the rest of its line: "Name:"
- * at the start of a line, "Employee Name Jane Doe", "Pay to the order of Jane
- * Doe", "Payee Jane Doe". "Plan Name: PERA" is a plan, not a person, and stays.
+ * at the start of a line, "Employee Name Jane Doe", "Employee: Jane Doe",
+ * "Pay to (the order of) Jane Doe", "Payable to", "Paid to", "Payroll for:",
+ * "Payee Jane Doe". "Plan Name: PERA" is a plan, not a person, and stays.
  */
 const LABELED_NAME =
-  /(?:^\s*name\b|\b(?:employee|emp\.?)\s+name\b|\bpay\s+to\s+the\s+order\s+of\b|\bpayee\b|\bdeposited\s+for\b)(?!\w).*$/gim
+  /(?:^\s*name\b|\b(?:employee|emp\.?)\s+name\b|\bemployee\s*:|\bpay(?:able)?\s+to\b|\bpaid\s+to\b|\bpayroll\s+for\b|\bpayee\b|\bdeposited\s+for\b)(?!\w).*$/gim
 
 /** A name after a title of address: "Ms. Jane Doe", "Dr Doe". */
 const TITLED_NAME =
@@ -60,15 +65,21 @@ const TITLED_NAME =
  */
 const MASKED_NUMBER = /(?<![\w*•])[Xx*•#]{2,}[-\s]?\d{2,}(?!\w)/g
 
-/** Words that mark a garnishment, levy or support order, which Leeway never names. */
+/**
+ * Words that mark a garnishment, levy, alimony or support order, which Leeway
+ * never names: "Support - Jane Doe", "Child Supp", "Support Ord", "CSE ORDER"
+ * (child support enforcement), "AWG" (an administrative wage garnishment).
+ * "Spousal support" and "spousal maintenance" go; "Spousal Life" insurance
+ * stays. Whole words only, so "Supplemental Life" and "courses" stay too.
+ */
 const SENSITIVE_DEDUCTION =
-  /\b(?:garnish\w*|levy|levies|child\s+support|support\s+order|wage\s+assignment|bankruptcy|chapter\s+13|creditor|tax\s+lien)\b/i
+  /\b(?:garnish\w*|levy|levies|alimony|spousal\s+maint\w*|support|child\s+supp\w*|supp\.?\s+ord\w*|cse|awg|wage\s+(?:assignment|order)|bankruptcy|chapter\s+13|creditor|tax\s+lien)\b/i
 
 /** An email address. */
 const EMAIL = /\S+@\S+/g
 
-/** A money amount as a paystub prints one: 1,234.56, $275.00, (12.50) or -275.00. */
-const MONEY = /^[-(]?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\)?$|^[-(]?\$?\d+\.\d{2}\)?$/
+/** A money amount as a paystub prints one: 1,234.56, $275.00, (12.50), $(12.50), -275.00 or 275.00-. */
+const MONEY = /^(?:-|\$?\()?\$?(?:\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+\.\d{2})\)?-?$/
 
 /** A date: 11/14/2026, 11-14-26 or 2026-11-14. */
 const DATE = /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$|^\d{4}-\d{2}-\d{2}$/

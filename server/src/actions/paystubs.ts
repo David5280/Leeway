@@ -39,11 +39,13 @@ export const savePaystubAction = defineAction({
   run: (ctx, input) => savePaystub(ctx.db, input),
 })
 
+// The paystub record saved with the lines becomes latestPaystub, which already
+// feeds payroll streams, pay cadence, the profile and the check-in.
 export const savePaystubDetailAction = defineAction({
   name: 'save_paystub_detail',
   title: 'Save a paystub in full',
   description:
-    'Saves every line of a paystub the owner reviewed in full, in cents: pay (gross and net, each {current, yearToDate}, with hours, hourlyRate and annualSalary), earnings, taxes, preTax, postTax and employer lines. A line the paystub does not show is null. Keeps the paystub record too, its figures worked out from these lines. Applies nothing to pensions, contributions or budgets.',
+    'Saves every line of a paystub the owner reviewed in full, in cents: pay (gross and net, each {current, yearToDate}, with hours, hourlyRate and annualSalary), earnings, taxes, preTax, postTax and employer lines. A line the paystub does not show is null. Keeps the paystub record too, its figures worked out from these lines; as the newest paystub it feeds payroll, pay frequency, the profile and check-ins like any saved paystub. Applies nothing to pensions, contributions or budgets.',
   input: z.object({ detail: confirmedDetailSchema }),
   scope: 'write',
   surface: 'app',

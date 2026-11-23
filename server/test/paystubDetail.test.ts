@@ -124,6 +124,37 @@ describe('extractionFrom, in full', () => {
     expect(current.grossPay.confidence).toBe('low')
   })
 
+  it('flags a line whose period amount is above its year to date, as swapped columns are', () => {
+    const { detail, current } = extractionFrom(
+      cityWith((reading) => {
+        reading.pay.gross = readLine('80,745.00', '3,845.00')
+        reading.taxes.medicare = readLine('1,170.75', '55.75')
+        reading.taxes.federalIncome = readLine('350.00', '350.00')
+      }),
+    )
+    expect(detail.pay.gross).toMatchObject({ current: 8_074_500, confidence: 'low' })
+    expect(detail.taxes.medicare.confidence).toBe('low')
+    expect(current.grossPay).toMatchObject({ cents: 8_074_500, confidence: 'low' })
+    // The year's first paycheck has both columns the same, which is fine.
+    expect(detail.taxes.federalIncome.confidence).toBe('high')
+  })
+
+  it('never names a support order or garnishment, whichever line the reader filed it under', () => {
+    const { detail } = extractionFrom(
+      cityWith((reading) => {
+        reading.preTax.other = readLine('200.00', null, 'CSE ORDER Jane Doe 200.00')
+        reading.taxes.other = readLine('75.00', null, 'AWG 75.00')
+        reading.earnings.other = readLine('300.00', null, 'Alimony Jane Doe 300.00')
+        reading.employer.match = readLine('20.00', null, 'Support - Jane Doe 20.00')
+      }),
+    )
+    const { preTax, taxes, earnings, employer } = detail
+    for (const line of [preTax.other, taxes.other, earnings.other, employer.match]) {
+      expect(line).toMatchObject({ current: expect.any(Number), source: null })
+    }
+    expect(JSON.stringify(detail)).not.toMatch(/Jane|Doe/)
+  })
+
   it('never names an after-tax "other" deduction, whatever its line says', () => {
     const garnished = cityWith((reading) => {
       reading.postTax.other = readLine('150.00', null, 'Garnishment Case 4471 150.00')
@@ -182,6 +213,39 @@ describe('the import figures, worked out from the lines', () => {
       confidence: 'medium',
       source: 'Deferred Comp 457 150.00 + Roth 457 50.00',
     })
+  })
+
+  it('gives no figure for a plan, only one to check, when a line of it was printed but dropped', () => {
+    const unreadable = extractionFrom(
+      cityWith((reading) => {
+        reading.preTax.plan457 = readLine('2OO.00', null, '457 Def Comp 2OO.00')
+        reading.postTax.roth457 = readLine('100.00')
+      }),
+    )
+    // Adding only the Roth side would save a contribution too low, without a word.
+    expect(unreadable.current.plan457).toEqual({
+      cents: null,
+      confidence: 'low',
+      source: '457 Def Comp 2OO.00',
+    })
+    const tooLarge = extractionFrom(
+      cityWith((reading) => {
+        reading.preTax.plan457 = readLine('100,000.01')
+        reading.postTax.roth457 = readLine('100.00')
+      }),
+    )
+    expect(tooLarge.current.plan457).toMatchObject({ cents: null, confidence: 'low' })
+  })
+
+  it('still adds a plan when a line of it is simply not printed in that column', () => {
+    const { yearToDate } = extractionFrom(
+      cityWith((reading) => {
+        reading.preTax.plan457 = readLine('150.00', '3,000.00', 'Deferred Comp 457 150.00')
+      }),
+    )
+    // The Roth line shows this period only; the year column rests on the traditional side.
+    expect(yearToDate.plan457).toMatchObject({ cents: 300_000, confidence: 'high' })
+    expect(yearToDate.netPay).toEqual({ cents: null, confidence: 'high', source: null })
   })
 
   it('drops a sum too large to be a contribution and marks it low', () => {

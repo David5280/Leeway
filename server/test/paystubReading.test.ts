@@ -99,8 +99,8 @@ describe('redact', () => {
   })
 
   it('takes out an address, a post office box and an email', () => {
-    expect(redact('Pay to 1437 Bannock St Apt 4 Denver CO 80202')).toBe(
-      `Pay to ${REMOVED} Denver ${REMOVED}`,
+    expect(redact('Mail to 1437 Bannock St Apt 4 Denver CO 80202')).toBe(
+      `Mail to ${REMOVED} Denver ${REMOVED}`,
     )
     expect(redact('PO Box 1234')).toBe(REMOVED)
     expect(redact('Questions: payroll@example.gov')).toBe(`Questions: ${REMOVED}`)
@@ -109,6 +109,9 @@ describe('redact', () => {
   it('takes out any other long number, keeping money, dates and percents', () => {
     expect(redact('Check 0045521 PERA 11.00% 1,234.56 on 11/13/2026 (12.50)')).toBe(
       `Check ${REMOVED} PERA 11.00% 1,234.56 on 11/13/2026 (12.50)`,
+    )
+    expect(redact('Fed Tax 1,234.56- Refund $(12,345.67)')).toBe(
+      'Fed Tax 1,234.56- Refund $(12,345.67)',
     )
     expect(redact('Period 2026-10-26 hours 80.00 rate 48.0625')).toBe(
       `Period 2026-10-26 hours 80.00 rate ${REMOVED}`,
@@ -120,6 +123,17 @@ describe('redact', () => {
     expect(redact('Name: Jane Q. Doe')).toBe(REMOVED)
     expect(redact('Net 2,611.42 Pay to the order of Jane Doe')).toBe(`Net 2,611.42 ${REMOVED}`)
     expect(redact('Payee John Roe 100.00')).toBe(REMOVED)
+    for (const line of [
+      'Employee: Jane Doe',
+      'Pay to Jane Doe 1,234.56',
+      'Payable to Jane Doe',
+      'Paid to Jane Doe',
+      'Payroll for: Jane Doe',
+    ]) {
+      expect(redact(line)).toBe(REMOVED)
+    }
+    expect(redact('Pay Total 3,845.00')).toBe('Pay Total 3,845.00')
+    expect(redact('Paid Time Off 8.00')).toBe('Paid Time Off 8.00')
     expect(redact('Prepared for Ms. Jane Doe 3,845.00')).toBe(`Prepared for ${REMOVED} 3,845.00`)
     expect(redact('Plan Name: PERA 422.95')).toBe('Plan Name: PERA 422.95')
     expect(redact('Employee 401k 150.00')).toBe('Employee 401k 150.00')
@@ -154,10 +168,22 @@ describe('redactSource and redactEmployer', () => {
       'Child Support 200.00',
       'IRS Levy 75.00',
       'Ch 13 Bankruptcy Trustee 90.00',
+      'Support - Jane Doe 200.00',
+      'Spousal support 300.00',
+      'Spousal Maint 300.00',
+      'Alimony Jane Doe 300.00',
+      'CSE ORDER Jane Doe 200.00',
+      'Support Ord 200.00',
+      'Child Supp 200.00',
+      'AWG 75.00',
+      'Wage Order 50.00',
     ]) {
       expect(redactSource(line)).toBeNull()
     }
-    expect(redactSource('Union Dues 25.00')).toBe('Union Dues 25.00')
+    // Whole words only: an ordinary deduction keeps its line.
+    for (const line of ['Union Dues 25.00', 'Supplemental Life 12.00', 'Spousal Life 8.00']) {
+      expect(redactSource(line)).toBe(line)
+    }
   })
 
   it('keeps only the employer name, never the address after it', () => {
@@ -190,6 +216,11 @@ describe('centsOf', () => {
   it('reads a deduction printed in parentheses or with a minus as positive', () => {
     expect(centsOf('(422.95)')).toBe(42_295)
     expect(centsOf('-422.95')).toBe(42_295)
+    expect(centsOf('1,234.56-')).toBe(123_456)
+    expect(centsOf('$(12.50)')).toBe(1_250)
+    expect(centsOf('($12.50)')).toBe(1_250)
+    // One mark only: two minus signs are no amount.
+    expect(centsOf('-12.50-')).toBeNull()
   })
 
   it('adds two lines of the same kind joined with a plus', () => {
