@@ -1,10 +1,10 @@
-// A trip budget belongs to the trip it shares days with: it stays with an
-// event moved a day or two, and the trip is saved for in one place only, so
-// the weeks ahead suggest nothing more for it and the coach does not call
-// its goal late once the trip starts.
+// A trip budget belongs to its trip's calendar events: it stays with an
+// event moved however far, keeps its days and goal in step with the trip,
+// says when its trip is gone, and leaves the next trip, back to back, a
+// budget of its own. The trip is saved for in one place only, so the weeks
+// ahead suggest nothing more for it.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { budgetsBetween } from '../src/domain/trips/budget.js'
 import { actionCaller } from './actionCaller.js'
 import {
   calendarReads,
@@ -22,7 +22,7 @@ import {
 } from './helpers.js'
 
 let ctx: CalendarContext
-const { call } = actionCaller(() => ctx)
+const { call, callError } = actionCaller(() => ctx)
 const { serving } = calendarReads(() => ctx)
 
 beforeAll(async () => {
@@ -89,13 +89,80 @@ describe('a budget and its trip', () => {
     })
   })
 
-  it('reads only the budgets on the days asked for', async () => {
+  it('follows an event moved further than its own length, in step with it', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
+    const goal = await call('create_trip_budget', PLAN)
+    serving(ics([['lisbon', 'Lisbon trip', '2026-12-17', '2026-12-22']]))
+    await call('refresh_calendar')
+    const moved = { startsOn: '2026-12-17', endsOn: '2026-12-22' }
+    // Before, the moved trip offered a new budget, and the old goal kept setting money aside.
+    expect((await call('list_trips')).map((t) => [t.startsOn, t.goalId])).toEqual([
+      ['2026-12-17', goal.id],
+    ])
+    // Six days of food now: the trip's page and the goal agree with the form's days.
+    expect(await call('get_trip', moved)).toMatchObject({
+      budget: { ...moved, plannedCents: 190000, plannedByPart: { food: 30000 } },
+    })
+    expect(await call('list_goals')).toEqual([
+      expect.objectContaining({
+        id: goal.id,
+        targetDate: '2026-12-17',
+        targetCents: 190000,
+        trip: { ...moved, onCalendar: true },
+      }),
+    ])
+    expect(await callError('create_trip_budget', { ...PLAN, ...moved })).toMatchObject({
+      code: 'conflict',
+    })
+  })
+
+  it('says when its trip is gone from the calendar, and finds it again', async () => {
+    serving(ics([LISBON]))
+    await call('connect_calendar', { url: SECRET })
     await call('create_trip_budget', PLAN)
-    await call('create_trip_budget', { ...PLAN, startsOn: '2028-01-08', endsOn: '2028-01-10' })
-    const near = await budgetsBetween(ctx.db, '2026-11-17', '2027-11-17')
-    expect(near.map((b) => b.startsOn)).toEqual(['2026-12-10'])
-    // A budget counts when it shares even one day.
-    expect(await budgetsBetween(ctx.db, '2026-12-14', '2026-12-20')).toHaveLength(1)
+    serving(ics([]))
+    await call('refresh_calendar')
+    expect(await call('list_trips')).toEqual([])
+    const [gone] = await call('list_goals')
+    expect(gone?.trip).toMatchObject({ onCalendar: false })
+    serving(ics([LISBON]))
+    await call('refresh_calendar')
+    await call('list_trips')
+    const [back] = await call('list_goals')
+    expect(back?.trip).toMatchObject({ onCalendar: true })
+  })
+
+  it('leaves the next trip, starting the day it ends, its own budget', async () => {
+    const past = await pastTrips()
+    const paris: [string, string, string, string] = [
+      'paris',
+      'Paris trip',
+      '2026-12-14',
+      '2026-12-18',
+    ]
+    serving(ics([...past, LISBON, paris]))
+    await call('connect_calendar', { url: SECRET })
+    const lisbon = await call('create_trip_budget', PLAN)
+    // Before, Paris took Lisbon's budget for the day they share.
+    expect((await call('list_trips')).slice(0, 2).map((t) => [t.name, t.goalId])).toEqual([
+      ['Paris trip', null],
+      ['Lisbon trip', lisbon.id],
+    ])
+    const forecast = await call('get_forecast')
+    const parisItem = forecast.weeks
+      .flatMap((week) => week.items)
+      .find((item) => item.type === 'event' && item.title === 'Paris trip')
+    expect(parisItem).not.toHaveProperty('budgeted')
+    expect(parisItem?.type === 'event' && parisItem.suggestedCents).toBeGreaterThan(0)
+    const parisPlan = { ...PLAN, name: 'Paris trip', startsOn: '2026-12-14', endsOn: '2026-12-18' }
+    const parisGoal = await call('create_trip_budget', parisPlan)
+    await call('update_trip_budget', { ...parisPlan, goalId: parisGoal.id, stayCents: 1000 })
+    // Changing Paris's budget left Lisbon's where it was.
+    expect(await call('get_trip', { startsOn: '2026-12-10', endsOn: '2026-12-14' })).toMatchObject({
+      goalId: lisbon.id,
+      budget: { goalId: lisbon.id, stayCents: 60000 },
+    })
   })
 })
 
@@ -109,27 +176,10 @@ describe('one place to save for a trip', () => {
     expect(before).not.toHaveProperty('budgeted')
     expect(before?.type === 'event' && before.suggestedCents).toBeGreaterThan(0)
 
-    await call('create_trip_budget', { ...PLAN, startsOn: '2026-12-12', endsOn: '2026-12-16' })
+    await call('create_trip_budget', PLAN)
     // Before, the forecast still suggested setting aside for it, beside the budget's goal.
     expect(await lisbonItem()).toMatchObject({ suggestedCents: 0, budgeted: true, tripPage: true })
     const forecast = await call('get_forecast')
     expect(forecast.weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(0)
-  })
-
-  it('does not call a trip budget’s goal late once the trip has started', async () => {
-    const trip = await call('create_trip_budget', PLAN)
-    await call('create_goal', {
-      kind: 'purchase',
-      name: 'New bike',
-      targetCents: 50000,
-      targetDate: '2026-12-01',
-    })
-    ctx.setNow(new Date('2026-12-12T18:00:00Z'))
-    const goals = await call('list_goals')
-    expect(goals.map((g) => g.status)).toEqual(['past_due', 'past_due'])
-    const late = (await call('get_checkin')).attention.filter((item) => item.topic === 'goal')
-    // Before, the trip's goal read as late with the trip under way.
-    expect(late.map((item) => item.message)).toEqual([expect.stringMatching(/^New bike passed/)])
-    expect(late.some((item) => item.message.includes(trip.name))).toBe(false)
   })
 })

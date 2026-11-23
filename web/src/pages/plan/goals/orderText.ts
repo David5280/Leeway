@@ -13,6 +13,8 @@ export type Landing = GoalOrder['goals'][number]
 export function landingText(goal: Landing, locale: string): string {
   if (goal.status === 'reached') return 'Reached'
   if (goal.status === 'stale') return 'Waiting on its account'
+  if (goal.status === 'trip_under_way') return 'Trip under way'
+  if (goal.status === 'trip_done') return 'Trip done'
   return goal.landsOn ? `Lands ${monthYear(goal.landsOn, locale)}` : 'No date yet'
 }
 

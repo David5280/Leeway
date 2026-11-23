@@ -34,16 +34,16 @@ describe('Planning a trip budget', () => {
     renderTrip()
     const form = await planForm()
     const user = userEvent.setup()
-    expect(form.getByRole('button', { name: 'Make it a goal' })).toBeDisabled()
+    expect(form.getByRole('button', { name: 'Save budget' })).toBeDisabled()
     await user.type(form.getByRole('textbox', { name: 'Getting there' }), '800')
     await user.type(form.getByRole('textbox', { name: 'Place to stay' }), '600')
     await user.type(form.getByRole('textbox', { name: 'Food per day' }), '50')
-    expect(form.getByText(/in all/)).toHaveTextContent('$1,650 in all')
+    expect(form.getByText(/in all/)).toHaveTextContent('$1,650 in all, saved by the day you leave.')
     // The name starts as the kind, not the calendar event's title.
     expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue('Trip')
     await user.clear(form.getByRole('textbox', { name: 'Name' }))
     await user.type(form.getByRole('textbox', { name: 'Name' }), 'Portugal')
-    await user.click(form.getByRole('button', { name: 'Make it a goal' }))
+    await user.click(form.getByRole('button', { name: 'Save budget' }))
     await waitFor(() =>
       expect(server.actions('create_trip_budget')).toEqual([
         {
@@ -71,7 +71,7 @@ describe('Planning a trip budget', () => {
     // Before, "lots" saved as $0 without a word.
     expect(form.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
     expect(things).toHaveAttribute('aria-invalid', 'true')
-    const save = form.getByRole('button', { name: 'Make it a goal' })
+    const save = form.getByRole('button', { name: 'Save budget' })
     expect(save).toBeDisabled()
     await user.click(save)
     expect(server.actions('create_trip_budget')).toEqual([])
@@ -89,7 +89,7 @@ describe('Planning a trip budget', () => {
     const form = await planForm()
     const user = userEvent.setup()
     await user.type(form.getByRole('textbox', { name: 'Getting there' }), '10')
-    await user.click(form.getByRole('button', { name: 'Make it a goal' }))
+    await user.click(form.getByRole('button', { name: 'Save budget' }))
     expect(await form.findByRole('alert')).toHaveTextContent('This trip already has a budget')
   })
 

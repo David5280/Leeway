@@ -139,3 +139,40 @@ describe('shortPlan', () => {
     })
   })
 })
+
+describe('a trip budget’s goal', () => {
+  // A trip's goal is due the day it starts; November 17th is the test's today.
+  const lisbon = (startsOn: string, endsOn: string, savedCents = 30000) =>
+    goal({
+      ...bike,
+      name: 'Lisbon trip',
+      savedCents,
+      setAside: true,
+      targetDate: startsOn,
+      trip: { startsOn, endsOn, onCalendar: true },
+    })
+
+  it('reads as the trip once it starts, never as late', () => {
+    const underWay = lisbon('2026-11-15', '2026-11-20')
+    // Before, it read as "Date passed" in red the day the trip began.
+    expect(shortPlan(underWay, money, 'month')).toEqual({ text: 'Trip under way', tone: '' })
+    expect(planText(underWay, money, 'month', 'en-US')).toBe(
+      'Trip under way. This goal is being spent on it.',
+    )
+    expect(paceText(underWay, 'en-US')).toBeNull()
+    expect(thisPeriodText(underWay, money, 'month')).toBeNull()
+    const done = lisbon('2026-11-10', '2026-11-14')
+    expect(shortPlan(done, money, 'month')).toEqual({ text: 'Trip done', tone: '' })
+    expect(planText(done, money, 'month', 'en-US')).toBe(
+      'Trip done. Close the goal when you are ready.',
+    )
+  })
+
+  it('is ready for the trip once saved before it', () => {
+    const saved = lisbon('2026-12-10', '2026-12-14', 120000)
+    expect(shortPlan(saved, money, 'month')).toEqual({ text: 'Ready for the trip', tone: 'good' })
+    expect(planText(saved, money, 'month', 'en-US')).toBe(
+      'Ready for the trip. You have saved the full $1200.',
+    )
+  })
+})

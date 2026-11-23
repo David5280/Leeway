@@ -4,7 +4,7 @@
 // no calendar event claims. Every money relevant event is costed together,
 // as the forecast costs them, so each purchase belongs to one occasion only
 // and a trip's travel never shows twice, nor goes missing. A calendar trip
-// carries the trip budget it shares days with, when one was planned.
+// carries its trip budget, when one was planned (match.ts).
 
 import type { Db } from '../../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
@@ -12,7 +12,8 @@ import { claimedSql, costsOf, spanParams, SPENT_SQL, TRAVEL_SQL } from '../calen
 import { spansBetween } from '../calendar/forecast.js'
 import { daysOf, isTrip, MAX_TRIP_DAYS } from '../calendar/kinds.js'
 import type { EventSpan } from '../calendar/spans.js'
-import { budgetOf, budgetsBetween, type TripBudget } from './budget.js'
+import { listBudgets, type StoredBudget } from './budget.js'
+import { assignBudgets, type TripKey } from './match.js'
 
 // Read here too by the trips that use them; they live with the event kinds.
 export { isTrip, MAX_TRIP_DAYS }
@@ -43,7 +44,7 @@ export interface TripSummary {
   name: string | null
   source: TripSource
   totalCents: number
-  /** The goal of the trip budget sharing its days; null for none, and for a run of spending. */
+  /** The goal of the trip's budget; null for none, and for a run of spending. */
   goalId: string | null
 }
 
@@ -122,24 +123,36 @@ export async function spansAround(db: Db, today: IsoDate): Promise<EventSpan[] |
   return spansBetween(db, addDays(today, -FIND_DAYS), addDays(today, FIND_DAYS))
 }
 
+/** What finding trips gives: the trips, and how the trip budgets matched them. */
+export interface FoundTrips {
+  /** The spans the trips' money is claimed among. */
+  spans: EventSpan[]
+  trips: FoundTrip[]
+  /** Each budget with the calendar trip it belongs to. */
+  matched: { budget: StoredBudget; trip: TripKey }[]
+  /** The budgets on days near today that no trip on the calendar matched. */
+  unmatched: StoredBudget[]
+}
+
 /**
  * Every trip around today, newest first, the spans their money is claimed
- * among, and the trip budgets on those days.
+ * among, and which trip each trip budget belongs to.
  */
-export async function findTrips(
-  db: Db,
-  today: IsoDate,
-): Promise<{ spans: EventSpan[]; trips: FoundTrip[]; budgets: TripBudget[] }> {
+export async function findTrips(db: Db, today: IsoDate): Promise<FoundTrips> {
   const spans = await spansAround(db, today)
-  if (!spans) return { spans: [], trips: [], budgets: [] }
+  // With no calendar linked, no budget is matched, nor said to have lost its trip.
+  if (!spans) return { spans: [], trips: [], matched: [], unmatched: [] }
   const costs = await costsOf(db, spans)
-  const budgets = await budgetsBetween(db, addDays(today, -FIND_DAYS), addDays(today, FIND_DAYS))
+  const budgets = await listBudgets(db)
+  const tripSpans = spans.filter(isTrip)
+  const byTrip = assignBudgets(budgets, tripSpans)
+  const budgetOf = new Map(tripSpans.map((span, i) => [span, byTrip.get(i) ?? null]))
   const planned = spans.flatMap((span, i): FoundTrip[] => {
     if (!isTrip(span)) return []
     const { aheadCents, duringCents } = costs[i]!
     const { startsOn, endsOn, title } = span
     const totalCents = aheadCents + duringCents
-    const goalId = budgetOf(budgets, span)?.goalId ?? null
+    const goalId = budgetOf.get(span)?.goalId ?? null
     const trip = { startsOn, endsOn, name: title, totalCents, goalId, spanNumber: i + 1 }
     return [{ ...trip, source: 'calendar' }]
   })
@@ -155,5 +168,14 @@ export async function findTrips(
     spanNumber: null,
   }))
   const trips = [...planned, ...spending].sort((a, b) => b.startsOn.localeCompare(a.startsOn))
-  return { spans, trips, budgets }
+  const matched = tripSpans.flatMap((trip, i) => {
+    const budget = byTrip.get(i)
+    return budget ? [{ budget, trip }] : []
+  })
+  // Only budgets on days the calendar was read for can be said to have lost their trip.
+  const paired = new Set(matched.map(({ budget }) => budget))
+  const near = (budget: StoredBudget) =>
+    budget.endsOn >= addDays(today, -FIND_DAYS) && budget.startsOn <= addDays(today, FIND_DAYS)
+  const unmatched = budgets.filter((budget) => !paired.has(budget) && near(budget))
+  return { spans, trips, matched, unmatched }
 }

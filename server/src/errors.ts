@@ -70,8 +70,3 @@ export function messageOf(error: unknown): string {
 export function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === '23505'
 }
-
-/** Postgres exclusion_violation, e.g. two trip budgets sharing a day. */
-export function isExclusionViolation(error: unknown): boolean {
-  return (error as { code?: string } | null)?.code === '23P01'
-}

@@ -125,12 +125,22 @@ function billsSection(
   }
 }
 
+/** What a reached goal is ready for: its trip, its purchase, or nothing more. */
+function reachedWords(goal: Checkin['goals'][number]): string {
+  if (goal.forTrip) return 'saved, ready for the trip'
+  return goal.kind === 'purchase' ? 'saved, ready to buy' : 'reached'
+}
+
 /** A goal's progress, with a note when it needs a look. */
 function goalItem(goal: Checkin['goals'][number], money: Money, locale: string): EmailItem {
   const progress = `${goal.percent}% saved`
   if (goal.status === 'reached') {
-    const done = goal.kind === 'purchase' ? 'saved, ready to buy' : 'reached'
-    return { text: `${goal.name}: ${done}`, detail: progress }
+    return { text: `${goal.name}: ${reachedWords(goal)}`, detail: progress }
+  }
+  // A trip's goal is spent on the trip once it starts: never late, just under way, then done.
+  if (goal.status === 'trip_under_way') return { text: `${goal.name}: trip under way` }
+  if (goal.status === 'trip_done') {
+    return { text: `${goal.name}: trip done`, detail: 'Close the goal in Leeway' }
   }
   if (goal.status === 'past_due') {
     return { text: `${goal.name}: past its date`, detail: `${money(goal.remainingCents)} to go` }

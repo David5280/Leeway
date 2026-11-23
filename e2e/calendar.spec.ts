@@ -109,7 +109,7 @@ test('a trip budget before you go is planned on the trip’s page', async ({ pag
   await form.getByRole('textbox', { name: 'Place to stay' }).fill('450')
   await form.getByRole('textbox', { name: 'Food per day' }).fill('60')
   await expect(form).toContainText('$1,290 in all')
-  await form.getByRole('button', { name: 'Make it a goal' }).click()
+  await form.getByRole('button', { name: 'Save budget' }).click()
   await expect
     .poll(() => planned)
     .toEqual([

@@ -1,6 +1,6 @@
-// Trip budgets: planning one makes one purchase goal, one budget per trip,
-// planned and changed before the trip starts, and a trip's page sets its
-// spending against it.
+// Trip budgets: planning one for a calendar trip makes one purchase goal,
+// one budget per trip, planned and changed before the trip starts, and a
+// trip's page sets its spending against it.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { actionCaller } from './actionCaller.js'
@@ -44,6 +44,12 @@ const PLAN = {
   activitiesCents: 20000,
 }
 
+/** A linked calendar holding these trips: [uid, title, first day, last day]. */
+async function linkTrips(...trips: [string, string, string, string][]) {
+  serving(ics(trips))
+  await call('connect_calendar', { url: SECRET })
+}
+
 /** A linked calendar holding the Lisbon trip, and its flight booked in November. */
 async function linkLisbon() {
   const { accountId } = await insertBankAccount(ctx.db)
@@ -60,6 +66,7 @@ async function linkLisbon() {
 
 describe('planning a trip budget', () => {
   it('makes one purchase goal, set aside for by the day the trip starts', async () => {
+    await linkTrips(LISBON)
     const goal = await call('create_trip_budget', PLAN)
     expect(goal).toMatchObject({
       kind: 'purchase',
@@ -69,6 +76,7 @@ describe('planning a trip budget', () => {
       targetDate: '2026-12-10',
       setAside: true,
       accountId: null,
+      trip: { ...LISBON_DAYS, onCalendar: true },
     })
     expect((await call('list_goals')).map((g) => g.id)).toEqual([goal.id])
   })
@@ -80,6 +88,7 @@ describe('planning a trip budget', () => {
       code: 'invalid_input',
       message: expect.stringMatching(/before the trip starts/),
     })
+    await linkTrips(['weekend', 'Weekend trip', '2026-11-18', '2026-11-19'])
     const tomorrow = { ...today, startsOn: '2026-11-18' }
     expect(await call('create_trip_budget', tomorrow)).toMatchObject({ targetDate: '2026-11-18' })
   })
@@ -96,18 +105,20 @@ describe('planning a trip budget', () => {
     expect(await call('list_goals')).toEqual([])
   })
 
-  it('keeps one budget per trip: none may share a day with another', async () => {
+  it('keeps one budget per trip, and plans only for a trip on the calendar', async () => {
+    await linkTrips(LISBON, ['porto', 'Porto trip', '2026-12-14', '2026-12-16'])
     await call('create_trip_budget', PLAN)
     expect(await callError('create_trip_budget', PLAN)).toMatchObject({
       code: 'conflict',
       message: 'This trip already has a budget',
     })
-    const overlapping = { ...PLAN, startsOn: '2026-12-14', endsOn: '2026-12-16' }
-    expect(await callError('create_trip_budget', overlapping)).toMatchObject({ code: 'conflict' })
+    const nowhere = { ...PLAN, startsOn: '2026-12-20', endsOn: '2026-12-22' }
+    expect(await callError('create_trip_budget', nowhere)).toMatchObject({ code: 'not_found' })
     // Neither refusal left a goal behind.
     expect(await call('list_goals')).toHaveLength(1)
-    const after = { ...PLAN, startsOn: '2026-12-15', endsOn: '2026-12-16' }
-    expect(await call('create_trip_budget', after)).toMatchObject({ targetDate: '2026-12-15' })
+    // The next trip, starting the day Lisbon ends, has a budget of its own.
+    const porto = { ...PLAN, name: 'Porto trip', startsOn: '2026-12-14', endsOn: '2026-12-16' }
+    expect(await call('create_trip_budget', porto)).toMatchObject({ targetDate: '2026-12-14' })
   })
 
   it('deletes the plan with its goal', async () => {
@@ -120,6 +131,7 @@ describe('planning a trip budget', () => {
 
 describe('changing a trip budget', () => {
   it('changes its parts and name, and its goal to match', async () => {
+    await linkTrips(LISBON)
     const goal = await call('create_trip_budget', PLAN)
     const changed = await call('update_trip_budget', {
       ...PLAN,
@@ -131,7 +143,10 @@ describe('changing a trip budget', () => {
   })
 
   it('takes the days the trip has now, and its goal the new start day', async () => {
+    await linkTrips(LISBON)
     const goal = await call('create_trip_budget', PLAN)
+    serving(ics([['lisbon', 'Lisbon trip', '2026-12-11', '2026-12-16']]))
+    await call('refresh_calendar')
     const moved = { ...PLAN, goalId: goal.id, startsOn: '2026-12-11', endsOn: '2026-12-16' }
     // Six days of food now, not five.
     expect(await call('update_trip_budget', moved)).toMatchObject({
@@ -140,10 +155,11 @@ describe('changing a trip budget', () => {
     })
   })
 
-  it('refuses a change once the trip has started, or onto another budget’s days', async () => {
+  it('refuses a change once the trip has started, or onto another trip’s budget', async () => {
+    await linkTrips(LISBON, ['ski', 'Ski trip', '2027-01-08', '2027-01-10'])
     const goal = await call('create_trip_budget', PLAN)
     await call('create_trip_budget', { ...PLAN, startsOn: '2027-01-08', endsOn: '2027-01-10' })
-    const onto = { ...PLAN, goalId: goal.id, startsOn: '2027-01-10', endsOn: '2027-01-12' }
+    const onto = { ...PLAN, goalId: goal.id, startsOn: '2027-01-08', endsOn: '2027-01-10' }
     expect(await callError('update_trip_budget', onto)).toMatchObject({ code: 'conflict' })
     ctx.setNow(new Date('2026-12-10T18:00:00Z'))
     expect(

@@ -122,7 +122,7 @@ export function TripBudgetForm({ trip, onDone }: { trip: TripDetail; onDone?: ()
       </div>
       <div className="row-between wrap">
         <span className="small muted">
-          <Money cents={totalCents} /> in all, as one goal set aside for by the day you leave.
+          <Money cents={totalCents} /> in all, saved by the day you leave.
         </span>
         <span className="row">
           {onDone && budget && (
@@ -135,7 +135,7 @@ export function TripBudgetForm({ trip, onDone }: { trip: TripDetail; onDone?: ()
             className="btn primary"
             disabled={totalCents <= 0 || unreadable || save.isPending}
           >
-            {budget ? 'Save' : 'Make it a goal'}
+            {budget ? 'Save' : 'Save budget'}
           </button>
         </span>
       </div>

@@ -4,12 +4,13 @@
 // saved for by the budget's goal, so it suggests nothing more.
 
 import type { Db } from '../../db/pool.js'
-import { addDays, maxDate, minDate, type IsoDate } from '../../lib/dates.js'
+import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
 import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
 import { nextPayday } from '../cashFlow.js'
 import type { Settings } from '../settings.js'
-import { budgetOf, budgetsBetween } from '../trips/budget.js'
+import { listBudgets } from '../trips/budget.js'
+import { assignBudgets } from '../trips/match.js'
 import { costsOf, type EventCost } from './costs.js'
 import { daysOf, isTrip, kindOf, type EventKind } from './kinds.js'
 import { mergeSpans, type EventSpan, type KindedEvent } from './spans.js'
@@ -122,14 +123,13 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
     const sameKind = past.filter(({ span }) => span.kind === kind)
     typical.set(kind, typicalCost(kind, sameKind))
   }
-  // Every day of the events listed, even before today or past the window, as a trip's page reads them.
-  const firstDay = upcoming.reduce((first, { span }) => minDate(first, span.startsOn), today)
-  const lastDay = upcoming.reduce((last, { span }) => maxDate(last, span.endsOn), to)
-  const budgets = await budgetsBetween(db, firstDay, lastDay)
+  // Each budget belongs to one trip, matched as the trips list matches it, so a moved event keeps it.
+  const trips = spans.filter(isTrip)
+  const byTrip = assignBudgets(await listBudgets(db), trips)
+  const budgeted = new Set(trips.filter((_, i) => byTrip.has(i)))
   return upcoming.map(({ span, cost }) => {
     const usual = typical.get(span.kind) ?? null
-    // Matched by shared days, as the trip's page matches it, so a moved event keeps its budget.
-    const budgeted = span.kind === 'trip' && budgetOf(budgets, span) !== null
+    const hasBudget = budgeted.has(span)
     return {
       type: 'event' as const,
       id: span.id,
@@ -137,10 +137,10 @@ async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<Forecast
       endsOn: span.endsOn,
       title: span.title,
       kind: span.kind,
-      suggestedCents: budgeted ? 0 : suggestionOf(span, usual, today, cost),
+      suggestedCents: hasBudget ? 0 : suggestionOf(span, usual, today, cost),
       basedOn: usual?.basedOn ?? 0,
       ...(isTrip(span) && { tripPage: true as const }),
-      ...(budgeted && { budgeted: true as const }),
+      ...(hasBudget && { budgeted: true as const }),
     }
   })
 }

@@ -3,6 +3,8 @@
 // once (find.ts); the list, a trip's page and a transaction's sheet all read
 // that one claim, so they always agree with each other and with the forecast.
 // A trip's page sets its spending against its budget, when one was planned.
+// Both screens are the app's own, so they also bring budgets in step with
+// moved trips (match.ts); nothing an agent reads writes.
 
 import type { Db } from '../../db/pool.js'
 import { AppError, notFound } from '../../errors.js'
@@ -25,7 +27,8 @@ import {
   type TripSummary,
 } from './find.js'
 import { partOf, TRIP_PARTS, type TripPart } from './parts.js'
-import { withLeft, type BudgetLeft } from './budget.js'
+import { onDays, shownBudget, withLeft, type BudgetLeft } from './budget.js'
+import { syncBudgets } from './match.js'
 
 /** The most trips listed. */
 const LIST_LIMIT = 24
@@ -66,7 +69,8 @@ const summaryOf = ({
 
 /** Recent and coming trips, newest first. */
 export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> {
-  const { trips } = await findTrips(db, today)
+  const { trips, matched, unmatched } = await findTrips(db, today)
+  await syncBudgets(db, matched, unmatched)
   return trips.slice(0, LIST_LIMIT).map(summaryOf)
 }
 
@@ -140,11 +144,13 @@ export async function getTrip(
   if (endsOn < startsOn || daysOf({ startsOn, endsOn }) > MAX_TRIP_DAYS) {
     throw new AppError('invalid_input', `A trip runs forward, up to ${MAX_TRIP_DAYS} days`)
   }
-  const { spans, trips, budgets } = await findTrips(db, today)
+  const { spans, trips, matched, unmatched } = await findTrips(db, today)
+  await syncBudgets(db, matched, unmatched)
   const trip = trips.find((t) => t.startsOn === startsOn && t.endsOn === endsOn)
   if (!trip) throw notFound('Trip')
   const { spentByPart, ids } = await spendingOf(db, spans, trip)
-  const budget = budgets.find((b) => b.goalId === trip.goalId)
+  // Planned on the trip's days as they are now, as the sync just saved them.
+  const found = matched.find(({ budget }) => budget.goalId === trip.goalId)?.budget
   let status: TripDetail['status'] = 'under_way'
   if (today < startsOn) status = 'upcoming'
   else if (today > endsOn) status = 'past'
@@ -155,7 +161,7 @@ export async function getTrip(
     days: daysOf({ startsOn, endsOn }),
     status,
     spentByPart,
-    budget: budget ? withLeft(budget, spentByPart) : null,
+    budget: found ? withLeft(onDays(shownBudget(found), { startsOn, endsOn }), spentByPart) : null,
     transactions: await transactionsByIds(db, ids),
   }
 }

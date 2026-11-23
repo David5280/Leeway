@@ -52,8 +52,11 @@ const SELECT = `
     g.account_id AS "accountId", g.saved_cents AS "savedCents", g.color, g.set_aside AS "setAside",
     g.created_at::date AS "createdOn", g.emergency_months AS "emergencyMonths",
     g.emergency_own_target AS "emergencyOwnTarget", g.emergency_by_hand AS "emergencyByHand",
-    a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf"
-  FROM goals g LEFT JOIN accounts a ON a.id = g.account_id`
+    a.balance_cents AS "accountBalanceCents", a.unshared_at::date AS "balanceAsOf",
+    CASE WHEN tb.goal_id IS NOT NULL THEN json_build_object('startsOn', tb.starts_on::text,
+      'endsOn', tb.ends_on::text, 'onCalendar', tb.on_calendar) END AS trip
+  FROM goals g LEFT JOIN accounts a ON a.id = g.account_id
+    LEFT JOIN trip_budgets tb ON tb.goal_id = g.id`
 
 /** A goal as stored, with the fund's own columns, which goalFunds.ts reads and nothing shows. */
 type StoredGoal = Omit<GoalRow, 'accountName' | 'followedAccountIds'> &
@@ -161,19 +164,39 @@ export async function createGoal(db: Db, input: GoalInput, reading: GoalReading)
   return getGoal(db, rows[0]!.id, reading)
 }
 
+type GoalPatch = z.infer<typeof goalPatchSchema>
+
+/**
+ * A trip budget's goal takes its target and date from the budget, so they
+ * change only with it, on the trip's page; the same values may be sent back.
+ */
+function assertTripFieldsKept(current: Goal, patch: GoalPatch): void {
+  const changes = (key: 'targetCents' | 'targetDate') =>
+    patch[key] !== undefined && patch[key] !== current[key]
+  if (current.trip && (changes('targetCents') || changes('targetDate'))) {
+    throw new AppError(
+      'invalid_input',
+      `${current.name} saves for a trip budget. Change its amount and days on the trip's page.`,
+    )
+  }
+}
+
 /**
  * Changes only the fields given. A changed "saved so far" is a correction, not
  * a contribution, so it does not count toward recent progress. A target typed
  * for the emergency fund becomes its own, no longer sized from essentials; a
- * save that leaves the target out (a new name, say) keeps it sized.
+ * save that leaves the target out (a new name, say) keeps it sized. A trip
+ * budget's target and date change only when its budget does (byTripBudget).
  */
 export async function updateGoal(
   db: Db,
   id: string,
-  patch: z.infer<typeof goalPatchSchema>,
+  patch: GoalPatch,
   reading: GoalReading,
+  { byTripBudget = false } = {},
 ): Promise<Goal> {
   const current = await getGoal(db, id, reading)
+  if (!byTripBudget) assertTripFieldsKept(current, patch)
   const next = { ...current, ...patch }
   // A plain rename of a fund whose account another goal took since is no new link to refuse.
   const namedFundNow = namesEmergencyFund(next.name) && !namesEmergencyFund(current.name)
