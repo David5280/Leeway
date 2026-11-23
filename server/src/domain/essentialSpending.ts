@@ -4,9 +4,10 @@
 // every other spending category, the loan and child care payments by their
 // own bank code: a student loan in the starter "Debt payments", child care
 // in "Services". An unfiled payment counts under any essential code. Card
-// payments never count: the totals read here already leave them out
-// (NOT_CARD_PAYMENT_SQL), since they pay off spending counted where it was
-// made. Pure.
+// payments never count, either side, even to a card Leeway cannot see: the
+// totals read here already leave them out (the skipAll rule in
+// categoryTotals.ts), since a payment says nothing of which purchases it
+// paid for. Pure.
 
 import type { CategoryTotal } from './budget.js'
 import type { Bill } from './bills.js'

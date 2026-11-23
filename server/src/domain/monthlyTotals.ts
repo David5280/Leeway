@@ -190,7 +190,7 @@ function flowTotals(
 /**
  * Spending in each range as a month's totals count it (see the top of this
  * file), less the card's side of every credit card payment
- * (NOT_CARD_PAYMENT_SQL), with each range's category totals for working out
+ * (the skipCardSide rule in categoryTotals.ts), with each range's category totals for working out
  * what is essential. Unfiled lines need no such rule: a card payment there
  * pairs with its other side as a move between own accounts, or, paid to a
  * card Leeway cannot see, counts as the spending it stands for.
@@ -202,7 +202,7 @@ export async function spendingByRange(
   // Posted only: a typical month goes by what has settled.
   const categories = await listCategories(db)
   const totalsByRange = await categoryTotalsByRange(db, ranges, false, null, {
-    skipCardPayments: true,
+    cardPayments: 'skipCardSide',
   })
   const unfiled = await unfiledFlows(db, ranges, false)
   return ranges.map((_, i) => {

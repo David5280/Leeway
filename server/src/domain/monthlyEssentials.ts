@@ -102,9 +102,11 @@ async function recentMonths(
   const ranges = wholeMonthsBefore(today, await firstTransactionDay(db))
   const categories = await listCategories(db)
   if (ranges.length === 0) return { categories, months: [] }
-  // Posted only (a month already over has settled), card payments left out wherever filed.
+  // Posted only (a month already over has settled). Every card payment line is
+  // left out wherever filed, even one to a card Leeway cannot see, which a
+  // typical month's spending does count: what it paid for is not known essential.
   const totalsByMonth = await categoryTotalsByRange(db, ranges, false, null, {
-    skipCardPayments: true,
+    cardPayments: 'skipAll',
   })
   const codedByMonth = await essentialCodedByRange(db, ranges)
   const months = totalsByMonth.map((totals, at) => ({
