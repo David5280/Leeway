@@ -44,6 +44,21 @@ describe('the amount that fills goals', () => {
     )
   })
 
+  it.each([
+    ['5k', "Couldn't read that amount."],
+    ['-500', "The amount can't be negative."],
+  ])('names %j once the field is left, and saves nothing', async (typed, note) => {
+    const server = serveOrder(orderOf([trip, car], 0, 'none'))
+    renderPlan('/plan/goals')
+    const card = within(await orderCard())
+    const user = userEvent.setup()
+    await user.type(card.getByRole('textbox', AMOUNT), typed)
+    expect(card.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.tab()
+    expect(card.getByRole('alert')).toHaveTextContent(note)
+    expect(server.actions('update_settings')).toEqual([])
+  })
+
   it('says the pace found lately, and lets it be changed', async () => {
     const server = serveOrder(orderOf([trip, car], 30_000, 'found'))
     renderPlan('/plan/goals')

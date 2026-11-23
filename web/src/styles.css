@@ -710,6 +710,19 @@ select.input {
   flex-wrap: wrap;
 }
 
+/* The line under a money field that says why its amount can't be saved. It
+   takes a whole line, and keeps it while empty so nothing moves when it
+   shows; in a long list of fields (fit) it takes room only once it has words. */
+.amount-note {
+  display: block;
+  width: 100%;
+  min-height: 1.45em;
+}
+
+.amount-note.fit:empty {
+  display: none;
+}
+
 /* A checkbox and the words that name it, in one label, so tapping either ticks it. */
 .check {
   display: flex;
@@ -1991,6 +2004,8 @@ details.more[open] summary {
 
 .inline-budget-form {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
 }

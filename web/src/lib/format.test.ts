@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   calendarDate,
   dayLabel,
+  isUnreadableMoney,
   isUnreadableRate,
   MAX_RATE_PERCENT,
-  parseMoney,
   parseRate,
   readRate,
   periodBarLabel,
@@ -15,56 +15,6 @@ import {
 } from './format'
 
 describe('format', () => {
-  it('reads typed amounts into cents', () => {
-    expect(parseMoney('12.50')).toBe(1250)
-    expect(parseMoney('$1,200')).toBe(120000)
-    expect(parseMoney('1200')).toBe(120000)
-    expect(parseMoney('12,5')).toBe(1250)
-    expect(parseMoney('-12.50')).toBe(-1250)
-    expect(parseMoney('')).toBeNull()
-    expect(parseMoney('abc')).toBeNull()
-  })
-
-  it.each([
-    // Letters typed for digits, which reading round would make far smaller amounts.
-    '5e1',
-    '1O0',
-    '1,2OO',
-    '1OOO',
-    '5OO',
-    'l00',
-    'I50',
-    '12e3',
-    // Thousands shorthand, which is not a currency.
-    '1.2k',
-    '10K',
-    // Nothing to read.
-    'abc',
-    '',
-    '   ',
-  ])('refuses %j rather than read a smaller amount', (text) => {
-    expect(parseMoney(text)).toBeNull()
-  })
-
-  it.each([
-    ['$1,200', 120000],
-    ['-$5', -500],
-    ['5 eur', 500],
-    ['EUR 5', 500],
-    ['12,50 \u20ac', 1250],
-    ['R$ 12,50', 1250],
-    ['CHF 12.50', 1250],
-    ['12 USD', 1200],
-    ['USD1,200', 120000],
-    ['120kr', 12000],
-    ['US$5', 500],
-    ['12 z\u0142', 1200],
-    ['Rs. 500', 50000],
-    ['Fr. 12.50', 1250],
-  ])('reads %j, its currency in letters or signs, as %i cents', (text, cents) => {
-    expect(parseMoney(text)).toBe(cents)
-  })
-
   it('refuses any letter in a rate, which takes no currency', () => {
     for (const text of ['5e1', '1O0', '12 USD', 'APR 5']) expect(readRate(text)).toBeNull()
     expect(readRate('5%')).toBe(5)
@@ -173,4 +123,20 @@ describe('isUnreadableRate', () => {
       expect(isUnreadableRate(text)).toBe(false)
     }
   })
+})
+
+describe('isUnreadableMoney', () => {
+  it.each(['5OO', '1,2OO', '5k', '6O', '2MM', '1.234', '(45', 'abc', '-'])(
+    'is true for %j, typed but not an amount',
+    (text) => {
+      expect(isUnreadableMoney(text)).toBe(true)
+    },
+  )
+
+  it.each(['', '   ', '60', '$1,234.56', '12,50', 'CHF 12.50', '-42.10', '(45.00)'])(
+    'is false for %j: blank, which may mean none on purpose, or a readable amount',
+    (text) => {
+      expect(isUnreadableMoney(text)).toBe(false)
+    },
+  )
 })
