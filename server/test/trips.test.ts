@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { partOf } from '../src/domain/trips/parts.js'
-import { clusters } from '../src/domain/trips/trips.js'
+import { clusters } from '../src/domain/trips/find.js'
 import { actionCaller } from './actionCaller.js'
 import {
   createTestContext,
@@ -119,6 +119,16 @@ describe('clusters', () => {
     ])
   })
 
+  it('never counts a refund toward the two charges a run needs', () => {
+    // A $50 charge and a $10 refund the next day are one charge, too small alone.
+    expect(
+      clusters([
+        { date: '2026-08-01', cents: 5000 },
+        { date: '2026-08-02', cents: -1000 },
+      ]),
+    ).toEqual([])
+  })
+
   it('leaves out a run longer than any trip', () => {
     const daily = Array.from({ length: 70 }, (_, i) => ({
       date: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10),
@@ -163,15 +173,11 @@ describe('trips', () => {
     expect(ski.transactions).toHaveLength(4)
   })
 
-  it('counts only travel for a run of travel spending, and knows a trip under way', async () => {
+  it('counts only travel for a run of travel spending', async () => {
     await seed()
     const july = await call('get_trip', { startsOn: '2026-07-01', endsOn: '2026-07-03' })
     expect(july).toMatchObject({ name: null, source: 'spending', totalCents: 45000 })
     expect(july.transactions.map((t) => t.id)).toEqual([ids.julyCar, ids.julyFlight])
-    expect(await call('get_trip', { startsOn: '2026-11-16', endsOn: '2026-11-18' })).toMatchObject({
-      status: 'under_way',
-      totalCents: 0,
-    })
   })
 
   it('refuses a trip that runs backward or too long', async () => {

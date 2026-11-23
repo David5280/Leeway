@@ -1,6 +1,7 @@
 // A trip's page: its spending by part and the transactions that make it up.
 
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, fakeServer, renderSignedIn, transaction } from '../test/fake'
@@ -53,10 +54,24 @@ describe('Trip page', () => {
     )
   })
 
-  it('says when a trip is done', async () => {
+  it('says when a trip is done, and what it cost in all', async () => {
     fakeServer({ get_trip: () => tripDetail({ status: 'past' }) })
     renderTrip()
     expect(await screen.findByText(/Done/)).toBeVisible()
+    // Before, a finished trip read "spent so far".
+    expect(screen.getByText(/^spent$/)).toBeVisible()
+    expect(screen.queryByText(/so far/)).not.toBeInTheDocument()
+  })
+
+  it('opens a transaction’s sheet from its row', async () => {
+    const hotel = transaction({ id: 't1', date: '2026-12-11', name: 'Hotel Lisboa' })
+    fakeServer({
+      get_trip: () => tripDetail({ transactions: [hotel] }),
+      trip_of_transaction: () => null,
+    })
+    renderTrip()
+    await userEvent.click(await screen.findByRole('button', { name: /Hotel Lisboa/ }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Hotel Lisboa')
   })
 
   it('names a run of travel spending plainly, for its one day', async () => {

@@ -89,6 +89,17 @@ export function setAsideFor(
   return once + usual.perDayCents * daysLeft
 }
 
+/** The calendar's money relevant events between two days, merged into one span per occasion. */
+export async function spansBetween(db: Db, from: IsoDate, to: IsoDate): Promise<EventSpan[]> {
+  const events = await eventsBetween(db, from, to)
+  return mergeSpans(
+    events.flatMap((event) => {
+      const kind = kindOf(event)
+      return kind ? [{ ...event, kind }] : []
+    }),
+  )
+}
+
 /**
  * Money relevant events from the calendar, with what to set aside for each.
  * Events that are one thing (a trip, its flight and its hotel) are merged
@@ -98,13 +109,7 @@ export function setAsideFor(
  * spent on it already.
  */
 async function eventItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastItem[]> {
-  const events = await eventsBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
-  const spans = mergeSpans(
-    events.flatMap((event) => {
-      const kind = kindOf(event)
-      return kind ? [{ ...event, kind }] : []
-    }),
-  )
+  const spans = await spansBetween(db, addDays(today, -LOOK_BACK_DAYS), to)
   if (!spans.some((span) => span.endsOn >= today)) return []
   const costs = await costsOf(db, spans)
   const costed = spans.map((span, i) => ({ span, cost: costs[i]! }))

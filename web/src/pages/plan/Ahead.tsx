@@ -7,7 +7,7 @@
 // calendar is linked.
 
 import { Link } from 'react-router-dom'
-import type { Forecast, ForecastItem, TripSummary } from '../../api/client'
+import type { Forecast, ForecastItem } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { Card } from '../../components/design/Card'
 import { Money } from '../../components/design/Money'
@@ -167,13 +167,16 @@ function runsOf(weeks: Week[]): [number, Week[]][] {
   return runs
 }
 
-function Trips({ trips }: { trips: TripSummary[] }) {
+/** Recent and coming trips, each opening its page; loaded on its own, so the weeks never wait on it. */
+function Trips() {
   const { settings } = useApp()
+  const trips = useAction('list_trips')
   return (
     <Card static="list" label="Trips" className="stack-sm">
       <h2>Trips</h2>
-      {trips.length === 0 && <p className="empty">No trips in the last year.</p>}
-      {trips.map((trip) => (
+      {!trips.data && <LoadingOrError error={trips.error} label="Loading trips" />}
+      {trips.data?.length === 0 && <p className="empty">No recent or coming trips.</p>}
+      {trips.data?.map((trip) => (
         <Link key={tripPath(trip)} to={tripPath(trip)} className="list-row clickrow">
           <RowText name={tripName(trip)} detail={dayRange(trip, settings.locale)} />
           <Money cents={trip.totalCents} />
@@ -185,10 +188,7 @@ function Trips({ trips }: { trips: TripSummary[] }) {
 
 export function AheadSection() {
   const forecast = useAction('get_forecast')
-  const trips = useAction('list_trips')
-  if (!forecast.data || !trips.data) {
-    return <LoadingOrError error={forecast.error ?? trips.error} />
-  }
+  if (!forecast.data) return <LoadingOrError error={forecast.error} />
   const { today, weeks, note } = forecast.data
   return (
     <>
@@ -205,7 +205,7 @@ export function AheadSection() {
           <WeekCard key={run[0]!.start} week={run[0]!} index={first} today={today} />
         ),
       )}
-      <Trips trips={trips.data} />
+      <Trips />
     </>
   )
 }

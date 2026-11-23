@@ -101,11 +101,9 @@ import {
   connectCalendarAction,
   disconnectCalendarAction,
   getForecastAction,
-  getTripAction,
-  listTripsAction,
   refreshCalendarAction,
-  tripOfTransactionAction,
 } from './calendar.js'
+import { getTripAction, listTripsAction, tripOfTransactionAction } from './trips.js'
 import { deletePaystubAction, getPaystubAction, savePaystubAction } from './paystubs.js'
 import { getFinancialProfileAction, summarizeSavingsAction } from './savings.js'
 import {
