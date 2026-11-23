@@ -20,10 +20,14 @@ const ID_LABELS = new Set(['no', 'id'])
 
 /**
  * Words naming the member, so whatever follows them, such as the member's
- * name or number, is no part of the plan's name. As the first word they may
- * begin one, as in "Member Retirement Plan".
+ * name or number, is no part of the plan's name. As the first word they begin
+ * one only before a plan word, as in "Member Retirement Plan", so "Member
+ * Jane Doe" still loses the person's name.
  */
 const MEMBER_WORDS = new Set(['member', 'mbr'])
+
+/** Words that show a leading member word starts the plan's own name. */
+const PLAN_WORDS = new Set(['retirement', 'pension', 'plan', 'benefit', 'benefits', 'savings'])
 
 /** Words a pension line prints after the plan's name, which name the member or deduction. */
 const LABEL_WORDS = new Set([
@@ -56,13 +60,22 @@ function digitsFitName(word: string, before: string | undefined): boolean {
 }
 
 /**
- * Whether a word ends a plan's name: an ID label, a member word after the
- * first, a figure holding #, % or $, or a digit in any shape but a plan's
- * own, as in "A1234", "ID:4417" or "4417A".
+ * Whether a member word labels the member here, rather than opening a name
+ * like "Member Retirement Plan".
  */
-function endsName(word: string, before: string | undefined): boolean {
+function labelsMember(before: string | undefined, after: string | undefined): boolean {
+  return before !== undefined || !PLAN_WORDS.has(labelForm(after ?? ''))
+}
+
+/**
+ * Whether a word ends a plan's name: an ID label, a member word that labels
+ * the member, a figure holding #, % or $, or a digit in any shape but a
+ * plan's own, as in "A1234", "ID:4417" or "4417A".
+ */
+function endsName(word: string, before: string | undefined, after: string | undefined): boolean {
   const label = labelForm(word)
-  if (ID_LABELS.has(label) || (before !== undefined && MEMBER_WORDS.has(label))) return true
+  if (ID_LABELS.has(label)) return true
+  if (MEMBER_WORDS.has(label) && labelsMember(before, after)) return true
   if (/[#%$]/.test(word)) return true
   return /\d/.test(word) && !digitsFitName(word, before)
 }
@@ -88,7 +101,7 @@ export function redactPlanName(text: string | null): string | null {
   const name = leadingName(text, MAX_PLAN_NAME_LENGTH)
   if (name === null) return null
   const words = name.split(' ')
-  const cut = words.findIndex((word, index) => endsName(word, words[index - 1]))
+  const cut = words.findIndex((word, index) => endsName(word, words[index - 1], words[index + 1]))
   const kept = cut === -1 ? words : words.slice(0, cut)
   while (kept.length > 0 && isTrailingLabel(kept.at(-1)!)) kept.pop()
   // A label's colon may be left on the name itself, as in "PERA: 422.95".

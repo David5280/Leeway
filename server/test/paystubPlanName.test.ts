@@ -84,6 +84,12 @@ describe('redactPlanName cuts labels and what follows a member label', () => {
 
   it.each<Case>([
     ['Member Retirement Plan', 'Member Retirement Plan'],
+    // A leading member word keeps the name only before a plan word, so a
+    // person's name after it is never kept.
+    ['Member Jane Doe 4417', null],
+    ['Mbr: Jane Doe PERA 422.95', null],
+    ['Member Name Jane Doe', null],
+    ['Member Pension Plan 4417', 'Member Pension Plan'],
     ['Mbr Retirement Plan 422.95', 'Mbr Retirement Plan'],
     ['Member Retirement Plan Member 4417', 'Member Retirement Plan'],
   ])('keeps a member word that begins the name in "%s"', keeps)
