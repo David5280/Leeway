@@ -53,6 +53,11 @@ const PAY_WORDS = /\b(salary|paycheck|wages?)\b/i
  * person's. A hyphen ends no word here, so "co-worker" is not "Co".
  */
 const BUSINESS_WORDS = /(?<![\w-])(inc|corp|corporation|llc|ltd|co|company)(?![\w-])/i
+
+/** Whether a deposit's text names a business ("ACME Corp", "Initech LLC"), never only a person. */
+export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
+  return BUSINESS_WORDS.test(`${tx.name} ${tx.merchantName ?? ''}`)
+}
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
 /** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe", and the sender. */

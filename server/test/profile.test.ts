@@ -80,7 +80,7 @@ async function steadyOwner() {
   const transfers = await call('create_category', { name: 'Transfers', kind: 'transfer' })
   for (const month of ['2026-08', '2026-09', '2026-10', '2026-11']) {
     await filed(checking.accountId, pay.id, `${month}-01`, -500_000, {
-      name: 'ACME PAYROLL',
+      name: 'ACME CORP PAYROLL',
       detailed: 'INCOME_SALARY',
     })
     await filed(checking.accountId, rent.id, `${month}-03`, 200_000)
@@ -159,7 +159,7 @@ describe('getFinancialProfile', () => {
       typicalPayCents: 500_000,
       nextPayday: '2026-12-01',
       estimate: false,
-      employer: 'Acme Payroll',
+      employer: 'Acme Corp Payroll',
       since: '2026-08-01',
     })
     expect(result.accounts.map((k) => [k.kind, k.totalCents])).toEqual([
@@ -229,14 +229,15 @@ describe('getFinancialProfile', () => {
     expect(result.pay).toMatchObject({
       cadence: 'month',
       typicalPayCents: 600_000,
-      employer: 'Globex Payroll',
+      // Named only as a business: GLOBEX PAYROLL could be anyone's.
+      employer: null,
       since: '2026-09-01',
       nextPayday: '2026-12-01',
       estimate: false,
     })
   })
 
-  it('counts a second job beside the first, naming each without account numbers', async () => {
+  it('counts a second job beside the first, naming only a business, never an account number', async () => {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', mask: '4821' })
     const pay = (date: string, name: string, amountCents: number) =>
       insertBankTransaction(ctx.db, checking.accountId, {
@@ -268,16 +269,39 @@ describe('getFinancialProfile', () => {
     // at the main job's payday, not the side job's.
     expect(result.pay).toMatchObject({
       cadence: 'biweek',
-      employer: 'Initech Payroll',
+      employer: null,
       nextPayday: '2026-12-01',
       since: '2026-08-28',
       estimate: true,
     })
     expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
-      ['Initech Payroll', 'biweek', 400_000],
+      // Only the one the bank names as a business is named.
+      [null, 'biweek', 400_000],
       ['Bluth Co Payroll', 'biweek', 130_446],
     ])
     expect(JSON.stringify(result.pay)).not.toContain('4821')
+  })
+
+  it('never names a person who pays a wage, in the profile or the digest the AI reads', async () => {
+    const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 300_000 })
+    // A household or a sole trader paying by direct deposit under their own name.
+    for (const date of ['2026-09-04', '2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30']) {
+      await insertBankTransaction(ctx.db, checking.accountId, {
+        date,
+        name: 'JOHN SMITH DIR DEP',
+        amountCents: -150_000,
+      })
+    }
+    const result = await profile()
+    expect(result.pay).toMatchObject({
+      cadence: 'biweek',
+      employer: null,
+      typicalPayCents: 150_000,
+    })
+    expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
+    const { digest } = await call('get_financial_profile')
+    expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
+    expect(digest).not.toMatch(/john|smith|dir dep/i)
   })
 
   it('counts only the essential categories the owner picked, and their target', async () => {

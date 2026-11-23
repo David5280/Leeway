@@ -20,7 +20,8 @@ import type { CategoryTotal } from '../budget.js'
 import { listCategories, type Category } from '../categories.js'
 import { essentialIdsOf } from '../essentials.js'
 import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
-import type { CurrentPay } from '../pay/current.js'
+import type { CurrentPay, Employer } from '../pay/current.js'
+import { namesBusiness } from '../pay/deposits.js'
 import { readCurrentPay } from '../pay/source.js'
 import { paydayFrom, type PaydaySource } from '../pay/payday.js'
 import type { Settings } from '../settings.js'
@@ -41,9 +42,15 @@ export const SPENDING_MIN_DAYS = 56
 /** Less bank history than this is too little to call any month typical. */
 export const SPENDING_LEAST_DAYS = 28
 
-/** One employer paying now, named as the app names its deposits. */
+/** One employer paying now. */
 export interface PayingEmployer {
-  name: string
+  /**
+   * Named as the app names its deposits, only when the bank's text says it
+   * is a business ("Acme Corp"): a household or a sole trader paying under
+   * their own name ("JOHN SMITH DIR DEP") is a private person, never named
+   * to the AI. Null otherwise.
+   */
+  name: string | null
   cadence: Cadence
   /** A usual paycheck from it. */
   typicalPayCents: number
@@ -66,7 +73,7 @@ export interface PaySchedule {
   nextPayday: IsoDate | null
   /** True while the main employer's cadence is unconfirmed: the next payday is a projection. */
   estimate: boolean
-  /** The main employer, named as the app names its deposits, or null. */
+  /** The main employer's name, as PayingEmployer names it, or null. */
   employer: string | null
   /** Every employer paying now, the main one first: a second job counts beside the first. */
   employers: PayingEmployer[]
@@ -182,6 +189,11 @@ export function payingSince(pay: CurrentPay): IsoDate | null {
   return firsts[0] ?? null
 }
 
+/** An employer's name, only when it names a business (see PayingEmployer), never an account mask. */
+function employerName(employer: Employer, masks: string[]): string | null {
+  return namesBusiness(employer.newest) ? merchantDisplayName(employer.newest, { masks }) : null
+}
+
 /** How often pay comes and when next, as the profile and an agent read it. */
 async function payScheduleOf(
   db: Db,
@@ -194,7 +206,7 @@ async function payScheduleOf(
   // Named only as the app names deposits: never an account number or mask.
   const masks = await accountMasks(db)
   const employers = pay.employers.map((employer) => ({
-    name: merchantDisplayName(employer.newest, { masks }),
+    name: employerName(employer, masks),
     cadence: employer.cadence,
     typicalPayCents: employer.paycheckCents,
     monthlyCents: employer.monthlyCents,

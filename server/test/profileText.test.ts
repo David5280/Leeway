@@ -437,6 +437,28 @@ describe('profileDigest', () => {
     )
   })
 
+  it('never names an employer the bank does not name as a business', () => {
+    const unnamed = (cadence: 'semimonth' | 'biweek', cents: number) => ({
+      ...employer('', cadence, cents),
+      name: null,
+    })
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-20',
+        estimate: false,
+        employer: null,
+        employers: [unnamed('semimonth', 200_000), unnamed('biweek', 60_000)],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: the main employer twice a month since Sep 25, about $2,000 each; another employer every 2 weeks since Sep 25, about $600 each. Next payday Nov 20.',
+    )
+  })
+
   it("calls pay from several employers an estimate while a side job's cadence is a guess", () => {
     // The main job is confirmed, so its payday is not a guess; the side job's amount is.
     const profile = emptyProfile({
