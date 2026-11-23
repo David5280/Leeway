@@ -98,9 +98,10 @@ describe('things entered by hand', () => {
     await user.clear(worth)
     await user.type(worth, '335000')
     await user.click(form.getByRole('button', { name: 'Save' }))
+    // The loan it is tied to is unchanged, so it is not sent again.
     await waitFor(() =>
       expect(server.actions('update_owned_or_owed')).toEqual([
-        { id: house.id, name: 'House', amountCents: 33_500_000, loanId: mortgage.id },
+        { id: house.id, name: 'House', amountCents: 33_500_000 },
       ]),
     )
 

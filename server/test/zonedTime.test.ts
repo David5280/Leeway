@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { zonedInstant } from '../src/lib/zonedTime.js'
+import { MAX_ZONES, perZone } from '../src/lib/zoneCache.js'
+import {
+  MAX_MIDNIGHTS,
+  midnightsRemembered,
+  wallClockMs,
+  zonedInstant,
+} from '../src/lib/zonedTime.js'
 
 const at = (date: string, hour: number, zone: string) =>
   zonedInstant(date, hour, zone).toISOString()
@@ -30,5 +36,100 @@ describe('zonedInstant', () => {
     expect(at('2026-03-29', 1, 'Europe/London')).toBe('2026-03-29T01:00:00.000Z')
     // Lord Howe moves only half an hour: 2 AM becomes 2:30 AM.
     expect(at('2026-10-04', 2, 'Australia/Lord_Howe')).toBe('2026-10-03T15:30:00.000Z')
+  })
+})
+
+describe('wallClockMs', () => {
+  /** The wall clock read straight from Intl, to the second, with no remembering. */
+  function fromIntl(instant: number, timeZone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    }).formatToParts(new Date(instant))
+    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+    const { year, month, day, hour, minute, second } = {
+      year: part('year'),
+      month: part('month'),
+      day: part('day'),
+      hour: part('hour'),
+      minute: part('minute'),
+      second: part('second'),
+    }
+    return Date.UTC(year, month - 1, day, hour, minute, second)
+  }
+
+  it.each([
+    'America/Denver',
+    'America/St_Johns',
+    'Europe/London',
+    'Australia/Sydney',
+    'Australia/Lord_Howe',
+    'Pacific/Auckland',
+    'Pacific/Chatham',
+    'Asia/Kolkata',
+    'UTC',
+  ])(
+    'reads the same clock as Intl in %s, hour by hour through two years of clock changes',
+    (zone) => {
+      // Every 50 minutes across 2025 and 2026, so each change of clocks is passed through mid-day.
+      const from = Date.UTC(2025, 0, 1)
+      const to = Date.UTC(2027, 0, 1)
+      const wrong: string[] = []
+      for (let instant = from; instant < to; instant += 50 * 60_000) {
+        if (wallClockMs(instant, zone) !== fromIntl(instant, zone))
+          wrong.push(new Date(instant).toISOString())
+      }
+      expect(wrong).toEqual([])
+    },
+  )
+
+  it('remembers no more midnights in all than MAX_MIDNIGHTS, however many zones and days', () => {
+    // Ten zones over seventy years each: a quarter more midnights than the bound.
+    const zones = Intl.supportedValuesOf('timeZone').slice(0, 10)
+    const days = Math.ceil((MAX_MIDNIGHTS * 1.25) / zones.length)
+    let most = 0
+    for (const zone of zones) {
+      for (let day = 0; day < days; day++) wallClockMs(day * 86_400_000, zone)
+      most = Math.max(most, midnightsRemembered())
+    }
+    expect(most).toBeLessThanOrEqual(MAX_MIDNIGHTS)
+    // Letting go of them changes no answer.
+    const instant = Date.UTC(2026, 2, 8, 9, 30)
+    expect(wallClockMs(instant, 'America/Denver')).toBe(Date.UTC(2026, 2, 8, 3, 30))
+  })
+
+  it('reads the same clock again for an instant read before', () => {
+    const instant = Date.UTC(2026, 2, 8, 9, 30)
+    expect(wallClockMs(instant, 'America/Denver')).toBe(wallClockMs(instant, 'America/Denver'))
+    expect(wallClockMs(instant, 'America/Denver')).toBe(Date.UTC(2026, 2, 8, 3, 30))
+  })
+})
+
+describe('perZone', () => {
+  it('makes an entry once per zone, and never grows past MAX_ZONES', () => {
+    const map = new Map<string, number>()
+    let made = 0
+    const make = () => ++made
+    expect(perZone(map, 'Asia/Tokyo', make)).toBe(1)
+    expect(perZone(map, 'Asia/Tokyo', make)).toBe(1)
+    for (let i = 0; i < MAX_ZONES * 3; i++) perZone(map, `Zone/${i}`, make)
+    expect(map.size).toBe(MAX_ZONES)
+    expect(made).toBe(1 + MAX_ZONES * 3)
+  })
+
+  it('lets go of only the zone remembered longest when full', () => {
+    const map = new Map<string, number>()
+    for (let i = 0; i < MAX_ZONES; i++) perZone(map, `Zone/${i}`, () => i)
+    perZone(map, 'Asia/Tokyo', () => -1)
+    expect(map.has('Zone/0')).toBe(false)
+    expect(map.has('Zone/1')).toBe(true)
+    expect(map.get('Asia/Tokyo')).toBe(-1)
+    expect(map.size).toBe(MAX_ZONES)
   })
 })

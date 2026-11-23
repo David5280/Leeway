@@ -18,6 +18,7 @@ export type ErrorCode =
   | 'unsupported_file'
   | 'reader_error'
   | 'ai_limit'
+  | 'calendar_error'
 
 const STATUS: Record<ErrorCode, number> = {
   invalid_input: 400,
@@ -36,6 +37,7 @@ const STATUS: Record<ErrorCode, number> = {
   unsupported_file: 415,
   reader_error: 502,
   ai_limit: 429,
+  calendar_error: 502,
 }
 
 export class AppError extends Error {

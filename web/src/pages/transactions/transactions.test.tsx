@@ -255,7 +255,7 @@ describe('Transactions filters', () => {
     serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
     renderTransactions('/transactions?merchant=tx-9')
     // With no name in the link, the chip still shows the list is narrowed.
-    expect(await screen.findByRole('button', { name: /^Merchant: One merchant/ })).toBeVisible()
+    expect(await screen.findByRole('button', { name: /^Merchant: These charges/ })).toBeVisible()
     await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
     expect(screen.getByText('Address: ?range=all')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Merchant:/ })).not.toBeInTheDocument()

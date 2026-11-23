@@ -6,9 +6,9 @@
 import { useMutation } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { paystubs, type Input } from '../../../../api/client'
-import { useAction, useActionMutation } from '../../../../api/hooks'
-import { ErrorNote, Loading } from '../../../../components/ui'
-import { pensionCandidates } from '../fields'
+import { useActionMutation } from '../../../../api/hooks'
+import { ErrorNote, Loading, RetryNote } from '../../../../components/ui'
+import { usePensionCandidates } from '../pensionCandidates'
 import { PaystubReview } from './PaystubReview'
 import { ACCEPT, fileProblem, readsPension, type PensionChoice } from './review'
 
@@ -152,23 +152,21 @@ export function PaystubImport({
 }) {
   const read = useMutation({ mutationFn: paystubs.read })
   const save = useActionMutation('save_paystub')
-  // A new pension may belong on an account Leeway already has, such as one linked from the bank.
-  const accounts = useAction('list_accounts', { includeHidden: false }, { enabled: adding })
+  // A new pension may belong on an account Leeway already has, so it is not counted twice.
+  const accounts = usePensionCandidates(adding)
   // Set the moment a save starts, before React shows it as busy, so a double click saves once.
   const saving = useRef(false)
   const [problem, setProblem] = useState<string | null>(null)
   // Whether the owner chose to review a paystub that seemed to show no pension.
   const [reviewAnyway, setReviewAnyway] = useState(false)
 
-  // Until the accounts are known, a new pension could not be offered the one it belongs on.
-  const accountsPending = adding && accounts.isPending
-  const accountsError = adding ? accounts.error : null
-
   function saveOnce(input: Input<'save_paystub'>) {
     if (saving.current) return
     saving.current = true
     save.mutate(input, {
       onSuccess: ({ paystub }) => onSaved(paystub.payDate),
+      // A refusal may name an account made a pension since the list was shown.
+      onError: accounts.refresh,
       onSettled: () => {
         saving.current = false
       },
@@ -209,12 +207,15 @@ export function PaystubImport({
   return (
     <PaystubReview
       read={read.data}
-      pensions={pensions}
+      // When adding, the pensions an account chosen may have become since it was offered.
+      pensions={adding ? accounts.pensions : pensions}
       pensionAccountId={pensionAccountId}
       adding={adding}
-      candidates={pensionCandidates(accounts.data ?? [])}
-      busy={save.isPending || accountsPending || accountsError !== null}
-      error={save.error ?? accountsError}
+      candidates={accounts.candidates}
+      // Add pension waits for the accounts, and while they load again after Try again.
+      busy={save.isPending || accounts.pending || accounts.error !== null}
+      error={save.error}
+      loadProblem={<RetryNote error={accounts.error} onRetry={accounts.retry} />}
       onSave={saveOnce}
       onCancel={onCancel}
     />

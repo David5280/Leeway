@@ -164,6 +164,18 @@ describe('Bills', () => {
     })
   })
 
+  it('opens straight onto a bill from its address, as Coming up links to it', async () => {
+    serve()
+    renderPlan(`/plan/bills?bill=${netflix.id}`)
+    expect(await screen.findByRole('form', { name: 'Edit Netflix' })).toBeInTheDocument()
+    const user = userEvent.setup()
+    // Another bill opened instead takes its place.
+    await user.click(within(await billsCard()).getByRole('button', { name: /Phone/ }))
+    expect(screen.getByRole('form', { name: 'Edit Phone' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: /Edit/ })).not.toBeInTheDocument()
+  })
+
   it('deletes a bill', async () => {
     const server = serve()
     renderPlan('/plan/bills')

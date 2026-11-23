@@ -15,7 +15,14 @@ import {
   type OwnedItem,
   type OwnedText,
 } from './ownedText'
-import { editOf, loanChoices, readOwned, type LoanChoice, type OwnedFields } from './readOwned'
+import {
+  loanChoices,
+  readEdit,
+  readOwned,
+  type LoanChoice,
+  type OwnedEdit,
+  type OwnedFields,
+} from './readOwned'
 
 /** A loan's rate and monthly payment. */
 function TermsFields({
@@ -82,25 +89,52 @@ function LoanField({
   )
 }
 
-/** Adding, changing and deleting one, each closing the form once it is done. */
-function useOwnedActions(item: OwnedItem | undefined, onClose: () => void) {
+/**
+ * Adding, changing and deleting one, each closing the form once it is done.
+ * Each clears the errors the others left, so only the latest try's error
+ * shows: a Delete that failed is not still blamed once Save is pressed. The
+ * form clears them too (clearErrors) when what was typed is refused before
+ * any is sent, so an old error from the server never shows beside it.
+ */
+function useOwnedActions(onClose: () => void) {
   const add = useActionMutation('add_owned_or_owed')
   const update = useActionMutation('update_owned_or_owed')
   const remove = useActionMutation('delete_account')
   const close = { onSuccess: onClose }
+  const clearErrors = () => [add, update, remove].forEach((mutation) => mutation.reset())
   return {
-    save(kind: NewKind, fields: OwnedFields) {
-      if (item) update.mutate({ id: item.id, ...editOf(fields, item) }, close)
-      else add.mutate({ kind, ...fields }, close)
+    add(kind: NewKind, fields: OwnedFields) {
+      clearErrors()
+      add.mutate({ kind, ...fields }, close)
     },
-    remove: (id: string) => remove.mutate({ id }, close),
+    update(id: string, edit: OwnedEdit) {
+      clearErrors()
+      update.mutate({ id, ...edit }, close)
+    },
+    remove(id: string) {
+      clearErrors()
+      remove.mutate({ id }, close)
+    },
+    clearErrors,
     busy: add.isPending || update.isPending || remove.isPending,
     error: add.error ?? update.error ?? remove.error,
   }
 }
 
-export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => void }) {
-  const actions = useOwnedActions(item, onClose)
+/**
+ * The form for `item`, or for a new thing without one. `owned` is every thing
+ * owned, so a loan already tied to one of the others is not offered.
+ */
+export function OwnedForm({
+  item,
+  owned,
+  onClose,
+}: {
+  item?: OwnedItem
+  owned: OwnedItem[]
+  onClose: () => void
+}) {
+  const actions = useOwnedActions(onClose)
   const accounts = useAction('list_accounts')
   const [newKind, setNewKind] = useState<NewKind>('home')
   const [text, setText] = useState<OwnedText>(() => ownedText(item))
@@ -112,11 +146,29 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
     setText((now) => ({ ...now, ...next }))
   }
 
+  /** Shows what is wrong with what was typed, alone: the server's last error goes. */
+  const refuse = (error: string) => {
+    actions.clearErrors()
+    setProblem(error)
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault()
-    const read = readOwned(text, kind)
-    if (read.ok) actions.save(newKind, read.value)
-    else setProblem(read.error)
+    if (item) {
+      const read = readEdit(text, item)
+      if (read.ok) actions.update(item.id, read.value)
+      else refuse(read.error)
+    } else {
+      const read = readOwned(text, newKind)
+      if (read.ok) actions.add(newKind, read.value)
+      else refuse(read.error)
+    }
+  }
+
+  /** Deletes it; a problem with what was typed no longer matters then. */
+  function remove(id: string) {
+    setProblem(null)
+    actions.remove(id)
   }
 
   return (
@@ -163,7 +215,7 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
       {carriesLoan(kind) && (
         <LoanField
           loanId={text.loanId}
-          loans={loanChoices(accounts.data ?? [], item)}
+          loans={loanChoices(accounts.data ?? [], item, owned)}
           onChange={change}
         />
       )}
@@ -185,7 +237,7 @@ export function OwnedForm({ item, onClose }: { item?: OwnedItem; onClose: () => 
             type="button"
             className="btn danger"
             disabled={actions.busy}
-            onClick={() => actions.remove(item.id)}
+            onClick={() => remove(item.id)}
           >
             Delete
           </button>

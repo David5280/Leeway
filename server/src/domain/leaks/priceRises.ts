@@ -1,7 +1,8 @@
 // Price rises on repeating charges that no bill tracks yet (a tracked bill's
 // change is a bill_change alert, billChanges.ts, so it is never said twice).
 // Pure: each repeating charge's history comes in, the rises worth a look come
-// out; leakSource.ts reads them.
+// out; leakSource.ts reads them, only for charges a merchant made
+// (merchantCharges.ts), and only on the cadences in RISE_CADENCES.
 //
 // A rise is only news when the price was steady before it and the latest
 // charge is the next one in the cycle:
@@ -42,28 +43,57 @@ const STEADY_SHARE = 0.02
 /** How long a rise stays news: past a monthly cycle, so it is seen before the next charge. */
 export const RISE_NEWS_DAYS = 45
 
+/**
+ * The cadences a rise is looked for on: quarterly or more often. A rise needs
+ * two steady charges before the latest, so three in all, and the history the
+ * recurring finder reads (about 400 days) holds only two of a yearly charge.
+ * Saying so here keeps the words on the Alerts page and in list_alerts true.
+ */
+export const RISE_CADENCES: readonly Cadence[] = ['week', 'biweek', 'semimonth', 'month', 'quarter']
+
 /** A repeating charge no bill tracks, as the rise check reads it. */
 export interface RepeatingCharge {
-  /** The merchant as the app shows it, with no account number. */
-  name: string
   /** How often it repeats, as detection found it. */
   cadence: Cadence
   /** Its posted charges, oldest first. */
   charges: ChargeLine[]
 }
 
+/** A price rise, with no name: leakSource.ts picks the name an alert may show (leakNames.ts). */
 export interface PriceRise {
-  name: string
   /** The latest charge, the first at the new price, totalled with any other that day. */
   charge: ChargeLine
   /** What it cost before. */
   previousCents: number
+  /** The charge a cycle before the latest, at the old price: it tells two like rises on one day apart. */
+  previousId: string
 }
 
-/** One line per day, oldest first, a day's charges added up: a split payment counts once. */
+/**
+ * Whether a charge repeats one already kept for its day: the same amount, on
+ * the same account and day. That is one charge made twice, which "Charged
+ * twice?" tells (duplicates.ts), never a new price.
+ */
+const repeatsOneOf = (kept: ChargeLine[], charge: ChargeLine) =>
+  kept.some(
+    (one) =>
+      one.date === charge.date &&
+      one.accountId === charge.accountId &&
+      one.amountCents === charge.amountCents,
+  )
+
+/**
+ * One line per day, oldest first, a day's charges added up: a payment split
+ * in parts counts once, at its whole amount. A charge repeated on its day
+ * (repeatsOneOf) is left out first, so a double charge never reads as the
+ * price doubling. A payment split in equal parts is read as one part each
+ * cycle, which still compares like with like.
+ */
 function byDay(charges: ChargeLine[]): ChargeLine[] {
+  const kept: ChargeLine[] = []
+  for (const charge of charges) if (!repeatsOneOf(kept, charge)) kept.push(charge)
   const days = new Map<IsoDate, ChargeLine>()
-  for (const charge of charges) {
+  for (const charge of kept) {
     const seen = days.get(charge.date)
     // The day's last charge stands for the day, carrying the day's total.
     days.set(charge.date, { ...charge, amountCents: (seen?.amountCents ?? 0) + charge.amountCents })
@@ -112,6 +142,7 @@ function cycleBefore(earlier: ChargeLine[], latest: ChargeLine, cadence: Cadence
 
 /** What a repeating charge's latest charge says about its price, or null when nothing. */
 export function priceRiseOf(repeating: RepeatingCharge, today: IsoDate): PriceRise | null {
+  if (!RISE_CADENCES.includes(repeating.cadence)) return null
   // The last few cycles, as bill changes read them: older history says nothing of today's price.
   const days = byDay(repeating.charges).slice(-CHARGES_READ)
   const latest = days.at(-1)
@@ -123,7 +154,7 @@ export function priceRiseOf(repeating: RepeatingCharge, today: IsoDate): PriceRi
   if (before === undefined || older === undefined) return null
   if (!steady(older, before) || amountsVary(amounts)) return null
   if (!isPriceRise(before, latest.amountCents)) return null
-  return { name: repeating.name, charge: latest, previousCents: before }
+  return { charge: latest, previousCents: before, previousId: earlier[0]!.id }
 }
 
 /** Every price rise among these repeating charges, newest first. */

@@ -29,12 +29,16 @@ afterAll(async () => {
 })
 
 const LOAN_LINK = '027_owned_loan_link.sql'
+/** Builds on 027's column, so it runs after it, as its number puts it on every install. */
+const LOAN_UNIQUE = '033_owned_loan_unique.sql'
 
 describe('the loan link migration', () => {
   it('runs on a database that already ran every other migration, keeping its accounts', async () => {
     dir = await mkdtemp(join(tmpdir(), 'leeway-without-loan-link-'))
     const migrations = fileURLToPath(new URL('../migrations', import.meta.url))
-    const others = (await readdir(migrations)).filter((file) => file !== LOAN_LINK)
+    const others = (await readdir(migrations)).filter(
+      (file) => file !== LOAN_LINK && file !== LOAN_UNIQUE,
+    )
     for (const file of others) await copyFile(join(migrations, file), join(dir, file))
     await ctx.db.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
     await migrate(ctx.db, dir)
@@ -46,7 +50,7 @@ describe('the loan link migration', () => {
     )
     const home = rows[0]!.id
 
-    expect(await migrate(ctx.db)).toEqual([LOAN_LINK])
+    expect(await migrate(ctx.db)).toEqual([LOAN_LINK, LOAN_UNIQUE])
     const kept = await ctx.db.query<{ balance: number; loan: string | null }>(
       'SELECT balance_cents AS balance, loan_account_id AS loan FROM accounts WHERE id = $1',
       [home],

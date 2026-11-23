@@ -137,6 +137,33 @@ export function pensionCandidates(accounts: Account[]): Account[] {
   )
 }
 
+/**
+ * Where a new pension goes, read from the account chosen and the accounts as
+ * listed now: a new account, an account offered, or one chosen that has since
+ * left the list, as after a refusal reads the accounts again. One made a
+ * pension meanwhile ("kept") can still take the figures as that pension; one
+ * hidden or gone ("gone") must be chosen again. Neither ever turns into a new
+ * pension by itself, which would count one plan twice.
+ */
+export type AccountChoice =
+  | { kind: 'new' }
+  | { kind: 'account'; accountId: string }
+  | { kind: 'kept'; accountId: string; name: string }
+  | { kind: 'gone'; accountId: string }
+
+export function accountChoice(
+  accountId: string,
+  candidates: readonly { id: string }[],
+  pensions: readonly { accountId: string; name: string }[] = [],
+): AccountChoice {
+  if (accountId === '') return { kind: 'new' }
+  if (candidates.some((candidate) => candidate.id === accountId)) {
+    return { kind: 'account', accountId }
+  }
+  const kept = pensions.find((pension) => pension.accountId === accountId)
+  return kept ? { kind: 'kept', accountId, name: kept.name } : { kind: 'gone', accountId }
+}
+
 export function assumptionsText(assumptions: Assumptions): AssumptionsText {
   return {
     retirementAge: String(assumptions.retirementAge),

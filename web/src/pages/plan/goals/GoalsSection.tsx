@@ -3,8 +3,10 @@
 // then each goal (purchases being saved for among them) with what each budget
 // period needs and whether recent progress makes it.
 // "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
-// the overview's "Save for a purchase" link gets here. When the fund alone
-// fails to load, the goals still show, with a way to try the fund again.
+// the overview's "Save for a purchase" link gets here; Coming up adds the
+// event's name, price and day (&name=, &price= in cents, &by=) to start from.
+// When the fund alone fails to load, the goals still show, with a way to try
+// the fund again.
 
 import { Card } from '../../../components/design/Card'
 import { useState } from 'react'
@@ -16,13 +18,27 @@ import { FormCard } from '../FormCard'
 import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
 import type { EmergencyView } from '../../../lib/emergencyText'
 import { GoalCard } from './GoalCard'
-import { GoalForm, type GoalFields, type GoalKind } from './GoalForm'
+import { GoalForm, type GoalDraft, type GoalFields, type GoalKind } from './GoalForm'
 import { GoalOrderCard } from './GoalOrder'
 
 /** What the form is open on: a new goal of a kind, or an existing goal. */
 interface Editing {
   goal: Goal | null
   kind: GoalKind
+  /** What a new goal starts from, when the link that opened it says. */
+  draft?: GoalDraft
+}
+
+/** A new purchase as the address asks for it, or nothing open. */
+function editingFrom(params: URLSearchParams): Editing | null {
+  if (params.get('new') !== 'purchase') return null
+  const price = Number(params.get('price'))
+  const draft = {
+    name: params.get('name') ?? '',
+    targetCents: Number.isInteger(price) && price > 0 ? price : null,
+    targetDate: params.get('by') ?? '',
+  }
+  return { goal: null, kind: 'purchase', draft }
 }
 
 /** The form's heading: the goal's name, or what kind of goal is being started. */
@@ -53,7 +69,7 @@ function GoalEditor({
   emergency: EmergencyView | null
   onClose: () => void
 }) {
-  const { goal, kind } = editing
+  const { goal, kind, draft } = editing
   const create = useActionMutation('create_goal')
   const update = useActionMutation('update_goal')
   const remove = useActionMutation('delete_goal')
@@ -65,6 +81,7 @@ function GoalEditor({
       <GoalForm
         goal={goal ?? undefined}
         kind={kind}
+        draft={draft}
         accounts={accounts}
         emergency={emergency}
         busy={create.isPending || update.isPending || remove.isPending}
@@ -159,9 +176,7 @@ function FundTrouble({ retrying, onRetry }: { retrying: boolean; onRetry: () => 
 export function GoalsSection() {
   const [params, setParams] = useSearchParams()
   // Opened from a link that asks for a new purchase; otherwise nothing is open.
-  const [editing, setEditing] = useState<Editing | null>(() =>
-    params.get('new') === 'purchase' ? { goal: null, kind: 'purchase' } : null,
-  )
+  const [editing, setEditing] = useState(() => editingFrom(params))
   const goals = useAction('list_goals')
   const accounts = useAction('list_accounts')
   // The Plan screen loads cash flow anyway; its date is the server's today.
@@ -176,7 +191,7 @@ export function GoalsSection() {
 
   function close() {
     setEditing(null)
-    // Drop "?new=purchase" so a reload does not open the form again.
+    // Drop "?new=purchase" and what came with it, so a reload does not open the form again.
     if (params.has('new')) setParams({}, { replace: true })
   }
 

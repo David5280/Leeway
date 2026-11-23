@@ -1,8 +1,11 @@
 // Bills and subscriptions: what is due and when, and repeating charges found
 // in history, each tracked as a bill in one tap, with Undo in a toast.
+// "/plan/bills?bill=<id>" opens straight onto that bill, which is how Coming
+// up's rows get here.
 
 import { Card } from '../../components/design/Card'
 import { useCallback, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Bill, Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Toast } from '../../components/Toast'
@@ -164,7 +167,8 @@ function BillEditor({
 
 export function BillsSection() {
   const { settings } = useApp()
-  const [editing, setEditing] = useState<Editing>(null)
+  const [params, setParams] = useSearchParams()
+  const [chosen, setEditing] = useState<Editing>(null)
   const bills = useAction('list_bills')
   const categories = useAction('list_categories')
   const today = isoDaysAgo(0, settings.timeZone)
@@ -174,6 +178,15 @@ export function BillsSection() {
     return <LoadingOrError error={error} />
   }
   const { monthlyCents, subscriptionsMonthlyCents } = bills.data
+  // A bill the address asks for is open until closed, unless another is opened.
+  const asked = bills.data.bills.find((bill) => bill.id === params.get('bill'))
+  const editing = chosen ?? (asked ? { bill: asked, initial: billFields(asked, today) } : null)
+
+  function close() {
+    setEditing(null)
+    // Drop "?bill=" so a reload does not open the form again.
+    if (params.has('bill')) setParams({}, { replace: true })
+  }
 
   return (
     <>
@@ -183,7 +196,7 @@ export function BillsSection() {
           key={editing.bill?.id ?? editing.initial.name}
           editing={editing}
           categories={categories.data}
-          onClose={() => setEditing(null)}
+          onClose={close}
         />
       )}
 

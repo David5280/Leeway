@@ -9,7 +9,7 @@ import {
   listBills,
   updateBill,
 } from '../domain/bills.js'
-import { dismissRecurring, untrackedRecurring } from '../domain/recurring.js'
+import { dismissRecurring, untrackedRecurring } from '../domain/untrackedRecurring.js'
 import { trackRecurring } from '../domain/trackRecurring.js'
 import { defineAction } from './action.js'
 import { today } from './today.js'
