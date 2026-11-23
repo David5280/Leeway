@@ -76,10 +76,9 @@ describe('a surname that is also a word', () => {
   })
 
   it('stays the word beside an ordinary word, which is hidden alone when no rule vouches for it', () => {
-    const labels = ['Brown rice', 'Young Living', 'Hill Country', 'Love Sac', 'Stone countertops']
+    expect(shown(['Brown rice', 'Young Living'])).toEqual(['Brown rice', 'Young Living'])
+    const labels = ['Hill Country', 'Love Sac', 'Stone countertops']
     expect(pairs(labels)).toEqual([
-      ['Brown rice', 'Brown someone'],
-      ['Young Living', 'Young someone'],
       ['Hill Country', 'Hill someone'],
       ['Love Sac', 'Love someone'],
       ['Stone countertops', 'Stone someone'],

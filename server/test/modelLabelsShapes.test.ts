@@ -49,6 +49,24 @@ describe("a person's name under a business's code, and a shop's imported row", (
     expect(labelOf('ACME CORP DIRECT DEP PAYROLL', wages)).toBeNull()
   })
 
+  it('labels a name joined by a dot on a practice, or by a star on a pay line', () => {
+    const practice = coded('MEDICAL_PRIMARY_CARE', { merchantEntityId: 'ent_fake_practice' })
+    for (const name of ['JANE.DOE COUNSELING', 'J.OSTROWSKI COUNSELING']) {
+      expect([name, label(name, { ...practice, merchantName: name })]).toEqual([
+        name,
+        'Medical payment',
+      ])
+    }
+    for (const name of ['CVS', 'Walgreens', 'BetterHelp', 'BETTERHELP.COM']) {
+      expect([name, labelOf(name, { ...practice, merchantName: name })]).toEqual([name, null])
+    }
+    const wages = coded('INCOME_WAGES', { amountCents: -90_000 })
+    for (const name of ['DOE*JANE PAYROLL', 'IGNATIUS*PEMBERTON HOUSEHOLD PAYROLL']) {
+      expect([name, label(name, wages)]).toEqual([name, 'Deposit'])
+    }
+    expect(labelOf('ACME CORP PAYROLL', wages)).toBeNull()
+  })
+
   it('shows a row the owner typed in only as a shop they buy from, or in everyday words', () => {
     const typed = { typedOrImported: true }
     for (const name of ['Rent', 'House cleaner', 'Groceries', 'Cash']) {

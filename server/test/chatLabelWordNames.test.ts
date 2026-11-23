@@ -5,7 +5,7 @@
 // words budgets are named with stay. Every name is made up.
 
 import { describe, expect, it } from 'vitest'
-import { pairs, shown } from './labelsShown.js'
+import { pairs, shown, shownWith } from './labelsShown.js'
 
 /** The labels of a list that a tool's output does not show as written. */
 const changed = (labels: readonly string[]) =>
@@ -61,9 +61,10 @@ describe('a given name that is an everyday word', () => {
   })
 
   it('is hidden in a rule pattern wherever the pattern is written', () => {
-    // A rule's pattern is written in capitals, and may be shown in lower case.
-    const people = shown(['VENMO BILL'])
-    expect(people).toEqual(['VENMO someone'])
+    // A rule's pattern is written in capitals, and may be shown in lower case,
+    // where it reads as the pattern does.
+    const texts = ['VENMO BILL', 'Paid venmo bill twice']
+    expect(shownWith(['VENMO BILL'], texts)).toEqual(['VENMO someone', 'Paid VENMO someone twice'])
   })
 })
 

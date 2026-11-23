@@ -23,6 +23,12 @@ const LINE_WORD = new RegExp(`\\p{L}(?:[\\p{L}${APOSTROPHES}-]*\\p{L})?`, 'gu')
 // What parts a line's words for reading a name in it: anything but letters, digits, dots,
 // apostrophes and hyphens, so "DOE*JANE" reads "DOE JANE" and "Jane Q. Doe" keeps its dot.
 const LINE_BREAKS = new RegExp(`[^\\p{L}\\p{N}.${APOSTROPHES}-]+`, 'u')
+// A dot between letters, which parts two words too ("JANE.DOE", "J.OSTROWSKI").
+const JOINING_DOT = /(?<=\p{L})\.(?=\p{L})/u
+// A web address, whose dots join no name ("BETTERHELP.COM").
+const WEB_ADDRESS = /\.(?:com|net|org|io|co|us|health)$/i
+// Short words written with a dot, which keep it when parted ("ST.JOSEPH" reads "ST. JOSEPH").
+const ABBREVIATIONS = new Set(['st', 'mt', 'ft'])
 
 // An initial, with or without its dot: "Jane Q. Doe", "J PEMBERTON".
 const INITIAL = /^\p{L}\.?$/u
@@ -56,6 +62,19 @@ const CREDENTIALS = new Set([...TITLES, ...MORE_TITLES, ...AFTER_A_NAME, ...MORE
 /** Whether a word is a clinician's credential or title, dots aside: "LCSW", "M.D.", "PA-C". */
 export function isCredential(word: string): boolean {
   return CREDENTIALS.has(word.toLowerCase().replace(/\./g, ''))
+}
+
+/**
+ * A word of a line parted at each dot between letters ("JANE.DOE" reads
+ * "JANE", "DOE"), as written with a space after an abbreviation ("ST.",
+ * "JOSEPH"), but whole when a credential ("Ph.D") or a web address.
+ */
+function partedAtDots(word: string): string[] {
+  if (isCredential(word) || WEB_ADDRESS.test(word)) return [word]
+  const parts = word.split(JOINING_DOT)
+  return parts.map((part, at) =>
+    at < parts.length - 1 && ABBREVIATIONS.has(part.toLowerCase()) ? `${part}.` : part,
+  )
 }
 
 /** A name without the credential written after it: "Corwin Ashby DC" reads "Corwin Ashby". */
@@ -117,12 +136,13 @@ export function hasAPersonsShape(name: string): boolean {
  * are gone is read as a name (hasAPersonsShape). A name that is also a word
  * stays, so "DIRECT DEP MARK WHITLOCK" or "BILL WHITLOCK" never leaves a lone
  * surname too short to read as one. Words are parted by any mark ("DOE*JANE
- * COUNSELING"), and more name words than a name has hold one anywhere in
- * them ("MARIA JOSE GARCIA LOPEZ PEREZ THERAPY").
+ * COUNSELING", "JANE.DOE COUNSELING"), and more name words than a name has
+ * hold one anywhere in them ("MARIA JOSE GARCIA LOPEZ PEREZ THERAPY").
  */
 export function holdsAPersonsName(line: string): boolean {
   const words = line
     .split(LINE_BREAKS)
+    .flatMap(partedAtDots)
     .map((word) => word.replace(/^[^\p{L}]+|[^\p{L}.]+$/gu, ''))
     .filter((word) => word && !/\d/.test(word) && !isCredential(word))
     .filter((word) => nameInALine(word.replace(/\.$/, '')))

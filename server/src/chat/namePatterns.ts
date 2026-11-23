@@ -23,13 +23,18 @@ function escaped(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// A hyphen as written: plain, or a non-breaking one (U+2011), which text is
+// searched with as the hyphen U+2010 (plainLetters.ts).
+const HYPHENS = '\\u2010\\u2011-'
+
 // Between the parts of a hyphenated name: a hyphen, a space, or nothing
 // ("Núñez-García" is also "NUNEZ GARCIA" and "NunezGarcia").
-const HYPHEN = '[\\s-]?'
+const HYPHEN = `[\\s${HYPHENS}]?`
+const A_HYPHEN = new RegExp(`^[${HYPHENS}]$`)
 
 /** A RegExp source matching one character of a name: a letter with or without accents. */
 function characterOf(character: string): string {
-  if (character === '-') return HYPHEN
+  if (A_HYPHEN.test(character)) return HYPHEN
   // Text is searched folded, where every apostrophe is a straight one (plainCharacter).
   if (APOSTROPHES.includes(character)) return "'"
   return `${escaped(character)}\\p{M}*`
@@ -40,7 +45,7 @@ function characterOf(character: string): string {
  * accents, and with a hyphen between any two ("Bright-water").
  */
 function lettersOf(word: string): string {
-  return [...withoutAccents(word)].map(characterOf).join('-?')
+  return [...withoutAccents(word)].map(characterOf).join(`[${HYPHENS}]?`)
 }
 
 // A name made plural: "BRIGHTWATERS", "the Prycewoods'". One owned
@@ -53,7 +58,7 @@ const ENDING = '[sS]?'
  * "Jane.Doe", "Jane/Doe", "Jane, Doe", "JaneDoe" and "Jane Does".
  */
 export function fullNamePattern(name: string): RegExp {
-  const words = name.trim().split(/\s+/).map(lettersOf).join('[\\s._,/-]*')
+  const words = name.trim().split(/\s+/).map(lettersOf).join(`[\\s._,/${HYPHENS}]*`)
   return new RegExp(`${WORD_START}${words}${ENDING}${WORD_END}`, 'giu')
 }
 

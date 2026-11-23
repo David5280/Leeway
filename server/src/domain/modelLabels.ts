@@ -201,8 +201,11 @@ function showsItsName(tx: LabelSubject): boolean {
   }
   if (vouched) return true
   if (PROCESSOR.test(tx.name)) return false
-  // Pay names its payer anywhere in a line: "DIRECT DEP JOHN Q PUBLIC HOUSEHOLD PAYROLL".
-  if (code.startsWith('INCOME')) return !holdsAPersonsName(shownMerchant(tx))
+  // Pay names its payer anywhere in a line: "DIRECT DEP JOHN Q PUBLIC HOUSEHOLD PAYROLL",
+  // read whole before the shown name cuts it ("DOE*JANE PAYROLL" shows as "Doe").
+  if (code.startsWith('INCOME')) {
+    return ![merchantOf(tx) || tx.name, shownMerchant(tx)].some(holdsAPersonsName)
+  }
   return !hasAPersonsShape(shownMerchant(tx))
 }
 

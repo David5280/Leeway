@@ -11,11 +11,16 @@ import { knownShops } from '../src/domain/knownShops.js'
 // Shops the owner buys from: one-word ones named for no one, and ones named like a person.
 export const SHOPS = knownShops(['Wegmans', 'Marshalls', 'Target', 'Ross', 'Ruby', "Trader Joe's"])
 
-/** Each label as a tool's output shows it. */
-export function shown(labels: readonly string[]): string[] {
+/** Texts as a tool's output shows them, beside the owner's labels read for names. */
+export function shownWith(labels: readonly string[], texts: readonly string[]): string[] {
   const words = namesInLabels(labels, () => false, SHOPS)
   const people = { ...NO_PEOPLE, shops: SHOPS, labels: namedLabels(words, SHOPS) }
-  return (JSON.parse(chatToolText({ labels }, people)) as { labels: string[] }).labels
+  return (JSON.parse(chatToolText({ texts }, people)) as { texts: string[] }).texts
+}
+
+/** Each label as a tool's output shows it. */
+export function shown(labels: readonly string[]): string[] {
+  return shownWith(labels, labels)
 }
 
 /** Each label beside how it is shown, so a failure names the label. */

@@ -184,7 +184,8 @@ describe("the owner's own words", () => {
       ['Ignatius allowance', ['Ignatius']],
       ['Bettina’s Savings', ['Bettina']],
       ['Fennwick-', ['Fennwick']],
-      ['Mary-Kate gifts', ['Mary-Kate']],
+      // A hyphen parts a label's words, so each half of a name is hidden.
+      ['Mary-Kate gifts', ['Mary', 'Kate']],
     ])
   })
 

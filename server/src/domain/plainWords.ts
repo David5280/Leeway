@@ -20,7 +20,7 @@ const PLAIN_WORDS = new Set(
     'tomorrow week weekend weekly weeks year yearly years yesterday',
     // Food and eating out.
     'alcohol beer breakfast brunch coffee dessert dining dinner drink drinks eating fast lunch',
-    'meal meals snack snacks takeout treats',
+    'meal meals snack snacks takeout treats rice',
     // Home.
     'appliance appliances bathroom bedroom cable decor deck electricity fence furnace hvac',
     'household housing improvement internet maintenance moving remodel repairs roof sewer',
@@ -31,7 +31,8 @@ const PLAIN_WORDS = new Set(
     // Shopping and family.
     'baby birthday birthdays children christmas clothes clothing costume diapers dog dogs',
     'donations gadgets gear holidays hobbies hobby kid kids laptop pet presents',
-    'shopping stuff toy wedding anniversary engagement honeymoon graduation',
+    'shopping stuff toy wedding anniversary engagement honeymoon graduation costumes coats',
+    'teacher friends living',
     // Health and care.
     'braces checkup contacts dentist doctor glasses haircut hospital medical medicine',
     'personal prescription prescriptions surgery therapy vet vision wellness',

@@ -74,6 +74,15 @@ describe("a person's shape", () => {
     expect(holdsAPersonsName('KING SOOPERS PAYROLL')).toBe(false)
     expect(holdsAPersonsName('ACME PHYSICAL THERAPY')).toBe(false)
   })
+
+  it('parts words at a dot between letters, but not in an address or credential', () => {
+    for (const line of ['JANE.DOE COUNSELING', 'J.OSTROWSKI COUNSELING', 'Jane Q. Doe']) {
+      expect([line, holdsAPersonsName(line)]).toEqual([line, true])
+    }
+    for (const line of ['BETTERHELP.COM', 'ST.JOSEPH HOSPITAL', 'ACME PH.D COUNSELING']) {
+      expect([line, holdsAPersonsName(line)]).toEqual([line, false])
+    }
+  })
 })
 
 describe('a name word anywhere in a text', () => {

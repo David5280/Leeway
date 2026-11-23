@@ -13,8 +13,9 @@
 //   A given name ("Hope", "Rose", "Will") is a person in a label but in a
 //   few set phrases ("Hope chest", "Rose Garden", "Will & Trust").
 // - A word whose everyday sense wins in money text ("bill", "May") reads as
-//   the word in labels unless a person is named there ("Uncle Bill",
-//   ownerText.ts), and as a name in a merchant or pay line.
+//   the word in labels, but a given name ("Bill", "June") only where its
+//   everyday sense is vouched for (wordNames.ts), and as a name in a
+//   merchant or pay line.
 // - Months, days, banks and what a contact is saved as ("Mom", "Rent") are
 //   never a name.
 
@@ -62,6 +63,7 @@ const EVERYDAY_PHRASES = [
   'bill paying',
   'bill payment',
   'bill payments',
+  'bill splitting',
 ]
 
 /** A phrase as a RegExp source: its words with any spaces between ("Hope  Chest"). */
