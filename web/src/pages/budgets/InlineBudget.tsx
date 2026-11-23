@@ -8,6 +8,7 @@ import { useActionMutation } from '../../api/hooks'
 import { CADENCE_LABELS } from '../../components/CategoryForm'
 import { Money } from '../../components/design/Money'
 import { ErrorNote } from '../../components/ui'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { parseMoney } from '../../lib/format'
 
 /** The amount to save from what was typed: cents, null for a blank box, undefined if unreadable. */
@@ -30,15 +31,18 @@ export function InlineBudget({
   const update = useActionMutation('update_category')
   const editing = text !== null
   const typed = typedBudget(text ?? '')
+  const field = useAmountField(text ?? '', { min: 0 })
 
   function save(event?: FormEvent) {
     event?.preventDefault()
+    field.reveal()
     if (typed === undefined) return
     if (typed === category.budgetCents) return setText(null)
     update.mutate({ id: category.id, budgetCents: typed }, { onSuccess: () => setText(null) })
   }
 
   function onKey(event: KeyboardEvent) {
+    field.inputProps.onKeyDown(event)
     if (event.key !== 'Escape') return
     update.reset()
     setText(null)
@@ -69,7 +73,7 @@ export function InlineBudget({
         // Opened by a click on the amount, so typing can start right away.
         autoFocus
         aria-label={`${category.name} budget amount`}
-        aria-invalid={typed === undefined}
+        {...field.inputProps}
         placeholder="None"
         value={text}
         disabled={update.isPending}
@@ -78,6 +82,7 @@ export function InlineBudget({
         onBlur={() => save()}
       />
       <span className="small muted">{CADENCE_LABELS[category.budgetCadence]}</span>
+      <AmountNote id={field.id} text={field.shown} />
       <ErrorNote error={update.error} />
     </form>
   )

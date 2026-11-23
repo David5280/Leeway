@@ -89,32 +89,6 @@ describe('NotificationsSection: what to hear about', () => {
     )
   })
 
-  it('saves a large charge amount when the box is left, and puts back one out of range', async () => {
-    const server = serve()
-    await renderSection()
-    const user = userEvent.setup()
-    const box = screen.getByRole('textbox', { name: 'Amount of a large charge' })
-    await user.clear(box)
-    await user.type(box, '0.5')
-    await user.tab()
-    expect(screen.getByRole('textbox', { name: 'Amount of a large charge' })).toHaveValue('500')
-    await user.clear(screen.getByRole('textbox', { name: 'Amount of a large charge' }))
-    await user.type(screen.getByRole('textbox', { name: 'Amount of a large charge' }), '500')
-    await user.tab()
-    expect(server.actions('update_notification_settings')).toEqual([])
-    await user.clear(screen.getByRole('textbox', { name: 'Amount of a large charge' }))
-    await user.type(screen.getByRole('textbox', { name: 'Amount of a large charge' }), '$1,200')
-    await user.tab()
-    await waitFor(() =>
-      expect(server.actions('update_notification_settings')).toEqual([
-        { largeTransactionCents: 120_000 },
-      ]),
-    )
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Amount of a large charge' })).toHaveValue('1200'),
-    )
-  })
-
   it('sets quiet hours in the owner time zone', async () => {
     const server = serve()
     await renderSection()

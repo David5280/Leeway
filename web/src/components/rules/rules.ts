@@ -1,6 +1,7 @@
 // What a rule says, as a draft being built and as one line of text.
 
 import type { Rule } from '../../api/client'
+import { isUnreadableMoney, parseMoney } from '../../lib/format'
 
 /** A rule while it is being built; amounts are still the text the owner typed. */
 export interface RuleDraft {
@@ -10,6 +11,20 @@ export interface RuleDraft {
   categoryId: string | null
   minAmount?: string
   maxAmount?: string
+}
+
+/**
+ * A draft's amount limits in cents, null for any amount, and whether one was
+ * typed that can't be read. A blank limit means any amount on purpose; an
+ * unreadable one must not save as no limit.
+ */
+export function amountLimits({ minAmount = '', maxAmount = '' }: RuleDraft) {
+  const centsOf = (text: string) => (text ? parseMoney(text) : null)
+  return {
+    minAmountCents: centsOf(minAmount),
+    maxAmountCents: centsOf(maxAmount),
+    unreadable: isUnreadableMoney(minAmount) || isUnreadableMoney(maxAmount),
+  }
 }
 
 export const FIELDS = [

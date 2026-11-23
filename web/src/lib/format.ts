@@ -1,16 +1,17 @@
 // Formatting for dates, and reading typed amounts and rates. Dates are
 // YYYY-MM-DD. Money and rates are formatted in lib/money.ts, the one place
-// numbers are written.
+// numbers are written; typed amounts are read in lib/typedMoney.ts.
 
 import { addDays, dateParts, daysBetween } from './dates'
+import { parseMoney } from './typedMoney'
 
 export { periodWord } from '../../../server/src/lib/words'
 
 /**
- * Reads a typed number, ignoring a currency or percent sign: "$1,200" is
- * 1200, and "12,5" is 12.5, since a comma before three digits groups
- * thousands while any other comma is a decimal point, as many locales write
- * it. Keeps a minus sign; null if it is not a number, or holds any letter.
+ * Reads a typed rate's number, ignoring a percent sign: "12,5" is 12.5, since
+ * a comma before three digits groups thousands while any other comma is a
+ * decimal point, as many locales write it. Keeps a minus sign; null if it is
+ * not a number, or holds any letter. Amounts are read by parseMoney instead.
  */
 function parseDecimal(text: string): number | null {
   // Dropping a letter would read "5e1" as 51 and "1O0" as 10, so any letter refuses it.
@@ -21,34 +22,15 @@ function parseDecimal(text: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
-/**
- * A currency written in letters at either end of an amount: a two or three
- * letter code or abbreviation, perhaps with a dot ("CHF 12", "12 USD",
- * "120kr", "Rs. 500"), or one letter right on a currency sign ("R$ 12").
- * A lone letter elsewhere is no currency: "10K" is shorthand, not ten.
- */
-const CURRENCY_LETTERS = /^\s*(\p{L}{2,3}\.?|\p{L}(?=\p{Sc}))|\p{L}{2,3}\.?\s*$/gu
-
-/** Letters typed for digits: O for 0, l or I for 1, as in "5OO" or "1,2OO". */
-const DIGIT_LOOKALIKES = /^[oOlI]+$/
+export { parseMoney }
 
 /**
- * Parses "12.50", "$1,200", "12,5", "1200" or "CHF 12" into cents; null if it
- * is not a number. A currency in letters may come before or after it, but
- * any other letter refuses it, so a typo never reads as a smaller amount:
- * "5e1", "1O0", "5OO" and "1.2k" are all null.
+ * Whether an amount was typed that cannot be read ("5OO", "5k", "1.234").
+ * A blank one may mean none on purpose; an unreadable one must never save as
+ * none, or as $0, in its place.
  */
-export function parseMoney(text: string): number | null {
-  let typedForDigits = false
-  const withoutCurrency = text.replace(CURRENCY_LETTERS, (token) => {
-    // "OO" at the end of "5OO" looks like a currency code but is two zeros.
-    typedForDigits ||= DIGIT_LOOKALIKES.test(token.trim().replace('.', ''))
-    return ''
-  })
-  if (typedForDigits) return null
-  // parseDecimal refuses any letter left over.
-  const value = parseDecimal(withoutCurrency)
-  return value === null ? null : Math.round(value * 100)
+export function isUnreadableMoney(text: string): boolean {
+  return parseMoney(text) === null && text.trim() !== ''
 }
 
 /** The highest interest rate a card or loan takes, as the server allows. */

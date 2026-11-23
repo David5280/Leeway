@@ -1,6 +1,7 @@
 // The starting-point step's logic, kept free of React so it can be tested on its own.
 
 import type { Input } from '../../api/client'
+import { amountNote } from '../../lib/amountNote'
 import { parseMoney } from '../../lib/format'
 
 export type StarterCategory = NonNullable<Input<'complete_setup'>['categories']>[number]
@@ -69,4 +70,16 @@ export function categoriesToCreate(rows: StarterRow[]): StarterCategory[] {
       budgetCents: row.category.kind === 'expense' ? parseMoney(row.amount) : null,
       budgetCadence: 'month' as const,
     }))
+}
+
+/**
+ * Whether a ticked spending row holds an amount that can't be saved. A blank
+ * one means no budget; one that can't be read, or a negative one, must not
+ * quietly become none.
+ */
+export function hasBadAmount(rows: StarterRow[]): boolean {
+  return rows.some(
+    (row) =>
+      row.include && row.category.kind === 'expense' && amountNote(row.amount, { min: 0 }) !== null,
+  )
 }

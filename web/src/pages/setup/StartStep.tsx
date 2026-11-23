@@ -5,12 +5,14 @@ import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { alphabeticalGroups } from '../../lib/alphabetical'
 import { useApp } from '../../lib/app'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
   defaultStart,
+  hasBadAmount,
   starterRows,
   type Edits,
   type Start,
@@ -58,7 +60,9 @@ export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () =
           onBack={onBack}
           next="Continue"
           busy={finish.isPending}
-          disabled={start === null || (start === 'import' && !imported)}
+          disabled={
+            start === null || (start === 'import' && !imported) || (listed && hasBadAmount(rows))
+          }
         />
       </form>
     </Frame>
@@ -166,6 +170,7 @@ function StarterItem({
   row: StarterRow
   onEdit: (name: string, change: Edits[string]) => void
 }) {
+  const field = useAmountField(amount, { min: 0 })
   return (
     <div className="list-row starter-item">
       <label className="check grow">
@@ -187,16 +192,21 @@ function StarterItem({
         </span>
       </label>
       {category.kind === 'expense' ? (
-        <input
-          className="input num"
-          style={{ width: 110 }}
-          inputMode="decimal"
-          placeholder="No budget"
-          aria-label={`${category.name} budget`}
-          value={amount}
-          disabled={!include}
-          onChange={(e) => onEdit(category.name, { amount: e.target.value })}
-        />
+        <>
+          <input
+            className="input num"
+            style={{ width: 110 }}
+            inputMode="decimal"
+            placeholder="No budget"
+            aria-label={`${category.name} budget`}
+            {...field.inputProps}
+            value={amount}
+            disabled={!include}
+            onChange={(e) => onEdit(category.name, { amount: e.target.value })}
+          />
+          {/* One row of a long list, so the line takes room only once it has words. */}
+          {include && <AmountNote id={field.id} text={field.shown} fit />}
+        </>
       ) : (
         // Income and transfers take no budget, so say how each is counted
         // instead of repeating the name.
