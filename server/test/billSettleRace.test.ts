@@ -2,11 +2,14 @@
 // out from (billChangeSource.ts, setUsual). An owner's update_bill that lands
 // between the read and the write keeps their figure, and the write is
 // skipped quietly, whether a refresh settles the bill or a dismissal takes
-// a changed charge's amount.
+// a changed charge's amount. The other way round, an owner's edit that
+// leaves the amount as it read it writes no amount, so a usual amount
+// written meanwhile stays.
 
 import type pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { acceptBillChange, settleBillChanges } from '../src/domain/billChangeSource.js'
+import { updateBill } from '../src/domain/bills.js'
 import { actionCaller } from './actionCaller.js'
 import { addCharges, cityPowerCharged, SWUNG, TODAY, usualOf } from './fixtures/cityPower.js'
 import {
@@ -34,14 +37,22 @@ beforeEach(async () => {
 /** The start of the statement that writes a bill's usual amount. */
 const USUAL_WRITE = 'UPDATE bills SET amount_cents'
 
+/** The start of update_bill's own write. */
+const OWNER_WRITE = 'UPDATE bills SET name'
+
 /**
- * `db`, but running `meanwhile` once, just before Leeway's first write of a
- * bill's usual amount: an owner's edit landing between the read and the write.
+ * `db`, but running `meanwhile` once, just before the first statement that
+ * starts with `before` (by default Leeway's write of a bill's usual amount):
+ * another write landing between the read and the write.
  */
-function interleaved(db: pg.Pool, meanwhile: () => Promise<unknown>): pg.Pool {
+function interleaved(
+  db: pg.Pool,
+  meanwhile: () => Promise<unknown>,
+  before = USUAL_WRITE,
+): pg.Pool {
   let ran = false
   const query = async (text: string, values?: unknown[]) => {
-    if (!ran && text.startsWith(USUAL_WRITE)) {
+    if (!ran && text.startsWith(before)) {
       ran = true
       await meanwhile()
     }
@@ -144,5 +155,32 @@ describe('dismissing a changed charge while the owner changes the bill', () => {
     const racing = interleaved(ctx.db, () => call('update_bill', { id: billId, amountCents: 999 }))
     expect(await acceptBillChange(racing, 'UTC', TODAY, target)).toBe(false)
     expect(await usualOf(caller, billId)).toBe(999)
+  })
+})
+
+describe('renaming a bill while Leeway writes its usual amount', () => {
+  /** update_bill as the owner's rename, with `meanwhile` landing between its read and write. */
+  const renameAcross = (billId: string, meanwhile: () => Promise<unknown>) =>
+    updateBill(
+      interleaved(ctx.db, meanwhile, OWNER_WRITE),
+      billId,
+      { name: 'Power and light' },
+      { today: TODAY, now: new Date('2026-11-17T18:00:00Z') },
+    )
+
+  it('keeps the $103.33 a refresh settled meanwhile, with the new name', async () => {
+    const { billId } = await cityPowerInNovember()
+    const bill = await renameAcross(billId, () => settleBillChanges(ctx.db, 'UTC', TODAY))
+    // Not put back to the $110 the rename read.
+    expect(bill).toMatchObject({ name: 'Power and light', amountCents: 10333 })
+    expect(await amountSetAt(billId)).toBeNull()
+  })
+
+  it('keeps any amount written meanwhile, as taking a changed charge writes it', async () => {
+    const { billId } = await cityPowerInNovember()
+    const accepted = async () => {
+      await ctx.db.query('UPDATE bills SET amount_cents = 2299 WHERE id = $1', [billId])
+    }
+    expect(await renameAcross(billId, accepted)).toMatchObject({ amountCents: 2299 })
   })
 })

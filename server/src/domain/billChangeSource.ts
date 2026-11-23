@@ -41,6 +41,8 @@ interface BillAndCharges {
   amountVaries: boolean
   /** When the owner last set the amount; null when never since tracking. */
   amountSetAt: Date | null
+  /** When following began, for a bill whose amount was there before then (035). */
+  followAfter: Date | null
   /** The same, to the microsecond, as setUsual compares it; a Date keeps only milliseconds. */
   amountSetStamp: string | null
   charges: BillCharge[]
@@ -55,6 +57,7 @@ async function billsWithCharges(db: Db, today: IsoDate): Promise<BillAndCharges[
     `SELECT b.id, b.name, b.amount_cents::int AS "amountCents", b.cadence, b.reads,
        b.match_pattern AS "matchPattern", b.created_at AS "createdAt",
        b.amount_varies AS "amountVaries", b.amount_set_at AS "amountSetAt",
+       b.follow_after AS "followAfter",
        to_char(b.amount_set_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
          AS "amountSetStamp",
        coalesce(json_agg(json_build_object('accountId', p.account_id,
@@ -143,6 +146,7 @@ async function readBillChanges(
       trackedOn: todayIn(timeZone, bill.createdAt),
       amountVaries: bill.amountVaries,
       amountSetOn: bill.amountSetAt ? todayIn(timeZone, bill.amountSetAt) : null,
+      followAfterOn: bill.followAfter ? todayIn(timeZone, bill.followAfter) : null,
       charges: bill.charges,
     }))
     .map((bill) => billChangeOf(bill, today))

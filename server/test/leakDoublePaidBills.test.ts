@@ -22,6 +22,7 @@ const bill: WatchedBill = {
   trackedOn: '2026-01-01',
   amountVaries: false,
   amountSetOn: null,
+  followAfterOn: null,
   charges: [],
 }
 
