@@ -8,7 +8,7 @@
 // layout.ts. Every route the app answers (web/src/routes.ts) must have a
 // screen here; a test below makes sure.
 
-import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
 import { SCREENS, type Screen } from './guarded-screens'
 import { SETTINGS_GROUPS } from './settings-groups'
@@ -22,36 +22,10 @@ import {
 import { OWNER, SETUP_CODE } from './owner'
 import { patchSettings } from './patchSettings'
 import { GUARDED_PHONES, simulateInsets, type GuardedPhone, type Insets } from './phone'
-import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
+import { action } from './seed'
+import { test } from './seeded-test'
 
-/**
- * Long names in every list while this file's tests run, gone again after.
- * They are added once per worker, before its first test here, and removed
- * when the worker ends (Playwright gives this file workers of its own, since
- * no other file has this fixture), rather than around a describe block.
- * That leaves each test standing alone, so it can run in any shard.
- */
-const test = base.extend<object, { seeded: Seeded }>({
-  seeded: [
-    async ({ playwright }, use, workerInfo) => {
-      // The signed-in owner of the project's server, as the request fixture has it.
-      const { baseURL, storageState } = workerInfo.project.use
-      const request = await playwright.request.newContext({ baseURL, storageState })
-      const seeded = emptySeed()
-      try {
-        await seedEveryScreen(request, seeded)
-        await use(seeded)
-      } finally {
-        // However far the seed got, so a seed that fails halfway still cleans up.
-        await removeSeed(request, seeded)
-        await request.dispose()
-      }
-    },
-    { scope: 'worker', auto: true },
-  ],
-})
-
-// Every test stands alone (see the fixture above), so a sharded run
+// Every test stands alone (see seeded-test.ts), so a sharded run
 // (scripts/e2e) shares this file's hundreds of tests out across its shards
 // one by one, rather than give one shard them all. A plain run, with one
 // worker, still runs them in order.
