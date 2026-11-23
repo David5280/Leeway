@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { account } from '../../../test/fake'
 import { ownedText, type OwnedItem, type OwnedText } from './ownedText'
-import { editOf, loanChoices, readOwned } from './readOwned'
+import { loanChoices, readEdit, readOwned } from './readOwned'
 
 /** The form's text, blank but for the fields given. */
 const typed = (fields: Partial<OwnedText>): OwnedText => ({ ...ownedText(), ...fields })
@@ -124,18 +124,83 @@ describe('reading the loan on a thing', () => {
 })
 
 describe('what an edit sends', () => {
+  const house: OwnedItem = {
+    ...checking,
+    id: 'h',
+    name: 'House',
+    kind: 'home',
+    amountCents: 45_000_000,
+    loanId: 'm',
+    loanName: 'Mortgage',
+  }
+
   it('leaves the amount out when unchanged, so the day it was entered stays', () => {
-    const fields = { name: 'Old checking', amountCents: -14_210 }
-    expect(editOf(fields, checking)).toEqual({ name: 'Old checking' })
+    const text = { ...ownedText(checking), name: 'Old checking' }
+    expect(readEdit(text, checking)).toEqual({ ok: true, value: { name: 'Old checking' } })
   })
 
-  it('sends the amount when it changed', () => {
-    const fields = { name: 'Second checking', amountCents: -20_000 }
-    expect(editOf(fields, checking)).toEqual(fields)
-    // An amount not known before counts as a change.
-    expect(editOf({ name: 'x', amountCents: 0 }, { ...checking, amountCents: null })).toEqual({
-      name: 'x',
-      amountCents: 0,
+  it('sends the amount when it changed, checked as a new one is', () => {
+    expect(readEdit({ ...ownedText(checking), amount: '-200' }, checking)).toEqual({
+      ok: true,
+      value: { name: 'Second checking', amountCents: -20_000 },
+    })
+    expect(readEdit({ ...ownedText(house), amount: '-1' }, house)).toEqual({
+      ok: false,
+      error: "What it is worth can't be below zero.",
+    })
+    expect(readEdit({ ...ownedText(house), amount: '' }, house)).toEqual({
+      ok: false,
+      error: 'Enter an amount, like 450,000.',
+    })
+  })
+
+  it('renames an older entry kept below zero, which the rules no longer allow', () => {
+    const legacy: OwnedItem = { ...checking, name: 'Old fund', kind: 'other', amountCents: -50_000 }
+    expect(readEdit({ ...ownedText(legacy), name: 'Rainy day' }, legacy)).toEqual({
+      ok: true,
+      value: { name: 'Rainy day' },
+    })
+    // A new amount below zero is still refused.
+    expect(readEdit({ ...ownedText(legacy), amount: '-600' }, legacy)).toMatchObject({ ok: false })
+  })
+
+  it('renames an older entry kept with no amount, its amount left blank', () => {
+    const unknown: OwnedItem = { ...checking, kind: 'investment', amountCents: null }
+    expect(readEdit({ ...ownedText(unknown), name: 'Brokerage' }, unknown)).toEqual({
+      ok: true,
+      value: { name: 'Brokerage' },
+    })
+    // An amount typed where none was known counts as a change.
+    expect(readEdit({ ...ownedText(unknown), amount: '0' }, unknown)).toEqual({
+      ok: true,
+      value: { name: 'Second checking', amountCents: 0 },
+    })
+  })
+
+  it('leaves the loan out when unchanged, and sends a new one or None', () => {
+    expect(readEdit(ownedText(house), house)).toEqual({ ok: true, value: { name: 'House' } })
+    expect(readEdit({ ...ownedText(house), loanId: 'other' }, house)).toEqual({
+      ok: true,
+      value: { name: 'House', loanId: 'other' },
+    })
+    expect(readEdit({ ...ownedText(house), loanId: '' }, house)).toEqual({
+      ok: true,
+      value: { name: 'House', loanId: null },
+    })
+    // A home with no loan left at None sends none.
+    const free = { ...house, loanId: null, loanName: null }
+    expect(readEdit(ownedText(free), free)).toEqual({ ok: true, value: { name: 'House' } })
+  })
+
+  it("still reads a loan's terms, refusing one it cannot read", () => {
+    const loan: OwnedItem = { ...checking, kind: 'loan', side: 'owed', amountCents: 100 }
+    expect(readEdit({ ...ownedText(loan), rate: '6.5' }, loan)).toEqual({
+      ok: true,
+      value: { name: 'Second checking', aprPercent: 6.5, monthlyPaymentCents: null },
+    })
+    expect(readEdit({ ...ownedText(loan), rate: 'six' }, loan)).toEqual({
+      ok: false,
+      error: 'Enter the rate as a number, like 6.5.',
     })
   })
 })
@@ -171,6 +236,28 @@ describe('the loans offered', () => {
     expect(loanChoices([], { ...tied, loanName: null })).toEqual([
       { id: 'old', label: 'The loan tied to it' },
     ])
+  })
+
+  it('leave out a loan tied to another thing, which the server would refuse', () => {
+    const autoLoan = account({ id: 'a', name: 'Auto loan', type: 'loan', manual: true })
+    const cabin: OwnedItem = { ...house, id: 'cabin', name: 'Cabin', loanId: 'm' }
+    expect(loanChoices([mortgage, autoLoan], house, [cabin])).toEqual([
+      { id: 'a', label: 'Auto loan' },
+    ])
+    // The thing holding the loan is still offered it, and a new thing is offered neither tie.
+    expect(loanChoices([mortgage, autoLoan], cabin, [cabin]).map((choice) => choice.id)).toEqual([
+      'm',
+      'a',
+    ])
+    expect(loanChoices([mortgage, autoLoan], undefined, [cabin])).toEqual([
+      { id: 'a', label: 'Auto loan' },
+    ])
+  })
+
+  it('keep a loan tied here even when an older tie holds it elsewhere too', () => {
+    const tied = { ...house, loanId: 'm', loanName: 'Mortgage' }
+    const cabin: OwnedItem = { ...house, id: 'cabin', name: 'Cabin', loanId: 'm' }
+    expect(loanChoices([mortgage], tied, [tied, cabin])).toEqual([{ id: 'm', label: 'Mortgage' }])
   })
 
   it('do not offer the tied loan twice, nor a thing as its own loan', () => {

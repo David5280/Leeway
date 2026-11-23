@@ -24,7 +24,7 @@ import type { Db } from '../../db/pool.js'
 import { notFound } from '../../errors.js'
 import { todayIn } from '../../lib/dates.js'
 import type { AccountAlert, AlertKind } from '../accountAlerts.js'
-import { listAlerts } from '../alerts.js'
+import { listAlerts, type AlertReads } from '../alerts.js'
 import { acceptBillChange } from '../billChangeSource.js'
 import { getSettings } from '../settings.js'
 import { keyOf, REARM_AFTER_MS, RESURFACE_AFTER_MS } from './inbox.js'
@@ -48,7 +48,7 @@ const alertKey = (alert: AccountAlert): string =>
 export async function currentAlerts(
   db: Db,
   now: Date,
-  only: { bills?: boolean; leaks?: boolean } = {},
+  only: Pick<AlertReads, 'bills' | 'leaks'> = {},
 ): Promise<AccountAlert[]> {
   const settings = await getSettings(db)
   return listAlerts(db, settings, todayIn(settings.timeZone, now), [], only)

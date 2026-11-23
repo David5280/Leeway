@@ -13,6 +13,7 @@ import { listAlerts } from '../alerts.js'
 import { listBills } from '../bills.js'
 import { budgetSummary } from '../budgetReport.js'
 import { listConnections } from '../connections.js'
+import type { LeakReader } from '../leaks/leakSource.js'
 import { getSettings, type Settings } from '../settings.js'
 import type { NotificationSettings } from './settings.js'
 import {
@@ -76,10 +77,14 @@ function formatFor(settings: Settings): AlertFormat {
   }
 }
 
-/** Every notification the data calls for now, for the kinds turned on. */
+/**
+ * Every notification the data calls for now, for the kinds turned on. A given
+ * `leaks` reader shares its read with the run's other alert lists (leakSource.ts).
+ */
 export async function gatherCandidates(
   ctx: AppContext,
   choices: NotificationSettings,
+  leaks?: LeakReader,
 ): Promise<Candidate[]> {
   const { db } = ctx
   const now = ctx.now()
@@ -93,7 +98,7 @@ export async function gatherCandidates(
   // A bill paid twice is pushed as a charge made twice only while that kind is on.
   if (ALERT_KINDS.some((kind) => on[kind])) {
     const doublesTold = on.duplicate_charge
-    const alerts = await listAlerts(db, settings, today, [], { doublesTold })
+    const alerts = await listAlerts(db, settings, today, [], { doublesTold, leaks: leaks ?? true })
     found.push(accountCandidates(alerts.filter((alert) => on[alert.kind])))
   }
   if (on.over_budget) {

@@ -5,6 +5,7 @@ import type { AppContext } from '../../context.js'
 import { todayIn } from '../../lib/dates.js'
 import { SECOND_MS } from '../../lib/time.js'
 import { settleBillChanges } from '../billChangeSource.js'
+import { leakReader } from '../leaks/leakSource.js'
 import { getSettings } from '../settings.js'
 import { deliverPushes, type DeliveryResult } from './delivery.js'
 import { currentAlerts, trackHomeHides } from './homeAlerts.js'
@@ -32,14 +33,17 @@ export async function refreshInbox(ctx: AppContext): Promise<NotificationSetting
   const now = ctx.now()
   // A bill charged its new amount twice in a row takes it as usual first, so its alert clears.
   const { timeZone } = await getSettings(ctx.db)
-  await settleBillChanges(ctx.db, timeZone, todayIn(timeZone, now))
-  const candidates = await gatherCandidates(ctx, choices)
+  const today = todayIn(timeZone, now)
+  await settleBillChanges(ctx.db, timeZone, today)
+  // The candidates and the home hides below both list alerts: they share one read of the leaks.
+  const leaks = leakReader(ctx.db, today)
+  const candidates = await gatherCandidates(ctx, choices, leaks)
   await recordCandidates(ctx.db, candidates, now)
   const on = kindsOn(choices)
   await resolveCleared(ctx.db, on, candidates, now)
   // After clearing, so only conditions still going on come back.
   await resurfaceDismissed(ctx.db, on, now)
-  await trackHomeHides(ctx.db, await currentAlerts(ctx.db, now), now)
+  await trackHomeHides(ctx.db, await currentAlerts(ctx.db, now, { leaks }), now)
   await pruneInbox(ctx.db, now, on)
   return choices
 }
