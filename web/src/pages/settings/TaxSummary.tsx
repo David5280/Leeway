@@ -1,9 +1,11 @@
 // What a tax year's export added up to, shown once its CSV has downloaded:
 // pay, interest and dividends, any benefits, refunds or rewards, money in that
 // has no category yet, pay by who paid it, and the categories that may be
-// deductible. Every figure is to the cent, as the CSV is.
+// deductible. Every figure is to the cent, as the CSV is. A year with no
+// transactions says so instead.
 
-import { INCOME_LINES } from '../../../../server/src/domain/tax/classify'
+import { INCOME_LINES } from '../../../../server/src/domain/tax/incomeLine'
+import { MONEY_IN_TO_CATEGORIZE } from '../../../../server/src/domain/tax/summary'
 import type { TaxExport } from '../../api/client'
 import { Money } from '../../components/design/Money'
 
@@ -56,6 +58,10 @@ function Fact({ label, cents }: { label: string; cents: number }) {
 }
 
 export function TaxSummary({ summary }: { summary: Summary }) {
+  // Every counted transaction adds to some category line, so none means an empty year.
+  if (summary.categories.length === 0) {
+    return <p className="small muted">No transactions in {summary.year}.</p>
+  }
   const hasUnfiledIn = summary.unfiledInCents > 0
   const sources = summary.income.map((line) => ({
     key: line.key,
@@ -71,14 +77,14 @@ export function TaxSummary({ summary }: { summary: Summary }) {
     }))
   return (
     <div className="stack-sm">
-      <dl className="facts">
+      <dl className="facts facts-amounts">
         <Fact label={INCOME_LINES.pay.label} cents={summary.payCents} />
         <Fact label={INCOME_LINES.interest.label} cents={summary.interestCents} />
         <Fact label={INCOME_LINES.dividends.label} cents={summary.dividendsCents} />
         {occasionalLines(summary).map((line) => (
           <Fact key={line.label} label={line.label} cents={line.cents} />
         ))}
-        {hasUnfiledIn && <Fact label="Money in, not categorized" cents={summary.unfiledInCents} />}
+        {hasUnfiledIn && <Fact label={MONEY_IN_TO_CATEGORIZE} cents={summary.unfiledInCents} />}
       </dl>
       {hasUnfiledIn && (
         <span className="small muted">

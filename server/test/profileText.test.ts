@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
 import { DIGEST_GOALS, nearestGoals, profileDigest } from '../src/domain/profile/digest.js'
 import {
-  essentialSpending,
   SPENDING_LEAST_DAYS,
   SPENDING_MAX_DAYS,
   SPENDING_MIN_DAYS,
@@ -138,7 +137,7 @@ describe('typical spending window', () => {
   })
 })
 
-describe('essential spending', () => {
+describe('a typical month of essentials', () => {
   const category = (id: string, kind: Category['kind'], name: string) =>
     ({ id, kind, name, providerCategories: [] }) as unknown as Category
   const categories = [
@@ -146,26 +145,15 @@ describe('essential spending', () => {
     category('fun', 'expense', 'Fun'),
     category('pay', 'income', 'Paycheck'),
   ]
-  /** A month of $2,000 rent, `fun` of fun, $10 unfiled and `pay` of pay. */
-  const month = (fun: number, pay: number) => [
-    { categoryId: 'rent', amountCents: 200_000, count: 1 },
-    { categoryId: 'fun', amountCents: fun, count: 1 },
-    { categoryId: 'pay', amountCents: -pay, count: 1 },
-    { categoryId: null, amountCents: 1_000, count: 1 },
-  ]
-
-  it('counts the essential categories that still exist, found by name without a pick', () => {
-    const totals = month(50_000, 600_000)
-    // With no essentials picked, they are found by name (essentials.ts): Rent, not Fun.
-    expect(essentialSpending(categories, totals, null, 251_000)).toBe(200_000)
-    // Picks that are no longer expense categories (income, or deleted) are ignored,
-    // and none left means the essentials are found, as if nothing had been picked.
-    expect(essentialSpending(categories, totals, ['pay', 'gone'], 251_000)).toBe(200_000)
-    // When none reads as essential, all spending counts, uncategorized included.
-    const plain = categories.map((one, index) => ({ ...one, name: `Group ${index + 1}` }))
-    expect(essentialSpending(plain, totals, null, 251_000)).toBe(251_000)
-    // A partly stale pick keeps the categories that still exist.
-    expect(essentialSpending(categories, totals, ['rent', 'gone'], 251_000)).toBe(200_000)
+  /** A month of $2,000 rent, `fun` of fun, $10 unfiled and `pay` of pay, nothing coded essential. */
+  const month = (fun: number, pay: number) => ({
+    totals: [
+      { categoryId: 'rent', amountCents: 200_000, count: 1 },
+      { categoryId: 'fun', amountCents: fun, count: 1 },
+      { categoryId: 'pay', amountCents: -pay, count: 1 },
+      { categoryId: null, amountCents: 1_000, count: 1 },
+    ],
+    essentialCoded: [],
   })
 
   it('takes the last three whole months that history fully covers, for the fund', () => {

@@ -56,7 +56,7 @@ export function TaxSection() {
           ))}
         </select>
         <button type="button" className="btn" disabled={busy} onClick={() => void download()}>
-          Download {year} CSV
+          {busy ? 'Preparing...' : `Download ${year} CSV`}
         </button>
       </div>
       {result && <TaxSummary summary={result.summary} />}

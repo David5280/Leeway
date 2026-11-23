@@ -18,6 +18,15 @@ describe('which proxies are believed', () => {
     expect(trust('10.1.2.3', 1)).toBe(false)
   })
 
+  it('trusts IPv6 proxies on this machine or network, but not tunnelled public clients', () => {
+    const trust = proxyTrustFunction('private-network')
+    for (const proxy of ['::1', 'fd00::5', 'fe80::1']) expect(trust(proxy, 0)).toBe(true)
+    // Teredo, 6to4 and NAT64 are refused for fetching, yet they are real clients.
+    for (const client of ['2001:0:4136:e378::1', '2002:c000:204::1', '64:ff9b::808:808']) {
+      expect(trust(client, 0)).toBe(false)
+    }
+  })
+
   it('trusts a set number of proxies from anywhere, or none', () => {
     const two = proxyTrustFunction(2)
     expect([two('8.8.8.8', 0), two('8.8.4.4', 1), two('1.1.1.1', 2)]).toEqual([true, true, false])
@@ -72,6 +81,13 @@ describe('the address and protocol a request is seen with', () => {
       remoteAddress: '8.8.8.8',
     })
     expect(seen.json()).toEqual({ ip: '8.8.8.8', protocol: 'http' })
+  })
+
+  it('ignores forwarded headers from a Teredo client, so it cannot pick its own address', async () => {
+    const app = await appTrusting('private-network')
+    const teredo = '2001:0:4136:e378:8000:63bf:3fff:fdd2'
+    const seen = await app.inject({ url: '/test/seen', headers: forwarded, remoteAddress: teredo })
+    expect(seen.json()).toEqual({ ip: teredo, protocol: 'http' })
   })
 
   it('reads past as many proxies as it is told to', async () => {

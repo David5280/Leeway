@@ -17,6 +17,7 @@ export function essentials(fields: Partial<Essentials> = {}): Essentials {
     from: 'spending',
     categories: ['Rent', 'Groceries'],
     categoryIds: ['cat-rent', 'cat-groceries'],
+    partlyCounted: [],
     picked: false,
     ...fields,
   }
