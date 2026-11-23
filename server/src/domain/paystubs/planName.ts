@@ -15,14 +15,20 @@ const UNION_LOCAL = /^\d{1,4}\p{Lu}{2,}$/u
 /** A tax code section: "401(a)", "457(b)", "403(b)". */
 const TAX_CODE = /^\d{3}\([a-z]\)$/i
 
-/**
- * Words naming the member or labelling their number, so whatever follows
- * them, such as a name or an ID, is no part of the plan's name.
- */
-const MEMBER_LABELS = new Set(['member', 'mbr', 'no', 'id'])
+/** Words labelling a member number, so whatever follows them is no part of the plan's name. */
+const ID_LABELS = new Set(['no', 'id'])
 
-/** Words a pension line prints after the plan's name, which name the deduction, not the plan. */
+/**
+ * Words naming the member, so whatever follows them, such as the member's
+ * name or number, is no part of the plan's name. As the first word they may
+ * begin one, as in "Member Retirement Plan".
+ */
+const MEMBER_WORDS = new Set(['member', 'mbr'])
+
+/** Words a pension line prints after the plan's name, which name the member or deduction. */
 const LABEL_WORDS = new Set([
+  'member',
+  'mbr',
   'employee',
   'ee',
   'pre-tax',
@@ -50,12 +56,13 @@ function digitsFitName(word: string, before: string | undefined): boolean {
 }
 
 /**
- * Whether a word ends a plan's name: a member label, a figure holding #, %
- * or $, or a digit in any shape but a plan's own, as in "A1234", "ID:4417"
- * or "4417A".
+ * Whether a word ends a plan's name: an ID label, a member word after the
+ * first, a figure holding #, % or $, or a digit in any shape but a plan's
+ * own, as in "A1234", "ID:4417" or "4417A".
  */
 function endsName(word: string, before: string | undefined): boolean {
-  if (MEMBER_LABELS.has(labelForm(word))) return true
+  const label = labelForm(word)
+  if (ID_LABELS.has(label) || (before !== undefined && MEMBER_WORDS.has(label))) return true
   if (/[#%$]/.test(word)) return true
   return /\d/.test(word) && !digitsFitName(word, before)
 }

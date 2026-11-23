@@ -28,7 +28,10 @@ export interface PensionTarget {
   pensionAccountId: string | null
   /** A pension to add as a new account, holding this paystub's figures from the start. */
   newPension: NewPaystubPension | null
-  /** An account Leeway already has, listed under retirement, investing or other, to become the new pension. */
+  /**
+   * An account Leeway already has, listed under retirement, investing or
+   * other, to become the new pension.
+   */
   attachAccountId: string | null
 }
 

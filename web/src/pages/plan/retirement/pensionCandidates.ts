@@ -47,6 +47,10 @@ export function usePensionCandidates(enabled: boolean) {
   const focusAfterRetry = useFocusAfterRetry(accounts.isSuccess)
   return {
     candidates: pensionCandidates(accounts.data ?? []),
+    /** The pensions among them, which an account chosen may have become since it was offered. */
+    pensions: (accounts.data ?? [])
+      .filter((account) => account.kind === 'pension')
+      .map(({ id, name }) => ({ accountId: id, name })),
     /** Until the accounts are known, a new pension could not be offered the one it belongs on. */
     pending: enabled && accounts.isPending,
     error: enabled ? accounts.error : null,

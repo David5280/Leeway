@@ -11,13 +11,13 @@ import {
   planText,
   readAmount,
   readPlan,
-  stillOffered,
+  accountChoice,
   type PensionPlan,
   type PlanChange,
   type PlanText,
 } from './fields'
 import { PensionDetails } from './PensionDetails'
-import { Figure, PensionAccount, type Candidate } from './PensionFields'
+import { Figure, LeftNote, leftOption, PensionAccount, type Candidate } from './PensionFields'
 
 export type { Candidate }
 
@@ -90,12 +90,15 @@ export function PensionForm({
   const [name, setName] = useState('')
   const [balance, setBalance] = useState('')
   // '' adds a new account; otherwise the id of the account the plan goes on.
-  const [picked, setAccountId] = useState('')
-  const accountId = stillOffered(picked, candidates)
+  const [accountId, setAccountId] = useState('')
+  // Typed in, a pension now can take no figures here, so one that left the list is chosen again.
+  const choice = accountChoice(accountId, candidates)
   const [problem, setProblem] = useState<string | null>(null)
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    // An account that left the list waits for the owner to choose again.
+    if (choice.kind === 'gone') return
     const figures = readPlan(text)
     const member = readAmount(balance, 'the member balance')
     setProblem(firstError(figures, member))
@@ -110,11 +113,17 @@ export function PensionForm({
       onSubmit={submit}
       aria-label={isNew ? 'New pension' : 'Pension figures'}
     >
-      {isNew && candidates.length > 0 && (
-        <PensionAccount candidates={candidates} accountId={accountId} onChange={setAccountId} />
+      {isNew && (candidates.length > 0 || choice.kind === 'gone') && (
+        <PensionAccount
+          candidates={candidates}
+          accountId={accountId}
+          left={leftOption(choice)}
+          onChange={setAccountId}
+        />
       )}
+      {isNew && <LeftNote choice={choice} confirm="Add pension" />}
       {/* An account Leeway already has keeps its own name and balance. */}
-      {isNew && !accountId && (
+      {isNew && choice.kind === 'new' && (
         <NameAndBalance name={name} balance={balance} onName={setName} onBalance={setBalance} />
       )}
       {/* A kept pension's figures are what its form is for, so they start open. */}
@@ -126,7 +135,7 @@ export function PensionForm({
       )}
       <ErrorNote error={error} />
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy || choice.kind === 'gone'}>
           {isNew ? 'Add pension' : 'Save'}
         </button>
         <button type="button" className="btn" onClick={onCancel}>

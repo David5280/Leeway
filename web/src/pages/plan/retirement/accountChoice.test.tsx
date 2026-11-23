@@ -1,9 +1,8 @@
 // The choice of account a new pension goes on, in both ways of adding one:
 // loading the accounts again when they fail, with focus taken on to the
-// choice, and reading them again after a refusal, so an account made a
-// pension elsewhere is no longer offered.
+// choice. What happens after a refusal is in refusedChoice.test.tsx.
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { account, failing, holdRequest } from '../../../test/fake'
 import {
@@ -20,10 +19,6 @@ afterEach(() => vi.unstubAllGlobals())
 
 const ACCOUNTS = '/api/actions/list_accounts'
 const NOT_LOADED = 'Leeway could not load your accounts.'
-const KEPT = 'Test State Plan is a pension already. Update it instead.'
-
-/** The same plan once made a pension elsewhere, so it is no longer one to offer. */
-const STATE_PLAN_KEPT = { ...STATE_PLAN, kind: 'pension' as const }
 
 describe('loading the accounts again from the paystub review', () => {
   it('loads them on Try again, offers them and takes focus to the choice', async () => {
@@ -90,55 +85,5 @@ describe('loading the accounts again on the form typed in', () => {
     await waitFor(() => expect(where).toHaveFocus())
     expect(screen.queryByText(NOT_LOADED)).toBeNull()
     expect(form.getByRole('button', { name: 'Add pension' })).toBeEnabled()
-  })
-})
-
-describe('after a refusal', () => {
-  it("shows the server's word on the form typed in, and stops offering that account", async () => {
-    // Made a pension elsewhere after this form listed it, so attach_pension turns it away.
-    const server = serve({
-      routes: {
-        [ACCOUNTS]: inTurn(listing([STATE_PLAN]), listing([STATE_PLAN_KEPT])),
-        '/api/actions/attach_pension': failing(KEPT),
-      },
-    })
-    const { user, form } = await byHand()
-    await user.selectOptions(await form.findByRole('combobox', { name: 'Add it to' }), 'State Plan')
-    await user.click(form.getByRole('button', { name: 'Add pension' }))
-
-    expect(await form.findByRole('alert')).toHaveTextContent(KEPT)
-    expect(server.actions('attach_pension')).toEqual([
-      expect.objectContaining({ accountId: STATE_PLAN.id }),
-    ])
-    // The accounts and the pensions are read again, so the plan shows as the pension it is.
-    await waitFor(() => expect(form.queryByRole('combobox', { name: 'Add it to' })).toBeNull())
-    expect(server.actions('list_accounts')).toHaveLength(2)
-    expect(server.actions('project_retirement').length).toBeGreaterThan(1)
-    // The choice falls back to a new pension, which asks for its name again.
-    expect(form.getByRole('textbox', { name: 'Name' })).toBeVisible()
-    expect(form.getByRole('button', { name: 'Add pension' })).toBeEnabled()
-  })
-
-  it('reads the accounts again when the paystub save is refused', async () => {
-    const server = serve({
-      routes: {
-        [ACCOUNTS]: inTurn(listing([STATE_PLAN]), listing([STATE_PLAN_KEPT])),
-        '/api/actions/save_paystub': failing(KEPT),
-      },
-    })
-    const { user } = await fromPaystub()
-    const form = await review()
-    await user.selectOptions(await form.findByRole('combobox', { name: 'Add it to' }), 'State Plan')
-    await user.click(form.getByRole('button', { name: 'Add pension' }))
-
-    expect(await form.findByText(KEPT)).toBeVisible()
-    await waitFor(() => expect(form.queryByRole('combobox', { name: 'Add it to' })).toBeNull())
-    expect(server.actions('list_accounts')).toHaveLength(2)
-    // With the account gone from the choice, the pension can be named and added afresh.
-    expect(
-      within(form.getByRole('group', { name: 'Your new pension' })).getByRole('textbox', {
-        name: 'Pension name',
-      }),
-    ).toBeVisible()
   })
 })

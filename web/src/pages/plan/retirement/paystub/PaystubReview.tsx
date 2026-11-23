@@ -18,10 +18,16 @@ import {
   type PensionChoice,
   type ReviewText,
 } from './review'
-import { stillOffered } from '../fields'
+import { accountChoice, type AccountChoice } from '../fields'
 import type { Candidate } from '../PensionFields'
 import { FigureGroup, PaystubDetails } from './ReviewFields'
 import { NewPensionFields, SavingChoice, UseFigures } from './ReviewUse'
+
+/** The save button's words: a kept pension is saved, a pension made meanwhile updated. */
+function confirmLabel(adding: boolean, choice: AccountChoice): string {
+  if (!adding) return 'Save'
+  return choice.kind === 'kept' ? 'Update pension' : 'Add pension'
+}
 
 export function PaystubReview({
   read,
@@ -36,6 +42,10 @@ export function PaystubReview({
   onCancel,
 }: {
   read: PaystubRead
+  /**
+   * The kept pensions the figures can update; when adding, those an account
+   * chosen may have become since it was offered.
+   */
   pensions: PensionChoice[]
   /** The pension chosen to start with, as when opened from that pension's form. */
   pensionAccountId: string | null
@@ -59,22 +69,26 @@ export function PaystubReview({
     name: extraction.pensionPlanName ?? '',
     balance: '',
   })
-  // An account chosen, then made a pension elsewhere, leaves the list; the choice falls back.
-  const created = { ...typed, accountId: stillOffered(typed.accountId, candidates) }
+  // An account chosen, then made a pension elsewhere, takes the figures as that pension.
+  const choice = accountChoice(typed.accountId, candidates, pensions)
   const [contribution, setContribution] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const set = (change: Partial<ReviewText>) => setText((current) => ({ ...current, ...change }))
   const plans = showsPlanFigures(text)
-  const confirm = adding ? 'Add pension' : 'Save'
+  const confirm = confirmLabel(adding, choice)
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    // An account that left the list for good waits for the owner to choose again.
+    if (choice.kind === 'gone') return
     const reviewed = readReview(text)
     if (!reviewed.ok) {
       setProblem(reviewed.error)
       return
     }
-    const target = adding ? readNewPension(reviewed.paystub, created) : null
+    // A pension made meanwhile is updated, as the server's refusal said; nothing new is added.
+    const kept = choice.kind === 'kept' ? choice.accountId : null
+    const target = adding && kept === null ? readNewPension(reviewed.paystub, typed) : null
     if (target && !target.ok) {
       setProblem(target.error)
       return
@@ -82,7 +96,7 @@ export function PaystubReview({
     setProblem(null)
     onSave({
       paystub: reviewed.paystub,
-      pensionAccountId: adding ? null : pension || null,
+      pensionAccountId: adding ? kept : pension || null,
       newPension: target ? target.target.newPension : null,
       attachAccountId: target ? target.target.attachAccountId : null,
       setRetirementContribution: plans && contribution,
@@ -114,7 +128,9 @@ export function PaystubReview({
         <>
           <NewPensionFields
             candidates={candidates}
-            typed={created}
+            typed={typed}
+            choice={choice}
+            confirm={confirm}
             onChange={(change) => setCreated((current) => ({ ...current, ...change }))}
           />
           {plans && <SavingChoice checked={contribution} onChange={setContribution} />}
@@ -137,7 +153,7 @@ export function PaystubReview({
       <ErrorNote error={error} />
       {loadProblem}
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy || choice.kind === 'gone'}>
           {confirm}
         </button>
         <button type="button" className="btn" onClick={onCancel}>

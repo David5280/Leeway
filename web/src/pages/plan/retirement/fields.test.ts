@@ -11,7 +11,7 @@ import {
   readAmount,
   readAssumptions,
   readPlan,
-  stillOffered,
+  accountChoice,
   switchContribution,
   type PlanText,
 } from './fields'
@@ -179,13 +179,24 @@ describe('pensionCandidates', () => {
   })
 })
 
-describe('stillOffered', () => {
-  it('keeps a choice still in the list, and falls back to a new account once it leaves', () => {
-    const offered = [{ id: 'plan' }, { id: 'ira' }]
-    expect(stillOffered('plan', offered)).toBe('plan')
-    expect(stillOffered('gone', offered)).toBe('')
-    expect(stillOffered('', offered)).toBe('')
-    expect(stillOffered('plan', [])).toBe('')
+describe('accountChoice', () => {
+  const offered = [{ id: 'plan' }, { id: 'ira' }]
+  const pensions = [{ accountId: 'pera', name: 'PERA' }]
+
+  it('reads a new account, and an account still offered', () => {
+    expect(accountChoice('', offered, pensions)).toEqual({ kind: 'new' })
+    expect(accountChoice('plan', offered, pensions)).toEqual({ kind: 'account', accountId: 'plan' })
+  })
+
+  it('never turns an account that left the list into a new pension', () => {
+    expect(accountChoice('pera', offered, pensions)).toEqual({
+      kind: 'kept',
+      accountId: 'pera',
+      name: 'PERA',
+    })
+    expect(accountChoice('gone', offered, pensions)).toEqual({ kind: 'gone', accountId: 'gone' })
+    // Typed in, no pension is given, so one made a pension is chosen again.
+    expect(accountChoice('pera', offered)).toEqual({ kind: 'gone', accountId: 'pera' })
   })
 })
 

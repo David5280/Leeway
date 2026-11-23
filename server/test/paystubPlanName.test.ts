@@ -83,6 +83,12 @@ describe('redactPlanName cuts labels and what follows a member label', () => {
   ])('ends the name at a member label in "%s"', keeps)
 
   it.each<Case>([
+    ['Member Retirement Plan', 'Member Retirement Plan'],
+    ['Mbr Retirement Plan 422.95', 'Mbr Retirement Plan'],
+    ['Member Retirement Plan Member 4417', 'Member Retirement Plan'],
+  ])('keeps a member word that begins the name in "%s"', keeps)
+
+  it.each<Case>([
     ['PERA (Member)', 'PERA'],
     ['PERA [Member]', 'PERA'],
     ['PERA (Member) 422.95', 'PERA'],

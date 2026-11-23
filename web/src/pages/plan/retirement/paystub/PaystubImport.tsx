@@ -207,7 +207,8 @@ export function PaystubImport({
   return (
     <PaystubReview
       read={read.data}
-      pensions={pensions}
+      // When adding, the pensions an account chosen may have become since it was offered.
+      pensions={adding ? accounts.pensions : pensions}
       pensionAccountId={pensionAccountId}
       adding={adding}
       candidates={accounts.candidates}
