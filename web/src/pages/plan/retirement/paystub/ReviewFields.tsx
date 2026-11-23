@@ -97,15 +97,21 @@ export function FigureGroup<F extends string>({
   )
 }
 
+/** The paystub's own fields, which the pension review and the full review share. */
+type DetailText = Pick<
+  ReviewText,
+  'employerName' | 'payDate' | 'periodStart' | 'periodEnd' | 'payCadence'
+>
+
 /** The paystub's own details: who paid, when, for which days, and how often. */
 export function PaystubDetails({
   extraction,
   text,
   set,
 }: {
-  extraction: Extraction
-  text: ReviewText
-  set: (change: Partial<ReviewText>) => void
+  extraction: Pick<Extraction, 'payCadence'>
+  text: DetailText
+  set: (change: Partial<DetailText>) => void
 }) {
   const cadence = extraction.payCadence
   const cadenceId = useId()
@@ -156,7 +162,7 @@ export function PaystubDetails({
           id={cadenceId}
           className="input"
           value={text.payCadence}
-          onChange={(e) => set({ payCadence: e.target.value as ReviewText['payCadence'] })}
+          onChange={(e) => set({ payCadence: e.target.value as DetailText['payCadence'] })}
         >
           <option value="">Not shown</option>
           {Object.entries(CADENCE_WORDS).map(([value, label]) => (

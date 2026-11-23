@@ -8,33 +8,21 @@ import type { AiAsk } from '../domain/ai/limit.js'
 import type { PaystubFile } from '../domain/paystubs/files.js'
 import { paystubReadingSchema, type PaystubReading } from '../domain/paystubs/reading.js'
 import { ReaderError, type DocumentReader, type ReaderUsage } from './documents.js'
+import { PAYSTUB_PROMPT } from './paystubPrompt.js'
 import { AiProviderError, type AiFailure } from './provider.js'
 
-export const PAYSTUB_PROMPT = `You read one paystub image or PDF and report its figures for the employee's own budgeting app. Fill the output schema and nothing more.
-
-isPaystub: false when the file is not a paystub or pay statement; then leave every other field null.
-employerName: the employer's name only, never its address.
-payDate, periodStart, periodEnd: as YYYY-MM-DD, or null when not printed.
-payFrequency.value: week (weekly), biweek (every two weeks), semimonth (twice a month), month (monthly). Null unless the stub states it or its pay period dates make it plain.
-
-Amounts: copy each exactly as printed, such as "1,234.56". Never add, subtract or estimate. When a figure is not printed, give null. When two lines are the same kind, such as pre-tax and Roth 401(k), give both joined with " + ".
-current: this period. yearToDate: the year-to-date column.
-grossPay: total gross earnings. netPay: net or take-home pay.
-pension: the employee's own contribution to a pension, a defined-benefit plan run by a state, city, school system or employer. It is often labeled with the plan's initials, such as PERA, PERS, STRS, TRS or FPPA, or as Pension, or as Retirement beside such a plan's name, such as "Retirement PERA" or "State Teachers Retirement". It is never a 401(k), 457 or 403(b), which have their own fields below. A plan's 401(k), 457, 403(b), 401(a) or DC plan, such as PERA 401(k) or PERA DC, is never the pension even with the plan's initials. A line labeled only Retirement, with no plan name, goes here only when nothing marks it a 401(k), 457 or 403(b), and with medium confidence.
-pensionEmployer: the employer's share of that pension, such as "PERA Employer", only when printed.
-pensionPlanName: the pension's plan name as its line prints it, such as PERA or Colorado PERA, without words like Member, Employee, EE or Pre-tax and without amounts or rates, and never a person's name or member number. Null when the stub shows no pension contribution.
-plan401k, plan457, plan403b: the employee's own contributions to each plan, Roth included. A 457 may be labeled deferred compensation.
-hsa: the employee's own HSA contribution.
-Report only what this paystub prints. Never supply a plan's contribution rate, employer rate, multiplier or rules from what you know of the plan, even when the plan is named.
-
-confidence: high when the label and amount are clear, medium when the label is ambiguous, low when the print is hard to read.
-source: the paystub line the figure came from, its label and amount only, under 80 characters. Never copy a Social Security number, employee ID, account or routing number, check number or address into any field.`
+export { PAYSTUB_PROMPT } from './paystubPrompt.js'
 
 /** Thinking runs on these models; low effort keeps one read quick and cheap. */
 const EFFORT = 'low'
 
-/** Room for brief thinking and the figures: the output is about a thousand tokens. */
-export const PAYSTUB_MAX_TOKENS = 3000
+/**
+ * Room for brief thinking and the figures. Every line of a paystub, filled or
+ * null, comes to about 1,500 output tokens; this leaves as much again for
+ * thinking. At Haiku 5.5's $0.50 per million output tokens, the most a read
+ * can spend on output is $0.003, and a usual read spends half that.
+ */
+export const PAYSTUB_MAX_TOKENS = 6000
 
 /** The fixed instruction sent with the file. */
 const ASK = 'Read this paystub.'

@@ -29,10 +29,11 @@ export const CACHE_TTL_MS = DAY_MS
  *   5.5's tokenizer counts about 30% more, so up to about 3,900 a page.
  * - Picture: the docs cap a PDF page's picture at 1,568 tokens, but this
  *   allows 4,784, the most a photo can use, in case that cap changes.
- * - Prompt and output schema: about 1,500, or 1,950 with the newer tokenizer.
- * That is 2 x (3,900 + 4,784) + 1,950, about 19,300 tokens.
+ * - Prompt and output schema, every line of the paystub named: about 2,500,
+ *   or 3,300 with the newer tokenizer.
+ * That is 2 x (3,900 + 4,784) + 3,300, about 20,700 tokens.
  *
- * 32,000 leaves about two thirds again as much for headroom. At Haiku 5.5's
+ * 32,000 leaves about half again as much for headroom. At Haiku 5.5's
  * $0.10 per million input tokens, a read that size costs about $0.003, and a
  * long statement, many pages of figures, is still refused.
  */
