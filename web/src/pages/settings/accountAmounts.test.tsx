@@ -38,10 +38,10 @@ describe("a new account's balance", () => {
       renderSignedIn(<AccountSection />)
       const { user, form, balance } = await openForm()
       await user.type(balance, typed)
-      expect(form.getByRole('alert')).toHaveTextContent(UNREADABLE)
       expect(form.getByRole('button', { name: 'Add account' })).toBeDisabled()
-      // Enter in the box sends nothing either.
+      // Enter in the box sends nothing either, and says why.
       await user.type(balance, '{Enter}')
+      expect(form.getByRole('alert')).toHaveTextContent(UNREADABLE)
       expect(server.actions('create_account')).toEqual([])
     },
   )
@@ -79,7 +79,63 @@ describe("a new account's balance", () => {
   })
 })
 
+describe("a card or loan's balance, typed as what is owed", () => {
+  const OWED_NOTE = "Enter what's owed without a minus sign or brackets."
+
+  async function openCardForm(type: string) {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add an account by hand' }))
+    const form = within(screen.getByRole('form', { name: 'New account' }))
+    await user.type(form.getByRole('textbox', { name: 'Account name' }), 'Acme card')
+    await user.selectOptions(form.getByRole('combobox', { name: 'Account type' }), type)
+    return { user, form, balance: form.getByRole('textbox', { name: 'Balance' }) }
+  }
+
+  it.each([
+    ['credit', '(1,200.00)'],
+    ['credit', '-1200'],
+    ['loan', '(500)'],
+  ])(
+    'refuses a %s balance of %j, which would save a credit, not money owed',
+    async (type, typed) => {
+      const server = serve()
+      renderSignedIn(<AccountSection />)
+      const { user, form, balance } = await openCardForm(type)
+      await user.type(balance, typed)
+      expect(form.getByRole('button', { name: 'Add account' })).toBeDisabled()
+      await user.type(balance, '{Enter}')
+      expect(form.getByRole('alert')).toHaveTextContent(OWED_NOTE)
+      expect(server.actions('create_account')).toEqual([])
+    },
+  )
+
+  it('adds a card at the plain amount owed', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const { user, balance } = await openCardForm('credit')
+    await user.type(balance, '1,200.00{Enter}')
+    await waitFor(() =>
+      expect(server.actions('create_account')).toEqual([
+        expect.objectContaining({ type: 'credit', balanceCents: 120000 }),
+      ]),
+    )
+  })
+})
+
 describe('a low-balance warning', () => {
+  it('keeps a negative one, "-5", in the box with a note, saving nothing', async () => {
+    const server = serve()
+    renderSignedIn(<AccountSection />)
+    const input = await screen.findByRole('textbox', { name: 'Low balance warning for Everyday' })
+    const user = userEvent.setup()
+    await user.type(input, '-5')
+    await user.tab()
+    expect(input).toHaveValue('-5')
+    expect(screen.getByRole('alert')).toHaveTextContent("The amount can't be negative.")
+    expect(input).toHaveAccessibleDescription("The amount can't be negative.")
+    expect(server.actions('update_account')).toEqual([])
+  })
+
   it('keeps one it cannot read in the box, saving nothing, until it is fixed', async () => {
     const server = serve()
     renderSignedIn(<AccountSection />)

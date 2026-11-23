@@ -35,8 +35,9 @@ describe('a starter budget', () => {
     const amount = await screen.findByLabelText('Groceries budget')
     await user.clear(amount)
     await user.type(amount, '6OO')
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
 
     // Unticked, the row is left out, so its amount no longer matters.
     await user.click(screen.getByRole('checkbox', { name: 'Include Groceries' }))
@@ -51,5 +52,18 @@ describe('a starter budget', () => {
     expect(server.actions('complete_setup')).toEqual([
       { categories: [{ ...groceries, budgetCents: 65000, budgetCadence: 'month' }] },
     ])
+  })
+
+  it('holds setup back while a budget is negative, "-600", and says why', async () => {
+    const server = serve()
+    renderSignedIn(<StartStep onBack={() => {}} onNext={() => {}} />)
+    const user = userEvent.setup()
+    const amount = await screen.findByLabelText('Groceries budget')
+    await user.clear(amount)
+    await user.type(amount, '-600')
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent("The amount can't be negative.")
+    expect(server.actions('complete_setup')).toEqual([])
   })
 })

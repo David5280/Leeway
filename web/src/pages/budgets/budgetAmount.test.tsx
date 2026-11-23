@@ -29,6 +29,14 @@ describe('a budget typed in place', () => {
     expect(server.actions('update_category')).toEqual([])
   })
 
+  it('names a negative budget, "-5", keeps the box open and saves nothing', async () => {
+    const { server, amount } = await editBudget('-5')
+    expect(screen.getByRole('alert')).toHaveTextContent("The amount can't be negative.")
+    expect(amount).toHaveAttribute('aria-invalid', 'true')
+    expect(amount).toHaveAccessibleDescription("The amount can't be negative.")
+    expect(server.actions('update_category')).toEqual([])
+  })
+
   it('saves one that reads, with no note', async () => {
     const { server } = await editBudget('650')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

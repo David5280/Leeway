@@ -5,8 +5,8 @@ import { useState, type FormEvent } from 'react'
 import type { Account } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
-import { UnreadableAmount } from '../../components/UnreadableAmount'
-import { isUnreadableMoney, parseMoney, parseRate } from '../../lib/format'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
+import { parseMoney, parseRate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
 
 export function DebtTerms({ account }: { account: Account }) {
@@ -20,9 +20,10 @@ export function DebtTerms({ account }: { account: Account }) {
   const unchanged =
     aprPercent === account.aprPercent && minimumPaymentCents === account.minimumPaymentCents
   // A blank rate or payment clears it, but one typed that cannot be read
-  // ("-5" or "150" for a rate, "6O" for a payment) must not.
+  // ("-5" or "150" for a rate, "6O" or "-5" for a payment) must not.
   const badRate = aprPercent === null && rate.trim() !== ''
-  const badPayment = isUnreadableMoney(minimum)
+  const paymentField = useAmountField(minimum, { min: 0 })
+  const badPayment = paymentField.note !== null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -56,6 +57,7 @@ export function DebtTerms({ account }: { account: Account }) {
         aria-label={`${account.name} monthly payment`}
         // A card's minimum can be estimated from its balance; a loan's cannot.
         placeholder={account.type === 'credit' ? 'Minimum, est.' : 'Payment'}
+        {...paymentField.inputProps}
         value={minimum}
         onChange={(e) => setMinimum(e.target.value)}
       />
@@ -66,7 +68,8 @@ export function DebtTerms({ account }: { account: Account }) {
       >
         Save
       </button>
-      <UnreadableAmount text={minimum} />
+      {/* One row of a list, so the line takes room only once it has words. */}
+      <AmountNote id={paymentField.id} text={paymentField.shown} fit />
       <ErrorNote error={save.error} />
     </form>
   )

@@ -5,10 +5,10 @@ import { useState, type FormEvent } from 'react'
 import type { Account, Goal, Input } from '../../../api/client'
 import { ColorPicker } from '../../../components/ColorPicker'
 import { ErrorNote, Setting, Switch } from '../../../components/ui'
-import { UnreadableAmount } from '../../../components/UnreadableAmount'
+import { AmountNote, useAmountField, type AmountField } from '../../../components/AmountNote'
 import { useApp } from '../../../lib/app'
 import { followHint, fundTargetHint, type EmergencyView } from '../../../lib/emergencyText'
-import { isUnreadableMoney, parseMoney, periodWord } from '../../../lib/format'
+import { parseMoney, periodWord } from '../../../lib/format'
 import { CATEGORY_COLORS } from '../../../lib/theme'
 
 export type GoalFields = Required<Input<'create_goal'>>
@@ -56,6 +56,7 @@ function ProgressFields({
   accounts,
   accountId,
   saved,
+  savedField,
   note,
   onAccount,
   onSaved,
@@ -63,6 +64,7 @@ function ProgressFields({
   accounts: Account[]
   accountId: string
   saved: string
+  savedField: AmountField
   /** A line under the choice, like the emergency fund losing the account picked. */
   note: string | null
   onAccount: (id: string) => void
@@ -95,12 +97,13 @@ function ProgressFields({
             inputMode="decimal"
             aria-label="Saved so far"
             placeholder="0"
+            {...savedField.inputProps}
             value={saved}
             onChange={(e) => onSaved(e.target.value)}
           />
         </Setting>
       )}
-      {accountId === BY_HAND && <UnreadableAmount text={saved} />}
+      {accountId === BY_HAND && <AmountNote id={savedField.id} text={savedField.shown} />}
     </>
   )
 }
@@ -119,11 +122,17 @@ function fundHints(goal: Goal | undefined, emergency: EmergencyView | null, acco
 }
 
 /**
- * Whether saved so far holds an amount that can't be read. It counts only
- * when kept by hand, and then one that can't be read must not save as $0.
+ * The target and saved-so-far fields, and whether either keeps Save off.
+ * Neither amount is ever negative. Saved so far counts only when kept by
+ * hand, and then one that can't be read, or a negative one, must not save as $0.
  */
-function savedIsUnreadable(saved: string, accountId: string, followsSavings: boolean): boolean {
-  return !followsSavings && accountId === BY_HAND && isUnreadableMoney(saved)
+function useGoalAmounts(target: string, saved: string, keptByHand: boolean) {
+  const targetField = useAmountField(target, { min: 0 })
+  const savedField = useAmountField(saved, { min: 0 })
+  const targetCents = parseMoney(target)
+  const badTarget = !targetCents || targetField.note !== null
+  const badSaved = keptByHand && savedField.note !== null
+  return { targetField, savedField, targetCents, blocked: badTarget || badSaved }
 }
 
 export function GoalForm({
@@ -161,13 +170,13 @@ export function GoalForm({
   const goalKind = goal?.kind ?? kind
   const words = WORDING[goalKind]
   const period = periodWord(settings.period.kind)
-  const targetCents = parseMoney(target)
   // Only savings and checking accounts can hold money set aside for a goal.
   const savingsAccounts = accounts.filter((a) => a.type === 'depository' && !a.hidden)
   // The emergency fund counts the accounts picked on its own card.
   const followsSavings = goal?.emergencyMonths !== null && goal?.emergencyMonths !== undefined
   const hints = fundHints(goal, emergency, accountId)
-  const badSaved = savedIsUnreadable(saved, accountId, followsSavings)
+  const amounts = useGoalAmounts(target, saved, !followsSavings && accountId === BY_HAND)
+  const { targetField, savedField, targetCents } = amounts
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -177,6 +186,7 @@ export function GoalForm({
       targetCents: targetCents ?? 0,
       targetDate: targetDate || null,
       accountId: accountId || null,
+      // Kept by hand, a negative amount keeps Save off; followed, it is not sent below $0.
       savedCents: Math.max(0, parseMoney(saved) ?? 0),
       color,
       // Setting money aside needs a date to divide by; the server says so too.
@@ -204,11 +214,12 @@ export function GoalForm({
           inputMode="decimal"
           required
           aria-label={words.targetLabel}
+          {...targetField.inputProps}
           value={target}
           onChange={(e) => setTarget(e.target.value)}
         />
       </Setting>
-      <UnreadableAmount text={target} />
+      <AmountNote id={targetField.id} text={targetField.shown} />
       <Setting label={words.date} hint={`Optional. Shows what to set aside each ${period}`}>
         <input
           className="input"
@@ -239,6 +250,7 @@ export function GoalForm({
           accounts={savingsAccounts}
           accountId={accountId}
           saved={saved}
+          savedField={savedField}
           note={hints.follow}
           onAccount={setAccountId}
           onSaved={setSaved}
@@ -249,7 +261,7 @@ export function GoalForm({
       </Setting>
       <ErrorNote error={error} />
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy || !targetCents || badSaved}>
+        <button type="submit" className="btn primary" disabled={busy || amounts.blocked}>
           {goal ? 'Save' : words.submit}
         </button>
         <button type="button" className="btn" onClick={onCancel}>

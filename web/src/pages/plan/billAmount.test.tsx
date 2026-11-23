@@ -36,6 +36,16 @@ describe("a bill's amount", () => {
     },
   )
 
+  it('names a negative amount, "-45", and keeps Add bill off', async () => {
+    const { onSubmit, user } = renderForm()
+    const amount = screen.getByRole('textbox', { name: 'Amount' })
+    await user.clear(amount)
+    await user.type(amount, '-45{Enter}')
+    expect(screen.getByRole('alert')).toHaveTextContent("The amount can't be negative.")
+    expect(screen.getByRole('button', { name: 'Add bill' })).toBeDisabled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it('adds the bill once the amount reads', async () => {
     const { onSubmit, user } = renderForm()
     const amount = screen.getByRole('textbox', { name: 'Amount' })

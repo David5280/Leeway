@@ -6,7 +6,7 @@ import type { Category } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { CategorySelect } from '../../components/CategorySelect'
 import { ErrorNote, Segmented } from '../../components/ui'
-import { UnreadableAmount } from '../../components/UnreadableAmount'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { useApp } from '../../lib/app'
 import { isoDaysAgo } from '../../lib/dates'
 import { parseMoney } from '../../lib/format'
@@ -35,6 +35,8 @@ export function AddTransaction({
   const [moneyIn, setMoneyIn] = useState(false)
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const cents = parseMoney(amount)
+  // The direction sets the sign, so a minus sign or brackets typed here are not refused.
+  const amountField = useAmountField(amount)
   // Until the owner picks one, the first account is selected.
   const account = accountId || accounts.data?.[0]?.id || ''
 
@@ -88,6 +90,7 @@ export function AddTransaction({
           placeholder="0.00"
           aria-label="Amount"
           required
+          {...amountField.inputProps}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
@@ -125,7 +128,7 @@ export function AddTransaction({
           Add
         </button>
       </div>
-      <UnreadableAmount text={amount} />
+      <AmountNote id={amountField.id} text={amountField.shown} />
       <ErrorNote error={create.error} />
     </form>
   )

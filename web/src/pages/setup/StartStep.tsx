@@ -5,14 +5,14 @@ import { call, type Input } from '../../api/client'
 import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { Dot, ErrorNote, Loading } from '../../components/ui'
-import { UnreadableAmount } from '../../components/UnreadableAmount'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { alphabeticalGroups } from '../../lib/alphabetical'
 import { useApp } from '../../lib/app'
 import { Frame, Nav } from './Frame'
 import {
   categoriesToCreate,
   defaultStart,
-  hasUnreadableAmount,
+  hasBadAmount,
   starterRows,
   type Edits,
   type Start,
@@ -61,9 +61,7 @@ export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () =
           next="Continue"
           busy={finish.isPending}
           disabled={
-            start === null ||
-            (start === 'import' && !imported) ||
-            (listed && hasUnreadableAmount(rows))
+            start === null || (start === 'import' && !imported) || (listed && hasBadAmount(rows))
           }
         />
       </form>
@@ -172,6 +170,7 @@ function StarterItem({
   row: StarterRow
   onEdit: (name: string, change: Edits[string]) => void
 }) {
+  const field = useAmountField(amount, { min: 0 })
   return (
     <div className="list-row starter-item">
       <label className="check grow">
@@ -200,11 +199,13 @@ function StarterItem({
             inputMode="decimal"
             placeholder="No budget"
             aria-label={`${category.name} budget`}
+            {...field.inputProps}
             value={amount}
             disabled={!include}
             onChange={(e) => onEdit(category.name, { amount: e.target.value })}
           />
-          {include && <UnreadableAmount text={amount} />}
+          {/* One row of a long list, so the line takes room only once it has words. */}
+          {include && <AmountNote id={field.id} text={field.shown} fit />}
         </>
       ) : (
         // Income and transfers take no budget, so say how each is counted

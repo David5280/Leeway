@@ -8,10 +8,11 @@ import { useAction, useActionMutation } from '../../api/hooks'
 import { Money } from '../../components/design/Money'
 import { UnsharedAccount } from '../../components/bank/UnsharedAccount'
 import { ErrorNote, Icon, Switch } from '../../components/ui'
-import { UnreadableAmount } from '../../components/UnreadableAmount'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
+import type { AmountRules } from '../../lib/amountNote'
 import { ACCOUNT_TYPES, accountDetailPath, isOwed, isShared } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
-import { isUnreadableMoney, parseMoney } from '../../lib/format'
+import { parseMoney } from '../../lib/format'
 import { LowBalanceField } from './LowBalance'
 import { Section } from './Section'
 
@@ -135,13 +136,27 @@ function AccountRow({ account }: { account: Account }) {
   )
 }
 
+/**
+ * A card or loan's balance is typed as what is owed, a plain amount, and saved
+ * that way. A minus sign or brackets would save the opposite, a credit, so
+ * they are refused with a note rather than read either way: brackets mean
+ * owed in a ledger, but "-1,200" is just as likely meant as a debt, and
+ * flipping one and not the other would surprise. Other accounts may be
+ * overdrawn, so they take a negative balance.
+ */
+const OWED_RULES: AmountRules = {
+  min: 0,
+  rangeNote: "Enter what's owed without a minus sign or brackets.",
+}
+
 function AddAccount({ onDone }: { onDone: () => void }) {
   const { settings } = useApp()
   const create = useActionMutation('create_account')
   const [name, setName] = useState('')
   const [type, setType] = useState<Input<'create_account'>['type']>('depository')
   const [balance, setBalance] = useState('')
-  const badBalance = isUnreadableMoney(balance)
+  const balanceField = useAmountField(balance, isOwed({ type }) ? OWED_RULES : {})
+  const badBalance = balanceField.note !== null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -181,11 +196,12 @@ function AddAccount({ onDone }: { onDone: () => void }) {
           inputMode="decimal"
           placeholder={isOwed({ type }) ? 'Owed' : 'Balance'}
           aria-label="Balance"
+          {...balanceField.inputProps}
           value={balance}
           onChange={(e) => setBalance(e.target.value)}
         />
       </div>
-      <UnreadableAmount text={balance} />
+      <AmountNote id={balanceField.id} text={balanceField.shown} />
       <ErrorNote error={create.error} />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button type="button" className="btn ghost" onClick={onDone}>

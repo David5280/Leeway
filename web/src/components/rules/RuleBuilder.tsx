@@ -7,7 +7,7 @@ import { useApp } from '../../lib/app'
 import { useDebounced } from '../../lib/useDebounced'
 import { CategorySelect } from '../CategorySelect'
 import { ErrorNote, Icon, Segmented } from '../ui'
-import { UnreadableAmount } from '../UnreadableAmount'
+import { AmountNote, useAmountField, type AmountField } from '../AmountNote'
 import { amountLimits, FIELDS, MATCHES, type RuleDraft } from './rules'
 
 /**
@@ -144,6 +144,9 @@ function AmountLimits({
   onChange: (change: Partial<RuleDraft>) => void
 }) {
   const [open, setOpen] = useState(Boolean(draft.minAmount || draft.maxAmount))
+  // Both limits share one line under them, so the row keeps one line's room.
+  const largest = useAmountField(draft.maxAmount ?? '')
+  const smallest = useAmountField(draft.minAmount ?? '', {}, largest.id)
   if (!open) {
     return (
       <div>
@@ -159,14 +162,17 @@ function AmountLimits({
       <AmountInput
         label="Smallest amount"
         value={draft.minAmount}
+        field={smallest}
         onChange={(minAmount) => onChange({ minAmount })}
       />
       <span>and</span>
       <AmountInput
         label="Largest amount"
         value={draft.maxAmount}
+        field={largest}
         onChange={(maxAmount) => onChange({ maxAmount })}
       />
+      <AmountNote id={largest.id} text={smallest.shown ?? largest.shown} />
     </div>
   )
 }
@@ -174,25 +180,25 @@ function AmountLimits({
 function AmountInput({
   label,
   value,
+  field,
   onChange,
 }: {
   label: string
   value: string | undefined
+  field: AmountField
   onChange: (value: string) => void
 }) {
   return (
-    <>
-      <input
-        className="input num"
-        style={{ width: 100 }}
-        inputMode="decimal"
-        placeholder="Any"
-        aria-label={label}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <UnreadableAmount text={value ?? ''} />
-    </>
+    <input
+      className="input num"
+      style={{ width: 100 }}
+      inputMode="decimal"
+      placeholder="Any"
+      aria-label={label}
+      {...field.inputProps}
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+    />
   )
 }
 

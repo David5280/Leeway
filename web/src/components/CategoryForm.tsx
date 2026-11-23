@@ -3,13 +3,13 @@
 import { useState, type FormEvent } from 'react'
 import type { Category, Input } from '../api/client'
 import { useApp } from '../lib/app'
-import { isUnreadableMoney, parseMoney } from '../lib/format'
+import { parseMoney } from '../lib/format'
 import { CATEGORY_COLORS } from '../lib/theme'
 import { BANK_CATEGORIES, bankCategoryLabel } from './bankCategories'
 import { ColorPicker } from './ColorPicker'
 import { PercentInput } from './PercentInput'
 import { ErrorNote, Segmented, Setting, Switch } from './ui'
-import { UnreadableAmount } from './UnreadableAmount'
+import { AmountNote, useAmountField } from './AmountNote'
 
 export type CategoryFields = Required<Omit<Input<'create_category'>, 'icon'>>
 
@@ -85,8 +85,10 @@ export function CategoryForm({
   )
   const [bankCode, setBankCode] = useState('')
   const set = (change: Partial<CategoryFields>) => setFields((f) => ({ ...f, ...change }))
-  // A blank budget means none; one typed that can't be read must not save as none.
-  const badAmount = fields.kind !== 'transfer' && isUnreadableMoney(amount)
+  // A blank budget means none; one typed that can't be read, or a negative
+  // one, must not save as none.
+  const amountField = useAmountField(amount, { min: 0 })
+  const badAmount = fields.kind !== 'transfer' && amountField.note !== null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -152,6 +154,7 @@ export function CategoryForm({
               inputMode="decimal"
               placeholder="None"
               aria-label="Budget amount"
+              {...amountField.inputProps}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -170,7 +173,7 @@ export function CategoryForm({
                 </option>
               ))}
             </select>
-            <UnreadableAmount text={amount} />
+            <AmountNote id={amountField.id} text={amountField.shown} />
           </div>
         </Setting>
       )}

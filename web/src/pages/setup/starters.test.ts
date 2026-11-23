@@ -3,7 +3,7 @@ import { category } from '../../test/fake'
 import {
   categoriesToCreate,
   defaultStart,
-  hasUnreadableAmount,
+  hasBadAmount,
   starterRows,
   type StarterCategory,
 } from './starters'
@@ -78,21 +78,21 @@ describe('categoriesToCreate', () => {
   })
 })
 
-describe('hasUnreadableAmount', () => {
-  it('is true when a ticked spending row holds an amount that cannot be read', () => {
-    for (const amount of ['6OO', '5k', '1.234']) {
+describe('hasBadAmount', () => {
+  it('is true when a ticked spending row holds an amount that cannot be read, or a negative one', () => {
+    for (const amount of ['6OO', '5k', '1.234', '-5', '(45)']) {
       const rows = starterRows([groceries, dining], [], { Groceries: { amount } })
-      expect(hasUnreadableAmount(rows)).toBe(true)
+      expect(hasBadAmount(rows)).toBe(true)
     }
   })
 
   it('is false for blank or readable amounts, unticked rows and rows that take no budget', () => {
-    expect(hasUnreadableAmount(starterRows([groceries, dining], [], {}))).toBe(false)
+    expect(hasBadAmount(starterRows([groceries, dining], [], {}))).toBe(false)
     const blank = starterRows([groceries], [], { Groceries: { amount: '' } })
-    expect(hasUnreadableAmount(blank)).toBe(false)
+    expect(hasBadAmount(blank)).toBe(false)
     const unticked = starterRows([groceries], [], { Groceries: { amount: '6OO', include: false } })
-    expect(hasUnreadableAmount(unticked)).toBe(false)
+    expect(hasBadAmount(unticked)).toBe(false)
     const income = starterRows([paycheck], [], { Paycheck: { amount: '6OO' } })
-    expect(hasUnreadableAmount(income)).toBe(false)
+    expect(hasBadAmount(income)).toBe(false)
   })
 })

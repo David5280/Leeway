@@ -1,7 +1,8 @@
 // The starting-point step's logic, kept free of React so it can be tested on its own.
 
 import type { Input } from '../../api/client'
-import { isUnreadableMoney, parseMoney } from '../../lib/format'
+import { amountNote } from '../../lib/amountNote'
+import { parseMoney } from '../../lib/format'
 
 export type StarterCategory = NonNullable<Input<'complete_setup'>['categories']>[number]
 
@@ -72,11 +73,13 @@ export function categoriesToCreate(rows: StarterRow[]): StarterCategory[] {
 }
 
 /**
- * Whether a ticked spending row holds an amount that can't be read. A blank
- * one means no budget; an unreadable one must not quietly become none.
+ * Whether a ticked spending row holds an amount that can't be saved. A blank
+ * one means no budget; one that can't be read, or a negative one, must not
+ * quietly become none.
  */
-export function hasUnreadableAmount(rows: StarterRow[]): boolean {
+export function hasBadAmount(rows: StarterRow[]): boolean {
   return rows.some(
-    (row) => row.include && row.category.kind === 'expense' && isUnreadableMoney(row.amount),
+    (row) =>
+      row.include && row.category.kind === 'expense' && amountNote(row.amount, { min: 0 }) !== null,
   )
 }

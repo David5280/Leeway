@@ -5,7 +5,7 @@ import { useState } from 'react'
 import type { Goal } from '../../../api/client'
 import { useAction, useActionMutation } from '../../../api/hooks'
 import { ErrorNote, LoadingOrError } from '../../../components/ui'
-import { UnreadableAmount } from '../../../components/UnreadableAmount'
+import { AmountNote, useAmountField } from '../../../components/AmountNote'
 import { useApp } from '../../../lib/app'
 import { longDate, parseMoney } from '../../../lib/format'
 import { Money } from '../../../components/design/Money'
@@ -18,6 +18,8 @@ export function AddMoney({ goal }: { goal: Goal }) {
   const [amount, setAmount] = useState('')
   const add = useActionMutation('add_to_goal')
   const cents = parseMoney(amount)
+  // A minus sign takes money back, so a negative amount is fine here.
+  const amountField = useAmountField(amount)
   return (
     <form
       className="row wrap"
@@ -34,6 +36,7 @@ export function AddMoney({ goal }: { goal: Goal }) {
         inputMode="decimal"
         aria-label={`Amount to add to ${goal.name}`}
         placeholder="$50"
+        {...amountField.inputProps}
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
@@ -41,7 +44,7 @@ export function AddMoney({ goal }: { goal: Goal }) {
       <button type="submit" className="btn" disabled={!cents || add.isPending}>
         Add
       </button>
-      <UnreadableAmount text={amount} />
+      <AmountNote id={amountField.id} text={amountField.shown} />
       <ErrorNote error={add.error} />
     </form>
   )

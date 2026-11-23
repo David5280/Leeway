@@ -27,14 +27,14 @@ async function fillIn(amount: string) {
 }
 
 describe("a transaction's amount", () => {
-  it.each(['3bn', '1.5mm', '5k', '12.500'])(
+  it.each(['3bn', '1.5mm', '5k', '12.500', '12€50', '1,0000', '1,000 000'])(
     'names %j as unreadable and adds nothing',
     async (typed) => {
       const server = serve()
       const user = await fillIn(typed)
-      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
       expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
       await user.type(screen.getByRole('textbox', { name: 'Amount' }), '{Enter}')
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
       expect(server.actions('create_transaction')).toEqual([])
     },
   )

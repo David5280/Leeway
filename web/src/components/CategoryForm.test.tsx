@@ -111,8 +111,11 @@ describe('CategoryForm', () => {
     const { onSubmit, user } = renderForm()
     await user.type(screen.getByLabelText('Name'), 'Fun')
     await user.type(screen.getByLabelText('Budget amount'), '5OO')
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
     expect(screen.getByRole('button', { name: 'Add category' })).toBeDisabled()
+    // Said once the box is left, not while it is still being typed.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read that amount.")
     // A transfer takes no budget, so what is in the box no longer matters.
     await user.click(screen.getByRole('button', { name: 'Transfer' }))
     expect(screen.getByRole('button', { name: 'Add category' })).toBeEnabled()
@@ -123,6 +126,18 @@ describe('CategoryForm', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await save(user)
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ budgetCents: 50000 }))
+  })
+
+  it('refuses a negative budget rather than send one the server turns down', async () => {
+    const { onSubmit, user } = renderForm()
+    await user.type(screen.getByLabelText('Name'), 'Fun')
+    await user.type(screen.getByLabelText('Budget amount'), '-5')
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent("The amount can't be negative.")
+    expect(screen.getByLabelText('Budget amount')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: 'Add category' })).toBeDisabled()
+    await save(user)
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('asks what is expected for income, with no warning or pace', async () => {

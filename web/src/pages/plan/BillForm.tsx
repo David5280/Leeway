@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 import type { Bill, Category, Input } from '../../api/client'
 import { CategorySelect } from '../../components/CategorySelect'
 import { ErrorNote, Segmented, Setting, Switch } from '../../components/ui'
-import { UnreadableAmount } from '../../components/UnreadableAmount'
+import { AmountNote, useAmountField } from '../../components/AmountNote'
 import { parseMoney } from '../../lib/format'
 import { BILL_CADENCES, type BillCadence } from './text'
 
@@ -52,6 +52,8 @@ export function BillForm({
   const [amount, setAmount] = useState(initial.amountCents ? String(initial.amountCents / 100) : '')
   const set = (change: Partial<BillFields>) => setFields((f) => ({ ...f, ...change }))
   const amountCents = parseMoney(amount)
+  // A bill is never negative, and Save waits for an amount above zero.
+  const amountField = useAmountField(amount, { min: 0 })
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -87,6 +89,7 @@ export function BillForm({
             inputMode="decimal"
             required
             aria-label="Amount"
+            {...amountField.inputProps}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
@@ -103,7 +106,7 @@ export function BillForm({
               </option>
             ))}
           </select>
-          <UnreadableAmount text={amount} />
+          <AmountNote id={amountField.id} text={amountField.shown} />
         </div>
       </Setting>
       <Setting label="Next due" hint="Later dates repeat from this one">
@@ -141,7 +144,11 @@ export function BillForm({
       </Setting>
       <ErrorNote error={error} />
       <div className="row wrap">
-        <button type="submit" className="btn primary" disabled={busy || !amountCents}>
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={busy || !amountCents || amountCents < 0}
+        >
           {bill ? 'Save' : 'Add bill'}
         </button>
         <button type="button" className="btn" onClick={onCancel}>
