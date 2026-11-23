@@ -7,20 +7,43 @@ describe('pay words', () => {
     expect(payerText(noPay)).toBeNull()
   })
 
+  it("names a payroll paid in a person's name as your employer", () => {
+    expect(payerText(payView([{ name: 'JANE DOE DIR DEP' }]))).toBe('your employer')
+    expect(payerText(payView())).toBe('Acme Corp')
+  })
+
   it('calls one paycheck an estimate, and says what more paychecks were worked out from', () => {
     const once = payView([{ count: 1 }])
     expect(sourceNote(once, once.pay!)).toMatch(/^An estimate from one paycheck so far/)
+    expect(isEstimate(once, once.pay!)).toBe(true)
     const many = payView()
     expect(sourceNote(many, many.pay!)).toBe(
       'Worked out from 6 paychecks. Money from people, refunds and transfers never count as pay.',
     )
-    expect(isEstimate(many.pay!)).toBe(true)
+    // Six paychecks two weeks apart settle it, though the owner has said nothing yet.
+    expect(isEstimate(many, many.pay!)).toBe(false)
+  })
+
+  it('calls paydays that fit two schedules an estimate, however many', () => {
+    const view = payView([{ count: 3, every: 15, last: '2026-11-13' }])
+    expect(view.found!.employers[0]!.estimate).toBe(true)
+    expect(sourceNote(view, view.pay!)).toMatch(/^An estimate from 3 paychecks so far/)
+    expect(isEstimate(view, view.pay!)).toBe(true)
+  })
+
+  it("goes by the main job's paychecks, saying a second job's guess apart", () => {
+    const view = payView([{}, { name: 'GIG PAYOUT', cents: 40_000, count: 1, last: '2026-11-16' }])
+    expect(view.pay!.estimate).toBe(true)
+    expect(sourceNote(view, view.pay!)).toBe(
+      "Worked out from 6 paychecks. Money from people, refunds and transfers never count as pay. A second job's pay is an estimate until more of its paychecks land.",
+    )
+    expect(isEstimate(view, view.pay!)).toBe(false)
   })
 
   it('says when the owner confirmed it', () => {
     const view = payView([{}], { confirmed: true })
     expect(sourceNote(view, view.pay!)).toBe('You said this looks right.')
-    expect(isEstimate(view.pay!)).toBe(false)
+    expect(isEstimate(view, view.pay!)).toBe(false)
   })
   it('says when the paychecks no longer show what the owner confirmed', () => {
     const view = payView()
@@ -41,7 +64,7 @@ describe('pay words', () => {
     expect(view.found!.employers[1]!.estimate).toBe(true)
     // The main job's paycheck and payday are settled, so no Estimate label on them.
     expect(view.pay).toMatchObject({ source: 'confirmed', paycheckCents: 210_000 })
-    expect(isEstimate(view.pay!)).toBe(false)
+    expect(isEstimate(view, view.pay!)).toBe(false)
     expect(sourceNote(view, view.pay!)).toBe(
       "You said this looks right. A second job's pay is an estimate until more of its paychecks land.",
     )

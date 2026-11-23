@@ -27,6 +27,7 @@ async function addPaychecks(page: Page): Promise<void> {
 }
 
 test.afterEach(async ({ page }) => {
+  // Back to the paychecks as found: the owner's own pay and any confirmation cleared.
   await action(page, 'set_pay', { pay: null })
   await removeAccount(page, ACCOUNT)
 })
@@ -39,10 +40,11 @@ test('pay found in the paychecks is confirmed in one tap, then replaced by the o
   const pay = page.getByRole('region', { name: 'Your pay' })
   await expect(pay).toContainText('Each paycheck$2,100')
   await expect(pay).toContainText('Every 2 weeks from')
-  await expect(pay.getByText('Estimate')).toBeVisible()
 
+  // Whether four paydays also fit twice a month depends on today; once confirmed, it is settled.
   await page.getByRole('button', { name: 'Looks right' }).click()
   await expect(pay.getByText('Estimate')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Looks right' })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Change my pay' }).click()
   const form = page.getByRole('form', { name: 'Enter your pay' })

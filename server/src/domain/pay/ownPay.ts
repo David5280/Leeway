@@ -2,15 +2,21 @@
 // right" on what Leeway found, or their own amount, cadence and next payday.
 // Pure. source.ts lays it over the paychecks found (current.ts), so every
 // figure built on pay (the payday, safe to spend, typical income, the
-// playbook) goes by it. It never feeds back into how the paychecks are read:
-// what Leeway found stays what the bank shows, so a confirmation can be seen
-// to go stale and going back to the paychecks undoes the owner's pay.
+// playbook) goes by it. What Leeway found stays what the bank shows: a
+// confirmation only settles the reading it confirmed, so it can be seen to
+// go stale, and going back to the paychecks undoes the owner's pay.
+//
+// A payer is kept by an id made from its key, never the key itself: the key
+// is the bank's text, which for a payroll paid in a person's name is that
+// name, and settings are read back by an assistant.
 
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import type { IsoDate } from '../../lib/dates.js'
+import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
-import type { CurrentPay, Employer } from './current.js'
+import { currentPay, type CurrentPay, type Employer } from './current.js'
+import type { Deposit } from './deposits.js'
 import { nextOwnPayday } from './ownSchedule.js'
 import { payerKeyOf } from './paychecks.js'
 
@@ -31,9 +37,20 @@ export const payOverrideSchema = z.object({
 
 export type PayOverride = z.infer<typeof payOverrideSchema>
 
-/** What the owner confirmed: the employer (by its merchant key) and how often it pays. */
+/** A payer's id (employerIdOf): sixteen hex digits. */
+const payerIdSchema = z.string().regex(/^[0-9a-f]{16}$/)
+
+/** The owner's own pay as saved, with the job it stands in for. */
+const savedOverrideSchema = payOverrideSchema.extend({
+  /** The employer it replaces, saved when it was entered; null when no job was found then. */
+  payerId: payerIdSchema.nullable().default(null),
+})
+
+export type SavedOverride = z.infer<typeof savedOverrideSchema>
+
+/** What the owner confirmed: the employer (by its id) and how often it pays. */
 const confirmedSchema = z.object({
-  payerKey: z.string().min(1).max(200),
+  payerId: payerIdSchema,
   cadence: z.enum(PAY_CADENCES),
 })
 
@@ -43,21 +60,22 @@ export const paySettingsSchema = z.object({
   /** The detected pay the owner said is right; it stops being an estimate while it still matches. */
   confirmed: confirmedSchema.nullable().default(null),
   /** The owner's own pay, used instead of what was found. */
-  override: payOverrideSchema.nullable().default(null),
+  override: savedOverrideSchema.nullable().default(null),
 })
 
 export type PaySettings = z.infer<typeof paySettingsSchema>
 
 export const NO_PAY_SETTINGS: PaySettings = { confirmed: null, override: null }
 
-/** The key an employer's paychecks are grouped by (paychecks.ts), as a confirmation stores it. */
-export const employerKeyOf = (employer: Employer) => payerKeyOf(employer.newest)
+/** An employer's id: a digest of the key its paychecks are grouped by (paychecks.ts). */
+export const employerIdOf = (employer: Employer) =>
+  createHash('sha256').update(payerKeyOf(employer.newest)).digest('hex').slice(0, 16)
 
 /** Whether the owner confirmed this employer paying on this cadence. */
 export function isConfirmed(employer: Employer, confirmed: ConfirmedPay | null): boolean {
   return (
     confirmed !== null &&
-    confirmed.payerKey === employerKeyOf(employer) &&
+    confirmed.payerId === employerIdOf(employer) &&
     confirmed.cadence === employer.cadence
   )
 }
@@ -69,6 +87,23 @@ const monthlyOf = (cents: number, cadence: Cadence) => Math.round((cents * PER_Y
 export const ownMonthlyCents = (override: PayOverride) =>
   monthlyOf(override.amountCents, override.cadence)
 
+/**
+ * The pay found, read again with the cadence the owner confirmed for the
+ * main employer: paydays that fit two cadences are then read their way, so
+ * paychecks a year and the next payday are what they said is right, not
+ * the cautious reading. As found when the confirmation no longer matches.
+ */
+export function readAsConfirmed(
+  deposits: Deposit[],
+  found: CurrentPay,
+  confirmed: ConfirmedPay | null,
+  today: IsoDate,
+): CurrentPay {
+  if (!found.employer || !isConfirmed(found.employer, confirmed)) return found
+  const payerKey = payerKeyOf(found.employer.newest)
+  return currentPay(deposits, today, { cadence: confirmed!.cadence, payerKey })
+}
+
 /** The pay found, with a confirmed main employer no longer an estimate. */
 function withConfirmation(pay: CurrentPay, confirmed: ConfirmedPay | null): CurrentPay {
   if (!pay.employer || !isConfirmed(pay.employer, confirmed)) return pay
@@ -79,19 +114,39 @@ function withConfirmation(pay: CurrentPay, confirmed: ConfirmedPay | null): Curr
 }
 
 /**
- * The pay found, with the owner's own pay standing in for the main
- * employer's: its paycheck, cadence and next payday, no longer an estimate.
- * Payday is the owner's, as the main job's is; any second job found still
- * adds its month of pay.
+ * Which employer the owner's own pay stands in for: the one it was entered
+ * for while that job still pays, else the main one (also when none was
+ * found as it was entered). -1 with no employer paying now.
  */
-function withOverride(pay: CurrentPay, override: PayOverride, today: IsoDate): CurrentPay {
+export function replacedIndex(employers: Employer[], override: SavedOverride): number {
+  const index = employers.findIndex((employer) => employerIdOf(employer) === override.payerId)
+  if (index >= 0) return index
+  return employers.length > 0 ? 0 : -1
+}
+
+/**
+ * The pay found, with the owner's own pay standing in for the job it was
+ * entered for: its paycheck, cadence and next payday, no longer an
+ * estimate, and first, since payday is the owner's. Any other job found
+ * still adds its month of pay.
+ */
+function withOverride(pay: CurrentPay, override: SavedOverride, today: IsoDate): CurrentPay {
   const { amountCents, cadence } = override
   const nextPayday = nextOwnPayday(override, today)
   const monthlyCents = ownMonthlyCents(override)
-  const [main, ...others] = pay.employers
-  // The main job, now paid as the owner says, so its payday is theirs (payday.ts).
-  const own = main && { ...main, cadence, paycheckCents: amountCents, monthlyCents, nextPayday }
-  const employers = own ? [{ ...own, estimate: false }, ...others] : []
+  const index = replacedIndex(pay.employers, override)
+  const replaced = pay.employers[index]
+  const others = pay.employers.filter((_, i) => i !== index)
+  // That job, now paid as the owner says, so its payday is theirs (payday.ts).
+  const own = replaced && {
+    ...replaced,
+    cadence,
+    paycheckCents: amountCents,
+    monthlyCents,
+    nextPayday,
+    estimate: false,
+  }
+  const employers = own ? [own, ...others] : []
   return {
     ...pay,
     employer: employers[0] ?? null,

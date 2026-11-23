@@ -1,9 +1,11 @@
 // The schedule the owner's own pay keeps (pay/ownSchedule.ts): twice-a-month
 // pay stays on its two days and monthly pay on its day, however far the
-// payday given lies behind today, and a payday of today still counts. Pure.
+// payday given lies behind today, and a payday of today still counts. A
+// payday on a weekend or bank holiday is paid the business day before, and
+// one given on such a business day is read as the day it moved from. Pure.
 
 import { describe, expect, it } from 'vitest'
-import { nextOwnPayday, scheduleAround } from '../src/domain/pay/ownSchedule.js'
+import { nextOwnPayday, nominalOwnPayday, scheduleAround } from '../src/domain/pay/ownSchedule.js'
 import { paycheckPeriod } from '../src/domain/pay/period.js'
 
 const TODAY = '2026-11-17'
@@ -19,6 +21,16 @@ describe('scheduleAround', () => {
     expect(scheduleAround('2026-11-25')).toEqual({ first: 10, second: 25 })
   })
 
+  it('reads a payday moved back over a weekend as the common day it was meant for', () => {
+    // Friday Nov 13, 2026 is paid for Sunday the 15th, not the 13th and the 28th.
+    expect(scheduleAround('2026-11-13')).toEqual({ first: 15, second: 31 })
+    // Friday Oct 30, 2026 is paid for Saturday the 31st.
+    expect(scheduleAround('2026-10-30')).toEqual({ first: 15, second: 31 })
+    expect(nominalOwnPayday('2027-01-29')).toBe('2027-01-31')
+    // A business day no common payday moves to is taken as given.
+    expect(nominalOwnPayday('2026-11-12')).toBe('2026-11-12')
+  })
+
   it('pairs any other day with the one half a month from it', () => {
     expect(scheduleAround('2026-11-05')).toEqual({ first: 5, second: 20 })
     expect(scheduleAround('2026-11-20')).toEqual({ first: 5, second: 20 })
@@ -28,6 +40,7 @@ describe('scheduleAround', () => {
   it('sets a twice-a-month budget period from it', () => {
     expect(paycheckPeriod('semimonth', '2026-11-01').semimonthlyDays).toEqual([1, 15])
     expect(paycheckPeriod('semimonth', '2026-11-30').semimonthlyDays).toEqual([15, 31])
+    expect(paycheckPeriod('semimonth', '2026-11-13').semimonthlyDays).toEqual([15, 31])
   })
 })
 
@@ -46,20 +59,47 @@ describe('nextOwnPayday', () => {
     const endOfMonth = { cadence: 'semimonth' as const, nextPayday: '2026-11-30' }
     // Stepping the 30th by half a month landed on Dec 30, not the month's end.
     expect(nextOwnPayday(endOfMonth, '2026-12-16')).toBe('2026-12-31')
-    // February ends on the 28th, then March on the 31st.
-    expect(nextOwnPayday(endOfMonth, '2027-02-16')).toBe('2027-02-28')
+    // February ends on Sunday the 28th, paid Friday the 26th; then March on the 31st.
+    expect(nextOwnPayday(endOfMonth, '2027-02-16')).toBe('2027-02-26')
     expect(nextOwnPayday(endOfMonth, '2027-03-01')).toBe('2027-03-15')
     expect(nextOwnPayday(endOfMonth, '2027-03-16')).toBe('2027-03-31')
     const fifteenth = { cadence: 'semimonth' as const, nextPayday: '2027-01-15' }
-    expect(nextOwnPayday(fifteenth, '2027-02-01')).toBe('2027-02-15')
-    expect(nextOwnPayday(fifteenth, '2027-02-16')).toBe('2027-02-28')
+    // Monday Feb 15, 2027 is Presidents' Day: paid the Friday before.
+    expect(nextOwnPayday(fifteenth, '2027-02-01')).toBe('2027-02-12')
+    expect(nextOwnPayday(fifteenth, '2027-02-16')).toBe('2027-02-26')
+  })
+
+  it('moves on from a payday paid early to the next one on its schedule', () => {
+    // Friday Nov 13 was the 15th's payday, so the next is the month's end.
+    const thirteenth = { cadence: 'semimonth' as const, nextPayday: '2026-11-13' }
+    expect(nextOwnPayday(thirteenth, '2026-11-14')).toBe('2026-11-30')
+    expect(nextOwnPayday(thirteenth, '2026-12-01')).toBe('2026-12-15')
+  })
+
+  it('pays a weekend or holiday payday the business day before', () => {
+    // A 15th given on a Sunday shows the Friday before.
+    expect(nextOwnPayday({ cadence: 'semimonth', nextPayday: '2026-11-15' }, '2026-11-10')).toBe(
+      '2026-11-13',
+    )
+    // Weekly Thursdays meet Thanksgiving on Nov 26, paid Wednesday.
+    expect(nextOwnPayday({ cadence: 'week', nextPayday: '2026-11-19' }, '2026-11-20')).toBe(
+      '2026-11-25',
+    )
   })
 
   it("keeps monthly pay on the given payday's day, clamped to a short month only", () => {
     const lastDay = { cadence: 'month' as const, nextPayday: '2026-12-31' }
-    expect(nextOwnPayday(lastDay, '2027-02-01')).toBe('2027-02-28')
+    // February's end is Sunday the 28th, paid Friday the 26th.
+    expect(nextOwnPayday(lastDay, '2027-02-01')).toBe('2027-02-26')
     // March is back on the 31st, not the 28th February was clamped to.
     expect(nextOwnPayday(lastDay, '2027-03-01')).toBe('2027-03-31')
-    expect(nextOwnPayday({ cadence: 'month', nextPayday: '2026-10-05' }, TODAY)).toBe('2026-12-05')
+    // Saturday Dec 5 is paid Friday the 4th.
+    expect(nextOwnPayday({ cadence: 'month', nextPayday: '2026-10-05' }, TODAY)).toBe('2026-12-04')
+  })
+
+  it('counts monthly pay from the day it was meant for, not the Friday it moved to', () => {
+    // Friday Jan 29, 2027 is the 31st's payday, so March pays on the 31st, not the 29th.
+    const january = { cadence: 'month' as const, nextPayday: '2027-01-29' }
+    expect(nextOwnPayday(january, '2027-03-01')).toBe('2027-03-31')
   })
 })

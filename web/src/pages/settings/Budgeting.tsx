@@ -17,8 +17,8 @@ const WARN_AT = [50, 60, 70, 75, 80, 85, 90, 95, 100]
 export function BudgetingSection() {
   const { settings } = useApp()
   const save = useSave()
-  // The paycheck schedule the paychecks show, so Every paycheck need not ask for it.
-  const found = useAction('get_pay').data?.period ?? null
+  // The schedule of the pay in use, so Every paycheck need not ask for it.
+  const pay = useAction('get_pay').data
   // An agent or an import can set any number, so a value that is not a preset
   // is offered as its own choice rather than shown as the wrong one.
   const pace = String(settings.paceTolerancePercent)
@@ -33,7 +33,8 @@ export function BudgetingSection() {
     <Section id="budgeting" title="Period and warnings">
       <PeriodEditor
         value={settings.period}
-        found={found}
+        found={pay?.period ?? null}
+        entered={Boolean(pay?.yours)}
         onChange={(period) => save.settings({ period })}
       />
       <Setting label="Count pending transactions" hint="Money is spent even before it posts">

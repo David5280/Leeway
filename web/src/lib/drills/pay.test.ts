@@ -12,14 +12,15 @@ function drillOf(view = payView()) {
 
 describe('payDrill', () => {
   it('spreads one job’s paychecks over a month', () => {
-    const drill = drillOf()
+    const view = payView()
+    const drill = drillOf(view)
     expect(drill.figure).toEqual({ cents: 210_000, tone: 'in' })
     expect(mathSentence(drill.math, money)).toBe(
       'About a month $4565.63 = One paycheck $2100 and Paychecks a year, over 12 months 26.1',
     )
     expect(drill.items?.rows).toEqual([
       {
-        key: 'Acme Corp',
+        key: view.found!.employers[0]!.id,
         label: 'Acme Corp',
         detail: 'Paid every 2 weeks, next 2026-11-27',
         value: { cents: 210_000 },
@@ -37,6 +38,16 @@ describe('payDrill', () => {
     ])
     expect(drill.math.terms[1]!.op).toBe('plus')
     expect(drill.items?.rows).toHaveLength(2)
+  })
+
+  it('tells employers apart by id, calling one in a person’s name Your employer', () => {
+    const view = payView([
+      { name: 'JANE DOE DIR DEP' },
+      { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' },
+    ])
+    const rows = drillOf(view).items!.rows
+    expect(rows.map((row) => row.label)).toEqual(['Your employer', 'Side Gig'])
+    expect(new Set(rows.map((row) => row.key)).size).toBe(2)
   })
 
   it('takes the owner’s own pay alone, with no employers under it', () => {

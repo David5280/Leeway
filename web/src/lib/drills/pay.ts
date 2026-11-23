@@ -2,7 +2,7 @@
 // month, and each employer paying now. Pure, like every drill in lib/drills.
 
 import type { PayView } from '../../api/client'
-import { PAY_CADENCE_WORDS, sourceNote } from '../../pages/plan/payday/payText'
+import { employerLabel, PAY_CADENCE_WORDS, sourceNote } from '../../pages/plan/payday/payText'
 import type { DrillDown, DrillItem, MathTerm } from '../drill'
 
 type PayInUse = NonNullable<PayView['pay']>
@@ -27,17 +27,21 @@ function paycheckTerms(paycheckCents: number, monthlyCents: number): MathTerm[] 
   ]
 }
 
+/** The employers found, less the one the owner's own pay stands in for while it does. */
+function jobsListed(view: PayView, pay: PayInUse) {
+  const employers = view.found?.employers ?? []
+  return pay.source === 'yours' ? employers.filter((employer) => !employer.replaced) : employers
+}
+
 /** A month of pay: each job's share, or the one paycheck's when there is only one. */
 function monthTerms(view: PayView, pay: PayInUse): MathTerm[] {
-  const jobs = (view.found?.employers ?? []).map(({ name, monthlyCents }) => ({
-    label: name,
-    monthlyCents,
+  const jobs = jobsListed(view, pay).map((employer) => ({
+    label: employerLabel(employer),
+    monthlyCents: employer.monthlyCents,
   }))
-  // The owner's own pay stands in for the main job; any second job still adds its month.
+  // The owner's own pay stands in for its job; any other job still adds its month.
   const yours = pay.source === 'yours' ? view.yours : null
-  const months = yours
-    ? [{ label: 'Your pay', monthlyCents: yours.monthlyCents }, ...jobs.slice(1)]
-    : jobs
+  const months = yours ? [{ label: 'Your pay', monthlyCents: yours.monthlyCents }, ...jobs] : jobs
   if (months.length < 2) {
     return paycheckTerms(pay.paycheckCents, yours?.monthlyCents ?? pay.monthlyCents)
   }
@@ -48,10 +52,10 @@ function monthTerms(view: PayView, pay: PayInUse): MathTerm[] {
   }))
 }
 
-function employerRows(view: PayView, date: (iso: string) => string): DrillItem[] {
-  return (view.found?.employers ?? []).map((employer) => ({
-    key: employer.name,
-    label: employer.name,
+function employerRows(view: PayView, pay: PayInUse, date: (iso: string) => string): DrillItem[] {
+  return jobsListed(view, pay).map((employer) => ({
+    key: employer.id,
+    label: employerLabel(employer),
     detail: `Paid ${PAY_CADENCE_WORDS[employer.cadence]}, next ${date(employer.nextPayday)}`,
     value: { cents: employer.paycheckCents },
   }))
@@ -59,8 +63,8 @@ function employerRows(view: PayView, date: (iso: string) => string): DrillItem[]
 
 /** Pay in use: the paycheck, and what it comes to in a month. */
 export function payDrill(view: PayView, pay: PayInUse, date: (iso: string) => string): DrillDown {
-  // The owner's own pay is in place of the main job's, so only a second job is listed.
-  const rows = employerRows(view, date).slice(pay.source === 'yours' ? 1 : 0)
+  // The owner's own pay is in place of its job's, so only another job is listed.
+  const rows = employerRows(view, pay, date)
   return {
     title: 'Your pay',
     subtitle: `Next payday ${date(pay.nextPayday)}`,

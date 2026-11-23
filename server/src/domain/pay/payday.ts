@@ -4,6 +4,7 @@ import type { IsoDate } from '../../lib/dates.js'
 import { periodContaining, type Cadence } from '../../lib/periods.js'
 import { periodConfig, type Settings } from '../settings.js'
 import type { CurrentPay } from './current.js'
+import { PAY_CADENCE } from './period.js'
 
 /** Where the payday came from, so the app and an agent can say how sure it is. */
 export type PaydaySource = 'pay_period' | 'detected_income' | 'period_end'
@@ -21,14 +22,6 @@ export interface Payday {
    * A side job's guess never makes it one: the date is the main job's.
    */
   estimate: boolean
-}
-
-/** A paycheck budget period's frequency, as a cadence. */
-export const PAY_CADENCE: Record<'weekly' | 'biweekly' | 'semimonthly' | 'monthly', Cadence> = {
-  weekly: 'week',
-  biweekly: 'biweek',
-  semimonthly: 'semimonth',
-  monthly: 'month',
 }
 
 /**

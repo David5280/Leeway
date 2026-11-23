@@ -115,6 +115,9 @@ async function revealKey(page: Page) {
   await expect(page.getByLabel('New key')).toBeVisible()
 }
 
+/** The first seeded category's page. */
+const categoryPage = (seeded: Seeded) => `/budgets/${seeded.categories[0]}`
+
 /** Every screen the app's router answers, and the forms that open on them. */
 export const SCREENS: Screen[] = [
   at('overview', '/'),
@@ -242,15 +245,11 @@ export const SCREENS: Screen[] = [
     name: '/budgets adding a category',
     then: open('New category', (page) => page.getByRole('region', { name: 'New category' })),
   }),
-  {
-    name: 'a category page',
-    route: 'category',
-    path: (seeded) => `/budgets/${seeded.categories[0]}`,
-  },
+  { name: 'a category page', route: 'category', path: categoryPage },
   {
     name: 'a category page making a rule',
     route: 'category',
-    path: (seeded) => `/budgets/${seeded.categories[0]}`,
+    path: categoryPage,
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
   at('plan', '/plan'),

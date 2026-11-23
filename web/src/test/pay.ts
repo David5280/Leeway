@@ -3,7 +3,11 @@
 
 import { currentPay } from '../../../server/src/domain/pay/current'
 import type { Deposit } from '../../../server/src/domain/pay/deposits'
-import { employerKeyOf, type PayOverride } from '../../../server/src/domain/pay/ownPay'
+import {
+  employerIdOf,
+  readAsConfirmed,
+  type PayOverride,
+} from '../../../server/src/domain/pay/ownPay'
 import { payViewOf } from '../../../server/src/domain/pay/view'
 import { addDays } from '../../../server/src/lib/dates'
 import type { PayView } from '../api/client'
@@ -49,19 +53,35 @@ function deposits({
   )
 }
 
-/** get_pay's answer for these jobs, with the owner's confirmation or own pay. */
+/** Names as the server would: a business by its name, a payroll in a person's name not at all. */
+const NAMES: Record<string, string | null> = {
+  'ACME CORP PAYROLL': 'Acme Corp',
+  'JANE DOE DIR DEP': null,
+}
+
+/**
+ * get_pay's answer for these jobs, with the owner's confirmation or own pay,
+ * which stands in for the main job as the server saves it.
+ */
 export function payView(
   jobs: Job[] = [{}],
   given: { confirmed?: boolean; override?: PayOverride } = {},
 ): PayView {
-  const detected = currentPay(jobs.flatMap(deposits), PAY_TODAY, null)
+  const all = jobs.flatMap(deposits)
+  const detected = currentPay(all, PAY_TODAY, null)
+  const main = detected.employer
   const confirmed =
-    given.confirmed && detected.employer
-      ? { payerKey: employerKeyOf(detected.employer), cadence: detected.employer.cadence }
+    given.confirmed && main
+      ? { payerId: employerIdOf(main), cadence: main.cadence as PayOverride['cadence'] }
       : null
-  const settings = settingsWith({ pay: { confirmed, override: given.override ?? null } })
-  return payViewOf(detected, settings, PAY_TODAY, (employer) =>
-    employer.newest.name === 'ACME CORP PAYROLL' ? 'Acme Corp' : 'Side Gig',
+  const override = given.override && {
+    ...given.override,
+    payerId: main ? employerIdOf(main) : null,
+  }
+  const settings = settingsWith({ pay: { confirmed, override: override ?? null } })
+  const found = readAsConfirmed(all, detected, confirmed, PAY_TODAY)
+  return payViewOf(found, settings, PAY_TODAY, ({ newest }) =>
+    newest.name in NAMES ? (NAMES[newest.name] ?? null) : 'Side Gig',
   )
 }
 

@@ -28,7 +28,7 @@ function PayFigure({ view, pay }: { view: PayView; pay: PayInUse }) {
       <SectionHead
         icon="wallet"
         title="Your pay"
-        aside={isEstimate(pay) ? <StatusPill status="info" label="Estimate" /> : undefined}
+        aside={isEstimate(view, pay) ? <StatusPill status="info" label="Estimate" /> : undefined}
       />
       <KeyFigure
         label="Each paycheck"
@@ -44,7 +44,10 @@ function PayFigure({ view, pay }: { view: PayView; pay: PayInUse }) {
   )
 }
 
-/** Under the figure: confirm it, change it, or go back to what the paychecks show. */
+/**
+ * Under the figure: confirm it, change it, or go back to what the paychecks
+ * show (with none found, remove the pay entered).
+ */
 function PayChoices({
   view,
   pay,
@@ -73,14 +76,14 @@ function PayChoices({
         <button type="button" className="btn" onClick={onChange}>
           {pay.source === 'found' ? 'Not quite' : 'Change my pay'}
         </button>
-        {pay.source === 'yours' && view.found && (
+        {pay.source === 'yours' && (
           <button
             type="button"
             className="btn ghost"
             disabled={reset.isPending}
             onClick={() => reset.mutate({ pay: null })}
           >
-            Use my paychecks
+            {view.found ? 'Use my paychecks' : 'Remove my pay'}
           </button>
         )}
       </div>

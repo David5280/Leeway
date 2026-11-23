@@ -9,7 +9,7 @@ import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
 const PAY_FIELDS =
-  'found is what the paychecks show (null when no employer is paying now): each employer paying now by name (named as the bank shows the deposit, never with an account number), its usual paycheck, cadence (week, biweek, semimonth or month), next payday and paychecks seen; estimate is true until a second paycheck or the owner confirms it, and confirmed says the owner did; confirmationStale says the owner confirmed an earlier reading the paychecks no longer show, so it may be worth confirming again. yours is the pay the owner entered (null for none) with what it comes to a month, used instead of found. pay is what every figure (safe to spend, typical income, the payday playbook) goes by, with source found, confirmed or yours. lastPaycheck is the newest paycheck that landed. Money from people (Venmo, Zelle), refunds, tax refunds and transfers are never pay. Amounts are in cents.'
+  'found is what the paychecks show (null when no employer is paying now): each employer paying now with an id and its name (as the bank shows the deposit, never with an account number; null when the payer is not a business, such as a payroll paid in the name of a person), its usual paycheck, cadence (week, biweek, semimonth or month), next payday paychecks seen and replaced (true when the pay the owner entered stands in for that job); estimate is true until a second paycheck or the owner confirms it, and confirmed says the owner did; confirmationStale says the owner confirmed an earlier reading the paychecks no longer show, so it may be worth confirming again. yours is the pay the owner entered (null for none) with what it comes to a month, used instead of the job it replaces. pay is what every figure (safe to spend, typical income, the payday playbook) goes by, with source found, confirmed or yours. lastPaycheck is the newest paycheck that landed. period is a paycheck budget period on the schedule of the pay in use. Money from people (Venmo, Zelle), refunds, tax refunds and transfers are never pay. Amounts are in cents.'
 
 export const getPayAction = defineAction({
   name: 'get_pay',
@@ -40,7 +40,7 @@ export const confirmPayAction = defineAction({
 export const setPayAction = defineAction({
   name: 'set_pay',
   title: 'Set pay',
-  description: `Sets the owner's own pay, used everywhere instead of what the paychecks show: amountCents for one paycheck, cadence (week, biweek, semimonth or month) and nextPayday (within a year of today; later paydays repeat from it). pay null goes back to the paychecks. A paycheck budget period moves to the new schedule. Returns get_pay's answer. ${PAY_FIELDS}`,
+  description: `Sets the owner's own pay, used everywhere instead of what the paychecks show: amountCents for one paycheck, cadence (week, biweek, semimonth or month) and nextPayday (within a year of today; later paydays repeat from it). With two jobs it stands in for the main one. pay null goes back to the paychecks as found, clearing the pay the owner entered and any confirmation. A paycheck budget period moves to the new schedule, or back to the paychecks'. Returns get_pay's answer. ${PAY_FIELDS}`,
   input: z.object({ pay: payOverrideSchema.nullable() }),
   scope: 'write',
   surface: 'all',

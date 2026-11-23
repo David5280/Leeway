@@ -1,5 +1,5 @@
 // Picking how budgets are counted: monthly, per paycheck or weekly. With
-// paychecks found, Every paycheck starts on their schedule (PaycheckFields).
+// pay known, Every paycheck starts on its schedule (PaycheckFields).
 
 import type { Settings } from '../api/client'
 import { PaycheckSchedule, type PaycheckPeriod } from './PaycheckFields'
@@ -30,18 +30,21 @@ function localToday(): string {
 
 /**
  * Picks how budgets are counted: by calendar month, by paycheck, or by week.
- * `found` is the paycheck period the paychecks show (get_pay), when they show one.
+ * `found` is the paycheck period of the pay in use (get_pay), when there is
+ * one: the owner's own pay's when `entered`, else the paychecks'.
  */
 export function PeriodEditor({
   value,
   onChange,
   found = null,
+  entered = false,
 }: {
   value: PeriodSetting
   onChange: (period: PeriodSetting) => void
   found?: PaycheckPeriod | null
+  entered?: boolean
 }) {
-  // Switching to Every paycheck starts on the found schedule, so there is nothing to ask.
+  // Switching to Every paycheck starts on the pay's schedule, so there is nothing to ask.
   const startOf = (kind: PeriodSetting['kind']) =>
     kind === 'paycheck' && found ? found : defaultPeriod(kind, localToday())
   return (
@@ -85,7 +88,7 @@ export function PeriodEditor({
         </Setting>
       )}
       {value.kind === 'paycheck' && (
-        <PaycheckSchedule value={value} found={found} onChange={onChange} />
+        <PaycheckSchedule value={value} found={found} entered={entered} onChange={onChange} />
       )}
     </div>
   )

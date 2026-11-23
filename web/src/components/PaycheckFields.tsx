@@ -1,6 +1,7 @@
 // A paycheck budget period's schedule: how often pay lands and a payday to
-// count from. When the paychecks show the schedule (get_pay's period), it is
-// said in a line instead of asked, with Change to open the fields.
+// count from. When the pay in use says the schedule (get_pay's period: the
+// owner's own pay, else the paychecks'), it is said in a line instead of
+// asked, with Change to open the fields.
 
 import { useState } from 'react'
 import type { Settings } from '../api/client'
@@ -50,12 +51,21 @@ export function sameSchedule(a: PaycheckPeriod, b: PaycheckPeriod): boolean {
   return daysBetween(a.anchorDate, b.anchorDate) % step === 0
 }
 
-/** The schedule in a line, with Change to open the fields. */
-function FoundSchedule({ value, onChange }: { value: PaycheckPeriod; onChange: () => void }) {
+/** The schedule in a line, saying whose word it is, with Change to open the fields. */
+function FoundSchedule({
+  value,
+  entered,
+  onChange,
+}: {
+  value: PaycheckPeriod
+  entered: boolean
+  onChange: () => void
+}) {
   return (
     <p className="row wrap small" style={{ justifyContent: 'space-between' }}>
       <span>
-        Paid <b>{PAY_CADENCE_WORDS[CADENCE_OF[value.frequency]]}</b>, going by your paychecks.
+        Paid <b>{PAY_CADENCE_WORDS[CADENCE_OF[value.frequency]]}</b>,{' '}
+        {entered ? 'going by the pay you entered.' : 'going by your paychecks.'}
       </span>
       <button type="button" className="btn ghost small" onClick={onChange}>
         Change
@@ -64,19 +74,24 @@ function FoundSchedule({ value, onChange }: { value: PaycheckPeriod; onChange: (
   )
 }
 
-/** How often pay lands and when: the fields, or a line when the paychecks already say. */
+/**
+ * How often pay lands and when: the fields, or a line when the pay in use
+ * already says (`entered` when that is the owner's own pay).
+ */
 export function PaycheckSchedule({
   value,
   found,
+  entered = false,
   onChange,
 }: {
   value: PaycheckPeriod
   found: PaycheckPeriod | null
+  entered?: boolean
   onChange: (period: PaycheckPeriod) => void
 }) {
   const [editing, setEditing] = useState(false)
   if (found && !editing && sameSchedule(value, found)) {
-    return <FoundSchedule value={value} onChange={() => setEditing(true)} />
+    return <FoundSchedule value={value} entered={entered} onChange={() => setEditing(true)} />
   }
   return <PaycheckFields value={value} onChange={onChange} />
 }

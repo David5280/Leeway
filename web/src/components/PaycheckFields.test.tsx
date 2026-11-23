@@ -79,6 +79,13 @@ describe('PeriodEditor with paychecks found', () => {
     })
   })
 
+  it('says when the schedule is the pay the owner entered', () => {
+    render(<PeriodEditor value={found} found={found} entered onChange={vi.fn()} />)
+    expect(screen.getByText(/going by/)).toHaveTextContent(
+      'Paid every 2 weeks, going by the pay you entered.',
+    )
+  })
+
   it('asks when the saved schedule is not the one found', () => {
     renderEditor({ ...found, anchorDate: '2026-11-06' })
     expect(screen.getByLabelText('A recent payday')).toHaveValue('2026-11-06')
