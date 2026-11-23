@@ -4,7 +4,7 @@
 // on any schedule of two days, through holidays and weekends moved either
 // way; a payday already moved is never counted from; and what is read as
 // either never projects a payday ahead of the real one. Every date is made
-// up; the holidays are real (fixtures/paydays.ts).
+// up; the holidays are the real ones the app knows (pay/holidays.ts).
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -12,7 +12,6 @@ import {
   addMonths,
   clampedDate,
   dateParts,
-  daysBetween,
   dayOfWeek,
   makeDate,
   type IsoDate,
@@ -90,11 +89,6 @@ describe('twice-a-month payrolls a 14-day grid also fits', () => {
     const cases: [IsoDate[], IsoDate][] = [
       // The 5th and the 20th, paid the business day before a weekend: the 20th of March is next.
       [['2023-01-05', '2023-01-20', '2023-02-03', '2023-02-17', '2023-03-03'], '2023-03-20'],
-      // The 1st and the 15th, paid the business day after: Monday Apr 3 for Saturday Apr 1.
-      [
-        ['2023-01-03', '2023-01-17', '2023-02-01', '2023-02-15', '2023-03-01', '2023-03-15'],
-        '2023-04-03',
-      ],
       // The 1st and the 15th around New Year's Day and MLK Day: Feb 1, not Jan 26.
       [['2023-12-01', '2023-12-15', '2023-12-29', '2024-01-12'], '2024-02-01'],
     ]
@@ -102,6 +96,26 @@ describe('twice-a-month payrolls a 14-day grid also fits', () => {
       expect(payPattern(paid)).toMatchObject({ cadence: 'biweek', ambiguous: true })
       expect(shownNext(paid, addDays(paid.at(-1)!, 1))).toBe(next)
     }
+  })
+
+  it('settles once holidays explain every payday the schedule moved', () => {
+    // The 1st and the 15th, paid the business day after: Jan 3 for New Year's
+    // Day observed on Monday Jan 2, and Jan 17 for MLK Day after Sunday the
+    // 15th, each right on the schedule. Monday Apr 3 for Saturday Apr 1 is next.
+    const paid = [
+      '2023-01-03',
+      '2023-01-17',
+      '2023-02-01',
+      '2023-02-15',
+      '2023-03-01',
+      '2023-03-15',
+    ]
+    expect(payPattern(paid)).toEqual({
+      cadence: 'semimonth',
+      schedule: { first: 1, second: 15 },
+      ambiguous: false,
+    })
+    expect(shownNext(paid, '2023-03-16')).toBe('2023-04-03')
   })
 
   it('takes the later of two schedules the paydays fit alike', () => {
@@ -134,10 +148,10 @@ describe('a semimonthly payday already paid early', () => {
     expect(
       nextPaydayAfter(['2026-12-15', '2026-12-31'], 'semimonth', '2027-01-01', firstAndFifteenth),
     ).toBe('2027-01-15')
-    // Holidays are not known here: Monday Jan 15 2024, MLK Day, is projected as open.
+    // Monday Jan 15 2024 is MLK Day, so the 15th's payday is the Friday before.
     expect(
       nextPaydayAfter(['2023-12-15', '2023-12-29'], 'semimonth', '2023-12-30', firstAndFifteenth),
-    ).toBe('2024-01-15')
+    ).toBe('2024-01-12')
     // Thursday Nov 9 was the 10th's, paid early for Veterans Day: Friday Nov 24 for Saturday the 25th.
     expect(
       nextPaydayAfter(['2023-10-25', '2023-11-09'], 'semimonth', '2023-11-10', {
@@ -189,13 +203,9 @@ describe('the day a monthly payroll keeps', () => {
     const { year, month } = dateParts(first)
     const due = Array.from({ length: 9 }, (_, i) => clampedDate(year, month + i, day))
     const paid = due.map(paidOnBusinessDay)
-    // Holidays are not known ahead, so the next is due the business day before its day.
     return [2, 3, 4, 5, 6, 7, 8]
       .map((n) => paid.slice(0, n))
-      .filter(
-        (run) =>
-          nextPaydayAfter(run, 'month', run.at(-1)!) < businessDayOnOrBefore(due[run.length]!),
-      )
+      .filter((run) => nextPaydayAfter(run, 'month', run.at(-1)!) < paid[run.length]!)
   }
 
   /**
@@ -310,8 +320,26 @@ describe('a biweekly run with one payday well off its grid', () => {
   })
 })
 
-/** Days early a settled reading may show: three before a payroll paying after is seen, else one. */
-const unseenAllowance = (unseen: boolean) => (unseen ? 3 : 1)
+/**
+ * The earliest a projection may show a payday due on `nominal` and really
+ * paid on `truth`: `slack` days before the real one, or, while a payroll
+ * that pays the business day after has not shown it yet (paydays are taken
+ * to move before until one does), the business day before `nominal`.
+ */
+function earliestAllowed(
+  truth: IsoDate,
+  nominal: IsoDate,
+  rollShown: boolean,
+  slack: number,
+): IsoDate {
+  const settled = addDays(truth, -slack)
+  const before = businessDayOnOrBefore(nominal)
+  return rollShown || before > settled ? settled : before
+}
+
+/** Whether a run shows how its payroll moves paydays: before by default, after once one landed late. */
+const rollShown = (pay: (date: IsoDate) => IsoDate, run: IsoDate[], nominal: IsoDate[]) =>
+  pay === businessDayOnOrBefore || run.some((date, i) => date > nominal[i]!)
 
 describe('a sweep of every twice-a-month schedule', () => {
   /** For runs of `count` on every schedule from every start, moved by `pay`, what fails `check`. */
@@ -364,18 +392,22 @@ describe('a sweep of every twice-a-month schedule', () => {
     'never shows a payday early while read as either, and at most a day once settled',
     () => {
       for (const pay of [businessDayOnOrBefore, businessDayOnOrAfter]) {
-        const failed = sweep(pay, 10, (paid) => {
+        const failed = sweep(pay, 10, (paid, schedule, start) => {
+          const nominal = semimonthlyPaid(schedule, start, paid.length, (date) => date)
           for (let n = 2; n < paid.length; n += 1) {
             const run = paid.slice(0, n)
             const pattern = payPattern(run)
             // Gaps too long for two weeks, as weekends can stretch them, read as no cadence (paychecks.ts).
             if (!pattern) continue
-            const early = daysBetween(shownNext(run, paid[n - 1]!), paid[n]!)
-            // Before a weekend payday shows a payroll paying after, it is taken to pay before.
-            const unseen = pay === businessDayOnOrAfter && run.every((date, i) => date === paid[i])
-            const allowed = pattern.ambiguous ? 0 : unseenAllowance(unseen)
-            if (early > allowed)
-              return `${letter(pattern)} ${run.join(',')} shows ${shownNext(run, paid[n - 1]!)}`
+            const shown = shownNext(run, paid[n - 1]!)
+            // Read as either, never early; settled, a day early at most.
+            const slack = pattern.ambiguous ? 0 : 1
+            // A payroll paying after may still be read as paying before: a
+            // schedule a day later, moved before, can fit its paydays as well
+            // (the 2nd and 18th, paid after, against the 2nd and the 19th).
+            const before = pay === businessDayOnOrBefore
+            const earliest = earliestAllowed(paid[n]!, nominal[n]!, before, slack)
+            if (shown < earliest) return `${letter(pattern)} ${run.join(',')} shows ${shown}`
           }
           return null
         })
@@ -394,9 +426,10 @@ function biweeklyFailures(start: IsoDate, pay: (date: IsoDate) => IsoDate): stri
   const read = readings(paid.slice(0, 12))
   if (!/^a{1,6}B+$/.test(read)) failed.push(`${read} ${paid.join(',')}`)
   for (let n = 2; n < 12; n += 1) {
-    // Against the day it was due: a holiday is not known ahead.
-    const next = shownNext(paid.slice(0, n), paid[n - 1]!)
-    if (next < due[n]!) failed.push(`${paid.slice(0, n).join(',')} shows ${next}`)
+    const run = paid.slice(0, n)
+    const next = shownNext(run, paid[n - 1]!)
+    const earliest = earliestAllowed(paid[n]!, due[n]!, rollShown(pay, run, due), 0)
+    if (next < earliest) failed.push(`${run.join(',')} shows ${next}`)
   }
   return failed
 }

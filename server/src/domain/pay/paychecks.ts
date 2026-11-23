@@ -21,6 +21,7 @@ import type { Cadence } from '../../lib/periods.js'
 import { merchantKey } from '../merchantKey.js'
 import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
 import type { Deposit } from './deposits.js'
+import { splitCycle } from './offCycle.js'
 import type { SemimonthSchedule } from './semimonthly.js'
 
 /** One paycheck: every deposit one payer made within a few days, added up. */
@@ -41,6 +42,12 @@ export interface EmployerRun {
   /** The newest deposit, for naming the payer the way the app names it. */
   newest: Deposit
   paychecks: Paycheck[]
+  /**
+   * The paychecks on the payroll's cycle: all but the bonuses and the like
+   * paid between paydays (offCycle.ts). The cadence, the next payday and a
+   * usual paycheck are read from these; pay month by month counts them all.
+   */
+  cycle: Paycheck[]
   /** How often it pays: from its paychecks, a paystub's, or a cautious guess from one. */
   cadence: Cadence
   /** For twice a month, the two days of the month it pays on (or may, when ambiguous); else null. */
@@ -144,17 +151,19 @@ function outliersOf(paychecks: Paycheck[]): Paycheck[] {
   return paychecks.slice(-2).filter((paycheck) => paycheck.amountCents > OUTLIER_SHARE * usual)
 }
 
-/** A run of a payer's paychecks, its cadence read from them (or given). */
+/** A run of a payer's paychecks, its cadence read from those on its cycle (or given). */
 export function runOf(paychecks: Paycheck[], newest: Deposit, given: Cadence | null): EmployerRun {
+  const { cycle } = splitCycle(paychecks, given)
   return {
     payerKey: paychecks[0]!.payerKey,
     newest,
     paychecks,
+    cycle,
     ...runPattern(
-      paychecks.map((p) => p.date),
+      cycle.map((p) => p.date),
       given,
     ),
-    outliers: outliersOf(paychecks),
+    outliers: outliersOf(cycle),
   }
 }
 
@@ -207,10 +216,10 @@ export function stillPaying(run: EmployerRun, today: IsoDate, missed = MISSED_CY
   return daysBetween(run.paychecks.at(-1)!.date, today) <= missed * CYCLE_DAYS[cycle] + SLACK_DAYS
 }
 
-/** A usual paycheck in a run: the middle of the newest few, leaving out the outliers. */
+/** A usual paycheck in a run: the middle of the newest few on its cycle, leaving out the outliers. */
 export function usualPaycheckCents(run: EmployerRun): number {
   const outliers = new Set(run.outliers)
   // Recent paychecks say most about pay now, after a raise.
-  const usual = run.paychecks.filter((paycheck) => !outliers.has(paycheck)).slice(-RECENT_PAYCHECKS)
+  const usual = run.cycle.filter((paycheck) => !outliers.has(paycheck)).slice(-RECENT_PAYCHECKS)
   return median(usual.map((paycheck) => paycheck.amountCents))
 }

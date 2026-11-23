@@ -284,7 +284,9 @@ describe('safe to spend agrees everywhere', () => {
     // Paid Nov 6, so next on Nov 20, 3 days counting today. $300 safe would be $100
     // a day, but the $1,000 budget over 14 days allows $71: the lesser leads everywhere.
     const accountId = await checking(30_000)
+    // Six Fridays, enough to settle every two weeks.
     await paidBiweekly(accountId, [
+      '2026-08-28',
       '2026-09-11',
       '2026-09-25',
       '2026-10-09',

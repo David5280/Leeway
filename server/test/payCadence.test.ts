@@ -214,10 +214,11 @@ describe('paydays that fit both cadences', () => {
 describe('long biweekly runs through holidays', () => {
   const SETTLED_BIWEEKLY = { cadence: 'biweek', schedule: null, ambiguous: false }
 
-  it('keeps a Friday payroll from Jan 2 on every two weeks after two holiday Thursdays', () => {
-    // Juneteenth (Jun 19) and Independence Day observed (Jul 3) are paid the Thursday before.
+  it('keeps a Friday payroll from Jan 2 on every two weeks after a holiday Thursday', () => {
+    // Juneteenth (Friday Jun 19) is paid the Thursday before. Independence
+    // Day falls on a Saturday, so banks stay open on Friday Jul 3.
     const paid = biweeklyPaid('2026-01-02', 24)
-    expect(paid.filter((date) => dayOfWeek(date) !== 5)).toEqual(['2026-06-18', '2026-07-02'])
+    expect(paid.filter((date) => dayOfWeek(date) !== 5)).toEqual(['2026-06-18'])
     expect(paid.at(-1)).toBe('2026-11-20')
     expect(payPattern(paid)).toEqual(SETTLED_BIWEEKLY)
     // Not Nov 27, as the 13th and 27th schedule it was once misread as would have it.
@@ -291,8 +292,11 @@ describe('real twice-a-month payrolls', () => {
     return paid
   }
 
-  it('settles on twice a month within six paychecks and never goes back', () => {
+  it('settles on twice a month within seven paychecks and never goes back', () => {
     // Every common schedule, from each half of every month of 2024 through 2026.
+    // Seven, not six, for early 2027: the 15th and the month's end pay four
+    // Fridays exactly two weeks apart (Jan 15 and 29, and Feb 12 and 26, for
+    // a Sunday, Presidents' Day and another Sunday), as a biweekly payroll would.
     const late: IsoDate[][] = []
     for (const schedule of COMMON_SCHEDULES) {
       for (let month = '2024-01-01'; month < '2027-01-01'; month = addDays(month, 15)) {
@@ -300,7 +304,7 @@ describe('real twice-a-month payrolls', () => {
         const reads = paid.map((_, i) => (i < 1 ? null : cadenceOfDates(paid.slice(0, i + 1))))
         const settled = reads.indexOf('semimonth') + 1
         const stays = reads.slice(settled - 1).every((read) => read === 'semimonth')
-        if (settled < 1 || settled > 6 || !stays) late.push(paid)
+        if (settled < 1 || settled > 7 || !stays) late.push(paid)
       }
     }
     expect(late).toEqual([])

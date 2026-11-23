@@ -241,7 +241,15 @@ describe('getFinancialProfile', () => {
     for (const date of ['2026-10-15', '2026-10-30', '2026-11-13']) {
       await pay(date, 'INITECH PAYROLL', 200_000)
     }
-    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
+    // Six Fridays, enough to settle every two weeks.
+    for (const date of [
+      '2026-08-28',
+      '2026-09-11',
+      '2026-09-25',
+      '2026-10-09',
+      '2026-10-23',
+      '2026-11-06',
+    ]) {
       await pay(date, 'BLUTH CO PAYROLL ACCT 4821', 60_000)
     }
     const result = await profile()
@@ -255,7 +263,7 @@ describe('getFinancialProfile', () => {
       cadence: 'biweek',
       employer: 'Initech Payroll',
       nextPayday: '2026-12-01',
-      since: '2026-09-11',
+      since: '2026-08-28',
       estimate: true,
     })
     expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
