@@ -12,10 +12,13 @@ import { getCashFlow } from './cashFlow.js'
 import { attentionItems, type AttentionItem } from './coach.js'
 import { listConnections } from './connections.js'
 import { debtPlans } from './debts.js'
+import { fundSaved } from './emergencyPlan.js'
+import { essentialsOf } from './goalFunds.js'
+import { goalReading } from './goalProgress.js'
 import { listGoals } from './goals.js'
+import { listLeaks } from './leaks/leakSource.js'
 import { latestPaystub } from './paystubs/paystubs.js'
 import { getNetWorth } from './netWorth.js'
-import { untrackedRecurring } from './recurring.js'
 import { typicalMonth } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
 import {
@@ -27,12 +30,16 @@ import { pensionsOf } from './retirement/pensionStore.js'
 import { paystubPlan } from './savings/payrollMonths.js'
 import { bankSeenRate, countedNote, countsPayroll, type SavingsRate } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
-import { periodConfig, type Settings } from './settings.js'
+import type { Settings } from './settings.js'
+import { suggestionsOf, untrackedSeries } from './untrackedRecurring.js'
 
 /** How far back the net worth change is measured. */
 export const NET_WORTH_DAYS = 30
 
 export async function getCheckin(db: Db, settings: Settings, now: Date, today: IsoDate) {
+  // One read of the repeating charges serves both the suggestions and the leak alerts.
+  const series = untrackedSeries(db, today)
+  const reading = goalReading(settings, today)
   const [
     report,
     cashFlow,
@@ -43,21 +50,22 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     recurring,
     worth,
     alerts,
-    { savings, pensions },
+    { accounts, savings, pensions },
     { monthly, pay },
     paystub,
   ] = await Promise.all([
     budgetReport(db, settings, now),
     getCashFlow(db, settings, today),
     listBills(db, today),
-    listGoals(db, { today, period: periodConfig(settings) }),
+    listGoals(db, reading),
     debtPlans(db, 0, today),
     listConnections(db),
-    untrackedRecurring(db, today),
+    series.then(suggestionsOf),
     getNetWorth(db, today, NET_WORTH_DAYS),
-    listAlerts(db, settings, today),
+    listAlerts(db, settings, today, [], { leaks: () => listLeaks(db, today, series) }),
     // Only what the savings glance needs beyond the reads above, not the whole profile.
     listAccounts(db, false).then(async (accounts) => ({
+      accounts,
       savings: await getSavingsGlance(db, settings, today, accounts),
       pensions: await pensionsOf(db, accounts),
     })),
@@ -65,6 +73,8 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     latestPaystub(db),
   ])
   const budget = withRoom(report, cashFlow, settings)
+  // Read once with the goals, so the fund's goal, its card and this check-in agree.
+  const { essentials } = await essentialsOf(db, reading)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
   const plan = paystubPlan(paystub, today)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
@@ -121,7 +131,7 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
     },
     /** The budget's room held to what is safe to spend, and the one line that says when they differ. */
     spendable: budget.spendable,
-    /** Pay from the current employer: an estimate while one paycheck is all there is. */
+    /** Pay from the employers paying now: an estimate while any one's cadence is unconfirmed. */
     pay: {
       monthlyCents: monthly.incomeCents,
       estimate: monthly.incomeEstimated,
@@ -162,13 +172,13 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       savings,
       { pensions, pensionPay },
       savingsMeasures({
-        cashCents: savings.cashCents,
+        fundSavedCents: fundSaved(goals, accounts, settings.currency, savings.cashCents !== null),
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
         planMonthlyCents: plan.monthlyCents,
         stalePlan: plan.stale,
         monthly,
-        billsMonthlyCents,
+        essentials,
         settings,
         today,
       }),

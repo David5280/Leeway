@@ -6,9 +6,13 @@ import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { aiSettingsSchema } from './ai/settings.js'
-import { paySettingsSchema } from './pay/given.js'
+import { paySettingsSchema } from './pay/ownPay.js'
 import type { PeriodConfig } from '../lib/periods.js'
-import { retirementPatchSchema, retirementSchema } from './retirement/assumptions.js'
+import {
+  MAX_MONTHLY_CENTS,
+  retirementPatchSchema,
+  retirementSchema,
+} from './retirement/assumptions.js'
 import { DEFAULT_EMERGENCY_MONTHS } from './savings/emergency.js'
 
 const periodSchema = z.discriminatedUnion('kind', [
@@ -112,7 +116,7 @@ const accountSelectionSchema = z.array(z.uuid()).max(100)
 
 /**
  * How savings are judged: the emergency fund's target, what counts as
- * essential spending and the savings rate to aim for.
+ * essential spending, the savings rate to aim for and what goes to goals.
  */
 const savingsPlanFields = {
   /** Months of essential spending the emergency fund should cover. */
@@ -122,9 +126,13 @@ const savingsPlanFields = {
     .min(1, 'Aim for at least one month')
     .max(24, 'Use 24 months or fewer'),
   /**
-   * Spending categories that count as essential. Null counts every spending
-   * category, and so does an empty list: no essentials at all would make any
-   * savings balance look like endless cover.
+   * Spending categories that count as essential, as the owner picked them.
+   * Null (and an empty list) has Leeway find them from each category's bank
+   * codes and name (essentials.ts), counting every spending category when none
+   * read as essential: no essentials at all would make any savings balance
+   * look like endless cover. Before the emergency fund, null counted every
+   * spending category; existing installs move to the found ones, which the
+   * owner sees and can change from the fund's card.
    */
   essentialCategoryIds: z
     .array(z.uuid())
@@ -138,6 +146,16 @@ const savingsPlanFields = {
     .min(1, 'Aim for at least 1%')
     .max(90, 'Use 90% or less')
     .nullable(),
+  /**
+   * What the owner puts toward goals each month, which fills them in their
+   * order (goalOrder.ts). Null uses the pace Leeway sees going into them.
+   */
+  goalsMonthlyCents: z
+    .number()
+    .int('Use whole cents')
+    .min(0, 'An amount cannot be negative')
+    .max(MAX_MONTHLY_CENTS, 'Use $100,000 a month or less')
+    .nullable(),
 }
 
 const savingsPlanSchema = z.object({
@@ -147,6 +165,7 @@ const savingsPlanSchema = z.object({
   // shows, so a default would call a pension member short of a goal they
   // may well meet through payroll.
   savingsRateTargetPercent: savingsPlanFields.savingsRateTargetPercent.default(null),
+  goalsMonthlyCents: savingsPlanFields.goalsMonthlyCents.default(null),
 })
 
 /**
@@ -188,10 +207,7 @@ export const settingsSchema = z.object({
   savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
   /** Assumptions for retirement projections (retirement/assumptions.ts). */
   retirement: retirementSchema.default(retirementSchema.parse({})),
-  /**
-   * The owner's word on their pay (pay/given.ts). Changed only through
-   * confirm_pay and set_pay, which keep a paycheck budget period in step.
-   */
+  /** The owner's word on their pay (pay/ownPay.ts), set only by confirm_pay and set_pay. */
   pay: paySettingsSchema.default(paySettingsSchema.parse({})),
 })
 
@@ -263,7 +279,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
 /**
  * Takes deleted categories out of the essential ones the owner picked, so the
  * stored pick never points at a category that is gone. A pick left empty goes
- * back to counting every spending category.
+ * back to the essentials Leeway finds itself (essentials.ts).
  */
 export async function forgetEssentialCategories(db: Db, deletedIds: string[]): Promise<void> {
   const settings = await getSettings(db)

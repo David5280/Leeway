@@ -3,7 +3,7 @@
 
 import { currentPay } from '../../../server/src/domain/pay/current'
 import type { Deposit } from '../../../server/src/domain/pay/deposits'
-import { payerKeyOf, type PayOverride } from '../../../server/src/domain/pay/given'
+import { employerKeyOf, type PayOverride } from '../../../server/src/domain/pay/ownPay'
 import { payViewOf } from '../../../server/src/domain/pay/view'
 import { addDays } from '../../../server/src/lib/dates'
 import type { PayView } from '../api/client'
@@ -57,7 +57,7 @@ export function payView(
   const detected = currentPay(jobs.flatMap(deposits), PAY_TODAY, null)
   const confirmed =
     given.confirmed && detected.employer
-      ? { payerKey: payerKeyOf(detected.employer), cadence: detected.employer.cadence }
+      ? { payerKey: employerKeyOf(detected.employer), cadence: detected.employer.cadence }
       : null
   const settings = settingsWith({ pay: { confirmed, override: given.override ?? null } })
   return payViewOf(detected, settings, PAY_TODAY, (employer) =>

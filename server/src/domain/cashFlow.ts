@@ -4,11 +4,11 @@
 // the actions an assistant calls) reads it from getCashFlow, so none works
 // out its own.
 //
-// It is the cash in checking (each account's available balance where the
-// bank gives one, else its balance; never savings, investments or
-// retirement), less the bills due by payday, less what an overdrawn
-// account needs to get back to zero, and never below zero: what those
-// outrun the cash by is the shortfall, a figure of its own.
+// It is the cash in checking (each account at the lower of its balance and
+// available balance; never savings, investments or retirement), less the
+// bills due by payday, less what an overdrawn account needs to get back to
+// zero, and never below zero: what those outrun the cash by is the
+// shortfall, a figure of its own.
 
 import type { Db } from '../db/pool.js'
 import { addDays, daysBetween, type IsoDate } from '../lib/dates.js'
@@ -33,14 +33,14 @@ export interface CashFlow {
   today: IsoDate
   nextPayday: IsoDate
   paydaySource: PaydaySource
-  /** True while the payday is projected from a single paycheck. */
+  /** True while the main employer's cadence is unconfirmed, so the payday is a cautious projection. */
   paydayEstimate: boolean
   /** A usual paycheck from the current employer, when paychecks were found. */
   expectedPayCents: number | null
   daysUntilPayday: number
   /** Whether any counted checking account has a balance: without one, the cash is unknown, not zero. */
   cashKnown: boolean
-  /** Cash in counted checking accounts: available balance, else balance, each never below zero. */
+  /** Cash in counted checking accounts: each at the lower of its two balances, never below zero. */
   cashCents: number
   billsDue: BillDue[]
   billsDueCents: number
@@ -77,21 +77,22 @@ type CheckingAccount = Pick<Account, 'availableCents' | 'balanceCents'>
 
 /**
  * What one checking account holds to spend, and what it needs to get back
- * to zero. Available balance comes first, since it already takes out pending
- * charges; an overdrawn account holds nothing to spend, and owes the lower of
- * its two balances back.
- *
- * Overdrawn means either balance below zero. A bank with overdraft
- * protection can show money available while the balance is negative: that
- * is credit, owed back, never cash to spend.
+ * to zero: the lower of its balance and available balance, whichever the
+ * bank gives. Available below the balance takes out pending charges;
+ * available above it is mostly an overdraft line, which is borrowing, not
+ * cash. An account with either below zero is overdrawn: it holds nothing to
+ * spend, and owes that much back, whatever protection shows as available.
+ * Idle cash counts checking the same way (idleCashSource.ts).
  */
-export function checkingCash(account: CheckingAccount): {
+export function accountCash(account: CheckingAccount): {
   cashCents: number
   overdraftCents: number
 } {
-  const held = account.availableCents ?? account.balanceCents ?? 0
-  const lowest = Math.min(account.balanceCents ?? held, held)
-  return { cashCents: lowest < 0 ? 0 : held, overdraftCents: Math.max(0, -lowest) }
+  const known = [account.balanceCents, account.availableCents].filter(
+    (cents): cents is number => cents !== null,
+  )
+  const lowest = known.length > 0 ? Math.min(...known) : 0
+  return { cashCents: Math.max(0, lowest), overdraftCents: Math.max(0, -lowest) }
 }
 
 /** Safe to spend from checking, the bills before payday and the payday. Pure. */
@@ -101,7 +102,7 @@ export function safeToSpend(
   payday: Payday,
   today: IsoDate,
 ): CashFlow {
-  const each = checking.map(checkingCash)
+  const each = checking.map(accountCash)
   const cashCents = each.reduce((sum, account) => sum + account.cashCents, 0)
   const overdraftCents = each.reduce((sum, account) => sum + account.overdraftCents, 0)
   const billsDueCents = billsDue.reduce((sum, bill) => sum + bill.amountCents, 0)

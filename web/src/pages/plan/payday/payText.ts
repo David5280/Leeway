@@ -23,6 +23,9 @@ export type PayCadenceChoice = (typeof PAY_CADENCE_CHOICES)[number]
 
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
+/** How often pay lands, said alone: "Every 2 weeks". */
+export const cadenceLabel = (cadence: Cadence) => capitalized(PAY_CADENCE_WORDS[cadence])
+
 /** Who pays: the one employer, or "ACME Corp and 1 more". */
 export function payerText(view: PayView): string | null {
   const employers = view.found?.employers ?? []
@@ -33,19 +36,29 @@ export function payerText(view: PayView): string | null {
 
 /** The line under the paycheck: how often, and from whom or on whose word. */
 export function payLine(view: PayView, pay: PayInUse): string {
-  const often = capitalized(PAY_CADENCE_WORDS[pay.cadence])
+  const often = cadenceLabel(pay.cadence)
   if (pay.source === 'yours') return `${often}, as you entered it.`
   const payer = payerText(view)
   return payer ? `${often} from ${payer}.` : `${often}.`
 }
+
+/** Said when the owner confirmed pay the paychecks no longer show. */
+export const STALE_NOTE = 'Your paychecks changed since you said this looked right.'
 
 /** Where the pay came from, said so it can be trusted the right amount. */
 export function sourceNote(view: PayView, pay: PayInUse): string {
   if (pay.source === 'yours') {
     return 'The pay you entered. Leeway uses it everywhere instead of what your paychecks show.'
   }
-  if (pay.source === 'confirmed') return 'You said this looks right.'
+  if (pay.source === 'confirmed') {
+    // The owner vouched for the main job only; a second job's guess is still one.
+    const sideGuess = view.found?.employers.slice(1).some((employer) => employer.estimate)
+    return sideGuess
+      ? "You said this looks right. A second job's pay is an estimate until more of its paychecks land."
+      : 'You said this looks right.'
+  }
   const seen = view.paydays.length
+  if (view.found?.confirmationStale) return `${STALE_NOTE} This is what they show now.`
   if (pay.estimate || seen < 2) {
     return 'An estimate from one paycheck so far. It firms up after the next one, or once you say it looks right.'
   }

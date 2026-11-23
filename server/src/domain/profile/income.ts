@@ -16,10 +16,11 @@ import type { Db } from '../../db/pool.js'
 import { addDays, daysBetween, maxDate, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
 import { accountMasks } from '../accounts.js'
-import type { CategoryTotal } from '../budget.js'
-import { listCategories, type Category } from '../categories.js'
-import { firstTransactionDay, spendingByRange } from '../monthlyTotals.js'
-import type { CurrentPay } from '../pay/current.js'
+import { listCategories } from '../categories.js'
+import { essentialCentsOf, readEssentialMonths } from '../essentialMonths.js'
+import { firstTransactionDay } from '../monthlyTotals.js'
+import type { CurrentPay, Employer } from '../pay/current.js'
+import { namesBusiness } from '../pay/deposits.js'
 import { readCurrentPay } from '../pay/source.js'
 import { paydayFrom, type PaydaySource } from '../pay/payday.js'
 import type { Settings } from '../settings.js'
@@ -40,9 +41,15 @@ export const SPENDING_MIN_DAYS = 56
 /** Less bank history than this is too little to call any month typical. */
 export const SPENDING_LEAST_DAYS = 28
 
-/** One employer paying now, named as the app names its deposits. */
+/** One employer paying now. */
 export interface PayingEmployer {
-  name: string
+  /**
+   * Named as the app names its deposits, only when the bank's text says it
+   * is a business ("Acme Corp"): a household or a sole trader paying under
+   * their own name ("JOHN SMITH DIR DEP") is a private person, never named
+   * to the AI. Null otherwise.
+   */
+  name: string | null
   cadence: Cadence
   /** A usual paycheck from it. */
   typicalPayCents: number
@@ -61,11 +68,11 @@ export interface PaySchedule {
   source: Exclude<PaydaySource, 'period_end'> | null
   /** A usual paycheck from the main employer, the one paying the most a month. */
   typicalPayCents: number | null
-  /** The soonest next payday from any employer. */
+  /** The main employer's next payday: what safe to spend runs until. */
   nextPayday: IsoDate | null
-  /** True while any employer has paid once: its cadence, and so the month, are a projection. */
+  /** True while the main employer's cadence is unconfirmed: the next payday is a projection. */
   estimate: boolean
-  /** The main employer, named as the app names its deposits, or null. */
+  /** The main employer's name, as PayingEmployer names it, or null. */
   employer: string | null
   /** Every employer paying now, the main one first: a second job counts beside the first. */
   employers: PayingEmployer[]
@@ -76,11 +83,18 @@ export interface PaySchedule {
 export interface MonthlyAverages {
   /** A month of pay from the current employer, take-home; null when no employer is paying now. */
   incomeCents: number | null
-  /** True while the pay above is projected from a single paycheck. */
+  /**
+   * True while any employer's cadence is unconfirmed (one paycheck, or
+   * paydays that fit two cadences): the month is the cautious projection.
+   */
   incomeEstimated: boolean
   /** Spending a month, transfers and card payments left out; null with too little history. */
   spendingCents: number | null
-  /** Spending in the categories the owner counts as essential (all spending by default). */
+  /**
+   * Spending in the essential categories: the owner's pick, or the ones found
+   * by their codes and names with loan and child care payments filed
+   * elsewhere (essentialSpending.ts), or all spending when none are.
+   */
   essentialSpendingCents: number | null
   /** The first day spending was measured from, or null with too little history. */
   spendingSince: IsoDate | null
@@ -115,36 +129,6 @@ export function spendingWindow(
   return held < SPENDING_LEAST_DAYS ? null : { start, days: held }
 }
 
-/**
- * The essential categories the owner picked that still exist as spending
- * categories, or null for every spending category. Settings can hold ids of
- * categories since deleted or replaced, so only current ones count, and a
- * pick with none left counts all spending rather than none.
- */
-export function currentEssentials(
-  categories: Category[],
-  essentialIds: string[] | null,
-): Set<string> | null {
-  if (essentialIds === null) return null
-  const picked = new Set(essentialIds)
-  const current = categories.filter((c) => c.kind === 'expense' && picked.has(c.id))
-  return current.length ? new Set(current.map((c) => c.id)) : null
-}
-
-/** Spending in the essential categories, or all of `spentCents` when none are picked. */
-export function essentialSpending(
-  categories: Category[],
-  totals: CategoryTotal[],
-  essentialIds: string[] | null,
-  spentCents: number,
-): number {
-  const essentials = currentEssentials(categories, essentialIds)
-  if (essentials === null) return spentCents
-  return totals
-    .filter((total) => total.categoryId !== null && essentials.has(total.categoryId))
-    .reduce((sum, total) => sum + total.amountCents, 0)
-}
-
 /** Spending a month over the window, and its essential share. */
 async function monthlySpending(
   db: Db,
@@ -153,13 +137,14 @@ async function monthlySpending(
   today: IsoDate,
 ) {
   if (window === null) return { spendingCents: null, essentialSpendingCents: null }
-  const [spending] = await spendingByRange(db, [{ start: window.start, end: today }])
+  const range = { start: window.start, end: today }
+  // The same reading the emergency fund's essentials go by (essentialMonths.ts).
+  const [month] = await readEssentialMonths(db, [range])
   const categories = await listCategories(db)
-  const ids = settings.savingsPlan.essentialCategoryIds
-  const essential = essentialSpending(categories, spending!.totals, ids, spending!.spentCents)
+  const essential = essentialCentsOf(categories, month!, settings.savingsPlan.essentialCategoryIds)
   const perMonth = (cents: number) => Math.round((cents * DAYS_PER_MONTH) / window.days)
   return {
-    spendingCents: perMonth(spending!.spentCents),
+    spendingCents: perMonth(month!.spentCents),
     essentialSpendingCents: perMonth(essential),
   }
 }
@@ -168,6 +153,11 @@ async function monthlySpending(
 export function payingSince(pay: CurrentPay): IsoDate | null {
   const firsts = pay.employers.map((employer) => employer.firstPaycheck).sort()
   return firsts[0] ?? null
+}
+
+/** An employer's name, only when it names a business (see PayingEmployer), never an account mask. */
+function employerName(employer: Employer, masks: string[]): string | null {
+  return namesBusiness(employer.newest) ? merchantDisplayName(employer.newest, { masks }) : null
 }
 
 /** How often pay comes and when next, as the profile and an agent read it. */
@@ -182,7 +172,7 @@ async function payScheduleOf(
   // Named only as the app names deposits: never an account number or mask.
   const masks = await accountMasks(db)
   const employers = pay.employers.map((employer) => ({
-    name: merchantDisplayName(employer.newest, { masks }),
+    name: employerName(employer, masks),
     cadence: employer.cadence,
     typicalPayCents: employer.paycheckCents,
     monthlyCents: employer.monthlyCents,

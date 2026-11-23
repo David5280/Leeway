@@ -140,6 +140,11 @@ export const transactionFilterSchema = z.object({
   accountIds: z.array(z.uuid()).min(1).max(100).optional(),
   /** Matches the description, merchant or note. */
   search: z.string().trim().min(1).max(100).optional(),
+  /**
+   * Only charges from the same merchant as this transaction, as repeat
+   * charges are grouped (merchantKey.ts): how a leak alert shows its charges.
+   */
+  sameMerchantAs: z.uuid().optional(),
   minAmountCents: z.number().int().optional(),
   maxAmountCents: z.number().int().optional(),
   includeExcluded: z.boolean().default(false),
@@ -216,6 +221,16 @@ function filterSql(filter: TransactionFilter, withSearch = true) {
       `%${filter.search.replace(/[%_\\]/g, '\\$&')}%`,
     )
   }
+  if (filter.sameMerchantAs) {
+    // merchantKey() in SQL. The key keeps no digits, so it never matches on an
+    // account number, and a transaction with no key (all digits) matches nothing.
+    add(
+      `merchant_key(coalesce(t.merchant_name, t.name)) = (
+        SELECT nullif(merchant_key(coalesce(s.merchant_name, s.name)), '')
+        FROM transactions s WHERE s.id = ?)`,
+      filter.sameMerchantAs,
+    )
+  }
   if (filter.minAmountCents !== undefined) add('t.amount_cents >= ?', filter.minAmountCents)
   if (filter.maxAmountCents !== undefined) add('t.amount_cents <= ?', filter.maxAmountCents)
   if (!filter.includeExcluded) where.push('NOT t.excluded')
@@ -255,6 +270,17 @@ export async function getTransaction(db: Db, id: string): Promise<Transaction> {
   const { rows } = await db.query<StoredTransaction>(`${SELECT} WHERE t.id = $1`, [id])
   if (!rows[0]) throw notFound('Transaction')
   return present(rows[0], await presenting(db, rows))
+}
+
+/** These transactions as the app shows them, newest first; ids that are gone are skipped. */
+export async function transactionsByIds(db: Db, ids: string[]): Promise<Transaction[]> {
+  if (!ids.length) return []
+  const { rows } = await db.query<StoredTransaction>(
+    `${SELECT} WHERE t.id = ANY($1::uuid[]) ORDER BY t.date DESC, t.created_at DESC, t.id`,
+    [ids],
+  )
+  const context = await presenting(db, rows)
+  return rows.map((row) => present(row, context))
 }
 
 /**

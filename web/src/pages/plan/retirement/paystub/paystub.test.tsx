@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HEIC_HELP, MAX_PAYSTUB_BYTES } from '../../../../../../server/src/domain/paystubs/files'
-import { savePaystubSchema } from '../../../../../../server/src/domain/paystubs/paystubs'
+import { savePaystubSchema } from '../../../../../../server/src/domain/paystubs/save'
 import { failing, settingsHandlers, type Handlers } from '../../../../test/fake'
 import {
   chosenFile,
@@ -427,7 +427,7 @@ describe('from a pension', () => {
     expect(await screen.findByRole('region', { name: 'Colorado PERA' })).toBeVisible()
   })
 
-  it('offers no import when the server cannot read a paystub, or for a new pension', async () => {
+  it('offers no import on either form when the server cannot read a paystub', async () => {
     serve({ status: paystubStatus(null, false) })
     const user = await editPension()
     await screen.findByRole('region', { name: 'Colorado PERA' })

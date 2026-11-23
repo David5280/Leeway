@@ -3,19 +3,35 @@
 
 import type { IsoDate } from './dates.js'
 import { DAY_MS } from './time.js'
+import { perZone } from './zoneCache.js'
 
-/** The wall clock of `timeZone` at `instant`, read as if it were UTC, in milliseconds. */
-function wallClockMs(instant: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
+/**
+ * One formatter per zone, made on first use: building an Intl.DateTimeFormat
+ * costs far more than using one, and a calendar read asks thousands of times.
+ */
+const wallClocks = new Map<string, Intl.DateTimeFormat>()
+
+function wallClockOf(timeZone: string): Intl.DateTimeFormat {
+  return perZone(
+    wallClocks,
     timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-  }).formatToParts(instant)
+    () =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+      }),
+  )
+}
+
+/** The wall clock of `timeZone` at a whole second, read from Intl: the slow way. */
+function readWallClockMs(whole: number, timeZone: string): number {
+  const parts = wallClockOf(timeZone).formatToParts(whole)
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     Number(parts.find((p) => p.type === type)!.value)
   return Date.UTC(
@@ -28,11 +44,71 @@ function wallClockMs(instant: number, timeZone: string): number {
   )
 }
 
-/** How far `timeZone` is ahead of UTC at `instant`, in milliseconds (negative west of UTC). */
+/** How far `timeZone` is ahead of UTC at a whole second, read from Intl. */
+function readOffsetMs(whole: number, timeZone: string): number {
+  return readWallClockMs(whole, timeZone) - whole
+}
+
+/**
+ * Midnights remembered across all zones before they are all let go, so a
+ * calendar spanning centuries in hundreds of zones cannot fill memory: at
+ * most a few tens of megabytes.
+ */
+export const MAX_MIDNIGHTS = 200_000
+
+/** Each zone's offset at the UTC midnights asked about, by day number, and how many in all. */
+const midnights = new Map<string, Map<number, number>>()
+let midnightsKept = 0
+
+/** How many midnights are remembered across all zones: never more than MAX_MIDNIGHTS. */
+export function midnightsRemembered(): number {
+  return midnightsKept
+}
+
+function offsetAtMidnight(day: number, timeZone: string): number {
+  let known = midnights.get(timeZone)
+  let offset = known?.get(day)
+  if (offset !== undefined) return offset
+  if (midnightsKept >= MAX_MIDNIGHTS) {
+    midnights.clear()
+    midnightsKept = 0
+    known = undefined
+  }
+  if (!known) {
+    known = new Map()
+    midnights.set(timeZone, known)
+  }
+  offset = readOffsetMs(day * DAY_MS, timeZone)
+  known.set(day, offset)
+  midnightsKept++
+  return offset
+}
+
+/**
+ * How far `timeZone` is ahead of UTC at `instant`, in milliseconds (negative
+ * west of UTC), to the second. A zone changes its offset a few times a year
+ * at most and never twice in one day, so a UTC day that starts and ends on
+ * the same offset keeps it throughout: those two remembered midnights answer
+ * for every instant of the day, and only a day holding a change asks Intl.
+ *
+ * Zone names reach here only as Intl knows them: the owner's is checked when
+ * saved (isValidTimeZone), and a calendar's are read to Intl's own names
+ * first (zoneNames.ts). So a made-up zone in a hostile calendar file never
+ * reaches this, and the midnights remembered are only ever for real zones.
+ */
 function offsetMs(instant: number, timeZone: string): number {
-  // Seconds are dropped from the instant so the difference is whole minutes.
+  // Seconds are dropped from the instant so the difference is whole seconds.
   const whole = Math.floor(instant / 1000) * 1000
-  return wallClockMs(whole, timeZone) - whole
+  const day = Math.floor(whole / DAY_MS)
+  const offset = offsetAtMidnight(day, timeZone)
+  if (offset === offsetAtMidnight(day + 1, timeZone)) return offset
+  return readOffsetMs(whole, timeZone)
+}
+
+/** The wall clock of `timeZone` at `instant`, read as if it were UTC, in milliseconds, to the second. */
+export function wallClockMs(instant: number, timeZone: string): number {
+  const whole = Math.floor(instant / 1000) * 1000
+  return whole + offsetMs(whole, timeZone)
 }
 
 /**

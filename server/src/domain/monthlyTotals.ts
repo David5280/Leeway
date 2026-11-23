@@ -22,19 +22,23 @@
 
 import type { Db } from '../db/pool.js'
 import { addDays, addMonths, dateParts, makeDate, type IsoDate } from '../lib/dates.js'
+import { currentPeriod } from './budgetReport.js'
 import {
   categoryTotalsByRange,
   IN_RANGES_SQL,
-  NOT_CARD_PAYMENT_SQL,
-  currentPeriod,
   rangeParams,
   sumTotals,
   type DateRange,
-} from './budgetReport.js'
+} from './categoryTotals.js'
 import type { CategoryTotal } from './budget.js'
 import { listCategories } from './categories.js'
 import type { Settings } from './settings.js'
-import { PAIR_WINDOW_DAYS, pairTransfers, unfiledLeg, type PairCandidate } from './transferPairs.js'
+import {
+  filedOrUnfiledLeg,
+  PAIR_WINDOW_DAYS,
+  pairTransfers,
+  type PairCandidate,
+} from './transferPairs.js'
 
 export interface MonthTotals {
   /** First day of the month. */
@@ -134,7 +138,6 @@ async function unfiledFlows(
   db: Db,
   ranges: DateRange[],
   includePending: boolean,
-  skipCardPayments = false,
 ): Promise<Flows[]> {
   const margin = 2 * PAIR_WINDOW_DAYS
   const span = {
@@ -146,13 +149,15 @@ async function unfiledFlows(
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
        t.category_id IS NOT NULL AS "filedTransfer"
-     ${IN_RANGES_SQL}${skipCardPayments ? NOT_CARD_PAYMENT_SQL : ''}
+     ${IN_RANGES_SQL}
        AND (t.category_id IS NULL OR c.kind = 'transfer')`,
     rangeParams([span], includePending),
   )
-  const filedIds = new Set(rows.filter((row) => row.filedTransfer).map((row) => row.id))
   // The owner filed a transfer leg as one, so it may pair whatever its line says.
-  const paired = pairTransfers(rows, (hint, tx) => filedIds.has(tx.id) || unfiledLeg(hint, tx))
+  const paired = pairTransfers(
+    rows,
+    filedOrUnfiledLeg((tx) => tx.filedTransfer),
+  )
   const flows = ranges.map((): Flows => ({ outCents: 0, inCents: 0 }))
   for (const tx of rows) {
     const i = ranges.findIndex((range) => tx.date >= range.start && tx.date < range.end)
@@ -184,8 +189,11 @@ function flowTotals(
 
 /**
  * Spending in each range as a month's totals count it (see the top of this
- * file), less every credit card payment (NOT_CARD_PAYMENT_SQL), with each
- * range's category totals for working out what is essential.
+ * file), less the card's side of every credit card payment (the
+ * skipCardSide rule in categoryTotals.ts), with each range's category
+ * totals. Unfiled lines need no such rule: a card payment there
+ * pairs with its other side as a move between own accounts, or, paid to a
+ * card Leeway cannot see, counts as the spending it stands for.
  */
 export async function spendingByRange(
   db: Db,
@@ -194,9 +202,9 @@ export async function spendingByRange(
   // Posted only: a typical month goes by what has settled.
   const categories = await listCategories(db)
   const totalsByRange = await categoryTotalsByRange(db, ranges, false, null, {
-    skipCardPayments: true,
+    cardPayments: 'skipCardSide',
   })
-  const unfiled = await unfiledFlows(db, ranges, false, true)
+  const unfiled = await unfiledFlows(db, ranges, false)
   return ranges.map((_, i) => {
     const totals = totalsByRange[i]!
     const flows = flowTotals(sumTotals(categories, totals), totals, unfiled[i]!)

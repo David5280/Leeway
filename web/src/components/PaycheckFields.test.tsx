@@ -34,6 +34,12 @@ describe('sameSchedule', () => {
     expect(sameSchedule(monthly, { ...monthly, anchorDate: '2026-08-06' })).toBe(false)
   })
 
+  it('matches monthly pay on the month’s last day, whatever the month’s length', () => {
+    const monthEnd = { ...found, frequency: 'monthly' as const, anchorDate: '2026-11-30' }
+    expect(sameSchedule(monthEnd, { ...monthEnd, anchorDate: '2026-10-31' })).toBe(true)
+    expect(sameSchedule(monthEnd, { ...monthEnd, anchorDate: '2026-10-30' })).toBe(false)
+  })
+
   it('matches twice-a-month pay by its two days', () => {
     const twice = {
       ...found,

@@ -117,6 +117,26 @@ describe('Until payday', () => {
     vi.restoreAllMocks()
   })
 
+  it('says checking is not known yet with no balance, never $0 or a false warning', async () => {
+    planServer({
+      ...quietBills,
+      get_cash_flow: () => cashFlow({ cashKnown: false, cashCents: 0, safeCents: 0 }),
+    })
+    renderPlan('/plan/bills')
+    await screen.findByText(/balance isn.t known yet/)
+    const card = screen.getByRole('region', { name: 'Until payday' })
+    expect(card).toHaveTextContent("Checking's balance isn't known yet.")
+    expect(card).toHaveTextContent('$60 in bills due before payday. Next payday Fri, Nov 27.')
+    expect(card).not.toHaveTextContent('safe to spend')
+    expect(card).not.toHaveTextContent('goes below')
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
+    // The bill is still listed, and the math says what is not known.
+    expect(within(card).getByText('Phone')).toBeVisible()
+    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    await userEvent.setup().click(open)
+    expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Not known yet')
+  })
+
   it('leaves the line out when no bill comes before payday, or payday is today', async () => {
     const quiet = await show(cashFlow({ billsDue: [], billsDueCents: 0 }))
     expect(within(quiet).queryByRole('img')).not.toBeInTheDocument()
@@ -150,6 +170,22 @@ describe('Until payday', () => {
     // The line starts at the balance now, before the overdue bill comes out.
     expect(within(card).getByRole('img')).toHaveAccessibleDescription(/^Checking from \$10 today/)
     expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
+  })
+
+  it('says a shortfall before a guessed payday as a maybe, not in red', async () => {
+    const card = await show(
+      cashFlow({
+        paydaySource: 'detected_income',
+        paydayEstimate: true,
+        expectedPayCents: 250_000,
+        cashCents: 1000,
+        billsDueCents: 6000,
+        safeCents: 0,
+        shortfallCents: 5000,
+      }),
+    )
+    expect(card).toHaveTextContent('Maybe $50 short of the bills due before payday.')
+    expect(within(card).getByText('$50')).not.toHaveClass('money-problem')
   })
 
   it('draws $0 to stay above once the line comes near it', async () => {
@@ -225,7 +261,7 @@ describe('Until payday', () => {
       }),
     )
     expect(card).toHaveTextContent(
-      'Next payday looks like Fri, Nov 20, about $2,500. An estimate: there is one paycheck from this employer so far.',
+      'Next payday looks like Fri, Nov 20, about $2,500. A best guess until more paychecks show how often pay comes.',
     )
   })
 
@@ -326,6 +362,38 @@ describe('Debts', () => {
         { id: loan.id, aprPercent: 9.99, minimumPaymentCents: 2500 },
       ]),
     )
+  })
+
+  it('saves a rate typed with a comma decimal as that rate, never as more digits', async () => {
+    const server = serve([rewards, loan])
+    renderPlan('/plan/debts')
+    const user = userEvent.setup()
+    const terms = within(await screen.findByRole('form', { name: 'Personal loan terms' }))
+    await user.type(terms.getByRole('textbox', { name: 'Personal loan interest rate' }), '9,9')
+    await user.click(terms.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(server.actions('update_account')).toEqual([
+        { id: loan.id, aprPercent: 9.9, minimumPaymentCents: null },
+      ]),
+    )
+  })
+
+  it("won't save a rate that can't be one, which would clear the saved rate", async () => {
+    serve([rewards, loan])
+    renderPlan('/plan/debts')
+    const user = userEvent.setup()
+    const terms = within(await screen.findByRole('form', { name: 'Rewards card terms' }))
+    const rate = terms.getByRole('textbox', { name: 'Rewards card interest rate' })
+    await user.clear(rate)
+    await user.type(rate, '-5')
+    expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Nor one over 100%, which the server would refuse.
+    await user.clear(rate)
+    await user.type(rate, '150')
+    expect(terms.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Blank still clears it on purpose.
+    await user.clear(rate)
+    expect(terms.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
 
   it('compares the strategies and lists the payoff order', async () => {
@@ -429,10 +497,9 @@ describe('Net worth', () => {
     fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
     expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
     vi.restoreAllMocks()
-    // A house or a car counts once it is added by hand, in Settings.
-    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
-      'href',
-      '/settings/accounts',
+    // A house or a car counts once it is added by hand, right here.
+    expect(await screen.findByRole('region', { name: 'Entered by you' })).toHaveTextContent(
+      'Add a home, a car or a loan your bank link does not cover',
     )
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))

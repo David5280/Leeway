@@ -57,6 +57,7 @@ describe('get_pay', () => {
       nextPayday: '2026-11-27',
       estimate: false,
       confirmed: false,
+      confirmationStale: false,
     })
     expect(view.found!.employers).toHaveLength(1)
     expect(view.found!.employers[0]!.name).toMatch(/acme/i)
@@ -101,6 +102,23 @@ describe('confirm_pay', () => {
     })
   })
 
+  it('says when the paychecks no longer show what the owner confirmed', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await insertPaychecks(ctx.db, accountId, ['2026-11-13'], 210_000)
+    await call('update_settings', { period: paycheckPeriod })
+    // Confirmed while one paycheck read as monthly, which moves the period to monthly.
+    expect((await call('confirm_pay')).found).toMatchObject({ cadence: 'month', confirmed: true })
+    // Earlier paychecks then show every two weeks: the confirmation no longer holds.
+    await insertPaychecks(ctx.db, accountId, ['2026-10-16', '2026-10-30'], 210_000)
+    const view = await call('get_pay')
+    expect(view.found).toMatchObject({
+      cadence: 'biweek',
+      confirmed: false,
+      confirmationStale: true,
+    })
+    expect(view.pay!.source).toBe('found')
+  })
+
   it('clears pay the owner entered, since the paychecks have it right', async () => {
     await biweeklyPay()
     await call('set_pay', {
@@ -132,6 +150,8 @@ describe('set_pay', () => {
       amountCents: 250_000,
       cadence: 'semimonth',
       nextPayday: '2026-11-30',
+      // Twice a month is two paychecks a month.
+      monthlyCents: 500_000,
     })
     // What the paychecks show is still there, beside it.
     expect(view.found!.paycheckCents).toBe(210_000)
@@ -148,8 +168,9 @@ describe('set_pay', () => {
     const view = await call('set_pay', {
       pay: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-03' },
     })
-    expect(view.yours!.nextPayday).toBe('2026-11-24')
-    expect(view.pay).toMatchObject({ source: 'yours', nextPayday: '2026-11-24', estimate: false })
+    // Two weeks on from Nov 3 is today, which still counts: its paycheck may not have landed.
+    expect(view.yours!.nextPayday).toBe('2026-11-17')
+    expect(view.pay).toMatchObject({ source: 'yours', nextPayday: '2026-11-17', estimate: false })
   })
 
   it('moves a paycheck budget period to the new schedule, and leaves it when cleared', async () => {
@@ -185,11 +206,34 @@ describe('set_pay', () => {
     expect(nothing.message).toMatch(/what one paycheck brings in/)
   })
 
-  it('keeps the owner pay out of an exported settings file', async () => {
-    await call('set_pay', {
-      pay: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
+  it('never reads pay the owner entered back as what the paychecks show', async () => {
+    // One paycheck so far: how often it comes is a cautious monthly guess.
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    await insertPaychecks(ctx.db, accountId, ['2026-11-13'], 210_000)
+    await call('update_settings', { period: paycheckPeriod })
+    // Weekly pay of their own moves the paycheck period to every week.
+    const view = await call('set_pay', {
+      pay: { amountCents: 50_000, cadence: 'week', nextPayday: '2026-11-20' },
     })
+    expect((await call('get_settings')).period).toMatchObject({ frequency: 'weekly' })
+    expect(view.found).toMatchObject({ cadence: 'month', estimate: true })
+    // Back to the paychecks, they say what they said before.
+    const back = await call('set_pay', { pay: null })
+    expect(back.pay).toMatchObject({ source: 'found', cadence: 'month', estimate: true })
+  })
+
+  it('goes with an exported settings file, and comes back with it', async () => {
+    const pay = { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' } as const
+    await call('set_pay', { pay })
     const file = await call('export_config')
-    expect(file.settings).not.toHaveProperty('pay')
+    expect(file.settings.pay).toEqual({ confirmed: null, override: pay })
+
+    await call('set_pay', { pay: null })
+    await call('import_config', { config: file, mode: 'merge' })
+    expect((await call('get_pay')).yours).toMatchObject(pay)
+    // A file without it leaves the owner's pay as it is.
+    const { pay: _pay, ...settings } = file.settings
+    await call('import_config', { config: { ...file, settings }, mode: 'merge' })
+    expect((await call('get_pay')).yours).toMatchObject(pay)
   })
 })

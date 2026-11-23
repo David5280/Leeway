@@ -316,10 +316,10 @@ describe('GlanceWidget', () => {
     expect(await within(card('Spent')).findByText(/Usually about/)).toHaveTextContent(
       `Usually about $42 a ${word}`,
     )
-    expect(card('Income')).toHaveTextContent(`Money in this ${word}`)
+    expect(card('Money in')).toHaveTextContent(`Filed as income this ${word}`)
   })
 
-  it('shows money in from income categories, signed and green', () => {
+  it('shows money filed as income as money in, not pay, signed and green', () => {
     serve()
     const paycheck = category('Paycheck', { kind: 'income' })
     const budget = budgetFor(
@@ -328,7 +328,7 @@ describe('GlanceWidget', () => {
     )
     renderSignedIn(<GlanceWidget budget={budget} offset={0} />)
     expect(screen.getByText('+$2,500', { selector: '.mid-number' })).toHaveClass('money-in')
-    expect(card('Income')).toHaveTextContent('Money in this month')
+    expect(card('Money in')).toHaveTextContent('Filed as income this month')
   })
 
   it('counts what needs a category, and opens where to sort it', async () => {
@@ -411,6 +411,8 @@ function billChange(amountCents: number, name: string) {
         cadence: 'month',
         trackedOn: '2026-09-01',
         amountVaries: false,
+        amountSetOn: null,
+        followAfterOn: null,
         charges: [],
       },
       charge: { accountId: 'everyday', date: '2026-11-16', amountCents },

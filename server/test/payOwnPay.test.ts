@@ -1,20 +1,24 @@
-// The owner's word on their pay (pay/given.ts): a confirmation that settles
+// The owner's word on their pay (pay/ownPay.ts): a confirmation that settles
 // an estimate, their own pay standing in for what the paychecks show, and a
 // paycheck budget period kept in step (pay/period.ts). Pure.
 
 import { describe, expect, it } from 'vitest'
 import { currentPay } from '../src/domain/pay/current.js'
+import { paydayFrom } from '../src/domain/pay/payday.js'
 import {
+  employerKeyOf,
   isConfirmed,
-  nextGivenPayday,
   NO_PAY_SETTINGS,
-  payerKeyOf,
   withOwnersPay,
-} from '../src/domain/pay/given.js'
-import { paycheckPeriod, periodInStep, scheduleAround } from '../src/domain/pay/period.js'
+} from '../src/domain/pay/ownPay.js'
+import { paycheckPeriod, periodInStep } from '../src/domain/pay/period.js'
+import { settingsSchema } from '../src/domain/settings.js'
 import { everyDays, paycheck } from './fixtures/pay.js'
 
 const TODAY = '2026-11-17'
+
+/** Budgets by calendar month, so the payday comes from pay, not a paycheck period. */
+const MONTHLY_BUDGET = settingsSchema.parse({})
 
 /** One paycheck so far: the cadence is a cautious monthly guess, an estimate. */
 const onePaycheck = () => currentPay([paycheck('2026-11-13', 210_000)], TODAY)
@@ -37,7 +41,7 @@ describe('withOwnersPay', () => {
 
   it('settles the main employer once the owner confirms it, on the same cadence only', () => {
     const pay = onePaycheck()
-    const key = payerKeyOf(pay.employer!)
+    const key = employerKeyOf(pay.employer!)
     const confirmed = withOwnersPay(
       pay,
       { confirmed: { payerKey: key, cadence: 'month' }, override: null },
@@ -60,7 +64,7 @@ describe('withOwnersPay', () => {
   it("keeps a second job's guess an estimate when only the main job is confirmed", () => {
     const pay = twoJobs()
     expect(pay.employers).toHaveLength(2)
-    const key = payerKeyOf(pay.employer!)
+    const key = employerKeyOf(pay.employer!)
     const confirmed = withOwnersPay(
       pay,
       { confirmed: { payerKey: key, cadence: 'biweek' }, override: null },
@@ -90,6 +94,14 @@ describe('withOwnersPay', () => {
     expect(given.nextPayday).toBe('2026-12-15')
     expect(given.nextPaycheckCents).toBe(250_000)
     expect(given.estimate).toBe(true)
+    // The main job is now paid as the owner says, so the payday every figure uses is theirs.
+    expect(given.employer).toMatchObject({ nextPayday: '2026-12-15', estimate: false })
+    expect(paydayFrom(given, MONTHLY_BUDGET, TODAY)).toMatchObject({
+      date: '2026-12-15',
+      amountCents: 250_000,
+      cadence: 'semimonth',
+      estimate: false,
+    })
   })
 
   it("plans from the owner's own pay alone when no paycheck was found", () => {
@@ -108,16 +120,13 @@ describe('withOwnersPay', () => {
       estimate: false,
       employer: null,
     })
-  })
-})
-
-describe('nextGivenPayday', () => {
-  it('steps a payday already past forward a cycle at a time, past today', () => {
-    const pay = { amountCents: 1, cadence: 'week' as const, nextPayday: '2026-11-03' }
-    expect(nextGivenPayday(pay, TODAY)).toBe('2026-11-24')
-    // Today is not after today: a payday today counts as passed.
-    expect(nextGivenPayday({ ...pay, nextPayday: TODAY }, TODAY)).toBe('2026-11-24')
-    expect(nextGivenPayday({ ...pay, nextPayday: '2026-12-01' }, TODAY)).toBe('2026-12-01')
+    // With no job found, the payday is still the owner's, not the budget period's end.
+    expect(paydayFrom(given, MONTHLY_BUDGET, TODAY)).toMatchObject({
+      date: '2026-11-20',
+      source: 'detected_income',
+      amountCents: 180_000,
+      estimate: false,
+    })
   })
 })
 
@@ -137,13 +146,6 @@ describe('paycheckPeriod', () => {
     const seen = ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30']
     expect(paycheckPeriod('semimonth', '2026-10-30', seen).semimonthlyDays).toEqual([15, 31])
     expect(paycheckPeriod('semimonth', '2026-11-10').semimonthlyDays).toEqual([10, 25])
-  })
-
-  it('suggests the days around a lone twice-a-month payday', () => {
-    expect(scheduleAround('2026-11-15')).toEqual([15, 31])
-    expect(scheduleAround('2026-11-30')).toEqual([15, 31])
-    expect(scheduleAround('2026-11-01')).toEqual([1, 16])
-    expect(scheduleAround('2026-11-25')).toEqual([10, 25])
   })
 
   it('moves only a paycheck budget period in step with pay', () => {

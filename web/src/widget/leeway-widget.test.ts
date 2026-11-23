@@ -25,6 +25,7 @@ import {
   parseJson,
   REFRESH_MINUTES,
   shortDate,
+  SUMMARY_VERSION,
   summaryUrl,
   THEME_COLORS,
   THEME_MODES,
@@ -118,7 +119,8 @@ describe('connecting', () => {
     expect(outcomeOf(500, {})).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, null)).toEqual({ ok: false, problem: 'server' })
     expect(outcomeOf(200, 'text')).toEqual({ ok: false, problem: 'server' })
-    expect(outcomeOf(200, { ...summary, version: 2 })).toEqual({ ok: false, problem: 'outdated' })
+    // A summary of another shape: an older script on a newer server says to update.
+    expect(outcomeOf(200, { ...summary, version: 3 })).toEqual({ ok: false, problem: 'outdated' })
   })
 
   it('reads JSON, or nothing', () => {
@@ -192,55 +194,112 @@ describe('themes', () => {
 })
 
 describe('what the widget says', () => {
-  it('leads with safe to spend, and what that is a day', () => {
+  it('leads with what is left to spend, and what that is a day', () => {
     expect(headlineOf(widgetSummary())).toEqual({
-      label: 'Safe to spend',
+      label: 'Left to spend',
       value: '$843',
       tone: 'ink',
       note: 'About $65 a day for 13 days',
     })
   })
 
-  it('says "over" in red once the budgets are overspent', () => {
+  it('says "Over budget" in red once the budgets are overspent', () => {
     expect(headlineOf(troubledWidgetSummary())).toEqual({
-      label: 'Safe to spend',
+      label: 'Over budget',
       value: '$50 over',
       tone: 'over',
       note: 'Nothing left to spend this period',
     })
   })
 
-  it('leads with cash until payday before any budget is set, $0 in red when bills do not fit', () => {
-    const until = (cents: number, shortfallCents: number) =>
+  it('leads with safe to spend until payday before any budget is set, $0 in red when bills do not fit', () => {
+    const until = (cents: number, shortfallCents: number, paydayEstimate = false) =>
       widgetSummary({
         headline: {
           kind: 'until_payday',
           cents,
+          cashKnown: true,
           shortfallCents,
           perDayCents: 2_000,
           payday: '2026-11-28',
+          paydayEstimate,
         },
       })
     expect(headlineOf(until(22_000, 0))).toEqual({
-      label: 'Until payday',
+      label: 'Safe to spend',
       value: '$220',
       tone: 'ink',
       note: 'About $20 a day until Nov 28',
     })
     // $0, as the Overview shows it, with the shortfall on its own line.
     expect(headlineOf(until(0, 4_000))).toEqual({
-      label: 'Until payday',
+      label: 'Safe to spend',
       value: '$0',
       tone: 'over',
-      note: '$40 short of bills due by Nov 28',
+      note: 'Checking is $40 short of bills due by Nov 28',
+    })
+    // Against a payday that is only a guess, the shortfall may be less: said, not red.
+    expect(headlineOf(until(0, 4_000, true))).toEqual({
+      label: 'Safe to spend',
+      value: '$0',
+      tone: 'ink',
+      note: 'Checking may be $40 short of bills due by about Nov 28',
     })
   })
 
-  it('reads an older server that sent a shortfall as a negative figure', () => {
-    const older = widgetSummary({
-      headline: { kind: 'until_payday', cents: -4_000, perDayCents: 0, payday: '2026-11-28' },
-    } as never)
-    expect(headlineOf(older)).toMatchObject({ value: '$0', tone: 'over' })
+  it('says the cash is not known with no checking balance, never $0', () => {
+    const unknown = widgetSummary({
+      headline: {
+        kind: 'until_payday',
+        cents: 0,
+        cashKnown: false,
+        shortfallCents: 0,
+        perDayCents: 0,
+        payday: '2026-11-28',
+        paydayEstimate: false,
+      },
+    })
+    expect(headlineOf(unknown)).toEqual({
+      label: 'Safe to spend',
+      value: 'Not known yet',
+      tone: 'muted',
+      note: "Checking's balance isn't known yet",
+    })
+  })
+
+  it('says checking is short of the bills when over budget too, as the Overview does', () => {
+    const over = troubledWidgetSummary()
+    const short = { ...over, headline: { ...over.headline, shortfallCents: 12_000 } }
+    expect(headlineOf(short as typeof over)).toEqual({
+      label: 'Over budget',
+      value: '$50 over',
+      tone: 'over',
+      note: 'Checking is $120 short of bills due by Nov 28',
+    })
+  })
+
+  it('is version 2: a script from before the shortfall had its own field asks to be updated', () => {
+    // Version 1 sent the shortfall as a negative figure; that script would show $0 and no shortfall.
+    expect(SUMMARY_VERSION).toBe(2)
+    expect(outcomeOf(200, { ...widgetSummary(), version: 3 })).toEqual({
+      ok: false,
+      problem: 'outdated',
+    })
+  })
+
+  it('asks for Leeway itself to be updated when this script is the newer one', () => {
+    // A version 1 server cannot send the shortfall field this script reads.
+    expect(outcomeOf(200, { ...widgetSummary(), version: 1 })).toEqual({
+      ok: false,
+      problem: 'server_outdated',
+    })
+    expect(MESSAGES.server_outdated).toEqual({
+      title: 'Update your Leeway',
+      detail:
+        'This script is newer than your Leeway. Update Leeway, or copy the script again from Settings > Widget.',
+    })
+    // The older-script message never says the server is the newer one here.
+    expect(MESSAGES.outdated.detail).toContain('Your Leeway is newer than this script')
   })
 
   it('lists budget left, net worth and the next bill', () => {
@@ -280,7 +339,7 @@ describe('layouts', () => {
     const small = layoutFor('small', widgetSummary())
     expect(small.family).toBe('small')
     expect(words(small.blocks).map((word) => word.text)).toEqual([
-      'Safe to spend',
+      'Left to spend',
       '$843',
       'About $65 a day for 13 days',
       'Heads up: 1 account low',
@@ -295,7 +354,7 @@ describe('layouts', () => {
     const [columns] = medium.blocks
     expect(columns?.type).toBe('columns')
     expect(words(medium.blocks).map((word) => word.text)).toEqual([
-      'Safe to spend',
+      'Left to spend',
       '$843',
       'About $65 a day for 13 days',
       'Heads up: 1 account low',
@@ -313,7 +372,7 @@ describe('layouts', () => {
   it('adds the change in net worth and a short list of bills in the large size', () => {
     const large = layoutFor('large', widgetSummary(), 'America/Denver')
     expect(words(large.blocks)).toEqual([
-      { text: 'Safe to spend', tone: 'muted' },
+      { text: 'Left to spend', tone: 'muted' },
       { text: '$843', tone: 'ink' },
       { text: 'About $65 a day for 13 days', tone: 'muted' },
       { text: 'Budget left', tone: 'muted' },
@@ -400,7 +459,14 @@ describe('problem messages', () => {
     for (const problem of ['offline', 'busy', 'server'] as const) {
       expect(MESSAGES[problem].detail).toContain(`${REFRESH_MINUTES} minutes`)
     }
-    for (const problem of ['setup', 'bad_token', 'bad_address', 'outdated'] as const) {
+    const settingsHelps = [
+      'setup',
+      'bad_token',
+      'bad_address',
+      'outdated',
+      'server_outdated',
+    ] as const
+    for (const problem of settingsHelps) {
       expect(MESSAGES[problem].detail).toMatch(/Settings > Widget/)
     }
   })

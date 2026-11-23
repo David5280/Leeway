@@ -11,6 +11,8 @@ test('a pension counts toward retirement, and the projection is a range', async 
   await page.goto('/plan/retirement')
   const projection = page.getByRole('region', { name: 'Retirement projection' })
   await expect(projection).toContainText('Add your birth year')
+  // Only the year is asked, once, right under the projection.
+  await expect(page.getByRole('region', { name: 'What year were you born?' })).toBeVisible()
 
   await setUpRetirement(page)
 

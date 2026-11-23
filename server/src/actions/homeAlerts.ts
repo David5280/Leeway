@@ -4,7 +4,7 @@
 // them and none of them can put one out of the owner's sight.
 
 import { z } from 'zod'
-import { ALERT_KINDS } from '../domain/accountAlerts.js'
+import { ALERT_KINDS, LEAK_KINDS } from '../domain/accountAlerts.js'
 import { currentAlerts, hideHomeAlert, listHomeAlerts } from '../domain/notifications/homeAlerts.js'
 import { getNotificationSettings, kindsOn } from '../domain/notifications/settings.js'
 import { defineAction } from './action.js'
@@ -28,18 +28,29 @@ export const hideHomeAlertAction = defineAction({
   name: 'hide_home_alert',
   title: 'Hide an alert from home',
   description:
-    "Hide an account alert from the home screen: a condition for a day while it holds, a fee for good. The inbox is left as it was. A bill's change (give its billId) is accepted instead: the charge's amount becomes the bill's usual one, which clears it.",
+    "Hide an account alert from the home screen: a condition for a day while it holds, a fee or a leak (give a leak's chargeId) for good. The inbox is left as it was. A bill's change (give its billId) is accepted instead: the charge's amount becomes the bill's usual one, which clears it.",
   input: z
-    .object({ kind: z.enum(ALERT_KINDS), accountId: z.uuid(), billId: z.uuid().optional() })
-    .strict(),
+    .object({
+      kind: z.enum(ALERT_KINDS),
+      accountId: z.uuid(),
+      billId: z.uuid().optional(),
+      chargeId: z.uuid().optional(),
+    })
+    .strict()
+    // A leak is about one charge, so hiding one names it: without it, any leak of the kind would do.
+    .refine((target) => !LEAK_KINDS.includes(target.kind) || target.chargeId !== undefined, {
+      message: "Give the leak's chargeId",
+      path: ['chargeId'],
+    }),
   scope: 'write',
   surface: 'app',
   run: async (ctx, target) => {
-    // Only the account alerts are read, bills only for a bill's change, so a
-    // problem with a budget or a bill never stands in the way of another hide.
+    // Only the account alerts are read, bills only for a bill's change and
+    // charges only for a leak, so a problem with one never stands in the way
+    // of another hide.
     const now = ctx.now()
-    const bills = target.kind === 'bill_change'
-    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, now, { bills }), target, now)
+    const only = { bills: target.kind === 'bill_change', leaks: LEAK_KINDS.includes(target.kind) }
+    await hideHomeAlert(ctx.db, await currentAlerts(ctx.db, now, only), target, now)
     return { hidden: true }
   },
 })

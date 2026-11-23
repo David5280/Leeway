@@ -6,9 +6,7 @@ import type { PayView } from '../../../api/client'
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting } from '../../../components/ui'
 import { parseMoney } from '../../../lib/format'
-import { PAY_CADENCE_CHOICES, PAY_CADENCE_WORDS, type PayCadenceChoice } from './payText'
-
-const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+import { cadenceLabel, PAY_CADENCE_CHOICES, type PayCadenceChoice } from './payText'
 
 /** What the form opens with: the owner's own pay, else the pay in use, else blank. */
 function startingPay(view: PayView): { amount: string; cadence: PayCadenceChoice; next: string } {
@@ -38,7 +36,8 @@ export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }
   }
 
   return (
-    <form className="stack-sm" onSubmit={submit} aria-label="Your pay">
+    // Named apart from the card around it, which is "Your pay" or "Your own pay".
+    <form className="stack-sm" onSubmit={submit} aria-label="Enter your pay">
       <Setting label="One paycheck" hint="What lands in your account">
         <input
           className="input num"
@@ -58,7 +57,7 @@ export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }
         >
           {PAY_CADENCE_CHOICES.map((choice) => (
             <option key={choice} value={choice}>
-              {capitalized(PAY_CADENCE_WORDS[choice])}
+              {cadenceLabel(choice)}
             </option>
           ))}
         </select>

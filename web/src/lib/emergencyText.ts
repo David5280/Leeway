@@ -1,0 +1,160 @@
+// Plain words for the emergency fund: what counts as essential, how many
+// months, which accounts it counts and why any is left out. Pure, so each
+// wording is tested alone.
+
+import type { Output } from '../api/client'
+
+export type EmergencyView = NonNullable<Output<'get_emergency_fund'>>
+export type FundChoice = EmergencyView['accounts'][number]
+
+/** "1 month", "3 months", "0.5 months". */
+export function monthsWord(months: number): string {
+  return months === 1 ? '1 month' : `${months} months`
+}
+
+/** Names in a sentence: "A", "A and B", "A, B and C". */
+function listed(names: string[]): string {
+  if (names.length <= 1) return names.join('')
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+/** How many category names to say before "and 3 more". */
+const NAMED = 3
+
+/** What a category counted in part adds: only its loan and child care payments. */
+const IN_PART = 'loans and child care'
+
+/** Whole categories by name: "Rent, Groceries and Gas", or "Rent, Groceries, Gas and 2 more". */
+function namedWords(names: string[]): string {
+  if (names.length <= NAMED) return listed(names)
+  return `${names.slice(0, NAMED).join(', ')} and ${names.length - NAMED} more`
+}
+
+/**
+ * What the essentials are, finishing "What ... cost in a typical month":
+ * "Rent, Groceries and Gas", "your bills", or "your spending". A category
+ * counted in part adds only its loans and child care, so those are said in
+ * place of its name: "Rent plus loans and child care".
+ */
+export function essentialsWords(essentials: EmergencyView['essentials']): string {
+  if (!essentials || essentials.from === 'bills') return 'your bills'
+  if (!essentials.categories) return 'your spending'
+  const whole = essentials.categories
+  const inPart = (essentials.partlyCounted ?? []).length > 0
+  if (whole.length === 0) return inPart ? IN_PART : 'your spending'
+  return inPart ? `${namedWords(whole)} plus ${IN_PART}` : namedWords(whole)
+}
+
+/**
+ * The line about the essentials on the fund's card or offer: what they cost,
+ * or, when the owner's pick had no spending to size the fund by, that.
+ */
+export function essentialsSentence(
+  view: Pick<EmergencyView, 'essentials' | 'essentialsChoice'>,
+): string {
+  if (view.essentials === null && view.essentialsChoice.pickedIds !== null) {
+    return 'The essentials you picked had no spending in recent months.'
+  }
+  return `What ${essentialsWords(view.essentials)} cost in a typical month.`
+}
+
+/**
+ * A note in the picker on the categories Leeway counts in part, which a tick
+ * cannot show: only their loan and child care payments count, and a pick of
+ * the owner's own counts whole categories. Null when there are none.
+ */
+export function partlyNote(names: string[]): string | null {
+  if (names.length === 0) return null
+  return `Also counted: the loan and child care payments in ${listed(names)}. Card payments never count. Your own pick counts whole categories.`
+}
+
+/** A note on ticked essentials that add nothing, having had no spending; null when none. */
+export function quietNote(names: string[]): string | null {
+  if (names.length === 0) return null
+  const adds = names.length === 1 ? 'it adds' : 'they add'
+  return `${listed(names)} had no spending in recent months, so ${adds} nothing to the fund.`
+}
+
+/**
+ * The fund's target as a badge: "3 months of essentials" for a step, or for
+ * the owner's own amount that amount in months, never a step it is not.
+ */
+export function targetWords(view: Pick<EmergencyView, 'months' | 'ownTarget'>): string {
+  if (view.months === null) return 'Your own target'
+  // "About 0 months" says nothing, so any own target under a month is told as less than one.
+  if (view.ownTarget && view.months < 1) return 'Less than a month of essentials'
+  if (view.ownTarget) return `About ${monthsWord(view.months)} of essentials`
+  return `${monthsWord(view.months)} of essentials`
+}
+
+/** The accounts the fund counts now. */
+export function countedAccounts(view: EmergencyView): FundChoice[] {
+  return view.accounts.filter((account) => account.counted)
+}
+
+/**
+ * Where the fund's progress comes from, finishing "Counts ...": "every
+ * savings account", the accounts by name, or what is added by hand.
+ */
+export function countedWords(view: EmergencyView): string {
+  const counted = countedAccounts(view).map((a) => a.name)
+  switch (view.counts) {
+    case 'hand':
+      return 'what you add by hand'
+    case 'account':
+    case 'marked':
+      return counted.length === 0 ? 'none of the accounts you picked yet' : listed(counted)
+    case 'savings': {
+      if (counted.length > 0) return 'every savings account'
+      // Every savings account there is may be one another goal follows.
+      const followed = view.accounts.some((a) => a.leftOut === 'other_goal')
+      return followed ? 'no savings account yet' : 'your savings accounts, once you have one'
+    }
+  }
+}
+
+/** Why one account is left out, as a sentence; null when it is not, or nothing needs saying. */
+function leftOutSentence(account: FundChoice): string | null {
+  switch (account.leftOut) {
+    case 'other_goal':
+      return `${account.name} is left out, since ${account.otherGoal} follows it.`
+    // The rest show only for accounts the owner marked, so they hear why a pick counts nothing.
+    case 'hidden':
+      return `${account.name} is hidden, so it counts nothing until you show it again.`
+    case 'not_shared':
+      return `${account.name} is no longer shared with Leeway, so it counts nothing.`
+    case 'unavailable':
+      return `${account.name} has no balance Leeway can count yet.`
+    default:
+      return null
+  }
+}
+
+/** A sentence for each account the fund leaves out that the owner should hear about. */
+export function leftOutNotes(view: EmergencyView): string[] {
+  // Counting by hand, no account is in play, so none is left out.
+  if (view.counts === 'hand') return []
+  return view.accounts.map(leftOutSentence).filter((note) => note !== null)
+}
+
+/** The hint by the fund's target in the goal's form: how it is sized, and how to change that. */
+export function fundTargetHint(view: EmergencyView): string {
+  if (view.ownTarget) return 'Your own amount. Pick a step on the card to size it by essentials.'
+  return 'Sized by essentials. Type an amount to set your own.'
+}
+
+/**
+ * The hint when another goal is set to follow an account the fund counts:
+ * following it leaves it out of the fund. Null when it does not.
+ */
+export function followHint(
+  view: EmergencyView | null,
+  goalId: string | null,
+  accountId: string,
+): string | null {
+  // Only a fund counts accounts; the offer only adds up what savings holds.
+  if (!view || view.goalId === null || view.goalId === goalId) return null
+  const account = countedAccounts(view).find((one) => one.id === accountId)
+  if (!account) return null
+  return `Your emergency fund counts ${account.name} now. Following it here leaves it out of the fund.`
+}

@@ -21,13 +21,30 @@ bank, and nothing in Leeway can ever move money.
 - **An accounts dashboard** for one account or several: balances, money in and
   out, spending by category and recent transactions.
 - **Account alerts** when an account is overdrawn, a card is over its limit, a
-  balance is low or an overdraft fee was charged.
+  balance is low or an overdraft fee was charged, and for money leaking away:
+  a charge that went through twice, or a repeating charge that went up in price.
 - **Planning**: bills and subscriptions, recurring charges found for you,
-  savings goals, debt payoff plans, cash until payday and net worth.
+  savings goals, debt payoff plans, cash until payday (and cash in checking
+  that could earn more in savings, at a stated rate) and net worth.
+- **Coming up**, if you connect a calendar by its private link: six weeks of
+  paydays, bills and events like trips and weddings, with what to set aside
+  for each from what past ones cost. Only events likely to cost money are
+  kept. Nothing changes until you connect one.
 - **Savings and investments**: savings, retirement and investing accounts
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI
   assistant can read all of it today.
+- **Credit card interest in dollars**: what carrying each card's balance past
+  the due date costs a month at its APR, and all your cards together. Add a
+  card's APR from its statement.
+- **A tax-ready export**: a year of transactions from every account, hidden
+  ones included, as a CSV grouped by category with totals. A summary at the
+  end gives pay by source, interest, dividends, benefits, tax refunds and
+  rewards, and "Possible income to categorize" for deposits still to sort.
+  Support payments and money from people are never counted as pay.
+  Transfers between your own accounts are left out, and categories that may
+  be deductible are flagged for you to check with a tax pro (Settings, then
+  Data). It is a summary, not tax advice.
 - **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
   your money with your real numbers. You choose whether it may only look or
   also change budgets.
@@ -142,7 +159,7 @@ After changing `.env`, run `docker compose up -d` again to apply it.
 
 ### Run from source
 
-You need Node.js 22.12 or newer and PostgreSQL.
+You need Node.js 22.18 or newer and PostgreSQL.
 
 ```sh
 npm install
@@ -352,6 +369,14 @@ sync, and tells you about:
 - a bill not on autopay coming due (2 days before, by default), until it is
   paid;
 - a single charge of at least an amount you choose ($500 by default);
+- the same charge at one place twice within 3 days (not a habit there, and not
+  refunded since), or a charge that repeats quarterly or more often and isn't a
+  bill yet going up in price on its usual cycle (a bill's own change alert
+  covers a tracked bill, and a bill paid twice is told once, as the charge
+  made twice). Cash, checks, payments to people, transfers and bank fees are
+  never either, and an alert never names what may be a person: rent, a
+  payment app with no merchant named, or a name that reads as someone's is
+  told as "A payment of $40 went out twice";
 - a bank that needs you to sign in again;
 - AI spending near or at this month's limit, once each as it happens (see
   [AI models](#ai-models-and-the-monthly-limit)).

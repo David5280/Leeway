@@ -4,6 +4,9 @@
 // default, except the birth year, which only the owner can give.
 
 import { z } from 'zod'
+import { AppError } from '../../errors.js'
+import type { IsoDate } from '../../lib/dates.js'
+import { birthYearProblem } from './birthYear.js'
 
 /** The most a monthly figure here may be: $100,000, far above any real contribution or income. */
 export const MAX_MONTHLY_CENTS = 10_000_000
@@ -17,7 +20,11 @@ export const DEFAULT_WITHDRAWAL_PERCENT = 4
 
 /** The fields, without defaults, so a patch changes only what it names. */
 export const retirementFields = {
-  /** Null until the owner gives it; projections wait for it. */
+  /**
+   * Null until the owner gives it; projections wait for it. The range here is
+   * only the outer bound a stored year must meet; a year given in a change is
+   * also checked against today with checkBirthYear.
+   */
   birthYear: z
     .number()
     .int('Use a four-digit year')
@@ -66,3 +73,20 @@ export type RetirementAssumptions = z.infer<typeof retirementSchema>
 export const retirementPatchSchema = z.object(retirementFields).partial().strict()
 
 export type RetirementPatch = z.infer<typeof retirementPatchSchema>
+
+/**
+ * Refuses a birth year given in a change when it is still to come or further
+ * back than anyone's age, with the field's path in the message as the schema
+ * would give it. The schema cannot know today, so the actions check here. A
+ * year already stored is never checked, so it can't block saving anything else.
+ */
+export function checkBirthYear(
+  year: number | null | undefined,
+  today: IsoDate,
+  path: string,
+): void {
+  if (year === null || year === undefined) return
+  const problem = birthYearProblem(year, today)
+  if (problem === null) return
+  throw new AppError('invalid_input', `${path}: ${problem}`, [{ path, message: problem }])
+}

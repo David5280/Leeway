@@ -26,31 +26,39 @@
     "web"
   ],
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.18"
   },
   "scripts": {
     "dev": "npm run dev --workspace server & npm run dev --workspace web",
     "build": "npm run build --workspace web && npm run build --workspace server",
     "start": "npm run start --workspace server",
     "reset-password": "npm run reset-password --workspace server",
-    "test": "npm run test --workspaces",
-    "typecheck": "npm run typecheck --workspaces && tsc -p e2e && tsc -p widget",
+    "test": "npm run test --workspaces && npm run test:scripts",
+    "test:coverage": "npm run test:coverage --workspaces && npm run test:scripts -- --coverage",
+    "test:scripts": "vitest run --config scripts/vitest.config.ts",
+    "typecheck": "npm run typecheck --workspaces && tsc -p e2e && tsc -p widget && tsc -p scripts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:coverage": "npm run test:coverage --workspaces",
     "e2e": "playwright test",
+    "e2e:full": "node scripts/e2e/cli.ts full",
+    "e2e:some": "node scripts/e2e/cli.ts some",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@playwright/test": "^1.65.1",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "@vitest/coverage-v8": "^5.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.0.0",
+    "pg": "^8.23.1",
     "prettier": "^3.10.1",
     "typescript": "5.9.3",
-    "typescript-eslint": "^8.73.0"
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.0"
   }
 }

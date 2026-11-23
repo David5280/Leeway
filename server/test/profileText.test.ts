@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { Category } from '../src/domain/categories.js'
 import { DIGEST_GOALS, nearestGoals, profileDigest } from '../src/domain/profile/digest.js'
 import {
-  essentialSpending,
   SPENDING_LEAST_DAYS,
   SPENDING_MAX_DAYS,
   SPENDING_MIN_DAYS,
   spendingWindow,
 } from '../src/domain/profile/income.js'
 import { addDays } from '../src/lib/dates.js'
+import { averageEssentials, wholeMonthsBefore } from '../src/domain/monthlyEssentials.js'
 import { emergencyFund } from '../src/domain/savings/emergency.js'
 import { RATE_GUARD_FOR_AI, savingsRate } from '../src/domain/savings/rate.js'
 import {
@@ -135,25 +135,48 @@ describe('typical spending window', () => {
     expect(spendingWindow(TODAY, null, addDays(TODAY, -27))).toBeNull()
     expect(spendingWindow(TODAY, null, null)).toBeNull()
   })
+})
 
-  it('counts the essential categories that still exist, or all spending', () => {
-    const category = (id: string, kind: Category['kind']) => ({ id, kind }) as Category
-    const categories = [
-      category('rent', 'expense'),
-      category('fun', 'expense'),
-      category('pay', 'income'),
-    ]
-    const totals = [
+describe('a typical month of essentials', () => {
+  const category = (id: string, kind: Category['kind'], name: string) =>
+    ({ id, kind, name, providerCategories: [] }) as unknown as Category
+  const categories = [
+    category('rent', 'expense', 'Rent'),
+    category('fun', 'expense', 'Fun'),
+    category('pay', 'income', 'Paycheck'),
+  ]
+  /** A month of $2,000 rent, `fun` of fun, $10 unfiled and `pay` of pay, nothing coded essential. */
+  const month = (fun: number, pay: number) => ({
+    totals: [
       { categoryId: 'rent', amountCents: 200_000, count: 1 },
-      { categoryId: 'fun', amountCents: 50_000, count: 1 },
+      { categoryId: 'fun', amountCents: fun, count: 1 },
+      { categoryId: 'pay', amountCents: -pay, count: 1 },
       { categoryId: null, amountCents: 1_000, count: 1 },
-    ]
-    expect(essentialSpending(categories, totals, null, 251_000)).toBe(251_000)
-    // Picks that are no longer expense categories (income, or deleted) are ignored,
-    // and none left means all spending, as if nothing had been picked.
-    expect(essentialSpending(categories, totals, ['pay', 'gone'], 251_000)).toBe(251_000)
-    // A partly stale pick keeps the categories that still exist.
-    expect(essentialSpending(categories, totals, ['rent', 'gone'], 251_000)).toBe(200_000)
+    ],
+    essentialCoded: [],
+    spentCents: 200_000 + fun + 1_000,
+  })
+
+  it('takes the last three whole months that history fully covers, for the fund', () => {
+    expect(wholeMonthsBefore(TODAY, '2026-01-01')).toEqual([
+      { start: '2026-08-01', end: '2026-09-01' },
+      { start: '2026-09-01', end: '2026-10-01' },
+      { start: '2026-10-01', end: '2026-11-01' },
+    ])
+    // History from Sep 12 leaves October as the only whole month.
+    expect(wholeMonthsBefore(TODAY, '2026-09-12')).toEqual([
+      { start: '2026-10-01', end: '2026-11-01' },
+    ])
+    expect(wholeMonthsBefore(TODAY, '2026-11-02')).toEqual([])
+    expect(wholeMonthsBefore(TODAY, null)).toEqual([])
+  })
+
+  it('averages the essentials over whole months, and knows nothing without one', () => {
+    const months = [month(50_000, 600_000), month(30_001, 600_000)]
+    expect(averageEssentials(categories, months, ['rent'])).toBe(200_000)
+    // Rent and Fun picked, the unfiled $10 left out: (250,000 + 230,001) / 2, rounded.
+    expect(averageEssentials(categories, months, ['rent', 'fun'])).toBe(240_001)
+    expect(averageEssentials(categories, [], null)).toBeNull()
   })
 })
 
@@ -253,7 +276,7 @@ describe('profileDigest', () => {
     expect(digest.split('\n')).toEqual([
       'Financial profile as of 2026-11-19. Amounts in USD.',
       'Pay: every 2 weeks from Acme Payroll since Jun 5, about $2,400 each, next on Dec 4.',
-      'Typical month (spending since Aug 20, pay from paychecks only): $5,200 take-home pay in from the current employer, $4,100 spent, $3,000 of it essential.',
+      'Typical month (spending since Aug 20, pay from paychecks only): $5,200 take-home pay in from the current employer, $4,100 spent.',
       'Bills: 9 tracked bills, $2,150 a month.',
       'Accounts: Checking $3,000 (1 account); Credit cards $1,200 owed (2 accounts, 1 without a usable balance).',
       'Saved and invested: $58,000 (savings $8,000, retirement $50,000), up $1,200 since Nov 1. Balance history starts Nov 19, 2026.',
@@ -351,8 +374,8 @@ describe('profileDigest', () => {
       ],
     })
     expect(profileDigest(profile, dollars).split('\n').slice(1, 6)).toEqual([
-      'Pay: monthly from Acme Payroll since Nov 14, about $2,500 each, next on Dec 1. This is an estimate from one paycheck: the schedule is confirmed by the second.',
-      'Typical month (spending since Sep 24, pay from paychecks only): $5,000 take-home pay in from the current employer (estimated from one paycheck), $3,000 spent.',
+      'Pay: monthly from Acme Payroll since Nov 14, about $2,500 each, next on Dec 1. This is an estimate until more paychecks confirm how often pay comes.',
+      'Typical month (spending since Sep 24, pay from paychecks only): $5,000 take-home pay in from the current employer (estimated until more paychecks confirm it), $3,000 spent.',
       'Saved and invested: $3,000 (savings $3,000), down $200 since Nov 1.',
       'Emergency fund: savings cover 1 month of essentials ($3,000 a month); target 1 month ($3,000), met.',
       // The dated goal comes first: it is the nearer one.
@@ -360,16 +383,17 @@ describe('profileDigest', () => {
     ])
   })
 
+  const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
+    name,
+    cadence,
+    typicalPayCents: cents,
+    monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
+    since: '2026-09-25',
+    nextPayday: '2026-11-20',
+    estimate: false,
+  })
+
   it('names each employer paying now, and adds their pay up', () => {
-    const employer = (name: string, cadence: 'semimonth' | 'biweek', cents: number) => ({
-      name,
-      cadence,
-      typicalPayCents: cents,
-      monthlyCents: cadence === 'semimonth' ? cents * 2 : 130_446,
-      since: '2026-09-25',
-      nextPayday: '2026-11-20',
-      estimate: false,
-    })
     const profile = emptyProfile({
       pay: {
         cadence: 'semimonth',
@@ -399,6 +423,50 @@ describe('profileDigest', () => {
     )
     expect(lines).toContain(
       'Typical month (spending since Sep 25, pay from paychecks only): $5,304 take-home pay in from the 2 current employers, $3,000 spent.',
+    )
+  })
+
+  it('never names an employer the bank does not name as a business', () => {
+    const unnamed = (cadence: 'semimonth' | 'biweek', cents: number) => ({
+      ...employer('', cadence, cents),
+      name: null,
+    })
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-20',
+        estimate: false,
+        employer: null,
+        employers: [unnamed('semimonth', 200_000), unnamed('biweek', 60_000)],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: the main employer twice a month since Sep 25, about $2,000 each; another employer every 2 weeks since Sep 25, about $600 each. Next payday Nov 20.',
+    )
+  })
+
+  it("calls pay from several employers an estimate while a side job's cadence is a guess", () => {
+    // The main job is confirmed, so its payday is not a guess; the side job's amount is.
+    const profile = emptyProfile({
+      pay: {
+        cadence: 'semimonth',
+        source: 'detected_income',
+        typicalPayCents: 200_000,
+        nextPayday: '2026-11-30',
+        estimate: false,
+        employer: 'Initech Payroll',
+        employers: [
+          employer('Initech Payroll', 'semimonth', 200_000),
+          { ...employer('Bluth Co Payroll', 'biweek', 60_000), estimate: true },
+        ],
+        since: '2026-09-25',
+      },
+    })
+    expect(profileDigest(profile, dollars).split('\n')).toContain(
+      'Pay: from 2 employers: Initech Payroll twice a month since Sep 25, about $2,000 each; Bluth Co Payroll every 2 weeks since Sep 25, about $600 each. Next payday Nov 30. This is an estimate until more paychecks confirm how often each employer pays.',
     )
   })
 

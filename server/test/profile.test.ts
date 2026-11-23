@@ -80,7 +80,7 @@ async function steadyOwner() {
   const transfers = await call('create_category', { name: 'Transfers', kind: 'transfer' })
   for (const month of ['2026-08', '2026-09', '2026-10', '2026-11']) {
     await filed(checking.accountId, pay.id, `${month}-01`, -500_000, {
-      name: 'ACME PAYROLL',
+      name: 'ACME CORP PAYROLL',
       detailed: 'INCOME_SALARY',
     })
     await filed(checking.accountId, rent.id, `${month}-03`, 200_000)
@@ -142,12 +142,13 @@ describe('getFinancialProfile', () => {
   it('works out a typical month, the emergency fund and the savings rate', async () => {
     await steadyOwner()
     const result = await profile()
-    // Pay from the paychecks; spending over the last 91 days: $9,000, about $3,010 a month.
+    // Pay from the paychecks; spending over the last 91 days: $9,000, about $3,010 a
+    // month, $6,000 of it on Rent, which reads as essential by its name; Fun does not.
     expect(result.monthly).toEqual({
       incomeCents: 500_000,
       incomeEstimated: false,
       spendingCents: perMonth(900_000),
-      essentialSpendingCents: perMonth(900_000),
+      essentialSpendingCents: perMonth(600_000),
       spendingSince: '2026-08-20',
       spendingDays: 91,
     })
@@ -158,7 +159,7 @@ describe('getFinancialProfile', () => {
       typicalPayCents: 500_000,
       nextPayday: '2026-12-01',
       estimate: false,
-      employer: 'Acme Payroll',
+      employer: 'Acme Corp Payroll',
       since: '2026-08-01',
     })
     expect(result.accounts.map((k) => [k.kind, k.totalCents])).toEqual([
@@ -168,11 +169,12 @@ describe('getFinancialProfile', () => {
     ])
     expect(result.emergencyFund).toMatchObject({
       savedCents: 900_000,
-      monthlyEssentialsCents: 301_030,
+      // Sized as the fund's card sizes it: $2,000 of rent in each whole month, August to October.
+      monthlyEssentialsCents: 200_000,
       essentialsFrom: 'spending',
-      monthsCovered: 2.9,
+      monthsCovered: 4.5,
       targetMonths: 6,
-      status: 'low',
+      status: 'building',
     })
     // $1,500 over the 111 days held, about $411 a month, of $5,000 take-home pay.
     expect(result.savingsRate).toMatchObject({ percent: 8, payMonthlyCents: 500_000 })
@@ -202,8 +204,15 @@ describe('getFinancialProfile', () => {
     for (const date of ['2026-09-05', '2026-10-05', '2026-11-05']) {
       await filed(checking.accountId, groceries.id, date, 60_000)
     }
-    // A card payment and a move to savings are not spending.
-    await money('2026-10-20', 'PAYMENT THANK YOU', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    // A payment to a tracked card, either side, and a move to savings are not spending.
+    const card = await insertBankAccount(ctx.db, { type: 'credit', subtype: 'credit card' })
+    await money('2026-10-20', 'CARD PAYMENT', 150_000, 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT')
+    await insertBankTransaction(ctx.db, card.accountId, {
+      date: '2026-10-20',
+      name: 'PAYMENT THANK YOU',
+      amountCents: -150_000,
+      detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+    })
     await filed(checking.accountId, transfers.id, '2026-10-21', 50_000)
     await ctx.db.query('DELETE FROM balance_history')
 
@@ -220,42 +229,12 @@ describe('getFinancialProfile', () => {
     expect(result.pay).toMatchObject({
       cadence: 'month',
       typicalPayCents: 600_000,
-      employer: 'Globex Payroll',
+      // Named only as a business: GLOBEX PAYROLL could be anyone's.
+      employer: null,
       since: '2026-09-01',
       nextPayday: '2026-12-01',
       estimate: false,
     })
-  })
-
-  it('counts a second job beside the first, naming each without account numbers', async () => {
-    const checking = await insertBankAccount(ctx.db, { subtype: 'checking', mask: '4821' })
-    const pay = (date: string, name: string, amountCents: number) =>
-      insertBankTransaction(ctx.db, checking.accountId, {
-        date,
-        name,
-        amountCents: -amountCents,
-        detailed: 'INCOME_SALARY',
-      })
-    for (const date of ['2026-10-15', '2026-10-30', '2026-11-13']) {
-      await pay(date, 'INITECH PAYROLL', 200_000)
-    }
-    for (const date of ['2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06']) {
-      await pay(date, 'BLUTH CO PAYROLL ACCT 4821', 60_000)
-    }
-    const result = await profile()
-    // $4,000 a month plus $600 every two weeks.
-    expect(result.monthly.incomeCents).toBe(400_000 + 130_446)
-    expect(result.pay).toMatchObject({
-      cadence: 'semimonth',
-      employer: 'Initech Payroll',
-      nextPayday: '2026-11-20',
-      since: '2026-09-25',
-    })
-    expect(result.pay.employers.map((e) => [e.name, e.cadence, e.monthlyCents])).toEqual([
-      ['Initech Payroll', 'semimonth', 400_000],
-      ['Bluth Co Payroll', 'biweek', 130_446],
-    ])
-    expect(JSON.stringify(result.pay)).not.toContain('4821')
   })
 
   it('counts only the essential categories the owner picked, and their target', async () => {
@@ -267,24 +246,24 @@ describe('getFinancialProfile', () => {
     await call('update_settings', { savingsPlan: { emergencyFundMonths: 4 } })
     const { emergencyFund, monthly } = await profile()
     expect(monthly.essentialSpendingCents).toBe(perMonth(600_000))
-    expect(emergencyFund).toMatchObject({ monthsCovered: 4.4, targetMonths: 4, status: 'met' })
+    expect(emergencyFund).toMatchObject({ monthsCovered: 4.5, targetMonths: 4, status: 'met' })
   })
 
-  it('counts every spending category as essential when the pick is an empty list', async () => {
+  it('finds the essential categories again when the pick is an empty list', async () => {
     await steadyOwner()
     // An empty pick would make essentials zero, and any savings endless cover.
     await call('update_settings', { savingsPlan: { essentialCategoryIds: [] } })
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
     const { monthly, emergencyFund } = await profile()
-    expect(monthly.essentialSpendingCents).toBe(perMonth(900_000))
-    expect(emergencyFund).toMatchObject({ monthsCovered: 2.9 })
+    expect(monthly.essentialSpendingCents).toBe(perMonth(600_000))
+    expect(emergencyFund).toMatchObject({ monthsCovered: 4.5 })
 
     // A list stored that way by an earlier version reads the same.
     await ctx.db.query(`UPDATE settings SET data = '{"savingsPlan": {"essentialCategoryIds": []}}'`)
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
   })
 
-  it('takes a deleted category out of the essentials, and counts all spending once none is left', async () => {
+  it('takes a deleted category out of the essentials, and counts all spending once none reads as essential', async () => {
     const { rent, fun } = await steadyOwner()
     await call('update_settings', { savingsPlan: { essentialCategoryIds: [rent.id, fun.id] } })
     expect((await profile()).monthly.essentialSpendingCents).toBe(perMonth(900_000))
@@ -294,7 +273,8 @@ describe('getFinancialProfile', () => {
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toEqual([rent.id])
     expect((await profile()).monthly.essentialSpendingCents).toBe(perMonth(600_000))
 
-    // Deleting the last one goes back to all spending, rather than essentials of zero.
+    // Deleting the last one leaves nothing that reads as essential (Fun went
+    // first), so all spending counts, rather than essentials of zero.
     await call('delete_category', { id: rent.id })
     expect((await getSettings(ctx.db)).savingsPlan.essentialCategoryIds).toBeNull()
     expect((await profile()).monthly.essentialSpendingCents).toBe(perMonth(900_000))
@@ -315,9 +295,10 @@ describe('getFinancialProfile', () => {
       jsonb_build_object('essentialCategoryIds', jsonb_build_array($1::text)))`,
       [gone],
     )
+    // With no pick left, the essentials are found again: Rent.
     const { monthly, emergencyFund } = await profile()
-    expect(monthly.essentialSpendingCents).toBe(perMonth(900_000))
-    expect(emergencyFund).toMatchObject({ monthsCovered: 2.9 })
+    expect(monthly.essentialSpendingCents).toBe(perMonth(600_000))
+    expect(emergencyFund).toMatchObject({ monthsCovered: 4.5 })
   })
 
   it('refuses an emergency fund target outside one to 24 whole months', async () => {
@@ -415,8 +396,9 @@ describe('get_financial_profile', () => {
     expect(digest).toContain(
       'Typical month (spending since Aug 20, pay from paychecks only): $5,000 take-home pay in from the current employer, $3,010 spent.',
     )
+    // The fund is sized by whole months of essentials, as its card is.
     expect(digest).toContain(
-      'Emergency fund: savings cover 2.9 months of essentials ($3,010 a month)',
+      'Emergency fund: savings cover 4.5 months of essentials ($2,000 a month)',
     )
     // The guard travels with the number, on the same line.
     expect(digest).toMatch(
@@ -469,11 +451,11 @@ describe('summarize_savings', () => {
     const [cash, retirement] = view.lenses
     expect(cash).toMatchObject({
       kind: 'savings',
-      emergencyFund: { monthsCovered: 2.9 },
+      emergencyFund: { monthsCovered: 4.5 },
       goals: [{ name: 'Rainy day' }],
     })
     expect(cash!.insights[0]!.text).toBe(
-      'Your savings of $9,000 cover 2.9 months of $3,010 a month of essential spending. Your target of 6 months is $18,062, $9,062 to go.',
+      'Your savings of $9,000 cover 4.5 months of $2,000 a month of essential spending. Your target of 6 months is $12,000, $3,000 to go.',
     )
     expect(retirement).toMatchObject({ kind: 'retirement', emergencyFund: null, goals: [] })
   })

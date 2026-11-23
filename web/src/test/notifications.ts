@@ -120,8 +120,15 @@ export function fakePushBrowser(options: FakeBrowser = {}) {
     }),
     ready: Promise.resolve(registration),
   }
-  const requestPermission = vi.fn(async () => options.answer ?? 'granted')
-  vi.stubGlobal('Notification', { permission: options.permission ?? 'default', requestPermission })
+  const notification: { permission: NotificationPermission } = {
+    permission: options.permission ?? 'default',
+  }
+  // As in a browser, the answer to the prompt is the permission from then on.
+  const requestPermission = vi.fn(async () => {
+    notification.permission = options.answer ?? 'granted'
+    return notification.permission
+  })
+  vi.stubGlobal('Notification', Object.assign(notification, { requestPermission }))
   vi.stubGlobal('PushManager', function PushManager() {})
   Object.defineProperty(navigator, 'serviceWorker', { value: serviceWorker, configurable: true })
   return { pushManager, serviceWorker, subscription, requestPermission }

@@ -45,7 +45,7 @@ test('pay found in the paychecks is confirmed in one tap, then replaced by the o
   await expect(pay.getByText('Estimate')).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Change my pay' }).click()
-  const form = page.getByRole('form', { name: 'Your pay' })
+  const form = page.getByRole('form', { name: 'Enter your pay' })
   await form.getByRole('textbox', { name: 'One paycheck' }).fill('2500')
   await form.getByRole('combobox', { name: 'How often you are paid' }).selectOption('Twice a month')
   await form.getByRole('button', { name: 'Save' }).click()

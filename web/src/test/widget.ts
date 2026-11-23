@@ -6,12 +6,20 @@ import type { WidgetSummary } from '../../../server/src/domain/widget'
 /** A household mid-period: some leeway left, three bills coming, one low account. */
 export function widgetSummary(overrides: Partial<WidgetSummary> = {}): WidgetSummary {
   return {
-    version: 1,
+    version: 2,
     asOf: '2026-11-17T18:05:00.000Z',
     currency: 'USD',
     locale: 'en-US',
     appearance: { theme: 'night', mode: 'theme' },
-    headline: { kind: 'leeway', cents: 84_250, perDayCents: 6_480, daysLeft: 13 },
+    headline: {
+      kind: 'leeway',
+      cents: 84_250,
+      perDayCents: 6_480,
+      daysLeft: 13,
+      shortfallCents: 0,
+      payday: '2026-11-28',
+      paydayEstimate: false,
+    },
     budgetLeftCents: 112_000,
     netWorth: { cents: 4_812_300, changeCents: 120_000, sinceDays: 30 },
     nextBills: [
@@ -27,7 +35,15 @@ export function widgetSummary(overrides: Partial<WidgetSummary> = {}): WidgetSum
 /** The same household having a hard month: over budget, a bill overdue, an account overdrawn. */
 export function troubledWidgetSummary(): WidgetSummary {
   return widgetSummary({
-    headline: { kind: 'leeway', cents: -5_000, perDayCents: null, daysLeft: 13 },
+    headline: {
+      kind: 'leeway',
+      cents: -5_000,
+      perDayCents: null,
+      daysLeft: 13,
+      shortfallCents: 0,
+      payday: '2026-11-28',
+      paydayEstimate: false,
+    },
     budgetLeftCents: -5_000,
     netWorth: { cents: 4_712_300, changeCents: -30_000, sinceDays: 30 },
     nextBills: [

@@ -7,10 +7,10 @@
 // - the same amount, out of one account and into a different one;
 // - dates at most PAIR_WINDOW_DAYS apart;
 // - both sides saying they are a transfer: Plaid's transfer or card payment
-//   codes, or words like "transfer" in a line with no code. A side that says
-//   nothing either way never pairs, since a line imported from a file or added
-//   by hand has no code, and its silence is as true of a refund, a paycheck or
-//   a friend paying back as of a transfer. A side that says it is something
+//   codes, or words like "transfer" in a line with no code (transferWords.ts).
+//   A side that says nothing either way never pairs, since a line imported
+//   from a file or added by hand has no code, and its silence is as true of a
+//   refund, a paycheck or a friend paying back as of a transfer. A side that says it is something
 //   else (a purchase, a paycheck, a payment to another person through an app
 //   like Zelle) never pairs either.
 // Every account Leeway knows is the owner's, so both sides are always the
@@ -31,7 +31,13 @@ import { accountMasks } from './accounts.js'
 import type { Category } from './categories.js'
 import { withShownNames } from './ruleText.js'
 import { listRules, ruleMatches, type Rule, type RuleSubject } from './rules.js'
-import { CARD_PAYMENT_CODE, personToPersonApp, type Movement } from './transfers.js'
+import {
+  CARD_PAYMENT_CODE,
+  CASH_WITHDRAWAL_CODE,
+  personToPersonApp,
+  type Movement,
+} from './transfers.js'
+import { wordsHint, type TransferHint } from './transferWords.js'
 
 /** How far apart, in days, the two sides of one transfer may post. */
 export const PAIR_WINDOW_DAYS = 5
@@ -42,27 +48,6 @@ export interface PairCandidate extends Movement {
   accountId: string
   date: IsoDate
 }
-
-/** What a transaction says about itself: a transfer, something else, or nothing either way. */
-export type TransferHint = 'transfer' | 'other' | 'none'
-
-/** Words a bank uses for a transfer or a card payment in a line with no category code. */
-const TRANSFER_WORDS =
-  /\b(transfer|xfer|trnsfr|autopay|card payment|crd pmt|payment\W*thank you|online pmt|mobile pmt)\b/i
-
-/**
- * Words for pay or money paid back in a line with no code: a paycheck, a
- * payout, a refund. Such a line is money coming in from outside, so it never
- * pairs, even beside an equal purchase on another account. Interest and
- * dividends only in their paid forms: "Interest Savings" names an account.
- */
-const PAY_WORDS =
-  /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?|salary|paycheck|wages?|payout|refund|reimburs\w*|rebate|cash\s?back|(interest|int|dividend|div)\.?\s+(paid|pd|payment|earned))\b/i
-
-/** A line that is only "Interest" or "Dividend": paid in, not an account's name. */
-const PAID_ALONE = /^\s*(interest|dividends?)\s*$/i
-
-const CASH_WITHDRAWAL_CODE = 'TRANSFER_OUT_WITHDRAWAL'
 
 /**
  * Whether a transaction says it is a transfer. Plaid's codes decide when
@@ -81,15 +66,6 @@ export function transferHint(tx: Movement): TransferHint {
   return code ? 'other' : wordsHint(tx)
 }
 
-/** What a line with no code says by its words. */
-function wordsHint(tx: Movement): TransferHint {
-  const words = `${tx.name} ${tx.merchantName ?? ''}`
-  // Transfer words win: an account's name can hold a pay word, as in
-  // "Online Transfer to Interest Savings".
-  if (TRANSFER_WORDS.test(words)) return 'transfer'
-  return PAY_WORDS.test(words) || PAID_ALONE.test(tx.name) ? 'other' : 'none'
-}
-
 /** A possible pair: money out, the same amount arriving elsewhere, and the days between. */
 interface Match<T> {
   out: T
@@ -98,10 +74,16 @@ interface Match<T> {
 }
 
 /** Whether a side may pair, given its hint and the side itself. */
-export type HintTest = (hint: TransferHint, tx: PairCandidate) => boolean
+export type HintTest<T extends PairCandidate = PairCandidate> = (
+  hint: TransferHint,
+  tx: T,
+) => boolean
+
+/** Whether two sides that each passed the hint test may still pair, as a whole. */
+export type PairTest<T extends PairCandidate = PairCandidate> = (out: T, arrival: T) => boolean
 
 /** The usual test: a side must say it is a transfer. */
-const saysTransfer: HintTest = (hint) => hint === 'transfer'
+export const saysTransfer: HintTest = (hint) => hint === 'transfer'
 
 /**
  * For legs nobody has filed yet, as monthly totals reads them: a side that
@@ -115,15 +97,33 @@ const saysTransfer: HintTest = (hint) => hint === 'transfer'
 export const unfiledLeg: HintTest = (hint, tx) =>
   hint === 'transfer' || (hint === 'none' && tx.accountType === 'depository')
 
-/** Whether two transactions may be the two sides of one transfer: both must pass the hint test. */
-function mayPair(
-  out: PairCandidate,
-  arrival: PairCandidate,
+/**
+ * How monthly totals reads the legs it pairs, which are all unfiled or filed
+ * as transfers: one the owner filed as a transfer pairs whatever its line
+ * says, and an unfiled one as unfiledLeg allows.
+ */
+export function filedOrUnfiledLeg<T extends PairCandidate>(
+  filedTransfer: (tx: T) => boolean,
+): HintTest<T> {
+  return (hint, tx) => filedTransfer(tx) || unfiledLeg(hint, tx)
+}
+
+/** The tests two sides must pass to pair: each side alone, then the two together. */
+interface PairTests<T extends PairCandidate> {
+  hintOk: HintTest<T>
+  pairOk: PairTest<T>
+}
+
+/** Whether two transactions may be the two sides of one transfer. */
+function mayPair<T extends PairCandidate>(
+  out: T,
+  arrival: T,
   hints: Map<string, TransferHint>,
-  hintOk: HintTest,
+  { hintOk, pairOk }: PairTests<T>,
 ) {
   if (arrival.amountCents !== -out.amountCents || arrival.accountId === out.accountId) return false
-  return hintOk(hints.get(out.id)!, out) && hintOk(hints.get(arrival.id)!, arrival)
+  const sidesOk = hintOk(hints.get(out.id)!, out) && hintOk(hints.get(arrival.id)!, arrival)
+  return sidesOk && pairOk(out, arrival)
 }
 
 /** Closest dates first; then by date and id, so equal gaps always pair the same way. */
@@ -139,11 +139,13 @@ function byClosest<T extends PairCandidate>(a: Match<T>, b: Match<T>): number {
 /**
  * Pairs the two sides of each transfer among the given transactions (see the
  * top of this file for the rules; hintOk loosens the last one for unfiled
- * legs). Returns each paired transaction's partner, by id.
+ * legs, and pairOk can hold back a pair its two sides allow). Returns each
+ * paired transaction's partner, by id.
  */
 export function pairTransfers<T extends PairCandidate>(
   transactions: readonly T[],
-  hintOk: HintTest = saysTransfer,
+  hintOk: HintTest<T> = saysTransfer,
+  pairOk: PairTest<T> = () => true,
 ): Map<string, T> {
   const hints = new Map(transactions.map((tx) => [tx.id, transferHint(tx)]))
   // Money arriving, by amount, so each payment out only meets its own amount.
@@ -157,7 +159,7 @@ export function pairTransfers<T extends PairCandidate>(
     if (out.amountCents <= 0) continue
     for (const arrival of arrivals.get(-out.amountCents) ?? []) {
       const gap = Math.abs(daysBetween(out.date, arrival.date))
-      if (gap <= PAIR_WINDOW_DAYS && mayPair(out, arrival, hints, hintOk)) {
+      if (gap <= PAIR_WINDOW_DAYS && mayPair(out, arrival, hints, { hintOk, pairOk })) {
         matches.push({ out, arrival, gap })
       }
     }
@@ -194,20 +196,29 @@ export function filedElsewhere(
   return rule !== undefined && kinds.get(rule.categoryId) !== 'transfer'
 }
 
+/** A leg as pairing reads it from the database, with how it is filed. */
+export interface StoredLeg extends PairCandidate {
+  /** The kind of the category it is filed under, or null for none. */
+  categoryKind: Category['kind'] | null
+  /** The owner said it is something other than a transfer (see filedElsewhere). */
+  filedElsewhere: boolean
+  /** On a card or loan hidden from budgets. */
+  hiddenDebt: boolean
+}
+
 /**
- * The transfer pairs among transactions dated from `start` to `end`, both
- * inclusive. Transactions up to a window either side are read too, so a
- * transfer whose other side posted just outside the dates still pairs.
- * Transactions left out of totals (duplicates, reimbursed costs) never pair,
- * nor do those filed as something else (see filedElsewhere). Nor does a card
- * or loan hidden from budgets: its purchases are not counted, so paying it is
- * the only trace of that spending, and must count (as in loadOwnAccounts).
+ * The legs dated from `start` to `end`, both inclusive, and a pairing window
+ * either side, so a transfer whose other side posted just outside the dates
+ * still pairs. Transactions left out of totals (duplicates, reimbursed costs)
+ * are never read. Cards and loans hidden from budgets are read only when
+ * asked for (see loadTransferPairs).
  */
-export async function loadTransferPairs(
+export async function readPairLegs(
   db: Db,
   start: IsoDate,
   end: IsoDate,
-): Promise<Map<string, PairCandidate>> {
+  { hiddenDebts }: { hiddenDebts: boolean },
+): Promise<StoredLeg[]> {
   // One query at a time: db may be a transaction's client.
   const rules = await listRules(db)
   const masks = await accountMasks(db)
@@ -215,19 +226,37 @@ export async function loadTransferPairs(
     'SELECT id, kind FROM categories',
   )
   const kinds = new Map(categories.map((category) => [category.id, category.kind]))
-  const { rows } = await db.query<PairCandidate & Filing>(
+  const { rows } = await db.query<Omit<StoredLeg, 'filedElsewhere'> & Filing>(
     `SELECT t.id, t.account_id AS "accountId", t.date, t.name, t.merchant_name AS "merchantName",
        t.amount_cents AS "amountCents", t.provider_category_primary AS "providerCategoryPrimary",
        t.provider_category_detailed AS "providerCategoryDetailed", a.type AS "accountType",
-       t.category_source AS "categorySource", c.kind AS "categoryKind"
+       t.category_source AS "categorySource", c.kind AS "categoryKind",
+       (a.hidden AND a.type IN ('credit', 'loan')) AS "hiddenDebt"
      FROM transactions t JOIN accounts a ON a.id = t.account_id
        LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.date BETWEEN $1 AND $2 AND t.amount_cents <> 0 AND NOT t.excluded
-       AND NOT (a.hidden AND a.type IN ('credit', 'loan'))`,
-    [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS)],
+       AND ($3 OR NOT (a.hidden AND a.type IN ('credit', 'loan')))`,
+    [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS), hiddenDebts],
   )
-  const candidates: PairCandidate[] = withShownNames(rows, rules, masks)
-    .filter((row) => !filedElsewhere(row, rules, kinds))
-    .map(({ categorySource: _s, categoryKind: _k, shownName: _n, ...candidate }) => candidate)
-  return pairTransfers(candidates)
+  return withShownNames(rows, rules, masks).map((row) => {
+    const { categorySource: _source, shownName: _name, ...leg } = row
+    return { ...leg, filedElsewhere: filedElsewhere(row, rules, kinds) }
+  })
+}
+
+/**
+ * The transfer pairs among transactions dated from `start` to `end`, both
+ * inclusive (with a window either side; see readPairLegs). A transaction
+ * filed as something else never pairs (see filedElsewhere). Nor does a card
+ * or loan hidden from budgets: its purchases are not counted, so paying it is
+ * the only trace of that spending, and must count (as in loadOwnAccounts).
+ * A view that counts hidden accounts too pairs with everyAccountPairs.ts.
+ */
+export async function loadTransferPairs(
+  db: Db,
+  start: IsoDate,
+  end: IsoDate,
+): Promise<Map<string, StoredLeg>> {
+  const legs = await readPairLegs(db, start, end, { hiddenDebts: false })
+  return pairTransfers(legs.filter((leg) => !leg.filedElsewhere))
 }

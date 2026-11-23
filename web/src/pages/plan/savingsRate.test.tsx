@@ -64,7 +64,7 @@ describe('SavingsRateCard', () => {
     renderSignedIn(<SavingsRateCard />)
     await screen.findByText('of pay, in a usual month')
     expect(region()).toHaveTextContent(
-      'Pay is an estimate for now: there is one paycheck from your current employer so far.',
+      'Pay is an estimate for now, until more paychecks show how often it comes.',
     )
   })
 

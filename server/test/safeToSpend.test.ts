@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { BudgetSummary } from '../src/domain/budget.js'
-import { checkingCash, safeToSpend, type BillDue } from '../src/domain/cashFlow.js'
+import { accountCash, safeToSpend, type BillDue } from '../src/domain/cashFlow.js'
 import type { Payday } from '../src/domain/pay/payday.js'
 import { withRoom } from '../src/domain/budgetRoom.js'
 import { settingsSchema } from '../src/domain/settings.js'
@@ -42,19 +42,33 @@ function budget(leewayCents: number, safePerDayCents = Math.floor(leewayCents / 
   } as BudgetSummary
 }
 
-describe('checkingCash', () => {
-  it('takes the available balance first, and owes back what an overdrawn account is below zero', () => {
-    expect(checkingCash(everyday)).toEqual({ cashCents: 17_800, overdraftCents: 0 })
-    expect(checkingCash({ availableCents: null, balanceCents: 40_000 })).toEqual({
+describe('accountCash', () => {
+  it('takes the lower of the two balances, and owes back what an overdrawn account is below zero', () => {
+    // Pending charges bring available below the balance.
+    expect(accountCash(everyday)).toEqual({ cashCents: 17_800, overdraftCents: 0 })
+    // $9,000 available on a $1,000 balance is mostly an overdraft line: borrowing, not cash.
+    expect(accountCash({ availableCents: 900_000, balanceCents: 100_000 })).toEqual({
+      cashCents: 100_000,
+      overdraftCents: 0,
+    })
+    expect(accountCash({ availableCents: 70_000, balanceCents: null })).toEqual({
+      cashCents: 70_000,
+      overdraftCents: 0,
+    })
+    expect(accountCash({ availableCents: null, balanceCents: null })).toEqual({
+      cashCents: 0,
+      overdraftCents: 0,
+    })
+    expect(accountCash({ availableCents: null, balanceCents: 40_000 })).toEqual({
       cashCents: 40_000,
       overdraftCents: 0,
     })
     // Overdrawn: nothing to spend, and the lower balance is what it needs back.
-    expect(checkingCash({ availableCents: 0, balanceCents: -14_210 })).toEqual({
+    expect(accountCash({ availableCents: 0, balanceCents: -14_210 })).toEqual({
       cashCents: 0,
       overdraftCents: 14_210,
     })
-    expect(checkingCash({ availableCents: -3_000, balanceCents: 1_000 })).toEqual({
+    expect(accountCash({ availableCents: -3_000, balanceCents: 1_000 })).toEqual({
       cashCents: 0,
       overdraftCents: 3_000,
     })
@@ -62,7 +76,7 @@ describe('checkingCash', () => {
 
   it('counts nothing to spend in an overdrawn account that overdraft protection shows money in', () => {
     // $50 below zero with $450 of protection available: credit owed back, not cash.
-    expect(checkingCash({ availableCents: 45_000, balanceCents: -5_000 })).toEqual({
+    expect(accountCash({ availableCents: 45_000, balanceCents: -5_000 })).toEqual({
       cashCents: 0,
       overdraftCents: 5_000,
     })
@@ -183,7 +197,7 @@ describe('spendable', () => {
   it('says when payday is a guess, or not found, so the end of the period stands in', () => {
     const estimate = safeToSpend([everyday], [], payday({ estimate: true }), TODAY)
     expect(room(140_400, estimate).note).toBe(
-      'Your budget has $1,404 left, but you have $178 you can safely spend before payday, about Nov 30.',
+      'Your budget has $1,404 left, but you have $178 you can safely spend before payday, best guess Nov 30.',
     )
     const periodEnd = safeToSpend(
       [everyday],

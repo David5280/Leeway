@@ -25,7 +25,9 @@ let app: FastifyInstance
 
 beforeAll(async () => {
   ctx = await createTestContext()
-  app = await buildApp(ctx, { webDir: null })
+  // Rate limits are checked on an app of their own below; here they are off, so
+  // a test that calls every MCP tool never spends another test's budget.
+  app = await buildApp(ctx, { webDir: null, rateLimit: false })
 })
 afterAll(async () => {
   await app.close()
@@ -572,6 +574,7 @@ describe('MCP endpoint', () => {
       await tool('list_alerts'),
       await tool('get_checkin'),
       await tool('update_account', { id: pension.accountId, kind: 'pension' }),
+      // Refused: it is a pension already, and attaching would replace its plan.
       await tool('attach_pension', {
         accountId: pension.accountId,
         serviceYears: 9.5,
@@ -594,12 +597,15 @@ describe('MCP endpoint', () => {
       text: expect.stringContaining('Trip follows the balance of'),
     })
     expect(byName.get('list_alerts')!.text).toContain('is overdrawn by')
+    expect(byName.get('attach_pension')).toMatchObject({
+      isError: true,
+      text: 'Test Pera Db is a pension already. Update it instead.',
+    })
     for (const name of [
       'create_goal',
       'list_accounts',
       'update_account',
       'get_checkin',
-      'attach_pension',
       'update_pension',
       'create_pension',
       'project_retirement',

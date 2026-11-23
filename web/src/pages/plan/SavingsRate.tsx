@@ -66,7 +66,7 @@ function RateChart({ rates }: { rates: SavingsRates }) {
       <p className="small muted">{rates.note}</p>
       {rates.payEstimated && (
         <p className="small muted">
-          Pay is an estimate for now: there is one paycheck from your current employer so far.
+          Pay is an estimate for now, until more paychecks show how often it comes.
         </p>
       )}
     </>

@@ -15,7 +15,7 @@ describe('payDrill', () => {
     const drill = drillOf()
     expect(drill.figure).toEqual({ cents: 210_000, tone: 'in' })
     expect(mathSentence(drill.math, money)).toBe(
-      'About a month $4565.63 = One paycheck $2100 and paychecks a year, over 12 months 26.1',
+      'About a month $4565.63 = One paycheck $2100 and Paychecks a year, over 12 months 26.1',
     )
     expect(drill.items?.rows).toEqual([
       {
@@ -47,5 +47,25 @@ describe('payDrill', () => {
     expect(drill.math.terms[1]!.value).toEqual({ text: '52.2' })
     expect(drill.math.note).toMatch(/^The pay you entered/)
     expect(drill.items).toBeUndefined()
+  })
+  it('adds a second job to the owner’s own pay, never counting it as more paychecks', () => {
+    const view = payView(
+      [{}, { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }],
+      {
+        override: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
+      },
+    )
+    const drill = drillOf(view)
+    // Weekly pay is 52.2 paychecks a year, about $4,348 a month, beside the gig's own month.
+    expect(drill.math.terms.map((term) => [term.label, term.value])).toEqual([
+      ['Your pay, a month', { cents: 434_821 }],
+      ['Side Gig, a month', { cents: view.found!.employers[1]!.monthlyCents }],
+    ])
+    expect(drill.math.result.value).toEqual({
+      cents: 434_821 + view.found!.employers[1]!.monthlyCents,
+      tone: 'in',
+    })
+    // Only the second job is listed: the owner's own pay is in place of the first.
+    expect(drill.items?.rows.map((row) => row.label)).toEqual(['Side Gig'])
   })
 })

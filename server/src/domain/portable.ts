@@ -9,7 +9,7 @@ import { withTransaction, type Db } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { recategorize } from './categorize.js'
 import { categoryInputSchema, createCategory, listCategories } from './categories.js'
-import { currentEssentials } from './profile/income.js'
+import { currentEssentials } from './essentialSpending.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -19,6 +19,7 @@ import {
   ruleReadsSchema,
   type RuleAuthor,
 } from './rules.js'
+import { paySettingsSchema } from './pay/ownPay.js'
 import { getSettings, mergeSettings, saveSettings, settingsPatchSchema } from './settings.js'
 
 /** The backup file: format markers, then settings, categories, rules and essentials. */
@@ -30,7 +31,16 @@ export const portableConfigSchema = z.object({
   // retirement assumptions are among them: a birth year, income target and
   // contribution are the owner's own, so a file shared with someone else
   // never carries them, and an import never sets them.
-  settings: z.object(settingsPatchSchema.omit({ retirement: true }).shape).default({}),
+  //
+  // The owner's word on their pay comes with the file, since the paycheck
+  // budget period beside it moves with it (pay/owner.ts): a restore without
+  // it would keep the schedule and lose the pay. Left out, it stays as it is.
+  settings: z
+    .object({
+      ...settingsPatchSchema.omit({ retirement: true }).shape,
+      pay: paySettingsSchema.optional(),
+    })
+    .default({}),
   categories: z.array(categoryInputSchema).default([]),
   // Rules point at categories by name so the file works on any install. A
   // file from before rules said what they read has rules that read bank text.
@@ -43,19 +53,18 @@ export const portableConfigSchema = z.object({
     )
     .default([]),
   // The essential spending categories, by name like the rules, since ids differ
-  // between installs. Null counts every spending category; left out keeps
-  // the current pick on a merge.
+  // between installs. Null lets Leeway find them (essentials.ts); left out
+  // keeps the current pick on a merge.
   essentialCategories: z.array(z.string().min(1)).max(200).nullable().optional(),
 })
 
 export type PortableConfig = z.infer<typeof portableConfigSchema>
 
-/** Settings without the retirement assumptions or the owner's pay, which never leave this install. */
-function withoutLocalOnly<T extends { retirement: unknown; pay: unknown }>({
+/** Settings without the retirement assumptions, which never leave this install. */
+function withoutRetirement<T extends { retirement: unknown }>({
   retirement: _retirement,
-  pay: _pay,
   ...rest
-}: T): Omit<T, 'retirement' | 'pay'> {
+}: T): Omit<T, 'retirement'> {
   return rest
 }
 
@@ -74,7 +83,7 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     exportedAt: new Date().toISOString(),
     // Essential categories go by name below, not by this install's ids; the
     // retirement assumptions stay on this install (see the schema above).
-    settings: { ...withoutLocalOnly(settings), savingsPlan },
+    settings: { ...withoutRetirement(settings), savingsPlan },
     // Rollover counts from a day on this install, so it stays here.
     categories: categories.map(
       ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,
@@ -140,8 +149,10 @@ async function applyConfig(
     await db.query('DELETE FROM categories')
   }
   // Ids in a file belong to the install that wrote it; essentials come by name below.
-  const { essentialCategoryIds: _ids, ...savingsPlan } = config.settings.savingsPlan ?? {}
-  await saveSettings(db, mergeSettings(await getSettings(db), { ...config.settings, savingsPlan }))
+  const { pay, ...patch } = config.settings
+  const { essentialCategoryIds: _ids, ...savingsPlan } = patch.savingsPlan ?? {}
+  const merged = mergeSettings(await getSettings(db), { ...patch, savingsPlan })
+  await saveSettings(db, pay ? { ...merged, pay } : merged)
 
   const existing = new Map((await listCategories(db)).map((c) => [c.name.toLowerCase(), c.id]))
   let categoriesAdded = 0

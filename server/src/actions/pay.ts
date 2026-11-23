@@ -3,13 +3,13 @@
 
 import { z } from 'zod'
 import { confirmPay, setPay } from '../domain/pay/owner.js'
-import { payOverrideSchema } from '../domain/pay/given.js'
+import { payOverrideSchema } from '../domain/pay/ownPay.js'
 import { readPayView } from '../domain/pay/view.js'
 import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
 const PAY_FIELDS =
-  'found is what the paychecks show (null when no employer is paying now): each employer paying now by name (named as the bank shows the deposit, never with an account number), its usual paycheck, cadence (week, biweek, semimonth or month), next payday and paychecks seen; estimate is true until a second paycheck or the owner confirms it, and confirmed says the owner did. yours is the pay the owner entered (null for none), used instead of found. pay is what every figure (safe to spend, typical income, the payday playbook) goes by, with source found, confirmed or yours. lastPaycheck is the newest paycheck that landed. Money from people (Venmo, Zelle), refunds, tax refunds and transfers are never pay. Amounts are in cents.'
+  'found is what the paychecks show (null when no employer is paying now): each employer paying now by name (named as the bank shows the deposit, never with an account number), its usual paycheck, cadence (week, biweek, semimonth or month), next payday and paychecks seen; estimate is true until a second paycheck or the owner confirms it, and confirmed says the owner did; confirmationStale says the owner confirmed an earlier reading the paychecks no longer show, so it may be worth confirming again. yours is the pay the owner entered (null for none) with what it comes to a month, used instead of found. pay is what every figure (safe to spend, typical income, the payday playbook) goes by, with source found, confirmed or yours. lastPaycheck is the newest paycheck that landed. Money from people (Venmo, Zelle), refunds, tax refunds and transfers are never pay. Amounts are in cents.'
 
 export const getPayAction = defineAction({
   name: 'get_pay',

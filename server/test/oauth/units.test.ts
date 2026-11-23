@@ -16,7 +16,7 @@ import {
   protectedResourceMetadata,
 } from '../../src/oauth/metadata.js'
 import { isValidChallenge, verifierMatches } from '../../src/oauth/pkce.js'
-import { isPublicAddress, publicOnlyLookup } from '../../src/lib/publicAddress.js'
+import { isFetchableAddress, publicOnlyLookup } from '../../src/lib/publicAddress.js'
 import {
   describeRedirect,
   redirectMatches,
@@ -152,8 +152,10 @@ describe('PKCE', () => {
 
 describe('public addresses', () => {
   it('tells public addresses from private and reserved ones', () => {
-    for (const address of ['8.8.8.8', '160.79.104.10', '2606:4700::1111', '::ffff:8.8.8.8']) {
-      expect(isPublicAddress(address)).toBe(true)
+    const publicOnes = ['8.8.8.8', '160.79.104.10', '2606:4700::1111', '::ffff:8.8.8.8']
+    // Next door to the 6to4 relay range, still public.
+    for (const address of [...publicOnes, '192.88.98.1', '192.88.100.1']) {
+      expect(isFetchableAddress(address)).toBe(true)
     }
     for (const address of [
       '127.0.0.1',
@@ -177,9 +179,13 @@ describe('public addresses', () => {
       '2002:a00:1::1',
       '2001:0:4136:e378::1',
       '2001:db8::1',
+      // The old 6to4 relay address and retired site-local IPv6, both private in practice.
+      '192.88.99.1',
+      'fec0::1',
+      'feff:ffff::1',
       'not-an-ip',
     ]) {
-      expect(isPublicAddress(address)).toBe(false)
+      expect(isFetchableAddress(address)).toBe(false)
     }
   })
 

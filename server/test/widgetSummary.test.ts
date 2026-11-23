@@ -78,6 +78,28 @@ describe('widgetSummary', () => {
       cents: 40_000,
       perDayCents: 3_076,
       daysLeft: 13,
+      shortfallCents: 0,
+      payday: '2026-11-28',
+      paydayEstimate: false,
+    })
+  })
+
+  it('carries a cash shortfall beside an overspent budget, as the hero says both', () => {
+    const cashFlow = cash({ safeCents: 0, shortfallCents: 12_000, perDayCents: 0 })
+    const summary = widgetSummary(
+      sources({
+        budget: budget({ budgetedCents: 90_000, leewayCents: -5_000 }, 12, cashFlow),
+        cashFlow,
+      }),
+    )
+    expect(summary.headline).toEqual({
+      kind: 'leeway',
+      cents: -5_000,
+      perDayCents: null,
+      daysLeft: 13,
+      shortfallCents: 12_000,
+      payday: '2026-11-28',
+      paydayEstimate: false,
     })
   })
 
@@ -121,9 +143,11 @@ describe('widgetSummary', () => {
     expect(summary.headline).toEqual({
       kind: 'until_payday',
       cents: 17_800,
+      cashKnown: true,
       shortfallCents: 0,
       perDayCents: 1_618,
       payday: '2026-11-28',
+      paydayEstimate: false,
     })
   })
 
@@ -133,13 +157,36 @@ describe('widgetSummary', () => {
       {
         kind: 'until_payday',
         cents: 0,
+        cashKnown: true,
         shortfallCents: 1_200,
         perDayCents: 0,
         payday: '2026-11-28',
+        paydayEstimate: false,
       },
     )
     expect(widgetSummary(sources()).headline.kind).toBe('until_payday')
     expect(widgetSummary(sources()).budgetLeftCents).toBeNull()
+  })
+
+  it('says the cash is unknown with no checking balance and no budget, never $0 to spend', () => {
+    // A card-only owner: no checking account, nothing budgeted.
+    const cashFlow = cash({ cashKnown: false, safeCents: 0, perDayCents: 0 })
+    const room = budget({}, 12, cashFlow).spendable
+    expect(room).toMatchObject({ limitedBy: 'none', leadCents: 0, cashKnown: false })
+    const summary = widgetSummary(sources({ budget: budget({}, 12, cashFlow), cashFlow }))
+    expect(summary.headline).toMatchObject({ kind: 'until_payday', cashKnown: false })
+    expect(summary.budgetLeftCents).toBeNull()
+  })
+
+  it('leads with the budget with no checking balance, the cash not judged', () => {
+    const cashFlow = cash({ cashKnown: false, safeCents: 0, perDayCents: 0 })
+    const summary = widgetSummary(
+      sources({
+        budget: budget({ budgetedCents: 300_000, leewayCents: 120_000 }, 12, cashFlow),
+        cashFlow,
+      }),
+    )
+    expect(summary.headline).toMatchObject({ kind: 'leeway', cents: 120_000 })
   })
 
   it('measures the net worth change from the start of the window', () => {

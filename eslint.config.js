@@ -66,6 +66,11 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // Development scripts, like the sharded browser test runner, run in Node.
+    files: ['scripts/**/*.ts'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // The layout checks run inside the page (see e2e/layout.ts).
     files: ['e2e/layout/**/*.ts'],
     languageOptions: { globals: globals.browser },

@@ -12,6 +12,7 @@ import { getWidgetSummary } from '../src/domain/widget.js'
 import { buildApp } from '../src/http/app.js'
 import { formatWholeCents } from '../src/lib/money.js'
 import { actionCaller } from './actionCaller.js'
+import { biweeklyPaid } from './fixtures/paydays.js'
 import {
   createTestContext,
   insertBankAccount,
@@ -68,8 +69,13 @@ async function checking(balanceCents: number | null, availableCents: number | nu
   return accountId
 }
 
-/** A $2,100 paycheck every other Friday into the account; the last of `dates` is the newest. */
-async function paidBiweekly(accountId: string, dates = ['2026-10-16', '2026-10-30', '2026-11-13']) {
+/**
+ * A $2,100 paycheck every other Friday into the account; the last of `dates` is
+ * the newest. Five checks, since four that land near the 15th and month end
+ * still fit some schedule of two days, could be either cadence and would
+ * leave payday a guess.
+ */
+async function paidBiweekly(accountId: string, dates = biweeklyPaid('2026-09-18', 5)) {
   for (const date of dates) {
     await insertBankTransaction(ctx.db, accountId, {
       date,
@@ -141,9 +147,7 @@ function expectAgreement(
     kind: want.limitedBy === 'budget' ? 'leeway' : 'until_payday',
     cents: want.leadCents,
   })
-  if (want.leadCents > 0) {
-    expect(surfaces.widget.headline.perDayCents).toBe(want.perDayCents)
-  }
+  if (want.leadCents > 0) expect(surfaces.widget.headline.perDayCents).toBe(want.perDayCents)
   // What the AI is told to quote.
   expect(surfaces.facts.spendNow).toMatchObject({
     amount: money(want.leadCents),
@@ -276,7 +280,8 @@ describe('safe to spend agrees everywhere', () => {
     // Paid Nov 6, so next on Nov 20, 3 days counting today. $300 safe would be $100
     // a day, but the $1,000 budget over 14 days allows $71: the lesser leads everywhere.
     const accountId = await checking(30_000)
-    await paidBiweekly(accountId, ['2026-10-09', '2026-10-23', '2026-11-06'])
+    // Six Fridays, Aug 28 to Nov 6, enough to settle every two weeks.
+    await paidBiweekly(accountId, biweeklyPaid('2026-08-28', 6))
     await budgeted(100_000)
     const surfaces = await everySurface()
     expect(surfaces.cashFlow).toMatchObject({ nextPayday: '2026-11-20', perDayCents: 10_000 })

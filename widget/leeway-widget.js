@@ -28,7 +28,10 @@
  */
 /** @typedef {'small' | 'medium' | 'large'} Family */
 /** @typedef {{ family: Family, blocks: Block[], palette: Palette }} Layout */
-/** @typedef {'setup' | 'bad_address' | 'offline' | 'bad_token' | 'busy' | 'server' | 'outdated'} Problem */
+/**
+ * @typedef {'setup' | 'bad_address' | 'offline' | 'bad_token' | 'busy' | 'server' | 'outdated'
+ *   | 'server_outdated'} Problem
+ */
 /** @typedef {{ ok: true, summary: Summary } | { ok: false, problem: Problem }} Outcome */
 /** @typedef {{ server: string, token: string }} Connection */
 
@@ -36,7 +39,7 @@
 const REFRESH_MINUTES = 30
 
 /** The summary shape this script reads; the server bumps it only if a field changes meaning. */
-const SUMMARY_VERSION = 1
+const SUMMARY_VERSION = 2
 
 /** Where the script keeps the address and token when they are not the widget's parameter. */
 const KEYCHAIN_SERVER = 'leeway.widget.server'
@@ -182,6 +185,8 @@ function outcomeOf(status, body) {
     return { ok: false, problem: 'server' }
   }
   const summary = /** @type {Summary} */ (body)
+  // An older summary means the server needs updating; any other, this script.
+  if (summary.version < SUMMARY_VERSION) return { ok: false, problem: 'server_outdated' }
   if (summary.version !== SUMMARY_VERSION) return { ok: false, problem: 'outdated' }
   return { ok: true, summary }
 }
@@ -273,9 +278,39 @@ function paletteFor(appearance) {
 // What the widget says --------------------------------------------------------
 
 /**
- * The leading number, as the Overview leads: safe to spend, or before any
- * budget is set, cash until payday. A problem is in red and in words ("over",
- * "short"), so color is never the only sign.
+ * How far checking falls short of the bills due by payday. Against a payday
+ * that is only a guess it may be less, and the words say so.
+ * @param {{ shortfallCents: number, payday: string, paydayEstimate: boolean }} headline
+ * @param {Summary} summary
+ * @returns {string}
+ */
+function shortfallNote(headline, summary) {
+  const short = money(headline.shortfallCents, summary)
+  const payday = shortDate(headline.payday, summary.locale)
+  return headline.paydayEstimate
+    ? `Checking may be ${short} short of bills due by about ${payday}`
+    : `Checking is ${short} short of bills due by ${payday}`
+}
+
+/**
+ * The line under the budgets' figure: checking short of the bills first, as
+ * the Overview says it, then what is left a day.
+ * @param {Summary} summary
+ * @returns {string}
+ */
+function leewayNote(summary) {
+  const { headline } = summary
+  if (headline.kind !== 'leeway') return ''
+  if (headline.shortfallCents > 0) return shortfallNote(headline, summary)
+  if (headline.perDayCents === null) return 'Nothing left to spend this period'
+  return `About ${money(headline.perDayCents, summary)} a day for ${count(headline.daysLeft, 'day')}`
+}
+
+/**
+ * The leading number, in the app's words: the budgets' room is left to
+ * spend, and the cash until payday, leading when checking holds less or
+ * before any budget is set, is safe to spend. A problem is in red and in
+ * words ("Over budget", "short"), so color is never the only sign.
  * @param {Summary} summary
  * @returns {{ label: string, value: string, tone: Tone, note: string }}
  */
@@ -284,29 +319,37 @@ function headlineOf(summary) {
   const amount = money(Math.abs(headline.cents), summary)
   if (headline.kind === 'leeway') {
     const short = headline.cents < 0
-    const perDay = headline.perDayCents
     return {
-      label: 'Safe to spend',
+      // Over budget, the label says so as the Overview's does; the figure's
+      // "over" keeps the red from being the only sign on it.
+      label: short ? 'Over budget' : 'Left to spend',
       value: short ? `${amount} over` : amount,
       tone: short ? 'over' : 'ink',
-      note:
-        perDay === null
-          ? 'Nothing left to spend this period'
-          : `About ${money(perDay, summary)} a day for ${count(headline.daysLeft, 'day')}`,
+      note: leewayNote(summary),
+    }
+  }
+  // With no checking balance there is no cash to go by: not known, never $0.
+  // A summary from before cashKnown has none, and reads as known.
+  if (headline.cashKnown === false) {
+    return {
+      label: 'Safe to spend',
+      value: 'Not known yet',
+      tone: 'muted',
+      note: "Checking's balance isn't known yet",
     }
   }
   const payday = shortDate(headline.payday, locale)
   // The figure is never below zero, as on the Overview; how far bills outrun
-  // the cash is its own line. An older server sent the shortfall as a negative figure.
-  const shortfall = headline.shortfallCents ?? Math.max(0, -headline.cents)
+  // the cash is its own line.
+  const shortfall = headline.shortfallCents > 0
   return {
-    label: 'Until payday',
+    label: 'Safe to spend',
     value: money(Math.max(0, headline.cents), summary),
-    tone: shortfall > 0 ? 'over' : 'ink',
-    note:
-      shortfall > 0
-        ? `${money(shortfall, summary)} short of bills due by ${payday}`
-        : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
+    // Red only when short before a payday read from paychecks, as on the Overview.
+    tone: shortfall && !headline.paydayEstimate ? 'over' : 'ink',
+    note: shortfall
+      ? shortfallNote(headline, summary)
+      : `About ${money(headline.perDayCents, summary)} a day until ${payday}`,
   }
 }
 
@@ -495,6 +538,11 @@ const MESSAGES = {
   outdated: {
     title: 'Update the widget script',
     detail: 'Your Leeway is newer than this script. Copy the script again from Settings > Widget.',
+  },
+  server_outdated: {
+    title: 'Update your Leeway',
+    detail:
+      'This script is newer than your Leeway. Update Leeway, or copy the script again from Settings > Widget.',
   },
 }
 

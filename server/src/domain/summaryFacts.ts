@@ -23,7 +23,7 @@ type FactSettings = Pick<Settings, 'period' | 'locale'>
 /** The one figure for what can be spent now, or null with neither a budget nor a checking balance. */
 function spendNow(checkin: Checkin, money: Money, settings: FactSettings) {
   const { spendable, cashFlow } = checkin
-  if (!spendable || (spendable.limitedBy === 'cash' && !cashFlow.cashKnown)) return null
+  if (!spendable || spendable.limitedBy === 'none') return null
   const byBudget = spendable.limitedBy === 'budget'
   return {
     amount: money(spendable.leadCents),
@@ -95,7 +95,7 @@ export function summaryFacts(checkin: Checkin, settings: FactSettings, money: Mo
         ? null
         : {
             amount: money(checkin.pay.monthlyCents),
-            estimatedFromOnePaycheck: checkin.pay.estimate,
+            estimated: checkin.pay.estimate,
           },
     // Account alerts have their own list below, so the heads-up list leaves them out.
     headsUp: checkin.attention

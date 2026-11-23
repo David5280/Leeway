@@ -1,7 +1,7 @@
 // "What do I get paid?": the paycheck Leeway found (or the owner entered),
 // how often it lands and the next payday, labelled an estimate until the
 // owner says it looks right. Under it, one tap confirms it, and Change opens
-// the owner's own pay in its place (pay/given.ts on the server).
+// the owner's own pay in its place (pay/ownPay.ts on the server).
 
 import { useState } from 'react'
 import type { PayView } from '../../../api/client'
@@ -15,7 +15,7 @@ import { useApp } from '../../../lib/app'
 import { payDrill } from '../../../lib/drills/pay'
 import { dayLabel } from '../../../lib/format'
 import { PayForm } from './PayForm'
-import { isEstimate, payLine } from './payText'
+import { isEstimate, payLine, STALE_NOTE } from './payText'
 
 type PayInUse = NonNullable<PayView['pay']>
 
@@ -58,6 +58,7 @@ function PayChoices({
   const reset = useActionMutation('set_pay')
   return (
     <Card static="form" label="Is this right?" className="stack-sm">
+      {view.found?.confirmationStale && <p className="small muted">{STALE_NOTE}</p>}
       <div className="row wrap">
         {pay.source === 'found' && (
           <button

@@ -20,6 +20,12 @@ import type { Settings } from './settings.js'
 export const WIDGET_BILLS = 3
 
 /**
+ * The summary's shape version. The widget script refuses any other: an older
+ * script asks to be updated, and a newer one asks for Leeway to be updated.
+ */
+export const SUMMARY_VERSION = 2
+
+/**
  * The number the widget leads with, as the Overview does (spendable.ts): the
  * budgets' room while checking can cover it, otherwise what is safe to spend
  * until payday.
@@ -33,20 +39,37 @@ export type WidgetHeadline =
       perDayCents: number | null
       /** Days left in the period, counting today. */
       daysLeft: number
+      /** How far the bills due by payday outrun the cash; 0 when they fit. */
+      shortfallCents: number
+      payday: IsoDate
+      /** True while payday is a guess from too few paychecks: a shortfall then is not red. */
+      paydayEstimate: boolean
     }
   | {
       kind: 'until_payday'
       /** Safe to spend until payday (see cashFlow.ts), never below zero, as the Overview shows it. */
       cents: number
+      /**
+       * Whether a checking balance is known. Without one, cents is 0 only
+       * because nothing is known, and the widget says so instead of $0.
+       * Added after version 2 without a bump: an older script reads it as before.
+       */
+      cashKnown: boolean
       /** How far the bills due by payday outrun the cash; 0 when they fit. */
       shortfallCents: number
       perDayCents: number
       payday: IsoDate
+      paydayEstimate: boolean
     }
 
 export interface WidgetSummary {
-  /** Bumped only if a field changes meaning, so an older script can say it needs updating. */
-  version: 1
+  /**
+   * Bumped only if a field changes meaning, so an older script can say it
+   * needs updating. 2: until_payday's cents is never below zero, with the
+   * shortfall in shortfallCents, and leeway carries the shortfall too; both
+   * say whether payday is a guess.
+   */
+  version: typeof SUMMARY_VERSION
   /** When these numbers were read. */
   asOf: string
   currency: string
@@ -83,7 +106,7 @@ export function widgetSummary(sources: WidgetSources): WidgetSummary {
   const startWorth = netWorth.history[0]?.netWorthCents ?? netWorth.netWorthCents
   const counts = countAlerts(sources.alerts)
   return {
-    version: 1,
+    version: SUMMARY_VERSION,
     asOf: sources.now.toISOString(),
     currency: settings.currency,
     locale: settings.locale,
@@ -116,14 +139,20 @@ function headlineOf(budget: WithRoom<BudgetSummary>, cashFlow: CashFlow): Widget
       cents: room.leadCents,
       perDayCents: room.leadCents > 0 ? room.perDayCents : null,
       daysLeft: budget.period.daysLeft + 1,
+      // Over budget and short of the bills too: the hero says both, and so does the widget.
+      shortfallCents: cashFlow.shortfallCents,
+      payday: cashFlow.nextPayday,
+      paydayEstimate: cashFlow.paydayEstimate,
     }
   }
   return {
     kind: 'until_payday',
     cents: cashFlow.safeCents,
+    cashKnown: cashFlow.cashKnown,
     shortfallCents: cashFlow.shortfallCents,
     perDayCents: room?.perDayCents ?? cashFlow.perDayCents,
     payday: cashFlow.nextPayday,
+    paydayEstimate: cashFlow.paydayEstimate,
   }
 }
 

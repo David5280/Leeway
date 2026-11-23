@@ -8,13 +8,16 @@ import { AgentSection } from './Agent'
 import { AiModelsSection } from './AiModels'
 import { BanksSection } from './Banks'
 import { BudgetingSection } from './Budgeting'
+import { CalendarSection } from './Calendar'
 import { DataSection } from './Data'
 import { EmailSection } from './Email'
 import { LayoutSection } from './Layout'
 import { LookSection } from './Look'
 import { NotificationsSection } from './Notifications'
+import { PlanningSection } from './Planning'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
+import { TaxSection } from './Tax'
 import { WidgetSection } from './Widget'
 
 export interface SettingsGroup {
@@ -40,6 +43,12 @@ export const SETTINGS_GROUPS = [
     title: 'Budgeting',
     description: 'When a period starts, when warnings show, and your currency and time zone.',
     sections: [BudgetingSection, RegionSection],
+  },
+  {
+    id: 'planning',
+    title: 'Planning',
+    description: 'Your birth year, for retirement projections.',
+    sections: [PlanningSection],
   },
   {
     id: 'accounts',
@@ -78,6 +87,12 @@ export const SETTINGS_GROUPS = [
     sections: [AiModelsSection],
   },
   {
+    id: 'calendar',
+    title: 'Calendar',
+    description: 'Connect a calendar to see trips and events coming up next to your bills.',
+    sections: [CalendarSection],
+  },
+  {
     id: 'widget',
     title: 'Widget',
     description: 'Your leeway on your iPhone home screen or Mac desktop, through Scriptable.',
@@ -86,8 +101,8 @@ export const SETTINGS_GROUPS = [
   {
     id: 'data',
     title: 'Data',
-    description: 'Bring in transaction history, and back up your setup.',
-    sections: [DataSection],
+    description: 'Bring in transaction history, back up your setup, and export a year for taxes.',
+    sections: [DataSection, TaxSection],
   },
   {
     id: 'sign-in',

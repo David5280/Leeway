@@ -8,7 +8,7 @@ import { addDays, type IsoDate } from '../../lib/dates.js'
 import type { PeriodConfig } from '../../lib/periods.js'
 import { periodConfig, saveSettings, settingsSchema, type Settings } from '../settings.js'
 import type { PayCadence } from './cadence.js'
-import { payerKeyOf, type PayOverride } from './given.js'
+import { employerKeyOf, type PayOverride } from './ownPay.js'
 import { paycheckPeriod, periodInStep } from './period.js'
 import { readDetectedPay } from './source.js'
 import { readPayView, type PayView } from './view.js'
@@ -34,7 +34,7 @@ async function savePay(
  * since they have said the paychecks have it right.
  */
 export async function confirmPay(db: Db, settings: Settings, today: IsoDate): Promise<PayView> {
-  const detected = await readDetectedPay(db, settings, today)
+  const detected = await readDetectedPay(db, today)
   const main = detected.employer
   if (!main) {
     throw new AppError(
@@ -43,7 +43,7 @@ export async function confirmPay(db: Db, settings: Settings, today: IsoDate): Pr
     )
   }
   const cadence = main.cadence as PayCadence
-  const payerKey = payerKeyOf(main)
+  const payerKey = employerKeyOf(main)
   const paydays = detected.paychecks.filter((p) => p.payerKey === payerKey).map((p) => p.date)
   const aligned = paycheckPeriod(cadence, main.lastPaycheck, paydays)
   return savePay(

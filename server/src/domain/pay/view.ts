@@ -9,18 +9,19 @@ import type { Cadence } from '../../lib/periods.js'
 import { accountMasks } from '../accounts.js'
 import type { Settings } from '../settings.js'
 import { merchantDisplayName } from '../transactionName.js'
+import type { PayCadence } from './cadence.js'
 import type { CurrentPay, Employer } from './current.js'
 import {
+  employerKeyOf,
   isConfirmed,
-  nextGivenPayday,
-  payerKeyOf,
+  ownMonthlyCents,
   withOwnersPay,
   type PayOverride,
-} from './given.js'
+} from './ownPay.js'
+import { nextOwnPayday } from './ownSchedule.js'
 import { paycheckPeriod, type PaycheckPeriod } from './period.js'
 import type { Paycheck } from './paychecks.js'
 import { readDetectedPay } from './source.js'
-import type { PayCadence } from './cadence.js'
 
 export interface FoundEmployer {
   name: string
@@ -45,6 +46,11 @@ export interface FoundPay {
   estimate: boolean
   /** Whether the owner said the main employer's pay is right. */
   confirmed: boolean
+  /**
+   * True when the owner said an earlier reading was right, but the paychecks
+   * now show another employer or cadence: their word no longer holds.
+   */
+  confirmationStale: boolean
 }
 
 /** Where the pay every figure goes by came from. */
@@ -62,11 +68,17 @@ export interface PayInUse {
   estimate: boolean
 }
 
+/** The owner's own pay, its next payday stepped on to today or after. */
+export interface YourPay extends PayOverride {
+  /** What it comes to in a month. */
+  monthlyCents: number
+}
+
 export interface PayView {
   /** Null when no employer is paying now. */
   found: FoundPay | null
-  /** The owner's own pay, its next payday stepped past today; null when they gave none. */
-  yours: PayOverride | null
+  /** The owner's own pay; null when they gave none. */
+  yours: YourPay | null
   /** Null with neither paychecks found nor the owner's own pay. */
   pay: PayInUse | null
   /** The newest paycheck from an employer paying now. */
@@ -95,13 +107,13 @@ function foundEmployer(employer: Employer, name: Namer): FoundEmployer {
 /** The main employer's paychecks, oldest first. */
 function mainPaychecks(pay: CurrentPay): Paycheck[] {
   if (!pay.employer) return []
-  const key = payerKeyOf(pay.employer)
+  const key = employerKeyOf(pay.employer)
   return pay.paychecks.filter((paycheck) => paycheck.payerKey === key)
 }
 
 /** The newest paycheck from any employer paying now. */
 function newestPaycheck(pay: CurrentPay): Paycheck | undefined {
-  const paying = new Set(pay.employers.map(payerKeyOf))
+  const paying = new Set(pay.employers.map(employerKeyOf))
   return pay.paychecks.filter((paycheck) => paying.has(paycheck.payerKey)).at(-1)
 }
 
@@ -120,6 +132,8 @@ function foundOf(detected: CurrentPay, settings: Settings, name: Namer): FoundPa
       (employer, i) => employer.estimate && !(i === 0 && confirmed),
     ),
     confirmed,
+    // A confirmation of a reading the paychecks no longer show is said, not kept quiet.
+    confirmationStale: settings.pay.confirmed !== null && !confirmed,
   }
 }
 
@@ -153,7 +167,11 @@ export function payViewOf(
   const last = newestPaycheck(detected)
   return {
     found,
-    yours: override && { ...override, nextPayday: nextGivenPayday(override, today) },
+    yours: override && {
+      ...override,
+      nextPayday: nextOwnPayday(override, today),
+      monthlyCents: ownMonthlyCents(override),
+    },
     pay: inUseOf(pay, settings, found),
     lastPaycheck: last ? { date: last.date, amountCents: last.amountCents } : null,
     paydays: paychecks.map((paycheck) => paycheck.date),
@@ -170,7 +188,7 @@ export function payViewOf(
 
 /** The owner's pay as the Payday screen shows it, read fresh. */
 export async function readPayView(db: Db, settings: Settings, today: IsoDate): Promise<PayView> {
-  const detected = await readDetectedPay(db, settings, today)
+  const detected = await readDetectedPay(db, today)
   const masks = await accountMasks(db)
   return payViewOf(detected, settings, today, (employer) =>
     merchantDisplayName(employer.newest, { masks }),

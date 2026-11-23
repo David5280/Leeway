@@ -117,7 +117,8 @@ describe('the points', () => {
     })
     // The headline says it, so no point repeats it.
     expect(summarize(short)).toEqual({
-      headline: 'Checking is $400 short of the bills and overdraft before payday, about Dec 1.',
+      headline:
+        'Checking may be $400 short of the bills and overdraft before payday, best guess Dec 1.',
       points: [],
     })
   })
@@ -359,7 +360,7 @@ describe('summaryFacts', () => {
         overdraftToBringBackToZero: '$0',
         shortfall: null,
       },
-      typicalMonthlyPay: { amount: '$4,200', estimatedFromOnePaycheck: true },
+      typicalMonthlyPay: { amount: '$4,200', estimated: true },
       headsUp: [{ priority: 'soon', message: 'Rent is due' }],
       debts: null,
       fixedHeadline: null,

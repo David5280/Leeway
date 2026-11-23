@@ -4,24 +4,23 @@
 
 import { useState } from 'react'
 import type { Settings } from '../api/client'
+import { addDays, dateParts, daysBetween } from '../lib/dates'
+import { cadenceLabel, PAY_CADENCE_WORDS } from '../pages/plan/payday/payText'
 import { Setting } from './ui'
 
 export type PaycheckPeriod = Extract<Settings['period'], { kind: 'paycheck' }>
 
-const FREQUENCIES = [
-  { value: 'weekly', label: 'Every week' },
-  { value: 'biweekly', label: 'Every 2 weeks' },
-  { value: 'semimonthly', label: 'Twice a month' },
-  { value: 'monthly', label: 'Once a month' },
-] as const
+type Frequency = PaycheckPeriod['frequency']
 
-/** What each frequency reads as in a sentence: "Paid every 2 weeks". */
-const FREQUENCY_WORDS: Record<PaycheckPeriod['frequency'], string> = {
-  weekly: 'every week',
-  biweekly: 'every 2 weeks',
-  semimonthly: 'twice a month',
-  monthly: 'once a month',
-}
+/** The pay cadence each frequency is, for its words (payText.ts), in the order the picker shows. */
+const CADENCE_OF = {
+  weekly: 'week',
+  biweekly: 'biweek',
+  semimonthly: 'semimonth',
+  monthly: 'month',
+} as const satisfies Record<Frequency, keyof typeof PAY_CADENCE_WORDS>
+
+const FREQUENCIES = Object.keys(CADENCE_OF) as Frequency[]
 
 function dayNumber(text: string, max: number): number {
   const value = Math.round(Number(text))
@@ -29,12 +28,11 @@ function dayNumber(text: string, max: number): number {
 }
 
 /** Days between paydays for the frequencies that step by whole weeks. */
-const STEP_DAYS: Partial<Record<PaycheckPeriod['frequency'], number>> = { weekly: 7, biweekly: 14 }
+const STEP_DAYS: Partial<Record<Frequency, number>> = { weekly: 7, biweekly: 14 }
 
-/** Whole days since 1970 for a date, so two dates can be counted apart. */
-function dayNumberOf(iso: string): number {
-  const [year, month, day] = iso.split('-').map(Number)
-  return Date.UTC(year!, month! - 1, day!) / 86_400_000
+/** The day of the month a monthly payday keeps: its own, or the month's end as 31 (any length). */
+function monthlyDay(date: string): number {
+  return dateParts(addDays(date, 1)).day === 1 ? 31 : dateParts(date).day
 }
 
 /**
@@ -48,8 +46,8 @@ export function sameSchedule(a: PaycheckPeriod, b: PaycheckPeriod): boolean {
     return String(a.semimonthlyDays ?? [1, 15]) === String(b.semimonthlyDays ?? [1, 15])
   }
   const step = STEP_DAYS[a.frequency]
-  if (!step) return a.anchorDate.slice(8) === b.anchorDate.slice(8)
-  return (dayNumberOf(a.anchorDate) - dayNumberOf(b.anchorDate)) % step === 0
+  if (!step) return monthlyDay(a.anchorDate) === monthlyDay(b.anchorDate)
+  return daysBetween(a.anchorDate, b.anchorDate) % step === 0
 }
 
 /** The schedule in a line, with Change to open the fields. */
@@ -57,7 +55,7 @@ function FoundSchedule({ value, onChange }: { value: PaycheckPeriod; onChange: (
   return (
     <p className="row wrap small" style={{ justifyContent: 'space-between' }}>
       <span>
-        Paid <b>{FREQUENCY_WORDS[value.frequency]}</b>, going by your paychecks.
+        Paid <b>{PAY_CADENCE_WORDS[CADENCE_OF[value.frequency]]}</b>, going by your paychecks.
       </span>
       <button type="button" className="btn ghost small" onClick={onChange}>
         Change
@@ -102,9 +100,9 @@ function PaycheckFields({
             onChange({ ...value, frequency: e.target.value as typeof value.frequency })
           }
         >
-          {FREQUENCIES.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
+          {FREQUENCIES.map((frequency) => (
+            <option key={frequency} value={frequency}>
+              {cadenceLabel(CADENCE_OF[frequency])}
             </option>
           ))}
         </select>

@@ -32,9 +32,11 @@ export interface PlanText {
   checkedOn: string
 }
 
-/** Every assumption as the form's text. */
+/**
+ * Every assumption as the form's text, but the birth year, which is asked on
+ * its own (components/BirthYearForm.tsx) and kept in Settings.
+ */
 export interface AssumptionsText {
-  birthYear: string
   retirementAge: string
   returnPercent: string
   inflationPercent: string
@@ -135,9 +137,35 @@ export function pensionCandidates(accounts: Account[]): Account[] {
   )
 }
 
+/**
+ * Where a new pension goes, read from the account chosen and the accounts as
+ * listed now: a new account, an account offered, or one chosen that has since
+ * left the list, as after a refusal reads the accounts again. One made a
+ * pension meanwhile ("kept") can still take the figures as that pension; one
+ * hidden or gone ("gone") must be chosen again. Neither ever turns into a new
+ * pension by itself, which would count one plan twice.
+ */
+export type AccountChoice =
+  | { kind: 'new' }
+  | { kind: 'account'; accountId: string }
+  | { kind: 'kept'; accountId: string; name: string }
+  | { kind: 'gone'; accountId: string }
+
+export function accountChoice(
+  accountId: string,
+  candidates: readonly { id: string }[],
+  pensions: readonly { accountId: string; name: string }[] = [],
+): AccountChoice {
+  if (accountId === '') return { kind: 'new' }
+  if (candidates.some((candidate) => candidate.id === accountId)) {
+    return { kind: 'account', accountId }
+  }
+  const kept = pensions.find((pension) => pension.accountId === accountId)
+  return kept ? { kind: 'kept', accountId, name: kept.name } : { kind: 'gone', accountId }
+}
+
 export function assumptionsText(assumptions: Assumptions): AssumptionsText {
   return {
-    birthYear: numberText(assumptions.birthYear),
     retirementAge: String(assumptions.retirementAge),
     returnPercent: String(assumptions.returnPercent),
     inflationPercent: String(assumptions.inflationPercent),
@@ -232,7 +260,6 @@ export function readPlan(text: PlanText): ReadBack<PlanChange> {
 /** Every assumption, from the form; the server checks each value's range. */
 export function readAssumptions(text: AssumptionsText): ReadBack<AssumptionsChange> {
   return readBack((fields) => ({
-    birthYear: fields.number(text.birthYear, 'your birth year'),
     retirementAge: fields.required(text.retirementAge, 'a retirement age'),
     returnPercent: fields.required(text.returnPercent, 'a yearly return'),
     inflationPercent: fields.required(text.inflationPercent, 'inflation'),

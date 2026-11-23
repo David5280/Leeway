@@ -46,15 +46,43 @@ describe('Your pay', () => {
     expect(screen.getByRole('button', { name: 'Change my pay' })).toBeVisible()
   })
 
-  it('names a second job beside the first', async () => {
+  it('names a second job beside the first, keeping the main job’s paycheck and payday', async () => {
+    // The gig pays weekly, next on Nov 23, before the main job's Nov 27.
     show(payView([{}, { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }]))
-    expect(await card()).toHaveTextContent('from Acme Corp and 1 more.')
+    const pay = await card()
+    expect(pay).toHaveTextContent('Each paycheck$2,100')
+    expect(pay).toHaveTextContent('from Acme Corp and 1 more. Next payday Fri, Nov 27.')
+  })
+
+  it('drops the estimate for a confirmed main job, though a second job is still a guess', async () => {
+    const view = payView(
+      [{}, { name: 'GIG PAYOUT', cents: 40_000, count: 1, last: '2026-11-16' }],
+      {
+        confirmed: true,
+      },
+    )
+    const { user } = show(view)
+    const pay = await card()
+    expect(within(pay).queryByText('Estimate')).not.toBeInTheDocument()
+    await user.click(within(pay).getByRole('button', { name: /Each paycheck/ }))
+    expect(screen.getByRole('dialog', { name: 'Your pay' })).toHaveTextContent(
+      "A second job's pay is an estimate",
+    )
+  })
+
+  it('says when the paychecks changed since the owner confirmed them', async () => {
+    const view = payView()
+    show({ ...view, found: { ...view.found!, confirmationStale: true } })
+    expect(
+      await screen.findByText('Your paychecks changed since you said this looked right.'),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Looks right' })).toBeVisible()
   })
 
   it('takes the owner’s own pay, filled in from what was found', async () => {
     const { server, user } = show(payView())
     await user.click(await screen.findByRole('button', { name: 'Not quite' }))
-    const form = screen.getByRole('form', { name: 'Your pay' })
+    const form = screen.getByRole('form', { name: 'Enter your pay' })
     expect(within(form).getByLabelText('One paycheck')).toHaveValue('2100')
     expect(within(form).getByLabelText('How often you are paid')).toHaveDisplayValue(
       'Every 2 weeks',
@@ -75,7 +103,7 @@ describe('Your pay', () => {
     const { server, user } = show(payView())
     await user.click(await screen.findByRole('button', { name: 'Not quite' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('form', { name: 'Your pay' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Enter your pay' })).not.toBeInTheDocument()
     expect(server.actions('set_pay')).toEqual([])
   })
 
@@ -122,7 +150,7 @@ describe('Your pay', () => {
     expect(sheet).toHaveTextContent('Next payday Fri, Nov 27')
     expect(
       within(sheet).getByText(
-        'About a month $4,566 = One paycheck $2,100 and paychecks a year, over 12 months 26.1',
+        'About a month $4,566 = One paycheck $2,100 and Paychecks a year, over 12 months 26.1',
       ),
     ).toBeInTheDocument()
     expect(sheet).toHaveTextContent('Paid every 2 weeks, next Fri, Nov 27')

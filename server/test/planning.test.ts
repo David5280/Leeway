@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { AppContext } from '../src/context.js'
 import { netWorthSeries } from '../src/domain/netWorth.js'
 import { actionCaller } from './actionCaller.js'
 import {
@@ -10,7 +9,20 @@ import {
 } from './helpers.js'
 
 // The test clock reads 2026-11-17, in UTC, and the database's own date is the real one.
-let ctx: AppContext
+const NOW = new Date('2026-11-17T18:00:00Z')
+/**
+ * Fridays every two weeks, enough to settle the cadence: with five, Veterans
+ * Day on Wednesday Nov 11 lets the 11th and the 25th fit nearly as well.
+ */
+const SIX_FRIDAYS = [
+  '2026-08-28',
+  '2026-09-11',
+  '2026-09-25',
+  '2026-10-09',
+  '2026-10-23',
+  '2026-11-06',
+]
+let ctx: Awaited<ReturnType<typeof createTestContext>>
 const { call } = actionCaller(() => ctx)
 
 beforeAll(async () => {
@@ -21,6 +33,7 @@ afterAll(async () => {
 })
 beforeEach(async () => {
   await resetData(ctx.db)
+  ctx.setNow(NOW)
 })
 
 describe('netWorthSeries', () => {
@@ -256,9 +269,23 @@ describe('get_cash_flow', () => {
     expect((await call('get_cash_flow')).cashCents).toBe(90_000)
   })
 
+  it('adds up counted checking only, leaving hidden and unshared accounts out', async () => {
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 10_000 })
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 20_000 })
+    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 1_000_000, hidden: true })
+    const unshared = await insertBankAccount(ctx.db, {
+      subtype: 'checking',
+      balanceCents: 1_000_000,
+    })
+    await ctx.db.query("UPDATE accounts SET unshared_at = '2026-11-01' WHERE id = $1", [
+      unshared.accountId,
+    ])
+    expect((await call('get_cash_flow')).cashCents).toBe(30_000)
+  })
+
   it('finds payday from regular deposits, and never goes below zero per day', async () => {
     const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1000 })
-    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06']) {
+    for (const date of SIX_FRIDAYS) {
       await insertBankTransaction(ctx.db, accountId, {
         date,
         name: 'ACME PAYROLL',
@@ -281,6 +308,84 @@ describe('get_cash_flow', () => {
       safeCents: 0,
       shortfallCents: 8000,
       perDayCents: 0,
+    })
+  })
+
+  it('keeps a paycheck that has not posted yet as payday, never a small payout after it', async () => {
+    ctx.setNow(new Date('2026-11-20T18:00:00Z'))
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 1_000_000 })
+    const deposit = (date: string, name: string, amountCents: number, pending = false) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents, pending })
+    for (const date of ['2026-09-11', '2026-09-25', '2026-10-09', '2026-10-23', '2026-11-06'])
+      await deposit(date, 'ACME PAYROLL', -250_000)
+    // Today's paycheck is still pending, and $30 from Etsy lands on the 22nd each month.
+    await deposit('2026-11-20', 'ACME PAYROLL', -250_000, true)
+    for (const date of ['2026-08-22', '2026-09-22', '2026-10-22'])
+      await deposit(date, 'ETSY PAYOUT', -3_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 200_000,
+      cadence: 'month',
+      anchorDate: '2026-12-01',
+    })
+    const flow = await call('get_cash_flow')
+    expect(flow).toMatchObject({
+      nextPayday: '2026-12-04',
+      expectedPayCents: 250_000,
+      billsDue: [{ name: 'Rent', dueDate: '2026-12-01' }],
+      safeCents: 800_000,
+    })
+  })
+
+  it('never takes money from a person as pay, however regular', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'Zelle payment from Jane Doughty',
+        amountCents: -200_000,
+      })
+    }
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-12-01',
+      paydaySource: 'period_end',
+      expectedPayCents: null,
+    })
+  })
+
+  it('takes payday from the payroll, not larger money from a person', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    const deposit = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, accountId, { date, name, amountCents })
+    for (const date of ['2026-08-03', '2026-09-03', '2026-10-03', '2026-11-03'])
+      await deposit(date, 'Zelle payment from Jane Doughty', -200_000)
+    for (const date of SIX_FRIDAYS) await deposit(date, 'ACME PAYROLL', -150_000)
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-11-20',
+      paydaySource: 'detected_income',
+      expectedPayCents: 150_000,
+    })
+  })
+
+  it('takes payday from a paycheck budget period over regular deposits that disagree', async () => {
+    // Pay found in history says Nov 20, but the owner budgets every paycheck from Nov 17.
+    await call('update_settings', {
+      period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-17' },
+    })
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 100_000 })
+    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'ACME PAYROLL',
+        amountCents: -250000,
+      })
+    }
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-12-01',
+      paydaySource: 'pay_period',
+      // The paychecks still say how much comes, whichever says when.
+      expectedPayCents: 250000,
+      daysUntilPayday: 14,
     })
   })
 
@@ -355,12 +460,96 @@ describe('get_cash_flow', () => {
     await deposit('2026-11-13', 'NEW CO PAYROLL', -210000, 'INCOME_SALARY')
     const flow = await call('get_cash_flow')
     // One paycheck cannot show how often pay comes, so the cautious monthly guess
-    // projects the latest payday: a month on.
+    // projects the latest payday: Friday Nov 13 may be the 15th paid early, so Dec 15.
     expect(flow).toMatchObject({
-      nextPayday: '2026-12-13',
+      nextPayday: '2026-12-15',
       paydaySource: 'detected_income',
       paydayEstimate: true,
       expectedPayCents: 210000,
+    })
+  })
+
+  it('says a shortfall before a guessed payday as a maybe, never in red', async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 17_800 })
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-13',
+      name: 'NEW CO PAYROLL',
+      amountCents: -210000,
+      detailed: 'INCOME_SALARY',
+    })
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150000,
+      cadence: 'month',
+      anchorDate: '2026-12-01',
+    })
+    // Rent falls before the guessed payday of Dec 15, but pay may well come first.
+    const flow = await call('get_cash_flow')
+    expect(flow).toMatchObject({ paydayEstimate: true, shortfallCents: 132_200 })
+    expect(flow.spendable).toMatchObject({
+      problem: false,
+      note: 'Checking may be $1,322 short of the bills before payday, best guess Dec 15.',
+    })
+  })
+
+  it("runs to the main job's payday, so a side job paying first leaves no bill out", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 160_000 })
+    const pay = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, accountId, {
+        date,
+        name,
+        amountCents: -amountCents,
+        detailed: 'INCOME_SALARY',
+      })
+    // $2,000 twice a month, next on Nov 30; $300 every two weeks on the side, next on Nov 20.
+    for (const date of ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'])
+      await pay(date, 'INITECH PAYROLL', 200_000)
+    for (const date of ['2026-10-09', '2026-10-23', '2026-11-06'])
+      await pay(date, 'BLUTH CO PAYROLL', 30_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150_000,
+      cadence: 'month',
+      anchorDate: '2026-11-25',
+    })
+    const flow = await call('get_cash_flow')
+    expect(flow).toMatchObject({
+      nextPayday: '2026-11-30',
+      expectedPayCents: 200_000,
+      billsDueCents: 150_000,
+      safeCents: 10_000,
+    })
+  })
+
+  it("says a shortfall in red when the main job is confirmed, whatever a side job's guess", async () => {
+    const { accountId } = await insertBankAccount(ctx.db, { balanceCents: 10_000 })
+    const pay = (date: string, name: string, amountCents: number) =>
+      insertBankTransaction(ctx.db, accountId, {
+        date,
+        name,
+        amountCents: -amountCents,
+        detailed: 'INCOME_SALARY',
+      })
+    // $2,000 twice a month, confirmed, next on Nov 30; one $300 side-job paycheck, a guess.
+    for (const date of ['2026-09-15', '2026-09-30', '2026-10-15', '2026-10-30', '2026-11-13'])
+      await pay(date, 'INITECH PAYROLL', 200_000)
+    await pay('2026-11-06', 'BLUTH CO PAYROLL', 30_000)
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150_000,
+      cadence: 'month',
+      anchorDate: '2026-11-25',
+    })
+    const flow = await call('get_cash_flow')
+    // The side job's guess makes the month an estimate, never the main job's payday.
+    expect(flow).toMatchObject({
+      nextPayday: '2026-11-30',
+      paydayEstimate: false,
+      shortfallCents: 140_000,
+    })
+    expect(flow.spendable).toMatchObject({
+      problem: true,
+      note: 'Checking is $1,400 short of the bills before payday on Nov 30.',
     })
   })
 

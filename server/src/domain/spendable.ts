@@ -22,10 +22,13 @@ export interface Spendable {
   overdraftCents: number
   /** Left in the budgets after what goals hold back; null when nothing is budgeted. */
   budgetLeftCents: number | null
-  /** The figure to lead with: the lesser of the budget's room and safe to spend. */
+  /** The figure to lead with: the lesser of the budget's room and safe to spend; 0 when neither is known. */
   leadCents: number
-  /** Which of the two the lead figure is. */
-  limitedBy: 'budget' | 'cash'
+  /**
+   * Which of the two the lead figure is, or 'none' with neither a budget nor
+   * a checking balance: then nothing is known to spend, which is not $0.
+   */
+  limitedBy: 'budget' | 'cash' | 'none'
   /**
    * What can be spent a day, counting today: the lesser of the budget's room
    * a day for the rest of the period and the cash's a day until payday (see
@@ -44,14 +47,18 @@ export interface Spendable {
    * compare, an overdraft. Null when the budget leads and the cash covers it.
    */
   note: string | null
-  /** Whether the note is a problem (a shortfall, or an overdraft while the cash leads), the only time it is red; there is always a note then. */
+  /**
+   * Whether the note is a problem, the only time it is red: a shortfall
+   * before a payday read from paychecks (not a guess), or an overdraft while
+   * the cash leads. There is always a note then.
+   */
   problem: boolean
 }
 
 /** When money is safe to spend until, as the cash flow found it. */
 type Until = Pick<Spendable, 'payday' | 'paydaySource' | 'paydayEstimate'>
 
-/** "before payday on Nov 28", "before payday, about Nov 28", or the period's end when no payday is known. */
+/** "before payday on Nov 28", "before payday, best guess Nov 28", or the period's end when no payday is known. */
 export function untilWords(
   { payday, paydaySource, paydayEstimate }: Until,
   locale: string,
@@ -62,7 +69,8 @@ export function untilWords(
     return `by ${end}, when this budget period ends (no payday found yet)`
   }
   const day = shortDate(payday, locale)
-  return paydayEstimate ? `before payday, about ${day}` : `before payday on ${day}`
+  // A payday read from too few paychecks is a guess, and the words say so.
+  return paydayEstimate ? `before payday, best guess ${day}` : `before payday on ${day}`
 }
 
 /** The figures a note is written from. */
@@ -85,7 +93,9 @@ export function spendableNote(facts: NoteFacts, money: Money, locale: string): s
   const until = untilWords(facts, locale)
   if (facts.shortfallCents > 0) {
     const owed = facts.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
-    return `Checking is ${money(facts.shortfallCents)} short of ${owed} ${until}.`
+    // Against a guessed payday some of those bills may fall after pay comes.
+    const is = facts.paydayEstimate ? 'may be' : 'is'
+    return `Checking ${is} ${money(facts.shortfallCents)} short of ${owed} ${until}.`
   }
   const overdraft = money(facts.overdraftCents)
   if (facts.budgetLeftCents !== null && facts.budgetLeftCents > facts.safeCents) {
@@ -133,10 +143,13 @@ export function spendable(
 ): Spendable {
   const budgeted = budget.totals.budgetedCents > 0
   const budgetLeftCents = budgeted ? budget.totals.leewayCents : null
-  // No checking balance to go by (none linked yet): the budget alone says what is left.
-  const byCash =
-    budgetLeftCents === null || (cashFlow.cashKnown && cashFlow.safeCents < budgetLeftCents)
-  const limitedBy: Spendable['limitedBy'] = byCash ? 'cash' : 'budget'
+  // No checking balance to go by (none linked yet): the budget alone says
+  // what is left, and with no budget either, nothing is known.
+  const cashLeads =
+    cashFlow.cashKnown && (budgetLeftCents === null || cashFlow.safeCents < budgetLeftCents)
+  let limitedBy: Spendable['limitedBy'] = 'none'
+  if (cashLeads) limitedBy = 'cash'
+  else if (budgetLeftCents !== null) limitedBy = 'budget'
   const shown = {
     safeCents: cashFlow.safeCents,
     shortfallCents: cashFlow.shortfallCents,
@@ -149,11 +162,12 @@ export function spendable(
   } satisfies Omit<NoteFacts, 'afterGoals'>
   const afterGoals = budget.totals.setAsideCents > 0
   const note = cashFlow.cashKnown ? spendableNote({ ...shown, afterGoals }, money, locale) : null
-  // Red only for money short, or owed back while the cash leads: there is a note then.
+  // Red only for money short before a known payday, or owed back while the cash leads.
   const owedWhileCashLeads = limitedBy === 'cash' && cashFlow.overdraftCents > 0
+  const surelyShort = cashFlow.shortfallCents > 0 && !cashFlow.paydayEstimate
   return {
     ...shown,
-    leadCents: limitedBy === 'cash' ? cashFlow.safeCents : budgetLeftCents!,
+    leadCents: { budget: budgetLeftCents ?? 0, cash: cashFlow.safeCents, none: 0 }[limitedBy],
     perDayCents: dailyRoom(
       budgetLeftCents === null
         ? null
@@ -162,7 +176,7 @@ export function spendable(
     ),
     cashKnown: cashFlow.cashKnown,
     note,
-    problem: note !== null && (cashFlow.shortfallCents > 0 || owedWhileCashLeads),
+    problem: note !== null && (surelyShort || owedWhileCashLeads),
   }
 }
 
