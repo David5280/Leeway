@@ -17,10 +17,11 @@
 // a long gap, is told apart from one still paying.
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
+import { median } from '../../lib/money.js'
 import type { Cadence } from '../../lib/periods.js'
 import { textKey } from '../merchantKey.js'
 import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
-import type { Deposit } from './deposits.js'
+import { isBusinessEnding, type Deposit } from './deposits.js'
 import { splitCycle } from './offCycle.js'
 import type { SemimonthSchedule } from './semimonthly.js'
 
@@ -92,24 +93,20 @@ export const CAUTIOUS_CADENCE: Cadence = 'month'
 /** Slack for a payroll that posts a few days late. */
 const SLACK_DAYS = 3
 
-/** The middle amount, rounded; the average of the two middles for an even count. */
-export function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2
-    ? sorted[middle]!
-    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2)
-}
-
 /**
  * Who paid a deposit, from its bank text without any word holding a digit,
  * as a transfer's name drops its reference: "ACME DES:PAYROLL ID:K3J9X"
  * carries a trace code that changes with every paycheck, and is still ACME.
+ * A name that is all digits, or digits and a business ending ("7-Eleven",
+ * "3M Company"), keeps its first word that holds one, so it names someone.
  */
 export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): string {
-  const text = deposit.merchantName ?? deposit.name
-  const words = text.split(/\s+/).filter((word) => !/\d/.test(word))
-  return textKey(words.join(' '))
+  const words = (deposit.merchantName ?? deposit.name).trim().split(/\s+/)
+  const holdsDigit = (word: string) => /\d/.test(word)
+  const named = words.filter((word) => !holdsDigit(word))
+  if (!named.every(isBusinessEnding)) return textKey(named.join(' '))
+  const first = words.findIndex(holdsDigit)
+  return textKey(words.filter((word, i) => i === first || !holdsDigit(word)).join(' '))
 }
 
 /**

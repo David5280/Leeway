@@ -38,6 +38,13 @@ describe('bankHolidaysOf', () => {
     expect(bankHolidaysOf(2026)).not.toContain('2026-07-04')
   })
 
+  it('closes for Juneteenth only from 2022, the first year the Federal Reserve did', () => {
+    // Sunday Jun 19 2022 closed Monday Jun 20; Friday Jun 19 2020 was a working day.
+    expect(bankHolidaysOf(2022)).toContain('2022-06-20')
+    expect(isBankHoliday('2020-06-19')).toBe(false)
+    expect(bankHolidaysOf(2020)).not.toContain('2020-06-19')
+  })
+
   it('counts holidays in a span of years, the later end included', () => {
     const count = (from: string, to: string) =>
       bankHolidaysAfter(toDayNumber(from), toDayNumber(to))

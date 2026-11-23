@@ -310,7 +310,7 @@ function leewayNote(summary) {
  * The leading number, in the app's words: the budgets' room is left to
  * spend, and the cash until payday, leading when checking holds less or
  * before any budget is set, is safe to spend. A problem is in red and in
- * words ("over", "short"), so color is never the only sign.
+ * words ("Over budget", "short"), so color is never the only sign.
  * @param {Summary} summary
  * @returns {{ label: string, value: string, tone: Tone, note: string }}
  */
@@ -320,7 +320,9 @@ function headlineOf(summary) {
   if (headline.kind === 'leeway') {
     const short = headline.cents < 0
     return {
-      label: 'Left to spend',
+      // Over budget, the label says so as the Overview's does; the figure's
+      // "over" keeps the red from being the only sign on it.
+      label: short ? 'Over budget' : 'Left to spend',
       value: short ? `${amount} over` : amount,
       tone: short ? 'over' : 'ink',
       note: leewayNote(summary),

@@ -282,26 +282,45 @@ describe('getFinancialProfile', () => {
     expect(JSON.stringify(result.pay)).not.toContain('4821')
   })
 
-  it('never names a person who pays a wage, in the profile or the digest the AI reads', async () => {
+  // A household or a sole trader paying by direct deposit under their own
+  // name, as banks write it: an ACH line's "CO" labels name no company.
+  const PERSON_PAYERS = [
+    'JOHN SMITH DIR DEP',
+    'ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD',
+    'JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD',
+  ]
+
+  /** Five biweekly paychecks of $1,500 under the given bank text, and the profile they make. */
+  async function paidBy(name: string) {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 300_000 })
-    // A household or a sole trader paying by direct deposit under their own name.
     for (const date of ['2026-09-04', '2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30']) {
-      await insertBankTransaction(ctx.db, checking.accountId, {
-        date,
-        name: 'JOHN SMITH DIR DEP',
-        amountCents: -150_000,
-      })
+      await insertBankTransaction(ctx.db, checking.accountId, { date, name, amountCents: -150_000 })
     }
-    const result = await profile()
-    expect(result.pay).toMatchObject({
-      cadence: 'biweek',
-      employer: null,
-      typicalPayCents: 150_000,
-    })
-    expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
-    const { digest } = await call('get_financial_profile')
-    expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
-    expect(digest).not.toMatch(/john|smith|dir dep/i)
+    return profile()
+  }
+
+  it.each(PERSON_PAYERS)(
+    'never names a person who pays a wage, in the profile or the digest the AI reads: %s',
+    async (name) => {
+      const result = await paidBy(name)
+      expect(result.pay).toMatchObject({
+        cadence: 'biweek',
+        employer: null,
+        typicalPayCents: 150_000,
+      })
+      expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
+      const { digest } = await call('get_financial_profile')
+      expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
+      expect(digest).not.toMatch(/john|smith|jane|doe|dir dep/i)
+    },
+  )
+
+  it('still names a business paying through the same ACH line', async () => {
+    const result = await paidBy(
+      'ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD IND NAME:JANE DOE',
+    )
+    expect(result.pay.employer).toBe('Acme Corp')
+    expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)
   })
 
   it('counts only the essential categories the owner picked, and their target', async () => {

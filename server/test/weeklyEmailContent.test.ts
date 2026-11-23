@@ -84,7 +84,7 @@ describe('weeklyEmailContent', () => {
     expect(short.subject).toBe('Your week in Leeway: $300 safe to spend')
     expect(short.figures).toContainEqual({ text: 'Safe to spend before payday', detail: '$300' })
     // No checking balance: $0 would be a guess, so the budget's room leads alone.
-    const unknown = { ...cashLeads, safeCents: 0, cashKnown: false }
+    const unknown = { limitedBy: 'budget', safeCents: 0, cashKnown: false } as const
     const email = content({ checkin: checkin({ spendable: unknown as never }) })
     expect(email.subject).toBe('Your week in Leeway: $1,200 left this month')
     expect(JSON.stringify(email.figures)).not.toMatch(/safe to spend/i)

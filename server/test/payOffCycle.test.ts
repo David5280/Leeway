@@ -130,11 +130,75 @@ describe('a bonus from the same payroll', () => {
   })
 })
 
-/** Paychecks on the given days, from one payer. */
-const paychecks = (dates: string[]): Paycheck[] =>
-  dates.map((date, i) => ({ payerKey: 'acme', date, amountCents: 300_000, depositIds: [`${i}`] }))
+describe('a payday paid early or posted late', () => {
+  // Paydays that move pay what a payday pays, so they stay on the cycle.
+  /** The month's last business day, Dec 31 paid early on Wednesday Dec 23. */
+  const MONTH_END = [
+    '2026-05-29',
+    '2026-06-30',
+    '2026-07-31',
+    '2026-08-31',
+    '2026-09-30',
+    '2026-10-30',
+    '2026-11-30',
+    '2026-12-23',
+  ]
+  /** The 15th and the month's end, Dec 31 paid early on Wednesday Dec 23. */
+  const TWICE_MONTHLY = [...SEMIMONTHLY, '2026-11-30', '2026-12-15', '2026-12-23']
+  /** Fridays every two weeks, Jan 1 paid Dec 31, Jan 15 posted the Thursday after. */
+  const LATE_BIWEEKLY = [
+    '2026-10-09',
+    '2026-10-23',
+    '2026-11-06',
+    '2026-11-20',
+    '2026-12-04',
+    '2026-12-18',
+    '2026-12-31',
+    '2027-01-21',
+    '2027-01-29',
+  ]
+  const payOn = (paydays: string[], today: string) =>
+    currentPay(
+      paydays.map((date) => salary(date)),
+      today,
+    )
 
-const dates = (list: Paycheck[]) => list.map((paycheck) => paycheck.date)
+  it('keeps a monthly payday paid early, so the next is a month on', () => {
+    expect(payOn(MONTH_END, '2026-12-26')).toMatchObject({
+      cadence: 'month',
+      nextPayday: '2027-01-29',
+    })
+  })
+
+  it('keeps a twice-a-month payday paid early, so the next is the 15th', () => {
+    expect(payOn(TWICE_MONTHLY, '2026-12-26')).toMatchObject({
+      cadence: 'semimonth',
+      nextPayday: '2027-01-15',
+    })
+  })
+
+  it('keeps both a payday posted late and the on-time one soon after it', () => {
+    expect(payOn(LATE_BIWEEKLY, '2027-01-31')).toMatchObject({
+      cadence: 'biweek',
+      nextPayday: '2027-02-12',
+    })
+  })
+})
+
+const PAY = 300_000
+
+/** A paycheck from one payer on the given day, for the usual amount unless given. */
+const paycheck = (date: string, amountCents = PAY): Paycheck => ({
+  payerKey: 'acme',
+  date,
+  amountCents,
+  depositIds: [date],
+})
+
+/** Paychecks on the given days, each for the usual amount. */
+const paychecks = (dates: string[]): Paycheck[] => dates.map((date) => paycheck(date))
+
+const dates = (list: Paycheck[]) => list.map((item) => item.date)
 
 describe('splitCycle', () => {
   it('sets nothing aside from a payroll on its cycle, or from fewer than three paychecks', () => {
@@ -149,17 +213,57 @@ describe('splitCycle', () => {
     expect(splitCycle(paychecks(late)).offCycle).toEqual([])
   })
 
-  it('sets aside a newest paycheck days before the payday the cycle points to', () => {
+  it('sets aside a newest bonus days before the payday the cycle points to', () => {
     // 22 days after Nov 2, a gap no shorter than a real month allows, but 7 days before Dec 1.
-    const split = splitCycle(paychecks([...MONTHLY, '2026-11-24']))
+    const split = splitCycle([...paychecks(MONTHLY), paycheck('2026-11-24', BONUS)])
     expect(dates(split.offCycle)).toEqual(['2026-11-24'])
     expect(dates(split.cycle)).toEqual(MONTHLY)
   })
 
-  it('sets aside a paycheck the next payday came soon after, and keeps that payday', () => {
+  it('keeps a newest paycheck days early when it pays what a payday does', () => {
+    // The same Nov 24, for a paycheck within LIKE_PAY_SHARE of the usual: Dec 1 paid early.
+    const run = [...paychecks(MONTHLY), paycheck('2026-11-24', PAY * 1.2)]
+    expect(splitCycle(run).offCycle).toEqual([])
+  })
+
+  it('sets aside a bonus the next payday came soon after, and keeps that payday', () => {
     // Oct 24 is 23 days after Oct 1, not short of a month alone, but Nov 2 is nine days on.
-    const run = ['2026-08-03', '2026-09-01', '2026-10-01', '2026-10-24', '2026-11-02']
-    const split = splitCycle(paychecks(run))
+    const run = [
+      ...paychecks(['2026-08-03', '2026-09-01', '2026-10-01']),
+      paycheck('2026-10-24', BONUS),
+      paycheck('2026-11-02'),
+    ]
+    const split = splitCycle(run)
     expect(dates(split.offCycle)).toEqual(['2026-10-24'])
+    expect(dates(split.cycle)).toEqual(['2026-08-03', '2026-09-01', '2026-10-01', '2026-11-02'])
+  })
+
+  it('sets aside a bonus soon after a payday, and keeps that payday', () => {
+    // A small reimbursement the Wednesday after Friday Oct 2.
+    const run = [
+      ...paychecks(BIWEEKLY.slice(0, 5)),
+      paycheck('2026-10-07', 40_000),
+      ...paychecks(BIWEEKLY.slice(5)),
+    ]
+    const split = splitCycle(run)
+    expect(dates(split.offCycle)).toEqual(['2026-10-07'])
+    expect(dates(split.cycle)).toEqual(BIWEEKLY)
+  })
+
+  it('of two paychecks a short gap apart, both unlike a payday, sets aside the one off the grid', () => {
+    // Fridays from Aug 7: Oct 12 is four days off the grid and Oct 16 on it; Oct 2 on it and Oct 7 five off.
+    const overtime = PAY * 1.4
+    const earlierOff = [
+      ...paychecks(BIWEEKLY.slice(0, 5)),
+      paycheck('2026-10-12', BONUS),
+      paycheck('2026-10-16', overtime),
+    ]
+    expect(dates(splitCycle(earlierOff).offCycle)).toEqual(['2026-10-12'])
+    const laterOff = [
+      ...paychecks(BIWEEKLY.slice(0, 4)),
+      paycheck('2026-10-02', overtime),
+      paycheck('2026-10-07', BONUS),
+    ]
+    expect(dates(splitCycle(laterOff).offCycle)).toEqual(['2026-10-07'])
   })
 })

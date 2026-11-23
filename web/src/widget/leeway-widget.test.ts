@@ -203,9 +203,9 @@ describe('what the widget says', () => {
     })
   })
 
-  it('says "over" in red once the budgets are overspent', () => {
+  it('says "Over budget" in red once the budgets are overspent', () => {
     expect(headlineOf(troubledWidgetSummary())).toEqual({
-      label: 'Left to spend',
+      label: 'Over budget',
       value: '$50 over',
       tone: 'over',
       note: 'Nothing left to spend this period',
@@ -271,7 +271,7 @@ describe('what the widget says', () => {
     const over = troubledWidgetSummary()
     const short = { ...over, headline: { ...over.headline, shortfallCents: 12_000 } }
     expect(headlineOf(short as typeof over)).toEqual({
-      label: 'Left to spend',
+      label: 'Over budget',
       value: '$50 over',
       tone: 'over',
       note: 'Checking is $120 short of bills due by Nov 28',

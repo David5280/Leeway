@@ -5,7 +5,9 @@
 //
 // A fixed-date holiday on a Sunday closes the Monday after. One on a
 // Saturday closes no weekday: the Federal Reserve stays open the Friday
-// before (federalreserve.gov, holiday schedules).
+// before (federalreserve.gov, holiday schedules). Juneteenth closes banks
+// from 2022: it became a holiday days before June 19, 2021, too late for
+// the Federal Reserve to close that year.
 
 import { addDays, dayOfWeek, makeDate, toDayNumber, type IsoDate } from '../../lib/dates.js'
 
@@ -13,6 +15,9 @@ const SUNDAY = 0
 const MONDAY = 1
 const THURSDAY = 4
 const SATURDAY = 6
+
+/** The first year the Federal Reserve closed for Juneteenth. */
+const FIRST_JUNETEENTH = 2022
 
 /** The nth `weekday` (0 = Sunday) of a month; a negative n counts back from its end. */
 function nthWeekday(year: number, month: number, weekday: number, n: number): IsoDate {
@@ -33,7 +38,7 @@ function observed(date: IsoDate): IsoDate | null {
 export function bankHolidaysOf(year: number): IsoDate[] {
   const fixed = [
     [1, 1], // New Year's Day
-    [6, 19], // Juneteenth
+    ...(year >= FIRST_JUNETEENTH ? [[6, 19]] : []), // Juneteenth
     [7, 4], // Independence Day
     [11, 11], // Veterans Day
     [12, 25], // Christmas Day
