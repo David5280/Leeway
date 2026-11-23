@@ -49,7 +49,10 @@ describe('the fetch guard', () => {
       'fdff:ffff::1',
       'fe80::1',
       'febf::1',
+      'fec0::1', // retired site-local
+      'feff:ffff::1',
       'ff02::1',
+      '192.88.99.1', // the old 6to4 relays' shared address
       ...TUNNELLED_CLIENTS,
     ]) {
       expect(isFetchableAddress(address), address).toBe(false)
@@ -122,6 +125,8 @@ describe('trusted local proxies', () => {
       '172.32.0.1',
       '192.0.2.1',
       '198.18.0.1',
+      '192.88.99.1',
+      'fec0::1',
       '0.0.0.0',
       '224.0.0.1',
       '::',

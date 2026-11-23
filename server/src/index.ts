@@ -8,6 +8,7 @@ import type { AppContext } from './context.js'
 import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
+import { CALENDAR_CHECK_MINUTES, refreshIfStale } from './domain/calendar/store.js'
 import { addFlowsWidget, addSummaryWidget, leadWithLeeway } from './domain/dashboardUpgrade.js'
 import {
   NOTIFIER_MINUTES,
@@ -152,6 +153,19 @@ if (ctx.mailer) {
     { runNow: true },
   )
 }
+
+// A linked calendar is read again once its last read is a few hours old, so
+// the forecast follows it. A failure is kept for Settings to show; the log
+// line never carries the calendar's address, which is a secret.
+repeatEvery(
+  CALENDAR_CHECK_MINUTES * MINUTE_MS,
+  async () => {
+    const { timeZone } = await getSettings(db)
+    await refreshIfStale(db, { key: config.encryptionKey, timeZone, now: ctx.now })
+  },
+  () => app.log.warn('Reading the linked calendar failed; it is tried again later'),
+  { runNow: true },
+)
 
 const shutdown = async () => {
   await app.close()

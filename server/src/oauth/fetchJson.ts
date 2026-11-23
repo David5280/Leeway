@@ -1,8 +1,7 @@
 // A small, careful HTTPS GET for JSON documents published by other servers.
 
 import https from 'node:https'
-import { isIP } from 'node:net'
-import { publicOnlyLookup } from '../lib/publicAddress.js'
+import { checkAddressLiteral, publicOnlyLookup } from '../lib/publicAddress.js'
 
 export interface FetchJsonOptions {
   /** The most the whole fetch may take, from connecting to the last byte. */
@@ -12,20 +11,6 @@ export interface FetchJsonOptions {
   /** Swappable for tests, which serve documents over plain http on this computer. */
   transport?: Pick<typeof https, 'get'>
   lookup?: typeof publicOnlyLookup
-}
-
-/**
- * Node skips the lookup for a URL written with an IP address, like
- * https://10.0.0.5/app, so such an address is put through it here instead.
- * Otherwise a client_id could point the fetch straight at a private network.
- */
-function checkAddressLiteral(url: string, lookup: typeof publicOnlyLookup): Promise<void> {
-  // URL keeps an IPv6 host in brackets, which isIP does not accept.
-  const host = new URL(url).hostname.replace(/^\[(.*)\]$/, '$1')
-  if (!isIP(host)) return Promise.resolve()
-  return new Promise((resolve, reject) =>
-    lookup(host, { all: true }, (error) => (error ? reject(error) : resolve())),
-  )
 }
 
 /**

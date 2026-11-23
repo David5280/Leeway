@@ -82,8 +82,10 @@ const LIST_ALERTS_PARTS = [
   'A bill whose amount moves from cycle to cycle, such as power or water, raises none once its charges show it varies.',
   `Money leaks come in two kinds. The same merchant charging an account the same amount more than once within ${DUPLICATE_DAYS} days is "duplicate_charge", warning, with count saying how many times, unless that is routine there; each refund since settles one of the charges.`,
   'A bill paid twice in one cycle is told once, as "duplicate_charge", not also as "bill_change".',
-  `A repeating charge no bill tracks whose latest charge, on its usual cycle, rose at least ${PRICE_RISE.share * 100}% and ${PRICE_RISE.cents} cents over a steady price is "price_rise", warning, with charge.previousCents the old price.`,
-  'A leak has charge.id, its latest transaction, and charge.merchant.',
+  `A charge that repeats quarterly or more often, no bill tracking it, whose latest charge, on its usual cycle, rose at least ${PRICE_RISE.share * 100}% and ${PRICE_RISE.cents} cents over a steady price is "price_rise", warning, with charge.previousCents the old price and charge.previousId the charge a cycle before at it. A yearly charge never raises one, as a year of history holds too few of its charges to show a steady price.`,
+  'Payments to people, cash withdrawals, checks, transfers and bank fees are never leaks.',
+  'A leak has charge.id, its latest transaction, and charge.merchant, the merchant as the app shows it.',
+  'When the charge is coded as rent, went through a payment app with no merchant named, or its name reads as a person\'s, charge.merchant is null and the alert names no one: "A repeating payment went up to ...", "A payment of ... went out twice".',
   "amountCents is how far overdrawn or over the limit, the balance left, the fees in all, what the bill's charge cost, what a duplicated charge was each time, or a risen price.",
   'Worked out from the balances of the last bank sync. Give accountIds for some accounts only.',
 ]

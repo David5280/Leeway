@@ -7,6 +7,7 @@ import type { RouteName } from '../web/src/routes'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
+import { pretendCalendar } from './calendar'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
@@ -283,6 +284,11 @@ export const SCREENS: Screen[] = [
     name: '/plan/net-worth changing a loan entered by hand',
     then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
   }),
+  // A calendar cannot be linked in the tests: it is stood in for (calendar.ts).
+  at('planSection', '/plan/ahead', {
+    name: '/plan/ahead with a calendar linked, noting events left out',
+    before: (page) => pretendCalendar(page),
+  }),
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',
@@ -314,6 +320,10 @@ export const SCREENS: Screen[] = [
   at('settings', '/settings/widget', {
     name: '/settings/widget showing a new token',
     then: revealWidgetToken,
+  }),
+  at('settings', '/settings/calendar', {
+    name: '/settings/calendar linked, its last read failed, noting events left out',
+    before: (page) => pretendCalendar(page),
   }),
   ...BANK_SCREENS,
   ...ALERT_SCREENS,

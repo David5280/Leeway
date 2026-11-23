@@ -43,11 +43,22 @@ const twice: AccountAlert = duplicateAlert(
 
 const rise: AccountAlert = priceRiseAlert(
   {
-    name: 'Spotify',
     charge: charge('33333333-3333-4333-8333-333333333333', '2026-11-12', 1199),
     previousCents: 1099,
+    previousId: '30000000-3000-4000-8000-300000000000',
   },
-  'Everyday',
+  { accountName: 'Everyday', merchant: 'Spotify' },
+  format,
+)
+
+/** A rise on a payment that may have gone to a person: it names no one. */
+const unnamed: AccountAlert = priceRiseAlert(
+  {
+    charge: charge('44444444-4444-4444-8444-444444444444', '2026-11-01', 165000),
+    previousCents: 150000,
+    previousId: '40000000-4000-4000-8000-400000000000',
+  },
+  { accountName: 'Everyday', merchant: null },
   format,
 )
 
@@ -58,6 +69,13 @@ describe('a leak alert', () => {
     )
     expect(alertPath(rise)).toBe(
       '/transactions?account=chk&range=all&merchant=33333333-3333-4333-8333-333333333333&merchantName=Spotify',
+    )
+  })
+
+  it('that names no one still opens the matching charges, with no name in the link', () => {
+    expect(unnamed.message).toBe('A repeating payment went up to $1650.00, from $1500.00.')
+    expect(alertPath(unnamed)).toBe(
+      '/transactions?account=chk&range=all&merchant=44444444-4444-4444-8444-444444444444',
     )
   })
 

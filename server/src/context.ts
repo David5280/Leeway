@@ -5,6 +5,7 @@ import type { Config } from './config.js'
 import type { SummaryWriter } from './ai/writer.js'
 import type { BankProvider } from './bank/provider.js'
 import type { AiGateway } from './domain/ai/gateway.js'
+import type { Fetcher } from './domain/calendar/feed.js'
 import type { PaystubReader } from './domain/paystubs/reader.js'
 import type { EmailSender } from './mail/sender.js'
 import type { PushSender } from './push/sender.js'
@@ -38,6 +39,8 @@ export interface AppContext {
    */
   afterBankUpdate?: () => void
   now: () => Date
+  /** Reads a linked calendar; the global fetch when unset. Tests stand in for the calendar's server. */
+  fetchCalendar?: Fetcher
   /**
    * True when an AI agent called, through the MCP endpoint. An agent never
    * reads the bank's own text (see mcp/withoutBankText.ts), so nothing it
