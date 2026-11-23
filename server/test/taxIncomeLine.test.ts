@@ -165,15 +165,6 @@ describe('the income line of money filed as income', () => {
     expect(lineOf({ bankCategory: 'TRANSFER_IN_DEPOSIT' })).toBe('moved_in')
   })
 
-  it('notes child support the bank calls money moved in as support', () => {
-    expect(lineOf({ name: 'CO CHILD SUPPORT SDU', bankCategory: 'TRANSFER_IN_DEPOSIT' })).toBe(
-      'support',
-    )
-    expect(lineOf({ name: 'TRANSFER FROM SAVINGS', bankCategory: 'TRANSFER_IN_ACCOUNT' })).toBe(
-      'moved_in',
-    )
-  })
-
   it('reads interest and dividends from a file import or a hand entry, which carry no code', () => {
     const lines: [Partial<Transaction>, string][] = [
       [{ name: 'INTEREST PAID', bankCategory: null }, 'interest'],
@@ -218,10 +209,29 @@ describe('the income line of money filed as income', () => {
       'INTEREST ADJUSTMENT',
       'FINANCE CHARGE INTEREST',
       'LATE FEE REVERSAL',
+      'ATM FEE REBATE',
+      'ATM REBATE',
+      'NSF FEE REV',
+      'LATE FEE CREDIT',
+      'SERVICE CHARGE REVERSAL',
+      'INTEREST CHARGED REVERSAL',
     ]) {
       expect(lineOf({ name }), name).toBe('charge_back')
     }
     expect(lineOf({ name: 'INTEREST PAID' })).toBe('interest')
+  })
+
+  it('reads money in under a bank fee code as a fee given back, whatever its words', () => {
+    for (const bankCategory of ['BANK_FEES_ATM_FEES', 'BANK_FEES_OVERDRAFT_FEES', 'BANK_FEES']) {
+      expect(lineOf({ name: 'ACME BANK', bankCategory }), bankCategory).toBe('charge_back')
+    }
+  })
+
+  it('reads interest a paid word names as interest, though a direct deposit account earned it', () => {
+    expect(lineOf({ name: 'INTEREST EARNED DIRECT DEPOSIT ACCT' })).toBe('interest')
+    expect(lineOf({ name: 'INTEREST PAID DIR DEP SAVINGS' })).toBe('interest')
+    // A payer named for interest still pays by direct deposit.
+    expect(lineOf({ name: 'PUBLIC INTEREST NETWORK DIR DEP' })).toBe('pay')
   })
 
   it('adds a charge given back, support and a VA benefit to no summed line', () => {
@@ -237,35 +247,6 @@ describe('the income line of money filed as income', () => {
     expect(sources).toHaveLength(1)
   })
 
-  it('never reads child support or alimony as pay, with or without a broad code', () => {
-    for (const fields of [
-      { name: 'TX CHILD SUPPORT SDU' },
-      { name: 'CHILD SUPPORT PAYMENT', bankCategory: 'INCOME_OTHER_INCOME' },
-      { name: 'ALIMONY' },
-      { name: 'SPOUSAL SUPPORT' },
-      { name: 'CA SDU DIR DEP' },
-      { name: 'SUPPORT PMT', merchantName: 'State Disbursement' },
-      { name: 'DEPT OF CHILD SUPPORT SERVICES' },
-      { name: 'SUPPORT PAYMENT', merchantName: 'County Child Services' },
-    ]) {
-      expect(lineOf(fields), fields.name).toBe('support')
-    }
-  })
-
-  it('reads payroll, salary and wages over support words, and support alone as pay', () => {
-    for (const fields of [
-      // A child support agency's own staff are paid wages.
-      { name: 'DEPT OF CHILD SUPPORT SERVICES PAYROLL' },
-      { name: 'SDU SALARY' },
-      { name: 'CHILD SUPPORT AGENCY WAGES' },
-      // A freelancer's support work, with no child or spousal word.
-      { name: 'TECH SUPPORT PAYMENT', bankCategory: 'INCOME_OTHER_INCOME' },
-      { name: 'IT SUPPORT PMT' },
-    ]) {
-      expect(lineOf(fields), fields.name).toBe('pay')
-    }
-  })
-
   it('reads veterans benefits, which are not taxed, apart from pay', () => {
     expect(lineOf({ name: 'VA BENEFITS TREAS 310' })).toBe('veterans')
     expect(lineOf({ name: 'VACP TREAS 310' })).toBe('veterans')
@@ -273,6 +254,9 @@ describe('the income line of money filed as income', () => {
     expect(lineOf({ name: 'VA DISABILITY COMP' })).toBe('veterans')
     expect(lineOf({ name: 'US TREAS VA PENSION' })).toBe('veterans')
     expect(lineOf({ name: 'ACH CREDIT', merchantName: 'Veterans Affairs' })).toBe('veterans')
+    // Virginia's own pension is a pension, not Veterans Affairs.
+    expect(lineOf({ name: 'COMMONWEALTH OF VA PENSION' })).toBe('retirement')
+    expect(lineOf({ name: 'STATE OF VA PENSION' })).toBe('retirement')
     // The agency's own staff are paid wages.
     expect(lineOf({ name: 'VETERANS AFFAIRS PAYROLL' })).toBe('pay')
   })

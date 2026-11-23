@@ -184,7 +184,7 @@ describe('the essentials it is sized by', () => {
     renderPlan('/plan/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
-    expect(fund.getByText(/What Rent, Groceries and Debt payments cost/)).toBeVisible()
+    expect(fund.getByText(/What Rent and Groceries plus loans and child care cost/)).toBeVisible()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
     const form = within(await fund.findByRole('form', { name: 'Essential categories' }))
     expect(

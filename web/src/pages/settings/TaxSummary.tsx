@@ -77,7 +77,7 @@ export function TaxSummary({ summary }: { summary: Summary }) {
     }))
   return (
     <div className="stack-sm">
-      <dl className="facts">
+      <dl className="facts facts-amounts">
         <Fact label={INCOME_LINES.pay.label} cents={summary.payCents} />
         <Fact label={INCOME_LINES.interest.label} cents={summary.interestCents} />
         <Fact label={INCOME_LINES.dividends.label} cents={summary.dividendsCents} />

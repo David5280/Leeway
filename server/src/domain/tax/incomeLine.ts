@@ -22,8 +22,21 @@ export type IncomeLine =
   | 'person'
   | 'moved_in'
 
+/**
+ * The lines the tax summary leaves out (see income.ts): money that is neither
+ * earned nor taxed as pay, so it has a note in the CSV but no figure.
+ */
+export type UnsummedLine = 'veterans' | 'support' | 'charge_back' | 'person' | 'moved_in'
+
+/** A line's words: a name for each figure the summary shows, and a note for every line. */
+type LineWords = {
+  [Line in IncomeLine]: Line extends UnsummedLine
+    ? { note: string }
+    : { label: string; note: string }
+}
+
 /** Each income line's name in the summary, and the note beside its rows in the CSV. */
-export const INCOME_LINES: Record<IncomeLine, { label: string; note: string }> = {
+export const INCOME_LINES: LineWords = {
   pay: { label: 'Pay', note: '' },
   interest: { label: 'Interest', note: 'Interest, not pay' },
   dividends: { label: 'Dividends', note: 'Dividends, not pay' },
@@ -35,14 +48,11 @@ export const INCOME_LINES: Record<IncomeLine, { label: string; note: string }> =
   retirement: { label: 'Pension and retirement', note: 'Pension or retirement income, not pay' },
   tax_refund: { label: 'Tax refunds', note: 'Tax refund, not pay' },
   rewards: { label: 'Card rewards and cash back', note: 'Card rewards or cash back, not pay' },
-  veterans: { label: 'Veterans benefits', note: 'Veterans benefits, not pay' },
-  support: { label: 'Support payments', note: 'Support payment, not pay' },
-  charge_back: {
-    label: 'Charges given back',
-    note: 'An interest charge or fee given back, not pay',
-  },
-  person: { label: 'From people', note: 'Payment from a person, not pay' },
-  moved_in: { label: 'Moved in', note: 'Money moved in from another account, not pay' },
+  veterans: { note: 'Veterans benefits, not pay' },
+  support: { note: 'Support payment, not pay' },
+  charge_back: { note: 'An interest charge or fee given back, not pay' },
+  person: { note: 'Payment from a person, not pay' },
+  moved_in: { note: 'Money moved in from another account, not pay' },
 }
 
 /** Plaid's codes that name a kind of money in that is not wages. */
@@ -64,10 +74,12 @@ const BROAD_CODES = new Set(['', 'INCOME', 'INCOME_OTHER_INCOME'])
 //    direct deposit, which says only how it arrived. Treasury 310 pays
 //    refunds and benefits, but 220 pays salaries and vendors, so "IRS TREAS
 //    220" is pay unless it says TAX REF. A pension's own payroll ("OPERS
-//    PENSION PAYROLL") is a pension.
+//    PENSION PAYROLL") is a pension, and so is a state's ("COMMONWEALTH OF
+//    VA PENSION"), which is Virginia's, not Veterans Affairs.
 // 2. An employer's words say pay, an agency's own staff included:
 //    "TEXAS WORKFORCE COMMISSION PAYROLL" and "DEPT OF CHILD SUPPORT
-//    SERVICES PAYROLL" are pay.
+//    SERVICES PAYROLL" are pay. Support taken from a payer's wages by order
+//    ("CHILD SUPPORT WAGE WITHHOLDING") is still support, so it is read first.
 // 3. Support words: child support or alimony is never income. "Support" alone
 //    is not enough ("TECH SUPPORT PAYMENT" is a freelancer's pay); it needs a
 //    child, spousal or State Disbursement Unit (SDU) word beside it.
@@ -99,10 +111,11 @@ const AGENCY_TEXTS: [RegExp, IncomeLine][] = [
   [anyOf(String.raw`irs\s+treas\s+220`), 'pay'],
   [anyOf(String.raw`ui\s+(benefits?|dd)|(uc|uia)\s+benefits?|twc\W+benefits?`), 'unemployment'],
   [anyOf(String.raw`(pension|annuity)\s+payroll`), 'retirement'],
-  // VA disability and pension, as Treasury sends them ("VACP TREAS 310", "US TREASURY VA").
+  // VA disability and pension, as Treasury sends them ("VACP TREAS 310", "US TREASURY VA"),
+  // but not Virginia's own ("COMMONWEALTH OF VA PENSION", "STATE OF VA").
   [
     anyOf(
-      String.raw`va\s+(benefits?|disability|pension|comp(ensation)?)`,
+      String.raw`(?<!\b(commonwealth|state)\s+of\s+)va\s+(benefits?|disability|pension|comp(ensation)?)`,
       String.raw`vacp\s+treas|treas(ury)?\s+va`,
     ),
     'veterans',
@@ -114,10 +127,16 @@ const EMPLOYER_WORDS = /\b(payroll|salary|wages?|paycheck)\b/i
 
 /**
  * Tier three: words that say support on their own, read in the description
- * and the merchant name. A State Disbursement Unit (SDU) passes on child
- * support, so anything from one is support.
+ * and the merchant name, "SUPP" short for support among them. A State
+ * Disbursement Unit passes on child support, so anything from one is
+ * support: "SDU", a state's own ("MISDU", "CASDU") or Pennsylvania's
+ * collection and disbursement unit ("SCDU"). Only a whole word ending in
+ * one counts, so a name with those letters inside it does not.
  */
-const SUPPORT_WORDS = anyOf(String.raw`(child|spousal)\s+support|alimony|sdu|state\s+disbursement`)
+const SUPPORT_WORDS = anyOf(
+  String.raw`(child|spousal)\s+supp(ort)?|alimony|state\s+disbursement`,
+  String.raw`\w{0,4}sc?du`,
+)
 
 /** "SUPPORT PMT" is support only beside a child or spousal word, never a tech support job. */
 const SUPPORT_PAYMENT = anyOf(String.raw`support\s+(pmt|payment)`)
@@ -126,6 +145,12 @@ const SUPPORT_SIGNAL = anyOf(String.raw`child|spousal`)
 /** Whether a line's words say it is child support or alimony (tier three). */
 const isSupport = (text: string) =>
   SUPPORT_WORDS.test(text) || (SUPPORT_PAYMENT.test(text) && SUPPORT_SIGNAL.test(text))
+
+/** An order that takes support from a payer's wages, whose wages word is not an employer's. */
+const WAGE_WITHHOLDING = anyOf(String.raw`(wage|income)\s+withholding`)
+
+/** Support withheld from wages, read before employer words (tier two). */
+const isWithheldSupport = (text: string) => WAGE_WITHHOLDING.test(text) && isSupport(text)
 
 /** Tier four: agency names, read in the description and the merchant name. */
 const AGENCY_NAMES: [RegExp, IncomeLine][] = [
@@ -146,9 +171,11 @@ const AGENCY_NAMES: [RegExp, IncomeLine][] = [
  * dividends count in full anywhere ("INTEREST PAID", "Dividend Deposit"),
  * but their short forms only beside a paid word ("INT PD", "DIV EARNED"),
  * since "INT" and "DIV" are often part of other names. An interest charge or
- * fee given back ("INT CHG REVERSAL", "INTEREST REFUND") is not interest
- * earned, and neither is a direct deposit, whose payer is named before it
- * ("PUBLIC INTEREST NETWORK DIR DEP").
+ * fee given back ("INT CHG REVERSAL", "ATM FEE REBATE", "SERVICE CHARGE
+ * REVERSAL") is not interest earned, and neither is a direct deposit, whose
+ * payer is named before it ("PUBLIC INTEREST NETWORK DIR DEP"), unless a
+ * paid word says the interest was earned ("INTEREST EARNED DIRECT DEPOSIT
+ * ACCT" is the account's interest).
  */
 const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [/\bsocial\s+security\b/i, 'social_security'],
@@ -158,12 +185,15 @@ const LOOSE_WORDS: [RegExp, IncomeLine][] = [
   [
     anyOf(
       String.raw`(interest|int|finance)\W+(charges?|chg)(\W+\w+)?\W+(reversal|rev|refund|credit|adj(ustment)?)`,
-      String.raw`interest\W+(refund|reversal|adj(ustment)?)|finance\s+charge|fee\W+(reversal|refund)`,
+      String.raw`interest\W+(refund|reversal|adj(ustment)?)|finance\s+charge`,
+      String.raw`(fee|charge[sd]?|chg)\W+(reversal|rev|refund|rebate|credit)`,
+      String.raw`atm\W+(rebate|refund|reimb(ursement)?)`,
     ),
     'charge_back',
   ],
   [
     anyOf(
+      String.raw`interest\W+(${PAID_IN_FORMS})`,
       String.raw`interest(?!\W*(charged?|chg|fee))(?!.*\bdir(ect)?\W+dep)`,
       String.raw`int\.?\s+(${PAID_IN_FORMS})`,
     ),
@@ -181,6 +211,7 @@ function lineFromWords({ name, merchantName }: Pick<Transaction, 'name' | 'merch
   const allWords = `${name} ${merchantName ?? ''}`
   const agencyText = firstNamed(AGENCY_TEXTS, allWords)
   if (agencyText) return agencyText
+  if (isWithheldSupport(allWords)) return 'support'
   if (EMPLOYER_WORDS.test(allWords)) return 'pay'
   if (isSupport(allWords)) return 'support'
   return firstNamed(AGENCY_NAMES, allWords) ?? firstNamed(LOOSE_WORDS, name) ?? 'pay'
@@ -197,6 +228,8 @@ export function incomeLine(
   const code = tx.bankCategory ?? ''
   const byCode = LINE_BY_CODE[code]
   if (byCode) return byCode
+  // Money in under a bank fee code ("BANK_FEES_ATM_FEES") is a fee given back.
+  if (code.startsWith('BANK_FEES')) return 'charge_back'
   // One person paying another through an app like Zelle (see personToPersonApp).
   if (tx.person) return 'person'
   // The bank says the money moved in from another account, not that it was earned,

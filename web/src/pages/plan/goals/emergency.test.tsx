@@ -229,4 +229,33 @@ describe('the emergency fund when it fails to load', () => {
     expect(screen.getByText('No goals yet. Save for something you want to buy.')).toBeVisible()
     expect(screen.queryByText(/start an emergency fund/)).toBeNull()
   })
+
+  it('drops an offer from an earlier load once the fund fails to load again', async () => {
+    let reads = 0
+    const server = planServer(
+      {
+        list_goals: () => [],
+        list_accounts: () => [],
+        create_goal: () => goal({ name: 'Trip', targetCents: 100_000 }),
+      },
+      {
+        '/api/actions/get_emergency_fund': () => {
+          reads += 1
+          return reads === 1 ? Response.json({ result: OFFER }) : failing('The fund is down', 500)()
+        },
+      },
+    )
+    renderPlan('/plan/goals')
+    const offer = await screen.findByRole('region', { name: 'Start an emergency fund' })
+    // Saving a goal reads everything again, and this time the fund fails.
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Add a goal' }))
+    const form = within(screen.getByRole('form', { name: 'New goal' }))
+    await user.type(form.getByLabelText('Name'), 'Trip')
+    await user.type(form.getByRole('textbox', { name: 'Target amount' }), '1,000')
+    await user.click(form.getByRole('button', { name: 'Add goal' }))
+    await waitFor(() => expect(server.actions('create_goal')).toHaveLength(1))
+    expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
+    expect(offer).not.toBeInTheDocument()
+  })
 })

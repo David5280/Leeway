@@ -125,7 +125,10 @@ describe('Tax export', () => {
     })
     renderSignedIn(<TaxSection />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Download 2025 CSV' }))
-    expect(await screen.findByText('Possible income to categorize')).toBeVisible()
+    const label = await screen.findByText('Possible income to categorize')
+    expect(label).toBeVisible()
+    // Its long label wraps on a narrow phone rather than squeezing the amount.
+    expect(label.closest('dl')).toHaveClass('facts-amounts')
     expect(screen.getByText('$3,000.00')).toBeVisible()
     expect(screen.getByText(/could be pay, interest or a refund/)).toBeVisible()
   })

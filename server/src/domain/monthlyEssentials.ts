@@ -1,10 +1,11 @@
 // Essential spending in a typical month, read from stored data: recent whole
 // months of the essential categories (essentialSpending.ts holds what
-// counts), or the essential tracked bills before those say anything (savings/emergency.ts holds the rule). The emergency fund is sized
-// by it, on its card, in its goal's target, in the financial profile and in
-// the check-in, so all of them say the same. With it comes the owner's own
-// pick of essentials, kept even when bills size the fund or nothing does, so
-// the pick can always be changed or handed back.
+// counts), or the essential tracked bills before those say anything
+// (savings/emergency.ts holds the rule). The emergency fund is sized by it,
+// on its card, in its goal's target, in the financial profile and in the
+// check-in, so all of them say the same. With it comes the owner's own pick
+// of essentials, kept even when bills size the fund or nothing does, so the
+// pick can always be changed or handed back.
 //
 // Whole calendar months, unlike the typical month's spending (profile/
 // income.ts), which runs over the stretch since the current job's first

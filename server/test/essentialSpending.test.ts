@@ -135,6 +135,39 @@ describe('essential spending on the starter categories', () => {
   })
 })
 
+describe("essential spending on categories of the owner's own", () => {
+  const category = (id: string, kind: Category['kind'], name: string) =>
+    ({ id, kind, name, providerCategories: [] }) as unknown as Category
+  const categories = [
+    category('rent', 'expense', 'Rent'),
+    category('fun', 'expense', 'Fun'),
+    category('pay', 'income', 'Paycheck'),
+  ]
+  /** A month of $2,000 rent, $500 of fun, $10 unfiled and $6,000 of pay, nothing coded essential. */
+  const month: MonthSpending = {
+    totals: [
+      { categoryId: 'rent', amountCents: 200_000, count: 1 },
+      { categoryId: 'fun', amountCents: 50_000, count: 1 },
+      { categoryId: 'pay', amountCents: -600_000, count: 1 },
+      { categoryId: null, amountCents: 1_000, count: 1 },
+    ],
+    essentialCoded: [],
+  }
+
+  it('counts the essential categories that still exist, found by name without a pick', () => {
+    // With no essentials picked, they are found by name (essentials.ts): Rent, not Fun.
+    expect(essentialSpending(categories, month, null, 251_000)).toBe(200_000)
+    // Picks that are no longer expense categories (income, or deleted) are ignored,
+    // and none left means the essentials are found, as if nothing had been picked.
+    expect(essentialSpending(categories, month, ['pay', 'gone'], 251_000)).toBe(200_000)
+    // When none reads as essential, all spending counts, uncategorized included.
+    const plain = categories.map((one, index) => ({ ...one, name: `Group ${index + 1}` }))
+    expect(essentialSpending(plain, month, null, 251_000)).toBe(251_000)
+    // A partly stale pick keeps the categories that still exist.
+    expect(essentialSpending(categories, month, ['rent', 'gone'], 251_000)).toBe(200_000)
+  })
+})
+
 describe('essential bills', () => {
   /** A bill of a month's amount, with no category unless given. */
   const bill = (name: string, monthlyCents: number, fields = {}) => ({

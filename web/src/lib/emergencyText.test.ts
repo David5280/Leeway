@@ -39,13 +39,18 @@ describe('what counts as essential', () => {
     expect(essentialsWords(essentials({ categories: [] }))).toBe('your spending')
   })
 
-  it('names categories counted in part after the whole ones', () => {
+  it('says what a category counted in part adds, never its name as if all of it counted', () => {
     const partly = essentials({ categories: ['Rent'], partlyCounted: ['Debt payments'] })
-    expect(essentialsWords(partly)).toBe('Rent and Debt payments')
+    expect(essentialsWords(partly)).toBe('Rent plus loans and child care')
     const many = essentials({ partlyCounted: ['Services', 'Debt payments'] })
-    expect(essentialsWords(many)).toBe('Rent, Groceries, Services and 1 more')
+    expect(essentialsWords(many)).toBe('Rent and Groceries plus loans and child care')
+    const lots = essentials({
+      categories: ['Rent', 'Groceries', 'Gas', 'Insurance'],
+      partlyCounted: ['Services'],
+    })
+    expect(essentialsWords(lots)).toBe('Rent, Groceries, Gas and 1 more plus loans and child care')
     expect(essentialsWords(essentials({ categories: [], partlyCounted: ['Services'] }))).toBe(
-      'Services',
+      'loans and child care',
     )
   })
 })

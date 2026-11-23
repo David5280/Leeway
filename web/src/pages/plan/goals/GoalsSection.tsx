@@ -117,7 +117,8 @@ const competing = (goals: Goal[]) =>
 /**
  * How a first goal starts: the emergency fund offer when there is one,
  * otherwise, with no goals yet, a line on what to save for. While the fund
- * fails to load, the line leaves it out, since the retry beside it says so.
+ * fails to load, neither offers it, since the retry beside them says so and
+ * an offer from an earlier load may be out of date.
  */
 function GoalsStart({
   goals,
@@ -128,7 +129,9 @@ function GoalsStart({
   emergency: EmergencyView | null
   fundFailed: boolean
 }) {
-  if (emergency && emergency.goalId === null) return <EmergencyOffer view={emergency} />
+  if (!fundFailed && emergency && emergency.goalId === null) {
+    return <EmergencyOffer view={emergency} />
+  }
   if (goals.length > 0) return null
   return (
     <Card static="empty" label="No goals">
