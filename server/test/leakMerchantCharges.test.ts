@@ -1,6 +1,6 @@
 // Which posted lines a merchant charged (leaks/merchantCharges.ts): the only
-// ones a duplicate is looked for among. Cash, checks, payments to people and
-// bank fees are the owner's own or the bank's, so two alike are ordinary.
+// ones a leak is looked for among. Cash, checks, payments to people, transfers
+// and bank fees are the owner's own or the bank's, so two alike are ordinary.
 
 import { describe, expect, it } from 'vitest'
 import { findDuplicates } from '../src/domain/leaks/duplicates.js'
@@ -82,6 +82,77 @@ describe('isMerchantCharge', () => {
     expect(isMerchantCharge(line({ name: 'CHECK INTO CASH' }))).toBe(true)
   })
 
+  it('leaves out a check written to its payee, keeping a card purchase and a merchant alike', () => {
+    for (const name of ['CHECK JANE DOE', 'CHK PAT EXAMPLE', 'Cheque Sam River']) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+    }
+    for (const name of ['CHECKCARD 1105 CORNER HARDWARE', 'CHECK CARD PURCHASE TARGET']) {
+      expect(isMerchantCharge(line({ name })), name).toBe(true)
+    }
+  })
+
+  it('leaves out money the owner sent through the bank, whoever it went to', () => {
+    for (const name of [
+      'ONLINE PAYMENT TO JANE DOE',
+      'MOBILE PMT TO JANE DOE',
+      'PAYMENT TO JANE DOE',
+      'BILL PAY JANE DOE',
+      'BILLPAY JANE DOE',
+      'WIRE TO JANE DOE',
+      'WIRE TRANSFER JANE DOE REF 44120',
+      'ZEL*JANE DOE',
+      'SQC*JANE DOE',
+      'GOOGLE PAY SEND JANE DOE',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+      // A bank's code or a merchant name it guessed never makes it a store.
+      expect(
+        isMerchantCharge(
+          line({ name, merchantName: 'Jane Doe', providerCategoryPrimary: 'GENERAL_SERVICES' }),
+        ),
+        name,
+      ).toBe(false)
+    }
+  })
+
+  it('reads a bank’s reference or confirmation number between the words', () => {
+    for (const name of [
+      'Online Payment 13577083912 To Jane Doe 11/04',
+      'ONLINE TRANSFER REF #IBE7KT4QRS TO JANE DOE',
+      'ONLINE TRANSFER REF IBE7KT4QRS TO JANE DOE',
+      'BILL PAYMENT - JANE DOE',
+    ]) {
+      expect(isMerchantCharge(line({ name })), name).toBe(false)
+    }
+  })
+
+  it('keeps a bill paid to a business the bank named and coded as a purchase', () => {
+    const comcast = {
+      name: 'ONLINE PAYMENT TO COMCAST',
+      merchantName: 'Comcast',
+      providerCategoryPrimary: 'RENT_AND_UTILITIES',
+      providerCategoryDetailed: 'RENT_AND_UTILITIES_INTERNET_AND_CABLE',
+    }
+    expect(isMerchantCharge(line(comcast))).toBe(true)
+    // Not without the code, nor for rent, nor for a name that reads as a person.
+    expect(
+      isMerchantCharge(
+        line({ ...comcast, providerCategoryPrimary: null, providerCategoryDetailed: null }),
+      ),
+    ).toBe(false)
+    expect(
+      isMerchantCharge(line({ ...comcast, providerCategoryDetailed: 'RENT_AND_UTILITIES_RENT' })),
+    ).toBe(false)
+    expect(isMerchantCharge(line({ ...comcast, merchantName: 'Jane Doe' }))).toBe(false)
+  })
+
+  it('leaves out a debit the bank pulled for someone it names no merchant for', () => {
+    expect(isMerchantCharge(line({ name: 'ACH DEBIT JANE DOE' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'ACH DR JANE DOE' }))).toBe(false)
+    // A biller collecting by ACH, named by the bank, is still a merchant.
+    expect(isMerchantCharge(line({ name: 'ACH DEBIT GEICO', merchantName: 'Geico' }))).toBe(true)
+  })
+
   it('leaves out every bank fee, not only overdraft fees', () => {
     expect(isMerchantCharge(line({ providerCategoryDetailed: 'BANK_FEES_ATM_FEES' }))).toBe(false)
     expect(
@@ -105,6 +176,24 @@ describe('isMerchantCharge', () => {
     ]) {
       expect(isMerchantCharge(line({ name })), name).toBe(false)
     }
+  })
+
+  it('leaves out money moved to an account, by its code or a bank’s words', () => {
+    for (const code of [
+      'TRANSFER_OUT_ACCOUNT_TRANSFER',
+      'TRANSFER_OUT_SAVINGS',
+      'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS',
+    ]) {
+      expect(isMerchantCharge(line({ providerCategoryDetailed: code })), code).toBe(false)
+    }
+    expect(isMerchantCharge(line({ providerCategoryPrimary: 'TRANSFER_OUT' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'ONLINE TRANSFER TO SAV XXXXXX1234' }))).toBe(false)
+    expect(isMerchantCharge(line({ name: 'XFER TO CHECKING' }))).toBe(false)
+  })
+
+  it('keeps a merchant whose name only holds the word transfer', () => {
+    expect(isMerchantCharge(line({ name: 'TRANSFERWISE INC' }))).toBe(true)
+    expect(isMerchantCharge(line({ name: 'BALANCE TRANSFER PILATES' }))).toBe(true)
   })
 
   it('keeps a purchase through a payment app the bank coded as one', () => {

@@ -17,7 +17,7 @@
 // the same way all the while they are news, however many come after them.
 //
 // Lines the owner made or the bank charged (cash, checks, payments to people,
-// bank fees) never reach here: merchantCharges.ts leaves them out.
+// transfers, bank fees) never reach here: merchantCharges.ts leaves them out.
 
 import { addDays, daysBetween, type IsoDate } from '../../lib/dates.js'
 import { merchantKey } from '../merchantKey.js'

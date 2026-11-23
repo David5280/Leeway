@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { createBill } from '../src/domain/bills.js'
-import { untrackedRecurring } from '../src/domain/recurring.js'
+import { untrackedRecurring } from '../src/domain/untrackedRecurring.js'
 import { trackRecurring } from '../src/domain/trackRecurring.js'
 import { ACCOUNT_TRANSFER, useChatProbe } from './chatProbe.js'
 

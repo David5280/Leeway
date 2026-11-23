@@ -3,6 +3,7 @@
 // a day number (days since 1970-01-01, UTC) which makes it exact.
 
 import { DAY_MS } from './time.js'
+import { perZone } from './zoneCache.js'
 
 /** A calendar day, "YYYY-MM-DD". */
 export type IsoDate = string
@@ -27,13 +28,33 @@ export function makeDate(year: number, month: number, day: number): IsoDate {
   return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10)
 }
 
+/**
+ * Day numbers and dates already worked out, both ways. A calendar read asks
+ * about the same few thousand days hundreds of thousands of times, and
+ * checking and splitting a date costs far more than a lookup; each map is
+ * emptied once full, so memory stays bounded.
+ */
+const dayNumbers = new Map<IsoDate, number>()
+const dates = new Map<number, IsoDate>()
+const MAX_REMEMBERED = 20_000
+
+function remember<K, V>(map: Map<K, V>, key: K, value: V): V {
+  if (map.size >= MAX_REMEMBERED) map.clear()
+  map.set(key, value)
+  return value
+}
+
 export function toDayNumber(date: IsoDate): number {
+  const known = dayNumbers.get(date)
+  if (known !== undefined) return known
   const [y, m, d] = parts(date)
-  return Date.UTC(y, m - 1, d) / DAY_MS
+  return remember(dayNumbers, date, Date.UTC(y, m - 1, d) / DAY_MS)
 }
 
 export function fromDayNumber(day: number): IsoDate {
-  return new Date(day * DAY_MS).toISOString().slice(0, 10)
+  const known = dates.get(day)
+  if (known !== undefined) return known
+  return remember(dates, day, new Date(day * DAY_MS).toISOString().slice(0, 10))
 }
 
 export function addDays(date: IsoDate, days: number): IsoDate {
@@ -74,15 +95,27 @@ export function dayOfWeek(date: IsoDate): number {
   return (((toDayNumber(date) + 4) % 7) + 7) % 7
 }
 
+/** One YYYY-MM-DD formatter per zone, made on first use, since building one is slow. */
+const calendars = new Map<string, Intl.DateTimeFormat>()
+
+function calendarOf(timeZone: string): Intl.DateTimeFormat {
+  // en-CA formats as YYYY-MM-DD.
+  return perZone(
+    calendars,
+    timeZone,
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+  )
+}
+
 /** Today's date on the wall calendar of `timeZone`, e.g. "America/Denver". */
 export function todayIn(timeZone: string, now: Date = new Date()): IsoDate {
-  // en-CA formats as YYYY-MM-DD.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now)
+  return calendarOf(timeZone).format(now)
 }
 
 export function isValidTimeZone(timeZone: string): boolean {

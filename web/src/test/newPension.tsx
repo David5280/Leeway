@@ -4,7 +4,7 @@
 
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { savePaystubSchema } from '../../../server/src/domain/paystubs/paystubs'
+import { savePaystubSchema } from '../../../server/src/domain/paystubs/save'
 import { settingsHandlers, type account } from './fake'
 import { chosenFile, cityRead, paystubStatus, reads, savedPaystub } from './paystub'
 import { planServer, renderPlan, retirementOf } from './planning'
