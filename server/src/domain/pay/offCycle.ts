@@ -22,8 +22,9 @@
 //   only by its own rule, as no paycheck after it shows which of the two
 //   kept the slot.
 // - "Short" is against the usual gap, which a bonus in a run of three or
-//   four can lower to its own; such a run's gap is read without it
-//   (shortRun.ts), by amount only in a run of three, too short for timing.
+//   four can lower to its own; such a run's gap is read without it where
+//   timing and amount both set it apart (shortRun.ts), an estimate until a
+//   fifth paycheck.
 //
 // Safety: when unsure, the reading that makes the next payday later wins,
 // so safe to spend stays cautious (spread over more days, with more bills
@@ -68,6 +69,8 @@ export const EARLY_WINDOW_DAYS: Record<Cadence, number> = {
 export interface CycleSplit {
   cycle: Paycheck[]
   offCycle: Paycheck[]
+  /** True when a short run's gap was read without one of its paychecks (shortRun.ts). */
+  shortRun: boolean
 }
 
 /** What one run usually looks like: its gaps, its middle paycheck and how far amounts stray. */
@@ -91,11 +94,9 @@ const middleOf = (values: number[]) =>
  * short nor beside a short one. A run of three or four with a bonus in it
  * may hold none (Oct 16, a bonus Oct 20, Oct 30), and then has no grid to
  * go by: read by its gaps alone, the bonus's own would line the grid up
- * with it. Where its bonus would be the middle gap, a short run's gaps are
- * read without it (shortRun.ts).
+ * with it.
  */
-function gapsOf(run: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
-  const paychecks = shortRunPaydays(run) ?? run
+function gapsOf(paychecks: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
   const gaps = paychecks
     .slice(1)
     .map((paycheck, i) => daysBetween(paychecks[i]!.date, paycheck.date))
@@ -106,11 +107,15 @@ function gapsOf(run: Paycheck[]): Pick<Usual, 'gapDays' | 'gridDays'> {
   return { gapDays: gridDays ?? rough, gridDays }
 }
 
-function usualOf(paychecks: Paycheck[]): Usual {
+/**
+ * What a run usually pays and how far apart, its gaps read from `paydays`:
+ * the run itself, or a short one without its bonus (shortRun.ts).
+ */
+function usualOf(paychecks: Paycheck[], paydays: Paycheck[]): Usual {
   const amounts = paychecks.map((paycheck) => paycheck.amountCents)
   const cents = median(amounts)
   const spreadCents = median(amounts.map((amount) => Math.abs(amount - cents)))
-  return { ...gapsOf(paychecks), cents, spreadCents }
+  return { ...gapsOf(paydays), cents, spreadCents }
 }
 
 /** Days a paycheck sits from the nearest payday on a grid `gridDays` apart through `anchor`. */
@@ -183,8 +188,10 @@ function fillsExpectedPayday(cycle: Paycheck[], given: Cadence | null): boolean 
  * those off it. `given` is a cadence the owner gave, for the expected payday.
  */
 export function splitCycle(paychecks: Paycheck[], given: Cadence | null = null): CycleSplit {
-  if (paychecks.length < 3) return { cycle: paychecks, offCycle: [] }
-  const usual = usualOf(paychecks)
+  if (paychecks.length < 3) return { cycle: paychecks, offCycle: [], shortRun: false }
+  // Where a bonus would be a short run's middle gap, its gaps are read without it.
+  const paydays = shortRunPaydays(paychecks, given)
+  const usual = usualOf(paychecks, paydays ?? paychecks)
   const newest = paychecks.at(-1)!
   const cycle = [paychecks[0]!]
   const offCycle: Paycheck[] = []
@@ -212,5 +219,5 @@ export function splitCycle(paychecks: Paycheck[], given: Cadence | null = null):
     offCycle.push(cycle.pop()!)
   }
   offCycle.sort((a, b) => a.date.localeCompare(b.date))
-  return { cycle, offCycle }
+  return { cycle, offCycle, shortRun: paydays !== null }
 }
