@@ -93,20 +93,50 @@ export const CAUTIOUS_CADENCE: Cadence = 'month'
 /** Slack for a payroll that posts a few days late. */
 const SLACK_DAYS = 3
 
+/** Words that only say a deposit is pay, naming no payer: "PAYROLL", "DIR DEP". */
+const PAY_ONLY_WORDS = new Set([
+  'payroll',
+  'dir',
+  'dep',
+  'direct',
+  'deposit',
+  'salary',
+  'wage',
+  'wages',
+  'paycheck',
+  'des',
+  'ppd',
+])
+
+/** A word's key with its digits kept: "3M" is "3m", "7-ELEVEN" is "7eleven". */
+const keyWithDigits = (word: string) => word.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
 /**
  * Who paid a deposit, from its bank text without any word holding a digit,
  * as a transfer's name drops its reference: "ACME DES:PAYROLL ID:K3J9X"
  * carries a trace code that changes with every paycheck, and is still ACME.
- * A name that is all digits, or digits and a business ending ("7-Eleven",
- * "3M Company"), keeps its first word that holds one, so it names someone.
+ * When the words left name no one, only a business ending or pay words
+ * ("12345 INC", "3M CO PAYROLL"), the first word holding a digit stays,
+ * digits and all, so the key names the payer rather than reading "inc".
+ * Each word is read as textKey reads it, but that one.
  */
 export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): string {
   const words = (deposit.merchantName ?? deposit.name).trim().split(/\s+/)
   const holdsDigit = (word: string) => /\d/.test(word)
-  const named = words.filter((word) => !holdsDigit(word))
-  if (!named.every(isBusinessEnding)) return textKey(named.join(' '))
+  const named = textKey(words.filter((word) => !holdsDigit(word)).join(' '))
+  const namesSomeone = named
+    .split(' ')
+    .some((word) => word !== '' && !isBusinessEnding(word) && !PAY_ONLY_WORDS.has(word))
+  if (namesSomeone) return named
   const first = words.findIndex(holdsDigit)
-  return textKey(words.filter((word, i) => i === first || !holdsDigit(word)).join(' '))
+  // The first word holding a digit keeps it; any later one is a reference, dropped.
+  return words
+    .map((word, i) => {
+      if (i === first) return keyWithDigits(word)
+      return holdsDigit(word) ? '' : textKey(word)
+    })
+    .filter((key) => key !== '')
+    .join(' ')
 }
 
 /**

@@ -7,22 +7,32 @@
 // safe-to-spend would be spread over a month too many. So the cadence, the
 // usual payday and the next one are read from the paychecks on the cycle.
 //
-// Timing alone cannot tell a bonus from a payday that moved: a payroll pays
-// early before a holiday and posts late after a bank delay. Amount can, as a
-// bonus rarely pays what a payday does and a moved payday always does. So a
-// paycheck is set aside only when its amount is unlike the run's usual one
-// (LIKE_PAY_SHARE) and its timing is off the cycle:
-// - it is one of two paychecks a short gap apart: of the pair, the one
-//   unlike the usual amount, or with both unlike it, the one farther from
-//   the cycle's grid;
-// - it is the newest and lands days before the payday the cycle projects.
-//   A late one never is.
+// Timing decides, not the amount: hourly, tipped and commission pay swings
+// as far as a bonus does, and a bonus can pay just what a payday does.
+// - The newest paycheck fills the payday the cycle expects next after the
+//   one before it (expectedPayday.ts) when it landed on or after that day,
+//   or no more than EARLY_WINDOW_DAYS before it and no nearer the payday
+//   before (a tie fills): a payday paid early for a holiday. Anything else
+//   is set aside. What it pays plays no part.
+// - Of two paychecks a short gap apart (two in one payday's slot), the one
+//   farther from the cycle's grid is set aside; equally far, or with no
+//   paycheck to set the grid by, the one whose amount is clearly farther
+//   from the run's middle, by more than the run's own spread; else the
+//   later. The newest is never set aside this way, only by its own rule,
+//   as no paycheck after it shows which of the two kept the slot.
+//
+// Safety: when unsure, the reading that makes the next payday later wins,
+// so safe to spend stays cautious (spread over more days, with more bills
+// due before it), and a paycheck that may have filled the expected payday
+// stays on the cycle. The one exception is a deposit clearly soon after a
+// regular payday, nearer it than the next: a bonus, set aside, since read
+// as a payday it would put the next payday a whole cycle late and count a
+// cycle of bills too many before it.
 
-import { daysBetween, minDate, type IsoDate } from '../../lib/dates.js'
+import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import { median } from '../../lib/money.js'
 import type { Cadence } from '../../lib/periods.js'
-import { nextPaydayAfter, payPattern } from './cadence.js'
-import { nextScheduledPayday } from './nominal.js'
+import { expectedPaydayAfter, readingsOf } from './expectedPayday.js'
 import type { Paycheck } from './paychecks.js'
 
 /**
@@ -33,18 +43,21 @@ import type { Paycheck } from './paychecks.js'
 export const SHORT_GAP_SHARE = 0.6
 
 /**
- * Days before the projected payday the newest paycheck must land to be off
- * the cycle: weekends and holidays are already in the projection, so more
- * than this is no move of a payday.
+ * The most days before the expected payday a newest paycheck may land and
+ * still be that payday paid early. Payrolls pay early for a holiday or a
+ * year-end close: a day or two for a weekly or biweekly one, and up to
+ * Wednesday Dec 23 for a Thursday Dec 31 (eight days) for a twice-monthly
+ * or monthly one, a weekend more for monthly. Being no nearer the payday
+ * before caps each at about half a cycle anyway.
  */
-export const EARLY_DAYS = 4
-
-/**
- * How far a paycheck may stray from the run's middle amount, as a share of
- * it, and still pay like a payday. Wide enough for overtime and a raise,
- * narrow enough that a bonus or commission rarely falls inside.
- */
-export const LIKE_PAY_SHARE = 0.25
+export const EARLY_WINDOW_DAYS: Record<Cadence, number> = {
+  week: 3,
+  biweek: 5,
+  semimonth: 9,
+  month: 10,
+  quarter: 10,
+  year: 10,
+}
 
 /** The paychecks on a payroll's cycle, and the ones set aside off it, each oldest first. */
 export interface CycleSplit {
@@ -52,10 +65,12 @@ export interface CycleSplit {
   offCycle: Paycheck[]
 }
 
-/** What one run usually looks like: its middle gap in days and its middle paycheck. */
+/** What one run usually looks like: its middle gap, its middle paycheck and how far amounts stray from it. */
 interface Usual {
   gapDays: number
   cents: number
+  /** The median absolute deviation of its amounts: how much its pay swings. */
+  spreadCents: number
 }
 
 /** The usual gap between paychecks: the middle one, the longer of two middles, as roughCadence reads it. */
@@ -66,87 +81,110 @@ function usualGap(paychecks: Paycheck[]): number {
   return [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)]!
 }
 
-/** True when the paycheck pays about what the run's usual paycheck does. */
-function paysLikeUsual(paycheck: Paycheck, usual: Usual): boolean {
-  return Math.abs(paycheck.amountCents - usual.cents) <= LIKE_PAY_SHARE * usual.cents
+function usualOf(paychecks: Paycheck[]): Usual {
+  const amounts = paychecks.map((paycheck) => paycheck.amountCents)
+  const cents = median(amounts)
+  const spreadCents = median(amounts.map((amount) => Math.abs(amount - cents)))
+  return { gapDays: usualGap(paychecks), cents, spreadCents }
 }
 
-/** Days a paycheck sits from the nearest payday on a grid a usual gap apart, counted from `anchor`. */
+/** Days a paycheck sits from the nearest payday on a grid a usual gap apart through `anchor`. */
 function daysOffGrid(anchor: Paycheck, paycheck: Paycheck, usual: Usual): number {
-  const rest = daysBetween(anchor.date, paycheck.date) % usual.gapDays
+  const rest = Math.abs(daysBetween(anchor.date, paycheck.date)) % usual.gapDays
   return Math.min(rest, usual.gapDays - rest)
 }
 
 /**
- * Of two paychecks a short gap apart, the one off the cycle, or null when
- * both pay like a payday (one of them moved early or late). `anchor` is the
- * paycheck on the cycle before the pair, if any, to set the grid by.
+ * Of two paychecks a short gap apart, the one off the cycle. `anchor` sets
+ * the grid: the paycheck on the cycle before the pair, else the one after
+ * it, so a bonus first in a run is judged by timing too.
  */
 function offOfPair(
   earlier: Paycheck,
   later: Paycheck,
   anchor: Paycheck | undefined,
   usual: Usual,
-): Paycheck | null {
-  const earlierLike = paysLikeUsual(earlier, usual)
-  const laterLike = paysLikeUsual(later, usual)
-  if (earlierLike && laterLike) return null
-  if (earlierLike !== laterLike) return earlierLike ? later : earlier
-  // Both unlike a payday: the one farther from the grid, the later on a tie or with no grid.
-  if (!anchor) return later
-  return daysOffGrid(anchor, earlier, usual) > daysOffGrid(anchor, later, usual) ? earlier : later
+): Paycheck {
+  if (anchor) {
+    const earlierOff = daysOffGrid(anchor, earlier, usual)
+    const laterOff = daysOffGrid(anchor, later, usual)
+    if (earlierOff !== laterOff) return earlierOff > laterOff ? earlier : later
+  }
+  // Amounts break the tie only when one strays from the middle by more than the run's pay swings.
+  const earlierStray = Math.abs(earlier.amountCents - usual.cents)
+  const laterStray = Math.abs(later.amountCents - usual.cents)
+  if (Math.abs(earlierStray - laterStray) > usual.spreadCents) {
+    return earlierStray > laterStray ? earlier : later
+  }
+  return later
 }
 
-/** The payday the paychecks on the cycle point to next, the earlier where they fit two readings. */
-function projectedPayday(cycle: Paycheck[], given: Cadence | null): IsoDate | null {
-  const dates = cycle.map((paycheck) => paycheck.date)
-  const last = dates.at(-1)!
-  if (given) return nextPaydayAfter(dates, given, last)
-  const pattern = dates.length > 1 ? payPattern(dates) : null
-  if (!pattern) return null
-  const next = nextPaydayAfter(dates, pattern.cadence, last, pattern.schedule ?? undefined)
-  // Read as either, only a paycheck early for both is off the cycle.
-  return pattern.ambiguous
-    ? minDate(next, nextScheduledPayday(dates, pattern.schedule!, last))
-    : next
+/**
+ * Whether a paycheck landing on `date` fills the payday `expected` after
+ * the one on `previous`: on or after it (a late payday is never a bonus),
+ * or no more than `window` days early and no nearer `previous`, a tie filling.
+ */
+function fills(date: IsoDate, previous: IsoDate, expected: IsoDate, window: number): boolean {
+  if (date >= expected) return true
+  const early = daysBetween(date, expected)
+  return early <= window && early <= daysBetween(previous, date)
+}
+
+/**
+ * Whether the newest paycheck on the cycle filled the payday the ones
+ * before it expect next. Read both ways while the paydays fit two
+ * cadences, filling either is enough: the later next payday. True when too
+ * few paychecks come before it to read a cadence from.
+ */
+function fillsExpectedPayday(cycle: Paycheck[], given: Cadence | null): boolean {
+  if (cycle.length < 3) return true
+  const newest = cycle.at(-1)!.date
+  const before = cycle.slice(0, -1).map((paycheck) => paycheck.date)
+  const readings = readingsOf(before, given)
+  if (readings.length === 0) return true
+  return readings.some((reading) =>
+    fills(
+      newest,
+      before.at(-1)!,
+      expectedPaydayAfter(before, reading),
+      EARLY_WINDOW_DAYS[reading.cadence],
+    ),
+  )
 }
 
 /**
  * Splits one run's paychecks (oldest first) into those on its cycle and
- * those off it. `given` is a cadence the owner gave, for the projection.
+ * those off it. `given` is a cadence the owner gave, for the expected payday.
  */
 export function splitCycle(paychecks: Paycheck[], given: Cadence | null = null): CycleSplit {
   if (paychecks.length < 3) return { cycle: paychecks, offCycle: [] }
-  const usual: Usual = {
-    gapDays: usualGap(paychecks),
-    cents: median(paychecks.map((paycheck) => paycheck.amountCents)),
-  }
+  const usual = usualOf(paychecks)
+  const newest = paychecks.at(-1)!
   const cycle = [paychecks[0]!]
   const offCycle: Paycheck[] = []
-  for (const paycheck of paychecks.slice(1)) {
+  paychecks.slice(1).forEach((paycheck, i) => {
     const last = cycle.at(-1)!
-    const short = daysBetween(last.date, paycheck.date) < SHORT_GAP_SHARE * usual.gapDays
-    const aside = short ? offOfPair(last, paycheck, cycle.at(-2), usual) : null
-    // The earlier of the pair was the one off the cycle: it leaves, this one takes its place.
-    if (aside === last) cycle.pop()
-    if (aside) offCycle.push(aside)
-    if (aside !== paycheck) cycle.push(paycheck)
+    if (daysBetween(last.date, paycheck.date) >= SHORT_GAP_SHARE * usual.gapDays) {
+      cycle.push(paycheck)
+      return
+    }
+    // paychecks[i + 2] is the one after this pair.
+    const aside = offOfPair(last, paycheck, cycle.at(-2) ?? paychecks[i + 2], usual)
+    if (aside === last) {
+      // The earlier of the pair leaves the cycle, and this one takes its place.
+      cycle.pop()
+      offCycle.push(last)
+      cycle.push(paycheck)
+    } else if (paycheck === newest) {
+      // Nothing after the newest shows which of the two kept the slot: its own rule decides.
+      cycle.push(paycheck)
+    } else {
+      offCycle.push(paycheck)
+    }
+  })
+  if (cycle.at(-1) === newest && !fillsExpectedPayday(cycle, given)) {
+    offCycle.push(cycle.pop()!)
   }
   offCycle.sort((a, b) => a.date.localeCompare(b.date))
-  // A newest paycheck already set aside leaves the cycle's own newest checked by the one after it.
-  if (offCycle.includes(paychecks.at(-1)!)) return { cycle, offCycle }
-  return withNewestChecked({ cycle, offCycle }, usual, given)
-}
-
-/** Sets the newest paycheck aside too when it pays unlike a payday and landed days before the projected one. */
-function withNewestChecked(split: CycleSplit, usual: Usual, given: Cadence | null): CycleSplit {
-  const { cycle, offCycle } = split
-  if (cycle.length < 3) return split
-  const newest = cycle.at(-1)!
-  // A payday paid early, before a holiday, pays what a payday does.
-  if (paysLikeUsual(newest, usual)) return split
-  const projected = projectedPayday(cycle.slice(0, -1), given)
-  if (projected === null || daysBetween(newest.date, projected) <= EARLY_DAYS) return split
-  const sorted = [...offCycle, newest].sort((a, b) => a.date.localeCompare(b.date))
-  return { cycle: cycle.slice(0, -1), offCycle: sorted }
+  return { cycle, offCycle }
 }

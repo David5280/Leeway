@@ -51,6 +51,8 @@ const FROM_A_PERSON = [
   'From Jane Doe paycheck share',
   // "co" in "co-worker" is no "Co" ending a business's name.
   'From Jane Doe co-worker paycheck',
+  // Nor is a state after a person's name, "CO" for Colorado.
+  'From Jane Doe Denver CO salary',
 ]
 
 describe('a deposit read by its words', () => {
@@ -105,6 +107,7 @@ describe('a deposit coded as a transfer in', () => {
     expect(kind('ACME DES:PAYROLL ID:K3J9X', TRANSFER_IN)).toBe('payroll')
     expect(kind('Transfer From ACME Corp Salary', TRANSFER_IN)).toBe('payroll')
     expect(kind('Transfer from ACME Corp Payroll', TRANSFER_IN)).toBe('payroll')
+    expect(kind('Transfer from Acme Co direct deposit', TRANSFER_IN)).toBe('payroll')
   })
 
   it('keeps everything else a deposit, a person passing on pay included', () => {
@@ -113,6 +116,8 @@ describe('a deposit coded as a transfer in', () => {
     // A person's transfer that carries a payroll's words, as a forwarded direct deposit can.
     expect(kind('Transfer from Jane Doe direct deposit', TRANSFER_IN)).toBe('deposit')
     expect(kind('From Jane Doe payroll', TRANSFER_IN)).toBe('deposit')
+    // A state after the person's name is no "Co" ending a business's name.
+    expect(kind('Transfer from Jane Doe Denver CO direct deposit', TRANSFER_IN)).toBe('deposit')
     expect(
       kind('Zelle from Jane Doe payroll', { ...TRANSFER_IN, name: 'Zelle from Jane Doe payroll' }),
     ).toBe('person')
@@ -192,10 +197,18 @@ describe('who paid a deposit', () => {
   })
 
   it('keeps a name that holds digits when nothing else would name the payer', () => {
-    // Read as letters only, as every key is, but never empty or a bare "company".
-    expect(key('7-ELEVEN')).toBe('eleven')
-    expect(key('3M COMPANY')).toBe('m company')
+    // Digits and all, so the key never reads as a bare "inc" or "company".
+    expect(key('7-ELEVEN')).toBe('7eleven')
+    expect(key('3M COMPANY')).toBe('3m company')
+    expect(key('12345 INC')).toBe('12345 inc')
+    expect(key('3M CO PAYROLL')).toBe('3m co payroll')
+    expect(key('3M CO DIR DEP')).toBe('3m co dir dep')
     // Still one payer across paychecks: only the first word with a digit is kept.
     expect(key('7-ELEVEN 0012345')).toBe(key('7-ELEVEN 0067890'))
+    expect(key('3M CO PAYROLL 0012345')).toBe('3m co payroll')
+  })
+
+  it('drops the digits where the other words name the payer', () => {
+    expect(key('ACME CORP PAYROLL 0012345')).toBe('acme corp payroll')
   })
 })

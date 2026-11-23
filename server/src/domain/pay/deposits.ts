@@ -81,6 +81,18 @@ const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCateg
 /** Who a "From Jane Doe" line says sent it, or undefined when it names no sender. */
 const senderOf = (tx: Deposit) => FROM_SOMEONE.exec(tx.name)?.groups?.sender
 
+/** Every payroll or pay word in a sender's text, to take off before reading its name. */
+const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 'gi')
+
+/**
+ * Whether a sender is a business, read from its clean name as namesBusiness
+ * reads a deposit's, with the pay words taken off first so a trailing state
+ * still reads as one: "Jane Doe Denver CO direct deposit" is Jane Doe in
+ * Colorado, where "ACME Corp direct deposit" is ACME Corp.
+ */
+const senderIsBusiness = (sender: string) =>
+  BUSINESS_WORDS.test(cleanMerchantName(sender.replace(ANY_PAY_WORDS, ' ')))
+
 /**
  * A transfer in, by its words: some banks code a payroll's direct deposit
  * so. Its sender is checked first, unlike a line with no code, as a bank's
@@ -89,7 +101,7 @@ const senderOf = (tx: Deposit) => FROM_SOMEONE.exec(tx.name)?.groups?.sender
  */
 function transferInKind(tx: Deposit): DepositKind {
   const sender = senderOf(tx)
-  if (sender !== undefined && !BUSINESS_WORDS.test(sender)) return 'deposit'
+  if (sender !== undefined && !senderIsBusiness(sender)) return 'deposit'
   return kindFromWords(tx) === 'payroll' ? 'payroll' : 'deposit'
 }
 
@@ -107,7 +119,7 @@ function kindFromWords(tx: Deposit): DepositKind {
   if (sender !== undefined) {
     // "From Jane Doe paycheck share" is money someone passed on, whatever it
     // was to them; "Transfer From ACME Corp Salary" is a business paying.
-    return PAY_WORDS.test(words) && BUSINESS_WORDS.test(sender) ? 'payroll' : 'deposit'
+    return PAY_WORDS.test(words) && senderIsBusiness(sender) ? 'payroll' : 'deposit'
   }
   if (PAY_WORDS.test(words)) return 'payroll'
   if (INTEREST_WORDS.test(words)) return 'interest'
