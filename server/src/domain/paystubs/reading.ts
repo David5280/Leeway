@@ -12,7 +12,7 @@
 import { z } from 'zod'
 import { isIsoDate, type IsoDate } from '../../lib/dates.js'
 import { PAY_CADENCES } from '../retirement/pensions.js'
-import { detailFrom, type ExtractedDetail } from './detail.js'
+import { checkedDetailFrom, type ExtractedDetail } from './detail.js'
 import {
   legacyFigures,
   type CurrentField,
@@ -134,8 +134,9 @@ function dateOf(text: string | null): IsoDate | null {
  * paystub shows a pension contribution for it to name.
  */
 export function extractionFrom(reading: PaystubReading): PaystubExtraction {
-  const detail = detailFrom(reading)
-  const { current, yearToDate } = legacyFigures(detail)
+  const checked = checkedDetailFrom(reading)
+  const { detail } = checked
+  const { current, yearToDate } = legacyFigures(checked)
   return {
     employerName: redactEmployer(reading.employerName),
     payDate: dateOf(reading.payDate),

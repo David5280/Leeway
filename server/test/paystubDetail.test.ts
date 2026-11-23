@@ -238,14 +238,19 @@ describe('the import figures, worked out from the lines', () => {
   })
 
   it('still adds a plan when a line of it is simply not printed in that column', () => {
-    const { yearToDate } = extractionFrom(
+    const { current, yearToDate } = extractionFrom(
       cityWith((reading) => {
         reading.preTax.plan457 = readLine('150.00', '3,000.00', 'Deferred Comp 457 150.00')
+        reading.preTax.plan401k = readLine('250.00', '5,000.00')
+        // A reader may call a line it did not find low; nothing printed was lost.
+        reading.postTax.roth401k = readLine(null, null, null, 'low')
       }),
     )
     // The Roth line shows this period only; the year column rests on the traditional side.
     expect(yearToDate.plan457).toMatchObject({ cents: 300_000, confidence: 'high' })
     expect(yearToDate.netPay).toEqual({ cents: null, confidence: 'high', source: null })
+    expect(current.plan401k).toMatchObject({ cents: 25_000, confidence: 'high' })
+    expect(yearToDate.plan401k).toMatchObject({ cents: 500_000, confidence: 'high' })
   })
 
   it('drops a sum too large to be a contribution and marks it low', () => {

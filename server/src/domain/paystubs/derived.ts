@@ -59,8 +59,12 @@ function dayOfYear(date: string): { day: number; daysInYear: number } {
  */
 export const MIN_DAY_FOR_YEAR_TO_DATE = 90
 
-/** Earnings that do not come every paycheck, so are never multiplied by a year of paychecks. */
-const ONE_OFF_EARNINGS = ['bonus', 'commission', 'other'] as const
+/**
+ * Earnings that do not come every paycheck, so are never multiplied by a
+ * year of paychecks. "Other" earnings are left in: the reader files shift
+ * differential and holiday pay there, which come back paycheck after paycheck.
+ */
+const ONE_OFF_EARNINGS = ['bonus', 'commission'] as const
 
 /** This paycheck's one-off earnings, in cents: 0 when it shows none. */
 function oneOffCents(detail: DerivableDetail): number {
@@ -74,11 +78,10 @@ function oneOffCents(detail: DerivableDetail): number {
  *    a month; about 26.09 every two weeks, counting the extra paycheck some
  *    years bring, as Leeway does everywhere). Steady pay makes this
  *    dependable, so it comes first.
- * 2. When this paycheck has a bonus, commission or other one-off earnings,
- *    multiplying it would count them every paycheck. Then the yearly salary
- *    the paystub states comes first (salary), and without one, this period's
- *    gross less the one-off earnings times the paychecks in a year
- *    (regularPay).
+ * 2. When this paycheck has a bonus or commission, multiplying it would
+ *    count them every paycheck. Then the yearly salary the paystub states
+ *    comes first (salary), and without one, this period's gross less those
+ *    earnings times the paychecks in a year (regularPay).
  * 3. yearToDate: year-to-date gross scaled to a full year by how far the pay
  *    date is into it: ytd x (days in year / day of year). Used only when how
  *    often pay comes is unknown, and only from day 90 on, since a one-off
@@ -89,6 +92,7 @@ function oneOffCents(detail: DerivableDetail): number {
 export function yearlyGross(detail: DerivableDetail, payDate: string | null): YearlyGross | null {
   const { gross, annualSalary } = detail.pay
   const oneOff = oneOffCents(detail)
+  // The salary basis serves twice: here for a bonus check, and below as the last fallback.
   if (oneOff > 0 && annualSalary !== null) return { cents: annualSalary, basis: 'salary' }
   // A paycheck with no regular pay, such as one that is all bonus, has nothing to multiply.
   const regular = gross.current === null ? null : gross.current - oneOff

@@ -7,7 +7,8 @@ import {
   lineAt,
   MAX_PERIOD_CENTS,
   MAX_YEAR_CENTS,
-  type ExtractedDetail,
+  type CheckedDetail,
+  type Dropped,
   type LinePath,
 } from './detail.js'
 import { eachField, sumKnown, type CentsLine, type Confidence, type ReviewLine } from './lines.js'
@@ -86,30 +87,26 @@ export function legacyCents(
   return cents !== null && cents > max ? null : cents
 }
 
-/**
- * Whether a line may have been printed in a column but dropped: it holds no
- * amount there and is marked low, as a line with an unreadable or too large
- * amount always is. Its share of a figure is then unknown.
- */
-function maybeDropped(line: ReviewLine, column: keyof CentsLine): boolean {
-  return line[column] === null && line.confidence === 'low'
+/** One line an import figure adds, with which of its columns lost a printed amount. */
+interface Part {
+  line: ReviewLine
+  dropped: Dropped
 }
 
 /** One import figure for review, from its lines in one column. */
-function legacyFigure(
-  lines: readonly ReviewLine[],
-  column: keyof CentsLine,
-  max: number,
-): ReviewFigure {
-  const dropped = lines.filter((line) => maybeDropped(line, column))
+function legacyFigure(parts: readonly Part[], column: keyof CentsLine, max: number): ReviewFigure {
+  const lines = parts.map((part) => part.line)
+  const dropped = parts.some((part) => part.dropped[column])
   // The lines the figure rests on: those with an amount, and those that lost one.
-  const used = lines.filter((line) => line[column] !== null || dropped.includes(line))
+  const used = parts
+    .filter((part) => part.line[column] !== null || part.dropped[column])
+    .map((part) => part.line)
   const sources = [...new Set(used.map((line) => line.source).filter((text) => text !== null))]
   const source =
     sources.length === 0 ? null : sources.join(' + ').slice(0, MAX_SOURCE_LENGTH).trim()
   // A sum missing a part would save too little without a word, so there is
   // no figure, only one to check. So too for a total too large to be real.
-  const cents = dropped.length > 0 ? null : legacyCents(lines, column, max)
+  const cents = dropped ? null : legacyCents(lines, column, max)
   if (cents === null && used.length > 0) return { cents, confidence: 'low', source }
   // Otherwise as sure as the weakest line it adds.
   const confidence = (used.length > 0 ? used : lines).map((line) => line.confidence).reduce(lower)
@@ -117,11 +114,15 @@ function legacyFigure(
 }
 
 /** The figures the pension and retirement import uses, worked out from the full detail. */
-export function legacyFigures(detail: ExtractedDetail): {
+export function legacyFigures({ detail, dropped }: CheckedDetail): {
   current: Record<CurrentField, ReviewFigure>
   yearToDate: Record<YearToDateField, ReviewFigure>
 } {
-  const linesOf = (field: CurrentField) => LEGACY_PARTS[field].map((path) => lineAt(detail, path))
+  const linesOf = (field: CurrentField) =>
+    LEGACY_PARTS[field].map((path) => ({
+      line: lineAt(detail, path),
+      dropped: lineAt(dropped, path),
+    }))
   return {
     current: eachField(CURRENT_FIELDS, (field) =>
       legacyFigure(linesOf(field), 'current', MAX_PERIOD_CENTS),

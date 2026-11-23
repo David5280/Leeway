@@ -46,13 +46,32 @@ const PO_BOX = /\bp\.?\s*o\.?\s*box\s*\d+/gi
 const STATE_ZIP = /\b[A-Z]{2},?\s+\d{5}(?:-\d{4})?\b/g
 
 /**
- * A label that introduces a person's name, with the rest of its line: "Name:"
- * at the start of a line, "Employee Name Jane Doe", "Employee: Jane Doe",
- * "Pay to (the order of) Jane Doe", "Payable to", "Paid to", "Payroll for:",
- * "Payee Jane Doe". "Plan Name: PERA" is a plan, not a person, and stays.
+ * Where a "to" names an account or a column, not a person: "Gross Pay To
+ * Date", "Net Pay to Checking", "Deposited to Savings".
  */
-const LABELED_NAME =
-  /(?:^\s*name\b|\b(?:employee|emp\.?)\s+name\b|\bemployee\s*:|\bpay(?:able)?\s+to\b|\bpaid\s+to\b|\bpayroll\s+for\b|\bpayee\b|\bdeposited\s+for\b)(?!\w).*$/gim
+const NOT_A_PERSON = String.raw`(?!\s+(?:date|checking|savings|account|acct)\b)`
+
+/**
+ * Labels that introduce a person's name. "Plan Name: PERA" is a plan, not a
+ * person, and stays.
+ */
+const NAME_LABELS = [
+  // "Name: Jane Doe" at the start of a line.
+  String.raw`^\s*name\b`,
+  // "EE: Jane Doe" at the start of a line; "PERA EE: 422.95" is a plan's line and stays.
+  String.raw`^\s*ee\s*:`,
+  // "Employee Name Jane Doe", "Emp. Name", "Employee: Jane Doe".
+  String.raw`\b(?:employee|emp\.?)\s+name\b`,
+  String.raw`\bemployee\s*:`,
+  // "Pay to (the order of) Jane Doe", "Payable to", "Paid to", "Deposited to".
+  String.raw`\b(?:pay(?:able)?|paid|deposited)\s+to\b${NOT_A_PERSON}`,
+  // "Payroll for: Jane Doe", "Deposited for Jane Doe", "Payee Jane Doe".
+  String.raw`\b(?:payroll|deposited)\s+for\b`,
+  String.raw`\bpayee\b`,
+]
+
+/** Any name label, with the rest of its line, since the name may run to the end of it. */
+const LABELED_NAME = new RegExp(`(?:${NAME_LABELS.join('|')})(?!\\w).*$`, 'gim')
 
 /** A name after a title of address: "Ms. Jane Doe", "Dr Doe". */
 const TITLED_NAME =

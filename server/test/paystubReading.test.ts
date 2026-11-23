@@ -129,11 +129,22 @@ describe('redact', () => {
       'Payable to Jane Doe',
       'Paid to Jane Doe',
       'Payroll for: Jane Doe',
+      'Deposited to Jane Doe',
+      'EE: Jane Doe',
     ]) {
       expect(redact(line)).toBe(REMOVED)
     }
-    expect(redact('Pay Total 3,845.00')).toBe('Pay Total 3,845.00')
-    expect(redact('Paid Time Off 8.00')).toBe('Paid Time Off 8.00')
+    // A "to" that names a column or an account, and a plan's own line, stay.
+    for (const line of [
+      'Pay Total 3,845.00',
+      'Paid Time Off 8.00',
+      'Gross Pay To Date 80,745.00',
+      'Net Pay to Checking 2,611.42',
+      'Deposited to Savings 100.00',
+      'PERA EE: 422.95',
+    ]) {
+      expect(redact(line)).toBe(line)
+    }
     expect(redact('Prepared for Ms. Jane Doe 3,845.00')).toBe(`Prepared for ${REMOVED} 3,845.00`)
     expect(redact('Plan Name: PERA 422.95')).toBe('Plan Name: PERA 422.95')
     expect(redact('Employee 401k 150.00')).toBe('Employee 401k 150.00')

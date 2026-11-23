@@ -14,7 +14,8 @@ const MINUS = /^-|-$/
 /**
  * A single number as printed, or null when it is not one or has more decimal
  * places than allowed. "(12.50)", "$(12.50)", "-12.50" and "12.50-" read as
- * positive, since a deduction's sign only says which column it is in.
+ * positive, since a deduction's sign usually only says which column it is
+ * in. A sign that says more, a refund or a reversal, is caught in signs.ts.
  */
 function plainNumber(printed: string, maxDecimals: number): number | null {
   // Each mark is taken off once, so "-12.50-" is no number.
@@ -58,4 +59,21 @@ export function rateCentsOf(printed: string): number | null {
 export function hoursOf(printed: string): number | null {
   const hours = total(printed, 4)
   return hours === null ? null : Math.round(hours * 100) / 100
+}
+
+/** How an amount is marked: plain, every part negative, or parts that differ. */
+export type Sign = 'plus' | 'minus' | 'mixed'
+
+/** Whether one part of an amount carries a negative mark: a minus before or after it, or parentheses. */
+function negative(part: string): boolean {
+  const plain = part.trim()
+  return PARENTHESES.test(plain) || MINUS.test(plain)
+}
+
+/** How an amount as printed is marked; null when it is not printed. */
+export function signOf(printed: string | null): Sign | null {
+  if (printed === null) return null
+  const marks = printed.split('+').map(negative)
+  if (marks.every(Boolean)) return 'minus'
+  return marks.some(Boolean) ? 'mixed' : 'plus'
 }

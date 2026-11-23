@@ -65,12 +65,28 @@ describe('yearlyGross', () => {
       cents: 384_500 * 24,
       basis: 'regularPay',
     })
-    // Commission and other earnings are left out the same way.
-    const mixed = withBonus(null)
-    mixed.earnings.bonus = line(null)
-    mixed.earnings.commission = line(600_000)
-    mixed.earnings.other = line(400_000)
-    expect(yearlyGross(mixed, '2026-11-13')).toEqual({ cents: 384_500 * 24, basis: 'regularPay' })
+    // Commission is left out the same way.
+    const commission = withBonus(null)
+    commission.earnings.bonus = line(null)
+    commission.earnings.commission = line(1_000_000)
+    expect(yearlyGross(commission, '2026-11-13')).toEqual({
+      cents: 384_500 * 24,
+      basis: 'regularPay',
+    })
+  })
+
+  it('keeps other earnings, like a shift differential that comes every paycheck', () => {
+    // 4,000.00 every two weeks, 600.00 of it shift differential.
+    const shifts = {
+      ...withPay({ gross: line(400_000), annualSalary: null }),
+      payCadence: 'biweek' as const,
+    }
+    shifts.earnings.regular = line(340_000)
+    shifts.earnings.other = line(60_000)
+    expect(yearlyGross(shifts, '2026-11-13')).toEqual({
+      cents: Math.round(400_000 * PER_YEAR.biweek),
+      basis: 'frequency',
+    })
   })
 
   it('uses the year so far for a paycheck that is all bonus, with nothing regular to multiply', () => {

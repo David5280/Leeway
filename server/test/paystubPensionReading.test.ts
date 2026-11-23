@@ -43,6 +43,10 @@ describe('the reader prompt', () => {
 
   it("asks only for what the paystub prints, never a plan's rules from what the model knows", () => {
     expect(PAYSTUB_PROMPT).toContain('Report only what this paystub prints.')
+    // A line the stub does not show is not a hard-to-read one.
+    expect(PAYSTUB_PROMPT).toContain(
+      'A line the stub does not show has null amounts, a null source and high confidence',
+    )
     expect(PAYSTUB_PROMPT).toContain(
       "Never supply a plan's contribution rate, employer rate, multiplier or rules",
     )

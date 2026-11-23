@@ -25,5 +25,5 @@ employer: paid by the employer, not taken from pay. match: the employer's 401(k)
 pensionPlanName: the pension's plan name as its line prints it, such as PERA or Colorado PERA, without words like Member, Employee, EE or Pre-tax and without amounts or rates, and never a person's name or member number. Null when the stub shows no pension contribution.
 Report only what this paystub prints. Never supply a plan's contribution rate, employer rate, multiplier or rules from what you know of the plan, even when the plan is named.
 
-confidence: high when the label and amount are clear, medium when the label is ambiguous, low when the print is hard to read.
+confidence: high when the label and amount are clear, medium when the label is ambiguous, low when the print is hard to read. A line the stub does not show has null amounts, a null source and high confidence; low is only for a figure that is printed.
 source: the paystub line the figure came from, its label and amount only, under 80 characters. Never copy a Social Security number, employee ID, account or routing number, check number, address or any person's name, the employee's or anyone else's, into any field. The employer's name goes only in employerName.`

@@ -40,8 +40,9 @@ function yearlyNote(basis: YearlyBasis, detail: ConfirmedDetail): string {
 
 /** Who the retirement saving comes from: only those the paystub shows putting money in. */
 function savers(saving: SavingsRate | null): string {
-  if (saving?.employerCents === null) return 'You'
-  if (saving?.employeeCents === null) return 'Your employer'
+  if (saving === null) return 'You and your employer'
+  if (saving.employerCents === null) return 'You'
+  if (saving.employeeCents === null) return 'Your employer'
   return 'You and your employer'
 }
 
