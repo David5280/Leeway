@@ -294,7 +294,7 @@ describe('drawing', () => {
     expect(widget.refreshAfterDate).toEqual(new Date(NOW.getTime() + REFRESH_MINUTES * 60_000))
 
     const [eyebrow, big, note] = widget.children as Extract<Drawn, { text: string }>[]
-    expect(eyebrow).toMatchObject({ text: 'Safe to spend', font: { name: 'semibold 11' } })
+    expect(eyebrow).toMatchObject({ text: 'Left to spend', font: { name: 'semibold 11' } })
     expect(big).toMatchObject({
       text: '$843',
       font: { name: `bold rounded ${STYLES.big.size}` },
@@ -387,7 +387,7 @@ describe('running', () => {
     expect(script.setWidget).toHaveBeenCalledTimes(1)
     const widget = script.setWidget.mock.calls[0]![0] as FakeWidget
     expect(texts(widget)).toEqual([
-      'Safe to spend',
+      'Left to spend',
       '$843',
       'About $65 a day for 13 days',
       'Heads up: 1 account low',

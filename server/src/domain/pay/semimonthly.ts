@@ -20,7 +20,7 @@ import {
   type IsoDate,
 } from '../../lib/dates.js'
 import { DAY_MS } from '../../lib/time.js'
-import { businessDayOnOrBefore, weekdaysApart } from './businessDays.js'
+import { businessDayOnOrBefore, openDaysApart } from './businessDays.js'
 
 /** The nominal day that means a month's last day, whatever its length. */
 export const MONTH_END = 31
@@ -102,7 +102,7 @@ interface Off {
 
 /** Signed business days from a nominal day to a payday, for a payroll that moves weekend paydays before it. */
 function businessOff(at: number, nominal: number): number {
-  return at < nominal ? -weekdaysApart(at, nominal) : weekdaysApart(at, nominal)
+  return at < nominal ? -openDaysApart(at, nominal) : openDaysApart(at, nominal)
 }
 
 /**

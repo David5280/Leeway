@@ -3,10 +3,12 @@
 // else. Leeway's own find counts its essential categories whole and, in
 // every other spending category, the loan and child care payments by their
 // own bank code: a student loan in the starter "Debt payments", child care
-// in "Services". An unfiled payment counts under any essential code. Card
-// payments never count: the totals read here already leave them out
-// (NOT_CARD_PAYMENT_SQL), since they pay off spending counted where it was
-// made. Pure.
+// in "Services". An unfiled payment counts under any essential code. A card
+// payment is never essential, either side, even to a card Leeway cannot see:
+// the totals read here already leave them out (the skipAll rule in
+// categoryTotals.ts), since a payment says nothing of which purchases it
+// paid for. Where nothing reads as essential, all spending counts instead,
+// card payments included (essentialMonths.ts). Pure.
 
 import type { CategoryTotal } from './budget.js'
 import type { Bill } from './bills.js'
@@ -16,7 +18,7 @@ import { essentialIdsOf, nameIsEssential } from './essentials.js'
 /** A stretch's totals by category, beside the part of each that is essential by its code. */
 export interface MonthSpending {
   totals: CategoryTotal[]
-  /** Each category's net (null for unfiled) of the payments essential by code (essentialCoded.ts). */
+  /** Each category's net (null for unfiled) of payments essential by code (essentialCoded.ts). */
   essentialCoded: CategoryTotal[]
 }
 

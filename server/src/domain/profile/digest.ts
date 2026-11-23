@@ -32,14 +32,20 @@ function paceWords(onTrack: boolean | null): string {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-/** "Initech twice a month since Nov 13, about $2,000 each", for one of several employers. */
+/**
+ * "Initech Inc twice a month since Nov 13, about $2,000 each", for one of
+ * several employers; one not named as a business is "the main employer" or
+ * "another employer", never a person's name read from the bank.
+ */
 function employerWords(
   employer: FinancialProfile['pay']['employers'][number],
+  index: number,
   locale: string,
   money: Money,
 ): string {
   const since = shortDate(employer.since, locale)
-  return `${employer.name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
+  const name = employer.name ?? (index === 0 ? 'the main employer' : 'another employer')
+  return `${name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
 }
 
 function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
@@ -50,7 +56,7 @@ function payLine({ pay, locale }: FinancialProfile, money: Money): string | null
       ? ' This is an estimate until more paychecks confirm how often each employer pays.'
       : ''
     // A second job counts beside the first, so each is named with its own schedule.
-    const each = pay.employers.map((employer) => employerWords(employer, locale, money))
+    const each = pay.employers.map((employer, i) => employerWords(employer, i, locale, money))
     return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${estimate}`
   }
   const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`

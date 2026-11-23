@@ -33,6 +33,7 @@ async function checkToday(
     { cashFlow, budget, room: budget.spendable! },
     categoryId,
     money,
+    settings.locale,
   )
 }
 
