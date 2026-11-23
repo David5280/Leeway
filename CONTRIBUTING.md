@@ -312,9 +312,9 @@ each sets its own `E2E_PORT_BASE` and `E2E_DATABASE_URL`.
 - **Before merging:** `npm run check`, then the whole suite with
   `npm run e2e:full`. CI runs both again.
 
-CI (`.github/workflows/ci.yml`) runs on every push to any branch, every pull
-request, and on demand; a newer push to a branch other than `main` cancels
-that branch's run still going. It runs `npm run check`, a production build,
+CI (`.github/workflows/ci.yml`) runs on every push to `main`, every pull
+request, and on demand; a newer push to a pull request cancels its run still
+going. It runs `npm run check`, a production build,
 the Docker image build, and the browser tests (WebKit included) as four
 shard jobs, each with its own Postgres. A last job, `e2e`, merges their blob
 reports into one `playwright-report` artifact, with screenshots and traces of
