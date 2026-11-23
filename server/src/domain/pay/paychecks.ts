@@ -18,7 +18,7 @@
 
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
-import { merchantKey } from '../merchantKey.js'
+import { textKey } from '../merchantKey.js'
 import { CYCLE_DAYS, givenPattern, payPattern, roughCadence } from './cadence.js'
 import type { Deposit } from './deposits.js'
 import { splitCycle } from './offCycle.js'
@@ -26,7 +26,7 @@ import type { SemimonthSchedule } from './semimonthly.js'
 
 /** One paycheck: every deposit one payer made within a few days, added up. */
 export interface Paycheck {
-  /** Who paid, as merchantKey reads the bank's text. */
+  /** Who paid, as payerKeyOf reads the bank's text. */
   payerKey: string
   /** The day its first part landed. */
   date: IsoDate
@@ -102,12 +102,23 @@ export function median(values: number[]): number {
 }
 
 /**
+ * Who paid a deposit, from its bank text without any word holding a digit,
+ * as a transfer's name drops its reference: "ACME DES:PAYROLL ID:K3J9X"
+ * carries a trace code that changes with every paycheck, and is still ACME.
+ */
+export function payerKeyOf(deposit: Pick<Deposit, 'name' | 'merchantName'>): string {
+  const text = deposit.merchantName ?? deposit.name
+  const words = text.split(/\s+/).filter((word) => !/\d/.test(word))
+  return textKey(words.join(' '))
+}
+
+/**
  * Payroll deposits as paychecks: one payer's deposits within SPLIT_DAYS of a
  * paycheck's first part, across every account, are that paycheck.
  */
 export function groupPaychecks(deposits: Deposit[]): Paycheck[] {
   const keyed = deposits
-    .map((deposit) => ({ deposit, payerKey: merchantKey(deposit) }))
+    .map((deposit) => ({ deposit, payerKey: payerKeyOf(deposit) }))
     .sort(
       (a, b) =>
         a.payerKey.localeCompare(b.payerKey) || a.deposit.date.localeCompare(b.deposit.date),

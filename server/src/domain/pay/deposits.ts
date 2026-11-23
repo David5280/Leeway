@@ -59,6 +59,7 @@ export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): bool
   return BUSINESS_WORDS.test(`${tx.name} ${tx.merchantName ?? ''}`)
 }
 const REFUND_WORDS = /\b(refund|return|reimburs\w*|rebate|cash\s?back)\b/i
+const TAX_REFUND_WORDS = /\btax\s+refund\b/i
 const INTEREST_WORDS = /\b(interest|dividend)\b/i
 /** A line that says who sent it, "From Jane Doe" or "Transfer from Jane Doe", and the sender. */
 const FROM_SOMEONE = /^\s*(?:transfer\s+)?from\s+(?<sender>\S.*)$/i
@@ -69,6 +70,10 @@ const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCateg
 /** What a line is from its words alone, when it has no bank code or only a broad income one. */
 function kindFromWords(tx: Deposit): DepositKind {
   const words = `${tx.name} ${tx.merchantName ?? ''}`
+  // Money back is never pay, whatever else it says: "PAYROLL TAX REFUND",
+  // or "WAGE WORKS REFUND" from a spending account.
+  if (TAX_REFUND_WORDS.test(words)) return 'tax_refund'
+  if (REFUND_WORDS.test(words)) return 'refund'
   // Checked before the sender: a person passing money on never writes a
   // payroll's own words, so "From GUSTO Payroll" is a paycheck, not a person.
   if (PAYROLL_WORDS.test(words)) return 'payroll'
@@ -79,7 +84,6 @@ function kindFromWords(tx: Deposit): DepositKind {
     return PAY_WORDS.test(words) && BUSINESS_WORDS.test(sender) ? 'payroll' : 'deposit'
   }
   if (PAY_WORDS.test(words)) return 'payroll'
-  if (REFUND_WORDS.test(words)) return 'refund'
   if (INTEREST_WORDS.test(words)) return 'interest'
   return 'other'
 }
@@ -95,7 +99,9 @@ export function depositKind(tx: Deposit): DepositKind {
   if (CONTRACTOR_CODES.has(code)) return 'contractor'
   if (code === 'INCOME_TAX_REFUND') return 'tax_refund'
   if (INTEREST_CODES.has(code)) return 'interest'
-  if (code.startsWith('TRANSFER_IN')) return 'deposit'
+  // Some banks code a payroll's direct deposit as a transfer in: its own
+  // words still tell it, after the person and "From X" checks words make.
+  if (code.startsWith('TRANSFER_IN')) return kindFromWords(tx) === 'payroll' ? 'payroll' : 'deposit'
   // Money in under any other code (a store's, a restaurant's) is money back.
   if (code && !code.startsWith('INCOME')) return 'refund'
   // No code, or a broad income one ("INCOME", INCOME_OTHER_INCOME) that does

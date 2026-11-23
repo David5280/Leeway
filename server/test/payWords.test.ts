@@ -96,6 +96,35 @@ describe('a deposit read by its words', () => {
   })
 })
 
+describe('a deposit coded as a transfer in', () => {
+  const TRANSFER_IN: Partial<Deposit> = { providerCategoryDetailed: 'TRANSFER_IN_DEPOSIT' }
+
+  it("reads a payroll's own words as pay, as some banks code a direct deposit", () => {
+    expect(kind('ACME CORP DIR DEP', TRANSFER_IN)).toBe('payroll')
+    expect(kind('ACME DES:PAYROLL ID:K3J9X', TRANSFER_IN)).toBe('payroll')
+    expect(kind('Transfer From ACME Corp Salary', TRANSFER_IN)).toBe('payroll')
+  })
+
+  it('keeps everything else a deposit, a person passing on pay included', () => {
+    expect(kind('Online Transfer from Savings', TRANSFER_IN)).toBe('deposit')
+    for (const name of FROM_A_PERSON) expect(kind(name, TRANSFER_IN), name).toBe('deposit')
+    expect(
+      kind('Zelle from Jane Doe payroll', { ...TRANSFER_IN, name: 'Zelle from Jane Doe payroll' }),
+    ).toBe('person')
+    expect(kind('PAYROLL TAX REFUND', TRANSFER_IN)).toBe('deposit')
+  })
+})
+
+describe('money back with pay words', () => {
+  it('is never pay', () => {
+    expect(kind('WAGE WORKS REFUND')).toBe('refund')
+    expect(kind('WAGE WORKS REFUND', BROAD_INCOME)).toBe('refund')
+    expect(kind('ACME PAYROLL EXPENSE REIMBURSEMENT')).toBe('refund')
+    expect(kind('PAYROLL TAX REFUND')).toBe('tax_refund')
+    expect(kind('STATE TAX REFUND', BROAD_INCOME)).toBe('tax_refund')
+  })
+})
+
 describe('pay found from words alone', () => {
   /** What pay reads from ten Fridays two weeks apart under this name. */
   const payFrom = (name: string, fields: Partial<Deposit> = {}) =>
@@ -112,6 +141,16 @@ describe('pay found from words alone', () => {
         expect(pay).toMatchObject({ cadence: 'biweek', nextPayday: '2026-11-27' })
       }
     }
+  })
+
+  it('finds one employer when every paycheck carries its own trace code', () => {
+    const codes = ['K3J9X', 'P7Q2M', 'Z8W4R', 'B5N1T', 'H2D6F', 'C9L3V', 'M4X8J', 'R1T5Y']
+    const deposits = biweeklyPaid('2026-07-31', 8).map((date, i) =>
+      deposit(date, `ACME DES:PAYROLL ID:${codes[i]}`),
+    )
+    const pay = currentPay(deposits, TODAY)
+    expect(pay.employers).toHaveLength(1)
+    expect(pay).toMatchObject({ cadence: 'biweek', nextPayday: '2026-11-20', estimate: false })
   })
 
   it('finds no employer in a person passing on a share of their pay', () => {
