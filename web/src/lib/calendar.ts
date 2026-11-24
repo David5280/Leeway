@@ -3,6 +3,7 @@
 
 import { daysBetween } from './dates'
 import { shortDate } from './format'
+import { paths } from '../routes'
 
 interface Span {
   startsOn: string
@@ -31,9 +32,9 @@ export function weekLabel(index: number, start: string, locale = 'en-US'): strin
   return `Week of ${shortDate(start, locale)}`
 }
 
-/** The bill's own form in Plan, opened from wherever the bill is listed. */
+/** The bill's own form in Bills, opened from wherever the bill is listed. */
 export function billPath(billId: string): string {
-  return `/plan/bills?${new URLSearchParams({ bill: billId })}`
+  return paths.bills(billId)
 }
 
 /** What a calendar event needs to become a purchase to save for. */
@@ -67,7 +68,7 @@ export function saveForPath({ kind, date, suggestedCents }: Saveable, today: str
   const by = date < today ? today : date
   const params = new URLSearchParams({ new: 'purchase', name: SAVE_FOR_NAMES[kind], by })
   if (suggestedCents) params.set('price', String(suggestedCents))
-  return `/plan/goals?${params}`
+  return paths.goals(params)
 }
 
 /**

@@ -16,7 +16,7 @@ for (const [name, phone] of [
 
     test('what is entered by hand fits the width, and so does its form', async ({ page }) => {
       await addCabin(page)
-      await page.goto('/plan/net-worth')
+      await page.goto('/wealth')
       const card = page.getByRole('region', { name: 'Entered by you' })
       await expect(card).toContainText('Yours after the loan: $60,000')
       expect(await overflow(page)).toBeLessThanOrEqual(0)

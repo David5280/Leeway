@@ -26,7 +26,7 @@ describe('TripFact', () => {
     })
     renderFact()
     const link = await screen.findByRole('link', { name: 'Lisbon trip, Dec 10 to Dec 14' })
-    expect(link).toHaveAttribute('href', '/trips/2026-12-10/2026-12-14')
+    expect(link).toHaveAttribute('href', '/goals/trips/2026-12-10/2026-12-14')
     expect(server.actions('trip_of_transaction')).toEqual([{ id: 't1' }])
   })
 

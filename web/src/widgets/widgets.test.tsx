@@ -104,7 +104,7 @@ describe('LeewayWidget', () => {
   it('asks for budgets when no category has one', () => {
     renderSignedIn(<LeewayWidget budget={budgetFor([category('Fun')], [])} offset={0} />)
     expect(region()).toHaveTextContent('Give a few categories a budget')
-    expect(screen.getByRole('link', { name: 'Set budgets' })).toHaveAttribute('href', '/budgets')
+    expect(screen.getByRole('link', { name: 'Set budgets' })).toHaveAttribute('href', '/spending')
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
@@ -248,7 +248,7 @@ describe('LeewayWidget', () => {
     )
     expect(within(sheet).getByRole('link', { name: /Groceries/ })).toHaveAttribute(
       'href',
-      `/budgets/${groceries.id}`,
+      `/spending/${groceries.id}`,
     )
   })
 
@@ -339,7 +339,7 @@ describe('GlanceWidget', () => {
     await userEvent.click(within(card('Needs a category')).getByRole('button'))
     expect(screen.getByRole('link', { name: 'Sort 1 transaction' })).toHaveAttribute(
       'href',
-      '/transactions?category=uncategorized',
+      '/spending/activity?category=uncategorized',
     )
   })
 
@@ -463,8 +463,8 @@ describe('AlertsWidget', () => {
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/settings/banks',
-      '/budgets/cat-dining-out',
-      '/budgets/cat-groceries',
+      '/spending/cat-dining-out',
+      '/spending/cat-groceries',
       '/alerts',
     ])
     expect(links[0]).toHaveTextContent('Bank')
@@ -529,8 +529,8 @@ describe('AlertsWidget', () => {
     await screen.findByText('Chase needs you to log in again to keep syncing.')
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/accounts/short',
-      '/accounts/low',
+      '/wealth/accounts/short',
+      '/wealth/accounts/low',
       '/settings/banks',
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
@@ -548,7 +548,7 @@ describe('AlertsWidget', () => {
     const higher = (await screen.findByText('Comcast was $95, usually $80.')).closest('a')!
     const lower = screen.getByText('Phone was $65, usually $80.').closest('a')!
     // Each opens Bills, where its bill can be changed.
-    expect(higher).toHaveAttribute('href', '/plan/bills')
+    expect(higher).toHaveAttribute('href', '/payday/bills')
     // Worth a look, not urgent: amber like an overdraft fee, never red.
     expect(higher.querySelector('.alert-icon')).not.toHaveClass('over')
     expect(higher.querySelector('.alert-icon')).not.toHaveClass('info')
@@ -624,7 +624,7 @@ describe('AlertsWidget', () => {
       within(region())
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/accounts/low', '/settings/banks', '/budgets/cat-dining-out'])
+    ).toEqual(['/wealth/accounts/low', '/settings/banks', '/spending/cat-dining-out'])
   })
 
   it('keeps the card, and focus in it, when a row is left after the last alert is hidden', async () => {
@@ -847,11 +847,11 @@ describe('CategoriesWidget', () => {
     const sheet = screen.getByRole('dialog', { name: 'Where your money went' })
     expect(within(sheet).getByRole('link', { name: /^A/ })).toHaveAttribute(
       'href',
-      `/budgets/${many[0]!.id}`,
+      `/spending/${many[0]!.id}`,
     )
     expect(within(sheet).getByRole('link', { name: 'Open budgets' })).toHaveAttribute(
       'href',
-      '/budgets',
+      '/spending',
     )
   })
 
@@ -861,7 +861,7 @@ describe('CategoriesWidget', () => {
     expect(screen.getByRole('region', { name: 'Categories' })).toHaveTextContent(
       'No categories yet.',
     )
-    expect(screen.getByRole('link', { name: 'Add one' })).toHaveAttribute('href', '/budgets')
+    expect(screen.getByRole('link', { name: 'Add one' })).toHaveAttribute('href', '/spending')
   })
 })
 
@@ -1039,7 +1039,7 @@ describe('RecentWidget', () => {
     )
     expect(within(sheet).getByRole('link', { name: 'See all transactions' })).toHaveAttribute(
       'href',
-      '/transactions',
+      '/spending/activity',
     )
   })
 
@@ -1158,12 +1158,12 @@ describe('AccountsWidget', () => {
     )
     expect(within(sheet).getByRole('link', { name: /Checking/ })).toHaveAttribute(
       'href',
-      '/accounts/a',
+      '/wealth/accounts/a',
     )
     expect(within(sheet).queryByText('Old savings')).not.toBeInTheDocument()
     expect(within(sheet).getByRole('link', { name: 'Open accounts' })).toHaveAttribute(
       'href',
-      '/accounts',
+      '/wealth',
     )
   })
 

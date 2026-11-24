@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { pension } from '../../../test/profile'
 import { account, failing, settingsHandlers, settingsWith, type Handlers } from '../../../test/fake'
-import { planServer, renderPlan, retirementOf } from '../../../test/planning'
+import { planServer, renderPlanning, retirementOf } from '../../../test/planning'
 import type { RetirementView } from './fields'
 
 afterEach(() => {
@@ -60,7 +60,7 @@ async function addByHand(user: ReturnType<typeof userEvent.setup>) {
 describe('the projection', () => {
   it('asks for a birth year before projecting anything', async () => {
     serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('Can I stop working on time?')).toBeVisible()
     expect(
@@ -76,7 +76,7 @@ describe('the projection', () => {
 
   it('shows the range with a pension counted, and never the bank-seen contributions', async () => {
     serve(withPension)
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('Can I retire at 65?')).toBeVisible()
     expect(projection.getByText('On track')).toBeVisible()
@@ -111,7 +111,7 @@ describe('the projection', () => {
         { birthYear: 1986 },
       ),
     )
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('Below target')).toBeVisible()
     const fill = projection.getByRole('progressbar').firstElementChild
@@ -120,7 +120,7 @@ describe('the projection', () => {
 
   it('says a figure once when every case agrees, as with nothing saved', async () => {
     serve(retirementOf({ recentMonthlySpendingCents: 400_000 }, { birthYear: 1986 }))
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByRole('img', { name: 'Savings by age' })).toHaveAccessibleDescription(
       'Savings at 40: $0. At 65: $0.',
@@ -138,7 +138,7 @@ describe('the projection', () => {
         { birthYear: 1986 },
       ),
     )
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('$1,392 to $5,443 a month')).toBeVisible()
     expect(projection.getByText(/^from your pension and savings at 65/)).toBeVisible()
@@ -149,7 +149,7 @@ describe('the projection', () => {
   it('says when a pension starts after the retirement age, with no verdict for that age', async () => {
     const later = pension({ ...PERA.plan, benefitAge: 67 }, { balanceCents: 6_500_000 })
     serve(retirementOf({ ...SAVER, pensions: [later] }, { birthYear: 1986 }))
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('Your pension starts at 67')).toBeVisible()
     expect(projection.getByText(/so it gives no verdict at 65\.$/)).toBeVisible()
@@ -158,7 +158,7 @@ describe('the projection', () => {
 
   it('says so when the projection cannot load', async () => {
     planServer({}, { '/api/actions/project_retirement': failing('Database is down', 500) })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 })
@@ -166,13 +166,13 @@ describe('the projection', () => {
 describe('pensions', () => {
   it('invites the owner to add one when there are none', async () => {
     serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     expect(within(await card('Pensions')).getByText(/such as Colorado PERA/)).toBeVisible()
   })
 
   it('shows each pension with its benefit, what goes in and the member balance', async () => {
     serve(withPension)
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const row = within(within(await card('Pensions')).getByRole('group', { name: 'Colorado PERA' }))
     expect(row.getByText('Pension, entered by you')).toBeVisible()
     expect(row.getByText('$1,200 to $4,950 / mo')).toBeVisible()
@@ -190,7 +190,7 @@ describe('pensions', () => {
 
   it('leaves out what the owner has not entered', async () => {
     serve(retirementOf({ ...SAVER, pensions: [pension()] }, { birthYear: 1986 }))
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const row = within(within(await card('Pensions')).getByRole('group', { name: 'Colorado PERA' }))
     expect(row.getByText('Benefit not known yet')).toBeVisible()
     expect(row.queryByText(/Member balance/)).toBeNull()
@@ -207,7 +207,7 @@ describe('pensions', () => {
 
   it("changes a pension's figures, sending every field", async () => {
     const server = serve(withPension)
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const pensions = within(await card('Pensions'))
     await user.click(pensions.getByRole('button', { name: 'Edit figures' }))
@@ -237,7 +237,7 @@ describe('pensions', () => {
 
   it('adds a pension with only the figures typed', async () => {
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     expect(screen.getByRole('region', { name: 'Add a pension' })).toBeVisible()
@@ -276,7 +276,7 @@ describe('pensions', () => {
         account({ id: 'acct-plan', name: 'State Plan', type: 'investment', subtype: 'other' }),
       ],
     })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     const where = await form.findByRole('combobox', { name: 'Add it to' })
@@ -306,7 +306,7 @@ describe('pensions', () => {
 
   it('never turns a percent into dollars when the contribution type changes', async () => {
     serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     const type = form.getByRole('combobox', { name: 'Your contribution' })
@@ -323,7 +323,7 @@ describe('pensions', () => {
 
   it('reads each hint with its figure, and each problem out loud', async () => {
     serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     expect(
@@ -351,7 +351,7 @@ describe('pensions', () => {
 
   it('names a figure that is not a number and sends nothing, then closes on cancel', async () => {
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     await user.type(form.getByLabelText('Name'), 'PERA')
@@ -377,7 +377,7 @@ describe('pensions', () => {
         '/api/actions/create_pension': failing('Leeway keeps up to 10 pensions'),
       },
     )
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = await addByHand(user)
     await user.type(form.getByLabelText('Name'), 'PERA')
@@ -389,7 +389,7 @@ describe('pensions', () => {
 describe('the assumptions', () => {
   it('saves the assumptions typed, and says the projection uses them', async () => {
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = within(await screen.findByRole('form', { name: 'Retirement assumptions' }))
     expect(form.getByRole('textbox', { name: 'Retire at' })).toHaveValue('65')
@@ -418,7 +418,7 @@ describe('the assumptions', () => {
 
   it('asks for a number it needs and sends nothing', async () => {
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const form = within(await screen.findByRole('form', { name: 'Retirement assumptions' }))
     await user.clear(form.getByRole('textbox', { name: 'Retire at' }))
@@ -434,7 +434,7 @@ describe('the assumptions', () => {
 describe('the birth year', () => {
   it('is asked once under the projection, as a year only, and saved to settings', async () => {
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const ask = within(await card('What year were you born?'))
     expect(ask.getByText(/Only the year/)).toBeVisible()
@@ -449,7 +449,7 @@ describe('the birth year', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-17T18:00:00Z'))
     const server = serve(retirementOf())
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const ask = within(await card('What year were you born?'))
     const field = ask.getByRole('textbox', { name: 'Year you were born' })
@@ -471,7 +471,7 @@ describe('the birth year', () => {
   it('is asked again, with the year saved, when that year is still to come', async () => {
     const future = settingsWith({ retirement: { birthYear: 2090 } })
     const server = serve(retirementOf({}, { birthYear: 2090 }), settingsHandlers(future))
-    renderPlan('/plan/retirement', future)
+    renderPlanning('/wealth/retirement', future)
     const user = userEvent.setup()
     const ask = within(await card('What year were you born?'))
     expect(ask.getByText(/The year saved, 2090, is still to come\./)).toBeVisible()
@@ -489,7 +489,7 @@ describe('the birth year', () => {
 
   it('says why a save failed, under the year', async () => {
     serve(retirementOf(), {}, { '/api/actions/update_settings': failing('Database is down', 500) })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const ask = within(await card('What year were you born?'))
     await user.type(ask.getByRole('textbox', { name: 'Year you were born' }), '1986')
@@ -499,7 +499,7 @@ describe('the birth year', () => {
 
   it('is not asked once it is known', async () => {
     serve(withPension)
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await card('Retirement projection')
     expect(screen.queryByRole('region', { name: 'What year were you born?' })).toBeNull()
   })

@@ -7,6 +7,7 @@ import { useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { longDate } from '../../lib/format'
+import { paths } from '../../routes'
 
 type ImportResult = Output<'import_transactions'>
 
@@ -58,7 +59,7 @@ export function ImportDone({ result }: { result: ImportResult }) {
         </p>
       )}
       <div className="row wrap">
-        <Link className="btn" to={`/transactions`}>
+        <Link className="btn" to={paths.activity()}>
           See transactions
         </Link>
         {result.importId && (

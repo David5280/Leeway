@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { savePaystubSchema } from '../../../server/src/domain/paystubs/save'
 import { account, settingsHandlers } from './fake'
 import { chosenFile, cityRead, paystubStatus, reads, savedPaystub } from './paystub'
-import { planServer, renderPlan, retirementOf } from './planning'
+import { planServer, renderPlanning, retirementOf } from './planning'
 import { pension } from './profile'
 
 const READ_ROUTE = '/api/paystubs/read'
@@ -83,7 +83,7 @@ export function serve({
 /** Presses Add a pension, and gives back the way to choose how. */
 export async function addPension() {
   const user = userEvent.setup({ applyAccept: false })
-  renderPlan('/plan/retirement')
+  renderPlanning('/wealth/retirement')
   const pensions = within(await screen.findByRole('region', { name: 'Pensions' }))
   await user.click(pensions.getByRole('button', { name: 'Add a pension' }))
   const choosing = within(await screen.findByRole('region', { name: 'Add a pension' }))

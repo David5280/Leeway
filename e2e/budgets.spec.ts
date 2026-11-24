@@ -5,7 +5,7 @@ import { showWidgets } from './dashboard'
 import { action, addAccount, addSpending, removeAccount } from './manual'
 
 test('a new category gets a budget, which can be changed on its own page', async ({ page }) => {
-  await page.goto('/budgets')
+  await page.goto('/spending')
   await page.getByRole('button', { name: 'New category' }).click()
   const form = page.getByRole('form', { name: 'New category' })
   await form.getByRole('textbox', { name: 'Name' }).fill('Hobbies')

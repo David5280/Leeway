@@ -1,11 +1,11 @@
 // Cash until payday: what checking holds, less the bills due first and any
 // overdraft, is what is safe to spend (server/src/domain/cashFlow.ts).
 // Savings is left out, as money set aside rather than what the bills come
-// out of. On the Plan's bills, the question and answer open
+// out of. On the Payday tab, the question and answer open
 // the math (lib/drills/plan.ts), and under them a line shows checking
 // stepping down with each bill to payday. If checking would go below $0, the
-// answer says when and what would cover it (BelowZeroWarning), on the Plan
-// and the Overview's widget alike.
+// answer says when and what would cover it (BelowZeroWarning), on Payday
+// and the Home widget alike.
 // With no checking balance known yet, there is no cash to judge: the card
 // says so, with no figure, line or warning that would read as $0.
 
@@ -141,7 +141,7 @@ function CashDetails({ flow }: { flow: CashFlow }) {
 
 const TITLE = 'Will the cash last until payday?'
 
-/** The card at the top of the Plan's bills: the answer opens the math, the line reads under a finger. */
+/** The Until payday card on the Payday tab: the answer opens the math, the line reads under a finger. */
 export function CashFlowCard() {
   const { settings } = useApp()
   const cash = useAction('get_cash_flow')

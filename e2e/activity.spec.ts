@@ -11,14 +11,12 @@ const list = (page: Page) => page.getByRole('region', { name: 'Transaction list'
 const rowNames = async (page: Page) =>
   (await list(page).locator('.act-row-name').allTextContents()).sort()
 
-test('Activity is named the same on the page and in the menu, its chip in the UI font', async ({
-  page,
-}) => {
-  await page.goto('/transactions')
+test('Activity sits under Spending, its chip in the UI font', async ({ page }) => {
+  await page.goto('/spending/activity')
   await expect(page.getByRole('heading', { level: 1, name: 'Activity' })).toBeVisible()
   await expect(
-    page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Activity' }),
-  ).toBeVisible()
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Spending' }),
+  ).toHaveAttribute('aria-current', 'page')
   // The comparison chip is a sentence, so it reads in Geist, not the monospaced money face.
   const chip = page.locator('.usual-chip').first()
   await expect(chip).toBeVisible()

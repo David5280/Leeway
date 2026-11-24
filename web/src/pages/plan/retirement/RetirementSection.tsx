@@ -1,4 +1,4 @@
-// The Retirement section of the Plan tab: what pensions and savings could pay
+// The Retirement page, a tap deeper in the Wealth tab: what pensions and savings could pay
 // in retirement, the pensions behind it and the assumptions it rests on, with
 // the birth year asked under the projection while no age is known. All worked
 // out by rule on the server; a pension always counts as retirement saving.

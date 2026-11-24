@@ -73,7 +73,7 @@ function renderList(transactions = [zelleIn, zelleOut, paymentIn, paymentOut]) {
       return { transactions: shown, total: shown.length }
     },
   })
-  return renderSignedIn(<Transactions />, { route: '/transactions' })
+  return renderSignedIn(<Transactions />, { route: '/spending/activity' })
 }
 
 describe('money moving between your own accounts', () => {

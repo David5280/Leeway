@@ -50,7 +50,7 @@ describe('savingsRateDrill', () => {
       ['2026-09', 'No pay or saving seen', { text: 'Not known', tone: undefined }],
       ['2026-08', '$360 of $4,000', { text: '9%', tone: undefined }],
     ])
-    expect(drill.more).toEqual({ to: '/plan/retirement', label: 'Add money taken from pay' })
+    expect(drill.more).toEqual({ to: '/wealth/retirement', label: 'Add money taken from pay' })
   })
 
   it('lists an odd count lowest first and picks the one middle month, the figure it shows', () => {

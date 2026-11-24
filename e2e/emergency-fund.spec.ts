@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => setUpEmergency(page))
 test.afterEach(async ({ page }) => tearDownEmergency(page))
 
 test('an emergency fund starts in one tap and grows a step at a time', async ({ page }) => {
-  await page.goto('/plan/goals')
+  await page.goto('/goals')
   const offer = page.getByRole('region', { name: 'Start an emergency fund' })
   await expect(offer).toContainText('Start with one month of essentials')
   await expect(offer).toContainText(/Then aim for 3 months: \$[\d,]+\./)

@@ -1,7 +1,7 @@
-// Cash that could earn more on Plan, Bills, from a seeded household in which
-// the server itself finds some: its answer adds up, the card says it
-// with the rate it assumes and agrees with cash until payday above it, and
-// the math opens under the same name with the rounding as its own row.
+// Cash that could earn more, on its own page under Wealth, from a seeded
+// household in which the server itself finds some: its answer adds up, the
+// card says it with the rate it assumes and agrees with cash until payday on
+// Payday, and the math opens under the same name with the rounding as its own row.
 
 import { expect, test } from '@playwright/test'
 import type { IdleCash } from '../server/src/domain/idleCash'
@@ -55,16 +55,17 @@ test.describe('cash that could earn more', () => {
     expect(idle.idleCents % 10_000).toBe(0)
   })
 
-  test('the card says it, under cash until payday, and opens its math', async ({
-    page,
-    request,
-  }) => {
+  test('the card agrees with cash until payday, and opens its math', async ({ page, request }) => {
     const idle = await action<IdleCash>(request, 'get_idle_cash')
-    await page.goto('/plan/bills')
+    await page.goto('/payday')
     const cash = page.getByRole('region', { name: 'Until payday' })
     await expect(cash).toContainText(`${dollars(idle.checkingCents)} in checking`)
     await expect(cash).toContainText(`${dollars(idle.billsCents)} in bills`)
 
+    // Wealth leads to it a tap deeper.
+    await page.goto('/wealth')
+    await page.getByRole('link', { name: new RegExp(NAME) }).click()
+    await expect(page).toHaveURL(/\/wealth\/idle-cash$/)
     const card = page.getByRole('region', { name: NAME })
     await expect(card).toContainText(`${dollars(idle.idleCents)} in checking isn't needed`)
     await expect(card).toContainText('In savings at an assumed 4% APY')

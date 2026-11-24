@@ -19,14 +19,15 @@ import { tripName } from '../lib/trips'
 import { TransactionSheet } from './transactions/TransactionSheet'
 import { PlanBudget } from './trips/PlanBudget'
 import { TripParts } from './trips/TripParts'
+import { paths } from '../routes'
 
 const STATUS = { upcoming: 'Coming up', under_way: 'Under way', past: 'Done' } as const
 
-/** Back to the list of trips coming up, where a trip's page is opened from. */
+/** Back to Goals, the tab a trip's page belongs to, since its budget is a goal. */
 function BackLink() {
   return (
-    <Link to="/plan/ahead" className="linkbtn row trip-back">
-      <Icon name="back" size={16} /> Coming up
+    <Link to={paths.goals()} className="linkbtn row trip-back">
+      <Icon name="back" size={16} /> Goals
     </Link>
   )
 }

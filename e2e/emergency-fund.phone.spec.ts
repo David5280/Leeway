@@ -17,7 +17,7 @@ for (const [name, phone] of [
     test.afterEach(async ({ page }) => tearDownEmergency(page))
 
     test('the emergency fund offer, card and form fit the width', async ({ page }) => {
-      await page.goto('/plan/goals')
+      await page.goto('/goals')
       const offer = page.getByRole('region', { name: 'Start an emergency fund' })
       await expect(offer).toBeVisible()
       expect(await overflow(page)).toBeLessThanOrEqual(0)

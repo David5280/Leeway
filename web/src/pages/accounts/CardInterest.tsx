@@ -18,6 +18,7 @@ import { useApp } from '../../lib/app'
 import { cardInterestDrill } from '../../lib/drills/cardInterest'
 import { parseRate } from '../../lib/format'
 import { percentText } from '../../lib/money'
+import { paths } from '../../routes'
 
 /** On a card's page: what its balance costs a month, or a way to add its APR. Nothing once paid off. */
 export function InterestCard({ account }: { account: Account }) {
@@ -93,7 +94,7 @@ export function CardsInterestLine({ accounts }: { accounts: readonly Account[] }
   const total = cardInterestTotal(accounts)
   if (total.cards.length === 0) return null
   return (
-    <Link to="/plan/debts" className="group-note small muted">
+    <Link to={paths.debts()} className="group-note small muted">
       {/* One run of text, so the link's flex box wraps it as a sentence, not word by word. */}
       <span>
         {total.missingApr === total.cards.length ? (

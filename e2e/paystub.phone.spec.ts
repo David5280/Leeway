@@ -19,7 +19,7 @@ for (const [name, viewport] of PHONES) {
     test('the paystub review fits, with nothing overlapping and 44px targets', async ({ page }) => {
       await addPension(page)
       await mockReader(page)
-      await page.goto('/plan/retirement')
+      await page.goto('/wealth/retirement')
       await importPaystub(page)
       const review = page.getByRole('form', { name: 'Review the paystub' })
       // Open both folds, so the figures Claude did not find are measured too.

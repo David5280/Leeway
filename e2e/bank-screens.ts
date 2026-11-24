@@ -1,7 +1,7 @@
 // The bank screens the phone layout guard checks (guarded-screens.ts), with
 // Plaid and the server's answers stood in for (plaid.ts): adding a bank, from
 // the banks already connected to a second login at the same bank, and an
-// account the bank no longer shares, on Accounts and in Settings.
+// account the bank no longer shares, on Wealth and in Settings.
 
 import type { RouteName } from '../web/src/routes'
 import type { Screen } from './screen'
@@ -37,7 +37,7 @@ export const BANK_SCREENS: Screen[] = [
     before: standInForPlaid,
     then: askForSecondLogin,
   }),
-  screen('accounts', '/accounts', 'with an account no longer shared', {
+  screen('wealth', '/wealth', 'with an account no longer shared', {
     before: standInForUnsharedAccount,
   }),
   screen('settings', '/settings/accounts', 'with an account no longer shared', {

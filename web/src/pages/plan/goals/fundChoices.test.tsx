@@ -15,7 +15,7 @@ import {
   serveEmergency,
 } from '../../../test/emergency'
 import { category } from '../../../test/fake'
-import { renderPlan } from '../../../test/planning'
+import { renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -26,7 +26,7 @@ describe('the essentials it is sized by', () => {
       categoryIds: ['cat-rent', 'cat-groceries', 'cat-gas', 'cat-insurance'],
     })
     const server = serveEmergency(offerView({ essentials: many }))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
     expect(offer.getByText(/What Rent, Groceries, Gas and 1 more cost/)).toBeVisible()
@@ -55,7 +55,7 @@ describe('the essentials it is sized by', () => {
       fundView({ essentials: essentials({ picked: true }), essentialsChoice: picked }),
       [fundGoal()],
     )
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
@@ -75,7 +75,7 @@ describe('the essentials it is sized by', () => {
   it('starts with every category ticked when all spending counts, and asks for one', async () => {
     const all = essentials({ categories: null, categoryIds: null })
     const server = serveEmergency(fundView({ essentials: all }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
@@ -98,7 +98,7 @@ describe('the essentials it is sized by', () => {
   it('is plain words when bills size it, since bills have no categories to pick', async () => {
     const bills = essentials({ from: 'bills', categories: null, categoryIds: null })
     serveEmergency(fundView({ essentials: bills }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     expect(fund.getByText('What your bills cost in a typical month.')).toBeVisible()
     expect(fund.queryByRole('button', { name: 'Change essentials' })).toBeNull()
@@ -110,7 +110,7 @@ describe('the essentials it is sized by', () => {
     const server = serveEmergency(fundView({ essentials: bills, essentialsChoice: choice }), [
       fundGoal(),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
@@ -136,7 +136,7 @@ describe('the essentials it is sized by', () => {
         category('Salary', { kind: 'income' }),
       ],
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
@@ -159,7 +159,7 @@ describe('the essentials it is sized by', () => {
     const server = serveEmergency(fundView(), [fundGoal()], {
       list_categories: () => [category('Rent'), category('Groceries'), category('Pets')],
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))
@@ -181,7 +181,7 @@ describe('the essentials it is sized by', () => {
   it("names the categories Leeway counts only in part, which a pick of one's own would not", async () => {
     const partly = essentials({ partlyCounted: ['Debt payments'] })
     serveEmergency(fundView({ essentials: partly }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText(/What Rent and Groceries plus loans and child care cost/)).toBeVisible()
@@ -196,7 +196,7 @@ describe('the essentials it is sized by', () => {
     const picked = { pickedIds: ['cat-rent'], spentIds: ['cat-rent'] }
     const view = fundView({ essentials: essentials({ picked: true }), essentialsChoice: picked })
     serveEmergency(view, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change essentials' }))

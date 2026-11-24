@@ -1,6 +1,7 @@
 // Small facts about accounts that several screens agree on.
 
 import type { Account } from '../api/client'
+import { paths } from '../routes'
 
 /** The kinds of account, as the owner picks one for an account kept by hand. */
 export const ACCOUNT_TYPES = [
@@ -64,7 +65,7 @@ export function nameUnderBank(
 
 /** Where every link to an account opens: its own page, with everything Leeway knows about it. */
 export function accountDetailPath(id: string): string {
-  return `/accounts/${encodeURIComponent(id)}`
+  return paths.account(id)
 }
 
 /**

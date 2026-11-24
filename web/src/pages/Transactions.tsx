@@ -7,6 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Category, Output, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
+import { BackLink } from '../components/BackLink'
 import { Menu } from '../components/design/Menu'
 import { Sheet } from '../components/design/Sheet'
 import { SkeletonRows } from '../components/design/Skeleton'
@@ -27,6 +28,7 @@ import {
   useActivityFilters,
   type ActivityFilters,
 } from './transactions/useActivityFilters'
+import { paths } from '../routes'
 
 const NEW_RULE: RuleDraft = {
   field: 'merchant',
@@ -62,6 +64,7 @@ export function Transactions() {
   return (
     <Shell>
       <div className="act-page">
+        <BackLink to={paths.spending()} label="Spending" />
         <div className="act-head">
           {/* Focusable from code only: where focus lands when nothing nearer is left. */}
           <h1 ref={heading} tabIndex={-1} className="page-title">
@@ -77,7 +80,7 @@ export function Transactions() {
               {
                 key: 'import',
                 label: 'Import a file',
-                onSelect: () => navigate('/transactions/import'),
+                onSelect: () => navigate(paths.importTransactions()),
               },
             ]}
           />

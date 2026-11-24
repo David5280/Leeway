@@ -124,7 +124,7 @@ describe('budgets', () => {
         title: 'Budget warning',
         message: 'Dining has used 100% of its $400.00 budget.',
         pushBody: 'Dining has used 100% of its budget.',
-        link: '/budgets/cat-2',
+        link: '/spending/cat-2',
       },
       {
         kind: 'over_budget',
@@ -132,7 +132,7 @@ describe('budgets', () => {
         title: 'Over budget',
         message: 'Fun is $50.00 over its $400.00 budget.',
         pushBody: 'Fun is over its budget.',
-        link: '/budgets/cat-3',
+        link: '/spending/cat-3',
       },
     ])
   })
@@ -183,7 +183,7 @@ describe('bills', () => {
     expect(found[0]).toMatchObject({
       title: 'Bill due soon',
       message: 'Rent is due today (on 2026-11-17), usually $1800.00.',
-      link: '/plan/bills',
+      link: '/payday/bills',
     })
   })
 
@@ -234,7 +234,7 @@ describe('large charges', () => {
       title: 'Large charge',
       message: 'BEST BUY #1234 DENVER CO charged $1299.99 to Everyday on on 2026-11-16.',
       pushBody: 'A large charge was made on Everyday.',
-      link: '/transactions',
+      link: '/spending/activity',
     })
     // An account deleted a moment ago is not named.
     const [orphan] = largeChargeCandidates([{ ...charge, accountId: 'gone' }], names, FORMAT)

@@ -398,80 +398,6 @@ button.list-row {
   }
 }
 
-.pillbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-
-.navlink {
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  color: var(--muted);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-@media (hover: hover) {
-  .navlink:hover {
-    color: var(--ink);
-  }
-}
-
-.navlink.active {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow);
-}
-
-.theme-dots {
-  gap: 6px;
-  padding: 6px;
-}
-
-.theme-dot {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  border-radius: 99px;
-  cursor: pointer;
-  border: 2px solid var(--line);
-  padding: 0;
-}
-
-/* On a touch screen each dot keeps its 28px look but takes a 44px tap: an
-   invisible hit area centred on it, 45px across so that lining it up to
-   whole pixels never leaves it short (see the taps block at the end). The
-   dots move 17px apart so the hit areas meet without overlapping, and the
-   bar sits in the 44px header row, so they reach nothing else. */
-@media (pointer: coarse) {
-  .theme-dots {
-    gap: 17px;
-  }
-
-  .theme-dot::before {
-    content: '';
-    position: absolute;
-    inset: calc(50% - 22.5px);
-  }
-}
-
-.theme-dot[aria-pressed='true'] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--surface);
-}
-
-.tabbar {
-  display: none;
-}
-
 /* The status bar backdrop (index.html). Installed to an iPhone's home screen
    the app draws under the status bar (black-translucent), so a scrolled page
    would run its text under the clock and the Dynamic Island. This bar, exactly
@@ -836,27 +762,6 @@ button.chip {
   .seg button {
     min-height: 44px;
   }
-}
-
-/* A page's sections in one row under its title (TabRow): it scrolls sideways
-   rather than wrapping when the sections do not all fit, as on a phone. */
-.seg.seg-scroll {
-  display: flex;
-  flex-wrap: nowrap;
-  width: fit-content;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.seg.seg-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.seg.seg-scroll button {
-  flex: none;
-  padding: 0 14px;
-  white-space: nowrap;
 }
 
 .seg button[aria-pressed='true'] {
@@ -1819,7 +1724,7 @@ details.more[open] summary {
 
 /* The narrowest phones (320pt, the first iPhone SE): cards give their
    contents more of the width, and the header shows the logo without its
-   name, so the logo, the bell and the theme dots keep to one row. */
+   name, so the logo, Chat, the bell and Settings keep to one row. */
 @media (max-width: 360px) {
   .card {
     padding: min(var(--pad), 16px);
@@ -1848,11 +1753,6 @@ details.more[open] summary {
     grid-column: 1 / -1 !important;
   }
 
-  /* The tab bar takes over navigation (short screens bring the top row back). */
-  .topbar nav {
-    display: none;
-  }
-
   .hide-sm {
     display: none !important;
   }
@@ -1863,35 +1763,6 @@ details.more[open] summary {
 
   h1 {
     font-size: 24px;
-  }
-
-  .tabbar {
-    display: flex;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10;
-    border-top: 1px solid var(--line);
-    background: var(--surface);
-    padding: 4px calc(8px + var(--sar)) calc(8px + var(--sab)) calc(8px + var(--sal));
-  }
-
-  .tab {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    min-height: 52px;
-    font-size: 11px;
-    color: var(--muted);
-    text-decoration: none;
-  }
-
-  .tab.active {
-    color: var(--accent);
   }
 
   .setup {
@@ -2722,10 +2593,9 @@ details.more[open] summary {
 
 /* Short screens: a phone turned sideways (or any window under 500px tall).
    The header would take a third of the height on its own, so it becomes one
-   slim row: the logo, the screen links (scrolling sideways if a wide font
-   needs it) and the screen's actions. The theme dots stay in Settings, and
-   the tab bar gives its height back to the page, since the top row
-   navigates. The left and right gutters still clear the notch. */
+   slim row: the logo, the five tabs (styles/shell.css), then Chat, the Inbox
+   and Settings, and the tab bar gives its height back to the page. The left
+   and right gutters still clear the notch. */
 @media (orientation: landscape) and (max-height: 500px) {
   .page {
     padding: max(12px, calc(var(--sat) + 8px)) calc(16px + var(--sar)) calc(16px + var(--sab))
@@ -2738,25 +2608,8 @@ details.more[open] summary {
     gap: 12px;
   }
 
-  .brand-name,
-  .theme-dots {
+  .brand-name {
     display: none;
-  }
-
-  .topbar nav {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: nowrap;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .topbar nav .navlink {
-    min-height: 32px;
-    padding: 0 10px;
-    font-size: 13px;
-    white-space: nowrap;
   }
 
   .topbar > .row {
@@ -2764,20 +2617,8 @@ details.more[open] summary {
     margin-left: auto;
   }
 
-  .tabbar {
-    display: none;
-  }
-
   h1 {
     font-size: 24px;
-  }
-}
-
-/* The slim row stays easy to tap with a finger: 44px, Apple's smallest
-   comfortable target, still well under a fifth of the height. */
-@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .topbar nav .navlink {
-    min-height: 44px;
   }
 }
 

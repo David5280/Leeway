@@ -1,6 +1,6 @@
 // Bills and subscriptions: what is due and when, and repeating charges found
 // in history, each tracked as a bill in one tap, with Undo in a toast.
-// "/plan/bills?bill=<id>" opens straight onto that bill, which is how Coming
+// "/payday/bills?bill=<id>" opens straight onto that bill, which is how Coming
 // up's rows get here.
 
 import { Card } from '../../components/design/Card'

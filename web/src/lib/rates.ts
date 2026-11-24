@@ -1,4 +1,4 @@
-// The savings rate month by month, as the Plan's chart reads it: what a
+// The savings rate month by month, as the savings rate chart reads it: what a
 // finished month usually saves, and the level each month is drawn against.
 // Pure. The server counts each month (bank transfers to savings, plus the
 // pension and the 401(k), 457 or 403(b) Leeway knows from when each began)

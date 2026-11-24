@@ -1,108 +1,89 @@
-// The frame around every screen: header, navigation and the phone tab bar.
+// The frame around every screen, in one of three shapes (shell/frame.ts):
+//   - a phone: a header (the logo, then Chat, the Inbox bell and Settings)
+//     over the page, and the five tabs in a bar along the bottom;
+//   - a phone turned sideways: one slim top row with the logo, the five tabs
+//     and the header's links, so the little height there is goes to the page;
+//   - a computer or a tablet turned sideways: a sidebar on the left with the
+//     logo, the five tabs, and Chat, the Inbox and Settings at its foot.
+// Keys 1 to 5 switch tabs in every shape.
 
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
-import { useChatAvailable } from '../api/chat'
-import { useUpdateSettings } from '../api/settings'
-import { useApp, usePrefersDark } from '../lib/app'
-import { THEMES, themeVariables, type ThemeId } from '../lib/theme'
-import { Bell } from './Bell'
-import { Icon, Logo, type IconName } from './ui'
+import { Link } from 'react-router-dom'
+import { paths } from '../routes'
+import { useFrame } from './shell/frame'
+import { HeaderLinks, SidebarFoot } from './shell/HeaderLinks'
+import { TabLinks } from './shell/TabLinks'
+import { useTabKeys } from './shell/useTabKeys'
+import { Logo } from './ui'
 
-const LINKS: { to: string; label: string; short: string; icon: IconName }[] = [
-  { to: '/', label: 'Overview', short: 'Overview', icon: 'overview' },
-  { to: '/accounts', label: 'Accounts', short: 'Accounts', icon: 'accounts' },
-  { to: '/transactions', label: 'Activity', short: 'Activity', icon: 'activity' },
-  { to: '/budgets', label: 'Budgets', short: 'Budgets', icon: 'budgets' },
-  { to: '/plan', label: 'Plan', short: 'Plan', icon: 'plan' },
-  { to: '/settings', label: 'Settings', short: 'Settings', icon: 'sliders' },
-]
-
-/** Quick theme switch: one dot per theme, painted in that theme's colors. */
-function ThemeDots() {
-  const { settings } = useApp()
-  const prefersDark = usePrefersDark()
-  const update = useUpdateSettings()
+/** The logo and name, a link home. */
+function Brand() {
   return (
-    <div role="group" aria-label="Theme" className="pillbar theme-dots">
-      {(Object.keys(THEMES) as ThemeId[]).map((id) => {
-        const { vars } = themeVariables({ ...settings.appearance, theme: id }, prefersDark)
-        return (
-          <button
-            key={id}
-            type="button"
-            className="theme-dot"
-            aria-label={`${THEMES[id].name} theme`}
-            aria-pressed={settings.appearance.theme === id}
-            onClick={() => update.mutate({ appearance: { theme: id } })}
-            style={{
-              background: `linear-gradient(135deg, ${vars['--bg']} 50%, ${vars['--accent']} 50%)`,
-            }}
-          />
-        )
-      })}
-    </div>
+    <Link to={paths.home()} className="brand" aria-label="Leeway home">
+      <Logo />
+      <span className="brand-name">leeway</span>
+    </Link>
   )
 }
 
-/** The way to Chat, in the header on every screen, only when Chat is on. */
-function ChatLink() {
-  if (!useChatAvailable()) return null
+/** The computer's sidebar: the logo, the five tabs, then Chat, the Inbox and Settings. */
+function Sidebar() {
   return (
-    <NavLink
-      to="/chat"
-      className={({ isActive }) => (isActive ? 'bell active' : 'bell')}
-      aria-label="Chat"
-      title="Chat"
-    >
-      <Icon name="chat" size={20} />
-    </NavLink>
+    <header className="sidebar">
+      <Brand />
+      <nav aria-label="Main" className="side-tabs">
+        <TabLinks className="side-link" />
+      </nav>
+      <SidebarFoot />
+    </header>
   )
 }
 
+/**
+ * The phone's header: the logo, then Chat, the Inbox bell, Settings and the
+ * screen's actions. Turned sideways it also holds the five tabs (`tabs`).
+ */
+function Header({ actions, tabs }: { actions?: ReactNode; tabs?: boolean }) {
+  return (
+    <header className="topbar">
+      <Brand />
+      {tabs && (
+        <nav aria-label="Main" className="row-tabs">
+          <TabLinks className="row-tab" />
+        </nav>
+      )}
+      <div className="row">
+        <HeaderLinks />
+        {actions}
+      </div>
+    </header>
+  )
+}
+
+/**
+ * Every screen inside the app's frame. `actions` are the screen's own buttons
+ * for the top row (Home's Edit layout); beside a sidebar, which holds the
+ * logo and links, that row shows only when there are some.
+ */
 export function Shell({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+  const frame = useFrame()
+  useTabKeys()
   return (
-    <>
+    <div className={`shell shell-${frame}`}>
+      {frame === 'sidebar' && <Sidebar />}
       <div className="page">
-        <header className="topbar">
-          <NavLink to="/" className="brand" aria-label="Leeway overview">
-            <Logo />
-            <span className="brand-name">leeway</span>
-          </NavLink>
-          <nav aria-label="Main" className="pillbar">
-            {LINKS.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.to === '/'}
-                className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
-              >
-                {link.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="row">
-            <ChatLink />
-            <Bell />
-            <ThemeDots />
-            {actions}
-          </div>
-        </header>
+        {frame === 'sidebar' ? (
+          actions && <div className="topbar topbar-actions">{actions}</div>
+        ) : (
+          <Header actions={actions} tabs={frame === 'short'} />
+        )}
         {children}
       </div>
-      <nav aria-label="Main" className="tabbar">
-        {LINKS.map((link) => (
-          <NavLink
-            key={link.to}
-            to={link.to}
-            end={link.to === '/'}
-            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-          >
-            <Icon name={link.icon} size={22} />
-            {link.short}
-          </NavLink>
-        ))}
-      </nav>
-    </>
+      {frame === 'tabbar' && (
+        <nav aria-label="Main" className="tabbar">
+          <TabLinks className="tab" />
+        </nav>
+      )}
+    </div>
   )
 }

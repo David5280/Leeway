@@ -94,7 +94,7 @@ function renderAccount(id: string) {
     <Routes>
       <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
     </Routes>,
-    { route: `/accounts/${id}` },
+    { route: `/wealth/accounts/${id}` },
   )
 }
 
@@ -106,11 +106,11 @@ describe("an account's own page", () => {
     renderAccount('chk')
     expect(await screen.findByRole('heading', { name: 'Everyday checking' })).toBeInTheDocument()
     expect(screen.getByText('First Bank ··1234')).toBeInTheDocument()
-    // The tab bar has an Accounts link too; this one is the way back above the title.
+    // The tab bar has a Wealth tab too; this one is the way back above the title.
     const back = screen
-      .getAllByRole('link', { name: 'Accounts' })
+      .getAllByRole('link', { name: 'Wealth' })
       .find((link) => link.classList.contains('back-link'))
-    expect(back).toHaveAttribute('href', '/accounts')
+    expect(back).toHaveAttribute('href', '/wealth')
   })
 
   it('shows an account the bank no longer shares as such, never its old balance as current', async () => {
@@ -166,7 +166,10 @@ describe("an account's own page", () => {
     server()
     renderAccount('chk')
     const bills = await screen.findByRole('region', { name: 'Bills paid from here' })
-    expect(within(bills).getByRole('link', { name: /Rent/ })).toHaveAttribute('href', '/plan/bills')
+    expect(within(bills).getByRole('link', { name: /Rent/ })).toHaveAttribute(
+      'href',
+      '/payday/bills',
+    )
     // Power is paid from somewhere else.
     expect(within(bills).queryByText('Power')).not.toBeInTheDocument()
 
@@ -180,7 +183,7 @@ describe("an account's own page", () => {
 
     const fees = screen.getByRole('region', { name: 'Fees charged' })
     const fee = within(fees).getByRole('link', { name: /Overdraft Fee/ })
-    expect(fee).toHaveAttribute('href', '/transactions?account=chk')
+    expect(fee).toHaveAttribute('href', '/spending/activity?account=chk')
     expect(within(fee).getByText('$34')).toHaveClass('money-problem')
   })
 
@@ -215,7 +218,7 @@ describe("an account's own page", () => {
     ).toHaveTextContent('Goal: Emergency fund: $6,000')
     const goals = screen.getByRole('region', { name: 'Goals on this account' })
     const row = within(goals).getByRole('link', { name: /Emergency fund/ })
-    expect(row).toHaveAttribute('href', '/plan/goals')
+    expect(row).toHaveAttribute('href', '/goals')
     expect(row).toHaveTextContent('$4,000 of $6,000')
     expect(within(row).getByRole('progressbar', { name: 'Emergency fund reached' })).toBeVisible()
   })

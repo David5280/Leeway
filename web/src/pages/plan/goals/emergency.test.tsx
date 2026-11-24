@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fundCard, fundGoal, fundView, offerView, serveEmergency } from '../../../test/emergency'
 import { failing, sentence } from '../../../test/fake'
-import { goal, planServer, renderPlan } from '../../../test/planning'
+import { goal, planServer, renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -16,7 +16,7 @@ const FUND = fundView()
 describe('the emergency fund offer', () => {
   it('offers a month of essentials in one tap, with the step after it, then is gone', async () => {
     const server = serveEmergency(OFFER)
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const region = await screen.findByRole('region', { name: 'Start an emergency fund' })
     const offer = within(region)
     expect(offer.getByText('Start with one month of essentials')).toBeVisible()
@@ -34,7 +34,7 @@ describe('the emergency fund offer', () => {
 
   it('opens the math behind its figure', async () => {
     serveEmergency(OFFER)
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
     await userEvent.setup().click(offer.getByRole('button', { name: /show how it adds up/ }))
     const sheet = within(screen.getByRole('dialog', { name: 'Emergency fund' }))
@@ -51,7 +51,7 @@ describe('the emergency fund offer', () => {
       },
       { '/api/actions/start_emergency_fund': failing('Rainy day is already your emergency fund') },
     )
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
     await userEvent.setup().click(offer.getByRole('button', { name: 'Start my emergency fund' }))
     expect(await offer.findByText('Rainy day is already your emergency fund')).toBeVisible()
@@ -67,7 +67,7 @@ describe('the emergency fund offer', () => {
       next: null,
     })
     const server = serveEmergency(quiet)
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const offer = within(await screen.findByRole('region', { name: 'Start an emergency fund' }))
     expect(offer.getByText('Pick what counts as essential')).toBeVisible()
     expect(
@@ -89,7 +89,7 @@ describe('the emergency fund offer', () => {
 
   it('is not offered before spending is known, so the empty card says when it will be', async () => {
     serveEmergency(null)
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect(
       await screen.findByText(/start an emergency fund once a month of spending/),
     ).toBeVisible()
@@ -99,7 +99,7 @@ describe('the emergency fund offer', () => {
 describe('the emergency fund goal', () => {
   it('shows its months, what is left and the next step, and takes it', async () => {
     const server = serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     expect(fund.getByText('1 month of essentials')).toBeVisible()
     expect(fund.getByText(sentence('$1,500 to go.'))).toBeVisible()
@@ -115,20 +115,20 @@ describe('the emergency fund goal', () => {
 
   it('opens how many months it covers from its figure', async () => {
     serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     await userEvent.setup().click(fund.getByRole('button', { name: /show how it adds up/ }))
     const sheet = within(screen.getByRole('dialog', { name: 'Emergency fund' }))
     expect(sheet.getByText('0.2 months')).toBeVisible()
     expect(sheet.getByRole('link', { name: /Rainy Day/ })).toHaveAttribute(
       'href',
-      '/accounts/acct-rainy',
+      '/wealth/accounts/acct-rainy',
     )
   })
 
   it('cheers a step reached, and makes the next one the main button', async () => {
     serveEmergency(FUND, [fundGoal({ accountBalanceCents: 250_000 })])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     expect(fund.getByText('You have 1 month put by. Nice work.')).toHaveClass('good')
     expect(fund.getByRole('button', { name: 'Aim for 3 months: $6,000' })).toHaveClass('primary')
@@ -138,7 +138,7 @@ describe('the emergency fund goal', () => {
     serveEmergency(fundView({ ownTarget: true, months: 2.5, next: null }), [
       fundGoal({ accountBalanceCents: 250_000 }),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     expect(fund.getByText('About 2.5 months of essentials')).toBeVisible()
     expect(fund.queryByText('1 month of essentials')).toBeNull()
@@ -154,7 +154,7 @@ describe('the emergency fund goal', () => {
     })
     const view = fundView({ goalId: 'goal-rainy', counts: 'hand', ownTarget: true, months: 1.5 })
     serveEmergency(view, [named])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = within(await screen.findByRole('region', { name: 'Rainy day' }))
     expect(fund.getByText('About 1.5 months of essentials')).toBeVisible()
     expect(fund.getByText(/Counts what you add by hand\./)).toBeVisible()
@@ -165,7 +165,7 @@ describe('the emergency fund goal', () => {
 
   it('edits with a hint on how its target is sized, and without the progress fields', async () => {
     serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     await userEvent.setup().click(fund.getByRole('button', { name: 'Edit goal' }))
     const form = within(await screen.findByRole('form', { name: 'Edit Emergency fund' }))
@@ -176,7 +176,7 @@ describe('the emergency fund goal', () => {
 
   it('saves a new name without its target, so the target stays sized by essentials', async () => {
     const server = serveEmergency(FUND, [fundGoal()], { update_goal: () => fundGoal() })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Edit goal' }))
@@ -207,7 +207,7 @@ describe('the emergency fund when it fails to load', () => {
       { list_goals: () => [fundGoal(), trip], list_accounts: () => [] },
       { '/api/actions/get_emergency_fund': failingOnce() },
     )
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
     expect(screen.getByRole('region', { name: 'Trip' })).toBeVisible()
     // The fund's goal draws nothing until the fund loads, never a plain card with an old target.
@@ -224,7 +224,7 @@ describe('the emergency fund when it fails to load', () => {
       { list_goals: () => [], list_accounts: () => [] },
       { '/api/actions/get_emergency_fund': failingOnce() },
     )
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
     expect(screen.getByText('No goals yet. Save for something you want to buy.')).toBeVisible()
     expect(screen.queryByText(/start an emergency fund/)).toBeNull()
@@ -245,7 +245,7 @@ describe('the emergency fund when it fails to load', () => {
         },
       },
     )
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const offer = await screen.findByRole('region', { name: 'Start an emergency fund' })
     // Saving a goal reads everything again, and this time the fund fails.
     const user = userEvent.setup()

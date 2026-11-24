@@ -20,7 +20,7 @@ for (const [name, phone] of [
     test.afterEach(async ({ page }) => forget(page))
 
     test('the birth year is asked once, fits, and changes in Settings', async ({ page }) => {
-      await page.goto('/plan/retirement')
+      await page.goto('/wealth/retirement')
       const ask = page.getByRole('region', { name: 'What year were you born?' })
       await expect(ask).toBeVisible()
       expect(await overflow(page)).toBeLessThanOrEqual(0)

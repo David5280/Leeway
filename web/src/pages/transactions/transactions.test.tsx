@@ -67,11 +67,11 @@ function Address() {
   return <p>Address: {useLocation().search || 'none'}</p>
 }
 
-function renderTransactions(route = '/transactions') {
+function renderTransactions(route = '/spending/activity') {
   return renderSignedIn(
     <Routes>
       <Route
-        path="/transactions"
+        path="/spending/activity"
         element={
           <>
             <Transactions />
@@ -79,7 +79,7 @@ function renderTransactions(route = '/transactions') {
           </>
         }
       />
-      <Route path="/transactions/import" element={<p>Import page</p>} />
+      <Route path="/spending/activity/import" element={<p>Import page</p>} />
     </Routes>,
     { route },
   )
@@ -196,7 +196,7 @@ describe('Transactions list', () => {
 
   it('says nothing matches a filter, and clears every filter', async () => {
     const server = serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
-    renderTransactions(`/transactions?category=${groceries.id}&account=acct-1`)
+    renderTransactions(`/spending/activity?category=${groceries.id}&account=acct-1`)
     const user = userEvent.setup()
     expect(await screen.findByText('Nothing matches these filters.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
@@ -236,7 +236,7 @@ describe('Transactions filters', () => {
   it('narrows to the merchant a link gave, as a leak alert does, until its chip is tapped', async () => {
     const server = serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
     renderTransactions(
-      '/transactions?account=acct-1&range=all&merchant=tx-9&merchantName=Netflix+%26+Co',
+      '/spending/activity?account=acct-1&range=all&merchant=tx-9&merchantName=Netflix+%26+Co',
     )
     await waitFor(() =>
       expect(lastList(server)).toMatchObject({ sameMerchantAs: 'tx-9', accountId: 'acct-1' }),
@@ -253,7 +253,7 @@ describe('Transactions filters', () => {
 
   it('lets go of a linked merchant with the other filters', async () => {
     serve({ list_transactions: () => ({ transactions: [], total: 0 }) })
-    renderTransactions('/transactions?merchant=tx-9')
+    renderTransactions('/spending/activity?merchant=tx-9')
     // With no name in the link, the chip still shows the list is narrowed.
     expect(await screen.findByRole('button', { name: /^Merchant: These charges/ })).toBeVisible()
     await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
@@ -279,7 +279,7 @@ describe('Transactions filters', () => {
 
   it('opens on the date range the address names', async () => {
     const server = serve()
-    renderTransactions('/transactions?range=all')
+    renderTransactions('/spending/activity?range=all')
     await screen.findByText('Costco')
     expect(screen.getByRole('button', { name: 'Dates: All' })).toBeInTheDocument()
     expect(lastList(server)?.start).toBeUndefined()
@@ -287,7 +287,7 @@ describe('Transactions filters', () => {
 
   it('reads a range it does not know as this period', async () => {
     serve()
-    renderTransactions('/transactions?range=forever')
+    renderTransactions('/spending/activity?range=forever')
     await screen.findByText('Costco')
     expect(screen.getByRole('button', { name: 'Dates: This period' })).toBeInTheDocument()
   })
@@ -326,7 +326,7 @@ describe('Transactions filters', () => {
 
   it('names the category filter for what still needs one', async () => {
     serve()
-    renderTransactions('/transactions?category=uncategorized')
+    renderTransactions('/spending/activity?category=uncategorized')
     expect(
       await screen.findByRole('button', { name: 'Category: Needs a category' }),
     ).toBeInTheDocument()
@@ -351,13 +351,13 @@ describe('Transactions filters', () => {
 
   it("names an account from another screen's link it cannot find plainly", async () => {
     serve({ list_accounts: () => [] })
-    renderTransactions('/transactions?account=gone')
+    renderTransactions('/spending/activity?account=gone')
     expect(await screen.findByRole('button', { name: 'Account: One account' })).toBeInTheDocument()
   })
 
   it('shows only what needs a category while its chip is on, keeping the rest of the address', async () => {
     const server = serve()
-    renderTransactions('/transactions?from=overview')
+    renderTransactions('/spending/activity?from=overview')
     const user = userEvent.setup()
     const chip = await screen.findByRole('button', { name: '1 need a category' })
     expect(chip).toHaveAttribute('aria-pressed', 'false')
@@ -376,7 +376,7 @@ describe('Transactions filters', () => {
           ? { transactions: [], total: input.accountId ? 2 : 5 }
           : { transactions: [costco], total: 1 },
     })
-    renderTransactions('/transactions?account=acct-1')
+    renderTransactions('/spending/activity?account=acct-1')
     expect(await screen.findByRole('button', { name: '2 need a category' })).toBeInTheDocument()
     const counted = server
       .actions('list_transactions')

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settingsHandlers } from '../../../test/fake'
 import { paystubStatus } from '../../../test/paystub'
-import { planServer, renderPlan, retirementOf } from '../../../test/planning'
+import { planServer, renderPlanning, retirementOf } from '../../../test/planning'
 import { pension } from '../../../test/profile'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -43,7 +43,7 @@ const DETAILS = [
 describe('adding a pension by hand', () => {
   it('asks for a name and balance first, with every plan detail folded away', async () => {
     serve([])
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
     const form = within(await screen.findByRole('form', { name: 'New pension' }))
@@ -70,7 +70,7 @@ describe('adding a pension by hand', () => {
 
   it('adds a pension with its name alone, every detail left not known', async () => {
     const server = serve([])
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
     const form = within(await screen.findByRole('form', { name: 'New pension' }))
@@ -88,7 +88,7 @@ describe('adding a pension by hand', () => {
 describe("changing a kept pension's figures", () => {
   it('shows its details open, with the figures it keeps', async () => {
     const server = serve()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     const pensions = within(await screen.findByRole('region', { name: 'Pensions' }))
     await user.click(pensions.getByRole('button', { name: 'Edit figures' }))

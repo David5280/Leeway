@@ -66,8 +66,8 @@ describe('nameUnderBank', () => {
 
 describe('accountDetailPath', () => {
   it("opens the account's own page, its id made safe for an address", () => {
-    expect(accountDetailPath('abc')).toBe('/accounts/abc')
-    expect(accountDetailPath('a b')).toBe('/accounts/a%20b')
+    expect(accountDetailPath('abc')).toBe('/wealth/accounts/abc')
+    expect(accountDetailPath('a b')).toBe('/wealth/accounts/a%20b')
   })
 })
 

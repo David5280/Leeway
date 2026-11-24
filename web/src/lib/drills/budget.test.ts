@@ -178,7 +178,7 @@ describe('uncategorizedDrill', () => {
     const drill = uncategorizedDrill(budget)
     expect(drill.figure).toEqual({ text: '1 transaction' })
     expect(drill.more).toEqual({
-      to: '/transactions?category=uncategorized',
+      to: '/spending/activity?category=uncategorized',
       label: 'Sort 1 transaction',
     })
   })

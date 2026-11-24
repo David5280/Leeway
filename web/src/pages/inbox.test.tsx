@@ -18,7 +18,7 @@ const bill = inboxItem({
   kind: 'bill_due',
   title: 'Bill due soon',
   message: 'Rent is due tomorrow.',
-  link: '/plan/bills',
+  link: '/payday/bills',
   readAt: new Date(),
   createdAt: new Date(Date.now() - 3 * 3_600_000),
 })

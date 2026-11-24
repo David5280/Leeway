@@ -16,6 +16,7 @@ import {
   DeleteCategory,
 } from './category/Manage'
 import { ThisPeriod } from './category/ThisPeriod'
+import { paths } from '../routes'
 
 export function CategoryPage() {
   const { id = '' } = useParams()
@@ -27,7 +28,7 @@ export function CategoryPage() {
     return (
       <Shell>
         <p className="empty">
-          That category is gone. <Link to="/budgets">All categories</Link>
+          That category is gone. <Link to={paths.spending()}>All categories</Link>
         </p>
       </Shell>
     )
@@ -72,7 +73,7 @@ function CategoryDetail({
   const status = row ? categoryStatus(row, money) : null
   return (
     <Shell>
-      <Link to="/budgets" className="linkbtn row" style={{ gap: 4 }}>
+      <Link to={paths.spending()} className="linkbtn row" style={{ gap: 4 }}>
         <Icon name="back" size={16} /> All categories
       </Link>
       <div>

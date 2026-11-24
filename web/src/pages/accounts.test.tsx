@@ -4,10 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   A,
   B,
-  C,
   card,
   checking,
-  everyAccount,
   group,
   pickBox,
   renderAccounts,
@@ -15,23 +13,22 @@ import {
   server,
 } from '../test/accounts'
 import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
-import { worthPoint } from '../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('Accounts screen', () => {
+describe('the accounts on Wealth', () => {
   it('shows each account as a card in its kind, opening its own page', async () => {
     server()
     renderAccounts()
     await screen.findByRole('region', { name: 'Checking' })
 
     const everyday = within(group('Checking')).getByRole('link', { name: /Everyday/ })
-    expect(everyday).toHaveAttribute('href', `/accounts/${A}`)
+    expect(everyday).toHaveAttribute('href', `/wealth/accounts/${A}`)
     // Checking shows what is available once pending charges clear.
     expect(everyday).toHaveTextContent('$2,500.00$2,400available')
     expect(within(group('Savings')).getByRole('link', { name: /Rainy day/ })).toHaveAttribute(
       'href',
-      `/accounts/${B}`,
+      `/wealth/accounts/${B}`,
     )
 
     // A card's balance is owed, with how much of the limit is used and what is due.
@@ -91,40 +88,7 @@ describe('Accounts screen', () => {
     expect(within(card).getByRole('img', { name: 'Balance over 30 days' })).toBeInTheDocument()
   })
 
-  it('leads with what every counted account comes to, opening how it adds up', async () => {
-    server()
-    renderAccounts()
-    const together = await screen.findByRole('region', { name: 'All accounts together' })
-    // $2,500 and $9,000 owned, less $300 owed on the card.
-    expect(together).toHaveTextContent('$11,200.00')
-    expect(together).toHaveTextContent('$11,500 owned, less $300 owed')
-
-    await userEvent.click(within(together).getByRole('button'))
-    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
-    expect(within(sheet).getByRole('region', { name: 'How it adds up' })).toHaveTextContent(
-      'Together $11,200 = Owned in these accounts $11,500 minus owed on cards and loans $300',
-    )
-  })
-
-  it("draws net worth's year beside the total when there is a history", async () => {
-    server(everyAccount, {
-      get_net_worth: () => ({
-        history: [worthPoint('2026-01-01', 900000), worthPoint('2026-11-17', 1120000)],
-      }),
-    })
-    renderAccounts()
-    expect(await screen.findByRole('img', { name: 'Net worth over the last year' })).toBeVisible()
-  })
-
-  it('reads an overdrawn total in red', async () => {
-    const short = account({ id: A, name: 'Short', balanceCents: -5000, subtype: 'checking' })
-    server([short])
-    renderAccounts()
-    const together = await screen.findByRole('region', { name: 'All accounts together' })
-    expect(within(together).getByText('−$50.00')).toHaveClass('money-problem')
-  })
-
-  it('puts the alerts under the total, red when one is urgent, each opening its account', async () => {
+  it('puts the alerts above the cards, red when one is urgent, each opening its account', async () => {
     const short = account({ id: 'a', name: 'Everyday', balanceCents: -4210, subtype: 'checking' })
     server([short], {
       list_alerts: () => accountsViewFor([short]).alerts,
@@ -134,9 +98,9 @@ describe('Accounts screen', () => {
     expect(alerts).toHaveClass('over-card')
     expect(
       within(alerts).getByRole('link', { name: /Everyday is overdrawn by \$42\.10/ }),
-    ).toHaveAttribute('href', '/accounts/a')
-    const together = screen.getByRole('region', { name: 'All accounts together' })
-    expect(together.compareDocumentPosition(alerts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toHaveAttribute('href', '/wealth/accounts/a')
+    const cards = screen.getByRole('region', { name: 'Checking' })
+    expect(alerts.compareDocumentPosition(cards)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     // Said once: the summary leaves the overdrawn account to the alert.
     await screen.findByRole('region', { name: 'Summary' })
     expect(screen.getAllByText(/overdrawn by \$42\.10/)).toHaveLength(1)
@@ -163,12 +127,6 @@ describe('Accounts screen', () => {
     renderAccounts()
     const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
     expect(alerts).toHaveClass('warn-card')
-  })
-
-  it('opens an account from an old ?select= link on its own page', async () => {
-    server()
-    renderAccounts({ route: `/accounts?select=${C}` })
-    expect(await screen.findByText("One account's page")).toBeInTheDocument()
   })
 
   it('says how to start when there are no accounts', async () => {
@@ -203,12 +161,10 @@ describe('accounts the bank no longer shares', () => {
     unsharedAt: '2026-11-04T15:00:00Z',
   })
 
-  it('shows them apart, out of the total and the cards, with a word in the summary', async () => {
+  it('shows them apart, out of the cards, with a word in the summary', async () => {
     server([checking, old])
     renderAccounts()
-    const together = await screen.findByRole('region', { name: 'All accounts together' })
-    // Only Everyday adds up: $2,500.00, not $7,500.00.
-    expect(together).toHaveTextContent('$2,500.00')
+    await screen.findByRole('region', { name: 'Checking' })
     expect(screen.queryByRole('link', { name: /Old savings/ })).not.toBeInTheDocument()
     const apart = screen.getByRole('region', { name: 'No longer shared' })
     expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
@@ -219,10 +175,6 @@ describe('accounts the bank no longer shares', () => {
         'Old savings is no longer shared from Chase and is left out of these figures.',
       ),
     ).toBeInTheDocument()
-    // The math leaves it out too.
-    await userEvent.click(within(together).getByRole('button'))
-    const sheet = screen.getByRole('dialog', { name: 'Your accounts' })
-    expect(within(sheet).queryByText('Old savings')).not.toBeInTheDocument()
   })
 
   it('offers no select for one shared account, and keeps the unshared out of picking', async () => {

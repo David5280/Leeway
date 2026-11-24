@@ -9,12 +9,13 @@ const overflow = (page: Page) =>
 
 const PATHS = [
   '/',
-  '/accounts',
+  '/wealth',
   '/alerts',
-  '/transactions',
-  '/budgets',
-  '/plan',
-  '/plan/retirement',
+  '/spending/activity',
+  '/spending',
+  '/payday',
+  '/goals',
+  '/wealth/retirement',
   '/settings/appearance',
   '/settings/budgeting',
   '/settings/accounts',

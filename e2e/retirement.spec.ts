@@ -1,4 +1,4 @@
-// Retirement on the Plan tab: a pension added with only the figures the owner
+// Retirement under Wealth: a pension added with only the figures the owner
 // gives, counted as retirement income beside savings, and a projection shown
 // as a range once the owner gives a birth year. Nothing here asks the AI.
 
@@ -8,7 +8,7 @@ import { PENSION, setUpRetirement, tearDownRetirement } from './retirement'
 test.afterEach(async ({ page }) => tearDownRetirement(page))
 
 test('a pension counts toward retirement, and the projection is a range', async ({ page }) => {
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   const projection = page.getByRole('region', { name: 'Retirement projection' })
   await expect(projection).toContainText('Add your birth year')
   // Only the year is asked, once, right under the projection.

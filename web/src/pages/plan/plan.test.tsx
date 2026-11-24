@@ -1,17 +1,12 @@
+// The planning cards on their new pages: cash until payday on Payday, and
+// Debts and net worth under Wealth.
+
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account, CashFlow } from '../../api/client'
 import { failing } from '../../test/fake'
-import {
-  account,
-  cashFlow,
-  debtPlans,
-  planServer,
-  renderPlan,
-  retirementOf,
-} from '../../test/planning'
-import { noPay } from '../../test/pay'
+import { account, cashFlow, debtPlans, planServer, renderPlanning } from '../../test/planning'
 import { worthPoint } from '../../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -25,49 +20,10 @@ const quietBills = {
   find_recurring: () => [],
 }
 
-describe('Plan screen', () => {
-  it('opens on payday and switches sections', async () => {
-    planServer({
-      ...quietBills,
-      get_pay: () => noPay,
-      list_goals: () => [],
-      list_accounts: () => [],
-      get_net_worth: () => ({ assetsCents: 0, liabilitiesCents: 0, netWorthCents: 0, history: [] }),
-      project_retirement: () => retirementOf(),
-    })
-    renderPlan('/plan')
-    const user = userEvent.setup()
-    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
-    const sections = within(screen.getByRole('group', { name: 'Plan section' }))
-    expect(sections.getByRole('button', { name: 'Payday' })).toHaveAttribute('aria-pressed', 'true')
-
-    await user.click(sections.getByRole('button', { name: 'Bills' }))
-    expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
-    // Cash until payday leads the bills, and stays off the other sections.
-    expect(screen.getByRole('region', { name: 'Until payday' })).toBeVisible()
-
-    await user.click(sections.getByRole('button', { name: 'Goals' }))
-    expect(await screen.findByRole('button', { name: 'Add a goal' })).toBeVisible()
-    expect(screen.queryByRole('region', { name: 'Until payday' })).not.toBeInTheDocument()
-    await user.click(sections.getByRole('button', { name: 'Debts' }))
-    expect(await screen.findByText(/No credit cards or loans/)).toBeVisible()
-    await user.click(sections.getByRole('button', { name: 'Net worth' }))
-    expect(await screen.findByRole('region', { name: 'Net worth over time' })).toBeVisible()
-    await user.click(sections.getByRole('button', { name: 'Retirement' }))
-    expect(await screen.findByRole('region', { name: 'Retirement projection' })).toBeVisible()
-  })
-
-  it('shows payday for an address it does not know', async () => {
-    planServer({ get_pay: () => noPay })
-    renderPlan('/plan/somewhere')
-    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
-  })
-})
-
 describe('Until payday', () => {
   async function show(flow: CashFlow) {
     planServer({ ...quietBills, get_cash_flow: () => flow })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday')
     // The card is drawn anew once the numbers arrive, so it is found after them.
     await screen.findByText(/in checking/)
     return screen.getByRole('region', { name: 'Until payday' })
@@ -122,7 +78,7 @@ describe('Until payday', () => {
       ...quietBills,
       get_cash_flow: () => cashFlow({ cashKnown: false, cashCents: 0, safeCents: 0 }),
     })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday')
     await screen.findByText(/balance isn.t known yet/)
     const card = screen.getByRole('region', { name: 'Until payday' })
     expect(card).toHaveTextContent("Checking's balance isn't known yet.")
@@ -276,7 +232,7 @@ describe('Until payday', () => {
 
   it('shows why it could not load', async () => {
     planServer(quietBills, { '/api/actions/get_cash_flow': failing('No accounts yet', 500) })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday')
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
   })
 })
@@ -334,7 +290,7 @@ describe('Debts', () => {
 
   it('lists only cards and loans that are owed, with their terms', async () => {
     serve([rewards, loan, paidOff, hidden, unshared, checking])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const card = within(await debtsCard())
     expect(card.getAllByRole('form').map((f) => f.getAttribute('aria-label'))).toEqual([
       'Rewards card terms',
@@ -351,7 +307,7 @@ describe('Debts', () => {
 
   it('saves a debt’s rate and payment once something changed', async () => {
     const server = serve([rewards, loan])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const user = userEvent.setup()
     const terms = within(await screen.findByRole('form', { name: 'Personal loan terms' }))
     const save = terms.getByRole('button', { name: 'Save' })
@@ -368,7 +324,7 @@ describe('Debts', () => {
 
   it('saves a rate typed with a comma decimal as that rate, never as more digits', async () => {
     const server = serve([rewards, loan])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const user = userEvent.setup()
     const terms = within(await screen.findByRole('form', { name: 'Personal loan terms' }))
     await user.type(terms.getByRole('textbox', { name: 'Personal loan interest rate' }), '9,9')
@@ -382,7 +338,7 @@ describe('Debts', () => {
 
   it("won't save a rate that can't be one, which would clear the saved rate", async () => {
     serve([rewards, loan])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const user = userEvent.setup()
     const terms = within(await screen.findByRole('form', { name: 'Rewards card terms' }))
     const rate = terms.getByRole('textbox', { name: 'Rewards card interest rate' })
@@ -400,7 +356,7 @@ describe('Debts', () => {
 
   it('compares the strategies and lists the payoff order', async () => {
     serve([rewards, loan])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const user = userEvent.setup()
     const plan = within(await screen.findByRole('region', { name: 'Payoff plan' }))
     expect(await plan.findByRole('group', { name: 'Avalanche plan' })).toHaveTextContent(
@@ -417,7 +373,7 @@ describe('Debts', () => {
 
   it('asks for an extra amount and plans with it', async () => {
     const server = serve([rewards, loan])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const user = userEvent.setup()
     await screen.findByRole('region', { name: 'Payoff plan' })
     await user.type(screen.getByRole('textbox', { name: 'Extra each month' }), '100')
@@ -433,7 +389,7 @@ describe('Debts', () => {
         { id: loan.id, name: 'Personal loan', missing: ['aprPercent', 'minimumPaymentCents'] },
       ]),
     )
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(
       await screen.findByText('Left out until they have terms: Personal loan.'),
     ).toBeInTheDocument()
@@ -441,14 +397,14 @@ describe('Debts', () => {
 
   it('asks for a rate when no debt can be planned yet', async () => {
     serve([loan], debtPlans([]))
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(await screen.findByText(/Add an interest rate for a debt above/)).toBeInTheDocument()
   })
 
   it('says when payments never pay a debt off', async () => {
     const stuck = { ...rewardsDebt, aprBps: 3000, minimumCents: 3000 }
     serve([rewards], debtPlans([stuck]))
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const plan = within(await screen.findByRole('region', { name: 'Payoff plan' }))
     expect(await plan.findByRole('group', { name: 'Minimums only plan' })).toHaveTextContent(
       'NeverNever, at these payments',
@@ -457,7 +413,7 @@ describe('Debts', () => {
 
   it('shows why accounts could not load', async () => {
     planServer(quietBills, { '/api/actions/list_accounts': failing('Database is down', 500) })
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 })
@@ -478,7 +434,7 @@ describe('Net worth', () => {
         estimatedBefore: null,
       }),
     })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     expect(await screen.findByRole('region', { name: 'Net worth' })).toHaveTextContent(
       'Net worth$7,000$8,200 owned, less $1,200 owed',
     )
@@ -528,7 +484,7 @@ describe('Net worth', () => {
         estimatedBefore: null,
       }),
     })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const card = await screen.findByRole('region', { name: 'Net worth' })
     expect(within(card).getByText('−$50')).toHaveClass('money-problem')
     expect(screen.getByText(/History builds as balances change/)).toBeInTheDocument()
@@ -553,7 +509,7 @@ describe('Net worth', () => {
         estimatedBefore: '2026-11-17',
       }),
     })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const chart = await screen.findByRole('region', { name: 'Net worth over time' })
     const line = () => screen.getByRole('img', { name: 'Net worth over time' })
     await waitFor(() =>
@@ -578,7 +534,7 @@ describe('Net worth', () => {
 
   it('shows why it could not load', async () => {
     planServer(quietBills, { '/api/actions/get_net_worth': failing('Database is down', 500) })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 })

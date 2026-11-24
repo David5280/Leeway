@@ -9,6 +9,7 @@ import { useApp } from '../../lib/app'
 import { budgetStatus, carriedText, overHint } from '../../lib/budgetText'
 import { InlineBudget } from './InlineBudget'
 import { Money } from '../../components/design/Money'
+import { paths } from '../../routes'
 
 export function BudgetRow({
   row,
@@ -28,7 +29,7 @@ export function BudgetRow({
     isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
   return (
     <div className="cat-row budget-row" aria-label={row.name} role="group">
-      <Link to={`/budgets/${row.categoryId}`} className="cat-name">
+      <Link to={paths.category(row.categoryId)} className="cat-name">
         <Dot color={row.color} />
         <span className="cat-label">{row.name}</span>
       </Link>

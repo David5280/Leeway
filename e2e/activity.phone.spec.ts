@@ -119,7 +119,7 @@ test.describe('the Transactions list on a phone', () => {
       test.use(screen)
 
       test('rows neither overlap nor cut anything off', async ({ page }) => {
-        await page.goto('/transactions')
+        await page.goto('/spending/activity')
         await simulateInsets(page, insets)
         await expect(page.getByRole('button', { name: /^Snooze, spent/ })).toBeVisible()
         expect(await rowProblems(page)).toEqual([])
@@ -127,7 +127,7 @@ test.describe('the Transactions list on a phone', () => {
       })
 
       test('nothing on the screen runs into anything else, rules included', async ({ page }) => {
-        await page.goto('/transactions')
+        await page.goto('/spending/activity')
         await simulateInsets(page, insets)
         await expect(page.getByText(RULES[0]!.pattern, { exact: false })).toBeVisible()
         const rules = page.getByRole('region', { name: 'Rules' })
@@ -138,7 +138,7 @@ test.describe('the Transactions list on a phone', () => {
       })
 
       test("a transaction's sheet fits the screen, clear of the notch", async ({ page }) => {
-        await page.goto('/transactions')
+        await page.goto('/spending/activity')
         await simulateInsets(page, insets)
         await page.getByRole('button', { name: /^King Soopers, spent/ }).click()
         const sheet = page.getByRole('dialog', { name: 'King Soopers' })
@@ -159,7 +159,7 @@ test.describe('the Transactions list on a phone', () => {
       })
 
       test('every control takes a finger, in the filters, rules and sheet', async ({ page }) => {
-        await page.goto('/transactions')
+        await page.goto('/spending/activity')
         await simulateInsets(page, insets)
         // The guard only means something where the page sees a finger.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)

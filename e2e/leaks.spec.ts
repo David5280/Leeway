@@ -54,7 +54,7 @@ test.describe('money leaks', () => {
     await expect(alert).toBeVisible()
     await alert.click()
     await expect(page).toHaveURL(
-      /\/transactions\?account=.+&range=all&merchant=.+&merchantName=Corner\+Hardware/,
+      /\/spending\/activity\?account=.+&range=all&merchant=.+&merchantName=Corner\+Hardware/,
     )
     await expect(page.getByRole('button', { name: /^Merchant: Corner Hardware/ })).toBeVisible()
     const list = page.getByRole('region', { name: 'Transaction list' })
@@ -78,7 +78,7 @@ test.describe('money leaks', () => {
     await expect(alert).toBeVisible()
     await alert.click()
     await expect(page).toHaveURL(
-      /\/transactions\?account=.+&range=all&merchant=.+&merchantName=Streamly/,
+      /\/spending\/activity\?account=.+&range=all&merchant=.+&merchantName=Streamly/,
     )
     // Every charge shows, the old price beside the new one.
     const list = page.getByRole('region', { name: 'Transaction list' })

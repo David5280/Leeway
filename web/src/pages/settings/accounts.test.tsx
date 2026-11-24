@@ -410,7 +410,7 @@ describe('Accounts', () => {
     renderSignedIn(<AccountSection />)
     expect(await screen.findByRole('link', { name: 'Open Everyday' })).toHaveAttribute(
       'href',
-      '/accounts/acct-1',
+      '/wealth/accounts/acct-1',
     )
     expect(screen.getByRole('link', { name: 'Open Cash' })).toHaveTextContent('Open')
   })

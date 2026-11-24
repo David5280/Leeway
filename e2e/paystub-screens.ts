@@ -7,12 +7,12 @@ import { expect, type Page } from '@playwright/test'
 import type { Screen } from './screen'
 import { addPensionFromPaystub, importPaystub, mockReader } from './paystub'
 
-const RETIREMENT = '/plan/retirement'
+const RETIREMENT = '/wealth/retirement'
 
 /** A Retirement screen with the reader stood in for, named for what it shows. */
 const screen = (name: string, then: (page: Page) => Promise<void>): Screen => ({
   name: `${RETIREMENT} ${name}`,
-  route: 'planSection',
+  route: 'retirement',
   path: () => RETIREMENT,
   before: async (page) => {
     await mockReader(page)

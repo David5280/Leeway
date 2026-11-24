@@ -13,13 +13,13 @@ describe('calendar words', () => {
     expect(weekLabel(2, '2026-12-01')).toBe('Week of Dec 1')
   })
   it('links a bill to its form, and an event to a purchase to save for it', () => {
-    expect(billPath('b 1')).toBe('/plan/bills?bill=b+1')
+    expect(billPath('b 1')).toBe('/payday/bills?bill=b+1')
     const trip = { kind: 'trip' as const, date: '2026-12-10', suggestedCents: 150000 }
     expect(saveForPath(trip, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Trip&by=2026-12-10&price=150000',
+      '/goals?new=purchase&name=Trip&by=2026-12-10&price=150000',
     )
     expect(saveForPath({ ...trip, suggestedCents: null }, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Trip&by=2026-12-10',
+      '/goals?new=purchase&name=Trip&by=2026-12-10',
     )
     // Nothing left to set aside prices nothing.
     expect(saveForPath({ ...trip, suggestedCents: 0 }, '2026-11-17')).not.toContain('price')
@@ -42,7 +42,7 @@ describe('calendar words', () => {
   it('wants a purchase for an event already under way by today, never a day gone by', () => {
     const trip = { kind: 'trip' as const, date: '2026-11-15', suggestedCents: 20000 }
     expect(saveForPath(trip, '2026-11-17')).toBe(
-      '/plan/goals?new=purchase&name=Trip&by=2026-11-17&price=20000',
+      '/goals?new=purchase&name=Trip&by=2026-11-17&price=20000',
     )
   })
 

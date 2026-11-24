@@ -27,7 +27,7 @@ test('Comcast, found in history, becomes a bill in one tap, and Undo takes it ba
         amountCents: 8_000,
       })
     }
-    await page.goto('/plan/bills')
+    await page.goto('/payday/bills')
     const found = page.getByRole('region', { name: 'Found in your history' })
     const bills = page.getByRole('region', { name: 'Bills and subscriptions' })
     const row = found.locator('.list-row', { hasText: 'Comcast' })

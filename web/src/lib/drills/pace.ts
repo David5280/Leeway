@@ -3,6 +3,7 @@
 
 import type { Budget, Connection, SpendingPace } from '../../api/client'
 import type { DrillDown } from '../drill'
+import { paths } from '../../routes'
 
 /** Where flexible spending lands: spent so far plus the rest of the period at today's rate. */
 export function paceDrill(pace: SpendingPace, budget: Budget, isCurrent: boolean): DrillDown {
@@ -41,11 +42,11 @@ export function paceDrill(pace: SpendingPace, budget: Budget, isCurrent: boolean
         key: row.categoryId,
         label: row.name,
         value: { cents: row.spentCents },
-        to: `/budgets/${row.categoryId}`,
+        to: paths.category(row.categoryId),
         icon: { category: { name: row.name, color: row.color, icon: row.icon, kind: row.kind } },
       })),
     },
-    more: { to: '/budgets', label: 'Open budgets' },
+    more: { to: paths.spending(), label: 'Open budgets' },
   }
 }
 

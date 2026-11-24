@@ -30,10 +30,10 @@ describe('cashFlowDrill', () => {
         label: 'Phone',
         detail: 'Due on 2026-11-20',
         value: { cents: 6000 },
-        to: '/plan/bills',
+        to: '/payday/bills',
       },
     ])
-    expect(drill.more).toEqual({ to: '/plan', label: 'Open the plan' })
+    expect(drill.more).toEqual({ to: '/payday', label: 'Open payday' })
   })
 
   it('says by how much the cash falls short, in red, and names an overdue bill', () => {
@@ -151,7 +151,7 @@ describe('netWorthDrill', () => {
       { date: '2026-01-01', cents: 500000 },
       { date: '2026-11-17', cents: 700000 },
     ])
-    expect(drill.more).toEqual({ to: '/plan/net-worth', label: 'Open net worth' })
+    expect(drill.more).toEqual({ to: '/wealth', label: 'Open net worth' })
   })
 
   it('reads a negative net worth in red, with no trend from one day', () => {
@@ -191,10 +191,10 @@ describe('debtsDrill', () => {
         label: 'Rewards card',
         detail: `${plans.avalanche.debts[0]!.months} months`,
         value: { cents: plans.avalanche.debts[0]!.interestCents },
-        to: '/plan/debts',
+        to: '/wealth/debts',
       },
     ])
-    expect(drill.more).toEqual({ to: '/plan/debts', label: 'Plan it' })
+    expect(drill.more).toEqual({ to: '/wealth/debts', label: 'Plan it' })
   })
 })
 
@@ -223,7 +223,7 @@ describe('merchantsDrill', () => {
       '2 charges',
     ])
     expect(drill.items!.rows[2]!.detail).toBe('1 charge')
-    expect(drill.more).toEqual({ to: '/transactions', label: 'See the transactions' })
+    expect(drill.more).toEqual({ to: '/spending/activity', label: 'See the transactions' })
   })
 
   it('has no rest term with four or fewer, and says when nothing was spent', () => {

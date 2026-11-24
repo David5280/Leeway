@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAction } from '../api/hooks'
+import { paths } from '../routes'
 import { Icon } from './ui'
 
 /** How often an open tab checks for news. The server's own check runs every few minutes. */
@@ -28,23 +29,39 @@ export function useBellCount(unread: number | undefined) {
   }, [client, unread])
 }
 
-export function Bell() {
+/** How many notifications are unread, checked again every minute while the app is open. */
+export function useUnread(): number {
   const count = useAction('count_notifications', undefined, { refetchInterval: BELL_POLL_MS })
-  const unread = count.data?.unread ?? 0
-  const label = unread > 0 ? `Inbox, ${unread} unread` : 'Inbox'
+  return count.data?.unread ?? 0
+}
+
+/** The inbox's name for screen readers, with how much is unread. */
+export function inboxLabel(unread: number): string {
+  return unread > 0 ? `Inbox, ${unread} unread` : 'Inbox'
+}
+
+/** The unread count as a small badge, or nothing when all is read. */
+export function UnreadBadge({ unread }: { unread: number }) {
+  if (unread === 0) return null
+  return (
+    <span className="bell-badge" aria-hidden="true">
+      {badgeText(unread)}
+    </span>
+  )
+}
+
+export function Bell() {
+  const unread = useUnread()
+  const label = inboxLabel(unread)
   return (
     <NavLink
-      to="/inbox"
+      to={paths.inbox()}
       className={({ isActive }) => (isActive ? 'bell active' : 'bell')}
       aria-label={label}
       title={label}
     >
       <Icon name="bell" size={20} />
-      {unread > 0 && (
-        <span className="bell-badge" aria-hidden="true">
-          {badgeText(unread)}
-        </span>
-      )}
+      <UnreadBadge unread={unread} />
     </NavLink>
   )
 }

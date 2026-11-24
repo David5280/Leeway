@@ -1,6 +1,6 @@
-// Saving for a purchase: starting one from the Plan tab, holding its share
+// Saving for a purchase: starting one from the Goals tab, holding its share
 // back from the budget, recording money put toward it, and seeing it on the
-// overview. Also a budget changed in place on the Budgets list.
+// overview. Also a budget changed in place on the Spending list.
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -13,7 +13,7 @@ function aYearFromNow(): string {
 
 /** A spending category with a budget, so there is a leeway for goals to hold money from. */
 async function addBudget(page: Page, name: string, amount: string) {
-  await page.goto('/budgets')
+  await page.goto('/spending')
   await page.getByRole('button', { name: 'New category' }).click()
   const form = page.getByRole('form', { name: 'New category' })
   await form.getByRole('textbox', { name: 'Name' }).fill(name)
@@ -24,7 +24,7 @@ async function addBudget(page: Page, name: string, amount: string) {
 
 test('a budget changes in place on the Budgets list', async ({ page }) => {
   await addBudget(page, 'Fun money', '500')
-  await page.goto('/budgets')
+  await page.goto('/spending')
   const row = page.getByRole('group', { name: 'Fun money' })
   const shown = row.getByRole('button', { name: 'Change Fun money budget' })
   // The row shows this period's share, which differs from $500 when periods are not months.
@@ -51,7 +51,7 @@ test('a budget changes in place on the Budgets list', async ({ page }) => {
 test('saving for a purchase sets money aside and counts what goes toward it', async ({ page }) => {
   await addBudget(page, 'Going out', '400')
 
-  await page.goto('/plan/goals')
+  await page.goto('/goals')
   await page.getByRole('button', { name: 'Save for a purchase' }).click()
   const form = page.getByRole('form', { name: 'New purchase' })
   await form.getByRole('textbox', { name: 'What are you saving for?' }).fill('Road bike')

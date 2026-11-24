@@ -1,5 +1,5 @@
 // Account health: an overdrawn account warns once, in Heads up, and
-// opens on its own page, Select on Accounts adds up a saved pick, and a
+// opens on its own page, Select on Wealth adds up a saved pick, and a
 // low-balance warning set in Settings becomes an alert. Each test removes its
 // accounts, since later specs share this install.
 
@@ -28,7 +28,7 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await headsUp.getByRole('link', { name: /Everyday is overdrawn/ }).click()
 
   // The alert opens the account's own page, which leads with the overdraft.
-  await expect(page).toHaveURL(/\/accounts\/[\w-]+$/)
+  await expect(page).toHaveURL(/\/wealth\/accounts\/[\w-]+$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Everyday' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Everyday balance' })).toContainText(
     /Overdrawn by\s*\$42\.10/,
@@ -37,8 +37,8 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
     'Everyday is overdrawn by $42.10.',
   )
 
-  // On Accounts, picking both sums them, and the pick is saved.
-  await page.goto('/accounts')
+  // On Wealth, picking both sums them, and the pick is saved.
+  await page.goto('/wealth')
   await page.getByRole('button', { name: 'Select' }).click()
   // A tick saves the pick, so each box is read back rather than assumed.
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {

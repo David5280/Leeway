@@ -46,10 +46,10 @@ function Landed() {
 function renderBudgets() {
   return renderSignedIn(
     <Routes>
-      <Route path="/budgets" element={<Budgets />} />
-      <Route path="/budgets/:id" element={<Landed />} />
+      <Route path="/spending" element={<Budgets />} />
+      <Route path="/spending/:id" element={<Landed />} />
     </Routes>,
-    { route: '/budgets' },
+    { route: '/spending' },
   )
 }
 
@@ -60,7 +60,7 @@ describe('budgets page', () => {
     renderBudgets()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')
     release()
-    expect(await screen.findByRole('heading', { name: 'Budgets' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Spending' })).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
@@ -131,8 +131,8 @@ describe('budgets page', () => {
     const spending = await screen.findByRole('region', { name: 'Spending categories' })
     const links = within(spending).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      `/budgets/${groceries.id}`,
-      `/budgets/${coffee.id}`,
+      `/spending/${groceries.id}`,
+      `/spending/${coffee.id}`,
     ])
     expect(within(spending).getByText('Tracking only')).toBeInTheDocument()
     expect(within(spending).getByRole('group', { name: 'Coffee' })).toHaveTextContent(
@@ -156,10 +156,10 @@ describe('budgets page', () => {
     const section = await screen.findByRole('region', { name: 'Income and transfers' })
     const income = within(section).getByRole('link', { name: /Paycheck/ })
     expect(income).toHaveTextContent('$5,000 in')
-    expect(income).toHaveAttribute('href', `/budgets/${paycheck.id}`)
+    expect(income).toHaveAttribute('href', `/spending/${paycheck.id}`)
     const transfer = within(section).getByRole('link', { name: /Savings/ })
     expect(transfer).toHaveTextContent('Not counted')
-    expect(transfer).toHaveAttribute('href', `/budgets/${savings.id}`)
+    expect(transfer).toHaveAttribute('href', `/spending/${savings.id}`)
   })
 })
 
@@ -175,7 +175,7 @@ describe('adding a category', () => {
     await user.type(within(form).getByLabelText('Name'), 'Pet care')
     await user.type(within(form).getByLabelText('Budget amount'), '75')
     await user.click(within(form).getByRole('button', { name: 'Add category' }))
-    expect(await screen.findByText('Landed on /budgets/cat-pet-care')).toBeInTheDocument()
+    expect(await screen.findByText('Landed on /spending/cat-pet-care')).toBeInTheDocument()
     expect(server.actions('create_category')).toEqual([
       expect.objectContaining({ name: 'Pet care', kind: 'expense', budgetCents: 7500 }),
     ])
@@ -191,7 +191,7 @@ describe('adding a category', () => {
     await user.click(screen.getByRole('button', { name: 'Add category' }))
     expect(await screen.findByRole('button', { name: 'Saving' })).toBeDisabled()
     release()
-    expect(await screen.findByText('Landed on /budgets/cat-pet-care')).toBeInTheDocument()
+    expect(await screen.findByText('Landed on /spending/cat-pet-care')).toBeInTheDocument()
   })
 
   it('keeps the form open with the reason when the server refuses the category', async () => {
@@ -203,7 +203,7 @@ describe('adding a category', () => {
     await user.type(within(form).getByLabelText('Name'), 'Groceries')
     await user.click(within(form).getByRole('button', { name: 'Add category' }))
     expect(await within(form).findByRole('alert')).toHaveTextContent('That name is taken')
-    expect(screen.getByRole('heading', { name: 'Budgets' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Spending' })).toBeInTheDocument()
   })
 
   it('closes the form without adding anything on cancel', async () => {
@@ -249,7 +249,7 @@ describe('changing a budget in place', () => {
     const row = await groceriesRow()
     await user.click(row.getByRole('button', { name: 'Change Groceries budget' }))
     await user.clear(row.getByRole('textbox'))
-    await user.click(screen.getByRole('heading', { name: 'Budgets' }))
+    await user.click(screen.getByRole('heading', { level: 1, name: 'Spending' }))
     await waitFor(() =>
       expect(server.actions('update_category')).toEqual([{ id: groceries.id, budgetCents: null }]),
     )
@@ -319,7 +319,7 @@ describe('budget rows in plain words', () => {
     expect(row.getByText('$360 left for 14 days, about $25 a day')).toBeInTheDocument()
     expect(row.getByRole('link', { name: 'Groceries' })).toHaveAttribute(
       'href',
-      `/budgets/${groceries.id}`,
+      `/spending/${groceries.id}`,
     )
   })
 
@@ -374,7 +374,7 @@ describe('budget rows in plain words', () => {
     renderBudgets()
     const left = await screen.findByRole('region', { name: 'Left' })
     const link = within(left).getByRole('link', { name: '$150 of it set aside for goals' })
-    expect(link).toHaveAttribute('href', '/plan/goals')
+    expect(link).toHaveAttribute('href', '/goals')
     // The amount and words in one box, so the flex link on a phone keeps the space between.
     expect(link.children).toHaveLength(1)
     expect(link.firstElementChild).toHaveTextContent(/^\$150 of it set aside for goals$/)

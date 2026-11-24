@@ -48,7 +48,7 @@ describe('Data', () => {
     expect(screen.getByRole('region', { name: 'Data' })).toHaveTextContent('Import transactions')
     expect(screen.getByRole('link', { name: 'Import a CSV file' })).toHaveAttribute(
       'href',
-      '/transactions/import',
+      '/spending/activity/import',
     )
   })
 

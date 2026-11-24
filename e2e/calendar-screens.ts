@@ -8,9 +8,9 @@ import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
 
 export const CALENDAR_SCREENS: Screen[] = [
   {
-    name: '/plan/ahead with a calendar linked, noting events left out',
-    route: 'planSection',
-    path: () => '/plan/ahead',
+    name: '/payday coming up, with a calendar linked, noting events left out',
+    route: 'payday',
+    path: () => '/payday',
     before: (page) => pretendCalendar(page),
   },
   {

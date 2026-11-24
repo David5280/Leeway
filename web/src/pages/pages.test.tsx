@@ -79,7 +79,7 @@ describe('app shell', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('opens Settings from its old Customize address, with Settings marked in the menu', async () => {
+  it('opens Settings from its old Customize address, marked current with no tab lit', async () => {
     fakeServer(
       { get_settings: () => settings, list_accounts: () => [], list_tokens: () => [] },
       {
@@ -91,13 +91,10 @@ describe('app shell', () => {
     renderPlain(<App />, '/customize/banks')
     expect(await screen.findByRole('heading', { level: 2, name: 'Banks' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
-    const menus = screen.getAllByRole('navigation', { name: 'Main' })
-    for (const menu of menus) {
-      expect(within(menu).getByRole('link', { name: /Settings/ })).toHaveAttribute(
-        'aria-current',
-        'page',
-      )
-    }
+    const more = within(screen.getByRole('navigation', { name: 'More' }))
+    expect(more.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+    const tabs = within(screen.getByRole('navigation', { name: 'Main' }))
+    expect(tabs.queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 })
 
@@ -108,7 +105,7 @@ describe('budgets', () => {
       list_categories: () => categories,
     })
     renderSignedIn(<Budgets />)
-    expect(await screen.findByRole('heading', { name: 'Budgets' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Spending' })).toBeInTheDocument()
     expect(screen.getByText('November 2026')).toBeInTheDocument()
     expect(screen.getByText('Over by $40')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Budgeted' })).toHaveTextContent('$800')

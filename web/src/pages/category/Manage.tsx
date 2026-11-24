@@ -12,6 +12,7 @@ import type { RuleDraft } from '../../components/rules/rules'
 import { ErrorNote, Setting, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { longDate } from '../../lib/format'
+import { paths } from '../../routes'
 
 export function CategorySettings({
   category,
@@ -115,7 +116,7 @@ export function DeleteCategory({ category }: { category: Category }) {
               className="btn danger"
               disabled={remove.isPending}
               onClick={() =>
-                remove.mutate({ id: category.id }, { onSuccess: () => navigate('/budgets') })
+                remove.mutate({ id: category.id }, { onSuccess: () => navigate(paths.spending()) })
               }
             >
               Delete {category.name}

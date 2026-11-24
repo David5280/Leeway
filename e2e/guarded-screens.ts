@@ -52,54 +52,54 @@ async function revealKey(page: Page) {
 }
 
 /** The first seeded category's page. */
-const categoryPage = (seeded: Seeded) => `/budgets/${seeded.categories[0]}`
+const categoryPage = (seeded: Seeded) => `/spending/${seeded.categories[0]}`
 
 /** Every screen the app's router answers, and the forms that open on them. */
 export const SCREENS: Screen[] = [
-  at('overview', '/'),
-  at('overview', '/', {
+  at('home', '/'),
+  at('home', '/', {
     name: '/ while editing its layout in place',
     on: (phone) => phone.editsInPlace,
     then: open('Edit layout', (page) => page.getByRole('button', { name: 'Done' })),
   }),
-  at('overview', '/', {
+  at('home', '/', {
     name: "/ with every widget, and Leeway's summary as the AI model is gone",
     // Only Anthropic can retire a model: the summary's answer is stood in for (ai.ts).
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,
   }),
-  at('accounts', '/accounts'),
-  at('accounts', '/accounts', {
-    name: '/accounts picking accounts to add up',
+  at('wealth', '/wealth'),
+  at('wealth', '/wealth', {
+    name: '/wealth picking accounts to add up',
     then: open('Select', (page) => page.getByRole('region', { name: 'Picked accounts' })),
   }),
   // Each account's own page, named for its kind.
   ...SEEDED_ACCOUNTS.map((kind, index) => ({
     ...at('account', `the ${kind} account page`),
-    path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
+    path: (seeded: Seeded) => `/wealth/accounts/${seeded.accounts[index]}`,
   })),
   {
     name: "the credit card account page asking for the card's APR",
     route: 'account',
     path: (seeded: Seeded) =>
-      `/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
+      `/wealth/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
     // The seeded card has an APR; the prompt shows in its place without one.
     before: withoutAprs,
   },
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
   ...TRANSACTION_SCREENS,
-  at('importTransactions', '/transactions/import'),
-  at('importTransactions', '/transactions/import', {
-    name: '/transactions/import with a file chosen',
+  at('importTransactions', '/spending/activity/import'),
+  at('importTransactions', '/spending/activity/import', {
+    name: '/spending/activity/import with a file chosen',
     then: async (page) => {
       await page.getByLabel('Choose a CSV file').setInputFiles('e2e/fixtures/old-checking.csv')
       await expect(page.getByText('old-checking.csv')).toBeVisible()
     },
   }),
-  at('budgets', '/budgets'),
-  at('budgets', '/budgets', {
-    name: '/budgets adding a category',
+  at('spending', '/spending'),
+  at('spending', '/spending', {
+    name: '/spending adding a category',
     then: open('New category', (page) => page.getByRole('region', { name: 'New category' })),
   }),
   { name: 'a category page', route: 'category', path: categoryPage },
@@ -110,58 +110,58 @@ export const SCREENS: Screen[] = [
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
   ...CHAT_SCREENS,
-  at('plan', '/plan'),
-  at('planSection', '/plan/payday', {
-    name: '/plan/payday changing the pay',
+  at('payday', '/payday'),
+  at('payday', '/payday', {
+    name: '/payday changing the pay',
     then: open('Not quite', (page) => page.getByRole('form', { name: 'Enter your pay' })),
   }),
-  at('planSection', '/plan/payday', {
+  at('payday', '/payday', {
     // The new paycheck's card always shows, with or without a pay schedule.
-    name: '/plan/payday what this paycheck covers',
+    name: '/payday what this paycheck covers',
     then: open(/This paycheck/, (page) => page.getByRole('dialog', { name: 'This paycheck' })),
   }),
-  at('planSection', '/plan/payday', {
-    name: '/plan/payday adding a yearly cost',
+  at('payday', '/payday', {
+    name: '/payday adding a yearly cost',
     then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
   }),
-  at('planSection', '/plan/bills'),
-  at('planSection', '/plan/bills', {
-    name: '/plan/bills with cash that could earn more',
-    // The shared install holds an overdrawn account, which hides the card, so
-    // the answer is stood in for (idle-cash.spec.ts reads the server's own).
-    before: fakeIdleCash,
-  }),
-  at('planSection', '/plan/bills', {
-    name: '/plan/bills adding a bill',
+  at('bills', '/payday/bills'),
+  at('bills', '/payday/bills', {
+    name: '/payday/bills adding a bill',
     then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
   }),
-  at('planSection', '/plan/goals'),
-  at('planSection', '/plan/goals', {
-    name: '/plan/goals adding a goal',
+  at('goals', '/goals'),
+  at('goals', '/goals', {
+    name: '/goals adding a goal',
     then: open('Add a goal', (page) => page.getByRole('region', { name: 'New goal' })),
   }),
-  at('planSection', '/plan/retirement'),
-  at('planSection', '/plan/retirement', {
-    name: '/plan/retirement adding a pension',
+  at('retirement', '/wealth/retirement'),
+  at('retirement', '/wealth/retirement', {
+    name: '/wealth/retirement adding a pension',
     then: async (page) => {
       await open('Add a pension', (page) => page.getByRole('form', { name: 'New pension' }))(page)
       // Unfold the plan's figures, so they are checked too.
       await page.getByText('More details (optional)').click()
     },
   }),
-  at('planSection', '/plan/retirement', {
-    name: "/plan/retirement changing a pension's figures",
+  at('retirement', '/wealth/retirement', {
+    name: "/wealth/retirement changing a pension's figures",
     then: open('Edit figures', (page) => page.getByRole('form', { name: 'Pension figures' })),
   }),
   ...PAYSTUB_SCREENS,
-  at('planSection', '/plan/debts'),
-  at('planSection', '/plan/net-worth'),
-  at('planSection', '/plan/net-worth', {
-    name: '/plan/net-worth adding something owned or owed',
+  at('debts', '/wealth/debts'),
+  at('idleCash', '/wealth/idle-cash'),
+  at('idleCash', '/wealth/idle-cash', {
+    name: '/wealth/idle-cash with cash that could earn more',
+    // The shared install holds an overdrawn account, which hides the card, so
+    // the answer is stood in for (idle-cash.spec.ts reads the server's own).
+    before: fakeIdleCash,
+  }),
+  at('wealth', '/wealth', {
+    name: '/wealth adding something owned or owed',
     then: open(/^Add$/, (page) => page.getByRole('form', { name: 'Add something' })),
   }),
-  at('planSection', '/plan/net-worth', {
-    name: '/plan/net-worth changing a loan entered by hand',
+  at('wealth', '/wealth', {
+    name: '/wealth changing a loan entered by hand',
     then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
   }),
   ...CALENDAR_SCREENS,
@@ -218,8 +218,6 @@ export const SCREENS: Screen[] = [
   }),
   ...BANK_SCREENS,
   ...ALERT_SCREENS,
-  // The old Customize address lands on Settings.
-  at('oldSettings', '/customize/appearance'),
   at('connectProblem', '/connect'),
   CONNECT_SCREEN,
 ]

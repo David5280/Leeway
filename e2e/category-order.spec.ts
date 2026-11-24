@@ -9,7 +9,7 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 const alphabetical = (names: string[]) => [...names].sort(collator.compare)
 
 test('the Transactions category filter lists categories A to Z', async ({ page }) => {
-  await page.goto('/transactions')
+  await page.goto('/spending/activity')
   await page.getByRole('button', { name: 'Category: all' }).click()
   const sheet = page.getByRole('dialog', { name: 'Filter by category' })
   const options = sheet.getByRole('list', { name: 'Categories' }).getByRole('button')

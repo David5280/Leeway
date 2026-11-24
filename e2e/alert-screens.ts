@@ -17,7 +17,7 @@ const screen = (
 ): Screen => ({ name: `${path} ${name}`, route, path: () => path, ...more })
 
 export const ALERT_SCREENS: Screen[] = [
-  screen('overview', '/', 'with long account alerts to hide', { before: fakeLongHomeAlerts }),
+  screen('home', '/', 'with long account alerts to hide', { before: fakeLongHomeAlerts }),
   screen('inbox', '/inbox', 'with long alerts, read, unread and cleared', {
     before: fakeLongInbox,
   }),

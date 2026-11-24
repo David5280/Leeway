@@ -1,33 +1,43 @@
-// Every address the app's router answers, by name. The router (App.tsx) and
-// the browser tests' phone layout guard both read this list, and the guard
-// fails when a route has no screen of its own there. A lint rule refuses any
-// other <Route> path but "*", so a new screen cannot reach the app without
-// being checked on a phone. It imports nothing, so the browser tests can read
-// it without the app.
+// Every address the app's router answers, by name, and the builders every
+// link uses to reach them. The router (App.tsx) and the browser tests' phone
+// layout guard both read these lists, and the guard fails when a screen route
+// has no screen of its own there. A lint rule refuses any other <Route> path
+// but "*", so a new screen cannot reach the app without being checked on a
+// phone. It imports nothing, so the browser tests can read it without the app.
 
 /** The screens of an app that is set up, in the router's order. */
 export const SCREEN_ROUTES = {
-  overview: '/',
-  accounts: '/accounts',
+  /** Home: am I OK right now? */
+  home: '/',
+  /** Spending: am I on budget, and where did it go? */
+  spending: '/spending',
+  /** Every transaction, with filters in the query (see paths.activity). */
+  activity: '/spending/activity',
+  importTransactions: '/spending/activity/import',
+  /** One category's own page. Static paths above win over this one. */
+  category: '/spending/:id',
+  /** Payday: will I make it to payday, and what's due before then? */
+  payday: '/payday',
+  bills: '/payday/bills',
+  /** Goals: am I on track for what I'm saving for? */
+  goals: '/goals',
+  /** One trip, by its first and last day. */
+  trip: '/goals/trips/:start/:end',
+  /** Wealth: what I'm worth, owe and will retire with. */
+  wealth: '/wealth',
   /** One account's own page. */
-  account: '/accounts/:id',
+  account: '/wealth/accounts/:id',
+  debts: '/wealth/debts',
+  retirement: '/wealth/retirement',
+  /** Cash in checking that could earn more in savings. */
+  idleCash: '/wealth/idle-cash',
   alerts: '/alerts',
   /** Notifications: the alerts as they happened, read and unread. */
   inbox: '/inbox',
-  transactions: '/transactions',
-  importTransactions: '/transactions/import',
-  budgets: '/budgets',
-  category: '/budgets/:id',
   /** Chat with Leeway about the owner's money, only when the server has an AI key. */
   chat: '/chat',
-  plan: '/plan',
-  planSection: '/plan/:section',
-  /** One trip, by its first and last day. */
-  trip: '/trips/:start/:end',
   /** Settings; the group is optional. */
   settings: '/settings/:group?',
-  /** The address Settings had when it was called Customize; it now redirects. */
-  oldSettings: '/customize/:group?',
 } as const
 
 /** Screens an assistant is sent to, answered even before setup is finished. */
@@ -38,6 +48,87 @@ export const CONNECT_ROUTES = {
   connect: '/connect/:id',
 } as const
 
+/**
+ * Addresses the app used to have. Each one only redirects to its new home, so
+ * links in emails, the phone widget, stored notifications and assistants keep
+ * working for good. They are not screens, so the layout guard skips them.
+ */
+export const OLD_ROUTES = {
+  accounts: '/accounts',
+  account: '/accounts/:id',
+  transactions: '/transactions',
+  importTransactions: '/transactions/import',
+  budgets: '/budgets',
+  category: '/budgets/:id',
+  plan: '/plan',
+  planSection: '/plan/:section',
+  trip: '/trips/:start/:end',
+  /** The address Settings had when it was called Customize. */
+  customize: '/customize/:group?',
+} as const
+
 export const ROUTES = { ...SCREEN_ROUTES, ...CONNECT_ROUTES } as const
 
 export type RouteName = keyof typeof ROUTES
+
+/** Query parameters as a link builder takes them: a plain record or URLSearchParams. */
+export type Query = URLSearchParams | Record<string, string>
+
+/** A path with its query, leaving off the "?" when there is nothing to ask. */
+function withQuery(path: string, query?: Query): string {
+  const search = new URLSearchParams(query).toString()
+  return search ? `${path}?${search}` : path
+}
+
+/** One path segment, so an id with a slash or a space cannot change the address. */
+const segment = (value: string) => encodeURIComponent(value)
+
+/**
+ * The address of every screen, for links. Each one builds the same path its
+ * route above answers, so a link and the router can never disagree.
+ */
+export const paths = {
+  home: () => SCREEN_ROUTES.home,
+  spending: () => SCREEN_ROUTES.spending,
+  /** All activity, narrowed by any filters (account, category, merchant, range). */
+  activity: (filters?: Query) => withQuery(SCREEN_ROUTES.activity, filters),
+  importTransactions: () => SCREEN_ROUTES.importTransactions,
+  category: (id: string) => `${SCREEN_ROUTES.spending}/${segment(id)}`,
+  payday: () => SCREEN_ROUTES.payday,
+  /** Bills and subscriptions, opened onto one bill's form when given its id. */
+  bills: (billId?: string) => withQuery(SCREEN_ROUTES.bills, billId ? { bill: billId } : {}),
+  /** Goals, with a query that can open a new goal's form (see GoalsSection). */
+  goals: (query?: Query) => withQuery(SCREEN_ROUTES.goals, query),
+  trip: (startsOn: string, endsOn: string) =>
+    `${SCREEN_ROUTES.goals}/trips/${segment(startsOn)}/${segment(endsOn)}`,
+  wealth: () => SCREEN_ROUTES.wealth,
+  account: (id: string) => `${SCREEN_ROUTES.wealth}/accounts/${segment(id)}`,
+  debts: () => SCREEN_ROUTES.debts,
+  retirement: () => SCREEN_ROUTES.retirement,
+  idleCash: () => SCREEN_ROUTES.idleCash,
+  alerts: () => SCREEN_ROUTES.alerts,
+  inbox: () => SCREEN_ROUTES.inbox,
+  chat: () => SCREEN_ROUTES.chat,
+  /** Settings, opening on the group used last (settingsPath links to one group). */
+  settings: () => '/settings',
+} as const
+
+/**
+ * Where each section of the old Plan screen lives now. A section it never
+ * had lands on Payday, as Plan itself opened on Payday.
+ */
+const PLAN_SECTIONS: Record<string, () => string> = {
+  payday: paths.payday,
+  bills: () => SCREEN_ROUTES.bills,
+  goals: () => SCREEN_ROUTES.goals,
+  debts: paths.debts,
+  'net-worth': paths.wealth,
+  retirement: paths.retirement,
+  ahead: paths.payday,
+}
+
+/** The new home of an old Plan section, by the section's name in the old address. */
+export function planSectionHome(section: string | undefined): string {
+  const home = section !== undefined && Object.hasOwn(PLAN_SECTIONS, section)
+  return home ? PLAN_SECTIONS[section]!() : paths.payday()
+}

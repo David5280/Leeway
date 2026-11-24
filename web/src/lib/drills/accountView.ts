@@ -4,6 +4,7 @@
 
 import type { AccountsView } from '../../api/client'
 import type { DrillDown, DrillItem } from '../drill'
+import { paths } from '../../routes'
 
 type Flow = AccountsView['flows'][number]
 type Spent = AccountsView['spending'][number]
@@ -73,15 +74,15 @@ export function flowsDrill(
             subject: 'out',
           },
     items: { title: 'Each period, newest first', rows },
-    more: { to: '/transactions', label: 'See the transactions' },
+    more: { to: paths.activity(), label: 'See the transactions' },
   }
 }
 
 /** Where a category's row opens: its own page, or the spending still to sort. */
 function categoryLink(spent: Spent): string {
   return spent.categoryId
-    ? `/budgets/${encodeURIComponent(spent.categoryId)}`
-    : '/transactions?category=uncategorized'
+    ? paths.category(spent.categoryId)
+    : paths.activity({ category: 'uncategorized' })
 }
 
 /** This period's spending on these accounts, category by category, biggest first. */
@@ -121,6 +122,6 @@ export function spendingDrill(
             })),
           }
         : undefined,
-    more: { to: '/transactions', label: 'See the transactions' },
+    more: { to: paths.activity(), label: 'See the transactions' },
   }
 }

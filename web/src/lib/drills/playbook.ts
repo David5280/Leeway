@@ -11,6 +11,7 @@ import {
   SUGGESTIONS_ONLY,
 } from '../../pages/plan/payday/playbookText'
 import type { DrillDown, DrillItem, MathTerm } from '../drill'
+import { paths } from '../../routes'
 
 type Dates = (iso: string) => string
 type Money = (cents: number) => string
@@ -38,7 +39,7 @@ export function closeOutDrill(closeOut: CloseOut, period: string, money: Money):
         label: row.name,
         detail: `Spent ${money(row.spentCents)} of ${money(row.budgetCents)}`,
         value: { cents: row.leftCents, tone: row.leftCents < 0 ? 'warn' : 'neutral' },
-        to: `/budgets/${row.categoryId}`,
+        to: paths.category(row.categoryId),
       })),
     },
   }

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Goal } from '../../../api/client'
 import { failing, sentence, type Handlers } from '../../../test/fake'
-import { account, goal, planServer, renderPlan } from '../../../test/planning'
+import { account, goal, planServer, renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -46,7 +46,7 @@ function serve(goals: Goal[] = [trip, house], extra: Handlers = {}, routes = {})
 describe('Goals', () => {
   it('shows progress and what each goal still needs', async () => {
     serve()
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const tripCard = within(await screen.findByRole('region', { name: 'Trip' }))
     expect(tripCard.getByText('$300')).toBeInTheDocument()
     expect(tripCard.getByText(sentence('of $1,200'))).toBeInTheDocument()
@@ -76,7 +76,7 @@ describe('Goals', () => {
   it('shows a goal on an account no longer shared as of that day, with no timeline', async () => {
     const frozen = goal({ ...house, targetDate: '2027-11-30', balanceAsOf: '2026-11-10' })
     serve([frozen])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const houseCard = within(await screen.findByRole('region', { name: 'House' }))
     expect(
       houseCard.getByText(
@@ -90,13 +90,13 @@ describe('Goals', () => {
 
   it('suggests a first goal when there are none', async () => {
     serve([])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect(await screen.findByText(/No goals yet/)).toBeInTheDocument()
   })
 
   it('adds a goal counted by hand', async () => {
     const server = serve([])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a goal' }))
     const form = within(screen.getByRole('form', { name: 'New goal' }))
@@ -125,7 +125,7 @@ describe('Goals', () => {
 
   it('links a goal to a savings account, offering only visible checking and savings', async () => {
     const server = serve([])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a goal' }))
     const form = within(screen.getByRole('form', { name: 'New goal' }))
@@ -151,7 +151,7 @@ describe('Goals', () => {
 
   it('edits a goal and closes on cancel', async () => {
     const server = serve()
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const tripCard = within(await screen.findByRole('region', { name: 'Trip' }))
     await user.click(tripCard.getByRole('button', { name: 'Edit' }))
@@ -176,7 +176,7 @@ describe('Goals', () => {
 
   it('deletes a goal', async () => {
     const server = serve()
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const houseCard = within(await screen.findByRole('region', { name: 'House' }))
     await user.click(houseCard.getByRole('button', { name: 'Edit' }))
@@ -186,7 +186,7 @@ describe('Goals', () => {
 
   it('adds money to a goal and clears the box', async () => {
     const server = serve()
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const add = within(await screen.findByRole('form', { name: 'Add to Trip' }))
     const amount = add.getByRole('textbox', { name: 'Amount to add to Trip' })
@@ -201,7 +201,7 @@ describe('Goals', () => {
 
   it('shows why money could not be added, or goals could not load', async () => {
     serve([trip], {}, { '/api/actions/add_to_goal': failing('Use an amount other than zero') })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const add = within(await screen.findByRole('form', { name: 'Add to Trip' }))
     await user.type(add.getByRole('textbox'), '10')
@@ -211,13 +211,13 @@ describe('Goals', () => {
 
   it('shows why goals could not load', async () => {
     serve([], {}, { '/api/actions/list_goals': failing('Database is down', 500) })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 
   it('shows why goals could not load when the date is unavailable', async () => {
     serve([trip], {}, { '/api/actions/get_cash_flow': failing('Cash flow is down', 500) })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     expect((await screen.findAllByText('Cash flow is down')).length).toBeGreaterThan(0)
   })
 })
@@ -241,7 +241,7 @@ const bike = goal(
 describe('Saving for a purchase', () => {
   it('saves for a purchase, setting money aside once it has a date', async () => {
     const server = serve([])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Save for a purchase' }))
     expect(screen.getByRole('heading', { name: 'Save for a purchase' })).toBeInTheDocument()
@@ -269,7 +269,7 @@ describe('Saving for a purchase', () => {
 
   it('stops setting money aside when the date is cleared', async () => {
     const server = serve([bike])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const card = within(await screen.findByRole('region', { name: 'Road bike' }))
     await user.click(card.getByRole('button', { name: 'Edit' }))
@@ -289,7 +289,7 @@ describe('Saving for a purchase', () => {
 
   it('opens straight onto a new purchase from the overview link', async () => {
     serve([])
-    renderPlan('/plan/goals?new=purchase')
+    renderPlanning('/goals?new=purchase')
     expect(await screen.findByRole('form', { name: 'New purchase' })).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('form', { name: 'New purchase' })).not.toBeInTheDocument()
@@ -297,7 +297,7 @@ describe('Saving for a purchase', () => {
 
   it('starts a purchase from an event coming up, with its name, price and day', async () => {
     serve([])
-    renderPlan('/plan/goals?new=purchase&name=Lisbon+trip&price=125000&by=2026-12-10')
+    renderPlanning('/goals?new=purchase&name=Lisbon+trip&price=125000&by=2026-12-10')
     const form = within(await screen.findByRole('form', { name: 'New purchase' }))
     expect(form.getByLabelText('What are you saving for?')).toHaveValue('Lisbon trip')
     expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('1250')
@@ -306,7 +306,7 @@ describe('Saving for a purchase', () => {
 
   it('leaves the price blank when the link gives none it can use', async () => {
     serve([])
-    renderPlan('/plan/goals?new=purchase&name=Gala&price=lots')
+    renderPlanning('/goals?new=purchase&name=Gala&price=lots')
     const form = within(await screen.findByRole('form', { name: 'New purchase' }))
     expect(form.getByLabelText('What are you saving for?')).toHaveValue('Gala')
     expect(form.getByRole('textbox', { name: 'Price' })).toHaveValue('')
@@ -315,7 +315,7 @@ describe('Saving for a purchase', () => {
 
   it("shows a purchase's share held from the budget, its pace and its timeline", async () => {
     serve([bike])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await screen.findByRole('region', { name: 'Road bike' }))
     expect(card.getByText('Purchase')).toBeInTheDocument()
     expect(card.getByText(sentence("$160 held from this month's budget"))).toBeInTheDocument()
@@ -336,7 +336,7 @@ describe('Saving for a purchase', () => {
 
   it('draws where recent progress lands for a goal with no date', async () => {
     serve([goal({ name: 'Rainy day', targetCents: 120000, savedCents: 30000 }, quick)])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await screen.findByRole('region', { name: 'Rainy day' }))
     expect(card.getByRole('img', { name: 'Rainy day timeline' })).toHaveAccessibleDescription(
       'Today is Nov 17, 2026. At the recent pace it is ready Apr 1, 2027.',
@@ -346,7 +346,7 @@ describe('Saving for a purchase', () => {
 
   it('says a purchase is ready to buy once it is saved, with no timeline left', async () => {
     serve([goal({ name: 'Road bike', kind: 'purchase', targetCents: 120000, savedCents: 120000 })])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await screen.findByRole('region', { name: 'Road bike' }))
     expect(card.getByText('Ready to buy. You have saved the full $1,200.')).toBeInTheDocument()
     expect(card.queryByRole('img')).not.toBeInTheDocument()
@@ -356,7 +356,7 @@ describe('Saving for a purchase', () => {
   it('draws a goal behind its date in the warning color', async () => {
     const slow = { savedThisPeriodCents: 0, recentSavedCents: 9000, recentDays: 90 }
     serve([goal({ ...trip, id: 'goal-trip' }, slow)])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await screen.findByRole('region', { name: 'Trip' }))
     expect(
       card.getByText('Behind: at its own recent pace, ready May 5, 2029, after Apr 30, 2027.'),
@@ -374,7 +374,7 @@ describe('Goal history', () => {
 
   it('lists what was recorded, newest first, and hides it again', async () => {
     const server = serve([trip], { list_goal_contributions: () => entries })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const card = within(await screen.findByRole('region', { name: 'Trip' }))
     await user.click(card.getByRole('button', { name: 'History' }))
@@ -390,7 +390,7 @@ describe('Goal history', () => {
 
   it('says when nothing was recorded yet', async () => {
     serve([trip], { list_goal_contributions: () => [] })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const card = within(await screen.findByRole('region', { name: 'Trip' }))
     await user.click(card.getByRole('button', { name: 'History' }))
@@ -399,7 +399,7 @@ describe('Goal history', () => {
 
   it('shows why the history could not load', async () => {
     serve([trip], {}, { '/api/actions/list_goal_contributions': failing('History is down', 500) })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const card = within(await screen.findByRole('region', { name: 'Trip' }))
     await user.click(card.getByRole('button', { name: 'History' }))

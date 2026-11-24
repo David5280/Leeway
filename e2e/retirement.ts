@@ -10,7 +10,7 @@ export const SAVINGS = 'Brokerage'
 
 /** Adds the pension from the Retirement section and waits until it is listed. */
 export async function addPension(page: Page): Promise<void> {
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   await page.getByRole('button', { name: 'Add a pension' }).click()
   const form = page.getByRole('form', { name: 'New pension' })
   await form.getByRole('textbox', { name: 'Name' }).fill(PENSION)

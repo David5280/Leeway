@@ -8,7 +8,7 @@ import { CABIN, CABIN_LOAN, removeCabin } from './owned'
 test.afterEach(async ({ page }) => removeCabin(page))
 
 test('a home and its loan are added, changed and removed by hand', async ({ page }) => {
-  await page.goto('/plan/net-worth')
+  await page.goto('/wealth')
   const card = page.getByRole('region', { name: 'Entered by you' })
 
   // The loan first, with its rate and payment.

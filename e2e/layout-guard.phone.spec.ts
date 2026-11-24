@@ -133,15 +133,15 @@ for (const phone of GUARDED_PHONES) {
       test('the header takes at most a fifth of the height, on a screen tapped with a finger', async ({
         page,
       }) => {
-        await load(page, '/transactions', phone.insets)
+        await load(page, '/spending/activity', phone.insets)
         const { width, height } = phone.screen.viewport
         const header = (await page.getByRole('banner').boundingBox())!
         expect(header.y + header.height).toBeLessThanOrEqual(height * 0.2)
-        // Sideways, the slim header's links navigate and the tab bar gives its height back.
-        const links = page.getByRole('banner').getByRole('navigation', { name: 'Main' })
-        const tabs = page.locator('.tabbar')
-        await (width > height ? expect(links).toBeVisible() : expect(links).toBeHidden())
-        await (width > height ? expect(tabs).toBeHidden() : expect(tabs).toBeVisible())
+        // Sideways, the tabs move into the slim top row and the tab bar gives its height back.
+        const tabs = page.getByRole('navigation', { name: 'Main' })
+        await expect(tabs).toBeVisible()
+        await expect(tabs).toHaveClass(width > height ? /\brow-tabs\b/ : /\btabbar\b/)
+        await expect(page.locator('.tabbar')).toHaveCount(width > height ? 0 : 1)
         // The tap sizes checked on every screen (problemsOn) hold only where
         // the phone reports a finger rather than a mouse.
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)

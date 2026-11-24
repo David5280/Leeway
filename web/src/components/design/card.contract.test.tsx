@@ -1,6 +1,6 @@
 // The card contract (Card.tsx), checked on the screens that promise it: with
-// real-looking data on Overview (every widget shown), Accounts, an account's
-// page, Activity and Plan's bills (with cash that could earn more), every
+// real-looking data on Home (every widget shown), Wealth, an account's page,
+// Activity, Payday's cash until payday and cash that could earn more, every
 // card is a drill-down that opens its math, a link to its own page, or
 // static for a stated reason other than "pending".
 
@@ -12,11 +12,12 @@ import { checkIdleCash } from '../../lib/idleCash'
 import { settingsSchema } from '../../../../server/src/domain/settings'
 import type { Settings } from '../../api/client'
 import { AccountDetail } from '../../pages/AccountDetail'
-import { Accounts } from '../../pages/Accounts'
 import { Overview } from '../../pages/Overview'
-import { Plan } from '../../pages/Plan'
+import { IdleCashPage } from '../../pages/IdleCash'
+import { CashFlowCard } from '../../pages/plan/CashFlow'
 import { Transactions } from '../../pages/Transactions'
-import { SCREEN_ROUTES } from '../../routes'
+import { Wealth } from '../../pages/Wealth'
+import { paths, SCREEN_ROUTES } from '../../routes'
 import { everyAccount } from '../../test/accounts'
 import {
   accountsViewFor,
@@ -156,6 +157,20 @@ function serve() {
       netWorthCents: 700000,
       history: [worthPoint('2026-01-01', 500000), worthPoint('2026-11-17', 700000)],
     }),
+    // Wealth's net worth: nothing entered by hand, and a usual month of saving.
+    list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
+    get_savings_rates: () => ({
+      months: ['2026-09-01', '2026-10-01', '2026-11-01'].map((start, i) => ({
+        start,
+        current: i === 2,
+        percent: 10,
+        savedCents: 40000,
+        payCents: 400000,
+      })),
+      targetPercent: null,
+      note: 'Counts transfers your bank shows.',
+      payEstimated: false,
+    }),
     get_cash_flow: () => cashFlow(),
     // Checking well past what it needs before payday, so the card shows.
     get_idle_cash: () =>
@@ -239,9 +254,9 @@ describe('every card on the redesigned screens keeps the card contract', () => {
     expect(found.drill).toBeGreaterThanOrEqual(10)
   })
 
-  it('on Accounts', async () => {
+  it('on Wealth', async () => {
     serve()
-    renderSignedIn(<Accounts />, { route: '/accounts' })
+    renderSignedIn(<Wealth />, { route: paths.wealth() })
     await screen.findByRole('region', { name: 'Summary' })
     const found = await checkEveryCard()
     expect(found.drill).toBeGreaterThan(0)
@@ -254,7 +269,7 @@ describe('every card on the redesigned screens keeps the card contract', () => {
       <Routes>
         <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
       </Routes>,
-      { route: `/accounts/${checking!.id}` },
+      { route: paths.account(checking!.id) },
     )
     await screen.findByRole('heading', { name: checking!.name })
     expect((await checkEveryCard()).drill).toBeGreaterThan(0)
@@ -262,21 +277,22 @@ describe('every card on the redesigned screens keeps the card contract', () => {
 
   it('on Activity', async () => {
     serve()
-    renderSignedIn(<Transactions />, { route: '/transactions' })
+    renderSignedIn(<Transactions />, { route: paths.activity() })
     await screen.findByRole('region', { name: 'Spent this month' })
     expect((await checkEveryCard()).drill).toBeGreaterThan(0)
   })
 
-  it('on Plan, Bills, with cash that could earn more', async () => {
+  it("on Payday's cash until payday", async () => {
     serve()
-    renderSignedIn(
-      <Routes>
-        <Route path="/plan/:section" element={<Plan />} />
-      </Routes>,
-      { route: '/plan/bills' },
-    )
+    renderSignedIn(<CashFlowCard />, { route: paths.payday() })
+    await screen.findByText(/in checking/)
+    expect((await checkEveryCard()).drill).toBe(1)
+  })
+
+  it('on cash that could earn more', async () => {
+    serve()
+    renderSignedIn(<IdleCashPage />, { route: paths.idleCash() })
     await screen.findByRole('region', { name: 'Cash that could earn more' })
-    // Cash until payday and cash that could earn more each open their math.
-    expect((await checkEveryCard()).drill).toBeGreaterThanOrEqual(2)
+    expect((await checkEveryCard()).drill).toBe(1)
   })
 })

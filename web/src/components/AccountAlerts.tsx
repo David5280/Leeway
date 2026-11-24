@@ -14,6 +14,7 @@ import { merchantActivityPath } from '../lib/transactions'
 import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
 import { Card } from './design/Card'
 import { Icon } from './ui'
+import { paths } from '../routes'
 
 /** A short word for each kind of alert, shown beside it on wider screens. */
 export const ALERT_LABELS: Record<AccountAlert['kind'], string> = {
@@ -46,7 +47,7 @@ export function alertsTint(alerts: AccountAlert[]): '' | 'over-card' | 'warn-car
  * account's activity, narrowed to the merchant), or its account.
  */
 export function alertPath(alert: AccountAlert): string {
-  if (alert.bill) return '/plan/bills'
+  if (alert.bill) return paths.bills()
   if (alert.charge) return merchantActivityPath(alert.accountId, alert.charge)
   return accountDetailPath(alert.accountId)
 }
@@ -172,7 +173,7 @@ export function AlertsCard({ alerts, label }: { alerts: AccountAlert[]; label: s
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>
           <span className="small muted">{moreAlerts(more)}</span>
           {/* A real 44px box, so its tap never reaches up into the last alert. */}
-          <Link to="/alerts" className="linkbtn small tap">
+          <Link to={paths.alerts()} className="linkbtn small tap">
             See all alerts
           </Link>
         </div>

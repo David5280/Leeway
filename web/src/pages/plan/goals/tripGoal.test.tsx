@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Goal } from '../../../api/client'
 import { failing } from '../../../test/fake'
-import { goal, planServer, renderPlan } from '../../../test/planning'
+import { goal, planServer, renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -41,18 +41,18 @@ const card = async () => within(await screen.findByRole('region', { name: 'Lisbo
 describe('a trip budget’s goal', () => {
   it('links to its trip, and offers no closing before the trip is done', async () => {
     serve([lisbon('2026-12-10', '2026-12-14')])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const trip = await card()
     expect(trip.getByRole('link', { name: 'Open the trip' })).toHaveAttribute(
       'href',
-      '/trips/2026-12-10/2026-12-14',
+      '/goals/trips/2026-12-10/2026-12-14',
     )
     expect(trip.queryByRole('button', { name: 'Close goal' })).not.toBeInTheDocument()
   })
 
   it('reads as under way, never late, while the trip is on', async () => {
     serve([lisbon('2026-11-15', '2026-11-20')])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const trip = await card()
     expect(trip.getByText('Trip under way. This goal is being spent on it.')).toBeInTheDocument()
     expect(trip.queryByText(/date has passed/i)).not.toBeInTheDocument()
@@ -61,7 +61,7 @@ describe('a trip budget’s goal', () => {
   it('closes once the trip is done, asking first', async () => {
     const user = userEvent.setup()
     const server = serve([lisbon('2026-11-10', '2026-11-14')])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const trip = await card()
     expect(trip.getByText('Trip done. Close the goal when you are ready.')).toBeInTheDocument()
     await user.click(trip.getByRole('button', { name: 'Close goal' }))
@@ -78,7 +78,7 @@ describe('a trip budget’s goal', () => {
     serve([lisbon('2026-12-10', '2026-12-14', false)], {
       '/api/actions/delete_goal': failing('Could not delete it'),
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const trip = await card()
     expect(trip.getByText(/no longer on your calendar/)).toHaveClass('warn')
     expect(trip.queryByRole('link', { name: 'Open the trip' })).not.toBeInTheDocument()
@@ -90,7 +90,7 @@ describe('a trip budget’s goal', () => {
   it('leaves its amount and date to the budget in its form, pointing to the trip', async () => {
     const user = userEvent.setup()
     const server = serve([lisbon('2026-12-10', '2026-12-14')])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     await user.click((await card()).getByRole('button', { name: 'Edit' }))
     const form = within(screen.getByRole('form', { name: 'Edit Lisbon trip' }))
     // Before, both were fields, and the server refused any change to them.
@@ -98,7 +98,7 @@ describe('a trip budget’s goal', () => {
     expect(form.queryByLabelText('Target date')).not.toBeInTheDocument()
     expect(form.getByRole('link', { name: "Change them on the trip's page" })).toHaveAttribute(
       'href',
-      '/trips/2026-12-10/2026-12-14',
+      '/goals/trips/2026-12-10/2026-12-14',
     )
     await user.clear(form.getByRole('textbox', { name: 'What are you saving for?' }))
     await user.type(form.getByRole('textbox', { name: 'What are you saving for?' }), 'Portugal')
@@ -115,7 +115,7 @@ describe('a trip budget’s goal', () => {
   it('says, with its trip off the calendar, where its amount and date would change', async () => {
     const user = userEvent.setup()
     serve([lisbon('2026-12-10', '2026-12-14', false)])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     await user.click((await card()).getByRole('button', { name: 'Edit' }))
     const form = within(screen.getByRole('form', { name: 'Edit Lisbon trip' }))
     expect(form.getByText(/Put the trip back on your calendar/)).toBeInTheDocument()
