@@ -62,11 +62,21 @@ export function unitsPerRepeat(base: Base): number {
   return zoned ? REPEAT_UNITS.zoned : REPEAT_UNITS.plain
 }
 
-/** The repeat starting on `date` (as written in the event's zone), on the owner's days. */
-export function occurrence(event: Measured, date: IsoDate, timeZone: string): CalendarEvent {
+/**
+ * The repeat starting on `date` (as written in the event's zone), on the
+ * owner's days; `repeatOn` is the day it was set for in its series, or null
+ * for an event that happens once.
+ */
+export function occurrence(
+  event: Measured,
+  date: IsoDate,
+  timeZone: string,
+  repeatOn: IsoDate | null,
+): CalendarEvent {
   const days = daysCovered(onDate(event.start, date), event.lengthMs, timeZone)
   return {
     uid: event.uid,
+    repeatOn,
     ...days,
     title: event.title,
     location: event.location,

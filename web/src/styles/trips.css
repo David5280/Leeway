@@ -1,11 +1,18 @@
-/* Trips: the trip page's parts and transactions. */
+/* Trips: the trip page's parts, the trip budget form and the link back. */
 
 /* The link back to Coming up, its arrow close to its words. */
 .trip-back {
   gap: 4px;
 }
 
-/* A part of a trip: what it is, then what it cost. */
+/* The four parts of a trip budget, two across where there is room. */
+.trip-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+/* A part of a trip: what it is, then spent against planned. */
 .trip-part {
   display: flex;
   align-items: baseline;

@@ -10,11 +10,11 @@ import { useApp } from '../../../lib/app'
 import { followHint, fundTargetHint, type EmergencyView } from '../../../lib/emergencyText'
 import { parseMoney, periodWord } from '../../../lib/format'
 import { CATEGORY_COLORS } from '../../../lib/theme'
+import { BY_HAND, ProgressFields } from './ProgressFields'
+import { TripTarget } from './TripGoal'
 
 export type GoalFields = Required<Input<'create_goal'>>
 export type GoalKind = GoalFields['kind']
-
-const BY_HAND = ''
 
 /** The words that change with the kind of goal; everything else reads the same. */
 const WORDING = {
@@ -72,63 +72,6 @@ function startingValues(goal?: Goal, draft?: GoalDraft) {
   }
 }
 
-/** Where a goal's progress comes from: an account's balance, or a count kept by hand. */
-function ProgressFields({
-  accounts,
-  accountId,
-  saved,
-  savedField,
-  note,
-  onAccount,
-  onSaved,
-}: {
-  accounts: Account[]
-  accountId: string
-  saved: string
-  savedField: AmountField
-  /** A line under the choice, like the emergency fund losing the account picked. */
-  note: string | null
-  onAccount: (id: string) => void
-  onSaved: (text: string) => void
-}) {
-  return (
-    <>
-      <Setting label="Progress" hint="Follow an account's balance, or count it yourself">
-        <select
-          className="input"
-          aria-label="Progress"
-          style={{ width: 'auto' }}
-          value={accountId}
-          onChange={(e) => onAccount(e.target.value)}
-        >
-          <option value={BY_HAND}>Count it myself</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              Follow {account.name}
-            </option>
-          ))}
-        </select>
-      </Setting>
-      {note && <p className="small muted">{note}</p>}
-      {accountId === BY_HAND && (
-        <Setting label="Saved so far">
-          <input
-            className="input num"
-            style={{ width: 130 }}
-            inputMode="decimal"
-            aria-label="Saved so far"
-            placeholder="0"
-            {...savedField.inputProps}
-            value={saved}
-            onChange={(e) => onSaved(e.target.value)}
-          />
-        </Setting>
-      )}
-      {accountId === BY_HAND && <AmountNote id={savedField.id} text={savedField.shown} />}
-    </>
-  )
-}
-
 /**
  * The emergency fund's hints in a goal's form: how the fund's own target is
  * sized, and, on another goal, that following an account the fund counts
@@ -154,6 +97,61 @@ function useGoalAmounts(target: string, saved: string, keptByHand: boolean) {
   const badTarget = !targetCents || targetField.note !== null
   const badSaved = keptByHand && savedField.note !== null
   return { targetField, savedField, targetCents, blocked: badTarget || badSaved }
+}
+
+/**
+ * A goal's target and date. A trip budget's goal takes both from its budget,
+ * which the server keeps to, so its form points to the trip's page instead.
+ */
+function TargetFields({
+  goal,
+  words,
+  hint,
+  period,
+  target,
+  targetField,
+  targetDate,
+  onTarget,
+  onTargetDate,
+}: {
+  goal: Goal | undefined
+  words: (typeof WORDING)[GoalKind]
+  hint: string | undefined
+  period: string
+  target: string
+  targetField: AmountField
+  targetDate: string
+  onTarget: (text: string) => void
+  onTargetDate: (date: string) => void
+}) {
+  if (goal?.trip) return <TripTarget goal={goal} />
+  return (
+    <>
+      <Setting label={words.target} hint={hint}>
+        <input
+          className="input num"
+          style={{ width: 130 }}
+          inputMode="decimal"
+          required
+          aria-label={words.targetLabel}
+          {...targetField.inputProps}
+          value={target}
+          onChange={(e) => onTarget(e.target.value)}
+        />
+      </Setting>
+      <AmountNote id={targetField.id} text={targetField.shown} />
+      <Setting label={words.date} hint={`Optional. Shows what to set aside each ${period}`}>
+        <input
+          className="input"
+          type="date"
+          aria-label="Target date"
+          style={{ width: 'auto' }}
+          value={targetDate}
+          onChange={(e) => onTargetDate(e.target.value)}
+        />
+      </Setting>
+    </>
+  )
 }
 
 export function GoalForm({
@@ -231,29 +229,17 @@ export function GoalForm({
           onChange={(e) => setName(e.target.value)}
         />
       </label>
-      <Setting label={words.target} hint={hints.target}>
-        <input
-          className="input num"
-          style={{ width: 130 }}
-          inputMode="decimal"
-          required
-          aria-label={words.targetLabel}
-          {...targetField.inputProps}
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-        />
-      </Setting>
-      <AmountNote id={targetField.id} text={targetField.shown} />
-      <Setting label={words.date} hint={`Optional. Shows what to set aside each ${period}`}>
-        <input
-          className="input"
-          type="date"
-          aria-label="Target date"
-          style={{ width: 'auto' }}
-          value={targetDate}
-          onChange={(e) => setTargetDate(e.target.value)}
-        />
-      </Setting>
+      <TargetFields
+        goal={goal}
+        words={words}
+        hint={hints.target}
+        period={period}
+        target={target}
+        targetField={targetField}
+        targetDate={targetDate}
+        onTarget={setTarget}
+        onTargetDate={setTargetDate}
+      />
       <Setting
         label="Set aside from my budget"
         hint={

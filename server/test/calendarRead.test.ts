@@ -25,6 +25,7 @@ describe('parseCalendar', () => {
         title: 'Lisbon trip',
         location: 'Lisbon, Portugal',
         allDay: true,
+        repeatOn: null,
       },
     ])
   })

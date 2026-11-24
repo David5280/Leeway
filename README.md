@@ -35,6 +35,9 @@ bank, and nothing in Leeway can ever move money.
   (getting there, a place to stay, food, things to do). Each purchase counts
   for one trip or event only, as in the weeks ahead. A transaction on a trip
   links to it.
+- **Trip budgets**: plan a coming trip by its parts and it becomes one savings
+  goal, set aside for by the day you leave; during the trip its page shows
+  what is left of each part.
 - **Savings and investments**: savings, retirement and investing accounts
   sorted for you (or as you mark them), daily balance history, an emergency
   fund counted in months of essential spending, and your savings rate. An AI

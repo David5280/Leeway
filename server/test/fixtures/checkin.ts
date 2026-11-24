@@ -73,6 +73,7 @@ export function goal(name: string, fields: Partial<CheckinGoal> = {}): CheckinGo
     heldBackCents: 0,
     status: 'in_progress',
     balanceAsOf: null,
+    forTrip: false,
     ...fields,
   }
 }

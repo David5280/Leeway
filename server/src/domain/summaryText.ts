@@ -182,7 +182,8 @@ function goalPoint({ goals }: Checkin, money: Money, locale: string): string | n
     return `${behind.name} is behind pace for ${shortDate(behind.targetDate, locale)}.`
   }
   const ready = goals.find((g) => g.status === 'reached' && g.kind === 'purchase')
-  if (ready) return `${ready.name} is fully saved and ready to buy.`
+  if (ready)
+    return `${ready.name} is fully saved and ready ${ready.forTrip ? 'for the trip' : 'to buy'}.`
   // The goal closest to done is the encouraging one to mention.
   const open = goals.filter((g) => g.status === 'in_progress')
   const closest = open.sort((a, b) => b.percent - a.percent)[0]

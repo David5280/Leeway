@@ -50,8 +50,9 @@ async function saveEvents(db: Db, events: CalendarEvent[]): Promise<void> {
   await db.query('DELETE FROM calendar_events')
   if (!events.length) return
   await db.query(
-    `INSERT INTO calendar_events (uid, starts_on, ends_on, title, location, all_day)
-     SELECT * FROM unnest($1::text[], $2::date[], $3::date[], $4::text[], $5::text[], $6::boolean[])`,
+    `INSERT INTO calendar_events (uid, starts_on, ends_on, title, location, all_day, repeat_on)
+     SELECT * FROM unnest($1::text[], $2::date[], $3::date[], $4::text[], $5::text[],
+       $6::boolean[], $7::date[])`,
     [
       events.map((e) => e.uid),
       events.map((e) => e.startsOn),
@@ -59,6 +60,7 @@ async function saveEvents(db: Db, events: CalendarEvent[]): Promise<void> {
       events.map((e) => e.title),
       events.map((e) => e.location),
       events.map((e) => e.allDay),
+      events.map((e) => e.repeatOn),
     ],
   )
 }
@@ -117,7 +119,8 @@ export async function connectCalendar(
 
 /**
  * Unlinks the calendar and forgets its events at once. A read under way
- * finds the calendar gone when it comes to save, and saves nothing.
+ * finds the calendar gone when it comes to save, and saves nothing. Trip
+ * budgets already made stay.
  */
 export async function disconnectCalendar(pool: pg.Pool): Promise<CalendarStatus> {
   await withTransaction(pool, async (db) => {
@@ -267,7 +270,7 @@ export function refreshIfStale(pool: pg.Pool, deps: CalendarDeps): Promise<ReadO
 export async function eventsBetween(db: Db, from: IsoDate, to: IsoDate): Promise<CalendarEvent[]> {
   const { rows } = await db.query<CalendarEvent>(
     `SELECT uid, starts_on::text AS "startsOn", ends_on::text AS "endsOn", title, location,
-       all_day AS "allDay"
+       all_day AS "allDay", repeat_on::text AS "repeatOn"
      FROM calendar_events WHERE ends_on >= $1 AND starts_on <= $2
      ORDER BY starts_on, uid`,
     [from, to],

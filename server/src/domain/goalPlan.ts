@@ -8,8 +8,12 @@ import { cadenceOf, PER_YEAR, periodContaining, type PeriodConfig } from '../lib
 /**
  * Where a goal stands. `stale`: it follows an account its bank no longer
  * shares, so its progress is only known as of then (see goals.ts).
+ * `trip_under_way` and `trip_done`: a trip budget's goal once its trip has
+ * started, when the money is being spent on the trip, so it is never late
+ * and needs nothing more set aside (see tripStage in goalProgress.ts).
  */
-export type GoalStatus = 'reached' | 'in_progress' | 'past_due' | 'stale'
+export type GoalStatus =
+  'reached' | 'in_progress' | 'past_due' | 'stale' | 'trip_under_way' | 'trip_done'
 
 /** How a goal stands, from goals.ts: just the parts the plan needs. */
 export interface GoalStanding {

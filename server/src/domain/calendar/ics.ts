@@ -28,6 +28,7 @@ import { bySoonest, MAX_EVENTS, nearest } from './nearest.js'
 import {
   baseOf,
   measure,
+  momentOfProperty,
   occurrence,
   previewOf,
   unitsPerRepeat,
@@ -42,6 +43,12 @@ export { MAX_EVENTS } from './nearest.js'
 export interface CalendarEvent {
   /** The calendar's own id for the event; a repeat shares it, told apart by its start. */
   uid: string
+  /**
+   * For one repeat of a repeating event, the day it was set for in the series
+   * (on the series' own clock), which stays the same when that repeat alone
+   * is moved: its RECURRENCE-ID. Null for an event that happens once.
+   */
+  repeatOn: IsoDate | null
   startsOn: IsoDate
   /** The last day it covers, inclusive. */
   endsOn: IsoDate
@@ -71,6 +78,15 @@ export interface Keep {
   mayKeep: (preview: Preview) => boolean
   /** The last word, on the days the event's first repeat covers. */
   keeps: (event: CalendarEvent) => boolean
+}
+
+/**
+ * Which event this is, for good: the calendar's id, and for a repeat the day
+ * it was set for. A repeat moved on its own keeps it, and its neighbours in
+ * the series (which share the calendar's id) never have it.
+ */
+export function eventIdOf(event: { uid: string; repeatOn?: IsoDate | null }): string {
+  return event.repeatOn ? `${event.uid} ${event.repeatOn}` : event.uid
 }
 
 export const KEEP_ALL: Keep = { mayKeep: () => true, keeps: () => true }
@@ -139,7 +155,7 @@ function keptEvent({ uid, component }: Identified, read: Reading): Measured | nu
   if (!base || isCancelled(component) || isDeclinedBy(component, read.owner)) return null
   if (!read.keep.mayKeep(previewOf(base))) return null
   const event = measure(base)
-  return read.keep.keeps(occurrence(event, base.start.date, read.timeZone)) ? event : null
+  return read.keep.keeps(occurrence(event, base.start.date, read.timeZone, null)) ? event : null
 }
 
 /**
@@ -167,18 +183,34 @@ function planOf(master: Identified, overrides: Component[], read: Reading): Plan
   return { event, exceptions, until, job }
 }
 
-/** An event's repeats on these days (in its zone), less those skipped, changed or past UNTIL. */
+/**
+ * An event's repeats on these days (in its zone), less those skipped, changed
+ * or past UNTIL. Each repeat of a rule is known by the day it starts on (repeatOn).
+ */
 function eventsOf(plan: Planned, starts: IsoDate[], timeZone: string): CalendarEvent[] {
   const skipped = skippedDays(plan.exceptions, plan.event.start.zone)
+  const inSeries = Boolean(plan.job?.rule)
   return starts
     .filter((date) => !skipped.has(date) && beforeUntil(plan.event, plan.until, date))
-    .map((date) => occurrence(plan.event, date, timeZone))
+    .map((date) => occurrence(plan.event, date, timeZone, inSeries ? date : null))
 }
 
-/** One repeat changed on its own (it has a RECURRENCE-ID): kept as written, unless cancelled. */
-function changedRepeat(repeat: Identified, read: Reading): CalendarEvent[] {
+/**
+ * One repeat changed on its own (it has a RECURRENCE-ID): kept as written,
+ * unless cancelled. It is known by the day it was set for, read on its
+ * series' clock (`seriesZone`) as the series' own repeats are, or on its
+ * own when the series was left out.
+ */
+function changedRepeat(
+  repeat: Identified,
+  read: Reading,
+  seriesZone: string | null | undefined,
+): CalendarEvent[] {
   const event = keptEvent(repeat, read)
-  return event ? [occurrence(event, event.start.date, read.timeZone)] : []
+  if (!event) return []
+  const original = momentOfProperty(first(repeat.component, 'RECURRENCE-ID'))
+  const repeatOn = original ? dateIn(original, seriesZone ?? event.start.zone) : null
+  return [occurrence(event, event.start.date, read.timeZone, repeatOn)]
 }
 
 /** The file's events, split into the events themselves and their repeats changed on their own. */
@@ -245,9 +277,11 @@ export function parseCalendar(
     const starts = plan.job ? repeats[next++] : [plan.event.start.date]
     if (starts) add(eventsOf(plan, starts, timeZone))
   }
+  const seriesZones = new Map(plans.map((plan) => [plan.event.uid, plan.event.start.zone]))
   for (const [uid, changed] of changedOf) {
     if (cancelled.has(uid)) continue
-    for (const repeat of changed) add(changedRepeat({ uid, component: repeat }, read))
+    const zone = seriesZones.get(uid)
+    for (const repeat of changed) add(changedRepeat({ uid, component: repeat }, read, zone))
   }
   if (found.size <= MAX_EVENTS) return { events: [...found.values()].sort(bySoonest), capped }
   return { events: nearest(found.values(), today), capped: true }
