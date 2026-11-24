@@ -1,5 +1,6 @@
 // Fixtures for the Plan screen, built with the server's own math where there is some.
 
+import { belowZero, type SavingsSource } from '../../../server/src/domain/belowZero'
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
 import type { GoalProgressFacts } from '../../../server/src/domain/goalPlan'
 import { goalOf } from '../../../server/src/domain/goalProgress'
@@ -113,8 +114,12 @@ export function account(fields: Partial<Account> & Pick<Account, 'id' | 'name'>)
   return baseAccount({ balanceCents: 250000, ...fields })
 }
 
-export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
-  return {
+/**
+ * get_cash_flow's answer, with its below zero warning worked out by the
+ * server's own math from these figures and savings, unless a test sets it.
+ */
+export function cashFlow(fields: Partial<CashFlow> = {}, savings: SavingsSource[] = []): CashFlow {
+  const flow: Omit<CashFlow, 'belowZero'> = {
     today: TODAY,
     nextPayday: '2026-11-27',
     paydaySource: 'pay_period',
@@ -140,6 +145,10 @@ export function cashFlow(fields: Partial<CashFlow> = {}): CashFlow {
     // The Plan screen reads the cash alone; the budget's lead is the Overview's.
     spendable: null,
     ...fields,
+  }
+  return {
+    ...flow,
+    belowZero: 'belowZero' in fields ? fields.belowZero! : belowZero(flow, savings),
   }
 }
 

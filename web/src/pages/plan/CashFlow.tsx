@@ -3,8 +3,9 @@
 // Savings is left out, as money set aside rather than what the bills come
 // out of. On the Plan's bills, the question and answer open
 // the math (lib/drills/plan.ts), and under them a line shows checking
-// stepping down with each bill to payday; if it would go below $0, that part
-// is red and the card says when. The Overview's widget shows the answer alone.
+// stepping down with each bill to payday. If checking would go below $0, the
+// answer says when and what would cover it (BelowZeroWarning), on the Plan
+// and the Overview's widget alike.
 // With no checking balance known yet, there is no cash to judge: the card
 // says so, with no figure, line or warning that would read as $0.
 
@@ -16,8 +17,9 @@ import { useApp } from '../../lib/app'
 import { dayLabel, shortDate } from '../../lib/format'
 import { Money } from '../../components/design/Money'
 import { CashLine } from '../../components/charts/CashLine'
-import { cashPath, firstBelowZero, lowestPoint, type CashPoint } from '../../lib/cashPath'
+import { cashPath, lowestPoint, shortTone } from '../../lib/cashPath'
 import { cashFlowDrill } from '../../lib/drills/plan'
+import { BelowZeroWarning } from './BelowZeroWarning'
 
 /** One line on where the payday came from, so the number can be trusted the right amount. */
 function paydayText(flow: CashFlow, money: (cents: number) => string, locale: string): string {
@@ -42,16 +44,11 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
 function Headline({ flow }: { flow: CashFlow }) {
   if (flow.shortfallCents > 0) {
     const owed = flow.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
-    const guess = flow.paydayEstimate
     return (
       <p style={{ fontSize: 17 }}>
-        {guess && 'Maybe '}
-        <Money
-          cents={flow.shortfallCents}
-          tone={guess ? 'warn' : 'problem'}
-          className="mid-number"
-        />{' '}
-        short of {owed} due before payday.
+        {flow.paydayEstimate && 'Maybe '}
+        <Money cents={flow.shortfallCents} tone={shortTone(flow)} className="mid-number" /> short of{' '}
+        {owed} due before payday.
       </p>
     )
   }
@@ -70,32 +67,12 @@ function CashPathChart({ flow }: { flow: CashFlow }) {
   // With no bill before payday the line is flat, so the sentence above says it all.
   if (points.every((point) => point.bills.length === 0)) return null
   const low = lowestPoint(points)
-  const below = firstBelowZero(points)
   return (
-    <>
-      <CashLine
-        points={points}
-        label="Checking until payday"
-        description={`Checking from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
-      />
-      {below && <BelowZero point={below} today={flow.today} locale={settings.locale} />}
-    </>
-  )
-}
-
-/** The day checking first goes below $0, in plain words: when, and which bills take it there. */
-function BelowZero({ point, today, locale }: { point: CashPoint; today: string; locale: string }) {
-  const zero = <Money cents={0} />
-  // The line starts at the balance now, so a first point below $0 with no bill is today's balance.
-  if (point.bills.length === 0) {
-    return <p className="small over">Checking is already below {zero}.</p>
-  }
-  const verb = point.bills.length === 1 ? 'comes' : 'come'
-  const when = point.date === today ? 'today' : `on ${shortDate(point.date, locale)}`
-  return (
-    <p className="small over">
-      Checking goes below {zero} {when}, when {point.bills.join(' and ')} {verb} out.
-    </p>
+    <CashLine
+      points={points}
+      label="Checking until payday"
+      description={`Checking from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
+    />
   )
 }
 
@@ -135,6 +112,7 @@ export function CashFacts({ flow }: { flow: CashFlow }) {
         )}
         . {paydayText(flow, money, settings.locale)}
       </span>
+      <BelowZeroWarning flow={flow} />
     </>
   )
 }

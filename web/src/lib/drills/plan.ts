@@ -3,6 +3,7 @@
 // takes what its widget already read and returns a DrillDown for DrillSheet.
 
 import type { CashFlow, DebtPlans, NetWorth, Output } from '../../api/client'
+import { shortTone } from '../cashPath'
 import type { DrillDown } from '../drill'
 import { startReference, worthChange } from '../worth'
 
@@ -30,8 +31,6 @@ function shortNote(flow: CashFlow): string {
 /** Safe to spend until payday: checking, less the bills due first and any overdraft. */
 export function cashFlowDrill(flow: CashFlow, date: (iso: string) => string): DrillDown {
   const short = flow.shortfallCents > 0
-  // Red only when short before a payday read from paychecks, as on the card.
-  const shortTone = flow.paydayEstimate ? 'warn' : 'problem'
   const overdraft =
     flow.overdraftCents > 0
       ? [
@@ -58,7 +57,7 @@ export function cashFlowDrill(flow: CashFlow, date: (iso: string) => string): Dr
     : {
         terms: [{ label: 'In checking', value: { cents: flow.cashCents } }, bills, ...overdraft],
         result: short
-          ? { label: 'Short by', value: { cents: flow.shortfallCents, tone: shortTone } }
+          ? { label: 'Short by', value: { cents: flow.shortfallCents, tone: shortTone(flow) } }
           : { label: 'Safe to spend', value: { cents: flow.safeCents } },
         note: short
           ? shortNote(flow)
