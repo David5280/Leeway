@@ -4,6 +4,8 @@
 
 import { MAX_PAYSTUB_BYTES, PAYSTUB_TYPES } from '../../../server/src/domain/paystubs/files'
 import type { SavedPaystub } from '../../../server/src/domain/paystubs/paystubs'
+import type { PaystubUse } from '../../../server/src/domain/paystubs/use'
+import { todayIn } from '../lib/dates'
 import {
   EARNING_LINES,
   eachField,
@@ -146,4 +148,42 @@ export function chosenFile(type = 'application/pdf', size = 2048, name = 'paystu
   // A real file of this size is slow to build, and only its size is read before sending.
   Object.defineProperty(file, 'size', { value: size })
   return file
+}
+
+/** This year where the test owner lives, so withholding reads as "so far this year" in any year. */
+export const THIS_YEAR = Number(todayIn('America/Denver', new Date()).slice(0, 4))
+
+/**
+ * get_paystub_use for the city paystub confirmed in full and in use, its
+ * take-home standing for the paycheck the bank shows; or changed as given.
+ */
+export function paystubInUse(fields: Partial<PaystubUse> = {}): PaystubUse {
+  return {
+    state: 'used',
+    paidOn: '2026-11-13',
+    takeHomeCents: 261_142,
+    appliedToPay: true,
+    figures: {
+      paidOn: '2026-11-13',
+      yearlyGross: { cents: 9_228_000, basis: 'frequency' },
+      taxes: {
+        year: THIS_YEAR,
+        federalWithheldCents: 735_000,
+        stateWithheldCents: 314_748,
+        effectiveRate: { rate: 0.1458, basis: 'current' },
+      },
+      retirement: { rate: 0.376, basis: 'current', employeeCents: 62_295, employerCents: 82_283 },
+      matchMonthlyCents: 12_500,
+    },
+    ...fields,
+  }
+}
+
+/** get_paystub_use before any paystub is saved. */
+export const NO_PAYSTUB_IN_USE: PaystubUse = {
+  state: 'none',
+  paidOn: null,
+  takeHomeCents: null,
+  appliedToPay: false,
+  figures: null,
 }

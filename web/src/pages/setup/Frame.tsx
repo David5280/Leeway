@@ -9,6 +9,7 @@ export const STEPS = [
   'Your sign-in',
   'Budget period',
   'Bank sync',
+  'Paystub',
   'Categories',
   'Done',
 ] as const

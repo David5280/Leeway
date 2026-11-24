@@ -14,6 +14,7 @@ import { EmailSection } from './Email'
 import { LayoutSection } from './Layout'
 import { LookSection } from './Look'
 import { NotificationsSection } from './Notifications'
+import { PaystubSection } from './Paystub'
 import { PlanningSection } from './Planning'
 import { RegionSection } from './Region'
 import { SignInSection } from './SignIn'
@@ -49,6 +50,12 @@ export const SETTINGS_GROUPS = [
     title: 'Planning',
     description: 'Your birth year, for retirement projections.',
     sections: [PlanningSection],
+  },
+  {
+    id: 'paystub',
+    title: 'Paystub',
+    description: 'Your yearly pay, taxes and retirement saving, read from a paystub you check.',
+    sections: [PaystubSection],
   },
   {
     id: 'accounts',

@@ -15,6 +15,7 @@ import {
   status,
   type Handlers,
 } from '../../test/fake'
+import { paystubStatus } from '../../test/paystub'
 import { Setup } from '../Setup'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -40,16 +41,20 @@ function serve(extra: Handlers = {}, routes: Record<string, () => Response> = {}
       get_starter_categories: () => [groceries, paycheck],
       complete_setup: () => ({ categoriesAdded: 2 }),
       create_token: () => ({ token: 'lw_secret_key', id: 'tok' }),
+      // No Anthropic key unless a test gives one, so the paystub step only offers a skip.
+      get_paystub: () => paystubStatus(null, false),
       ...extra,
     },
     routes,
   )
 }
 
-/** Moves from the period step to the starting point, with or without banks. */
+/** Moves from the period step to the starting point, with or without banks, skipping the paystub. */
 async function toStartingPoint(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Continue' }))
   await user.click(await screen.findByRole('button', { name: /Skip for now|Continue/ }))
+  await screen.findByRole('heading', { name: 'Add a paystub' })
+  await user.click(await screen.findByRole('button', { name: 'Skip for now' }))
   await screen.findByRole('heading', { name: 'Choose your categories' })
 }
 
@@ -97,11 +102,12 @@ describe('setup after the account exists', () => {
       'step',
       'step',
       'step',
+      'step',
     ])
     expect(items[2]).toHaveAttribute('aria-current', 'step')
     // Finished steps say so in words too, not only with a tick.
     expect(items[0]).toHaveTextContent('Setup code (done)')
-    expect(screen.getByText('Step 3 of 6')).toBeInTheDocument()
+    expect(screen.getByText('Step 3 of 7')).toBeInTheDocument()
   })
 
   it('explains bank keys when the server has none, and lets the step be skipped', async () => {

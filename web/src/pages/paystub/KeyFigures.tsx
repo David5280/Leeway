@@ -51,7 +51,7 @@ function savers(saving: SavingsRate | null): string {
 }
 
 /** One key figure: what it is, the figure in bold, and what it rests on. */
-function KeyFigure({
+export function KeyFigure({
   label,
   note,
   children,

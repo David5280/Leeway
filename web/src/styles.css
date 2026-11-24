@@ -1911,7 +1911,7 @@ details.more[open] summary {
     white-space: nowrap;
   }
 
-  /* Only the current step keeps its name, so all six fit across a phone. */
+  /* Only the current step keeps its name, so all seven fit across a phone. */
   .setup aside .step:not(.current) .step-name {
     display: none;
   }

@@ -1,4 +1,4 @@
-// Step 6: finished. Says how money gets in from here, and offers a key for an AI assistant.
+// Step 7: finished. Says how money gets in from here, and offers a key for an AI assistant.
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -35,7 +35,7 @@ export function DoneStep({ status }: { status: Status }) {
   }
 
   return (
-    <Frame step={6}>
+    <Frame step={7}>
       <form
         className="stack"
         onSubmit={(e) => {

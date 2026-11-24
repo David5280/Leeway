@@ -1,4 +1,4 @@
-// Step 5: picking the categories to start with: suggested budgets, a starter set, empty, or a copy.
+// Step 6: picking the categories to start with: suggested budgets, a starter set, empty, or a copy.
 
 import { Fragment, useState, type FormEvent } from 'react'
 import { call, type Input } from '../../api/client'
@@ -44,7 +44,7 @@ export function StartStep({ onBack, onNext }: { onBack: () => void; onNext: () =
     setEdits((current) => ({ ...current, [name]: { ...current[name], ...change } }))
 
   return (
-    <Frame step={5}>
+    <Frame step={6}>
       <form className="stack" onSubmit={submit}>
         <h1>Choose your categories</h1>
         <p className="muted">

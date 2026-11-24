@@ -24,9 +24,9 @@ test('the setup code comes first, says where to find it, and refuses a wrong one
   )
   await expect(page.getByRole('textbox', { name: 'Email' })).toHaveCount(0)
 
-  // On a phone, the six steps fit across the top without widening the page.
+  // On a phone, the seven steps fit across the top without widening the page.
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.getByText('Step 1 of 6')).toBeVisible()
+  await expect(page.getByText('Step 1 of 7')).toBeVisible()
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   )
@@ -56,7 +56,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
 
   // Budget period: paid every other week, warned at 90%.
   await expect(page.getByRole('heading', { name: 'How do you budget?' })).toBeVisible()
-  await expect(page.getByText('Step 3 of 6')).toBeVisible()
+  await expect(page.getByText('Step 3 of 7')).toBeVisible()
   await page.getByRole('button', { name: 'Every paycheck' }).click()
   await page.getByRole('spinbutton', { name: 'Warn me at percent' }).fill('90')
   await expectPhoneSizedFields(page)
@@ -71,6 +71,12 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page.getByRole('link', { name: 'Developers, then Keys' })).toBeVisible()
   await expect(page.getByText(/free Trial plan/)).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Skip for now' }).click()
+
+  // No Anthropic key on this server either: the paystub step says what to add
+  // instead of offering an import, and skipping goes on.
+  await expect(page.getByRole('heading', { name: 'Add a paystub' })).toBeVisible()
+  await expect(page.getByText(/Reading a paystub needs an Anthropic API key/)).toBeVisible()
   await page.getByRole('button', { name: 'Skip for now' }).click()
 
   // The starter categories, with one budget changed and one left out.

@@ -199,6 +199,10 @@ for (const phone of GUARDED_PHONES) {
             reach: (page) => page.getByRole('button', { name: 'Continue' }).click(),
           },
           {
+            heading: 'Add a paystub',
+            reach: (page) => page.getByRole('button', { name: 'Skip for now' }).click(),
+          },
+          {
             heading: 'Choose your categories',
             reach: (page) => page.getByRole('button', { name: 'Skip for now' }).click(),
           },

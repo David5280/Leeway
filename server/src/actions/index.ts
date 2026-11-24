@@ -106,6 +106,7 @@ import {
 import {
   deletePaystubAction,
   getPaystubAction,
+  getPaystubUseAction,
   savePaystubAction,
   savePaystubDetailAction,
 } from './paystubs.js'
@@ -208,6 +209,7 @@ export const actionList = [
   attachPensionAction,
   updatePensionAction,
   getPaystubAction,
+  getPaystubUseAction,
   savePaystubAction,
   savePaystubDetailAction,
   deletePaystubAction,
