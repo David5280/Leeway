@@ -133,7 +133,7 @@ export function safeToSpend(
 }
 
 /** The next payday, from the current employer's paychecks or the budget period. */
-export async function nextPayday(db: Db, settings: Settings, today: IsoDate): Promise<Payday> {
+async function nextPayday(db: Db, settings: Settings, today: IsoDate): Promise<Payday> {
   return paydayFrom(await readCurrentPay(db, settings, today), settings, today)
 }
 

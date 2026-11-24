@@ -4,7 +4,7 @@
 // inbox, and push turned on in Settings (notifications.ts).
 
 import type { RouteName } from '../web/src/routes'
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import { fakeLongHomeAlerts } from './homeAlerts'
 import { fakeLongInbox, pushOnThisDevice, seePushOn } from './notifications'
 

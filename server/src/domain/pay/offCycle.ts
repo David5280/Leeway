@@ -1,5 +1,6 @@
-// Paychecks off a payroll's cycle: a bonus, a commission or a reimbursement
-// the same payroll pays between paydays. Pure.
+// Paychecks off a payroll's cycle: a bonus or a commission the same payroll
+// pays between paydays. Pure. (A deposit that says it is a reimbursement is
+// money back, never pay, so it never reaches here: see deposits.ts.)
 //
 // They are pay, and count in what pay comes to month by month, but they say
 // nothing of when pay comes. Read as paydays, a year-end bonus on Nov 20

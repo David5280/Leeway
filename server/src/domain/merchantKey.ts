@@ -2,11 +2,11 @@
 // charges group together, a bill's pattern finds the payments and a pending
 // charge finds the one it became. Pure.
 
+import { SMALL_WORDS } from './merchantCase.js'
 import {
   cleanMerchantName,
   GENERIC_NAME,
   namesNoMerchant,
-  SMALL_WORDS,
   tidyMerchantName,
 } from './merchantName.js'
 

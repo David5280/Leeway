@@ -7,7 +7,9 @@ import type { Db } from '../../db/pool.js'
 import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
 import { occurrences } from '../../lib/schedule.js'
 import { dueBefore, listBills } from '../bills.js'
-import { nextPayday } from '../cashFlow.js'
+import { paydayFrom } from '../pay/payday.js'
+import { paydaysThrough } from '../pay/projection.js'
+import { readCurrentPay } from '../pay/source.js'
 import type { Settings } from '../settings.js'
 import { listBudgets } from '../trips/budget.js'
 import { assignBudgets } from '../trips/match.js'
@@ -153,17 +155,27 @@ function suggestionOf(span: EventSpan, usual: Typical | null, today: IsoDate, co
   return usual ? roundUp(setAsideFor(span, usual, today, cost)) : null
 }
 
-/** Paydays in the window: the next one and those after it, when how often pay comes is known. */
+/**
+ * Paydays in the window: the next one and those after it, when how often pay
+ * comes is known. A paycheck budget period's paydays are its own exact days;
+ * a payroll's are each projected from its usual day and moved off a weekend
+ * or holiday on their own (projection.ts), so one moved payday moves no other.
+ */
 async function paydayItems(
   db: Db,
   settings: Settings,
   today: IsoDate,
   to: IsoDate,
 ): Promise<ForecastItem[]> {
-  const payday = await nextPayday(db, settings, today)
+  const pay = await readCurrentPay(db, settings, today)
+  const payday = paydayFrom(pay, settings, today)
   // The end of a budget period, which stands in when pay is unknown, is no payday.
   if (payday.source === 'period_end' || !payday.cadence) return []
-  return occurrences(payday.date, payday.cadence, payday.date, to).map((date) => ({
+  const dates =
+    payday.source === 'detected_income' && pay.employer
+      ? paydaysThrough(pay.employer.projection, today, to)
+      : occurrences(payday.date, payday.cadence, payday.date, to)
+  return dates.map((date) => ({
     type: 'payday' as const,
     date,
     amountCents: payday.amountCents,

@@ -115,6 +115,7 @@ export function tripDetail(fields: Partial<TripDetail> = {}): TripDetail {
     spentByPart: { ...NO_PARTS, travel: 70000 },
     budget: null,
     transactions: [],
+    moreTransactions: false,
     ...fields,
   }
 }

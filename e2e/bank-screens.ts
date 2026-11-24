@@ -4,7 +4,7 @@
 // account the bank no longer shares, on Accounts and in Settings.
 
 import type { RouteName } from '../web/src/routes'
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import {
   askForSecondLogin,
   checkConnectedBanks,
