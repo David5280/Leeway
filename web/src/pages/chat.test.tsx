@@ -365,7 +365,8 @@ describe('Chat for every reader', () => {
     const followed = scrolls.mock.calls.length
     stream.send({ type: 'text', text: 'is due.' })
     await screen.findByText('Rent is due.')
-    expect(scrolls.mock.calls.length).toBeGreaterThan(followed)
+    // The follow runs after the text paints, so it can land a tick later.
+    await waitFor(() => expect(scrolls.mock.calls.length).toBeGreaterThan(followed))
 
     // Scrolled up: the end is far below the screen, so it stays put.
     const end = document.querySelector('.chat')!.lastElementChild!
