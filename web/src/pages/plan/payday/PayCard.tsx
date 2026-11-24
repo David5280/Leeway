@@ -15,7 +15,7 @@ import { useApp } from '../../../lib/app'
 import { payDrill } from '../../../lib/drills/pay'
 import { dayLabel } from '../../../lib/format'
 import { PayForm } from './PayForm'
-import { isEstimate, payLine, STALE_NOTE } from './payText'
+import { isEstimate, JOB_STOPPED_NOTE, payLine, STALE_NOTE } from './payText'
 
 type PayInUse = NonNullable<PayView['pay']>
 
@@ -62,6 +62,7 @@ function PayChoices({
   return (
     <Card static="form" label="Is this right?" className="stack-sm">
       {view.found?.confirmationStale && <p className="small muted">{STALE_NOTE}</p>}
+      {view.yours?.jobStopped && <p className="small muted">{JOB_STOPPED_NOTE}</p>}
       <div className="row wrap">
         {pay.source === 'found' && (
           <button

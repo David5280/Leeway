@@ -11,12 +11,16 @@ const ACCOUNT = 'payday- checking'
 const daysAgo = (days: number) =>
   new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
 
-/** Four paychecks two weeks apart, the last three days ago. */
-async function addPaychecks(page: Page): Promise<void> {
+/** A checking account for the paychecks; its id. */
+async function payrollAccount(page: Page): Promise<string> {
   await addAccount(page, { name: ACCOUNT, balance: '3000' })
   const accounts = await action<{ id: string; name: string }[]>(page, 'list_accounts')
-  const accountId = accounts.find((account) => account.name === ACCOUNT)!.id
-  for (const weeks of [6, 4, 2, 0]) {
+  return accounts.find((account) => account.name === ACCOUNT)!.id
+}
+
+/** Paychecks this many weeks before the newest, which landed three days ago. */
+async function addPaychecks(page: Page, accountId: string, weeksBack: number[]): Promise<void> {
+  for (const weeks of weeksBack) {
     await action(page, 'create_transaction', {
       accountId,
       date: daysAgo(3 + weeks * 7),
@@ -35,9 +39,16 @@ test.afterEach(async ({ page }) => {
 test('pay found in the paychecks is confirmed in one tap, then replaced by the owner’s own', async ({
   page,
 }) => {
-  await addPaychecks(page)
+  const accountId = await payrollAccount(page)
+  // One paycheck so far: how often it comes is only a guess, whatever today is.
+  await addPaychecks(page, accountId, [0])
   await page.goto('/plan')
   const pay = page.getByRole('region', { name: 'Your pay' })
+  await expect(pay.getByText('Estimate')).toBeVisible()
+
+  // Three more, two weeks apart.
+  await addPaychecks(page, accountId, [6, 4, 2])
+  await page.reload()
   await expect(pay).toContainText('Each paycheck$2,100')
   await expect(pay).toContainText('Every 2 weeks from')
 

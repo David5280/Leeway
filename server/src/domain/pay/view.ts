@@ -17,13 +17,14 @@ import { namesBusiness } from './deposits.js'
 import {
   employerIdOf,
   isConfirmed,
+  jobStopped,
   ownMonthlyCents,
   replacedIndex,
   withOwnersPay,
   type PayOverride,
-  type SavedOverride,
+  type PaySettings,
 } from './ownPay.js'
-import { nextOwnPayday } from './ownSchedule.js'
+import { nextOwnPayday } from './periodPayday.js'
 import { paycheckPeriod, type PaycheckPeriod } from './period.js'
 import { payerKeyOf, type Paycheck } from './paychecks.js'
 import { readFoundPay } from './source.js'
@@ -42,6 +43,8 @@ export interface FoundEmployer {
   paychecks: number
   /** True until a second paycheck (or the owner) confirms how often it pays. */
   estimate: boolean
+  /** True when the owner said this job's pay is right, and it still pays that way. */
+  confirmed: boolean
   /** True when the owner's own pay stands in for this job's. */
   replaced: boolean
 }
@@ -54,11 +57,12 @@ export interface FoundPay {
   monthlyCents: number
   nextPayday: IsoDate
   estimate: boolean
-  /** Whether the owner said the main employer's pay is right. */
+  /** Whether the owner said a job's pay is right, and it still pays that way (any job). */
   confirmed: boolean
   /**
    * True when the owner said an earlier reading was right, but the paychecks
-   * now show another employer or cadence: their word no longer holds.
+   * no longer show that employer paying on that cadence: their word no
+   * longer holds.
    */
   confirmationStale: boolean
 }
@@ -78,10 +82,15 @@ export interface PayInUse {
   estimate: boolean
 }
 
-/** The owner's own pay, its next payday stepped on to today or after. */
+/** The owner's own pay, its next payday stepped on to the next one to come. */
 export interface YourPay extends PayOverride {
   /** What it comes to in a month. */
   monthlyCents: number
+  /**
+   * True when the job it was entered for has stopped paying: it then
+   * counts beside every job still paying, until the owner updates it.
+   */
+  jobStopped: boolean
 }
 
 export interface PayView {
@@ -104,9 +113,15 @@ export interface PayView {
 
 type Namer = (employer: Employer) => string | null
 
-function foundEmployer(employer: Employer, name: Namer, replaced: boolean): FoundEmployer {
+function foundEmployer(
+  employer: Employer,
+  pay: PaySettings,
+  name: Namer,
+  replaced: boolean,
+): FoundEmployer {
+  const confirmed = isConfirmed(employer, pay)
   return {
-    id: employerIdOf(employer),
+    id: employerIdOf(employer, pay),
     name: name(employer),
     paycheckCents: employer.paycheckCents,
     cadence: employer.cadence,
@@ -114,7 +129,9 @@ function foundEmployer(employer: Employer, name: Namer, replaced: boolean): Foun
     nextPayday: employer.nextPayday,
     lastPaycheck: employer.lastPaycheck,
     paychecks: employer.paychecks,
-    estimate: employer.estimate,
+    // Confirming a job settles it; another job's own guess still stands.
+    estimate: employer.estimate && !confirmed,
+    confirmed,
     replaced,
   }
 }
@@ -138,19 +155,19 @@ function newestPaycheck(pay: CurrentPay): Paycheck | undefined {
 function foundOf(reading: CurrentPay, settings: Settings, name: Namer): FoundPay | null {
   const main = reading.employer
   if (!main) return null
-  const confirmed = isConfirmed(main, settings.pay.confirmed)
-  const { override } = settings.pay
-  const replaced = override ? replacedIndex(reading.employers, override) : -1
+  const replaced = replacedIndex(reading.employers, settings.pay)
+  const employers = reading.employers.map((employer, i) =>
+    foundEmployer(employer, settings.pay, name, i === replaced),
+  )
+  // The confirmation follows its job by id, wherever that job ranks now.
+  const confirmed = employers.some((employer) => employer.confirmed)
   return {
-    employers: reading.employers.map((employer, i) =>
-      foundEmployer(employer, name, i === replaced),
-    ),
+    employers,
     paycheckCents: main.paycheckCents,
     cadence: main.cadence,
     monthlyCents: reading.monthlyCents!,
     nextPayday: reading.nextPayday!,
-    // Confirming the main employer settles it; a second job's own guess still stands.
-    estimate: reading.employers.some((employer, i) => employer.estimate && !(i === 0 && confirmed)),
+    estimate: employers.some((employer) => employer.estimate),
     confirmed,
     // A confirmation of a reading the paychecks no longer show is said, not kept quiet.
     confirmationStale: settings.pay.confirmed !== null && !confirmed,
@@ -189,14 +206,17 @@ export function periodOfPay(
   return paycheckPeriod(cadence as PayCadence, lastPaycheck, paydays)
 }
 
-/** The owner's own pay as shown: its next payday stepped on to today or after. */
-function yoursOf(override: SavedOverride, today: IsoDate): YourPay {
+/** The owner's own pay as shown: its next payday stepped on to the next one to come. */
+function yoursOf(found: CurrentPay, pay: PaySettings, today: IsoDate): YourPay | null {
+  const { override } = pay
+  if (!override) return null
   const { amountCents, cadence } = override
   return {
     amountCents,
     cadence,
     nextPayday: nextOwnPayday(override, today),
     monthlyCents: ownMonthlyCents(override),
+    jobStopped: jobStopped(found.employers, pay),
   }
 }
 
@@ -212,7 +232,7 @@ export function payViewOf(
   const last = newestPaycheck(found)
   return {
     found: shown,
-    yours: override && yoursOf(override, today),
+    yours: yoursOf(found, settings.pay, today),
     pay: inUseOf(withOwnersPay(found, settings.pay, today), settings, shown),
     lastPaycheck: last ? { date: last.date, amountCents: last.amountCents } : null,
     paydays: mainPaychecks(found).map((paycheck) => paycheck.date),

@@ -5,6 +5,7 @@ import { periodContaining, type Cadence } from '../../lib/periods.js'
 import { periodConfig, type Settings } from '../settings.js'
 import type { CurrentPay } from './current.js'
 import { PAY_CADENCE } from './period.js'
+import { isOwnPeriod, nextPeriodPayday } from './periodPayday.js'
 
 /** Where the payday came from, so the app and an agent can say how sure it is. */
 export type PaydaySource = 'pay_period' | 'detected_income' | 'period_end'
@@ -25,18 +26,21 @@ export interface Payday {
 }
 
 /**
- * The next payday. A paycheck budget period knows it exactly. Otherwise the
- * main employer's next paycheck says (see current.ts), or the owner's own
- * pay in its place (ownPay.ts), and with neither, the end of the budget
- * period stands in, which the app says.
+ * The next payday. A paycheck budget period knows it exactly: the next
+ * payday on its schedule, paid the business day before a weekend or a bank
+ * holiday by the same rule as the owner's own pay (periodPayday.ts); on the
+ * schedule their pay sets, the payday they gave stands too, so the two
+ * always agree. Otherwise the main employer's next paycheck says (see
+ * current.ts), or the owner's own pay in its place (ownPay.ts), and with
+ * neither, the end of the budget period stands in, which the app says.
  */
 export function paydayFrom(pay: CurrentPay, settings: Settings, today: IsoDate): Payday {
   const config = periodConfig(settings)
-  // `end` is exclusive: it is already the first day of the next period.
-  const nextPeriodStart = periodContaining(today, config).end
   if (config.kind === 'paycheck') {
+    const { override } = settings.pay
+    const given = override && isOwnPeriod(config, override) ? override.nextPayday : null
     return {
-      date: nextPeriodStart,
+      date: nextPeriodPayday(config, today, given),
       source: 'pay_period',
       amountCents: pay.paycheckCents,
       cadence: PAY_CADENCE[config.frequency],
@@ -56,7 +60,8 @@ export function paydayFrom(pay: CurrentPay, settings: Settings, today: IsoDate):
     }
   }
   return {
-    date: nextPeriodStart,
+    // `end` is exclusive: it is already the first day of the next period.
+    date: periodContaining(today, config).end,
     source: 'period_end',
     amountCents: null,
     cadence: null,

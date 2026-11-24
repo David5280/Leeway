@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import type { Settings } from '../api/client'
-import { addDays, dateParts, daysBetween } from '../lib/dates'
+import { dateParts, daysBetween } from '../lib/dates'
 import { cadenceLabel, PAY_CADENCE_WORDS } from '../pages/plan/payday/payText'
 import { Setting } from './ui'
 
@@ -31,11 +31,6 @@ function dayNumber(text: string, max: number): number {
 /** Days between paydays for the frequencies that step by whole weeks. */
 const STEP_DAYS: Partial<Record<Frequency, number>> = { weekly: 7, biweekly: 14 }
 
-/** The day of the month a monthly payday keeps: its own, or the month's end as 31 (any length). */
-function monthlyDay(date: string): number {
-  return dateParts(addDays(date, 1)).day === 1 ? 31 : dateParts(date).day
-}
-
 /**
  * Whether a period keeps the found schedule. The found one counts from the
  * newest payday, so a saved period counted from an older payday on the same
@@ -47,7 +42,8 @@ export function sameSchedule(a: PaycheckPeriod, b: PaycheckPeriod): boolean {
     return String(a.semimonthlyDays ?? [1, 15]) === String(b.semimonthlyDays ?? [1, 15])
   }
   const step = STEP_DAYS[a.frequency]
-  if (!step) return monthlyDay(a.anchorDate) === monthlyDay(b.anchorDate)
+  // A monthly period keeps its anchor's day; the server anchors a month's end on a 31st.
+  if (!step) return dateParts(a.anchorDate).day === dateParts(b.anchorDate).day
   return daysBetween(a.anchorDate, b.anchorDate) % step === 0
 }
 

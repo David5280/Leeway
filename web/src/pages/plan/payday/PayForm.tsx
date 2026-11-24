@@ -3,7 +3,7 @@
 // for the main job, when two are found.
 
 import { useState, type FormEvent } from 'react'
-import { PAYDAY_RANGE_DAYS } from '../../../../../server/src/domain/pay/ownSchedule'
+import { PAYDAY_RANGE_DAYS } from '../../../../../server/src/domain/pay/paydayRange'
 import type { PayView } from '../../../api/client'
 import { useActionMutation } from '../../../api/hooks'
 import { ErrorNote, Setting } from '../../../components/ui'
@@ -12,6 +12,10 @@ import { isoDaysAgo } from '../../../lib/dates'
 import { parseMoney } from '../../../lib/format'
 import { typedAmount } from '../../../lib/money'
 import { cadenceLabel, PAY_CADENCE_CHOICES, type PayCadenceChoice } from './payText'
+
+/** A payday paid early for a weekend or holiday is read as the day it stands for (ownSchedule.ts). */
+const PAYDAY_HINT =
+  'Paid early for a 15th or month end on a weekend or holiday? That day counts as the 15th or month end.'
 
 /** What the form opens with: the owner's own pay, else the pay in use, else blank. */
 function startingPay(view: PayView): { amount: string; cadence: PayCadenceChoice; next: string } {
@@ -81,7 +85,7 @@ export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }
           ))}
         </select>
       </Setting>
-      <Setting label="Next payday">
+      <Setting label="Next payday" hint={PAYDAY_HINT}>
         <input
           className="input num"
           type="date"

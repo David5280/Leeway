@@ -8,16 +8,23 @@
 //
 // A payer is kept by an id made from its key, never the key itself: the key
 // is the bank's text, which for a payroll paid in a person's name is that
-// name, and settings are read back by an assistant.
+// name, and settings are read back by an assistant. The id is keyed with a
+// random salt kept for this install, so it cannot be matched to a name by
+// hashing guesses.
+//
+// Each word names its job by that id, wherever the job ranks: a
+// confirmation and the owner's own pay both follow their job when another
+// pays more, and neither ever speaks for a different job.
 
-import { createHash } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
 import { currentPay, type CurrentPay, type Employer } from './current.js'
 import type { Deposit } from './deposits.js'
-import { nextOwnPayday } from './ownSchedule.js'
+import type { GivenCadence } from './given.js'
+import { nextOwnPayday } from './periodPayday.js'
 import { payerKeyOf } from './paychecks.js'
 
 /** How often a paycheck can come, as the owner says it. */
@@ -61,21 +68,41 @@ export const paySettingsSchema = z.object({
   confirmed: confirmedSchema.nullable().default(null),
   /** The owner's own pay, used instead of what was found. */
   override: savedOverrideSchema.nullable().default(null),
+  /** Keys payer ids (employerIdOf); saved with the first id, then kept for good. */
+  payerSalt: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/)
+    .nullable()
+    .default(null),
 })
 
 export type PaySettings = z.infer<typeof paySettingsSchema>
 
-export const NO_PAY_SETTINGS: PaySettings = { confirmed: null, override: null }
+/** Nothing said yet: the paychecks as found. */
+export const NO_PAY_SETTINGS: PaySettings = { confirmed: null, override: null, payerSalt: null }
 
-/** An employer's id: a digest of the key its paychecks are grouped by (paychecks.ts). */
-export const employerIdOf = (employer: Employer) =>
-  createHash('sha256').update(payerKeyOf(employer.newest)).digest('hex').slice(0, 16)
+/**
+ * The salt until one is saved: ids only tell employers apart until then,
+ * and the first id saved saves the salt it was made with (owner.ts).
+ */
+const UNSAVED_SALT = randomBytes(16).toString('hex')
+
+/** The salt payer ids are keyed with on this install. */
+export const payerSaltOf = (pay: Pick<PaySettings, 'payerSalt'>) => pay.payerSalt ?? UNSAVED_SALT
+
+/** An employer's id: the key its paychecks are grouped by (paychecks.ts), keyed with the salt. */
+export const employerIdOf = (employer: Employer, pay: Pick<PaySettings, 'payerSalt'>) =>
+  createHmac('sha256', payerSaltOf(pay))
+    .update(payerKeyOf(employer.newest))
+    .digest('hex')
+    .slice(0, 16)
 
 /** Whether the owner confirmed this employer paying on this cadence. */
-export function isConfirmed(employer: Employer, confirmed: ConfirmedPay | null): boolean {
+export function isConfirmed(employer: Employer, pay: PaySettings): boolean {
+  const { confirmed } = pay
   return (
     confirmed !== null &&
-    confirmed.payerId === employerIdOf(employer) &&
+    confirmed.payerId === employerIdOf(employer, pay) &&
     confirmed.cadence === employer.cadence
   )
 }
@@ -89,52 +116,69 @@ export const ownMonthlyCents = (override: PayOverride) =>
 
 /**
  * The pay found, read again with the cadence the owner confirmed for the
- * main employer: paydays that fit two cadences are then read their way, so
- * paychecks a year and the next payday are what they said is right, not
- * the cautious reading. As found when the confirmation no longer matches.
+ * employer they confirmed, wherever it ranks now: paydays that fit two
+ * cadences are then read their way, so paychecks a year and the next
+ * payday are what they said is right, not the cautious reading. A saved
+ * paystub (`paystub`) still speaks for the main job. As found when the
+ * confirmation no longer matches.
  */
 export function readAsConfirmed(
   deposits: Deposit[],
   found: CurrentPay,
-  confirmed: ConfirmedPay | null,
+  pay: PaySettings,
   today: IsoDate,
+  paystub: GivenCadence | null = null,
 ): CurrentPay {
-  if (!found.employer || !isConfirmed(found.employer, confirmed)) return found
-  const payerKey = payerKeyOf(found.employer.newest)
-  return currentPay(deposits, today, { cadence: confirmed!.cadence, payerKey })
+  const employer = found.employers.find((each) => isConfirmed(each, pay))
+  if (!employer) return found
+  // The owner's word first, so it wins over a paystub for the same job (current.ts).
+  const confirmed = { cadence: pay.confirmed!.cadence, payerKey: payerKeyOf(employer.newest) }
+  return currentPay(deposits, today, paystub ? [confirmed, paystub] : [confirmed])
 }
 
-/** The pay found, with a confirmed main employer no longer an estimate. */
-function withConfirmation(pay: CurrentPay, confirmed: ConfirmedPay | null): CurrentPay {
-  if (!pay.employer || !isConfirmed(pay.employer, confirmed)) return pay
-  const employers = pay.employers.map((employer, i) =>
-    i === 0 ? { ...employer, estimate: false } : employer,
+/** The pay found, with the employer the owner confirmed no longer an estimate. */
+function withConfirmation(pay: CurrentPay, given: PaySettings): CurrentPay {
+  if (!pay.employers.some((employer) => isConfirmed(employer, given))) return pay
+  const employers = pay.employers.map((employer) =>
+    isConfirmed(employer, given) ? { ...employer, estimate: false } : employer,
   )
   return { ...pay, employer: employers[0]!, employers, estimate: employers.some((e) => e.estimate) }
 }
 
 /**
  * Which employer the owner's own pay stands in for: the one it was entered
- * for while that job still pays, else the main one (also when none was
- * found as it was entered). -1 with no employer paying now.
+ * for while that job still pays, or the main one when no job was found as
+ * it was entered. -1 with no own pay, with no employer paying now, or when
+ * the job it was entered for has stopped (jobStopped): it never takes the
+ * place of a different job that is still paying.
  */
-export function replacedIndex(employers: Employer[], override: SavedOverride): number {
-  const index = employers.findIndex((employer) => employerIdOf(employer) === override.payerId)
-  if (index >= 0) return index
-  return employers.length > 0 ? 0 : -1
+export function replacedIndex(employers: Employer[], pay: PaySettings): number {
+  const { override } = pay
+  if (!override) return -1
+  if (override.payerId === null) return employers.length > 0 ? 0 : -1
+  return employers.findIndex((employer) => employerIdOf(employer, pay) === override.payerId)
+}
+
+/** Whether the job the owner's own pay was entered for has stopped paying. */
+export function jobStopped(employers: Employer[], pay: PaySettings): boolean {
+  const payerId = pay.override?.payerId ?? null
+  return payerId !== null && replacedIndex(employers, pay) === -1
 }
 
 /**
  * The pay found, with the owner's own pay standing in for the job it was
  * entered for: its paycheck, cadence and next payday, no longer an
- * estimate, and first, since payday is the owner's. Any other job found
- * still adds its month of pay.
+ * estimate, and first, since payday is the owner's. Every other job found
+ * still adds its month of pay, all of them when the job it was entered for
+ * has stopped: the pay entered then counts beside them until the owner
+ * updates or removes it (the Payday screen says so).
  */
-function withOverride(pay: CurrentPay, override: SavedOverride, today: IsoDate): CurrentPay {
+function withOverride(pay: CurrentPay, given: PaySettings, today: IsoDate): CurrentPay {
+  const override = given.override!
   const { amountCents, cadence } = override
   const nextPayday = nextOwnPayday(override, today)
   const monthlyCents = ownMonthlyCents(override)
-  const index = replacedIndex(pay.employers, override)
+  const index = replacedIndex(pay.employers, given)
   const replaced = pay.employers[index]
   const others = pay.employers.filter((_, i) => i !== index)
   // That job, now paid as the owner says, so its payday is theirs (payday.ts).
@@ -146,10 +190,11 @@ function withOverride(pay: CurrentPay, override: SavedOverride, today: IsoDate):
     nextPayday,
     estimate: false,
   }
-  const employers = own ? [own, ...others] : []
+  // With no job in its place, the main job is the owner's own: none found paying.
+  const employers = own ? [own, ...others] : others
   return {
     ...pay,
-    employer: employers[0] ?? null,
+    employer: own ?? null,
     employers,
     cadence,
     estimate: others.some((employer) => employer.estimate),
@@ -162,6 +207,6 @@ function withOverride(pay: CurrentPay, override: SavedOverride, today: IsoDate):
 
 /** The pay found, with the owner's word laid over it: their own pay first, else a confirmation. */
 export function withOwnersPay(pay: CurrentPay, given: PaySettings, today: IsoDate): CurrentPay {
-  if (given.override) return withOverride(pay, given.override, today)
-  return withConfirmation(pay, given.confirmed)
+  if (given.override) return withOverride(pay, given, today)
+  return withConfirmation(pay, given)
 }

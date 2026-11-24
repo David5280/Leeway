@@ -4,12 +4,12 @@
 // budget and the payday never disagree. Pure. Periods themselves are
 // lib/periods.ts; nothing about them changes here.
 
-import type { IsoDate } from '../../lib/dates.js'
+import { clampedDate, dateParts, type IsoDate } from '../../lib/dates.js'
 import type { PayFrequency, PeriodConfig } from '../../lib/periods.js'
 import type { PayCadence } from './cadence.js'
 import { nominalPayday } from './nominal.js'
-import { nominalOwnPayday, scheduleAround } from './ownSchedule.js'
-import { bestSchedule, type SemimonthSchedule } from './semimonthly.js'
+import { nominalOwnPayday, scheduleAround, scheduleDayOf } from './ownSchedule.js'
+import { bestSchedule, MONTH_END, type SemimonthSchedule } from './semimonthly.js'
 
 /** A paycheck period's frequency for each pay cadence. */
 export const FREQUENCY_OF: Record<PayCadence, PayFrequency> = {
@@ -35,12 +35,41 @@ function semimonthlyDaysOf(payday: IsoDate, paydays: IsoDate[]): [number, number
 }
 
 /**
- * The day monthly pay is meant for, which a monthly period counts from: the
- * one past paydays keep, else the one this payday was meant for, so Friday
- * Jan 29 paid for Sunday the 31st counts from the month's end.
+ * A monthly anchor that keeps a payday's day of the month. A monthly period
+ * counts from its anchor's day (lib/periods.ts), so the month's end is
+ * anchored on the last day of a 31-day month: Nov 30 would keep the 30th.
+ * The month before a short month always has 31 days.
  */
-function monthlyAnchorOf(payday: IsoDate, paydays: IsoDate[]): IsoDate {
-  return paydays.length ? nominalPayday(paydays, 'month').date : nominalOwnPayday(payday)
+function monthlyAnchor(date: IsoDate, dayOfMonth: number): IsoDate {
+  const { year, month, day } = dateParts(date)
+  return dayOfMonth === MONTH_END && day < MONTH_END
+    ? clampedDate(year, month - 1, MONTH_END)
+    : date
+}
+
+/**
+ * The usual payday past paydays keep, which a period counts from: on their
+ * weekday (a Wednesday paid early for Thanksgiving still counts from
+ * Thursdays) or day of the month.
+ */
+function foundAnchor(cadence: PayCadence, paydays: IsoDate[]): IsoDate {
+  const { date, dayOfMonth } = nominalPayday(paydays, cadence)
+  return cadence === 'month' ? monthlyAnchor(date, dayOfMonth!) : date
+}
+
+/**
+ * The payday a period counts from. With past paydays, the usual one they
+ * keep; else the one the owner gave, or for monthly pay the day it was meant
+ * for, so Friday Jan 29 paid for Sunday the 31st counts from the month's
+ * end, and so does Nov 30, the last day of its month. Twice a month reads
+ * only its two days, so its anchor is the payday as given.
+ */
+function anchorOf(cadence: PayCadence, payday: IsoDate, paydays: IsoDate[]): IsoDate {
+  if (cadence === 'semimonth') return payday
+  if (paydays.length) return foundAnchor(cadence, paydays)
+  if (cadence !== 'month') return payday
+  const nominal = nominalOwnPayday(payday)
+  return monthlyAnchor(nominal, scheduleDayOf(nominal))
 }
 
 /**
@@ -56,7 +85,7 @@ export function paycheckPeriod(
   return {
     kind: 'paycheck',
     frequency: FREQUENCY_OF[cadence],
-    anchorDate: cadence === 'month' ? monthlyAnchorOf(payday, paydays) : payday,
+    anchorDate: anchorOf(cadence, payday, paydays),
     // Only twice a month reads these; the others count from the anchor.
     semimonthlyDays: cadence === 'semimonth' ? semimonthlyDaysOf(payday, paydays) : [1, 15],
   }

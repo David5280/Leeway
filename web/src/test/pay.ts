@@ -57,29 +57,40 @@ function deposits({
 const NAMES: Record<string, string | null> = {
   'ACME CORP PAYROLL': 'Acme Corp',
   'JANE DOE DIR DEP': null,
+  'JOHN ROE DIR DEP': null,
 }
+
+/** The salt payer ids are keyed with, fixed so ids read alike in every test. */
+const PAYER_SALT = '0'.repeat(32)
+
+/** An id for a job that no longer pays: the owner's pay entered for it then. */
+const STOPPED_JOB_ID = 'f'.repeat(16)
 
 /**
  * get_pay's answer for these jobs, with the owner's confirmation or own pay,
- * which stands in for the main job as the server saves it.
+ * which stands in for the main job as the server saves it, or with
+ * `forStoppedJob` for a job that has since stopped paying.
  */
 export function payView(
   jobs: Job[] = [{}],
-  given: { confirmed?: boolean; override?: PayOverride } = {},
+  given: { confirmed?: boolean; override?: PayOverride; forStoppedJob?: boolean } = {},
 ): PayView {
   const all = jobs.flatMap(deposits)
   const detected = currentPay(all, PAY_TODAY, null)
   const main = detected.employer
+  const salted = { payerSalt: PAYER_SALT }
   const confirmed =
     given.confirmed && main
-      ? { payerId: employerIdOf(main), cadence: main.cadence as PayOverride['cadence'] }
+      ? { payerId: employerIdOf(main, salted), cadence: main.cadence as PayOverride['cadence'] }
       : null
+  const mainId = main ? employerIdOf(main, salted) : null
   const override = given.override && {
     ...given.override,
-    payerId: main ? employerIdOf(main) : null,
+    payerId: given.forStoppedJob ? STOPPED_JOB_ID : mainId,
   }
-  const settings = settingsWith({ pay: { confirmed, override: override ?? null } })
-  const found = readAsConfirmed(all, detected, confirmed, PAY_TODAY)
+  const pay = { confirmed, override: override ?? null, payerSalt: PAYER_SALT }
+  const settings = settingsWith({ pay })
+  const found = readAsConfirmed(all, detected, pay, PAY_TODAY)
   return payViewOf(found, settings, PAY_TODAY, ({ newest }) =>
     newest.name in NAMES ? (NAMES[newest.name] ?? null) : 'Side Gig',
   )

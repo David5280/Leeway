@@ -11,12 +11,16 @@ import {
   NO_PAY_SETTINGS,
   readAsConfirmed,
   withOwnersPay,
+  type PaySettings,
 } from '../src/domain/pay/ownPay.js'
 import { paycheckPeriod, periodInStep } from '../src/domain/pay/period.js'
 import { settingsSchema } from '../src/domain/settings.js'
 import { everyDays, paycheck } from './fixtures/pay.js'
 
 const TODAY = '2026-11-17'
+
+/** The owner's word: what they said, the rest as when they have said nothing. */
+const said = (word: Partial<PaySettings>): PaySettings => ({ ...NO_PAY_SETTINGS, ...word })
 
 /** Budgets by calendar month, so the payday comes from pay, not a paycheck period. */
 const MONTHLY_BUDGET = settingsSchema.parse({})
@@ -42,33 +46,31 @@ describe('withOwnersPay', () => {
 
   it('settles the main employer once the owner confirms it, on the same cadence only', () => {
     const pay = onePaycheck()
-    const key = employerIdOf(pay.employer!)
+    const key = employerIdOf(pay.employer!, NO_PAY_SETTINGS)
     const confirmed = withOwnersPay(
       pay,
-      { confirmed: { payerId: key, cadence: 'month' }, override: null },
+      said({ confirmed: { payerId: key, cadence: 'month' } }),
       TODAY,
     )
     expect(confirmed.estimate).toBe(false)
     expect(confirmed.employer!.estimate).toBe(false)
     // A confirmation of another cadence, or another payer, no longer holds.
-    expect(isConfirmed(pay.employer!, { payerId: key, cadence: 'biweek' })).toBe(false)
-    expect(isConfirmed(pay.employer!, { payerId: 'other', cadence: 'month' })).toBe(false)
-    expect(isConfirmed(pay.employer!, null)).toBe(false)
-    const stale = withOwnersPay(
-      pay,
-      { confirmed: { payerId: 'other', cadence: 'month' }, override: null },
-      TODAY,
-    )
+    const biweekly = said({ confirmed: { payerId: key, cadence: 'biweek' } })
+    expect(isConfirmed(pay.employer!, biweekly)).toBe(false)
+    const other = said({ confirmed: { payerId: 'other', cadence: 'month' } })
+    expect(isConfirmed(pay.employer!, other)).toBe(false)
+    expect(isConfirmed(pay.employer!, NO_PAY_SETTINGS)).toBe(false)
+    const stale = withOwnersPay(pay, other, TODAY)
     expect(stale.estimate).toBe(true)
   })
 
   it("keeps a second job's guess an estimate when only the main job is confirmed", () => {
     const pay = twoJobs()
     expect(pay.employers).toHaveLength(2)
-    const key = employerIdOf(pay.employer!)
+    const key = employerIdOf(pay.employer!, NO_PAY_SETTINGS)
     const confirmed = withOwnersPay(
       pay,
-      { confirmed: { payerId: key, cadence: 'biweek' }, override: null },
+      said({ confirmed: { payerId: key, cadence: 'biweek' } }),
       TODAY,
     )
     expect(confirmed.employers[1]!.estimate).toBe(true)
@@ -80,15 +82,14 @@ describe('withOwnersPay', () => {
     const second = pay.employers[1]!
     const given = withOwnersPay(
       pay,
-      {
-        confirmed: null,
+      said({
         override: {
           amountCents: 250_000,
           cadence: 'semimonth',
           nextPayday: '2026-12-15',
           payerId: null,
         },
-      },
+      }),
       TODAY,
     )
     expect(given.paycheckCents).toBe(250_000)
@@ -113,15 +114,14 @@ describe('withOwnersPay', () => {
   it("plans from the owner's own pay alone when no paycheck was found", () => {
     const given = withOwnersPay(
       currentPay([], TODAY),
-      {
-        confirmed: null,
+      said({
         override: {
           amountCents: 180_000,
           cadence: 'biweek',
           nextPayday: '2026-11-20',
           payerId: null,
         },
-      },
+      }),
       TODAY,
     )
     expect(given).toMatchObject({
@@ -153,12 +153,9 @@ describe('readAsConfirmed', () => {
       monthlyCents: 420_000,
       nextPayday: '2026-12-01',
     })
-    const confirmed = { payerId: employerIdOf(found.employer!), cadence: 'biweek' as const }
-    const settled = withOwnersPay(
-      readAsConfirmed(deposits, found, confirmed, TODAY),
-      { confirmed, override: null },
-      TODAY,
-    )
+    const payerId = employerIdOf(found.employer!, NO_PAY_SETTINGS)
+    const word = said({ confirmed: { payerId, cadence: 'biweek' } })
+    const settled = withOwnersPay(readAsConfirmed(deposits, found, word, TODAY), word, TODAY)
     // Every two weeks from Nov 13: 26.1 paychecks a year, the next on Nov 27.
     expect(settled).toMatchObject({
       cadence: 'biweek',
@@ -174,46 +171,10 @@ describe('readAsConfirmed', () => {
 
   it('leaves the pay as found when the confirmation no longer matches it', () => {
     const found = currentPay(deposits, TODAY)
-    const stale = { payerId: employerIdOf(found.employer!), cadence: 'month' as const }
+    const payerId = employerIdOf(found.employer!, NO_PAY_SETTINGS)
+    const stale = said({ confirmed: { payerId, cadence: 'month' } })
     expect(readAsConfirmed(deposits, found, stale, TODAY)).toBe(found)
-    expect(readAsConfirmed(deposits, found, null, TODAY)).toBe(found)
-  })
-})
-
-describe("the owner's own pay with two jobs", () => {
-  // ACME's lone paycheck reads monthly, so GLOBEX's smaller biweekly pay ranks first.
-  const deposits = [
-    ...everyDays('2026-09-04', 14, 6).map((day) => paycheck(day, 120_000, 'GLOBEX PAYROLL')),
-    paycheck('2026-11-06', 210_000),
-  ]
-  const own = { amountCents: 210_000, cadence: 'biweek' as const, nextPayday: '2026-11-20' }
-
-  it('stands in for the job it was entered for, keeping the other job beside it', () => {
-    const pay = currentPay(deposits, TODAY)
-    const [globex, acme] = pay.employers
-    expect(acme!.newest.name).toBe('ACME CORP PAYROLL')
-    const given = withOwnersPay(
-      pay,
-      { confirmed: null, override: { ...own, payerId: employerIdOf(acme!) } },
-      TODAY,
-    )
-    // ACME every two weeks, plus GLOBEX's month, never ACME's month again.
-    expect(given.monthlyCents).toBe(456_563 + globex!.monthlyCents)
-    expect(given.employers.map((employer) => employer.newest.name)).toEqual([
-      'ACME CORP PAYROLL',
-      'GLOBEX PAYROLL',
-    ])
-    expect(given.nextPayday).toBe('2026-11-20')
-  })
-
-  it('stands in for the main job when the job it was entered for has stopped paying', () => {
-    const pay = currentPay(deposits, TODAY)
-    const given = withOwnersPay(
-      pay,
-      { confirmed: null, override: { ...own, payerId: '0123456789abcdef' } },
-      TODAY,
-    )
-    expect(given.monthlyCents).toBe(456_563 + pay.employers[1]!.monthlyCents)
+    expect(readAsConfirmed(deposits, found, NO_PAY_SETTINGS, TODAY)).toBe(found)
   })
 })
 
@@ -235,6 +196,24 @@ describe('paycheckPeriod', () => {
     // Past paydays say it too: Friday Nov 13 was paid for Sunday the 15th.
     const seen = ['2026-09-15', '2026-10-15', '2026-11-13']
     expect(paycheckPeriod('month', '2026-11-13', seen).anchorDate).toBe('2026-11-15')
+  })
+
+  it("anchors the month's end on a 31st, so a monthly period keeps it", () => {
+    // Nov 30 is the month's end: anchored on Oct 31, never the 30th.
+    expect(paycheckPeriod('month', '2026-11-30').anchorDate).toBe('2026-10-31')
+    expect(paycheckPeriod('month', '2027-02-28').anchorDate).toBe('2027-01-31')
+    expect(paycheckPeriod('month', '2028-02-29').anchorDate).toBe('2028-01-31')
+    // Feb 28 in a leap year is the 28th, as given.
+    expect(paycheckPeriod('month', '2028-02-28').anchorDate).toBe('2028-02-28')
+    // Paychecks on the month's last business day say it too.
+    const seen = ['2026-08-31', '2026-09-30', '2026-10-30']
+    expect(paycheckPeriod('month', '2026-10-30', seen).anchorDate).toBe('2026-10-31')
+  })
+
+  it('counts weekly pay found from its usual weekday, not a holiday payday', () => {
+    // Thursday paydays, the newest paid Wednesday Nov 25 for Thanksgiving.
+    const seen = ['2026-11-05', '2026-11-12', '2026-11-19', '2026-11-25']
+    expect(paycheckPeriod('week', '2026-11-25', seen).anchorDate).toBe('2026-11-26')
   })
 
   it('reads twice-a-month days from past paydays, else from the one payday given', () => {

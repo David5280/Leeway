@@ -70,6 +70,17 @@ describe('pay words', () => {
     )
   })
 
+  it('says the pay entered stands beside jobs still paying when its own job stopped', () => {
+    const view = payView([{ name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }], {
+      override: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
+      forStoppedJob: true,
+    })
+    expect(view.yours!.jobStopped).toBe(true)
+    expect(sourceNote(view, view.pay!)).toBe(
+      'The pay you entered. Leeway uses it everywhere instead of what your paychecks show. The job you entered pay for has stopped paying. Update or remove it.',
+    )
+  })
+
   it('labels a cadence said alone', () => {
     expect(cadenceLabel('biweek')).toBe('Every 2 weeks')
     expect(cadenceLabel('semimonth')).toBe('Twice a month')

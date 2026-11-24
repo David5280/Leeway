@@ -1,7 +1,7 @@
 // Reads the deposits pay is worked out from, and the cadence a saved paystub
 // gives, for current.ts; then lays the owner's own word on their pay over it
-// (ownPay.ts): a confirmation reads the main employer their way, and their
-// own pay stands in for a job's.
+// (ownPay.ts): a confirmation reads the employer it names their way, and
+// their own pay stands in for a job's.
 //
 // A paycheck budget period is never read as how the paychecks come: it moves
 // with the pay the owner confirms or enters (owner.ts), so reading it back
@@ -55,8 +55,8 @@ export async function readDetectedPay(db: Db, today: IsoDate): Promise<CurrentPa
 }
 
 /**
- * The pay the paychecks show, with the main employer read the way the
- * owner confirmed while their confirmation still matches (ownPay.ts).
+ * The pay the paychecks show, with the employer the owner confirmed read
+ * their way while their confirmation still matches (ownPay.ts).
  */
 export async function readFoundPay(
   db: Db,
@@ -64,8 +64,9 @@ export async function readFoundPay(
   today: IsoDate,
 ): Promise<CurrentPay> {
   const deposits = await readDeposits(db, today)
-  const detected = currentPay(deposits, today, await paystubCadence(db, today))
-  return readAsConfirmed(deposits, detected, settings.pay.confirmed, today)
+  const paystub = await paystubCadence(db, today)
+  const detected = currentPay(deposits, today, paystub)
+  return readAsConfirmed(deposits, detected, settings.pay, today, paystub)
 }
 
 /** The owner's pay now, read fresh, with their own word on it laid over (ownPay.ts). */

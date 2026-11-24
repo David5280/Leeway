@@ -5,7 +5,7 @@
 import type pg from 'pg'
 import { addDays } from '../../src/lib/dates.js'
 import type { Deposit } from '../../src/domain/pay/deposits.js'
-import { insertBankTransaction } from '../helpers.js'
+import { insertBankAccount, insertBankTransaction } from '../helpers.js'
 
 let next = 0
 
@@ -48,4 +48,22 @@ export async function insertPaychecks(
       detailed: 'INCOME_SALARY',
     })
   }
+}
+
+/** Biweekly Fridays, the last on Nov 13, 2026 (the test clock reads Nov 17). */
+export const BIWEEKLY = everyDays('2026-09-04', 14, 6)
+
+/** A paycheck budget period counted from an old payday, for pay to move. */
+export const OLD_PAYCHECK_PERIOD = {
+  kind: 'paycheck',
+  frequency: 'monthly',
+  anchorDate: '2026-01-01',
+  semimonthlyDays: [1, 15],
+} as const
+
+/** A checking account paid 2,100.00 every two weeks by ACME; its id. */
+export async function insertBiweeklyPay(db: pg.Pool): Promise<string> {
+  const { accountId } = await insertBankAccount(db, { subtype: 'checking' })
+  await insertPaychecks(db, accountId, BIWEEKLY, 210_000)
+  return accountId
 }

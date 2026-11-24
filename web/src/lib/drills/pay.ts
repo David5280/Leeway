@@ -27,18 +27,21 @@ function paycheckTerms(paycheckCents: number, monthlyCents: number): MathTerm[] 
   ]
 }
 
-/** The employers found, less the one the owner's own pay stands in for while it does. */
+/**
+ * The employers found, each with what to call it (named by its place among
+ * them all), less the one the owner's own pay stands in for while it does.
+ */
 function jobsListed(view: PayView, pay: PayInUse) {
-  const employers = view.found?.employers ?? []
+  const employers = (view.found?.employers ?? []).map((employer, rank) => ({
+    ...employer,
+    label: employerLabel(employer, rank),
+  }))
   return pay.source === 'yours' ? employers.filter((employer) => !employer.replaced) : employers
 }
 
 /** A month of pay: each job's share, or the one paycheck's when there is only one. */
 function monthTerms(view: PayView, pay: PayInUse): MathTerm[] {
-  const jobs = jobsListed(view, pay).map((employer) => ({
-    label: employerLabel(employer),
-    monthlyCents: employer.monthlyCents,
-  }))
+  const jobs = jobsListed(view, pay).map(({ label, monthlyCents }) => ({ label, monthlyCents }))
   // The owner's own pay stands in for its job; any other job still adds its month.
   const yours = pay.source === 'yours' ? view.yours : null
   const months = yours ? [{ label: 'Your pay', monthlyCents: yours.monthlyCents }, ...jobs] : jobs
@@ -55,7 +58,7 @@ function monthTerms(view: PayView, pay: PayInUse): MathTerm[] {
 function employerRows(view: PayView, pay: PayInUse, date: (iso: string) => string): DrillItem[] {
   return jobsListed(view, pay).map((employer) => ({
     key: employer.id,
-    label: employerLabel(employer),
+    label: employer.label,
     detail: `Paid ${PAY_CADENCE_WORDS[employer.cadence]}, next ${date(employer.nextPayday)}`,
     value: { cents: employer.paycheckCents },
   }))

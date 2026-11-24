@@ -161,41 +161,50 @@ const mostFirst = (a: Employer, b: Employer) => b.monthlyCents - a.monthlyCents
 const SIDE_JOB_MISSED_CYCLES = 1
 
 /**
- * The employers paying now, the main one first. `given` is the cadence the
- * owner gave (given.ts), which overrides what the paydays suggest for the
- * main employer when it speaks for that job: the owner's own word on it.
+ * The cadence given for the run ranked `rank`, if one speaks for it: a
+ * confirmation for the payer it names wherever it ranks, anything else for
+ * the main job only. The first that speaks wins, so the owner's word goes
+ * before a paystub's.
  */
-function payingEmployers(
-  runs: EmployerRun[],
-  today: IsoDate,
-  given: GivenCadence | null,
-): Employer[] {
+function givenForRun(givens: GivenCadence[], run: EmployerRun, rank: number) {
+  return givens.find((given) => ('payerKey' in given || rank === 0) && givenFor(given, run))
+}
+
+/**
+ * The employers paying now, the main one first. `givens` are the cadences
+ * the owner gave (given.ts), each overriding what the paydays suggest for
+ * the job it speaks for: the owner's own word on it.
+ */
+function payingEmployers(runs: EmployerRun[], today: IsoDate, givens: GivenCadence[]): Employer[] {
   const paying = runs.filter((run) => stillPaying(run, today))
   const ranked = paying
     .map((run) => ({ run, employer: employerOf(run, today) }))
     .sort((a, b) => mostFirst(a.employer, b.employer))
-  // A paystub from a job that has since ended says nothing of how the new one pays.
-  if (given && ranked[0] && givenFor(given, ranked[0].run)) {
-    const main = withGivenCadence(ranked[0].run, given.cadence)
-    ranked[0] = { run: main, employer: employerOf(main, today) }
-  }
+    .map((ranking, rank) => {
+      // A paystub from a job that has since ended says nothing of how the new one pays.
+      const given = givenForRun(givens, ranking.run, rank)
+      if (!given) return ranking
+      const run = withGivenCadence(ranking.run, given.cadence)
+      return { run, employer: employerOf(run, today) }
+    })
   // The main job may miss a payroll; a side job that has missed one has likely stopped.
   const [main, ...side] = ranked
   const onSchedule = side.filter(({ run }) => stillPaying(run, today, SIDE_JOB_MISSED_CYCLES))
   return (main ? [main, ...onSchedule] : []).map(({ employer }) => employer).sort(mostFirst)
 }
 
-/** The owner's pay now, from deposits oldest first. */
+/** The owner's pay now, from deposits oldest first, with any cadences given (see payingEmployers). */
 export function currentPay(
   deposits: Deposit[],
   today: IsoDate,
-  given: GivenCadence | null = null,
+  given: GivenCadence | GivenCadence[] | null = null,
 ): CurrentPay {
   const runs = payRuns(deposits)
   const paychecks = runs
     .flatMap((run) => run.paychecks)
     .sort((a, b) => a.date.localeCompare(b.date))
-  const employers = payingEmployers(runs, today, given)
+  const givens = given === null ? [] : [given].flat()
+  const employers = payingEmployers(runs, today, givens)
   const main = employers[0]
   if (!main) return { ...NO_PAY, paychecks }
   return {

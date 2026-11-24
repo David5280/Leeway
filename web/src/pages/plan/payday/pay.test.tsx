@@ -85,6 +85,18 @@ describe('Your pay', () => {
     expect(screen.getByRole('button', { name: 'Looks right' })).toBeVisible()
   })
 
+  it('says when the job the owner entered pay for has stopped, and offers to change it', async () => {
+    const gig = { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }
+    show(payView([gig], { override: yours, forStoppedJob: true }))
+    expect(
+      await screen.findByText(
+        'The job you entered pay for has stopped paying. Update or remove it.',
+      ),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Change my pay' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Use my paychecks' })).toBeVisible()
+  })
+
   it('takes the owner’s own pay, filled in from what was found', async () => {
     const { server, user } = show(payView())
     await user.click(await screen.findByRole('button', { name: 'Not quite' }))

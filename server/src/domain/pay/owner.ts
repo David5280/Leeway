@@ -9,20 +9,30 @@ import { addDays, type IsoDate } from '../../lib/dates.js'
 import type { PeriodConfig } from '../../lib/periods.js'
 import { periodConfig, saveSettings, settingsSchema, type Settings } from '../settings.js'
 import type { PayCadence } from './cadence.js'
-import { employerIdOf, NO_PAY_SETTINGS, replacedIndex, type PayOverride } from './ownPay.js'
-import { PAYDAY_RANGE_DAYS } from './ownSchedule.js'
+import {
+  employerIdOf,
+  NO_PAY_SETTINGS,
+  payerSaltOf,
+  replacedIndex,
+  type PayOverride,
+} from './ownPay.js'
+import { PAYDAY_RANGE_DAYS } from './paydayRange.js'
 import { paycheckPeriod, periodInStep } from './period.js'
 import { readDetectedPay, readFoundPay } from './source.js'
 import { periodOfPay, readPayView, type PayView } from './view.js'
 
-/** Saves new pay settings and budget period, then reads the view back. */
+/**
+ * Saves new pay settings and budget period, then reads the view back. The
+ * salt payer ids are keyed with is saved too, so an id saved keeps its job.
+ */
 async function savePay(
   db: Db,
   settings: Settings,
-  change: { pay: Settings['pay']; period: PeriodConfig },
+  change: { pay: Omit<Settings['pay'], 'payerSalt'>; period: PeriodConfig },
   today: IsoDate,
 ): Promise<PayView> {
-  const next = settingsSchema.parse({ ...settings, ...change })
+  const pay = { ...change.pay, payerSalt: payerSaltOf(settings.pay) }
+  const next = settingsSchema.parse({ ...settings, ...change, pay })
   await saveSettings(db, next)
   return readPayView(db, next, today)
 }
@@ -41,7 +51,10 @@ export async function confirmPay(db: Db, settings: Settings, today: IsoDate): Pr
       'Leeway has not found a paycheck to confirm yet. Enter your pay instead.',
     )
   }
-  const confirmed = { payerId: employerIdOf(main), cadence: main.cadence as PayCadence }
+  const confirmed = {
+    payerId: employerIdOf(main, settings.pay),
+    cadence: main.cadence as PayCadence,
+  }
   return savePay(
     db,
     settings,
@@ -71,13 +84,14 @@ async function backToPaychecks(db: Db, settings: Settings, today: IsoDate): Prom
 
 /**
  * The id of the job the owner's pay stands in for: the one it already does
- * while that job still pays, else the main job; null with none found.
+ * while that job still pays, else (none entered yet, or its job stopped)
+ * the main job; null with none found.
  */
 async function replacedPayerId(db: Db, settings: Settings, today: IsoDate): Promise<string | null> {
   const { employers } = await readFoundPay(db, settings, today)
-  const { override } = settings.pay
-  const job = employers[override ? replacedIndex(employers, override) : 0]
-  return job ? employerIdOf(job) : null
+  const index = replacedIndex(employers, settings.pay)
+  const job = employers[index >= 0 ? index : 0]
+  return job ? employerIdOf(job, settings.pay) : null
 }
 
 /**

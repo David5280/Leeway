@@ -50,6 +50,29 @@ describe('payDrill', () => {
     expect(new Set(rows.map((row) => row.key)).size).toBe(2)
   })
 
+  it('calls a second job paid in a person’s name Your other employer', () => {
+    const view = payView([
+      { name: 'JANE DOE DIR DEP' },
+      { name: 'JOHN ROE DIR DEP', cents: 40_000, every: 7, last: '2026-11-16' },
+    ])
+    const rows = drillOf(view).items!.rows
+    expect(rows.map((row) => row.label)).toEqual(['Your employer', 'Your other employer'])
+  })
+
+  it('lists every job still paying when the one the pay was entered for stopped', () => {
+    const view = payView([{ name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }], {
+      override: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
+      forStoppedJob: true,
+    })
+    const drill = drillOf(view)
+    expect(drill.items?.rows.map((row) => row.label)).toEqual(['Side Gig'])
+    expect(drill.math.terms.map((term) => term.label)).toEqual([
+      'Your pay, a month',
+      'Side Gig, a month',
+    ])
+    expect(drill.math.note).toMatch(/has stopped paying\. Update or remove it\.$/)
+  })
+
   it('takes the owner’s own pay alone, with no employers under it', () => {
     const view = payView([{}], {
       override: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
