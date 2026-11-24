@@ -228,3 +228,30 @@ test.describe('a control hidden on purpose', () => {
     })
   }
 })
+
+test.describe('a box open over the page', () => {
+  /** A full width button behind a box that floats over it without a scrim. */
+  const overThePage = (close: string) => `
+    <button style="width: 100%; height: 60px">Behind</button>
+    <section role="dialog" aria-label="Ask" style="position: fixed; inset: 0">
+      <button style="width: 120px; height: ${close}">Close</button>
+    </section>`
+
+  test('checks only its own controls, since a tap outside closes it', async ({ page }) => {
+    await fixture(page, overThePage('44px'))
+    expect(await missedTaps(page)).toEqual([])
+
+    await fixture(page, overThePage('30px'))
+    expect(await missedTaps(page)).toEqual(['<button> "Close" misses a 44px tap (120x30)'])
+  })
+
+  test('a modal sheet leaves the page to its own rules', async ({ page }) => {
+    await fixture(
+      page,
+      `<button style="width: 100%; height: 60px">Behind</button>
+      <section role="dialog" aria-modal="true" aria-label="Sheet"
+        style="position: fixed; inset: 0"></section>`,
+    )
+    expect(await missedWithoutSize(page)).toEqual(['<button> "Behind" misses a 44px tap'])
+  })
+})
