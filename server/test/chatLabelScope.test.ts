@@ -66,6 +66,16 @@ describe("a word of the owner's label that could be a name", () => {
   })
 })
 
+describe("a label whose word is found only in a shop's whole name", () => {
+  it('stays as written, as the shop does', () => {
+    const people = hiding({
+      labels: [{ label: "Trader Joe's run", words: ['Joe'] }],
+      shops: knownShops(["Trader Joe's"]),
+    })
+    expect(sent({ category: "Trader Joe's run" }, people)).toEqual({ category: "Trader Joe's run" })
+  })
+})
+
 describe("a label of one word that is a word of a shop's name", () => {
   it("goes alone, but leaves the shop's whole name", () => {
     const people = hiding({

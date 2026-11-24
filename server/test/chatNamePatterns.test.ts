@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   fullNamePattern,
+  isFoundIn,
   loneNamePattern,
   maskPattern,
   replacedIn,
@@ -75,6 +76,35 @@ describe('a full name', () => {
   })
 })
 
+describe('a name or label written with invisible or look-alike characters itself', () => {
+  it('is found as written, its emoji and invisible characters included', () => {
+    const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}'
+    expect(hidden(`${family} Trip, then trip`, [`${family} Trip`])).toBe('someone, then trip')
+    expect(hidden('Ottilie braces', ['\u2068Ottilie\u2069 braces'])).toBe('someone')
+    expect(hidden('\u2068Ottilie\u2069 braces', ['Ottilie braces'])).toBe('\u2068someone')
+    expect(hidden('Ottilie braces', ['Otti\u00adlie\u200b braces'])).toBe('someone')
+  })
+
+  it('is found through look-alike letters, either way round', () => {
+    expect(hidden('Jane gift', ['\uff2a\uff41\uff4e\uff45 gift'])).toBe('someone')
+    expect(hidden('\u041ettilie and Ottilie', [], ['Ottilie'])).toBe('someone and someone')
+    expect(hidden('Ottilie and \u041ettilie', [], ['\u041ettilie'])).toBe('someone and someone')
+    const olga = '\u041e\u043b\u044c\u0433\u0430'
+    expect(hidden(`Gift for ${olga}`, [], [olga])).toBe('Gift for someone')
+  })
+
+  it('stays a whole word beside an invisible character, which goes with it inside one', () => {
+    expect(hidden('Jane\u200bbraces', [], ['Jane'])).toBe('someone\u200bbraces')
+    expect(hidden('Otti\u00adlie braces', [], ['Ottilie'])).toBe('someone braces')
+  })
+
+  it('matches nothing when it is nothing but invisible characters', () => {
+    expect(hidden('Jane Doe', ['\u200b\u2068'])).toBe('Jane Doe')
+    expect(isFoundIn('Jane Doe', fullNamePattern('\u200b'))).toBe(false)
+    expect(isFoundIn('Jane\u200bDoe', fullNamePattern('Jane Doe'))).toBe(true)
+  })
+})
+
 describe('a word of a name alone', () => {
   it('is found as a name is written, with a capital or in capitals, accents aside', () => {
     expect(hidden('José, JOSE, jose and Josefina', [], ['José'])).toBe(
@@ -125,6 +155,10 @@ describe('an account mask', () => {
       'acct ••••, card ...••••, xxxx-••••',
     )
     expect(masked('99110 and 19911', '9911')).toBe('99110 and 19911')
+  })
+
+  it('is hidden through invisible characters between its digits', () => {
+    expect(masked('acct 99\u200b11, card 9\u00ad911', '9911')).toBe('acct ••••, card ••••')
   })
 
   it("never in a date's year or an amount", () => {

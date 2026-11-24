@@ -51,7 +51,9 @@ function hiddenAs(
   shops: KnownShops,
   skip: ReadonlySet<string>,
 ): keyof LoneNames | null {
-  if (!NAME_PART.test(part) || isMovementWord(part) || isCredential(part)) return null
+  // Accents aside, so a mark no letter takes in ("Ot\u0301tilie") leaves a name a name.
+  const letters = part.normalize('NFD').replace(/\p{M}/gu, '')
+  if (!NAME_PART.test(letters) || isMovementWord(part) || isCredential(part)) return null
   if (!source.owner && startsAShop(shops, part)) return null
   // A business's own words ("Insurance", "Lawn") are no one's, so a category keeps them.
   if (skip.has(part.toLowerCase()) || isBusinessWord(part)) return null

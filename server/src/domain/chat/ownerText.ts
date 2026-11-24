@@ -29,7 +29,11 @@
 //   but not "Pemberton Bill").
 // - Nothing vouches for a word after one a person is named after: "for",
 //   "with", "to", "from", kin, a title, a role or a payment app ("For Rose",
-//   "Uncle Bill", "Coach Bill", "Venmo Brown"; personCues.ts).
+//   "Uncle Bill", "Coach Bill", "Doctor Brown", "Venmo Brown"; personCues.ts),
+//   but an everyday word, and after a role what it is paid for, a date or a
+//   clinician's bill ("Sitter tip", "Coach June 15", "Doctor bill"). A role
+//   right after a hidden word may be a surname, so it goes too ("Bill Coach"),
+//   unless it is an everyday word ("Bill Teacher" reads "someone Teacher").
 // - Every mark parts words, a dot or a spaced dash included ("Venmo.June",
 //   "Braces - Bill"), but an apostrophe inside a word ("O'Brien", "Bill's").
 //   A hyphen or underscore between letters joins them as a space does
@@ -38,10 +42,21 @@
 import type { Db } from '../../db/pool.js'
 import { NO_SHOPS, startsAShop, type KnownShops } from '../knownShops.js'
 import { APOSTROPHES, isEverydayWord } from '../personShape.js'
+import { INVISIBLE_CHARACTER } from '../plainLetters.js'
 import { wordsOf } from './billLabels.js'
 import { isNameInALine, isWordInLabels, withoutEverydayPhrases } from './commonWords.js'
 import { isGivenName, isNamedLikeAPerson } from './givenNames.js'
-import { afterANamer, afterAPerson, isNamerWord, lettered, nearest } from './personCues.js'
+import {
+  afterANamer,
+  afterAPerson,
+  isNamerWord,
+  isRole,
+  isRoleTerm,
+  lettered,
+  nearest,
+  roleBefore,
+  roleSense,
+} from './personCues.js'
 import { withoutShops } from './shownText.js'
 import { isWordName, meansTheWord, SHOP_MARK } from './wordNames.js'
 
@@ -63,12 +78,16 @@ const LABEL_WORDS = new RegExp(
 // Kate", so "Bill" means the word there exactly where it would with a space.
 // Spaced around, a dash still parts ("Braces - Bill").
 const JOINER = /(?<=\p{L})[-_\u2010\u2011](?=\p{L})/gu
+// Invisible characters inside a word (a soft hyphen, a zero-width space or
+// joiner), which are no part of it: "Otti\u00adlie" is the one word Ottilie.
+const INNER_INVISIBLES = new RegExp(`(?<=[\\p{L}\\p{M}])${INVISIBLE_CHARACTER}+(?=\\p{L})`, 'gu')
 // An owner's "'s" ("Bettina's Savings"), which is no part of the name.
 const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'iu')
 
 // The fewest letters a label's word needs to be hidden as a name: "TV", "Q4"
 // and "Al" are not, nor "LA" in "Trip to LA". A given name of two ("Jo
-// allowance") is, and so is one kin, a title or a payment app names ("Zelle to Ed").
+// allowance") is, and so is one kin, a title, a role or a payment app names
+// ("Zelle to Ed", "Coach Al").
 const SHORTEST_NAME = 3
 
 /** Whether a word (wordsOf) is surely no one's beyond everyday words: an account's. */
@@ -108,7 +127,8 @@ export async function ownerLabels(db: Db): Promise<string[]> {
 
 /** A text's words, numbers and marks as written (LABEL_WORDS), shops marked, set phrases left out. */
 function writtenWords(text: string, shops: KnownShops): string[] {
-  const marked = withoutShops(text.normalize('NFC'), shops, ` ${SHOP_MARK} `)
+  const visible = text.normalize('NFC').replace(INNER_INVISIBLES, '')
+  const marked = withoutShops(visible, shops, ` ${SHOP_MARK} `)
   return withoutEverydayPhrases(marked).replace(JOINER, ' ').match(LABEL_WORDS) ?? []
 }
 
@@ -156,7 +176,8 @@ function besideAName(words: readonly string[], at: number, reading: Reading): bo
  * Whether "Bill", "June" or "April" means the word where it stands
  * (wordNames.ts), and no person is named around it: none is named after
  * "for" or kin ("Venmo June 15"), nor before a word no rule vouches for
- * ("Electric Bill Ostrowski").
+ * ("Electric Bill Ostrowski"). Right after a role, only a date ("Coach June
+ * 15", "Tutor April 2027") or a clinician's bill ("Doctor bill") is the word.
  */
 function wordNameAsWord(
   label: string,
@@ -172,11 +193,15 @@ function wordNameAsWord(
     const word = written.toLowerCase()
     if (!startsAShop(reading.shops, word) || isNamedLikeAPerson(word) || isNamerWord(word))
       return false
-    const shopWords = words.slice(from, at).map((_word, offset) => from + offset)
-    return shopWords.every((place) => plainWord(label, words, place, reading))
+    for (let place = from; place < at; place += 1) {
+      if (!plainWord(label, words, place, reading)) return false
+    }
+    return true
   }
-  if (afterAPerson(words, at) || unvouched(words, nearest(words, at, 1), reading)) return false
-  return meansTheWord(label, words, at, shop)
+  if (unvouched(words, nearest(words, at, 1), reading)) return false
+  const role = roleBefore(words, at)
+  if (role) return roleSense(words, at, role)
+  return !afterAPerson(words, at) && meansTheWord(label, words, at, shop)
 }
 
 /** Whether a written word is a name with an owner's "'s", always a person's ("Grant's"). */
@@ -188,26 +213,46 @@ function ownedName(word: string): boolean {
 
 /**
  * Whether a written word is surely no one's: never a name owned, but kin, a
- * title or a payment app's word, "Bill", "June" or "April" where it means the
- * word, any other everyday word with its own "'s" ("Lowe's" is lowes), or
- * every part of it everyday, or, where no person is named, an account's
- * word, a shop's name of one word, or a surname read as the word beside no
- * name ("Price Club").
+ * title, a role or a payment app's word (a role that is no everyday word
+ * only where it follows no hidden word), "Bill", "June" or "April" where it
+ * means the word, any other everyday word with its own "'s" ("Lowe's" is
+ * lowes), or every part of it everyday, or, where no person is named, an
+ * account's word, a shop's name of one word, or a surname read as the word
+ * beside no name ("Price Club"). After a role, what it is paid for ("Sitter
+ * tip") is no one's too.
  */
 function plainWord(label: string, words: readonly string[], at: number, reading: Reading): boolean {
   const word = words[at]!
   if (!lettered(word)) return true
   if (ownedName(word)) return false
   const whole = wordsOf(word).join('')
-  if (isNamerWord(whole)) return true
+  if (isNamerWord(whole)) return !surnameRole(label, words, at, reading)
   if (isWordName(whole)) return wordNameAsWord(label, words, at, reading)
   if (isEverydayWord(whole)) return true
-  if (afterAPerson(words, at))
+  if (afterAPerson(words, at)) {
+    if (roleBefore(words, at) && isRoleTerm(whole)) return true
     return wordsOf(word).every((part) => part.length < 2 || isEverydayWord(part))
+  }
   const asWord = !POSSESSIVE.test(word) && !besideAName(words, at, reading)
   return wordsOf(word).every(
     (part) => plainAlone(part, reading) || (asWord && isWordInLabels(part)),
   )
+}
+
+/**
+ * Whether a role right after a hidden word reads as that person's surname
+ * ("Bill Coach", "Ignatius Pastor"): one that is no everyday word ("Jane
+ * Teacher" keeps "Teacher"). Words before it are read first, never after.
+ */
+function surnameRole(
+  label: string,
+  words: readonly string[],
+  at: number,
+  reading: Reading,
+): boolean {
+  const whole = wordsOf(words[at]!).join('')
+  if (!isRole(whole) || isEverydayWord(whole) || !lettered(words[at - 1])) return false
+  return !plainWord(label, words, at - 1, reading) && longEnough(words, at - 1)
 }
 
 /** A written word as it is hidden: without an owner's "'s". */

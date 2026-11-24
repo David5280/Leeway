@@ -9,8 +9,10 @@ import { wordsOf } from '../domain/chat/billLabels.js'
 import { isNamedLikeAPerson } from '../domain/chat/givenNames.js'
 import type { PaymentPeople } from '../domain/chat/people.js'
 import { straight } from '../domain/chat/shownText.js'
+import { INVISIBLE_CHARACTER } from '../domain/plainLetters.js'
 import {
   fullNamePattern,
+  isFoundIn,
   loneNamePattern,
   maskPattern,
   replacedIn,
@@ -57,6 +59,10 @@ function shopsKept(people: PaymentPeople): Replacement[] {
     .map((shop) => ({ pattern: fullNamePattern(shop), with: null }))
 }
 
+// Spaces and invisible characters at either end of a label, which no pattern
+// matches there, so they stay outside the label as written ("\u2068Ana\u2069").
+const EDGES = new RegExp(`^(?:\\s|${INVISIBLE_CHARACTER})+|(?:\\s|${INVISIBLE_CHARACTER})+$`, 'gu')
+
 /** The names Chat hides that were read from labelled rows, in the order they are looked for. */
 interface OfPeople {
   /** What labelled rows would have been shown as, and full names: looked for first. */
@@ -68,7 +74,9 @@ interface OfPeople {
 /**
  * Each owner's label holding a word that could be a name, as it reads with
  * those words (and any other hidden name) as "someone", longest first, so
- * the label goes wherever it is written and its words nowhere else. The
+ * the label goes wherever it is written and its words nowhere else. A label
+ * where one of its words cannot be found as written reads "someone" whole,
+ * so a word missed never shows the name beside it. The
  * whole name of a shop of two words or more stays ("Trader Joe's with Joe"
  * reads "Trader Joe's with someone"), as does a shop's name of one word
  * that is no given name ("Wegmans groceries", but "Ross allowance"). Labels
@@ -86,12 +94,14 @@ function labelsAsShown(people: PaymentPeople, ofPeople: OfPeople): OfPeople {
     words.map((word) => ({ pattern: fullNamePattern(word), with: SOMEONE }))
   const shown = [...people.labels]
     .sort((a, b) => b.label.length - a.label.length)
-    .flatMap(({ label, words }) => {
+    .flatMap(({ label: written, words }) => {
+      const label = written.replace(EDGES, '')
       const order = [...shopsIn(label), ...ofPeople.phrases, ...asSomeone(words), ...ofPeople.words]
-      const reads = replacedIn(label, order)
+      const found = words.every((word) => isFoundIn(label, fullNamePattern(word)))
+      const reads = found ? replacedIn(label, order) : SOMEONE
       return reads === label ? [] : [{ label, pattern: fullNamePattern(label), with: reads }]
     })
-  const oneWord = ({ label }: { label: string }) => !/\s/.test(label.trim())
+  const oneWord = ({ label }: { label: string }) => !/\s/.test(label)
   return {
     phrases: shown.filter((one) => !oneWord(one)),
     words: shown.filter(oneWord),
