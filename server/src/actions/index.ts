@@ -69,6 +69,7 @@ import {
   planDebtPayoffAction,
 } from './planning.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
+import { getPaydayPlaybookAction } from './playbook.js'
 import { sinkingFundActions } from './sinkingFunds.js'
 import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
 import { getIdleCashAction } from './idleCash.js'
@@ -235,6 +236,7 @@ export const actionList = [
   listRecentBalancesAction,
   planDebtPayoffAction,
   getCashFlowAction,
+  getPaydayPlaybookAction,
   getPayAction,
   confirmPayAction,
   setPayAction,
