@@ -77,6 +77,8 @@ for (const [name, viewport] of PHONES) {
       await askButton.click()
       const box = page.getByRole('dialog', { name: 'Ask Leeway' })
       await expect(box.getByRole('textbox', { name: 'Your question' })).toBeFocused()
+      // Measured once it has grown from the corner, not partway through.
+      await box.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
       // Inside the screen, clear of the tab bar, its field and close button full taps.
       const opened = (await box.boundingBox())!
       expect(opened.x).toBeGreaterThanOrEqual(0)
