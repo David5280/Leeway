@@ -114,6 +114,10 @@ export const SCREENS: Screen[] = [
     name: '/plan/payday changing the pay',
     then: open('Not quite', (page) => page.getByRole('form', { name: 'Enter your pay' })),
   }),
+  at('planSection', '/plan/payday', {
+    name: '/plan/payday adding a yearly cost',
+    then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
+  }),
   at('planSection', '/plan/bills'),
   at('planSection', '/plan/bills', {
     name: '/plan/bills with cash that could earn more',

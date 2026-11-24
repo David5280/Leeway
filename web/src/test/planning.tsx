@@ -22,6 +22,7 @@ import type {
 import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
+import { fundsView } from './funds'
 import { retirementProfile } from './profile'
 
 export const TODAY = '2026-11-17'
@@ -184,6 +185,7 @@ export function planServer(handlers: Handlers, routes: Record<string, () => Resp
       get_goal_order: () => ({ monthlyCents: 0, source: 'none', goals: [] }),
       list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       list_trips: () => [],
+      list_sinking_funds: () => fundsView(),
       ...handlers,
     },
     routes,

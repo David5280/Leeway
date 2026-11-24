@@ -79,6 +79,12 @@ import {
   planDebtPayoffAction,
 } from './planning.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
+import {
+  addSinkingFundAction,
+  deleteSinkingFundAction,
+  dismissSinkingFundAction,
+  listSinkingFundsAction,
+} from './sinkingFunds.js'
 import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
 import { getIdleCashAction } from './idleCash.js'
 import {
@@ -254,6 +260,10 @@ export const actionList = [
   getPayAction,
   confirmPayAction,
   setPayAction,
+  listSinkingFundsAction,
+  addSinkingFundAction,
+  deleteSinkingFundAction,
+  dismissSinkingFundAction,
   getIdleCashAction,
   calendarStatusAction,
   connectCalendarAction,
