@@ -2,6 +2,7 @@
 // the sidebar and the number keys share. Everything here is plain data and
 // pure functions, so the shell's pieces and their tests read the same list.
 
+import { TAB_PLACES, type PlaceId } from '../../lib/places'
 import { paths } from '../../routes'
 import type { IconName } from '../ui'
 
@@ -10,14 +11,16 @@ export interface Tab {
   to: string
   label: string
   icon: IconName
+  /** The tab's color, on its link when active and across its pages (lib/places.ts). */
+  place: PlaceId
 }
 
 export const TABS: readonly Tab[] = [
-  { to: paths.home(), label: 'Home', icon: 'overview' },
-  { to: paths.spending(), label: 'Spending', icon: 'budgets' },
-  { to: paths.payday(), label: 'Payday', icon: 'wallet' },
-  { to: paths.goals(), label: 'Goals', icon: 'target' },
-  { to: paths.wealth(), label: 'Wealth', icon: 'growth' },
+  { to: paths.home(), label: 'Home', icon: 'overview', place: TAB_PLACES.home },
+  { to: paths.spending(), label: 'Spending', icon: 'budgets', place: TAB_PLACES.spending },
+  { to: paths.payday(), label: 'Payday', icon: 'wallet', place: TAB_PLACES.payday },
+  { to: paths.goals(), label: 'Goals', icon: 'target', place: TAB_PLACES.goals },
+  { to: paths.wealth(), label: 'Wealth', icon: 'growth', place: TAB_PLACES.wealth },
 ]
 
 /**

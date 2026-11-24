@@ -208,6 +208,46 @@ describe('the lit tab', () => {
   })
 })
 
+/** The page under the shell's header, which carries the place of its tab. */
+const page = () => document.querySelector('.page')!
+
+describe('place colors', () => {
+  it.each([PHONE, PHONE_SIDEWAYS, COMPUTER])(
+    'mark each tab link with its place, so the lit one wears its color (%o)',
+    (size) => {
+      windowOf(size)
+      renderShell('/goals')
+      const places = mainMenu()
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('data-place'))
+      expect(places).toEqual(['home', 'spend', 'pay', 'goal', 'wealth'])
+      expect(mainMenu().getByRole('link', { current: 'page' })).toHaveAttribute(
+        'data-place',
+        'goal',
+      )
+    },
+  )
+
+  it.each([
+    ['/', 'home'],
+    ['/spending', 'spend'],
+    ['/spending/activity', 'spend'],
+    ['/payday', 'pay'],
+    ['/payday/bills', 'pay'],
+    ['/goals', 'goal'],
+    ['/wealth', 'wealth'],
+    ['/wealth/debts', 'wealth'],
+  ])('set the page on %s to the %s place, its deeper pages included', (route, place) => {
+    renderShell(route)
+    expect(page()).toHaveAttribute('data-place', place)
+  })
+
+  it.each(['/inbox', '/settings/banks', '/chat'])('leave %s, in no tab, without one', (route) => {
+    renderShell(route)
+    expect(page()).not.toHaveAttribute('data-place')
+  })
+})
+
 describe('the tab keys', () => {
   it('switch tabs with 1 to 5', () => {
     renderShell('/inbox')

@@ -60,11 +60,17 @@
   --warn: #f2b24a;
   --warn-fill: #f2b24a;
   --warn-soft: #2d2413;
-  --over: #ff8371;
+  --over: #f7705e;
   --over-fill: #ff6b57;
   --over-soft: #341b18;
   --track: #232830;
   --shadow: none;
+  /* Tab colors until the theme loads (lib/places.ts, Night dark; Home wears the ink). */
+  --place-home: #edeff2;
+  --place-spend: #9980fe;
+  --place-pay: #98bffe;
+  --place-goal: #c77ea1;
+  --place-wealth: #34eee5;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--surface));
 
   /* Safe areas. Installed to an iPhone's home screen, the app draws edge to
@@ -617,11 +623,6 @@ select.input {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
-}
-
-.badge.accent {
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 
 /* A figure to check closely: ink on the warning tint, edged in the warning color. */
@@ -2046,10 +2047,6 @@ details.more[open] summary {
   fill: var(--muted);
 }
 
-.chart-value.accent {
-  fill: var(--accent);
-}
-
 /* A ring of card color behind text that sits over lines, so it stays legible. */
 .chart-value.halo,
 .chart-axis.halo {
@@ -2075,7 +2072,7 @@ details.more[open] summary {
 }
 
 .chart-line.actual {
-  stroke: var(--accent);
+  stroke: var(--place-mark);
   stroke-width: 2.5;
 }
 
@@ -2086,7 +2083,7 @@ details.more[open] summary {
 }
 
 .chart-line.projected {
-  stroke: var(--accent);
+  stroke: var(--place-mark);
   stroke-width: 2;
   stroke-dasharray: 1 5;
 }
@@ -2101,10 +2098,10 @@ details.more[open] summary {
  * A range of cases, such as a retirement projection: low to high, shaded.
  * The pale fill alone is too faint to see against the card, so its edge is
  * drawn in the muted ink, which holds at least 3:1 against the surface in
- * every theme, whatever accent the owner picks (6:1 in the built-in ones).
+ * every theme, whatever tab color or accent fills it (6:1 in the built-in ones).
  */
 .chart-band {
-  fill: var(--accent);
+  fill: var(--place-mark);
   fill-opacity: 0.16;
   stroke: var(--muted);
   stroke-width: 1.5;
@@ -2129,7 +2126,7 @@ details.more[open] summary {
 }
 
 .chart-dot {
-  fill: var(--accent);
+  fill: var(--place-mark);
   stroke: var(--surface);
   stroke-width: 2;
 }

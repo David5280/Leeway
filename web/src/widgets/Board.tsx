@@ -101,6 +101,8 @@ function WidgetSlot({
     <div
       className="widget rise-in"
       data-size={widget.size}
+      // The tab its figures belong to colors its card (styles/places.css).
+      data-place={entry.place}
       // --i staggers the cards rising in, in the owner's order (styles/motion.css).
       style={{
         order,

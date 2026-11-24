@@ -88,7 +88,7 @@ describe('paceEndLabels', () => {
     const current = pace()
     expect(paceEndLabels(current, paceState(current, true))).toEqual([
       { name: 'Budget', cents: 80_000, tone: 'muted' },
-      { name: 'Projected', cents: 60_000, tone: 'accent' },
+      { name: 'Projected', cents: 60_000, tone: 'ink' },
     ])
   })
 
@@ -96,7 +96,7 @@ describe('paceEndLabels', () => {
     const past = pace()
     expect(paceEndLabels(past, paceState(past, false))).toEqual([
       { name: 'Budget', cents: 80_000, tone: 'muted' },
-      { name: 'Spent', cents: 34_000, tone: 'accent' },
+      { name: 'Spent', cents: 34_000, tone: 'ink' },
     ])
   })
 

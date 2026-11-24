@@ -3,6 +3,7 @@
 
 import type { Settings } from '../api/client'
 import { DEPTH, type Mode } from './depth'
+import { placeVariables } from './places'
 
 export type Appearance = Settings['appearance']
 export type ThemeId = Appearance['theme']
@@ -56,7 +57,7 @@ export const THEMES: Record<
       warn: '#935400',
       'warn-fill': '#E89B1A',
       'warn-soft': '#FCEFD9',
-      over: '#BA3127',
+      over: '#A3281F',
       'over-fill': '#E0483B',
       'over-soft': '#FBE4E1',
       track: '#E9EBE4',
@@ -75,7 +76,7 @@ export const THEMES: Record<
       warn: '#F2B24A',
       'warn-fill': '#F2B24A',
       'warn-soft': '#2D2413',
-      over: '#FF8371',
+      over: '#F7705E',
       'over-fill': '#FF6B57',
       'over-soft': '#341B18',
       track: '#222C36',
@@ -101,7 +102,7 @@ export const THEMES: Record<
       warn: '#935400',
       'warn-fill': '#E89B1A',
       'warn-soft': '#FCEFD9',
-      over: '#BA3127',
+      over: '#A3281F',
       'over-fill': '#E0483B',
       'over-soft': '#FBE4E1',
       track: '#E8EAEE',
@@ -120,7 +121,7 @@ export const THEMES: Record<
       warn: '#F2B24A',
       'warn-fill': '#F2B24A',
       'warn-soft': '#2D2413',
-      over: '#FF8371',
+      over: '#F7705E',
       'over-fill': '#FF6B57',
       'over-soft': '#341B18',
       track: '#232830',
@@ -146,7 +147,7 @@ export const THEMES: Record<
       warn: '#806200',
       'warn-fill': '#E6B800',
       'warn-soft': '#FFF5CC',
-      over: '#C2185B',
+      over: '#A8134E',
       'over-fill': '#FF4D7A',
       'over-soft': '#FDE3EC',
       track: '#E6E6F2',
@@ -265,8 +266,10 @@ export function themeVariables(
     '--pad': compact ? '16px' : '24px',
     '--gap': compact ? '12px' : '20px',
   }
-  // Colors first, then the depth that layers the surfaces (lib/depth.ts).
+  // Colors first, then each tab's place color (lib/places.ts) and the depth
+  // that layers the surfaces (lib/depth.ts).
   for (const [key, value] of Object.entries(tokens)) vars[`--${key}`] = value
+  Object.assign(vars, placeVariables(appearance.theme, mode, tokens.ink))
   for (const [key, value] of Object.entries(DEPTH[appearance.theme][mode])) vars[`--${key}`] = value
   return { mode, vars }
 }

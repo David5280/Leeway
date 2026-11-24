@@ -90,14 +90,17 @@ describe('budgets page', () => {
     expect(used).toHaveClass('ring-ok')
   })
 
-  it('marks the amount left as over once spending passes the budgets', async () => {
+  it('says how far over, in words, once spending passes the budgets', async () => {
     fakeServer({
       get_budget: () => budgetFor([groceries], [{ categoryId: groceries.id, amountCents: 70000 }]),
       list_categories: () => [groceries],
     })
     renderBudgets()
-    const left = await screen.findByRole('region', { name: 'Left' })
-    expect(within(left).getByText('−$100')).toHaveClass('money-problem')
+    const left = await screen.findByRole('region', { name: 'Over by' })
+    // Red is never the only signal: the words say over, so no bare minus is needed.
+    expect(within(left).getByText('Over by')).toBeInTheDocument()
+    expect(within(left).getByText('$100')).toHaveClass('money-problem')
+    expect(left).not.toHaveTextContent('−')
     const used = screen.getByRole('progressbar', { name: 'Budgets used' })
     expect(used).toHaveAttribute('aria-valuetext', '117%')
     expect(used).toHaveClass('ring-over')

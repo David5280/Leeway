@@ -55,14 +55,18 @@
   text-decoration: none;
 }
 
+/* The active tab's icon and name wear its place color (styles/places.css),
+   set by the data-place on each tab link; Home's is the ink. Chat, the Inbox
+   and Settings have no place, so in the sidebar's foot they keep the ink and
+   the accent. */
 .tab.active {
-  color: var(--accent);
+  color: var(--place);
 }
 
 .tab.active svg,
 .row-tab.active svg,
 .side-link.active svg {
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent));
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--place, var(--accent)) 55%, transparent));
 }
 
 /* Top row (phone turned sideways) ------------------------------------------ */
@@ -99,7 +103,7 @@
 }
 
 .row-tab.active {
-  color: var(--accent);
+  color: var(--place);
   background: var(--surface-2);
 }
 
@@ -177,13 +181,13 @@
 }
 
 .side-link.active {
-  color: var(--ink);
+  color: var(--place, var(--ink));
   background: var(--surface-2);
   box-shadow: var(--hi);
 }
 
 .side-link.active svg {
-  color: var(--accent);
+  color: var(--place, var(--accent));
 }
 
 /* The icon holds the Inbox's unread badge at its corner, as the bell does. */

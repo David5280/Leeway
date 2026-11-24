@@ -72,7 +72,7 @@ export function ProjectionCard({ view }: { view: RetirementView }) {
         <Progress
           aria-label="Share of the income you want"
           percent={(answer.progress.value / answer.progress.target) * 100}
-          color={answer.tone === 'good' ? 'var(--good)' : 'var(--accent)'}
+          color={answer.tone === 'good' ? 'var(--good)' : 'var(--place-mark)'}
         />
       )}
       {banded && <SavingsBand meter={banded} />}

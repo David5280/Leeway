@@ -115,7 +115,8 @@ describe('the projection', () => {
     const projection = within(await card('Retirement projection'))
     expect(projection.getByText('Below target')).toBeVisible()
     const fill = projection.getByRole('progressbar').firstElementChild
-    expect(fill?.getAttribute('style')).toContain('var(--accent)')
+    // Not a status: the bar wears the page's own color (Wealth's), like its charts.
+    expect(fill?.getAttribute('style')).toContain('var(--place-mark)')
   })
 
   it('says a figure once when every case agrees, as with nothing saved', async () => {

@@ -38,7 +38,7 @@ export function paceState(pace: Pace, isCurrent: boolean) {
 export interface EndLabelSpec {
   name: string
   cents: number
-  tone: 'muted' | 'accent'
+  tone: 'muted' | 'ink'
 }
 
 /**
@@ -49,10 +49,12 @@ export interface EndLabelSpec {
 export function paceEndLabels(pace: Pace, state: ReturnType<typeof paceState>): EndLabelSpec[] {
   const labels: EndLabelSpec[] = []
   if (pace.budgetCents > 0) labels.push({ name: 'Budget', cents: pace.budgetCents, tone: 'muted' })
+  // The amounts are figures, so they read in the ink: the line beside them
+  // wears the tab's color, and a number never does (lib/places.ts).
   if (state.projecting) {
-    labels.push({ name: 'Projected', cents: pace.projectedCents, tone: 'accent' })
+    labels.push({ name: 'Projected', cents: pace.projectedCents, tone: 'ink' })
   } else if (state.lastIndex >= 0) {
-    labels.push({ name: 'Spent', cents: state.spentCents, tone: 'accent' })
+    labels.push({ name: 'Spent', cents: state.spentCents, tone: 'ink' })
   }
   return labels
 }

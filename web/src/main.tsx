@@ -20,6 +20,8 @@ import './styles/goals.css'
 import './styles/trips.css'
 import './styles/playbook.css'
 import './styles/shell.css'
+// Last: each tab's colors layer over the cards and labels drawn above.
+import './styles/places.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

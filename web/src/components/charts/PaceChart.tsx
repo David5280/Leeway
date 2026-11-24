@@ -104,8 +104,8 @@ export function PaceChart({ pace, isCurrent }: { pace: Pace; isCurrent: boolean 
           <rect x={left} y={top} width={Math.max(0, right - left)} height={bottom - top} />
         </clipPath>
         <linearGradient id={`${clipId}-fill`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.22" />
-          <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
+          <stop offset="0" stopColor="var(--place-mark)" stopOpacity="0.22" />
+          <stop offset="1" stopColor="var(--place-mark)" stopOpacity="0" />
         </linearGradient>
       </defs>
       <ValueAxis ticks={axis.values} y={y} left={left} right={right} format={format} />

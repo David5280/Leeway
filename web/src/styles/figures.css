@@ -158,12 +158,12 @@
 /* Sparkline fill ----------------------------------------------------------- */
 
 .spark-fill-top {
-  stop-color: var(--accent);
+  stop-color: var(--place-mark);
   stop-opacity: 0.32;
 }
 
 .spark-fill-bottom {
-  stop-color: var(--accent);
+  stop-color: var(--place-mark);
   stop-opacity: 0;
 }
 
@@ -172,7 +172,7 @@
 }
 
 .spark-end {
-  stroke: var(--accent);
+  stroke: var(--place-mark);
   stroke-width: 6;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -454,7 +454,7 @@
   bottom: 0;
   left: 0;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--place-mark);
 }
 
 .cbar-warn {
