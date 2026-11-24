@@ -185,7 +185,9 @@ describe('Until payday', () => {
       }),
     )
     expect(card).toHaveTextContent('Maybe $50 short of the bills due before payday.')
-    expect(within(card).getByText('$50')).not.toHaveClass('money-problem')
+    expect(within(card).getByText('$50', { selector: '.mid-number' })).not.toHaveClass(
+      'money-problem',
+    )
   })
 
   it('draws $0 to stay above once the line comes near it', async () => {

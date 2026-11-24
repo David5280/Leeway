@@ -1,6 +1,7 @@
 // Actions for the bigger picture: net worth, debt payoff and cash until payday.
 
 import { z } from 'zod'
+import { readBelowZero } from '../domain/belowZeroSource.js'
 import { budgetSummaryWithRoom } from '../domain/budgetRoom.js'
 import { debtPlans } from '../domain/debts.js'
 import { getNetWorth } from '../domain/netWorth.js'
@@ -45,13 +46,14 @@ export const getCashFlowAction = defineAction({
   name: 'get_cash_flow',
   title: 'Get cash until payday',
   description:
-    "Safe to spend until payday, the one figure every screen and summary uses: cash in counted checking accounts (available balance where known, else balance; savings, investments and retirement are left out), less every unpaid bill due by the next payday (one due on payday itself included, and an overdue one), less what an overdrawn account needs to get back to zero (overdraftCents). safeCents is never below zero; shortfallCents says how far the bills and overdrafts outrun the cash. perDayCents is safeCents per day until payday, counting today. paydaySource says where the payday came from: the paycheck budget period (exact), the main employer's next paycheck, the employer paying the most a month (detected_income, with expectedPayCents; paydayEstimate is true while its cadence is unconfirmed, from one paycheck or paydays that fit two cadences, and the payday is then the later, cautious reading), or the end of the budget period when no employer is paying yet. Pay the owner entered (set_pay) stands in for the main employer's paycheck. Spending from the budget is not subtracted. spendable is get_budget's: the budget's room held to this figure, leadCents and perDayCents being what the owner's dashboard leads with and what to quote. Amounts are in cents.",
+    "Safe to spend until payday, the one figure every screen and summary uses: cash in counted checking accounts (available balance where known, else balance; savings, investments and retirement are left out), less every unpaid bill due by the next payday (one due on payday itself included, and an overdue one), less what an overdrawn account needs to get back to zero (overdraftCents). safeCents is never below zero; shortfallCents says how far the bills and overdrafts outrun the cash. perDayCents is safeCents per day until payday, counting today. paydaySource says where the payday came from: the paycheck budget period (exact), the main employer's next paycheck, the employer paying the most a month (detected_income, with expectedPayCents; paydayEstimate is true while its cadence is unconfirmed, from one paycheck or paydays that fit two cadences, and the payday is then the later, cautious reading), or the end of the budget period when no employer is paying yet. Pay the owner entered (set_pay) stands in for the main employer's paycheck. Spending from the budget is not subtracted. spendable is get_budget's: the budget's room held to this figure, leadCents and perDayCents being what the owner's dashboard leads with and what to quote. belowZero is null while checking lasts until payday; otherwise it says when checking first goes below zero (date, today with now true when it already is), the bills that take it there, shortCents (the shortfall) and cover: amountCents (rounded up to $10) to move into checking by byDate, and fromAccountName, the savings account holding enough, or null when none does. It is worked out from these same figures, so it always agrees with safeCents and shortfallCents. Suggestions only: Leeway never moves money. Amounts are in cents.",
   input: z.object({}),
   scope: 'read',
   surface: 'all',
   run: async (ctx) => {
     const { settings } = await settingsAndToday(ctx)
     const { budget, cashFlow } = await budgetSummaryWithRoom(ctx.db, settings, ctx.now())
-    return { ...cashFlow, spendable: budget.spendable }
+    const belowZero = await readBelowZero(ctx.db, cashFlow)
+    return { ...cashFlow, spendable: budget.spendable, belowZero }
   },
 })
