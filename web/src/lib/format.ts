@@ -114,6 +114,11 @@ export function dayLabel(iso: string, locale = 'en-US'): string {
   })
 }
 
+/** "Friday", for a day in the last week, where the weekday alone is clear. */
+export function weekdayName(iso: string, locale = 'en-US'): string {
+  return asDate(iso).toLocaleDateString(locale, { weekday: 'long', timeZone: 'UTC' })
+}
+
 /** "November 2026" for a whole month, otherwise "Nov 14 to Nov 27". */
 export function periodLabel(start: string, end: string, locale = 'en-US'): string {
   const first = dateParts(start)

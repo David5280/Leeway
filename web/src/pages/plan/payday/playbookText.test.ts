@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { closeOutOf, LINES, planOf, SHORT } from '../../../test/playbook'
-import { billNames, hasCloseOut, leftoverTone, setAsideWords, shortClass } from './playbookText'
+import { closeOutOf, IDEAS, LINES, planOf, SHORT } from '../../../test/playbook'
+import {
+  billNames,
+  hasCloseOut,
+  ideaReason,
+  leftoverTone,
+  setAsideWords,
+  shortClass,
+} from './playbookText'
 
 describe('playbook words', () => {
   it('draws money left green, money over amber and nothing left plain', () => {
@@ -12,6 +19,14 @@ describe('playbook words', () => {
     expect(hasCloseOut(null)).toBe(false)
     const spentOnly = closeOutOf([{ name: 'Dining', budgetCents: 0, spentCents: 500 }])
     expect(hasCloseOut(spentOnly)).toBe(true)
+  })
+
+  it("adds a goal's target date to its reason, and leaves any other reason alone", () => {
+    const date = (iso: string) => `[${iso}]`
+    expect(IDEAS.map((idea) => ideaReason(idea, date))).toEqual([
+      'Your emergency fund is short of its target.',
+      'A goal still to reach. Due [2027-01-15].',
+    ])
   })
 
   it('names two bills, then counts the rest', () => {

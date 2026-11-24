@@ -25,7 +25,7 @@ describe('Last paycheck', () => {
   it('leads with what was left, big, bold and green', async () => {
     show(playbookOf())
     const card = await region('Last paycheck')
-    expect(card).toHaveTextContent('Oct 31 to Nov 13')
+    expect(card).toHaveTextContent('Oct 30 to Nov 12')
     expect(card).toHaveTextContent('Left over$44')
     expect(within(card).getByText('$44', { selector: '.money-xl' })).toHaveClass('money-in')
     expect(card).toHaveTextContent('You spent $230 of the $274 budgeted for everyday spending.')
@@ -69,7 +69,7 @@ describe('Ideas for what was left', () => {
     expect(await region('Last paycheck')).toHaveTextContent('A few ideas for it are below.')
     const card = await region('Ideas for what was left')
     expect(card).toHaveTextContent('Emergency fundYour emergency fund is short of its target.$30')
-    expect(card).toHaveTextContent('New laptopA goal still to reach.$14')
+    expect(card).toHaveTextContent('New laptopA goal still to reach. Due Jan 15, 2027.$14')
     expect(card).toHaveTextContent('Suggestions only. You move the money yourself.')
     await user.click(within(card).getByRole('button'))
     expect(screen.getByRole('dialog', { name: 'Ideas for what was left' })).toHaveTextContent(
