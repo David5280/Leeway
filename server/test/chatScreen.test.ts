@@ -1,9 +1,11 @@
 // Where a question in Chat was asked (chat/screen.ts): checked, kept to one
 // plain line, capped, and sent to the model as a single "Asked from" line
-// after the cached instructions, with the screens an answer may link to.
+// opening that question's own message, so the cached instructions, the
+// context and the history before it are the same from every screen.
 
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { listMessages } from '../src/domain/chat/store.js'
 import { CHAT_SYSTEM, chatContext } from '../src/chat/prompt.js'
 import {
   askedFromLine,
@@ -12,6 +14,7 @@ import {
   plainLine,
   RAW_MAX,
   SCREEN_MAX,
+  withAskedFrom,
 } from '../src/chat/screen.js'
 import { buildApp } from '../src/http/app.js'
 import { screenContextSchema, UNREADABLE_SCREEN } from '../src/http/chatBody.js'
@@ -59,17 +62,24 @@ describe('the screen line', () => {
 })
 
 describe('what the model is told about screens', () => {
-  it('ends the changing context with the one screen line, and leaves it out when unknown', () => {
-    const asked = chatContext('2026-11-20', 'USD', [], {
+  it('opens the question with the one screen line, and leaves the question alone when unknown', () => {
+    const asked = withAskedFrom('Why so high?', {
       screen: 'Payday',
       card: { label: 'Until payday', figure: '$1,180' },
     })
     expect(asked.split('\n')).toEqual([
+      'Asked from: Payday, card Until payday showing $1,180',
+      '',
+      'Why so high?',
+    ])
+    expect(withAskedFrom('Why so high?')).toBe('Why so high?')
+  })
+
+  it('keeps the screen out of the context after the instructions', () => {
+    expect(chatContext('2026-11-20', 'USD', []).split('\n')).toEqual([
       "Today is Friday, 2026-11-20. The owner's currency is USD.",
       'The owner has not saved any notes yet.',
-      'Asked from: Payday, card Until payday showing $1,180',
     ])
-    expect(chatContext('2026-11-20', 'USD', [])).not.toContain('Asked from')
   })
 
   it('says the screen line is data, and lists every screen an answer may link to', () => {
@@ -115,7 +125,7 @@ describe('POST /api/chat with a screen', () => {
   const ask = (payload: object) =>
     app.inject({ method: 'POST', url: '/api/chat', headers: { cookie }, payload })
 
-  it('gives the model the screen line, trimmed, and keeps only the question', async () => {
+  it('opens the question with the screen line, trimmed, and keeps only the question', async () => {
     const response = await ask({
       message: 'Why is this so high?',
       context: {
@@ -125,12 +135,31 @@ describe('POST /api/chat with a screen', () => {
     })
     expect(response.statusCode).toBe(200)
     const sent = provider.conversed[0]!
-    const line = sent.context.split('\n').at(-1)!
-    expect(line).toBe(
-      `Asked from: Payday, card ${`Until payday ${'x'.repeat(200)}`.slice(0, CARD_LABEL_MAX)} showing $1,180`,
-    )
-    // The question alone is sent and kept; the screen never joins the history.
-    expect(sent.messages.at(-1)).toEqual({ role: 'user', text: 'Why is this so high?' })
+    const label = `Until payday ${'x'.repeat(200)}`.slice(0, CARD_LABEL_MAX)
+    expect(sent.messages.at(-1)).toEqual({
+      role: 'user',
+      text: `Asked from: Payday, card ${label} showing $1,180\n\nWhy is this so high?`,
+    })
+    expect(sent.context).not.toContain('Asked from')
+    // The question alone is kept: the owner's history never shows the screen line.
+    expect((await listMessages(ctx.db)).map((kept) => kept.text)).toEqual([
+      'Why is this so high?',
+      'Fine.',
+    ])
+  })
+
+  it('sends the same instructions, context and history from any screen', async () => {
+    await ask({ message: 'Why so low?', context: { screen: 'Payday' } })
+    await ask({ message: 'And this?', context: { screen: 'Goals' } })
+    const [first, second] = provider.conversed
+    expect(second!.system).toBe(first!.system)
+    expect(second!.context).toBe(first!.context)
+    // The earlier question comes back as asked, without the screen it came from.
+    expect(second!.messages).toEqual([
+      { role: 'user', text: 'Why so low?' },
+      { role: 'assistant', text: 'Fine.' },
+      { role: 'user', text: 'Asked from: Goals\n\nAnd this?' },
+    ])
   })
 
   it('refuses a screen it cannot read, before anything is sent', async () => {

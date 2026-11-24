@@ -21,7 +21,7 @@ import { AppError } from '../errors.js'
 import { todayIn } from '../lib/dates.js'
 import { chatEnding, forKeeping, historyFor, joinSteps, TOO_MANY_STEPS } from './answer.js'
 import { CHAT_SYSTEM, chatContext } from './prompt.js'
-import type { ScreenContext } from './screen.js'
+import { withAskedFrom, type ScreenContext } from './screen.js'
 import { chatToolList, runChatTool, toolTitle } from './tools.js'
 
 /** The most calls one question makes: a few looks at the data, then the answer. */
@@ -130,8 +130,10 @@ async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
     paymentPeople(ctx.db),
   ])
   const today = todayIn(settings.timeZone, ctx.now())
-  const context = chatContext(today, settings.currency, facts, askedFrom)
-  const messages: AiMessage[] = [...historyFor(past), { role: 'user', text: question }]
+  const context = chatContext(today, settings.currency, facts)
+  // The screen opens this question's message only; the question alone is kept (saveExchange).
+  const asked: AiMessage = { role: 'user', text: withAskedFrom(question, askedFrom) }
+  const messages: AiMessage[] = [...historyFor(past), asked]
   const steps: string[] = []
   let ending: string | null = null
   for (let step = 0; step < MAX_STEPS && ending === null; step++) {

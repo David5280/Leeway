@@ -3,6 +3,12 @@
 // showed. The model gets it as one short line, so "why is this so high?"
 // can be answered about the right thing.
 //
+// The line opens the question's own message, not the cached instructions
+// or the context after them: everything before the newest message is the
+// same whichever screen a question comes from, so the prompt cache keeps
+// serving the earlier conversation. Only the question itself is kept, so
+// the line never joins the history the owner sees or later questions send.
+//
 // It comes from the owner's own app, but over the network like any input,
 // so it is checked at the door (http/chat.ts), kept to plain text and
 // capped here, and the model is told it is data, never instructions
@@ -47,4 +53,12 @@ export function askedFromLine({ screen, card }: ScreenContext): string {
   if (!card) return `Asked from: ${screen}`
   const figure = card.figure ? ` showing ${card.figure}` : ''
   return `Asked from: ${screen}, card ${card.label}${figure}`
+}
+
+/**
+ * The question as the model gets it: the screen line, a blank line, then
+ * the owner's words; the words alone when the screen is not known.
+ */
+export function withAskedFrom(question: string, askedFrom?: ScreenContext): string {
+  return askedFrom ? `${askedFromLine(askedFrom)}\n\n${question}` : question
 }

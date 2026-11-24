@@ -72,13 +72,11 @@ function Header({ actions, tabs }: { actions?: ReactNode; tabs?: boolean }) {
 
 /**
  * The shell's classes: its frame, and whether Ask Leeway is on it, so the
- * page leaves room for the bar (or the computer's panel, open or not).
+ * page leaves room for the bar (or the computer's panel, which sizes its
+ * own column, open or not).
  */
 function shellClass(frame: Frame, ask: AskControls | null): string {
-  const classes = ['shell', `shell-${frame}`]
-  if (ask) classes.push('shell-ask')
-  if (ask?.panelOpen && frame === 'sidebar') classes.push('shell-ask-open')
-  return classes.join(' ')
+  return ['shell', `shell-${frame}`, ...(ask ? ['shell-ask'] : [])].join(' ')
 }
 
 /**

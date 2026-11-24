@@ -5,6 +5,9 @@
 // focus goes back to what opened it, or to a fallback when that is gone. Keys are
 // heard on the whole document, so Escape and Tab still work when the
 // element that had focus was taken away (a view inside the sheet changed).
+// A press on the dimmed page closes it, but not in its first moment: the
+// release of the press that opened it (a card held to ask about it, on a
+// phone) can land on the scrim as a click, and must not close it at once.
 
 import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -12,6 +15,9 @@ import { Icon } from '../ui'
 
 /** How far down, in pixels, a swipe must travel to close the sheet. */
 export const SWIPE_CLOSE_PX = 80
+
+/** How long after opening a press on the dimmed page is ignored, in milliseconds. */
+export const SCRIM_SETTLE_MS = 350
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
@@ -74,6 +80,22 @@ function useSwipeDown(onClose: () => void) {
 }
 
 /**
+ * Closes the sheet from a press on the dimmed page, once SCRIM_SETTLE_MS
+ * have passed since it opened; a click before then is the press that
+ * opened it, let go.
+ */
+function useScrimClose(onClose: () => void) {
+  const settled = useRef(false)
+  useEffect(() => {
+    const timer = setTimeout(() => (settled.current = true), SCRIM_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  return () => {
+    if (settled.current) onClose()
+  }
+}
+
+/**
  * Keeps Tab inside the sheet: past the last element goes to the first, and
  * Shift+Tab before the first goes to the last. Focus outside the sheet (on
  * the page, or nowhere) comes back in at the near end.
@@ -128,6 +150,7 @@ export function Sheet({
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const swipe = useSwipeDown(onClose)
+  const onScrimClick = useScrimClose(onClose)
   // The latest fallback, read on close, after the sheet's last render.
   const fallback = useRef(focusOnClose)
   useEffect(() => {
@@ -164,7 +187,7 @@ export function Sheet({
 
   return createPortal(
     <div ref={layer} className="sheet-layer">
-      <div className="sheet-scrim" aria-hidden="true" onClick={onClose} />
+      <div className="sheet-scrim" aria-hidden="true" onClick={onScrimClick} />
       <div
         ref={panel}
         className="sheet"

@@ -1,7 +1,8 @@
 // Press and hold a card to ask about it (useCardHold.ts): a held press, a
 // right click or the context menu key opens Ask Leeway carrying the card's
 // name and figure, while a tap still drills, a link card still goes, and a
-// press that moves or scrolls is left alone.
+// press that moves or scrolls is left alone. However a hold is let go, it
+// neither closes the sheet it opened nor swallows a later press.
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -11,7 +12,8 @@ import { renderAsk } from '../../test/ask'
 import { COMPUTER } from '../../test/frames'
 import { Card } from '../design/Card'
 import { Money } from '../design/Money'
-import { HOLD_MS, HOLD_SLOP_PX } from './useCardHold'
+import { SCRIM_SETTLE_MS } from '../design/Sheet'
+import { HELD_CLICK_MS, HOLD_MS, HOLD_SLOP_PX } from './useCardHold'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -56,6 +58,13 @@ function hold(element: Element, { ms = HOLD_MS, drift = 0 } = {}) {
   act(() => vi.advanceTimersByTime(ms))
   fireEvent.pointerUp(element)
   vi.useRealTimers()
+}
+
+/** Holds `element` until Ask Leeway opens, leaving the press down and fake timers on. */
+function holdDown(element: Element) {
+  vi.useFakeTimers()
+  fireEvent.pointerDown(element, { isPrimary: true, button: 0, clientX: 50, clientY: 50 })
+  act(() => vi.advanceTimersByTime(HOLD_MS))
 }
 
 /** Ask Leeway's screen, ready: the bar shows once the server says Chat is on. */
@@ -153,6 +162,39 @@ describe('what a hold leaves alone', () => {
     expect(fireEvent.contextMenu(figure)).toBe(true)
     window.getSelection()!.removeAllRanges()
     expect(screen.queryByRole('complementary', { name: 'Ask Leeway' })).not.toBeInTheDocument()
+  })
+})
+
+describe('letting go of a hold', () => {
+  it('off the card, with no click to swallow, leaves a later Enter on the card working', async () => {
+    await ready({ size: COMPUTER })
+    holdDown(drillButton())
+    // Let go elsewhere: the card never sees the click that would end the hold.
+    fireEvent.pointerUp(document.body)
+    act(() => vi.advanceTimersByTime(HELD_CLICK_MS))
+    vi.useRealTimers()
+    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
+    // The panel takes focus into its box first; the owner then comes back to the card.
+    await waitFor(() => expect(within(panel).getByRole('textbox')).toHaveFocus())
+    drillButton().focus()
+    await userEvent.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Until payday' })).toBeVisible()
+  })
+
+  it("on a phone, over the sheet's dimmed page, leaves the sheet open", async () => {
+    await ready()
+    holdDown(drillButton())
+    const askSheet = () => screen.queryByRole('dialog', { name: 'Ask Leeway' })
+    const scrim = document.querySelector('.sheet-scrim')!
+    // The release lands on the scrim now over the card, as a click (iOS).
+    fireEvent.pointerUp(scrim)
+    fireEvent.click(scrim)
+    expect(askSheet()).toBeInTheDocument()
+    // A press there a moment later is the owner's own, and closes it.
+    act(() => vi.advanceTimersByTime(SCRIM_SETTLE_MS))
+    fireEvent.click(scrim)
+    vi.useRealTimers()
+    await waitFor(() => expect(askSheet()).not.toBeInTheDocument())
   })
 })
 

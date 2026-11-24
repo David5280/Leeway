@@ -57,6 +57,17 @@ export interface AskOptions {
   messages?: Message[]
   /** Drawn inside the screen, under its heading. */
   children?: ReactNode
+  /**
+   * Draws a new frame for each address, as the app's pages each draw their
+   * own <Shell>; otherwise one frame stays across addresses.
+   */
+  shellPerPage?: boolean
+}
+
+/** The screen at every address: one frame, or a new one per address with `shellPerPage`. */
+function Screen({ shellPerPage, children }: { shellPerPage: boolean; children: ReactNode }) {
+  const { pathname } = useLocation()
+  return <Shell key={shellPerPage ? pathname : undefined}>{children}</Shell>
 }
 
 /**
@@ -65,7 +76,13 @@ export interface AskOptions {
  * press the browser's Back button, and one to resize the window.
  */
 export function renderAsk(route = '/payday', options: AskOptions = {}) {
-  const { chat = true, size = { width: 390, height: 844 }, messages = [], children } = options
+  const {
+    chat = true,
+    size = { width: 390, height: 844 },
+    messages = [],
+    children,
+    shellPerPage = false,
+  } = options
   const resize = windowOf(size)
   const asked: { message: string; context?: ScreenContext }[] = []
   const handlers: Handlers = {
@@ -82,12 +99,12 @@ export function renderAsk(route = '/payday', options: AskOptions = {}) {
   })
   let navigate: NavigateFunction = () => {}
   const screen = (
-    <Shell>
+    <Screen shellPerPage={shellPerPage}>
       <h1>A screen</h1>
       <input aria-label="Note" />
       <Address onNavigate={(next) => (navigate = next)} />
       {children}
-    </Shell>
+    </Screen>
   )
   const result = renderSignedIn(
     <Routes>

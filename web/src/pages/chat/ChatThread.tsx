@@ -22,6 +22,14 @@ const ALLOWANCE_NOTE_AT = 0.75
 /** How often to look for an answer the server is still writing, in milliseconds. */
 const ANSWER_POLL_MS = 1500
 
+/**
+ * How long the conversation read counts as fresh, in milliseconds. The
+ * computer's panel is drawn anew on every tab, and this keeps a tab switch
+ * from reading it again. A question asked here refreshes it at once
+ * (useAsk.ts), so this only delays seeing one asked on another device.
+ */
+export const CONVERSATION_FRESH_MS = 5 * 60_000
+
 /** Said while the server finishes a question asked before (from another visit or tab). */
 export const STILL_ANSWERING =
   'Still answering your last question. Its answer shows here once done.'
@@ -34,6 +42,7 @@ type ChatView = Output<'get_chat'>
  */
 function useConversation() {
   return useAction('get_chat', undefined, {
+    staleTime: CONVERSATION_FRESH_MS,
     refetchInterval: (query) => (query.state.data?.answering ? ANSWER_POLL_MS : false),
   })
 }
