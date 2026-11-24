@@ -13,7 +13,10 @@ import {
 } from '../../test/paystub'
 import { Setup } from '../Setup'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 /** A fresh install with no banks, able to read a paystub unless told otherwise. */
 function serve(available = true, routes: Record<string, () => Response> = {}) {
@@ -76,8 +79,10 @@ describe('the setup paystub step', () => {
     const form = within(await screen.findByRole('form', { name: 'Review your paystub' }))
     await user.click(form.getByRole('button', { name: 'Confirm' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved. Leeway now uses your paystub.',
+    // Named as in use once the refetch after saving says it is.
+    expect(await screen.findByText('Saved. Leeway now uses your paystub.')).toHaveAttribute(
+      'role',
+      'status',
     )
     expect(server.actions('save_paystub_detail')).toHaveLength(1)
     const used = within(
@@ -112,6 +117,19 @@ describe('the setup paystub step', () => {
     const user = await toPaystubStep()
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }))
     expect(await screen.findByRole('heading', { name: 'Choose your categories' })).toBeVisible()
+  })
+
+  it('scrolls the current step into view, for a phone where the list runs across', async () => {
+    serve()
+    const scrolled: [string, unknown][] = []
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (
+      this: Element,
+      options?: boolean | ScrollIntoViewOptions,
+    ) {
+      scrolled.push([this.textContent ?? '', options])
+    })
+    await toPaystubStep()
+    expect(scrolled.at(-1)).toEqual(['5Paystub', { block: 'nearest', inline: 'center' }])
   })
 
   it('goes back to bank sync', async () => {

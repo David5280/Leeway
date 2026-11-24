@@ -9,6 +9,7 @@ import { deletePaystub, latestPaystub } from '../domain/paystubs/paystubs.js'
 import { confirmedDetailSchema } from '../domain/paystubs/confirmed.js'
 import { saveDetail } from '../domain/paystubs/detailStore.js'
 import { savePaystub, savePaystubSchema } from '../domain/paystubs/save.js'
+import { readLatestDetail } from '../domain/paystubs/applied.js'
 import { paystubUse } from '../domain/paystubs/use.js'
 import { getFinancialProfile } from '../domain/profile/profile.js'
 import { defineAction } from './action.js'
@@ -35,17 +36,21 @@ export const getPaystubUseAction = defineAction({
   name: 'get_paystub_use',
   title: 'Show what Leeway uses from the paystub',
   description:
-    'Where the newest paystub stands (none, used, stale when too old to count, or partial when saved for a pension only) and what Leeway uses from it: take-home per paycheck, whether that take-home stands for a paycheck the bank shows, and, while used, yearly gross pay, taxes withheld, the effective tax rate and retirement from pay. Totals only.',
+    'Where the newest paystub stands (none, used, stale when too old to count, or partial when saved for a pension only) and what Leeway uses from it: take-home per paycheck, whether that take-home stands for a paycheck the bank shows (and if not, why: pay the owner entered, a one-off paycheck, no schedule shown, or no matching deposit), and, while used, yearly gross pay, taxes withheld, the effective tax rate and retirement from pay. Totals only.',
   input: z.object({}),
   scope: 'read',
   surface: 'app',
   run: async (ctx) => {
     const { settings, today } = await settingsAndToday(ctx)
-    const [latest, profile] = await Promise.all([
+    const [latest, detail, profile] = await Promise.all([
       latestPaystub(ctx.db),
+      readLatestDetail(ctx.db, today),
       getFinancialProfile(ctx.db, settings, today),
     ])
-    return paystubUse(latest, profile, today)
+    const { override } = settings.pay
+    // Own pay saved beside every job leaves each job, the paystub's included, as found.
+    const ownPay = override !== null && !override.besideJobs
+    return paystubUse({ latest, detail, profile, ownPay }, today)
   },
 })
 

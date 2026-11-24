@@ -38,6 +38,8 @@ describe('get_paystub_use', () => {
       paidOn: null,
       takeHomeCents: null,
       appliedToPay: false,
+      notForPay: null,
+      retirementInUse: false,
       figures: null,
     })
   })
@@ -51,6 +53,7 @@ describe('get_paystub_use', () => {
       paidOn: '2026-11-13',
       takeHomeCents: 214_000,
       appliedToPay: true,
+      notForPay: null,
     })
     expect(use.figures?.taxes.federalWithheldCents).toBe(735_000)
     expect(use.figures?.yearlyGross?.cents).toBeGreaterThan(0)
@@ -61,7 +64,44 @@ describe('get_paystub_use', () => {
     const use = await call('get_paystub_use')
     expect(use.state).toBe('used')
     expect(use.figures).not.toBeNull()
-    expect(use.appliedToPay).toBe(false)
+    expect(use).toMatchObject({ appliedToPay: false, notForPay: 'noMatch' })
+  })
+
+  it("says the owner's own pay stands instead of the take-home", async () => {
+    await insertBiweeklyPay(ctx.db)
+    await call('set_pay', {
+      pay: { amountCents: 250_000, cadence: 'biweek', nextPayday: '2026-11-27' },
+    })
+    await saveDetail(ctx.db, acmeDetail())
+    expect(await call('get_paystub_use')).toMatchObject({
+      state: 'used',
+      appliedToPay: false,
+      notForPay: 'ownPay',
+    })
+  })
+
+  it('says a paycheck with a bonus in it is no usual one', async () => {
+    await insertBiweeklyPay(ctx.db)
+    const detail = acmeDetail()
+    await saveDetail(ctx.db, {
+      ...detail,
+      earnings: { ...detail.earnings, bonus: line(50_000) },
+    })
+    expect(await call('get_paystub_use')).toMatchObject({
+      state: 'used',
+      appliedToPay: false,
+      notForPay: 'oneOff',
+    })
+  })
+
+  it('says when the paystub shows no schedule to place its take-home', async () => {
+    await insertBiweeklyPay(ctx.db)
+    await saveDetail(ctx.db, acmeDetail({ payCadence: null }))
+    expect(await call('get_paystub_use')).toMatchObject({
+      state: 'used',
+      appliedToPay: false,
+      notForPay: 'noSchedule',
+    })
   })
 
   it('calls a paystub over six months old stale, using none of it', async () => {
@@ -75,13 +115,23 @@ describe('get_paystub_use', () => {
     })
   })
 
-  it('calls a recent paystub saved for a pension only partial', async () => {
+  it('calls a recent paystub saved for a pension only partial, its plan in use', async () => {
+    // The city paystub shows a 457, which the savings rate counts.
     await insertPaystub(ctx.db, confirmedPaystub({ payDate: '2026-11-14' }), null)
     expect(await call('get_paystub_use')).toMatchObject({
       state: 'partial',
       paidOn: '2026-11-14',
+      retirementInUse: true,
+      notForPay: null,
       figures: null,
     })
+  })
+
+  it('says a partial paystub with no pension or plan feeds no retirement figure', async () => {
+    const paystub = confirmedPaystub({ payDate: '2026-11-14' })
+    const current = { ...paystub.current, plan401k: null, plan457: null, plan403b: null }
+    await insertPaystub(ctx.db, { ...paystub, current }, null)
+    expect((await call('get_paystub_use')).retirementInUse).toBe(false)
   })
 
   it('never returns who paid or anything that names someone', async () => {

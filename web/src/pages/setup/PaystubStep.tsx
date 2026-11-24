@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useAction } from '../../api/hooks'
 import { Loading } from '../../components/ui'
 import { FullPaystubImport } from '../paystub/FullPaystubImport'
-import { PaystubInUse } from '../paystub/InUse'
+import { PaystubInUse, SavedNote } from '../paystub/InUse'
 import { NoReader } from '../paystub/NoReader'
 import { Frame, Nav } from './Frame'
 
@@ -79,9 +79,7 @@ function SavedPaystub() {
   const use = useAction('get_paystub_use')
   return (
     <div className="stack-sm">
-      <p className="notice" role="status">
-        Saved. Leeway now uses your paystub.
-      </p>
+      <SavedNote state={use.isFetching ? undefined : use.data?.state} />
       {use.data && <PaystubInUse use={use.data} />}
     </div>
   )

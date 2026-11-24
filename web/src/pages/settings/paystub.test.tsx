@@ -18,7 +18,7 @@ import { PaystubSection } from './Paystub'
 afterEach(() => vi.unstubAllGlobals())
 
 /** A server with paystub import as given; it reads the city paystub and saves what is confirmed. */
-function serve({ available = true, use = NO_PAYSTUB_IN_USE } = {}) {
+function serve({ available = true, use = NO_PAYSTUB_IN_USE, saved = paystubInUse() } = {}) {
   let inUse = use
   return fakeServer(
     {
@@ -27,7 +27,7 @@ function serve({ available = true, use = NO_PAYSTUB_IN_USE } = {}) {
       get_paystub_use: () => inUse,
       save_paystub_detail: (input) => {
         const detail = confirmedDetailSchema.parse(input.detail)
-        inUse = paystubInUse()
+        inUse = saved
         return {
           paystub: savedPaystub(),
           detail: { ...detail, paystubId: savedPaystub().id, savedAt: '2026-11-19T16:00:00.000Z' },
@@ -58,8 +58,10 @@ describe('Settings, Paystub', () => {
     const form = within(await screen.findByRole('form', { name: 'Review your paystub' }))
     await user.click(form.getByRole('button', { name: 'Confirm' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved. Leeway now uses your paystub.',
+    // Named as in use once the refetch after saving says it is.
+    expect(await screen.findByText('Saved. Leeway now uses your paystub.')).toHaveAttribute(
+      'role',
+      'status',
     )
     expect(server.actions('save_paystub_detail')).toHaveLength(1)
     expect(await figures().findByText('$92,280')).toHaveClass('review-key-value')
@@ -107,13 +109,32 @@ describe('Settings, Paystub', () => {
     )
   })
 
-  it('says plainly when the take-home does not stand for a paycheck', async () => {
-    serve({ use: paystubInUse({ appliedToPay: false }) })
+  it.each([
+    ['noMatch', /Your pay still follows your bank deposits, since none matches this take-home/],
+    ['ownPay', /Your pay follows the pay you entered yourself/],
+    ['oneOff', /This paycheck included a bonus or commission/],
+    ['noSchedule', /The paystub shows no pay date or how often you are paid/],
+  ] as const)('says plainly why the take-home is not used for pay: %s', async (reason, words) => {
+    serve({ use: paystubInUse({ appliedToPay: false, notForPay: reason }) })
     renderSignedIn(<PaystubSection />)
     expect(await screen.findByText('Not used for pay')).toBeVisible()
-    expect(screen.getByText(/Your pay still follows your bank deposits/)).toBeVisible()
-    // The other figures still count.
+    expect(screen.getByText(words)).toBeVisible()
+    // Only the one reason shows, and the other figures still count.
+    expect(screen.getAllByText(/follows|included a bonus/)).toHaveLength(1)
     expect(figures().getByText('$92,280')).toBeVisible()
+  })
+
+  it('says only "Saved." when the paystub just confirmed is too old to use', async () => {
+    const stale = { ...NO_PAYSTUB_IN_USE, state: 'stale' as const, paidOn: '2026-04-10' }
+    serve({ saved: stale })
+    renderSignedIn(<PaystubSection />)
+    const user = userEvent.setup({ applyAccept: false })
+    await user.click(await screen.findByRole('button', { name: 'Import a paystub' }))
+    await user.upload(screen.getByLabelText('Choose a paystub'), chosenFile())
+    const form = within(await screen.findByRole('form', { name: 'Review your paystub' }))
+    await user.click(form.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText(/over six months old/)).toBeVisible()
+    expect(screen.getByText('Saved.')).toHaveAttribute('role', 'status')
   })
 
   it('says a paystub over six months old is no longer used, and offers a new one', async () => {
@@ -129,9 +150,21 @@ describe('Settings, Paystub', () => {
   })
 
   it('says a paystub saved for a pension only is used only for that', async () => {
+    serve({
+      use: { ...NO_PAYSTUB_IN_USE, state: 'partial', paidOn: '2026-11-14', retirementInUse: true },
+    })
+    renderSignedIn(<PaystubSection />)
+    expect(await screen.findByText(/saved for your pension only/)).toHaveTextContent(
+      'so Leeway uses just its retirement figures.',
+    )
+  })
+
+  it('claims no retirement figures for a partial paystub that shows no pension or plan', async () => {
     serve({ use: { ...NO_PAYSTUB_IN_USE, state: 'partial', paidOn: '2026-11-14' } })
     renderSignedIn(<PaystubSection />)
-    expect(await screen.findByText(/saved for your pension only/)).toBeVisible()
+    expect(await screen.findByText(/saved for your pension only/)).toHaveTextContent(
+      'so Leeway does not use its figures yet.',
+    )
   })
 
   it('without an AI key, says what to add instead of offering an import that cannot run', async () => {

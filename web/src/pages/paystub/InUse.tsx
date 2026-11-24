@@ -14,6 +14,27 @@ import { KeyFigure } from './KeyFigures'
 
 export type PaystubUse = Output<'get_paystub_use'>
 type Figures = NonNullable<PaystubUse['figures']>
+type NotForPay = NonNullable<PaystubUse['notForPay']>
+
+/** Why the take-home is not used for pay, in plain words: one per reason the server gives. */
+const NOT_FOR_PAY_WORDS: Record<NotForPay, string> = {
+  ownPay: 'Your pay follows the pay you entered yourself, so this take-home is not used for it.',
+  oneOff:
+    'This paycheck included a bonus or commission, so it is not a usual one. Your pay follows your bank deposits.',
+  noSchedule:
+    'The paystub shows no pay date or how often you are paid, so your pay follows your bank deposits.',
+  noMatch:
+    'Your pay still follows your bank deposits, since none matches this take-home. That happens when pay is split between accounts or has changed since.',
+}
+
+/** The line shown once a paystub is saved: it names use only when Leeway uses it. */
+export function SavedNote({ state }: { state: PaystubUse['state'] | undefined }) {
+  return (
+    <p className="notice" role="status">
+      {state === 'used' ? 'Saved. Leeway now uses your paystub.' : 'Saved.'}
+    </p>
+  )
+}
 
 /** A share of gross pay to one decimal place: enough to compare, without false precision. */
 function useShare(): (rate: number) => string {
@@ -78,12 +99,7 @@ function Used({ use, figures }: { use: PaystubUse; figures: Figures }) {
         </p>
       )}
       <Withheld taxes={taxes} thisYear={thisYear} />
-      {!use.appliedToPay && use.takeHomeCents !== null && (
-        <p className="small muted">
-          Your pay still follows your bank deposits, since none matches this take-home. That happens
-          when pay is split between accounts or has changed since.
-        </p>
-      )}
+      {use.notForPay && <p className="small muted">{NOT_FOR_PAY_WORDS[use.notForPay]}</p>}
     </>
   )
 }
@@ -108,10 +124,14 @@ export function PaystubInUse({ use }: { use: PaystubUse }) {
     )
   }
   if (use.state === 'partial' || !use.figures) {
+    // Only claim retirement figures in use when the paystub feeds a pension or a plan.
+    const uses = use.retirementInUse
+      ? 'Leeway uses just its retirement figures'
+      : 'Leeway does not use its figures yet'
     return (
       <p className="notice">
-        Your latest paystub, paid {paid}, was saved for your pension only, so Leeway uses just its
-        retirement figures. Import it here to use all of it.
+        Your latest paystub, paid {paid}, was saved for your pension only, so {uses}. Import it here
+        to use all of it.
       </p>
     )
   }

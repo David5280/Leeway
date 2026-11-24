@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useAction } from '../../api/hooks'
 import { ErrorNote, Loading } from '../../components/ui'
 import { FullPaystubImport } from '../paystub/FullPaystubImport'
-import { PaystubInUse } from '../paystub/InUse'
+import { PaystubInUse, SavedNote } from '../paystub/InUse'
 import { NoReader } from '../paystub/NoReader'
 import { Section } from './Section'
 
@@ -31,11 +31,8 @@ export function PaystubSection() {
         />
       ) : (
         <>
-          {saved && (
-            <p className="notice" role="status">
-              Saved. Leeway now uses your paystub.
-            </p>
-          )}
+          {/* Named as in use only once the refetch after saving says so. */}
+          {saved && <SavedNote state={use.isFetching ? undefined : use.data?.state} />}
           <ErrorNote error={status.error ?? use.error} />
           {use.data ? <PaystubInUse use={use.data} /> : !use.error && <Loading />}
           {status.data &&

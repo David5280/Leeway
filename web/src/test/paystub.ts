@@ -163,6 +163,8 @@ export function paystubInUse(fields: Partial<PaystubUse> = {}): PaystubUse {
     paidOn: '2026-11-13',
     takeHomeCents: 261_142,
     appliedToPay: true,
+    notForPay: null,
+    retirementInUse: false,
     figures: {
       paidOn: '2026-11-13',
       yearlyGross: { cents: 9_228_000, basis: 'frequency' },
@@ -185,5 +187,7 @@ export const NO_PAYSTUB_IN_USE: PaystubUse = {
   paidOn: null,
   takeHomeCents: null,
   appliedToPay: false,
+  notForPay: null,
+  retirementInUse: false,
   figures: null,
 }
