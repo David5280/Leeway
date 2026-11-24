@@ -12,6 +12,8 @@ const SCREENS = [
   { path: '/spending/activity/import', heading: 'Import transactions' },
   { path: '/payday', heading: 'Payday' },
   { path: '/payday/bills', heading: 'Bills' },
+  { path: '/payday/pay', heading: 'Your pay' },
+  { path: '/payday/six-weeks', heading: 'Six weeks ahead' },
   { path: '/goals', heading: 'Goals' },
   { path: '/wealth', heading: 'Wealth' },
   { path: '/wealth/debts', heading: 'Debts' },

@@ -1,4 +1,4 @@
-// The warning under the answer to "Will the cash last until payday?": the day
+// The warning on Payday's cash until payday and the Home widget: the day
 // checking first goes below $0, and the move that would cover it. Both come
 // from the server's cash flow (belowZero on get_cash_flow), the same figures
 // as safe to spend and the line to payday, so the three always agree. Red

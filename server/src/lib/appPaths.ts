@@ -28,6 +28,8 @@ export const LINKABLE_SCREENS = {
   'All activity': APP_PATHS.activity,
   Payday: '/payday',
   'Bills and subscriptions': APP_PATHS.bills,
+  'Your pay': '/payday/pay',
+  'Six weeks ahead': '/payday/six-weeks',
   Goals: '/goals',
   Wealth: '/wealth',
   Debts: '/wealth/debts',

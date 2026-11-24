@@ -146,6 +146,8 @@ describe("the server's links into the app", () => {
       'All activity': paths.activity(),
       Payday: paths.payday(),
       'Bills and subscriptions': paths.bills(),
+      'Your pay': paths.pay(),
+      'Six weeks ahead': paths.sixWeeks(),
       Goals: paths.goals(),
       Wealth: paths.wealth(),
       Debts: paths.debts(),

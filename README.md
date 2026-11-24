@@ -26,10 +26,10 @@ bank, and nothing in Leeway can ever move money.
 - **Planning**: bills and subscriptions, recurring charges found for you,
   savings goals, debt payoff plans, cash until payday (and cash in checking
   that could earn more in savings, at a stated rate) and net worth.
-- **Coming up**, if you connect a calendar by its private link: six weeks of
-  paydays, bills and events like trips and weddings, with what to set aside
-  for each from what past ones cost. Only events likely to cost money are
-  kept. Nothing changes until you connect one.
+- **The weeks ahead** on Payday: the next two weeks, and six weeks a tap
+  deeper, of paydays and bills, plus events like trips and weddings if you
+  connect a calendar by its private link, with what to set aside for each
+  from what past ones cost. Only events likely to cost money are kept.
 - **Trips**: with a calendar linked, the spending around time away, from
   your calendar or from a run of travel charges, gathered on one page by part
   (getting there, a place to stay, food, things to do). Each purchase counts

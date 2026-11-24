@@ -1,12 +1,13 @@
 // The payday playbook (playbook/ on the server), Payday's lead: this
-// paycheck, pay minus the bills before payday minus what is set aside, which
-// is the everyday budget for it. On payday (the few days after one lands)
-// the close-out leads instead: what was left of the last paycheck and ideas
-// for it, then this paycheck. Each card opens its math. What is set aside is
+// paycheck, pay minus this pay period's bills minus what is set aside, which
+// is what it leaves for everyday spending, the same all period. On payday
+// (the few days after one lands) the close-out leads instead: what was left
+// of the last paycheck and ideas for it, then this paycheck. Each card opens its math. What is set aside is
 // only totalled here because the Goals tab explains it, and whether checking
 // dips before payday is the cash line's job, just below. The playbook only
 // suggests: Leeway never moves money.
 
+import { Link } from 'react-router-dom'
 import type { CloseOut, LeftoverSuggestion, Playbook as PlaybookView } from '../../../api/client'
 import { usePaydayPlaybook } from '../../../api/playbook'
 import { Card } from '../../../components/design/Card'
@@ -17,6 +18,7 @@ import { LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { closeOutDrill, planDrill, suggestionsDrill } from '../../../lib/drills/playbook'
 import { dayLabel, longDate, periodLabel, shortDate } from '../../../lib/format'
+import { paths } from '../../../routes'
 import { PlanRows } from './PlanRows'
 import {
   hasCloseOut,
@@ -87,31 +89,34 @@ function LeftoverIdeas({ ideas, leftover }: { ideas: LeftoverSuggestion[]; lefto
   )
 }
 
-/** The big figure: the everyday budget this paycheck leaves, or safe to spend without pay. */
+/**
+ * The big figure: what this paycheck leaves for everyday spending, which
+ * holds still all pay period; or safe to spend while pay is unknown.
+ */
 function PlanFigure({ playbook }: { playbook: PlaybookView }) {
   const { settings } = useApp()
   const { plan } = playbook
   const payday = <b>{shortDate(plan.nextPayday, settings.locale)}</b>
-  if (plan.paycheckCents === null || plan.leftCents === null) {
+  if (plan.paycheckCents === null || plan.everydayCents === null) {
     return (
       <KeyFigure
         label="Safe to spend now"
         cents={plan.safeToSpendCents}
-        caption={<>Add your pay under Your pay to see what each paycheck leaves before {payday}.</>}
+        caption={<>Add your pay to see what each paycheck leaves before {payday}.</>}
       />
     )
   }
   return (
     <KeyFigure
-      label="Your everyday budget"
-      cents={plan.leftCents}
-      tone={plan.leftCents < 0 ? 'warn' : 'neutral'}
-      caption={<>For this paycheck, until payday {payday}.</>}
+      label="Left for everyday spending"
+      cents={plan.everydayCents}
+      tone={plan.everydayCents < 0 ? 'warn' : 'neutral'}
+      caption={<>From this paycheck, until payday {payday}.</>}
     />
   )
 }
 
-/** The new paycheck: what it covers before the next payday, and what it leaves. */
+/** The new paycheck: what it covers this pay period, and what it leaves. */
 function ThisPaycheck({ playbook }: { playbook: PlaybookView }) {
   const { settings } = useApp()
   const date = (iso: string) => dayLabel(iso, settings.locale)
@@ -120,8 +125,19 @@ function ThisPaycheck({ playbook }: { playbook: PlaybookView }) {
       {/* No payday aside: the figure below already names it, and on a phone it crowds the title. */}
       <SectionHead icon="sunrise" title="This paycheck" />
       <PlanFigure playbook={playbook} />
-      <PlanRows plan={playbook.plan} />
+      <PlanRows plan={playbook.plan} estimate={playbook.paydayEstimate} />
     </Card>
+  )
+}
+
+/** While pay is unknown, the way to add it; outside the card, which is one button itself. */
+function AddPay() {
+  return (
+    <p className="small">
+      <Link to={paths.pay()} className="linkbtn">
+        Add your pay
+      </Link>
+    </p>
   )
 }
 
@@ -141,6 +157,7 @@ export function Playbook() {
       {closeOut && <LastPaycheck closeOut={closeOut} ideas={ideas} />}
       {ideas && <LeftoverIdeas ideas={data.suggestions} leftover={leftover} />}
       <ThisPaycheck playbook={data} />
+      {data.plan.paycheckCents === null && <AddPay />}
     </>
   )
 }

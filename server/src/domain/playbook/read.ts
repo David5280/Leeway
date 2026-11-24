@@ -6,7 +6,7 @@
 import type { Db } from '../../db/pool.js'
 import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import { cadenceOf } from '../../lib/periods.js'
-import { readBelowZero } from '../belowZeroSource.js'
+import { listBills } from '../bills.js'
 import { setAsides } from '../budgetReport.js'
 import { budgetSummaryWithRoom } from '../budgetRoom.js'
 import type { CashFlow } from '../cashFlow.js'
@@ -48,8 +48,9 @@ async function readCloseOut(db: Db, settings: Settings, period: ClosedPeriod): P
 }
 
 /**
- * The new paycheck's plan, from the cash flow already read and what can be
- * spent now: the figure get_cash_flow's spendable leads with (spendable.ts).
+ * The new paycheck's plan: every bill due from the latest payday to the
+ * next, and what can be spent now, the figure get_cash_flow's spendable
+ * leads with (spendable.ts). Without a pay schedule the period starts today.
  */
 async function readPlan(
   db: Db,
@@ -57,19 +58,20 @@ async function readPlan(
   today: IsoDate,
   flow: CashFlow,
   spendableCents: number,
-  payCadence: ClosedPeriod['cadence'] | null,
+  period: ClosedPeriod | null,
 ): Promise<PaycheckPlan> {
   const held = await setAsides(db, settings, today)
-  const belowZero = await readBelowZero(db, flow)
+  const bills = await listBills(db, today)
   return planPaycheck({
     paycheckCents: flow.expectedPayCents,
+    periodStart: period?.end ?? today,
     nextPayday: flow.nextPayday,
-    billsDue: flow.billsDue,
+    today,
+    bills,
     setAsides: held,
     periodCadence: cadenceOf(periodConfig(settings)),
-    payCadence,
+    payCadence: period?.cadence ?? null,
     safeToSpendCents: spendableCents,
-    belowZero,
   })
 }
 
@@ -113,6 +115,6 @@ export async function readPlaybook(
     paydayEstimate: flow.paydayEstimate,
     closeOut: closed,
     suggestions,
-    plan: await readPlan(db, settings, today, flow, spendableCents, period?.cadence ?? null),
+    plan: await readPlan(db, settings, today, flow, spendableCents, period),
   }
 }

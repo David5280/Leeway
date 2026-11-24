@@ -164,31 +164,50 @@ describe('get_payday_playbook', () => {
     expect(plan.paycheckCents).toBe(210_000)
     expect(plan.safeToSpendCents).toBe(flow.spendable!.leadCents)
     expect(plan.lines).toEqual([
-      { kind: 'bill', name: 'Rent', amountCents: 150_000, dueDate: '2026-11-25', overdue: false },
+      {
+        kind: 'bill',
+        name: 'Rent',
+        amountCents: 150_000,
+        dueDate: '2026-11-25',
+        paid: false,
+        overdue: false,
+      },
       {
         kind: 'sinking_fund',
         name: 'Car insurance',
         amountCents: convertCadence(funds[0]!.perPeriodCents, period, 'biweek'),
         dueDate: null,
+        paid: false,
         overdue: false,
       },
     ])
-    expect(plan.leftCents).toBe(210_000 - plan.billsCents - plan.setAsideCents)
-    expect(plan.short).toBeNull()
+    expect(plan.everydayCents).toBe(210_000 - plan.billsCents - plan.setAsideCents)
   })
 
-  it('notes when checking runs short before payday', async () => {
-    await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 100_000 }).then(
-      ({ accountId }) => insertPaychecks(ctx.db, accountId, BIWEEKLY, 210_000),
-    )
+  it('counts a bill already paid this pay period, so the figure holds still once rent clears', async () => {
+    const accountId = await paidChecking()
     await call('create_bill', {
       name: 'Rent',
       amountCents: 150_000,
       cadence: 'month',
-      anchorDate: '2026-11-25',
+      anchorDate: '2026-10-25',
+      matchPattern: 'LANDLORD',
     })
-    const { plan } = await call('get_payday_playbook')
-    expect(plan.short).toMatchObject({ date: '2026-11-25', now: false, shortCents: 50_000 })
+    const before = (await call('get_payday_playbook')).plan
+    // Nov 26: rent cleared the day after it was due.
+    await insertBankTransaction(ctx.db, accountId, {
+      date: '2026-11-26',
+      name: 'LANDLORD RENT',
+      amountCents: 150_000,
+    })
+    ctx.setNow(new Date('2026-11-26T18:00:00Z'))
+    const after = (await call('get_payday_playbook')).plan
+    const flow = await call('get_cash_flow')
+    expect(after.lines[0]).toMatchObject({ name: 'Rent', dueDate: '2026-11-25', paid: true })
+    expect(after.everydayCents).toBe(before.everydayCents)
+    expect(after.everydayCents).toBe(210_000 - 150_000 - after.setAsideCents)
+    // The cash line no longer waits on it.
+    expect(flow.billsDue.map((bill) => bill.name)).not.toContain('Rent')
   })
 
   it('shows no account number anywhere', async () => {
@@ -210,6 +229,6 @@ describe('get_payday_playbook', () => {
       paydaySource: 'period_end',
     })
     expect(playbook.plan.paycheckCents).toBeNull()
-    expect(playbook.plan.leftCents).toBeNull()
+    expect(playbook.plan.everydayCents).toBeNull()
   })
 })

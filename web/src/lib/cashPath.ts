@@ -1,5 +1,5 @@
 // The cash in checking from today to payday, drawn as it drops with each
-// bill: "Will the cash last until payday?" Pure. Day-to-day spending is left
+// bill: Payday's cash until payday. Pure. Day-to-day spending is left
 // out, since the line shows what the bills leave. The line starts at what
 // checking holds now, less what an overdrawn account owes; a bill already
 // overdue, or due today, is a step down on today.

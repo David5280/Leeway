@@ -43,7 +43,7 @@ test('pay found in the paychecks is confirmed in one tap, then replaced by the o
   // One paycheck so far: how often it comes is only a guess, whatever today is.
   await addPaychecks(page, accountId, [0])
   await page.goto('/payday/pay')
-  const pay = page.getByRole('region', { name: 'Your pay' })
+  const pay = page.getByRole('region', { name: 'Your pay', exact: true })
   await expect(pay.getByText('Estimate')).toBeVisible()
 
   // Three more, two weeks apart.

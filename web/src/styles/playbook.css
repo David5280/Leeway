@@ -20,3 +20,21 @@
 .playbook-row-name {
   font-weight: 500;
 }
+
+/* The new paycheck's sum ends on its own total, set off by a heavier rule. */
+.playbook-sum {
+  display: block;
+}
+
+.playbook-rows .list-row.playbook-total {
+  border-top: 2px solid var(--ink);
+}
+
+.playbook-total .playbook-row-name {
+  font-weight: 600;
+}
+
+/* Safe to spend stands apart from the sum: a gap above, so it never reads as its total. */
+.playbook-rows .list-row.playbook-apart {
+  margin-top: 12px;
+}

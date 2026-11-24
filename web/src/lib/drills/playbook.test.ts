@@ -32,20 +32,21 @@ describe('suggestionsDrill', () => {
 })
 
 describe('planDrill', () => {
-  it('takes bills and set-asides from the paycheck, marking an overdue bill', () => {
+  it('takes bills and set-asides from the paycheck, marking a paid and an overdue bill', () => {
     const overdue = { ...LINES[0]!, overdue: true }
     const drill = planDrill(planOf([overdue, ...LINES.slice(1)]), date)
     expect(drill.figure).toEqual({ cents: 69_000, tone: 'neutral' })
     expect(mathSentence(drill.math, money)).toBe(
-      'Left for everyday spending $690 = Paycheck $2100 minus bills before payday $1260 minus set aside $150',
+      'Left for everyday spending $690 = Paycheck $2100 minus bills this pay period $1260 minus set aside $150',
     )
     expect(drill.items?.rows.map((row) => row.detail)).toEqual([
       'Bill, overdue',
-      'Bill, due 2026-11-22',
+      'Bill, paid, due 2026-11-14',
       'Goal or trip',
       'Yearly cost',
     ])
     expect(drill.items?.rows[0]?.value).toEqual({ cents: 120_000, tone: 'warn' })
+    expect(drill.subtitle).toMatch(/^2026-11-13 until payday 2026-11-27\./)
   })
 
   it('shows a paycheck that does not cover everything in amber', () => {
@@ -63,7 +64,7 @@ describe('planDrill', () => {
   it('names what is not known yet in the math while pay is unknown, never safe to spend twice', () => {
     const drill = planDrill(planOf(LINES, null), date)
     expect(mathSentence(drill.math, money)).toBe(
-      'Left for everyday spending not known yet = Paycheck not added yet minus bills before payday $1260 minus set aside $150',
+      'Left for everyday spending not known yet = Paycheck not added yet minus bills this pay period $1260 minus set aside $150',
     )
   })
 })

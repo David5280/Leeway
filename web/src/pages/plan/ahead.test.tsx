@@ -29,6 +29,8 @@ describe('Six weeks ahead', () => {
     expect(screen.getByRole('region', { name: 'Next week' })).toHaveTextContent(
       'RentDue Wed, Nov 25$1,500',
     )
+    // No calendar, so no trips to find: the card stays out of sight.
+    expect(screen.queryByRole('region', { name: 'Trips' })).not.toBeInTheDocument()
   })
 
   it('lays out the weeks ahead, with what to set aside and trips opening their page', async () => {

@@ -72,16 +72,38 @@ export const IDEAS: LeftoverSuggestion[] = [
   },
 ]
 
-/** Rent and a phone bill before payday, a goal and a yearly cost set aside. */
+/** Rent and a phone bill this pay period, a goal and a yearly cost set aside. */
 export const LINES: PlanLine[] = [
-  { kind: 'bill', name: 'Rent', amountCents: 120_000, dueDate: '2026-11-20', overdue: false },
-  { kind: 'bill', name: 'Phone', amountCents: 6_000, dueDate: '2026-11-22', overdue: false },
-  { kind: 'set_aside', name: 'New laptop', amountCents: 10_000, dueDate: null, overdue: false },
+  {
+    kind: 'bill',
+    name: 'Rent',
+    amountCents: 120_000,
+    dueDate: '2026-11-20',
+    paid: false,
+    overdue: false,
+  },
+  {
+    kind: 'bill',
+    name: 'Phone',
+    amountCents: 6_000,
+    dueDate: '2026-11-14',
+    paid: true,
+    overdue: false,
+  },
+  {
+    kind: 'set_aside',
+    name: 'New laptop',
+    amountCents: 10_000,
+    dueDate: null,
+    paid: false,
+    overdue: false,
+  },
   {
     kind: 'sinking_fund',
     name: 'Car insurance',
     amountCents: 5_000,
     dueDate: null,
+    paid: false,
     overdue: false,
   },
 ]
@@ -98,13 +120,13 @@ export function planOf(
   const setAsideCents = total(false)
   return {
     paycheckCents,
+    periodStart: LAST_PAYDAY,
     nextPayday: NEXT_PAYDAY,
     lines,
     billsCents,
     setAsideCents,
-    leftCents: paycheckCents === null ? null : paycheckCents - billsCents - setAsideCents,
+    everydayCents: paycheckCents === null ? null : paycheckCents - billsCents - setAsideCents,
     safeToSpendCents: 45_000,
-    short: null,
     ...more,
   }
 }

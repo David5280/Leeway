@@ -182,7 +182,7 @@ describe('a transaction’s trip', () => {
 })
 
 describe('without a calendar', () => {
-  it('shows no trips, since Coming up where they are listed is not there', async () => {
+  it('shows no trips, since the six weeks ahead list them only with a calendar', async () => {
     const flight = await charge('2026-07-01', 30000)
     await charge('2026-07-03', 15000)
     expect(await call('list_trips')).toEqual([])

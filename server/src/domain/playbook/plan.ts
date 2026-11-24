@@ -1,19 +1,20 @@
-// The plan for the new paycheck: the bills due before the next payday, the
+// The plan for the new paycheck: every bill due in this pay period, the
 // set-asides, and what that leaves for everyday spending. Pure. Suggestions
 // only: nothing here, or anywhere, moves money.
 //
-// Every figure is one Leeway already shows, so the plan can never disagree:
-// the bills are the cash flow's bills before payday (cashFlow.ts), and the
-// set-asides are the very list the budget's room holds back once (goals,
-// trip budgets and sinking funds, setAsides in budgetReport.ts). Nothing is
-// counted twice: a set-aside is never a bill, and the plan only lays them
-// side by side.
+// The figure must hold still for the whole pay period, so the bills are all
+// those due from the latest payday up to the next, paid or not: rent paying
+// mid-period changes nothing. What checking still has to cover before
+// payday is the cash flow's question (cashFlow.ts), quoted here only as safe
+// to spend. The set-asides are the very list the budget's room holds back
+// (goals, trip budgets and sinking funds, setAsides in budgetReport.ts).
+// Nothing is counted twice: a set-aside is never a bill.
 
-import type { IsoDate } from '../../lib/dates.js'
+import { addDays, type IsoDate } from '../../lib/dates.js'
 import { convertCadence, type Cadence } from '../../lib/periods.js'
+import { occurrences } from '../../lib/schedule.js'
+import type { Bill } from '../bills.js'
 import type { SetAside } from '../budget.js'
-import type { BelowZero } from '../belowZero.js'
-import type { BillDue } from '../cashFlow.js'
 
 export type PlanLineKind = 'bill' | 'set_aside' | 'sinking_fund'
 
@@ -23,64 +24,75 @@ export interface PlanLine {
   amountCents: number
   /** When a bill is due; null for a set-aside. */
   dueDate: IsoDate | null
+  /** A bill already paid for this due date. */
+  paid: boolean
   /** A bill whose date has passed unpaid. */
   overdue: boolean
-}
-
-/** When checking runs short before payday, as belowZero.ts finds it, without account names. */
-export interface ShortNote {
-  /** The first day checking is below zero. */
-  date: IsoDate
-  /** Already below zero today. */
-  now: boolean
-  shortCents: number
-  /** A plain amount to move in, by a day, to cover it. */
-  coverCents: number
-  coverBy: IsoDate
-  /** Whether a savings account holds enough to cover it. */
-  savingsCanCover: boolean
 }
 
 export interface PaycheckPlan {
   /** The usual paycheck; null when no paychecks were found. */
   paycheckCents: number | null
+  /** The pay period's first day: the latest payday, or today while no pay schedule is known. */
+  periodStart: IsoDate
+  /** The next payday, the first day of the next pay period. */
   nextPayday: IsoDate
   lines: PlanLine[]
+  /** Every bill due in the pay period, paid or not. */
   billsCents: number
   setAsideCents: number
-  /** The paycheck less the bills and set-asides: for everyday spending. Null without a paycheck. */
-  leftCents: number | null
+  /**
+   * The paycheck less the pay period's bills and the set-asides, left for
+   * everyday spending. It stays put all period. Null without a paycheck.
+   */
+  everydayCents: number | null
   /**
    * What can be spent now, the figure every screen leads with: the lesser of
    * the budget's room after set-asides and cash safe to spend (spendable.ts).
    */
   safeToSpendCents: number
-  short: ShortNote | null
 }
 
 export interface PlanFacts {
   paycheckCents: number | null
+  periodStart: IsoDate
   nextPayday: IsoDate
-  billsDue: BillDue[]
+  today: IsoDate
+  bills: Bill[]
   setAsides: SetAside[]
   /** The budget period's cadence, which each set-aside is a share of. */
   periodCadence: Cadence
   /** How often pay comes; null when not known. */
   payCadence: Cadence | null
   safeToSpendCents: number
-  belowZero: BelowZero | null
 }
 
 const total = (lines: PlanLine[]) => lines.reduce((sum, line) => sum + line.amountCents, 0)
 
-function billLine(bill: BillDue): PlanLine {
-  return {
-    kind: 'bill',
-    name: bill.name,
-    amountCents: bill.amountCents,
-    dueDate: bill.dueDate,
-    overdue: bill.overdue,
-  }
+/**
+ * Every due date of every bill from `start` up to, not including, the next
+ * payday, soonest first. A bill due on payday belongs to the paycheck that
+ * lands that day. Dates before the bill's first due date (its anchor) never
+ * count. A date before the bill's next unpaid one is paid (scheduleOf).
+ */
+export function periodBills(bills: Bill[], start: IsoDate, payday: IsoDate, today: IsoDate) {
+  return bills
+    .flatMap((bill) =>
+      occurrences(bill.anchorDate, bill.cadence, start, addDays(payday, -1))
+        .filter((dueDate) => dueDate >= bill.anchorDate)
+        .map((dueDate): PlanLine => {
+          const paid = dueDate < bill.nextDueDate
+          return {
+            kind: 'bill',
+            name: bill.name,
+            amountCents: bill.amountCents,
+            dueDate,
+            paid,
+            overdue: !paid && dueDate < today,
+          }
+        }),
+    )
+    .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || a.name.localeCompare(b.name))
 }
 
 /**
@@ -95,26 +107,14 @@ function setAsideLine(held: SetAside, facts: PlanFacts): PlanLine {
     name: held.name,
     amountCents: convertCadence(held.amountCents, facts.periodCadence, to),
     dueDate: null,
+    paid: false,
     overdue: false,
-  }
-}
-
-/** The short note without the account it would come from: names stay out of the plan. */
-function shortNote(below: BelowZero | null): ShortNote | null {
-  if (!below) return null
-  return {
-    date: below.date,
-    now: below.now,
-    shortCents: below.shortCents,
-    coverCents: below.cover.amountCents,
-    coverBy: below.cover.byDate,
-    savingsCanCover: below.cover.fromAccountName !== null,
   }
 }
 
 /** The plan for the new paycheck. */
 export function planPaycheck(facts: PlanFacts): PaycheckPlan {
-  const bills = facts.billsDue.map(billLine)
+  const bills = periodBills(facts.bills, facts.periodStart, facts.nextPayday, facts.today)
   const held = facts.setAsides
     .filter((one) => one.amountCents > 0)
     .map((one) => setAsideLine(one, facts))
@@ -122,13 +122,13 @@ export function planPaycheck(facts: PlanFacts): PaycheckPlan {
   const setAsideCents = total(held)
   return {
     paycheckCents: facts.paycheckCents,
+    periodStart: facts.periodStart,
     nextPayday: facts.nextPayday,
     lines: [...bills, ...held],
     billsCents,
     setAsideCents,
-    leftCents:
+    everydayCents:
       facts.paycheckCents === null ? null : facts.paycheckCents - billsCents - setAsideCents,
     safeToSpendCents: facts.safeToSpendCents,
-    short: shortNote(facts.belowZero),
   }
 }

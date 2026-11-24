@@ -181,10 +181,15 @@ function runsOf(weeks: Week[]): [number, Week[]][] {
   return runs
 }
 
-/** Recent and coming trips, each opening its page; loaded on its own, so the weeks never wait on it. */
-function Trips() {
+/**
+ * Recent and coming trips, each opening its page; loaded on its own, so the
+ * weeks never wait on it. Without a calendar no trip can be found, so the
+ * card stays out of sight unless one is listed.
+ */
+function Trips({ connected }: { connected: boolean }) {
   const { settings } = useApp()
   const trips = useAction('list_trips')
+  if (!connected && !trips.data?.length) return null
   return (
     <Card static="list" label="Trips" className="stack-sm">
       <h2>Trips</h2>
@@ -206,7 +211,7 @@ function Trips() {
 export function AheadSection() {
   const forecast = useAction('get_forecast')
   if (!forecast.data) return <LoadingOrError error={forecast.error} />
-  const { today, weeks, note } = forecast.data
+  const { today, weeks, note, connected } = forecast.data
   return (
     <>
       {/* Some events may be missing from the weeks below, so they say so, quietly. */}
@@ -222,7 +227,7 @@ export function AheadSection() {
           <WeekCard key={run[0]!.start} week={run[0]!} index={first} today={today} />
         ),
       )}
-      <Trips />
+      <Trips connected={connected} />
     </>
   )
 }

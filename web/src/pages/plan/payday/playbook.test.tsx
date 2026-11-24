@@ -1,5 +1,6 @@
 // The payday playbook, Payday's lead: this paycheck as a sum (pay, minus
-// bills before payday, minus what is set aside, is the everyday budget),
+// this pay period's bills, minus what is set aside, is what is left for
+// everyday spending), with safe to spend apart from it,
 // and on payday what was left of the last paycheck (green) or how far
 // spending ran over (amber) first, with ideas for the leftover.
 
@@ -86,33 +87,63 @@ describe('Ideas for what was left', () => {
   })
 })
 
+/** A shown amount as cents: "+$2,100" is 210000 and "−$1,260" is -126000. */
+const cents = (text: string) => {
+  const value = Math.round(Number(text.replace(/[^0-9.]/g, '')) * 100)
+  return text.startsWith('−') ? -value : value
+}
+
 describe('This paycheck', () => {
-  it('reads as a sum: pay, minus bills, minus set aside, is the everyday budget', async () => {
+  it('reads as a sum that ends on its own total, which the shown parts add up to', async () => {
     show(playbookOf())
     const card = await region('This paycheck')
-    expect(card).toHaveTextContent('Your everyday budget$690')
-    expect(card).toHaveTextContent('For this paycheck, until payday Nov 27.')
-    expect(within(card).getByText('+$2,100')).toHaveClass('money-in')
-    expect(card).toHaveTextContent('Bills before paydayRent and Phone−$1,260')
-    expect(card).toHaveTextContent('Set asideGoals, trips and yearly costs−$150')
-    // The parts add up to the figure: $2,100 − $1,260 − $150 = $690.
-    const plan = planOf()
-    expect(plan.paycheckCents! - plan.billsCents - plan.setAsideCents).toBe(plan.leftCents)
-    expect(plan.leftCents).toBe(69_000)
+    expect(card).toHaveTextContent('Left for everyday spending$690')
+    expect(card).toHaveTextContent('From this paycheck, until payday Nov 27.')
+    const sum = within(card).getByRole('group', { name: 'How this paycheck adds up' })
+    const rows = Array.from(sum.querySelectorAll('.list-row'))
+    const names = rows.map((row) => row.querySelector('.playbook-row-name')!.textContent)
+    expect(names).toEqual([
+      'Pay',
+      'Bills this pay period',
+      'Set aside',
+      'Left for everyday spending',
+    ])
+    const amounts = rows.map((row) => row.querySelector('.money')!.textContent!)
+    expect(amounts).toEqual(['+$2,100', '−$1,260', '−$150', '$690'])
+    // What the screen shows adds up: the parts make the total line, and the figure above.
+    const [pay, bills, setAside, total] = amounts.map(cents)
+    expect(pay! + bills! + setAside!).toBe(total)
+    expect(rows.at(-1)).toHaveClass('playbook-total')
+    expect(within(sum).getByText('+$2,100')).toHaveClass('money-in')
   })
 
-  it('ends with safe to spend now, the figure Home and Spending lead with', async () => {
+  it('shows safe to spend now apart from the sum, labelled, so it never reads as the total', async () => {
     show(playbookOf({ plan: planOf(undefined, undefined, { safeToSpendCents: 41_234 }) }))
-    expect(await region('This paycheck')).toHaveTextContent('Safe to spend now$412')
+    const card = await region('This paycheck')
+    const sum = within(card).getByRole('group', { name: 'How this paycheck adds up' })
+    expect(sum).not.toHaveTextContent('Safe to spend')
+    expect(card).toHaveTextContent(
+      'Safe to spend nowWhat you can spend today, as Home shows it$412',
+    )
   })
 
-  it('leads with safe to spend while pay is unknown, with plain totals', async () => {
+  it('says when the pay is only an estimate', async () => {
+    show(playbookOf({ paydayEstimate: true }))
+    const card = await region('This paycheck')
+    expect(card).toHaveTextContent('PayAn estimate until more paychecks show+$2,100')
+  })
+
+  it('leads with safe to spend while pay is unknown, with plain totals and a way to add pay', async () => {
     show(playbookOf({ plan: planOf(undefined, null) }))
     const card = await region('This paycheck')
     expect(card).toHaveTextContent('Safe to spend now$450')
-    expect(card).toHaveTextContent('Add your pay under Your pay')
-    expect(card).toHaveTextContent('Bills before paydayRent and Phone$1,260')
+    expect(card).toHaveTextContent('Add your pay to see')
+    expect(card).toHaveTextContent('Bills this pay periodRent and Phone$1,260')
     expect(card).not.toHaveTextContent('−')
-    expect(card).not.toHaveTextContent('Your everyday budget')
+    expect(card).not.toHaveTextContent('Left for everyday spending')
+    expect(screen.getByRole('link', { name: 'Add your pay' })).toHaveAttribute(
+      'href',
+      '/payday/pay',
+    )
   })
 })

@@ -84,9 +84,9 @@ export function suggestionsDrill(
 /** The paycheck less what is spoken for; while pay is unknown, the same math with the gaps named. */
 function planMath(plan: PaycheckPlan): DrillDown['math'] {
   const note =
-    'Bills due before your next payday come first, then this paycheck’s share of goals, trips and yearly costs. What is left is for everyday spending.'
+    'Every bill due this pay period comes first, paid or not, so the figure stays the same as they clear. Then this paycheck’s share of goals, trips and yearly costs. What is left is for everyday spending.'
   const spokenFor: MathTerm[] = [
-    { label: 'bills before payday', value: { cents: plan.billsCents }, op: 'minus' },
+    { label: 'bills this pay period', value: { cents: plan.billsCents }, op: 'minus' },
     { label: 'set aside', value: { cents: plan.setAsideCents }, op: 'minus' },
   ]
   if (plan.paycheckCents === null) {
@@ -96,7 +96,7 @@ function planMath(plan: PaycheckPlan): DrillDown['math'] {
       note: `${note} Add your pay to see what each paycheck leaves. Until then, the figure is what is safe to spend now.`,
     }
   }
-  const left = plan.leftCents ?? 0
+  const left = plan.everydayCents ?? 0
   return {
     terms: [{ label: 'Paycheck', value: { cents: plan.paycheckCents, tone: 'in' } }, ...spokenFor],
     result: {
@@ -107,9 +107,15 @@ function planMath(plan: PaycheckPlan): DrillDown['math'] {
   }
 }
 
+/** When a bill is due, and whether it is paid or overdue. */
+function dueWords(line: PlanLine, day: string): string {
+  if (line.paid) return `paid, due ${day}`
+  return line.overdue ? 'overdue' : `due ${day}`
+}
+
 /** One line of the plan: its name, what kind it is and, for a bill, when it is due. */
 function lineRow(line: PlanLine, index: number, date: Dates): DrillItem {
-  const due = line.dueDate && (line.overdue ? 'overdue' : `due ${date(line.dueDate)}`)
+  const due = line.dueDate && dueWords(line, date(line.dueDate))
   return {
     key: `${line.kind}-${index}`,
     label: line.name,
@@ -118,12 +124,12 @@ function lineRow(line: PlanLine, index: number, date: Dates): DrillItem {
   }
 }
 
-/** The new paycheck's plan: what it covers before payday, and what is left. */
+/** The new paycheck's plan: what it covers this pay period, and what is left. */
 export function planDrill(plan: PaycheckPlan, date: Dates): DrillDown {
   const math = planMath(plan)
   return {
     title: 'This paycheck',
-    subtitle: `Until payday ${date(plan.nextPayday)}. ${SUGGESTIONS_ONLY}`,
+    subtitle: `${date(plan.periodStart)} until payday ${date(plan.nextPayday)}. ${SUGGESTIONS_ONLY}`,
     // Without pay the math has no total, so the figure is safe to spend, as the card's is.
     figure: plan.paycheckCents === null ? { cents: plan.safeToSpendCents } : math.result.value,
     math,

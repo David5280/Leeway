@@ -52,7 +52,7 @@ export const COACH_PROMPTS: CoachPrompt[] = [
     title: 'Plan my paycheck',
     description: 'What was left from the last paycheck, and a plan for the new one.',
     text: () =>
-      'Help me plan my paycheck. Use get_payday_playbook. First tell me what I had left from my last pay period against my budget, and what it suggests doing with it. Then walk me through the new paycheck: the bills due before my next payday, the set-asides, and what is left for everyday spending. Say plainly if checking may go below zero before payday. These are suggestions: remind me that I move the money myself.',
+      'Help me plan my paycheck. Use get_payday_playbook. First tell me what I had left from my last pay period against my budget, and what it suggests doing with it. Then walk me through the new paycheck: the bills due this pay period, the set-asides, and what is left for everyday spending. Use get_cash_flow to say plainly if checking may go below zero before payday. These are suggestions: remind me that I move the money myself.',
   },
   {
     name: 'subscriptions',
