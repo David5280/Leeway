@@ -65,6 +65,12 @@
   --over-soft: #341b18;
   --track: #232830;
   --shadow: none;
+  /* Tab colors until the theme loads (lib/places.ts, Night dark; Home wears the ink). */
+  --place-home: #edeff2;
+  --place-spend: #9980fe;
+  --place-pay: #98bffe;
+  --place-goal: #c77ea1;
+  --place-wealth: #34eee5;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--surface));
 
   /* Safe areas. Installed to an iPhone's home screen, the app draws edge to

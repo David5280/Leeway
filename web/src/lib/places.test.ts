@@ -123,3 +123,18 @@ describe('TAB_PLACES', () => {
     expect([...places].sort()).toEqual([...PLACE_IDS].sort())
   })
 })
+
+describe('the stylesheet fallback', () => {
+  // The page draws before settings load the theme, so styles.css carries the
+  // Night dark tab colors; without them tinted cards lose their fill and edge.
+  const fallback = readFileSync(resolve(__dirname, '../styles.css'), 'utf8')
+  const root = /:root \{([^}]*)\}/.exec(fallback)?.[1] ?? ''
+
+  it('matches Night dark, with Home in the fallback ink', () => {
+    const ink = /--ink: (#[0-9a-f]{6});/i.exec(root)?.[1]
+    expect(ink).toBeDefined()
+    for (const [name, value] of Object.entries(placeVariables('night', 'dark', ink!))) {
+      expect(root.toLowerCase()).toContain(`${name}: ${value.toLowerCase()};`)
+    }
+  })
+})

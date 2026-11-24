@@ -51,7 +51,7 @@ export function Flows({ flows }: { flows: AccountsView['flows'] }) {
   )
 }
 
-/** One labelled bar: money in is green with a +, money out the page's own color. */
+/** One labelled bar: money in is green with a +, money out a quiet grey. */
 function FlowBar({
   label,
   cents,
@@ -72,7 +72,7 @@ function FlowBar({
       <span className="grow">
         <Progress
           percent={(cents / of) * 100}
-          color={cameIn ? 'var(--good)' : 'var(--place-mark)'}
+          color={cameIn ? 'var(--good)' : 'var(--muted)'}
           aria-label={`${word}, ${label}: ${money(cents)}`}
         />
       </span>

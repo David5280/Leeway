@@ -96,7 +96,7 @@ describe('budgets page', () => {
       list_categories: () => [groceries],
     })
     renderBudgets()
-    const left = await screen.findByRole('region', { name: 'Left' })
+    const left = await screen.findByRole('region', { name: 'Over by' })
     // Red is never the only signal: the words say over, so no bare minus is needed.
     expect(within(left).getByText('Over by')).toBeInTheDocument()
     expect(within(left).getByText('$100')).toHaveClass('money-problem')

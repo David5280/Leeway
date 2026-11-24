@@ -42,6 +42,7 @@ export function Budgets() {
   const transfers = categories.data.filter((c) => c.kind === 'transfer')
   // Gone past the budgets: red, and said in words, never a bare minus.
   const overBudget = b.totals.leftCents < 0
+  const leftLabel = overBudget ? 'Over by' : 'Left'
 
   return (
     <Shell>
@@ -75,8 +76,8 @@ export function Budgets() {
             <BudgetsUsed totals={b.totals} />
           </div>
         </Card>
-        <Card static="pending" className="span-4 stack-sm" label="Left">
-          <span className="eyebrow">{overBudget ? 'Over by' : 'Left'}</span>
+        <Card static="pending" className="span-4 stack-sm" label={leftLabel}>
+          <span className="eyebrow">{leftLabel}</span>
           <Money
             cents={Math.abs(b.totals.leftCents)}
             tone={overBudget ? 'problem' : undefined}
