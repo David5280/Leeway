@@ -153,7 +153,7 @@ describe('the panel, on a computer', () => {
     const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
     expect(await within(panel).findByRole('textbox', { name: 'Your question' })).toHaveFocus()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(document.querySelector('.shell')).toHaveClass('shell-ask-open')
+    expect(document.querySelector('.shell')).toHaveClass('shell-sidebar', 'shell-ask')
     await user.click(within(panel).getByRole('button', { name: 'Collapse Ask Leeway' }))
     expect(await screen.findByRole('button', { name: /^Open Ask Leeway/ })).toBeVisible()
     expect(localStorage.getItem('leeway.askPanel')).toBe('closed')
@@ -173,6 +173,27 @@ describe('the panel, on a computer', () => {
     first.unmount()
     renderAsk('/wealth', { size: COMPUTER })
     expect(await screen.findByRole('complementary', { name: 'Ask Leeway' })).toBeVisible()
+  })
+
+  it('keeps its conversation and scroll when each tab draws its own frame', async () => {
+    const user = userEvent.setup()
+    const { server } = renderAsk('/payday', {
+      size: COMPUTER,
+      shellPerPage: true,
+      messages: [message('m1', 'user', 'How am I doing?'), message('m2', 'assistant', 'Fine.')],
+    })
+    await user.click(await screen.findByRole('button', { name: /^Open Ask Leeway/ }))
+    const before = await screen.findByRole('complementary', { name: 'Ask Leeway' })
+    await within(before).findByText('How am I doing?')
+    before.scrollTop = 120
+    fireEvent.scroll(before)
+    await user.click(screen.getByRole('link', { name: 'Goals' }))
+    const after = await screen.findByRole('complementary', { name: 'Ask Leeway' })
+    // A new panel, drawn by the new tab's frame, showing the conversation at once.
+    expect(after).not.toBe(before)
+    expect(within(after).getByText('How am I doing?')).toBeVisible()
+    expect(after.scrollTop).toBe(120)
+    expect(server.actions('get_chat')).toHaveLength(1)
   })
 
   it('still opens and collapses when the browser refuses storage', async () => {

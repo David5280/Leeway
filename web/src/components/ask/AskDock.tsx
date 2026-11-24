@@ -4,9 +4,11 @@
 //     conversation;
 //   - AskSheet: that conversation over the screen on a phone;
 //   - AskPanel: on a computer, the conversation in a panel on the right that
-//     stays open across tabs, or collapsed to a slim rail.
+//     stays open across tabs, scrolled where it was left, or collapsed to a
+//     slim rail.
 // All of them show the one conversation (pages/chat/ChatThread.tsx).
 
+import { useEffect, useRef, type RefObject } from 'react'
 import { ChatThread } from '../../pages/chat/ChatThread'
 import { Sheet } from '../design/Sheet'
 import { Icon } from '../ui'
@@ -46,6 +48,23 @@ export function AskSheet({ ask }: { ask: AskControls }) {
   )
 }
 
+/**
+ * Keeps the panel's scroll in `keptRef` (the provider's, above the pages) and
+ * puts it back when a new tab draws the panel anew. Put back in an effect
+ * of the panel's own, which runs after the conversation's, so it wins over
+ * the conversation's jump to its end on first drawing.
+ */
+function useKeptScroll(keptRef: RefObject<number | null>) {
+  const panel = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (panel.current && keptRef.current !== null) panel.current.scrollTop = keptRef.current
+  }, [keptRef])
+  const onScroll = () => {
+    if (panel.current) keptRef.current = panel.current.scrollTop
+  }
+  return { ref: panel, onScroll }
+}
+
 /** The computer's panel beside the page, or the slim rail it collapses to. */
 export function AskPanel({ ask }: { ask: AskControls }) {
   if (!ask.panelOpen) {
@@ -64,8 +83,14 @@ export function AskPanel({ ask }: { ask: AskControls }) {
       </div>
     )
   }
+  return <OpenPanel ask={ask} />
+}
+
+/** The open panel: its title, a way to collapse it, and the conversation. */
+function OpenPanel({ ask }: { ask: AskControls }) {
+  const scroll = useKeptScroll(ask.panelScroll)
   return (
-    <aside className="ask-panel" aria-labelledby="ask-panel-title">
+    <aside className="ask-panel" aria-labelledby="ask-panel-title" {...scroll}>
       <div className="ask-panel-head">
         <h2 id="ask-panel-title" className="ask-panel-title">
           <Icon name="sparkle" size={18} />

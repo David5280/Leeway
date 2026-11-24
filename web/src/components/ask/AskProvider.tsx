@@ -12,7 +12,9 @@
 //     same address, so Back closes it and the screen under it, scroll
 //     included, is never left;
 //   - a computer: a panel beside the page, open or collapsed as this browser
-//     last left it (panelMemory.ts).
+//     last left it (panelMemory.ts). Each page draws its own frame, so the
+//     panel is drawn anew on every tab; its scroll is kept here, above the
+//     pages, so it opens on each tab where the owner left it.
 // Without an AI key none of it exists: `available` is false everywhere.
 
 import {
@@ -24,6 +26,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useChatAvailable, type ScreenContext } from '../../api/chat'
@@ -60,6 +63,8 @@ export interface AskControls {
   /** Closes the phone's sheet, back to the screen under it. */
   closeSheet: () => void
   setPanelOpen: (open: boolean) => void
+  /** How far the computer's panel was scrolled, kept across tabs; null until it is. */
+  panelScroll: RefObject<number | null>
   /** Lets a page name itself more exactly, like "Category: Groceries". */
   nameScreen: (pathname: string, name: string) => void
 }
@@ -108,6 +113,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const { screen, nameScreen } = useScreen(location.pathname)
   const { panelOpen, setPanelOpen } = usePanel()
+  const panelScroll = useRef<number | null>(null)
   const onChatPage = location.pathname === paths.chat()
   const sheetOpen = available && frame !== 'sidebar' && !onChatPage && showsSheet(location.state)
 
@@ -151,6 +157,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
       open,
       closeSheet,
       setPanelOpen,
+      panelScroll,
       nameScreen,
     }),
     [

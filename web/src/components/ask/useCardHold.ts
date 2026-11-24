@@ -12,6 +12,8 @@
 //     menu, for copying;
 //   - presses in a field, or inside a sheet the card opened (React passes
 //     those up through the portal), are not the card's.
+// A card with nothing focusable inside is given one tab stop, so the
+// keyboard can reach it too (useKeyboardReach.ts).
 // Without an AI key it does nothing at all.
 
 import {
@@ -24,12 +26,20 @@ import {
 } from 'react'
 import { useAskOffered } from './AskDock'
 import { cardAbout } from './cardAbout'
+import { useKeyboardReach } from './useKeyboardReach'
 
 /** How long a press must be held to ask about the card, in milliseconds. */
 export const HOLD_MS = 500
 
 /** How far a press may drift and still be a hold, in pixels. */
 export const HOLD_SLOP_PX = 10
+
+/**
+ * How long after a held press is let go its click may still arrive, in
+ * milliseconds. Past it no click is swallowed, even when the release landed
+ * off the card (or on a sheet over it) and the card never saw a click.
+ */
+export const HELD_CLICK_MS = 300
 
 /** The handlers a card's surface takes; none at all without Ask Leeway. */
 export interface HoldHandlers {
@@ -41,6 +51,8 @@ export interface HoldHandlers {
   onClickCapture?: (event: MouseEvent<HTMLElement>) => void
   onContextMenu?: (event: MouseEvent<HTMLElement>) => void
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
+  ref?: (card: HTMLElement | null) => void
+  tabIndex?: 0
   'data-ask-hold'?: true
 }
 
@@ -65,6 +77,47 @@ function isMenuKey(event: KeyboardEvent): boolean {
 }
 
 /**
+ * The `held` flag's life: set when a hold opens Ask Leeway, and cleared
+ * HELD_CLICK_MS after the press is let go anywhere on the page. The card's
+ * own click (when it comes) clears it sooner; this covers the release that
+ * never becomes the card's click, which would otherwise leave the flag set
+ * to swallow the next Enter or click on the card.
+ */
+function useHeldRelease() {
+  const held = useRef(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stop = useRef<() => void>(() => {})
+
+  const reset = useCallback(() => {
+    stop.current()
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    held.current = false
+  }, [])
+  useEffect(() => reset, [reset])
+
+  const hold = useCallback(() => {
+    held.current = true
+    // Heard on the whole document, captured: the release may land on a sheet or off the card.
+    const letGo = () => {
+      stop.current()
+      timer.current = setTimeout(() => (held.current = false), HELD_CLICK_MS)
+    }
+    document.addEventListener('pointerup', letGo, { capture: true })
+    document.addEventListener('pointercancel', letGo, { capture: true })
+    stop.current = () => {
+      document.removeEventListener('pointerup', letGo, { capture: true })
+      document.removeEventListener('pointercancel', letGo, { capture: true })
+      stop.current = () => {}
+    }
+  }, [])
+
+  /** Whether a hold opened Ask Leeway, so the click it ends with is to be swallowed. */
+  const isHeld = useCallback(() => held.current, [])
+  return { isHeld, hold, reset }
+}
+
+/**
  * Press and hold for a card named `label` (or by the name it shows). Spread
  * the result on the card's outer element.
  */
@@ -72,9 +125,9 @@ export function useCardHold(label: string | undefined): HoldHandlers {
   const ask = useAskOffered()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
-  // A hold that opened Ask Leeway, so the click it ends with is swallowed.
-  const held = useRef(false)
   const stopListening = useRef<() => void>(() => {})
+  const release = useHeldRelease()
+  const reach = useKeyboardReach(ask !== null)
 
   const cancel = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -91,16 +144,17 @@ export function useCardHold(label: string | undefined): HoldHandlers {
 
   return {
     'data-ask-hold': true,
+    ...reach,
     onPointerDown(event) {
       if (!event.isPrimary || event.button !== 0 || !isCardsOwn(event)) return
       cancel()
-      held.current = false
+      release.reset()
       const card = event.currentTarget
       start.current = { x: event.clientX, y: event.clientY }
       timer.current = setTimeout(() => {
         cancel()
         if (hasSelection(card)) return
-        held.current = true
+        release.hold()
         askAbout(card)
       }, HOLD_MS)
       // Any scroll, of the page or a list inside it, means the finger is scrolling, not holding.
@@ -117,8 +171,8 @@ export function useCardHold(label: string | undefined): HoldHandlers {
     onPointerCancel: cancel,
     onPointerLeave: cancel,
     onClickCapture(event) {
-      if (!held.current || !isCardsOwn(event)) return
-      held.current = false
+      if (!release.isHeld() || !isCardsOwn(event)) return
+      release.reset()
       event.preventDefault()
       event.stopPropagation()
     },
@@ -127,7 +181,7 @@ export function useCardHold(label: string | undefined): HoldHandlers {
       event.preventDefault()
       cancel()
       // A long press on a phone raises this too, after the hold already asked.
-      if (!held.current) askAbout(event.currentTarget)
+      if (!release.isHeld()) askAbout(event.currentTarget)
     },
     onKeyDown(event) {
       if (!isMenuKey(event) || !isCardsOwn(event)) return
