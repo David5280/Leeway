@@ -47,8 +47,10 @@ export function GoalTimeline({ goal, today }: { goal: Goal; today: string }) {
     },
     width,
   )
-  // A stale goal's progress is frozen, so it has no pace to place on the line.
-  if (!layout || goal.status === 'reached' || goal.status === 'stale') return null
+  // Only a goal still being saved for has a pace to place on the line: a stale
+  // goal's progress is frozen, and a trip's goal is spent once the trip starts.
+  const saving = goal.status === 'in_progress' || goal.status === 'past_due'
+  if (!layout || !saving) return null
   const { left, right, lineY, target, projected } = layout
   // Behind means the dot lands past the flag; the line then warns.
   const color = goal.onTrack === false ? 'var(--warn)' : goal.color

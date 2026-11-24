@@ -248,7 +248,7 @@ describe('linking a calendar', () => {
     expect(await call('get_forecast')).toMatchObject({ note: null })
   })
 
-  it('stays in the app: no agent can link, read or see the calendar or trips', () => {
+  it('stays in the app: no agent can link, read or see the calendar, trips or trip budgets', () => {
     const names = [
       'calendar_status',
       'connect_calendar',
@@ -258,6 +258,8 @@ describe('linking a calendar', () => {
       'list_trips',
       'get_trip',
       'trip_of_transaction',
+      'create_trip_budget',
+      'update_trip_budget',
     ]
     for (const name of names) expect(findAction(name)).toMatchObject({ surface: 'app' })
     const tools = agentTools('write').map((tool) => tool.name)

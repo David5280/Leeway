@@ -1,7 +1,8 @@
 // Coming up: the next six weeks with a calendar linked, week by week, with
 // paydays, bills due and the events likely to cost money, each with what to
-// set aside where past ones show it. A bill opens its own form; an event
-// opens a purchase goal to save for it, unless nothing is left to set aside.
+// set aside where past ones show it. A bill opens its own form; a trip opens
+// its page, where its budget is planned; any other event opens a purchase
+// goal to save for it, unless nothing is left to set aside.
 // Weeks with nothing in them fold into one quiet line. Recent and coming
 // trips follow, each opening its own page. Shown in Plan only while a
 // calendar is linked.
@@ -30,6 +31,7 @@ type Bill = Extract<ForecastItem, { type: 'bill' }>
 
 /** Where the amount to set aside comes from ("From 2 past trips"), or why there is none. */
 function setAsideText(event: Event): string {
+  if (event.budgeted) return 'Trip budget planned'
   if (event.suggestedCents === null) return 'No past ones to go by yet'
   if (event.suggestedCents === 0) return 'Nothing left to set aside'
   const kind = EVENT_KIND_NAMES[event.kind].toLowerCase()
@@ -69,13 +71,24 @@ function EventRow({ event, today }: { event: Event; today: string }) {
       )}
     </>
   )
-  // With nothing left to set aside there is no goal to start, so the row opens nothing.
-  if (event.suggestedCents === 0) return <div className="list-row">{row}</div>
+  const to = eventLink(event, today)
+  if (to === null) return <div className="list-row">{row}</div>
   return (
-    <Link to={saveForPath(event, today)} className="list-row clickrow">
+    <Link to={to} className="list-row clickrow">
       {row}
     </Link>
   )
+}
+
+/**
+ * Where an event's row goes: a trip to its page, so a trip is saved for in
+ * one place, its budget; any other event to a goal to save for it. With
+ * nothing left to set aside there is no goal to start, so the row opens nothing.
+ */
+function eventLink(event: Event, today: string): string | null {
+  if (event.tripPage) return tripPath({ startsOn: event.date, endsOn: event.endsOn })
+  if (event.suggestedCents === 0) return null
+  return saveForPath(event, today)
 }
 
 function BillRow({ bill, today }: { bill: Bill; today: string }) {
@@ -178,7 +191,10 @@ function Trips() {
       {trips.data?.length === 0 && <p className="empty">No recent or coming trips.</p>}
       {trips.data?.map((trip) => (
         <Link key={tripPath(trip)} to={tripPath(trip)} className="list-row clickrow">
-          <RowText name={tripName(trip)} detail={dayRange(trip, settings.locale)} />
+          <RowText
+            name={tripName(trip)}
+            detail={`${dayRange(trip, settings.locale)}${trip.goalId ? ', budget planned' : ''}`}
+          />
           <Money cents={trip.totalCents} />
         </Link>
       ))}

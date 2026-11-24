@@ -62,7 +62,7 @@ export const refreshCalendarAction = defineAction({
 export const disconnectCalendarAction = defineAction({
   name: 'disconnect_calendar',
   title: 'Unlink the calendar',
-  description: 'Forget the calendar link and its events.',
+  description: 'Forget the calendar link and its events. Trip budgets already planned stay.',
   input: z.object({}),
   scope: 'write',
   surface: 'app',

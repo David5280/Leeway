@@ -262,6 +262,7 @@ describe('get_checkin', () => {
         heldBackCents: 0,
         status: 'in_progress',
         balanceAsOf: null,
+        forTrip: false,
       },
     ])
     expect(checkin.debts).toMatchObject({ owedCents: 200000, minimumsCents: 6000 })

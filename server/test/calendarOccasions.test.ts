@@ -62,6 +62,7 @@ describe('costing occasions in the forecast', () => {
         kind: 'trip',
         suggestedCents: 150000,
         basedOn: 2,
+        tripPage: true,
       },
     ])
     expect(weeks.reduce((sum, week) => sum + week.setAsideCents, 0)).toBe(150000)
