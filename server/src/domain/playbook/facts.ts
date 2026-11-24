@@ -12,8 +12,9 @@ import { goalReading, type Goal } from '../goalProgress.js'
 import { listGoals } from '../goals.js'
 import { getIdleCash } from '../idleCashSource.js'
 import { getFinancialProfile, type FinancialProfile } from '../profile/profile.js'
+import { countingWords } from '../savings/rate.js'
 import type { Settings } from '../settings.js'
-import type { CostliestDebt, OpenGoal, SuggestionFacts } from './suggestions.js'
+import type { CostliestDebt, OpenGoal, RetirementGap, SuggestionFacts } from './suggestions.js'
 
 /** Goals still being saved toward, the emergency fund left out: it has a suggestion of its own. */
 export function openGoals(goals: Goal[]): OpenGoal[] {
@@ -32,18 +33,25 @@ export function costliestDebt(debts: CostliestDebt[]): CostliestDebt | null {
 
 /**
  * What a pay period would need to put away to reach the savings rate target,
- * from the profile's own rate and pay. Null with no target, no rate known,
- * or the target already met.
+ * from the profile's own rate and pay, and what that rate counts. Null with
+ * no target, no rate known, or the target already met. As the profile's
+ * savings rate meter does (profile/lenses.ts), the rate is read against the
+ * target, never as falling short: a 401(k) taken from pay before the bank
+ * sees it may be missing from it.
  */
 export function retirementGap(
   profile: Pick<FinancialProfile, 'savingsRate' | 'savingsRateTargetPercent'>,
   payCadence: Cadence,
-): number | null {
+): RetirementGap | null {
   const target = profile.savingsRateTargetPercent
   const rate = profile.savingsRate
   if (target === null || rate === null || rate.percent >= target) return null
   const monthlyCents = Math.round((rate.payMonthlyCents * (target - rate.percent)) / 100)
-  return convertCadence(monthlyCents, 'month', payCadence)
+  return {
+    cents: convertCadence(monthlyCents, 'month', payCadence),
+    targetPercent: target,
+    counting: countingWords(rate),
+  }
 }
 
 /** Everything the leftover's suggestions need, read fresh. */
@@ -63,7 +71,7 @@ export async function readSuggestionFacts(
     emergencyShortCents: profile.emergencyFund?.shortCents ?? null,
     goals: openGoals(goals),
     debt: costliestDebt(debts),
-    retirementGapCents: retirementGap(profile, payCadence),
+    retirement: retirementGap(profile, payCadence),
     idleCents: idle.suggested ? idle.idleCents : null,
   }
 }

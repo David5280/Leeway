@@ -4,8 +4,8 @@
 //
 // Every figure is one Leeway already shows, so the plan can never disagree:
 // the bills are the cash flow's bills before payday (cashFlow.ts), and the
-// set-asides are the very list safe to spend holds back once (goals, trip
-// budgets and sinking funds, setAsides in budgetReport.ts). Nothing is
+// set-asides are the very list the budget's room holds back once (goals,
+// trip budgets and sinking funds, setAsides in budgetReport.ts). Nothing is
 // counted twice: a set-aside is never a bill, and the plan only lays them
 // side by side.
 
@@ -50,7 +50,10 @@ export interface PaycheckPlan {
   setAsideCents: number
   /** The paycheck less the bills and set-asides: for everyday spending. Null without a paycheck. */
   leftCents: number | null
-  /** Safe to spend now, the one figure every screen shows (cashFlow.ts). */
+  /**
+   * What can be spent now, the figure every screen leads with: the lesser of
+   * the budget's room after set-asides and cash safe to spend (spendable.ts).
+   */
   safeToSpendCents: number
   short: ShortNote | null
 }

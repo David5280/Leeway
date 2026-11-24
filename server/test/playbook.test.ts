@@ -126,6 +126,23 @@ describe('get_payday_playbook', () => {
     expect(playbook.suggestions).toEqual([])
   })
 
+  it('quotes what can be spent now as get_cash_flow leads with it, set-asides held back', async () => {
+    await paidChecking()
+    await groceries()
+    await call('add_sinking_fund', {
+      name: 'Car insurance',
+      amountCents: 60_000,
+      cadence: 'year',
+      dueDate: '2027-06-01',
+    })
+    const { plan } = await call('get_payday_playbook')
+    const { safeCents, spendable } = await call('get_cash_flow')
+    // The budget's room after the set-aside is less than the $3,000 in checking.
+    expect(spendable!.limitedBy).toBe('budget')
+    expect(plan.safeToSpendCents).toBe(spendable!.leadCents)
+    expect(plan.safeToSpendCents).toBeLessThan(safeCents)
+  })
+
   it('plans the new paycheck on the same figures as safe to spend', async () => {
     await paidChecking()
     await call('create_bill', {
@@ -145,7 +162,7 @@ describe('get_payday_playbook', () => {
     const { funds } = await call('list_sinking_funds')
     const period = cadenceOf(periodConfig(await getSettings(ctx.db)))
     expect(plan.paycheckCents).toBe(210_000)
-    expect(plan.safeToSpendCents).toBe(flow.safeCents)
+    expect(plan.safeToSpendCents).toBe(flow.spendable!.leadCents)
     expect(plan.lines).toEqual([
       { kind: 'bill', name: 'Rent', amountCents: 150_000, dueDate: '2026-11-25', overdue: false },
       {

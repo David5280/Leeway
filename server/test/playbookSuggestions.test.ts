@@ -16,7 +16,7 @@ const NOTHING: SuggestionFacts = {
   emergencyShortCents: null,
   goals: [],
   debt: null,
-  retirementGapCents: null,
+  retirement: null,
   idleCents: null,
 }
 
@@ -25,7 +25,7 @@ const EVERY_NEED: SuggestionFacts = {
   emergencyShortCents: 10_000,
   goals: [{ name: 'New bike', remainingCents: 20_000, targetDate: '2027-03-01' }],
   debt: { name: 'Acme Card', balanceCents: 30_000, aprBps: 2499 },
-  retirementGapCents: 15_000,
+  retirement: { cents: 15_000, targetPercent: 15, counting: 'counting only bank transfers' },
   idleCents: 25_000,
 }
 
@@ -128,7 +128,21 @@ describe('retirementGap', () => {
   it('is what a pay period needs to reach the savings rate target', () => {
     // 15% target less 5% saved is 10% of $5,000 a month: $500, or $250 twice a month.
     const gap = retirementGap({ savingsRate: rate, savingsRateTargetPercent: 15 }, 'semimonth')
-    expect(gap).toBe(25_000)
+    expect(gap).toEqual({
+      cents: 25_000,
+      targetPercent: 15,
+      counting: 'counting only bank transfers',
+    })
+  })
+
+  it('is worded as a nudge toward the target, never as falling short', () => {
+    // The bank never sees a 401(k) taken from pay, so the rate may leave it out.
+    const retirement = retirementGap({ savingsRate: rate, savingsRateTargetPercent: 15 }, 'month')
+    const [suggestion] = suggestLeftover(1_000_000, { ...NOTHING, retirement })
+    expect(suggestion?.reason).toBe(
+      'A nudge toward your 15% savings rate target, counting only bank transfers.',
+    )
+    expect(suggestion?.reason).not.toMatch(/short|behind|less than/i)
   })
 
   it('is null with no target, no rate known, or the target met', () => {

@@ -8,7 +8,8 @@ import { daysBetween, type IsoDate } from '../../lib/dates.js'
 import { cadenceOf } from '../../lib/periods.js'
 import { readBelowZero } from '../belowZeroSource.js'
 import { setAsides } from '../budgetReport.js'
-import { getCashFlow, type CashFlow } from '../cashFlow.js'
+import { budgetSummaryWithRoom } from '../budgetRoom.js'
+import type { CashFlow } from '../cashFlow.js'
 import { listCategories } from '../categories.js'
 import { categoryTotals } from '../categoryTotals.js'
 import { paydayFrom } from '../pay/payday.js'
@@ -18,7 +19,7 @@ import { closeOut, type CloseOut } from './closeOut.js'
 import { readSuggestionFacts } from './facts.js'
 import { planPaycheck, type PaycheckPlan } from './plan.js'
 import { suggestLeftover, type Suggestion } from './suggestions.js'
-import { closedPayPeriod, payScheduleOf, type ClosedPeriod } from './window.js'
+import { closedPayPeriod, givenPayday, payScheduleOf, type ClosedPeriod } from './window.js'
 
 /** Days after a payday that the playbook greets its paycheck as new. */
 export const JUST_PAID_DAYS = 3
@@ -46,12 +47,16 @@ async function readCloseOut(db: Db, settings: Settings, period: ClosedPeriod): P
   return closeOut(categories, totals, period)
 }
 
-/** The new paycheck's plan, from the cash flow already read. */
+/**
+ * The new paycheck's plan, from the cash flow already read and what can be
+ * spent now: the figure get_cash_flow's spendable leads with (spendable.ts).
+ */
 async function readPlan(
   db: Db,
   settings: Settings,
   today: IsoDate,
   flow: CashFlow,
+  spendableCents: number,
   payCadence: ClosedPeriod['cadence'] | null,
 ): Promise<PaycheckPlan> {
   const held = await setAsides(db, settings, today)
@@ -63,7 +68,7 @@ async function readPlan(
     setAsides: held,
     periodCadence: cadenceOf(periodConfig(settings)),
     payCadence,
-    safeToSpendCents: flow.safeCents,
+    safeToSpendCents: spendableCents,
     belowZero,
   })
 }
@@ -76,9 +81,15 @@ export async function readPlaybook(
   now: Date,
 ): Promise<Playbook> {
   // One at a time: db may be a transaction's client, which runs one query at once.
-  const payday = paydayFrom(await readCurrentPay(db, settings, today), settings, today)
-  const schedule = payScheduleOf(periodConfig(settings), payday)
-  const period = schedule ? closedPayPeriod(schedule, today) : null
+  const pay = await readCurrentPay(db, settings, today)
+  const { override } = settings.pay
+  const schedule = payScheduleOf(
+    periodConfig(settings),
+    paydayFrom(pay, settings, today),
+    pay,
+    override,
+  )
+  const period = schedule ? closedPayPeriod(schedule, today, givenPayday(schedule, override)) : null
   const closed = period ? await readCloseOut(db, settings, period) : null
   // The suggestions' reads are only worth making when something was left.
   const suggestions =
@@ -88,7 +99,10 @@ export async function readPlaybook(
           await readSuggestionFacts(db, settings, today, now, period.cadence),
         )
       : []
-  const flow = await getCashFlow(db, settings, today)
+  // The same read get_cash_flow makes, so the plan quotes the figure it leads with.
+  const { budget, cashFlow: flow } = await budgetSummaryWithRoom(db, settings, now)
+  // Always there for the current period; safe to spend alone only if it ever is not.
+  const spendableCents = budget.spendable?.leadCents ?? flow.safeCents
   const lastPayday = period?.end ?? null
   return {
     today,
@@ -99,6 +113,6 @@ export async function readPlaybook(
     paydayEstimate: flow.paydayEstimate,
     closeOut: closed,
     suggestions,
-    plan: await readPlan(db, settings, today, flow, period?.cadence ?? null),
+    plan: await readPlan(db, settings, today, flow, spendableCents, period?.cadence ?? null),
   }
 }

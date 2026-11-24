@@ -44,6 +44,14 @@ export interface CostliestDebt {
   aprBps: number
 }
 
+/** What a pay period would need to reach the savings rate target, and what the rate counts. */
+export interface RetirementGap {
+  cents: number
+  targetPercent: number
+  /** What the rate counts, as the savings rate meter says it: "counting only bank transfers". */
+  counting: string
+}
+
 /** What the financial profile says each suggestion needs; null where it needs nothing. */
 export interface SuggestionFacts {
   /** What the emergency fund is short of its target. */
@@ -52,7 +60,7 @@ export interface SuggestionFacts {
   goals: OpenGoal[]
   debt: CostliestDebt | null
   /** What a pay period would need to put away to reach the savings rate target. */
-  retirementGapCents: number | null
+  retirement: RetirementGap | null
   /** What checking holds beyond what it needs until payday (idleCash.ts). */
   idleCents: number | null
 }
@@ -103,12 +111,14 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       reason: `Your highest interest debt, at ${rateWords(facts.debt.aprBps)}.`,
     })
   }
-  if (facts.retirementGapCents) {
+  if (facts.retirement?.cents) {
+    const { cents, targetPercent, counting } = facts.retirement
     list.push({
       kind: 'retirement',
       label: 'Retirement',
-      needCents: facts.retirementGapCents,
-      reason: 'You are saving less than your savings rate target.',
+      needCents: cents,
+      // Never "short" or "behind": the bank may not see a 401(k) taken from pay (profile/lenses.ts).
+      reason: `A nudge toward your ${targetPercent}% savings rate target, ${counting}.`,
     })
   }
   if (facts.idleCents) {
