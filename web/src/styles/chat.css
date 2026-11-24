@@ -228,36 +228,3 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-/* The way into Chat on Overview: one slim row. */
-.ask-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 14px 18px;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.ask-bar > svg:first-child {
-  color: var(--accent);
-  flex: none;
-}
-
-.ask-bar-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ask-bar-title {
-  font-weight: 500;
-}
-
-@media (hover: hover) {
-  .ask-bar:hover {
-    border-color: var(--accent);
-  }
-}

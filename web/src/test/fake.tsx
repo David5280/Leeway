@@ -32,6 +32,7 @@ import { periodContaining } from '../../../server/src/lib/periods'
 import type { Account, AccountAlert, AccountsView, Budget, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
+import { AskProvider } from '../components/ask/AskProvider'
 import { AppProvider } from '../lib/app'
 import type { WeeklyEmailView } from '../pages/settings/email/emailText'
 import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
@@ -343,7 +344,7 @@ function LiveSettings({ server, children }: { server: Status; children: ReactNod
   if (!current.data) return null
   return (
     <AppProvider settings={current.data} status={server}>
-      {children}
+      <AskProvider>{children}</AskProvider>
     </AppProvider>
   )
 }

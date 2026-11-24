@@ -1,6 +1,8 @@
 // Chat on a phone, upright, narrowest and turned sideways: the conversation,
 // the box to type in and what Leeway remembers stay inside the screen, the
 // box stays clear of the tab bar, and every control is at least 44px tall.
+// Ask Leeway's bar sits above the tabs, clear of them, and opens the
+// conversation over the screen, which Back closes to the same place.
 // Chat is turned on by stand-ins (chat.ts); no model is called.
 
 import { expect, test } from '@playwright/test'
@@ -37,6 +39,27 @@ for (const [name, viewport] of PHONES) {
         expect(a.x + a.width).toBeLessThanOrEqual(viewport.width)
         for (const b of lines.slice(i + 1)) expect(overlapping(a, b)).toBe(false)
       }
+    })
+
+    test('Ask Leeway sits above the tabs and opens over the screen', async ({ page }) => {
+      await pretendChatOn(page)
+      await page.goto('/payday')
+      const askBar = page.getByRole('button', { name: 'Ask Leeway: Ask about Payday' })
+      const bar = (await askBar.boundingBox())!
+      expect(bar.height).toBeGreaterThanOrEqual(44)
+      expect(bar.x + bar.width).toBeLessThanOrEqual(viewport.width)
+      const tabs = page.locator('.tabbar')
+      if ((await tabs.count()) > 0)
+        expect(overlapping(bar, (await tabs.boundingBox())!)).toBe(false)
+
+      await page.evaluate(() => window.scrollTo({ top: 200 }))
+      const scrolled = await page.evaluate(() => window.scrollY)
+      await askBar.click()
+      await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toBeVisible()
+      await page.goBack()
+      await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toHaveCount(0)
+      await expect(page).toHaveURL(/\/payday$/)
+      expect(await page.evaluate(() => window.scrollY)).toBe(scrolled)
     })
   })
 }

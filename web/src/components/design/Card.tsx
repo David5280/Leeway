@@ -10,10 +10,14 @@
 // checks every card on Overview, Accounts and Activity, so no figure ships
 // without its explanation. A tappable card holds no buttons or links of its
 // own: the drill-down is where its parts are opened.
+//
+// Any card can also be pressed and held (or right clicked, or given the
+// context menu key) to ask Leeway about it (ask/useCardHold.ts).
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { DrillDown } from '../../lib/drill'
+import { useCardHold, type HoldHandlers } from '../ask/useCardHold'
 import { DrillSheet } from './DrillSheet'
 
 /**
@@ -60,9 +64,11 @@ export type CardProps = Base &
 
 export function Card(props: CardProps) {
   const { children, className = '', label, style } = props
+  const hold = useCardHold(label)
   if (props.drill) {
     return (
       <DrillCard
+        hold={hold}
         drill={props.drill}
         below={props.below}
         className={className}
@@ -75,7 +81,7 @@ export function Card(props: CardProps) {
   }
   if (props.to) {
     return (
-      <section className={`card card-tap ${className}`} aria-label={label} style={style}>
+      <section className={`card card-tap ${className}`} aria-label={label} style={style} {...hold}>
         <Link to={props.to} className="card-press">
           {children}
           <span className="visually-hidden">, open details</span>
@@ -89,6 +95,7 @@ export function Card(props: CardProps) {
       aria-label={label}
       style={style}
       data-static={props.static}
+      {...hold}
     >
       {children}
     </section>
@@ -97,13 +104,14 @@ export function Card(props: CardProps) {
 
 /** A card that is one button, opening its drill-down in a sheet, with any chart after it. */
 function DrillCard({
+  hold,
   drill,
   below,
   children,
   className,
   label,
   style,
-}: Base & { drill: DrillDown; below?: ReactNode; className: string }) {
+}: Base & { hold: HoldHandlers; drill: DrillDown; below?: ReactNode; className: string }) {
   const [open, setOpen] = useState(false)
   const split = below !== undefined
   return (
@@ -111,6 +119,7 @@ function DrillCard({
       className={`card card-tap${split ? ' card-split' : ''} ${className}`}
       aria-label={label}
       style={style}
+      {...hold}
     >
       <button
         type="button"

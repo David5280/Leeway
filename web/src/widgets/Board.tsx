@@ -1,7 +1,6 @@
 // Draws the dashboard: widgets in bands and columns (see arrange.ts), each
 // with its editing tools while the owner customizes.
 
-import type { ReactNode } from 'react'
 import type { Budget } from '../api/client'
 import { Icon, Segmented } from '../components/ui'
 import { arrange, type Band } from './arrange'
@@ -16,22 +15,11 @@ interface BoardProps {
   budget: Budget
   offset: number
   save: (widgets: Widget[]) => void
-  /**
-   * Drawn right under the hero (the leeway card), in its column, like
-   * Overview's Ask bar: the page then reads from the most general answer
-   * down. At the top when the hero is hidden.
-   */
-  underHero?: ReactNode
 }
 
-/** The hero card: the most general answer, which everything else follows. */
-const HERO = 'leeway'
-
 export function Board(props: BoardProps) {
-  const heroShown = props.shown.some((widget) => widget.type === HERO && widget.visible)
   return (
     <div className={props.editing ? 'board editing' : 'board'}>
-      {!heroShown && props.underHero}
       {arrange(props.shown).map((band) => (
         <BandView key={bandKey(band)} band={band} {...props} />
       ))}
@@ -50,7 +38,7 @@ function bandKey(band: Band): string {
 }
 
 function BandView({ band, ...props }: BoardProps & { band: Band }) {
-  if (band.kind === 'full') return <Slot widget={band.widget} {...props} />
+  if (band.kind === 'full') return <WidgetSlot widget={band.widget} {...props} />
   const columns = band.kind === 'split' ? [band.main, band.side] : band.columns
   return (
     <div className={`band ${band.kind}`}>
@@ -58,7 +46,7 @@ function BandView({ band, ...props }: BoardProps & { band: Band }) {
         <div key={c} className="band-column">
           {column.map((widget) => (
             // A phone shows one column, and uses each widget's saved place to keep the owner's order.
-            <Slot
+            <WidgetSlot
               key={widget.type}
               widget={widget}
               order={props.shown.indexOf(widget)}
@@ -72,20 +60,6 @@ function BandView({ band, ...props }: BoardProps & { band: Band }) {
 }
 
 /** One widget, faded while hidden in edit mode, with its tools above it. */
-function Slot(props: BoardProps & { widget: Widget; order?: number }) {
-  const { widget, order, underHero } = props
-  if (widget.type !== HERO || !widget.visible || !underHero) return <WidgetSlot {...props} />
-  return (
-    <>
-      <WidgetSlot {...props} />
-      {/* The same order as the hero, so a phone's single column keeps it right under. */}
-      <div className="under-hero" style={{ order }}>
-        {underHero}
-      </div>
-    </>
-  )
-}
-
 function WidgetSlot({
   widget,
   order,

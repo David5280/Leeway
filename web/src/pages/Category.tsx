@@ -3,6 +3,7 @@
 import { Link, useParams } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget } from '../api/client'
 import { useAction } from '../api/hooks'
+import { useScreenName } from '../components/ask/AskProvider'
 import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
@@ -23,6 +24,8 @@ export function CategoryPage() {
   const categories = useAction('list_categories')
   const budget = useAction('get_budget', { offset: 0 })
   const category = categories.data?.find((c) => c.id === id)
+  // Ask Leeway names the category, not only its kind: "Ask about Category: Groceries".
+  useScreenName(category && `Category: ${category.name}`)
 
   if (categories.isSuccess && !category) {
     return (

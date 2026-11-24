@@ -21,6 +21,7 @@ import { AppError } from '../errors.js'
 import { todayIn } from '../lib/dates.js'
 import { chatEnding, forKeeping, historyFor, joinSteps, TOO_MANY_STEPS } from './answer.js'
 import { CHAT_SYSTEM, chatContext } from './prompt.js'
+import type { ScreenContext } from './screen.js'
 import { chatToolList, runChatTool, toolTitle } from './tools.js'
 
 /** The most calls one question makes: a few looks at the data, then the answer. */
@@ -74,11 +75,13 @@ export interface ChatTurn {
  * Lets a question through, or refuses it with an AppError before anything
  * is sent: no key, an empty or overlong question, another still being
  * answered, or the day's allowance used up. The caller must then run it.
+ * `askedFrom`, already checked (screen.ts), says where it was asked.
  */
 export async function openTurn(
   ctx: AppContext,
   text: string,
   onError: (error: unknown) => void,
+  askedFrom?: ScreenContext,
 ): Promise<ChatTurn> {
   const ai = ctx.ai
   if (!ai) throw new AppError('not_configured', NOT_CONFIGURED)
@@ -101,7 +104,7 @@ export async function openTurn(
   return {
     run: async (emit) => {
       try {
-        await answer({ ctx, ai, settings, onError }, question, emit)
+        await answer({ ctx, ai, settings, onError, askedFrom }, question, emit)
       } catch (error) {
         emit({ type: 'error', message: failureMessage(error, onError) })
       } finally {
@@ -116,16 +119,18 @@ interface Turn {
   ai: AiGateway
   settings: Settings
   onError: (error: unknown) => void
+  askedFrom: ScreenContext | undefined
 }
 
 async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
-  const { ctx, settings } = turn
+  const { ctx, settings, askedFrom } = turn
   const [past, facts, people] = await Promise.all([
     listMessages(ctx.db, HISTORY_MESSAGES),
     listFacts(ctx.db),
     paymentPeople(ctx.db),
   ])
-  const context = chatContext(todayIn(settings.timeZone, ctx.now()), settings.currency, facts)
+  const today = todayIn(settings.timeZone, ctx.now())
+  const context = chatContext(today, settings.currency, facts, askedFrom)
   const messages: AiMessage[] = [...historyFor(past), { role: 'user', text: question }]
   const steps: string[] = []
   let ending: string | null = null

@@ -203,42 +203,12 @@ describe('moveWidget', () => {
   })
 })
 
-describe('the way into Chat on the Overview', () => {
-  it('asks about your money when Chat is on', async () => {
+describe('Ask Leeway on the Overview', () => {
+  it('is the frame bar alone, naming Home, with no Ask bar on the page itself', async () => {
     serve(settings, { get_chat_status: () => ({ available: true }) })
     renderOverview()
-    const bar = await screen.findByRole('link', { name: /Ask about your money/ })
-    expect(bar).toHaveAttribute('href', '/chat')
-  })
-
-  it('sits right under the hero, so the page reads from the most general answer down', async () => {
-    serve(settings, { get_chat_status: () => ({ available: true }) })
-    renderOverview()
-    const bar = await screen.findByRole('link', { name: /Ask about your money/ })
-    const hero = screen.getByRole('region', { name: 'Your leeway' })
-    const heading = screen.getByRole('heading', { level: 1 })
-    // After the period's heading and the hero, in its column, before the next widget.
-    expect(heading.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(hero.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const heroSlot = hero.closest('.widget')!
-    expect(heroSlot.nextElementSibling).toContainElement(bar)
-  })
-
-  it('leads the widgets when the hero is hidden, and is gone while editing', async () => {
-    const noHero = layout([{ type: 'leeway', visible: false }, { type: 'merchants' }])
-    serve(noHero, { get_chat_status: () => ({ available: true }) })
-    renderOverview(noHero)
-    const bar = await screen.findByRole('link', { name: /Ask about your money/ })
-    expect(bar.closest('.board')!.firstElementChild).toBe(bar)
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Edit layout' }))
-    expect(screen.queryByRole('link', { name: /Ask about your money/ })).not.toBeInTheDocument()
-  })
-
-  it('is not there without an AI key', async () => {
-    const server = serve(settings, { get_chat_status: () => ({ available: false }) })
-    renderOverview()
-    await waitFor(() => expect(server.actions('get_chat_status').length).toBeGreaterThan(0))
-    expect(await screen.findByRole('region', { name: 'Your leeway' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Ask Leeway: Ask about Home' })).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /^Ask Leeway/ })).toHaveLength(1)
     expect(screen.queryByRole('link', { name: /Ask about your money/ })).not.toBeInTheDocument()
   })
 })

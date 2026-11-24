@@ -3,7 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { askChat, type ChatEvent } from '../../api/chat'
+import { askChat, type ChatEvent, type ScreenContext } from '../../api/chat'
 import { ApiError, type Output } from '../../api/client'
 
 type ChatView = Output<'get_chat'>
@@ -30,7 +30,8 @@ export interface Asking {
   error: Unanswered | null
   /** The answer that last finished here, for screen readers to announce. */
   finished: string | null
-  ask: (question: string) => void
+  /** Sends a question, with the screen (and card) it was asked from when known. */
+  ask: (question: string, context?: ScreenContext) => void
 }
 
 /**
@@ -92,7 +93,7 @@ export function useAsk(onFailed: (question: string) => void): Asking {
     }
   }
 
-  const ask = (text: string) => {
+  const ask = (text: string, context?: ScreenContext) => {
     const question = text.trim()
     if (!question || pending) return
     const controller = new AbortController()
@@ -100,8 +101,9 @@ export function useAsk(onFailed: (question: string) => void): Asking {
     setError(null)
     setFinished(null)
     setPending({ question, text: '', tool: null })
-    askChat(question, (event) => handle(question, event), controller.signal).catch(
-      (failure: unknown) => refused(question, failure),
+    const onEvent = (event: ChatEvent) => handle(question, event)
+    askChat(question, onEvent, controller.signal, context).catch((failure: unknown) =>
+      refused(question, failure),
     )
   }
 

@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ApiError, auth, setSignedOutHandler, UNREACHABLE } from './api/client'
 import { useAction } from './api/hooks'
+import { AskProvider } from './components/ask/AskProvider'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
 import { AccountDetail } from './pages/AccountDetail'
@@ -119,15 +120,19 @@ export function App() {
 
   return (
     <AppProvider settings={settings.data} status={status.data}>
-      <Routes>
-        {/* An assistant asking to connect is answered even before setup is finished. */}
-        <Route path={CONNECT_ROUTES.connectProblem} element={<ConnectProblem />} />
-        <Route path={CONNECT_ROUTES.connect} element={<Connect />} />
-        <Route
-          path="*"
-          element={me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} signedIn />}
-        />
-      </Routes>
+      <AskProvider>
+        <Routes>
+          {/* An assistant asking to connect is answered even before setup is finished. */}
+          <Route path={CONNECT_ROUTES.connectProblem} element={<ConnectProblem />} />
+          <Route path={CONNECT_ROUTES.connect} element={<Connect />} />
+          <Route
+            path="*"
+            element={
+              me.data.owner.onboarded ? <Screens /> : <Setup status={status.data} signedIn />
+            }
+          />
+        </Routes>
+      </AskProvider>
     </AppProvider>
   )
 }

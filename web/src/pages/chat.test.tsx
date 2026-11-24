@@ -119,10 +119,11 @@ describe('Chat without an AI key', () => {
 })
 
 describe('Chat with an AI key', () => {
-  it('is a button in the header', async () => {
+  it('is reached from the Ask Leeway bar, not a link in the header', async () => {
     fakeServer(chatHandlers())
     renderSignedIn(<Shell>Page</Shell>)
-    expect(await screen.findByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/chat')
+    expect(await screen.findByRole('button', { name: /^Ask Leeway/ })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
   it('starts with what it does and questions to tap', async () => {

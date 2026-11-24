@@ -1,0 +1,212 @@
+/* Ask Leeway on every screen (components/ask/AskDock.tsx): the slim bar
+   above the phone's tabs, the conversation in a sheet over the screen, and
+   the computer's panel on the right or the rail it collapses to. Plain ink,
+   muted and line colors only: the bar wears no place or status color, and
+   only the box to type in lights with the accent when it has focus. */
+
+/* The bar (phone) ---------------------------------------------------------- */
+
+/* How much the bar takes from the bottom of the page: its 44px tap height
+   and the 8px around it. */
+.shell {
+  --ask-dock: 60px;
+}
+
+/* Fixed just above the tab bar (about 65px tall with its border), clear of
+   the notch at either side. Only the bar takes taps; the strip around it
+   lets them through to the page. */
+.ask-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(65px + var(--sab));
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: 8px calc(16px + var(--sar)) 8px calc(16px + var(--sal));
+  pointer-events: none;
+}
+
+/* A phone turned sideways has no tab bar: the bar sits at the foot. */
+.shell-short .ask-dock {
+  bottom: var(--sab);
+}
+
+/* The page's end clears the bar as well as the tab bar, so nothing hides under it. */
+.shell-tabbar.shell-ask .page {
+  padding-bottom: calc(96px + var(--ask-dock) + var(--sab));
+}
+
+.shell-short.shell-ask .page {
+  padding-bottom: calc(16px + var(--ask-dock) + var(--sab));
+}
+
+/* Looks like a box to type in; a tap opens the conversation. */
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 640px;
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+  color: var(--muted);
+  font: 400 15px var(--font-ui);
+  text-align: left;
+  cursor: text;
+  pointer-events: auto;
+}
+
+.ask-bar > svg {
+  flex: none;
+  color: var(--ink);
+}
+
+.ask-bar-prompt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask-bar:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The sheet (phone) -------------------------------------------------------- */
+
+/* Tall enough to read a conversation without the sheet jumping as it grows. */
+.ask-sheet-body {
+  min-height: 55dvh;
+}
+
+.ask-sheet-body .chat,
+.ask-panel .chat {
+  gap: var(--space-4);
+}
+
+/* The card a question is about, over the box to type in. */
+.ask-about {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 4px 4px 4px var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+}
+
+.ask-about-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask-about-drop {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* A link in an answer to the screen that holds it. */
+.chat-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A card that can be held to ask about it keeps a phone's own long-press
+   preview away; its text can still be selected. */
+[data-ask-hold] {
+  -webkit-touch-callout: none;
+}
+
+/* The panel (computer) ----------------------------------------------------- */
+
+/* A third column beside the page: the slim rail, or the open panel. */
+.shell-sidebar.shell-ask {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+/* Both stay in view as the page scrolls, as the sidebar does. */
+.ask-rail,
+.ask-panel {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.ask-rail {
+  display: flex;
+  justify-content: center;
+  width: calc(64px + var(--sar));
+  padding: max(28px, calc(var(--sat) + 8px)) var(--sar) 0 0;
+}
+
+.ask-rail-open,
+.ask-panel-collapse {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ask-panel-collapse {
+  border-color: transparent;
+  color: var(--muted);
+}
+
+@media (hover: hover) {
+  .ask-rail-open:hover,
+  .ask-panel-collapse:hover {
+    background: var(--surface-2);
+  }
+}
+
+/* The open panel: its title, then the conversation, scrolling on its own. */
+.ask-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: calc(360px + var(--sar));
+  padding: max(24px, calc(var(--sat) + 8px)) calc(16px + var(--sar)) calc(16px + var(--sab)) 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.ask-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ask-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-lg);
+}

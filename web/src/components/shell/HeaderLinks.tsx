@@ -1,9 +1,9 @@
-// The round links in the phone's header, and at the foot of the sidebar:
-// Chat (only when the server has an AI key), the Inbox bell and Settings.
+// The round links in the phone's header, and at the foot of the sidebar: the
+// Inbox bell and Settings. Chat has no link here: Ask Leeway is on every
+// screen instead (ask/AskDock.tsx).
 
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useChatAvailable } from '../../api/chat'
 import { paths } from '../../routes'
 import { Bell, inboxLabel, UnreadBadge, useUnread } from '../Bell'
 import { Icon, type IconName } from '../ui'
@@ -22,12 +22,10 @@ function RoundLink({ to, label, icon }: { to: string; label: string; icon: IconN
   )
 }
 
-/** The phone's header links: Chat when it is on, the Inbox bell, then Settings. */
+/** The phone's header links: the Inbox bell, then Settings. */
 export function HeaderLinks() {
-  const chat = useChatAvailable()
   return (
     <nav aria-label="More" className="row header-links">
-      {chat && <RoundLink to={paths.chat()} label="Chat" icon="chat" />}
       <Bell />
       <RoundLink to={paths.settings()} label="Settings" icon="gear" />
     </nav>
@@ -59,13 +57,11 @@ function SideLink({ to, label, icon, badge }: SideLinkProps) {
   )
 }
 
-/** The sidebar's foot: Chat when it is on, the Inbox with its unread count, then Settings. */
+/** The sidebar's foot: the Inbox with its unread count, then Settings. */
 export function SidebarFoot() {
-  const chat = useChatAvailable()
   const unread = useUnread()
   return (
     <nav aria-label="More" className="side-foot">
-      {chat && <SideLink to={paths.chat()} label="Chat" icon="chat" />}
       <SideLink
         to={paths.inbox()}
         label="Inbox"

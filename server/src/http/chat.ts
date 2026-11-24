@@ -5,16 +5,14 @@
 
 import { PassThrough } from 'node:stream'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { z } from 'zod'
 import { openTurn, type ChatEvent } from '../chat/turn.js'
 import type { AppContext } from '../context.js'
 import { AppError } from '../errors.js'
+import { chatBody, refusal } from './chatBody.js'
 import { perMinute } from './rateLimit.js'
 
 /** Questions from one address a minute; each makes a few paid calls. */
 const QUESTIONS_PER_MINUTE = 10
-
-const chatBody = z.object({ message: z.string() })
 
 /** One event as a server-sent event: its type, then the event as JSON. */
 export function serverSentEvent(event: ChatEvent): string {
@@ -31,9 +29,13 @@ export function registerChatRoutes(
     { preHandler: requireSession, ...perMinute(QUESTIONS_PER_MINUTE) },
     async (request, reply) => {
       const body = chatBody.safeParse(request.body)
-      if (!body.success) throw new AppError('invalid_input', 'Type a question first.')
-      const turn = await openTurn(ctx, body.data.message, (err) =>
-        request.log.error({ err }, 'Chat failed'),
+      if (!body.success) throw new AppError('invalid_input', refusal(body.error))
+      const { message, context } = body.data
+      const turn = await openTurn(
+        ctx,
+        message,
+        (err) => request.log.error({ err }, 'Chat failed'),
+        context,
       )
       const events = new PassThrough()
       void turn.run((event) => events.write(serverSentEvent(event))).finally(() => events.end())

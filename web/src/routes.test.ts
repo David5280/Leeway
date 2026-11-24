@@ -3,7 +3,7 @@
 
 import { matchPath } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { APP_PATHS } from '../../server/src/lib/appPaths'
+import { APP_PATHS, LINKABLE_SCREENS } from '../../server/src/lib/appPaths'
 import { settingsPath } from './pages/settings/paths'
 import { CONNECT_ROUTES, OLD_ROUTES, paths, planSectionHome, ROUTES, SCREEN_ROUTES } from './routes'
 
@@ -137,5 +137,23 @@ describe("the server's links into the app", () => {
     expect(APP_PATHS.category('cat 1')).toBe(paths.category('cat 1'))
     expect(APP_PATHS.settings('banks')).toBe(settingsPath('banks'))
     expect(APP_PATHS.settings('ai')).toBe(settingsPath('ai'))
+  })
+
+  it("include every screen Chat's answers may link to, each the app's own address", () => {
+    expect(LINKABLE_SCREENS).toEqual({
+      Home: paths.home(),
+      Spending: paths.spending(),
+      'All activity': paths.activity(),
+      Payday: paths.payday(),
+      'Bills and subscriptions': paths.bills(),
+      Goals: paths.goals(),
+      Wealth: paths.wealth(),
+      Debts: paths.debts(),
+      Retirement: paths.retirement(),
+      'Idle cash': paths.idleCash(),
+      Alerts: paths.alerts(),
+      Inbox: paths.inbox(),
+      Settings: paths.settings(),
+    })
   })
 })
