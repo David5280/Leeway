@@ -118,11 +118,8 @@ function ThisPaycheck({ playbook }: { playbook: PlaybookView }) {
   const date = (iso: string) => dayLabel(iso, settings.locale)
   return (
     <Card drill={planDrill(playbook.plan, date)} label="This paycheck" className="stack-sm">
-      <SectionHead
-        icon="sunrise"
-        title="This paycheck"
-        aside={<span className="small muted">Next payday {date(playbook.nextPayday)}</span>}
-      />
+      {/* No payday aside: the figure below already names it, and on a phone it crowds the title. */}
+      <SectionHead icon="sunrise" title="This paycheck" />
       <PlanFigure playbook={playbook} />
       <PlanRows plan={playbook.plan} />
     </Card>

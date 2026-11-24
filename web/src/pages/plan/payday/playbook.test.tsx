@@ -82,8 +82,9 @@ describe('This paycheck', () => {
   it('says what the paycheck leaves after bills and set-asides, pointing to Yearly costs', async () => {
     show(playbookOf())
     const card = await region('This paycheck')
-    expect(card).toHaveTextContent('Next payday Fri, Nov 27')
     expect(card).toHaveTextContent('Left for everyday spending$690')
+    expect(card).toHaveTextContent('after what is due before Nov 27.')
+    expect(card).not.toHaveTextContent('Next payday')
     expect(within(card).getByText('$2,100')).toHaveClass('money-in')
     expect(card).toHaveTextContent('Bills before paydayRent and Phone$1,260')
     expect(card).toHaveTextContent(
