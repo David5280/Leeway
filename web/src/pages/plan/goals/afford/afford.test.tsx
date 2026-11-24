@@ -118,6 +118,42 @@ describe('Can I afford it?', () => {
     expect(form.getByRole('button', { name: 'Check' })).toBeDisabled()
     await ask(user, 'Road bike', '1200')
     await waitFor(() => expect(screen.getByText('The check failed')).toBeVisible())
-    expect(screen.queryByRole('status', { name: 'The answer' })).toBeNull()
+    expect(await answer()).toBeEmptyDOMElement()
+  })
+
+  it('asks again with the same price after a failure', async () => {
+    let calls = 0
+    const plan = affordPlan(checkOf(5_000, 'yes', [FITS]))
+    const { user } = show(() => {
+      calls += 1
+      return calls === 1 ? failing('The check failed', 500)() : Response.json({ result: plan })
+    })
+    await ask(user, 'Headphones', '50')
+    await waitFor(() => expect(screen.getByText('The check failed')).toBeVisible())
+    await user.click(screen.getByRole('button', { name: 'Check' }))
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'The answer' })).toHaveTextContent('Yes.'),
+    )
+    expect(calls).toBe(2)
+  })
+
+  it("says it can't tell yet when there is no checking balance, and offers to save", async () => {
+    const check = { ...checkOf(5_000, 'yes', [FITS]), cashKnown: false }
+    const { user } = show(affordPlan(check))
+    await ask(user, 'Headphones', '50')
+    const said = await answer()
+    expect(within(said).getByText("Can't tell yet.")).toHaveClass('muted')
+    expect(said).toHaveTextContent(
+      'Headphones at $50 fits the budget, but Leeway has no checking balance to weigh it against yet.',
+    )
+    await user.click(within(said).getByRole('button', { name: 'Save for it' }))
+    expect(screen.getByLabelText('Target date')).toHaveValue('')
+  })
+
+  it('clears the answer once its goal is being made, so it cannot be made twice', async () => {
+    const { user } = show(affordPlan(checkOf(120_000, 'no', [SHORT])))
+    await ask(user, 'Road bike', '1200')
+    await user.click(within(await answer()).getByRole('button', { name: 'Save for it' }))
+    expect(await answer()).toBeEmptyDOMElement()
   })
 })

@@ -30,7 +30,7 @@ function Answer({
   const date = (iso: string) => longDate(iso, settings.locale)
   const answer = affordAnswer(asked, plan, money, date, periodWord(settings.period.kind))
   return (
-    <div role="status" aria-label="The answer" className="stack-sm">
+    <>
       <p>
         <b className={answer.tone}>{answer.verdict}</b> {answer.summary}
       </p>
@@ -51,7 +51,7 @@ function Answer({
           </button>
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -110,12 +110,29 @@ export function AffordCheck({ onSaveFor }: { onSaveFor: (draft: GoalDraft) => vo
     asked ? { amountCents: asked.amountCents } : undefined,
     { enabled: asked !== null },
   )
+
+  function ask(next: Asked) {
+    // The same price keeps the same query, so asking again (after an error,
+    // say) fetches again rather than doing nothing.
+    if (asked !== null && next.amountCents === asked.amountCents) void check.refetch()
+    setAsked(next)
+  }
+
+  function saveFor(draft: GoalDraft) {
+    // The answer goes once its goal is being made, so a second tap cannot make two.
+    setAsked(null)
+    onSaveFor(draft)
+  }
+
   return (
     <Card static="form" label="Can I afford it?" className="stack-sm">
       <SectionHead icon="tag" title="Can I afford it?" />
-      <AskForm busy={check.isFetching} onAsk={setAsked} />
+      <AskForm busy={check.isFetching} onAsk={ask} />
       <ErrorNote error={check.error} />
-      {asked && check.data && <Answer asked={asked} plan={check.data} onSaveFor={onSaveFor} />}
+      {/* Always on the page, so a screen reader announces each answer as it arrives. */}
+      <div role="status" aria-label="The answer" className="stack-sm">
+        {asked && check.data && <Answer asked={asked} plan={check.data} onSaveFor={saveFor} />}
+      </div>
     </Card>
   )
 }

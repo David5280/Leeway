@@ -23,6 +23,22 @@ describe('afford words', () => {
     })
   })
 
+  it("can't tell with no checking balance: offers a goal with no date, not a promise", () => {
+    const check = { ...checkOf(5_000, 'yes', ['It fits the budget.']), cashKnown: false }
+    const plan = affordPlan(check)
+    const asked = { name: 'Lamp', amountCents: 5_000 }
+    expect(affordAnswer(asked, plan, money, date, 'month')).toEqual({
+      verdict: "Can't tell yet.",
+      tone: 'muted',
+      summary:
+        'Lamp at $50 fits the budget, but Leeway has no checking balance to weigh it against yet.',
+      reasons: [],
+      when: null,
+      saveFor: true,
+    })
+    expect(goalDraftFor(asked, plan).targetDate).toBe('')
+  })
+
   it('says how much each period and by when, from the plan', () => {
     const plan = affordPlan(checkOf(120_000, 'no', ['Short.']))
     expect(whenText(plan, money, date, 'week')).toBe(

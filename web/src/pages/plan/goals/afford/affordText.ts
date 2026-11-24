@@ -16,7 +16,7 @@ export interface Asked {
 }
 
 /** The verdict's status color: good for yes, warn for tight, over for not yet. */
-export type AnswerTone = 'good' | 'warn' | 'over'
+export type AnswerTone = 'good' | 'warn' | 'over' | 'muted'
 
 /** The answer as the card says it, each part in words that stand alone. */
 export interface AffordAnswer {
@@ -86,6 +86,19 @@ export function affordAnswer(
   periodWord: string,
 ): AffordAnswer {
   const verdict = plan.today.verdict
+  // With no checking balance only the budget was weighed, so "yes" means it
+  // fits the budget, not that the cash is there: say so rather than promise it.
+  if (verdict === 'yes' && !plan.today.cashKnown) {
+    return {
+      verdict: "Can't tell yet.",
+      tone: 'muted',
+      summary: `${subject(asked, money)} fits the budget, but Leeway has no checking balance to weigh it against yet.`,
+      // The server's one reason says the same thing, so it is not repeated.
+      reasons: [],
+      when: null,
+      saveFor: true,
+    }
+  }
   const fits = verdict === 'yes'
   return {
     ...VERDICTS[verdict],
@@ -104,6 +117,7 @@ export function goalDraftFor(asked: Asked, plan: PurchasePlan): GoalDraft {
   return {
     name: asked.name.trim(),
     targetCents: asked.amountCents,
-    targetDate: plan.affordableBy ?? '',
+    // A date only when saving gets there later; "today" is no date to save toward.
+    targetDate: plan.today.verdict === 'yes' ? '' : (plan.affordableBy ?? ''),
   }
 }
