@@ -1,12 +1,12 @@
 // The rows inside the Yearly costs card: the costs Leeway found, each added
 // or waved off in one tap, and the funds saved toward, each removable.
 
-import type { SinkingFundsView } from '../../../api/client'
-import { useActionMutation } from '../../../api/hooks'
-import { Money } from '../../../components/design/Money'
-import { ErrorNote } from '../../../components/ui'
-import { useApp } from '../../../lib/app'
-import { dayLabel } from '../../../lib/format'
+import type { SinkingFundsView } from '../../../../api/client'
+import { useActionMutation } from '../../../../api/hooks'
+import { Money } from '../../../../components/design/Money'
+import { ErrorNote } from '../../../../components/ui'
+import { useApp } from '../../../../lib/app'
+import { dayLabel } from '../../../../lib/format'
 import { basisWords, FUND_CADENCE_WORDS, suggestionInput } from './fundText'
 
 type Fund = SinkingFundsView['funds'][number]

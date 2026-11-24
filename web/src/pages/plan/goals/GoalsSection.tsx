@@ -1,165 +1,27 @@
-// The Goals tab's content, most general first: the emergency fund
-// offer while there is none, then which goal comes first and when each lands,
-// then each goal (purchases being saved for among them) with what each budget
-// period needs and whether recent progress makes it.
-// "/goals?new=purchase" opens straight onto a new purchase, which is how
-// the overview's "Save for a purchase" link gets here; Coming up adds the
-// event's name, price and day (&name=, &price= in cents, &by=) to start from.
-// When the fund alone fails to load, the goals still show, with a way to try
-// the fund again.
+// The emergency fund and the owner's goals, after Goals' lead and afford
+// check: any open goal form first, then the emergency fund (its card, the
+// offer to start one, or a line on when it can be sized), then every other
+// goal in the order they are funded, with which comes first when two or more
+// compete. When the fund alone fails to load, the goals still show, with a
+// way to try the fund again.
 
+import type { Goal } from '../../../api/client'
+import { useAction } from '../../../api/hooks'
 import { Card } from '../../../components/design/Card'
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import type { Account, Goal } from '../../../api/client'
-import { useAction, useActionMutation } from '../../../api/hooks'
 import { LoadingOrError } from '../../../components/ui'
-import { FormCard } from '../FormCard'
-import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
 import type { EmergencyView } from '../../../lib/emergencyText'
+import { EmergencyCard, EmergencyOffer } from './EmergencyFund'
 import { GoalCard } from './GoalCard'
-import { GoalForm, type GoalDraft, type GoalFields, type GoalKind } from './GoalForm'
+import { GoalEditor, type Editing } from './GoalEditor'
 import { GoalOrderCard } from './GoalOrder'
 
-/** What the form is open on: a new goal of a kind, or an existing goal. */
-interface Editing {
-  goal: Goal | null
-  kind: GoalKind
-  /** What a new goal starts from, when the link that opened it says. */
-  draft?: GoalDraft
-}
-
-/** A new purchase as the address asks for it, or nothing open. */
-function editingFrom(params: URLSearchParams): Editing | null {
-  if (params.get('new') !== 'purchase') return null
-  const price = Number(params.get('price'))
-  const draft = {
-    name: params.get('name') ?? '',
-    targetCents: Number.isInteger(price) && price > 0 ? price : null,
-    targetDate: params.get('by') ?? '',
-  }
-  return { goal: null, kind: 'purchase', draft }
-}
-
-/** The form's heading: the goal's name, or what kind of goal is being started. */
-function titleOf({ goal, kind }: Editing): string {
-  if (goal) return goal.name
-  return kind === 'purchase' ? 'Save for a purchase' : 'New goal'
-}
-
-/**
- * A goal's save, leaving out a target the form left as it opened: the
- * emergency fund's target grows with essentials, so sending back the one the
- * form showed would read as the owner typing their own.
- */
-function changesTo(goal: Goal, fields: GoalFields) {
-  const { targetCents, ...rest } = fields
-  return targetCents === goal.targetCents ? { id: goal.id, ...rest } : { id: goal.id, ...fields }
-}
-
-/** The open form, with the changes it can save. */
-function GoalEditor({
-  editing,
-  accounts,
-  emergency,
-  onClose,
-}: {
-  editing: Editing
-  accounts: Account[]
-  emergency: EmergencyView | null
-  onClose: () => void
-}) {
-  const { goal, kind, draft } = editing
-  const create = useActionMutation('create_goal')
-  const update = useActionMutation('update_goal')
-  const remove = useActionMutation('delete_goal')
-  const close = { onSuccess: onClose }
-  const save = (fields: GoalFields) =>
-    goal ? update.mutate(changesTo(goal, fields), close) : create.mutate(fields, close)
-  return (
-    <FormCard title={titleOf(editing)}>
-      <GoalForm
-        goal={goal ?? undefined}
-        kind={kind}
-        draft={draft}
-        accounts={accounts}
-        emergency={emergency}
-        busy={create.isPending || update.isPending || remove.isPending}
-        error={create.error ?? update.error ?? remove.error}
-        onSubmit={save}
-        onCancel={onClose}
-        onDelete={goal ? () => remove.mutate({ id: goal.id }, close) : undefined}
-      />
-    </FormCard>
-  )
-}
-
-/**
- * Every goal's card, in the owner's order; the emergency fund draws its own.
- * While the fund fails to load, its goal draws nothing, since a plain card
- * would show a target the fund has not just worked out.
- */
-function GoalCards({
-  goals,
-  emergency,
-  fundFailed,
-  today,
-  onEdit,
-}: {
-  goals: Goal[]
-  emergency: EmergencyView | null
-  fundFailed: boolean
-  today: string
-  onEdit: (goal: Goal) => void
-}) {
-  const shown = fundFailed ? goals.filter((goal) => goal.emergencyMonths === null) : goals
-  return (
-    <div className="grid">
-      {shown.map((goal) =>
-        // The fund's goal, marked or only named as one, draws the fund's card.
-        emergency && goal.id === emergency.goalId ? (
-          <EmergencyCard key={goal.id} goal={goal} view={emergency} onEdit={() => onEdit(goal)} />
-        ) : (
-          <GoalCard key={goal.id} goal={goal} today={today} onEdit={() => onEdit(goal)} />
-        ),
-      )}
-    </div>
-  )
-}
+/** Said while there is too little spending to size an emergency fund from. */
+export const NO_FUND_YET =
+  'Your emergency fund shows here once Leeway has a month of your spending to size it from.'
 
 /** Goals still being saved for compete for the same money; two or more make an order worth setting. */
 const competing = (goals: Goal[]) =>
   goals.filter((goal) => goal.status === 'in_progress' || goal.status === 'past_due').length >= 2
-
-/**
- * How a first goal starts: the emergency fund offer when there is one,
- * otherwise, with no goals yet, a line on what to save for. While the fund
- * fails to load, neither offers it, since the retry beside them says so and
- * an offer from an earlier load may be out of date.
- */
-function GoalsStart({
-  goals,
-  emergency,
-  fundFailed,
-}: {
-  goals: Goal[]
-  emergency: EmergencyView | null
-  fundFailed: boolean
-}) {
-  if (!fundFailed && emergency && emergency.goalId === null) {
-    return <EmergencyOffer view={emergency} />
-  }
-  if (goals.length > 0) return null
-  return (
-    <Card static="empty" label="No goals">
-      <p className="empty">
-        {fundFailed
-          ? 'No goals yet. Save for something you want to buy.'
-          : 'No goals yet. Save for something you want to buy, or start an emergency fund once a month of spending is in.'}
-      </p>
-    </Card>
-  )
-}
 
 /** In place of the fund's card or offer when it could not load: a line and a retry. */
 function FundTrouble({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
@@ -173,10 +35,112 @@ function FundTrouble({ retrying, onRetry }: { retrying: boolean; onRetry: () => 
   )
 }
 
-export function GoalsSection() {
-  const [params, setParams] = useSearchParams()
-  // Opened from a link that asks for a new purchase; otherwise nothing is open.
-  const [editing, setEditing] = useState(() => editingFrom(params))
+/** The emergency fund's place: its card once started, the offer before, or why it waits. */
+function EmergencySlot({
+  goals,
+  fund,
+  onEdit,
+}: {
+  goals: Goal[]
+  fund: EmergencyView | null
+  onEdit: (goal: Goal) => void
+}) {
+  const goal = fund && goals.find((one) => one.id === fund.goalId)
+  if (fund && goal) {
+    return <EmergencyCard goal={goal} view={fund} onEdit={() => onEdit(goal)} />
+  }
+  if (fund && fund.goalId === null) return <EmergencyOffer view={fund} />
+  return (
+    <Card static="empty" label="Emergency fund">
+      <p className="empty">{NO_FUND_YET}</p>
+    </Card>
+  )
+}
+
+/** What the goals list says with nothing in it, beside the buttons that start one. */
+function NoGoals({ hasFund }: { hasFund: boolean }) {
+  return (
+    <Card static="empty" label="No goals">
+      <p className="empty">
+        {hasFund ? 'Nothing else saved for yet.' : 'No goals yet.'} Save for something you want to
+        buy, and Leeway works out what to set aside for it.
+      </p>
+    </Card>
+  )
+}
+
+/** Every goal but the fund, in the owner's order, under the buttons that start a new one. */
+function YourGoals({
+  goals,
+  all,
+  hasFund,
+  today,
+  onOpen,
+}: {
+  goals: Goal[]
+  all: Goal[]
+  hasFund: boolean
+  today: string
+  onOpen: (editing: Editing) => void
+}) {
+  return (
+    <section className="stack" aria-label="Your goals">
+      <div className="row-between wrap">
+        <h2>Your goals</h2>
+        <div className="row wrap">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => onOpen({ goal: null, kind: 'savings' })}
+          >
+            Add a goal
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => onOpen({ goal: null, kind: 'purchase' })}
+          >
+            Save for a purchase
+          </button>
+        </div>
+      </div>
+      {/* The fund is funded in the same order, so the order counts it too. */}
+      {competing(all) && <GoalOrderCard today={today} />}
+      {goals.length === 0 ? (
+        <NoGoals hasFund={hasFund} />
+      ) : (
+        <div className="grid">
+          {goals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              today={today}
+              onEdit={() => onOpen({ goal, kind: goal.kind })}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** A key that starts the form afresh for each goal, kind or filled-in draft it opens on. */
+function editorKey({ goal, kind, draft }: Editing): string {
+  if (goal) return goal.id
+  return draft
+    ? `new-${kind}-${draft.name}-${draft.targetCents}-${draft.targetDate}`
+    : `new-${kind}`
+}
+
+export function GoalsSection({
+  editing,
+  onOpen,
+  onClose,
+}: {
+  editing: Editing | null
+  onOpen: (editing: Editing) => void
+  onClose: () => void
+}) {
   const goals = useAction('list_goals')
   const accounts = useAction('list_accounts')
   // Cash flow's date is the server's today.
@@ -188,55 +152,39 @@ export function GoalsSection() {
     return <LoadingOrError error={goals.error ?? accounts.error ?? cash.error} />
   }
   const fund = emergency.data ?? null
-
-  function close() {
-    setEditing(null)
-    // Drop "?new=purchase" and what came with it, so a reload does not open the form again.
-    if (params.has('new')) setParams({}, { replace: true })
-  }
+  const fundGoalId = fund?.goalId ?? null
+  // While the fund fails to load, its goal draws nothing: a plain card would
+  // show a target the fund has not just worked out.
+  const others = goals.data.filter(
+    (goal) => goal.id !== fundGoalId && !(emergency.isError && goal.emergencyMonths !== null),
+  )
 
   return (
     <>
       {editing && (
         <GoalEditor
-          key={editing.goal?.id ?? `new-${editing.kind}`}
+          key={editorKey(editing)}
           editing={editing}
           accounts={accounts.data}
           emergency={fund}
-          onClose={close}
+          onClose={onClose}
         />
       )}
-
-      <div className="row-between wrap">
-        <h1>Goals</h1>
-        <div className="row wrap">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setEditing({ goal: null, kind: 'savings' })}
-          >
-            Add a goal
-          </button>
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => setEditing({ goal: null, kind: 'purchase' })}
-          >
-            Save for a purchase
-          </button>
-        </div>
-      </div>
-      {emergency.isError && (
+      {emergency.isError ? (
         <FundTrouble retrying={emergency.isFetching} onRetry={() => void emergency.refetch()} />
+      ) : (
+        <EmergencySlot
+          goals={goals.data}
+          fund={fund}
+          onEdit={(goal) => onOpen({ goal, kind: goal.kind })}
+        />
       )}
-      <GoalsStart goals={goals.data} emergency={fund} fundFailed={emergency.isError} />
-      {competing(goals.data) && <GoalOrderCard today={cash.data.today} />}
-      <GoalCards
-        goals={goals.data}
-        emergency={fund}
-        fundFailed={emergency.isError}
+      <YourGoals
+        goals={others}
+        all={goals.data}
+        hasFund={fundGoalId !== null}
         today={cash.data.today}
-        onEdit={(goal) => setEditing({ goal, kind: goal.kind })}
+        onOpen={onOpen}
       />
     </>
   )

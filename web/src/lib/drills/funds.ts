@@ -2,7 +2,7 @@
 // budget period, cost by cost. Pure, like every drill in lib/drills.
 
 import type { SinkingFundsView } from '../../api/client'
-import { FUND_CADENCE_WORDS } from '../../pages/plan/payday/fundText'
+import { FUND_CADENCE_WORDS } from '../../pages/plan/goals/yearly/fundText'
 import type { DrillDown } from '../drill'
 
 /** The drill for these funds; `word` names a budget period, like "month". */

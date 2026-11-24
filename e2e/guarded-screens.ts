@@ -51,6 +51,22 @@ async function revealKey(page: Page) {
   await expect(page.getByLabel('New key')).toBeVisible()
 }
 
+/**
+ * Asks Goals' afford check about a long-named thing at a price no seeded
+ * account covers, so the longest answer shows: the reasons, when saving gets
+ * there, and Save for it.
+ */
+async function checkPurchase(page: Page) {
+  const form = page.getByRole('form', { name: 'Can I afford it?' })
+  await form
+    .getByRole('textbox', { name: 'What is it?' })
+    .fill('A very long weekend away in the mountains')
+  await form.getByRole('textbox', { name: 'Price' }).fill('1000000')
+  await form.getByRole('button', { name: 'Check' }).click()
+  const answer = page.getByRole('status', { name: 'The answer' })
+  await expect(answer.getByRole('button', { name: 'Save for it' })).toBeVisible()
+}
+
 /** The first seeded category's page. */
 const categoryPage = (seeded: Seeded) => `/spending/${seeded.categories[0]}`
 
@@ -120,10 +136,6 @@ export const SCREENS: Screen[] = [
     name: '/payday what this paycheck covers',
     then: open(/This paycheck/, (page) => page.getByRole('dialog', { name: 'This paycheck' })),
   }),
-  at('payday', '/payday', {
-    name: '/payday adding a yearly cost',
-    then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
-  }),
   at('bills', '/payday/bills'),
   at('bills', '/payday/bills', {
     name: '/payday/bills adding a bill',
@@ -133,6 +145,14 @@ export const SCREENS: Screen[] = [
   at('goals', '/goals', {
     name: '/goals adding a goal',
     then: open('Add a goal', (page) => page.getByRole('region', { name: 'New goal' })),
+  }),
+  at('goals', '/goals', {
+    name: '/goals with the answer to can I afford it',
+    then: checkPurchase,
+  }),
+  at('goals', '/goals', {
+    name: '/goals adding a yearly cost',
+    then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
   }),
   at('retirement', '/wealth/retirement'),
   at('retirement', '/wealth/retirement', {

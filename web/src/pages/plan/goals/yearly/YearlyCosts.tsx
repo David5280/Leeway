@@ -1,21 +1,21 @@
-// Sinking funds on Payday, all in one Yearly costs card: what the yearly
-// and irregular costs (insurance, a registration, the holidays) hold back
-// each budget period on top, opening its math; the costs Leeway found,
-// added or waved off in one tap; and the funds themselves, opened on
-// request. The figure is the very amount safe to spend holds back, so the
-// two never disagree.
+// Yearly costs on Goals (the server calls them sinking funds), all in one
+// card: what the yearly and irregular costs (insurance, a registration, the
+// holidays) hold back each budget period on top, opening its math; the costs
+// Leeway found, added or waved off in one tap; and the funds themselves,
+// opened on request. The figure is the very amount safe to spend holds back,
+// so the two never disagree. Payday only totals it, linking here.
 
 import { useState } from 'react'
-import type { SinkingFundsView } from '../../../api/client'
-import { useAction } from '../../../api/hooks'
-import { Card } from '../../../components/design/Card'
-import { KeyFigure } from '../../../components/design/KeyFigure'
-import { SectionHead } from '../../../components/design/SectionHead'
-import { LoadingOrError } from '../../../components/ui'
-import { useApp } from '../../../lib/app'
-import { fundsDrill } from '../../../lib/drills/funds'
-import { periodWord } from '../../../lib/format'
-import { FormCard } from '../FormCard'
+import type { SinkingFundsView } from '../../../../api/client'
+import { useAction } from '../../../../api/hooks'
+import { Card } from '../../../../components/design/Card'
+import { KeyFigure } from '../../../../components/design/KeyFigure'
+import { SectionHead } from '../../../../components/design/SectionHead'
+import { LoadingOrError } from '../../../../components/ui'
+import { useApp } from '../../../../lib/app'
+import { fundsDrill } from '../../../../lib/drills/funds'
+import { periodWord } from '../../../../lib/format'
+import { FormCard } from '../../FormCard'
 import { FundForm } from './FundForm'
 import { FundList, ShortNote, Suggestions, useDate } from './FundRows'
 import { firstShort } from './fundText'
@@ -82,7 +82,7 @@ function Inside({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) 
 }
 
 /** The one card: an invitation before any fund, the total and its parts after. */
-function YearlyCosts({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) {
+function YearlyCostsCard({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) {
   const word = usePeriodWord()
   const date = useDate()
   if (view.funds.length === 0) {
@@ -115,13 +115,13 @@ function YearlyCosts({ view, onAdd }: { view: SinkingFundsView; onAdd: () => voi
   )
 }
 
-export function SinkingFunds() {
+export function YearlyCosts() {
   const view = useAction('list_sinking_funds')
   const [adding, setAdding] = useState(false)
   if (!view.data) return <LoadingOrError error={view.error} label="Loading yearly costs" />
   return (
     <>
-      <YearlyCosts view={view.data} onAdd={() => setAdding(true)} />
+      <YearlyCostsCard view={view.data} onAdd={() => setAdding(true)} />
       {adding && (
         <FormCard title="New yearly cost">
           <FundForm onDone={() => setAdding(false)} />

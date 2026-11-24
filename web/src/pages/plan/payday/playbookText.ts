@@ -50,10 +50,6 @@ export function setAsideWords(lines: PlanLine[]): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-/** Whether any line is a yearly cost, which the Yearly costs card already explains. */
-export const holdsYearlyCosts = (lines: PlanLine[]): boolean =>
-  lines.some((line) => line.kind === 'sinking_fund')
-
 /** "Rent and Phone", or "Rent, Phone and 2 more" past two names. */
 export function billNames(lines: PlanLine[]): string {
   const names = lines.filter((line) => line.kind === 'bill').map((line) => line.name)

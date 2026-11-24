@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fundCard, fundGoal, fundView, offerView, serveEmergency } from '../../../test/emergency'
 import { failing, sentence } from '../../../test/fake'
 import { goal, planServer, renderPlanning } from '../../../test/planning'
+import { NO_FUND_YET } from './GoalsSection'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -23,8 +24,10 @@ describe('the emergency fund offer', () => {
     expect(offer.getByText('$2,000')).toBeVisible()
     expect(offer.getByText(/^What Rent and Groceries cost in a typical month\./)).toBeVisible()
     expect(offer.getByText(sentence('Then aim for 3 months: $6,000.'))).toBeVisible()
-    // No empty-goals card beside the offer: the offer is the way to start.
-    expect(screen.queryByText(/No goals yet/)).toBeNull()
+    // The offer has its own place; the goals below still say how to start one.
+    expect(
+      within(screen.getByRole('region', { name: 'Your goals' })).getByText(/^No goals yet\./),
+    ).toBeVisible()
 
     await userEvent.setup().click(offer.getByRole('button', { name: 'Start my emergency fund' }))
     await waitFor(() => expect(server.actions('start_emergency_fund')).toEqual([{}]))
@@ -90,9 +93,9 @@ describe('the emergency fund offer', () => {
   it('is not offered before spending is known, so the empty card says when it will be', async () => {
     serveEmergency(null)
     renderPlanning('/goals')
-    expect(
-      await screen.findByText(/start an emergency fund once a month of spending/),
-    ).toBeVisible()
+    const empty = await screen.findByRole('region', { name: 'Emergency fund' })
+    expect(empty).toHaveTextContent(NO_FUND_YET)
+    expect(screen.queryByRole('region', { name: 'Start an emergency fund' })).toBeNull()
   })
 })
 
@@ -226,8 +229,9 @@ describe('the emergency fund when it fails to load', () => {
     )
     renderPlanning('/goals')
     expect(await screen.findByText('The emergency fund did not load.')).toBeVisible()
-    expect(screen.getByText('No goals yet. Save for something you want to buy.')).toBeVisible()
-    expect(screen.queryByText(/start an emergency fund/)).toBeNull()
+    expect(screen.getByText(/^No goals yet\. Save for something you want to buy/)).toBeVisible()
+    expect(screen.queryByRole('region', { name: 'Start an emergency fund' })).toBeNull()
+    expect(screen.queryByText(NO_FUND_YET)).toBeNull()
   })
 
   it('drops an offer from an earlier load once the fund fails to load again', async () => {
