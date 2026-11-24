@@ -79,6 +79,48 @@ describe("an old job's paystub", () => {
   })
 })
 
+/**
+ * An old job paid twice a month until Jul 31, then a new one with a name
+ * that shares a word with it every two weeks from Aug 14.
+ */
+function sharedWordJobs() {
+  const old = ['2026-04-15', '2026-04-30', '2026-05-15', '2026-05-29', '2026-06-15', '2026-06-30']
+  const fridays = ['2026-08-14', '2026-08-28', '2026-09-11', '2026-09-25', '2026-10-09']
+  return [
+    ...[...old, '2026-07-15', '2026-07-31'].map((date) =>
+      salary(date, 'STATE OF COLORADO PAYROLL', 250_000),
+    ),
+    ...[...fridays, '2026-10-23', '2026-11-06'].map((date) =>
+      salary(date, 'UNIV OF COLORADO PAYROLL', 300_000),
+    ),
+  ]
+}
+
+/** The new job read from its own seven Fridays: every two weeks, next Nov 20, $3,000 each. */
+const NEW_FRIDAYS = { cadence: 'biweek', monthlyCents: 652_232, nextPayday: '2026-11-20' }
+
+describe("an old job's paystub naming a word the new job shares", () => {
+  it('leaves the new job read from its own paychecks', () => {
+    const old = paystub('semimonth', '2026-07-31', 'State of Colorado')
+    expect(currentPay(sharedWordJobs(), TODAY, old)).toMatchObject(NEW_FRIDAYS)
+  })
+
+  it('is the old job’s even when dated during the new job’s first paychecks', () => {
+    // The old job's final stub, paid Aug 16, two days after the new job's first paycheck.
+    const final = paystub('semimonth', '2026-08-16', 'State of Colorado')
+    expect(currentPay(sharedWordJobs(), TODAY, final)).toMatchObject(NEW_FRIDAYS)
+    // A stub naming no payer seen, as when the bank shows only a payroll
+    // service, still counts by its date.
+    const unnamed = paystub('semimonth', '2026-08-16', 'Payroll Services LLC')
+    expect(currentPay(sharedWordJobs(), TODAY, unnamed)).toMatchObject({ cadence: 'semimonth' })
+  })
+
+  it('still sets the new job’s cadence when it names the new job', () => {
+    const named = paystub('semimonth', null, 'Univ. of Colorado')
+    expect(currentPay(sharedWordJobs(), TODAY, named)).toMatchObject({ cadence: 'semimonth' })
+  })
+})
+
 describe("the main job's own paystub", () => {
   it('sets the cadence when it was paid during the job, from a few days before its first paycheck', () => {
     const ours = paystub('semimonth', '2026-09-28', null)
@@ -113,5 +155,51 @@ describe('namesPayer', () => {
     // A key keeps the number that names its payer; a stub's name is read without it.
     expect(namesPayer('7-Eleven, Inc.', '7eleven dir dep')).toBe(true)
     expect(namesPayer('1199SEIU Benefit Funds', '1199seiu dir dep')).toBe(true)
+  })
+
+  it('never matches on one shared word alone', () => {
+    expect(namesPayer('State of Colorado', 'univ of colorado payroll')).toBe(false)
+    expect(namesPayer('Denver Public Schools', 'cherry creek schools payroll')).toBe(false)
+    expect(namesPayer('Bank of the West', 'first bank payroll')).toBe(false)
+    expect(namesPayer('State of Colorado', 'state farm payroll')).toBe(false)
+  })
+
+  it('matches every name word of the stub side by side, or a brand the bank prints alone', () => {
+    expect(namesPayer('State of Colorado', 'state of colorado payroll')).toBe(true)
+    expect(namesPayer('Denver Public Schools', 'denver public schools dir dep')).toBe(true)
+    expect(namesPayer('Acme Widgets Inc', 'acme payroll')).toBe(true)
+    // An ACH line puts its own labels before the company.
+    expect(namesPayer('Acme Corp', 'orig co name acme corp orig co entry descr payroll')).toBe(true)
+  })
+
+  it('reads a short form the bank prints as the word the stub spells out', () => {
+    expect(namesPayer('University of Colorado', 'univ of colorado payroll')).toBe(true)
+    expect(namesPayer('Acme International', 'acme intl payroll')).toBe(true)
+    expect(namesPayer('Acme Svcs', 'acme services dir dep')).toBe(true)
+    // Spelled out, two employers that share one word are still two.
+    expect(namesPayer('State of Colorado', 'univ of colorado payroll')).toBe(false)
+  })
+
+  it('reads the last word of a name the bank cut off at 16 characters', () => {
+    expect(namesPayer('Denver Public Schools', 'denver public sc payroll')).toBe(true)
+    expect(namesPayer('Denver Public Schools', 'denver public schoo dir dep')).toBe(true)
+    // Only at the end of the line's name, and only from two letters on.
+    expect(namesPayer('Denver Public Schools', 'denver public sc west payroll')).toBe(false)
+    expect(namesPayer('Denver Public Schools', 'denver public sx payroll')).toBe(false)
+    expect(namesPayer('Denver Public Schools', 'denver public s payroll')).toBe(false)
+    // A lone cut word, with no whole word of the stub before it, names no one.
+    expect(namesPayer('Acme', 'globex ac payroll')).toBe(false)
+  })
+
+  it('never matches an employer that shares only some of its words with the line', () => {
+    // Every stub word is in the line, but not side by side.
+    expect(namesPayer('University of Denver', 'univ of colorado denver payroll')).toBe(false)
+    // The stub names more than the line does.
+    expect(namesPayer('University of Colorado Health', 'univ of colorado payroll')).toBe(false)
+    // The two go apart after their shared start.
+    expect(namesPayer('National Western Life', 'natl western stock show payroll')).toBe(false)
+    // A general word the bank prints alone names no one employer.
+    expect(namesPayer('National Western Life', 'natl payroll')).toBe(false)
+    expect(namesPayer('University of Denver', 'univ payroll')).toBe(false)
   })
 })

@@ -2,7 +2,7 @@
 // hidden without an Anthropic key, so it is turned on by stand-ins (chat.ts):
 // before the first question, and with an answer and what Leeway remembers.
 
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import { pretendChatOn } from './chat'
 
 /** A Chat screen, named for what it shows. */

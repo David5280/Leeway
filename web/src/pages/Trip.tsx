@@ -1,7 +1,8 @@
 // One trip: what it cost, by part (getting there, a place to stay, food and
 // things to do) against its budget when one was planned, and the
 // transactions that make it up, each opening its sheet. A trip still ahead
-// offers to plan its budget, or to change the one planned.
+// offers to plan its budget, or to change the one planned. Every state, an
+// error or a trip not found included, leads back to Coming up.
 
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -20,6 +21,16 @@ import { PlanBudget } from './trips/PlanBudget'
 import { TripParts } from './trips/TripParts'
 
 const STATUS = { upcoming: 'Coming up', under_way: 'Under way', past: 'Done' } as const
+
+/** Back to the list of trips coming up, where a trip's page is opened from. */
+function BackLink() {
+  return (
+    <Link to="/plan/ahead" className="linkbtn row trip-back">
+      <Icon name="back" size={16} /> Coming up
+    </Link>
+  )
+}
+
 function Transactions({ trip }: { trip: TripDetail }) {
   const { settings } = useApp()
   const categories = useAction('list_categories').data ?? []
@@ -31,15 +42,16 @@ function Transactions({ trip }: { trip: TripDetail }) {
         {trip.transactions.length === 0 && <p className="empty">Nothing spent on it yet.</p>}
         {trip.transactions.map((tx) => (
           <button key={tx.id} type="button" className="list-row" onClick={() => setOpened(tx)}>
-            <span className="num small muted" style={{ width: 56, flex: 'none' }}>
-              {shortDate(tx.date, settings.locale)}
-            </span>
-            <span className="grow ellipsis" style={{ minWidth: 0 }}>
-              {tx.displayName}
-            </span>
+            <span className="num small muted trip-date">{shortDate(tx.date, settings.locale)}</span>
+            <span className="grow ellipsis">{tx.displayName}</span>
             <Money cents={tx.amountCents} sign="transaction" precision="cents" />
           </button>
         ))}
+        {trip.moreTransactions && (
+          <p className="small muted">
+            Showing the newest {trip.transactions.length}. The totals count them all.
+          </p>
+        )}
       </Card>
       {opened && (
         <TransactionSheet
@@ -61,6 +73,7 @@ export function TripPage() {
   if (!trip.data) {
     return (
       <Shell>
+        <BackLink />
         <LoadingOrError error={trip.error} />
       </Shell>
     )
@@ -68,9 +81,7 @@ export function TripPage() {
   const detail = trip.data
   return (
     <Shell>
-      <Link to="/plan/ahead" className="linkbtn row" style={{ gap: 4 }}>
-        <Icon name="back" size={16} /> Coming up
-      </Link>
+      <BackLink />
       <div>
         <h1>{tripName(detail)}</h1>
         <span className="muted">

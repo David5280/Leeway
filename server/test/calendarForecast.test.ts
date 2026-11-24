@@ -13,7 +13,12 @@ import {
   spend,
   type CalendarContext,
 } from './fixtures/calendarStore.js'
-import { createTestContext, insertBankAccount, resetData } from './helpers.js'
+import {
+  createTestContext,
+  insertBankAccount,
+  insertBankTransaction,
+  resetData,
+} from './helpers.js'
 
 let ctx: CalendarContext
 const { call } = actionCaller(() => ctx)
@@ -131,6 +136,28 @@ describe('the forecast', () => {
     // A monthly budget with no regular deposit has no payday to show.
     const forecast = await call('get_forecast')
     expect(forecast.weeks.flatMap((week) => week.items)).toEqual([])
+  })
+
+  it('keeps paydays on the payroll’s weekday after one a holiday moved', async () => {
+    ctx.setNow(new Date('2026-11-20T18:00:00Z'))
+    const { accountId } = await insertBankAccount(ctx.db, { subtype: 'checking' })
+    const thursdays = ['2026-09-03', '2026-09-17', '2026-10-01', '2026-10-15', '2026-10-29']
+    for (const date of [...thursdays, '2026-11-12']) {
+      await insertBankTransaction(ctx.db, accountId, {
+        date,
+        name: 'ACME PAYROLL',
+        amountCents: -200_000,
+        detailed: 'INCOME_SALARY',
+      })
+    }
+    serving(ics([]))
+    await call('connect_calendar', { url: SECRET })
+    const paydays = (await call('get_forecast')).weeks
+      .flatMap((week) => week.items)
+      .filter((item) => item.type === 'payday')
+      .map((item) => item.date)
+    // Thanksgiving's payday is paid the Wednesday before; the rest stay Thursdays.
+    expect(paydays).toEqual(['2026-11-25', '2026-12-10', '2026-12-24'])
   })
 
   it('sets aside the booking once and each day for a trip, only the days left once under way', () => {

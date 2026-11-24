@@ -10,7 +10,8 @@
 
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { ROUTES, type RouteName } from '../web/src/routes'
-import { SCREENS, type Screen } from './guarded-screens'
+import { SCREENS } from './guarded-screens'
+import type { Screen } from './screen'
 import { SETTINGS_GROUPS } from './settings-groups'
 import {
   describeProblems,

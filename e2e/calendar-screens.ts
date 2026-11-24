@@ -3,7 +3,7 @@
 // network (calendar.ts): the weeks ahead with events left out, and a trip's
 // page, ahead with no budget and under way over one.
 
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import { pretendCalendar, SOON_TRIP_PATH } from './calendar'
 
 export const CALENDAR_SCREENS: Screen[] = [

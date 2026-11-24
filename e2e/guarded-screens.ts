@@ -2,8 +2,7 @@
 // every route the app answers (web/src/routes.ts), with long names seeded,
 // and the forms people open on them.
 
-import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import type { RouteName } from '../web/src/routes'
+import { expect, type Page } from '@playwright/test'
 import * as ai from './ai'
 import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
@@ -13,52 +12,11 @@ import { CHAT_SCREENS } from './chat-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
-import type { GuardedPhone } from './phone'
+import { at, open, type Screen } from './screen'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
 import { SETTINGS_GROUPS } from './settings-groups'
+import { TRANSACTION_SCREENS } from './transaction-screens'
 import { revealWidgetToken } from './widget'
-
-export interface Screen {
-  name: string
-  /** The route in web/src/routes.ts this screen is an address of. */
-  route: RouteName
-  /** The address, worked out from what was seeded (an assistant's needs the server). */
-  path: (seeded: Seeded, request: APIRequestContext) => string | Promise<string>
-  /** Anything to set up before it loads, like standing in for a service the tests cannot reach. */
-  before?: (page: Page) => Promise<void>
-  /** Anything to do once it has loaded, like opening a form. */
-  then?: (page: Page) => Promise<void>
-  /** Only on the phones this holds for; by default, on every phone. */
-  on?: (phone: GuardedPhone) => boolean
-}
-
-const at = (route: RouteName, path: string, more: Partial<Screen> = {}): Screen => ({
-  name: path,
-  route,
-  path: () => path,
-  ...more,
-})
-
-/**
- * Presses a button, then waits for what it opens. The button is scrolled into
- * view a frame ahead, as a finger would find it first, so the scroll is over
- * before the press: a menu closes when the page or its row scrolls.
- */
-const open = (button: string | RegExp, opens: (page: Page) => ReturnType<Page['getByRole']>) =>
-  async function (page: Page) {
-    const pressed = page.getByRole('button', { name: button }).first()
-    await pressed.scrollIntoViewIfNeeded()
-    await page.evaluate(
-      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-    )
-    await pressed.click()
-    await expect(opens(page)).toBeVisible()
-  }
-
-/** Waits until nothing in it is still moving, like a sheet sliding up. */
-async function stillOn(locator: ReturnType<Page['getByRole']>) {
-  await expect.poll(() => locator.evaluate((element) => element.getAnimations().length)).toBe(0)
-}
 
 /** Every account as the server lists it, with no APR, as a card is before one is added. */
 async function withoutAprs(page: Page) {
@@ -71,30 +29,6 @@ async function withoutAprs(page: Page) {
     })
   })
 }
-
-/** The seeded transaction with the longest name, as its row and its sheet are named. */
-const LONG_TRANSACTION = /^Amazon Marketplace/i
-
-/** Opens the long-named transaction's sheet from the Transactions list. */
-async function openTransaction(page: Page) {
-  await page.getByRole('button', { name: LONG_TRANSACTION }).first().click()
-  const sheet = page.getByRole('dialog', { name: LONG_TRANSACTION })
-  await expect(sheet).toBeVisible()
-  await stillOn(sheet)
-  return sheet
-}
-
-/** Opens the long-named transaction's sheet, then presses a button in it and waits for what it shows. */
-const inTransaction = (
-  button: RegExp,
-  shows: (sheet: ReturnType<Page['getByRole']>) => ReturnType<Page['getByRole']>,
-) =>
-  async function (page: Page) {
-    const sheet = await openTransaction(page)
-    await sheet.getByRole('button', { name: button }).click()
-    await expect(shows(sheet)).toBeVisible()
-    await stillOn(sheet)
-  }
 
 /** A key that looks like a new one, answered without making it, so no key is left behind. */
 async function revealKey(page: Page) {
@@ -150,86 +84,7 @@ export const SCREENS: Screen[] = [
   },
   at('alerts', '/alerts'),
   at('inbox', '/inbox'),
-  at('transactions', '/transactions'),
-  at('transactions', '/transactions', {
-    name: '/transactions with the add menu open',
-    then: open('Add or import', (page) => page.getByRole('menu', { name: 'Add or import' })),
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions adding one by hand',
-    then: async (page) => {
-      await open('Add or import', (on) => on.getByRole('menuitem', { name: 'Add by hand' }))(page)
-      await page.getByRole('menuitem', { name: 'Add by hand' }).click()
-      const sheet = page.getByRole('dialog', { name: 'Add a transaction' })
-      await expect(sheet.getByRole('form')).toBeVisible()
-      await stillOn(sheet)
-    },
-  }),
-  // A transaction's sheet, in each of its three views.
-  at('transactions', '/transactions', {
-    name: "/transactions with a transaction's sheet open",
-    then: async (page) => {
-      await openTransaction(page)
-    },
-  }),
-  at('transactions', '/transactions', {
-    name: "/transactions with a transaction's sheet open, part of a trip",
-    before: (page) => pretendCalendar(page),
-    then: async (page) => {
-      const sheet = await openTransaction(page)
-      await expect(sheet.getByRole('link', { name: /^Lisbon, Porto/ })).toBeVisible()
-    },
-  }),
-  at('transactions', '/transactions', {
-    name: "/transactions changing a transaction's category",
-    then: inTransaction(/Change$/, (sheet) => sheet.getByRole('list', { name: /^Category for / })),
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions making a rule from one',
-    then: inTransaction(/^Always categorize/, (sheet) =>
-      sheet.getByRole('form', { name: 'New rule' }),
-    ),
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions starting a new rule',
-    then: async (page) => {
-      await open('+ New rule', (on) => on.getByRole('form', { name: 'New rule' }))(page)
-      await stillOn(page.getByRole('dialog', { name: 'New rule' }))
-    },
-  }),
-  // The filter chips, each open.
-  at('transactions', '/transactions', {
-    name: '/transactions choosing dates',
-    then: open(/^Dates:/, (page) => page.getByRole('menu', { name: /^Dates:/ })),
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions choosing an account',
-    then: open(/^Account:/, (page) => page.getByRole('menu', { name: /^Account:/ })),
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions filtering by category',
-    then: async (page) => {
-      await page.getByRole('button', { name: 'Category: all' }).click()
-      const sheet = page.getByRole('dialog', { name: 'Filter by category' })
-      await expect(sheet).toBeVisible()
-      await stillOn(sheet)
-    },
-  }),
-  at('transactions', '/transactions', {
-    name: '/transactions showing only what needs a category',
-    then: async (page) => {
-      await page.getByRole('button', { name: /need a category$/ }).click()
-      await expect(page.getByRole('button', { name: /need a category$/ })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      )
-    },
-  }),
-  {
-    name: "one account's transactions",
-    route: 'transactions',
-    path: (seeded) => `/transactions?account=${seeded.accounts[0]}`,
-  },
+  ...TRANSACTION_SCREENS,
   at('importTransactions', '/transactions/import'),
   at('importTransactions', '/transactions/import', {
     name: '/transactions/import with a file chosen',

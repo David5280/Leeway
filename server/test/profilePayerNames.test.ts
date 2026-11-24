@@ -79,26 +79,73 @@ describe('the payers the profile names', () => {
   })
 
   // A household or a sole trader paying by direct deposit under their own
-  // name, as banks write it: an ACH line's "CO" labels name no company.
-  const PERSON_PAYERS = [
-    'JOHN SMITH DIR DEP',
-    'ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD',
-    'JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD',
+  // name, as banks write it: an ACH line's "CO" labels name no company, nor
+  // does a trailing state, before a pay word ("DENVER CO DIR DEP") or an ACH
+  // label ("DENVER CO DES:PAYROLL"), nor a word an ACH line prints after its
+  // pay word ("DES:PAYROLL CO ID"). A bank code, where given, is the one some
+  // banks put on such a line.
+  const PERSON_PAYERS: [name: string, code: string | null][] = [
+    ['JOHN SMITH DIR DEP', null],
+    ['ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', null],
+    ['JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', null],
+    ['JOHN SMITH DES:PAYROLL CO ID:XXXXX PPD', null],
+    ['JOHN SMITH DENVER CO DIR DEP', null],
+    ['JANE DOE CO PAYROLL', 'TRANSFER_IN_DEPOSIT'],
+    // A state ends an ACH line's payer as it does a plain line's.
+    ['JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD', null],
+    [
+      'ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 DESC DATE: CO ENTRY DESCR:DIR DEP SEC:PPD',
+      null,
+    ],
+    ['JANE DOE CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD', null],
+    ['Transfer from Jane Doe CO salary', 'INCOME_SALARY'],
+    // A word between the state and the pay word: how often, or the ACH rails.
+    ['JANE DOE CO WEEKLY PAYROLL', null],
+    ['JOHN SMITH DENVER CO ACH PAYROLL', null],
+    ['JANE DOE CO MONTHLY SALARY', 'INCOME_SALARY'],
+    ['JANE DOE DENVER CO EFT PAYROLL', null],
+    // As some banks write it, in title case.
+    ['Jane Doe Co DES:PAYROLL ID:1', null],
+    // Any word after the state, under a salary code or none: a "CO" is the
+    // company only when the words up to it still end in "CO".
+    ['JANE DOE CO BI-WEEKLY PAY', 'INCOME_SALARY'],
+    ['JANE DOE CO PAY', 'INCOME_SALARY'],
+    ['JANE DOE CO DES:PAY ID:1', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL 12', null],
+    ['JANE DOE CO PAYROLL NOV 15', null],
+    ['JANE DOE CO SEMI MONTHLY PAYROLL', null],
+    ['JANE DOE CO BI WEEKLY PAYROLL', null],
+    ['JANE DOE CO WKLY PAYROLL', null],
+    ['JANE DOE CO. PAYROLL', null],
+    ['JANE DOE CO BONUS PAYROLL', null],
+    ['JANE DOE CO PAYROLL PMT', null],
+    ['JANE DOE CO ACH CREDIT PAYROLL', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL CREDIT', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL TRANSFER', 'INCOME_SALARY'],
+    ['JANE DOE CO DD', 'INCOME_SALARY'],
+    ['JANE DOE CO SALARY 15', 'INCOME_SALARY'],
+    ['Transfer from Jane Doe Co bi-weekly pay', 'INCOME_SALARY'],
+    ['From Jane Doe Co payroll bonus', 'INCOME_SALARY'],
   ]
 
-  /** Five biweekly paychecks of $1,500 under the given bank text, and the profile they make. */
-  async function paidBy(name: string) {
+  /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
+  async function paidBy(name: string, detailed: string | null = null) {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 300_000 })
     for (const date of ['2026-09-04', '2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30']) {
-      await insertBankTransaction(ctx.db, checking.accountId, { date, name, amountCents: -150_000 })
+      await insertBankTransaction(ctx.db, checking.accountId, {
+        date,
+        name,
+        amountCents: -150_000,
+        detailed,
+      })
     }
     return profile()
   }
 
   it.each(PERSON_PAYERS)(
     'never names a person who pays a wage, in the profile or the digest the AI reads: %s',
-    async (name) => {
-      const result = await paidBy(name)
+    async (name, code) => {
+      const result = await paidBy(name, code)
       expect(result.pay).toMatchObject({
         cadence: 'biweek',
         employer: null,
@@ -107,7 +154,7 @@ describe('the payers the profile names', () => {
       expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
       const { digest } = await call('get_financial_profile')
       expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
-      expect(digest).not.toMatch(/john|smith|jane|doe|dir dep/i)
+      expect(digest).not.toMatch(/john|smith|jane|doe|denver|dir dep/i)
     },
   )
 
@@ -116,6 +163,35 @@ describe('the payers the profile names', () => {
       'ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD IND NAME:JANE DOE',
     )
     expect(result.pay.employer).toBe('Acme Corp')
+    expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)
+  })
+
+  it.each([
+    ['ACME CO PAYROLL', 'Acme Co Payroll'],
+    ['ACME CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', 'Acme Co Payroll'],
+    ['3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', '3m Co Payroll'],
+    ['ORIG CO NAME:ACME INC ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', 'Acme Inc'],
+    ['GREAT DIVIDE BREWING CO DIR DEP', 'Great Divide Brewing Co Dir Dep'],
+    ['ACME CO WEEKLY PAYROLL', 'Acme Co Weekly Payroll'],
+    ['Acme Co Payroll', 'Acme Co Payroll'],
+    ['3M CO DES:PAYROLL', '3m Co Payroll'],
+    ['ACME INC ACH PAYROLL', 'Acme Inc ACH Payroll'],
+    ['GREAT DIVIDE BREWING CO PAYROLL', 'Great Divide Brewing Co Payroll'],
+    // A business ending before the place still names the business.
+    ['ACME LLC DENVER CO PAYROLL', 'Acme LLC Denver Co Payroll'],
+    // Whatever follows the ending, the business is still named.
+    ['IDEAL CO PAYROLL', 'Ideal Co Payroll'],
+    ['ACME & CO PAYROLL', 'Acme & Co Payroll'],
+    ['SMITH AND CO PAYROLL', 'Smith and Co Payroll'],
+    ['ACME CO DENVER CO PAYROLL', 'Acme Co Denver Co Payroll'],
+    ['FORD MOTOR CO PAYROLL', 'Ford Motor Co Payroll'],
+    ['ACME CO BONUS PAYROLL', 'Acme Co Bonus Payroll'],
+    ['ACME CO PAYROLL 12', 'Acme Co Payroll 12'],
+    ['ACME COMPANY PAYROLL', 'Acme Company Payroll'],
+    ['ADP PAYROLL FOR ACME INC', 'Adp Payroll for Acme Inc'],
+  ])('still names a business by its ending: %s', async (name, shown) => {
+    const result = await paidBy(name)
+    expect(result.pay.employer).toBe(shown)
     expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)
   })
 })
