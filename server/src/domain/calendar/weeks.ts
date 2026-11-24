@@ -29,12 +29,16 @@ export type ForecastItem =
       kind: EventKind
       /**
        * What to set aside, from what past events of this kind cost less what
-       * was spent on this one already: 0 when nothing is left to set aside,
-       * null without enough history to tell.
+       * was spent on this one already: 0 when nothing is left to set aside
+       * (or a trip budget saves for it), null without enough history to tell.
        */
       suggestedCents: number | null
       /** How many past events the suggestion comes from. */
       basedOn: number
+      /** A trip with a page of its own, where its budget is planned: the row opens it. */
+      tripPage?: true
+      /** A trip budget shares its days, so its goal saves for it and nothing more is suggested. */
+      budgeted?: true
     }
 
 export interface ForecastWeek {

@@ -35,6 +35,16 @@ export interface GoalRow extends GoalInput {
    * is then their total. Null for any other goal.
    */
   followedAccountIds: string[] | null
+  /** For a trip budget's goal: its trip (see trips/budget.ts). Null for any other goal. */
+  trip: GoalTrip | null
+}
+
+/** A trip budget's trip, as its goal knows it. */
+export interface GoalTrip {
+  startsOn: IsoDate
+  endsOn: IsoDate
+  /** False once no trip on the calendar matches the budget any more. */
+  onCalendar: boolean
 }
 
 export interface GoalProgress extends GoalRow {
@@ -93,10 +103,26 @@ function monthsUntil(today: IsoDate, target: IsoDate): number {
   return (to.year - from.year) * 12 + (to.month - from.month) + 1
 }
 
+/**
+ * The one rule for a trip budget's goal once its trip has started: its money
+ * is being spent on the trip, so it reads as the trip under way, then done,
+ * never as late, and holds nothing more back. Null before the trip, and for
+ * any other goal.
+ */
+export function tripStage(
+  trip: GoalTrip | null,
+  today: IsoDate,
+): 'trip_under_way' | 'trip_done' | null {
+  if (!trip || today < trip.startsOn) return null
+  return today <= trip.endsOn ? 'trip_under_way' : 'trip_done'
+}
+
 function goalStatus(row: GoalRow, reached: boolean, today: IsoDate): GoalStatus {
   // A balance frozen when the bank stopped sharing it says nothing about now,
   // so the goal is neither reached nor behind; it is shown as of that day.
   if (row.balanceAsOf !== null) return 'stale'
+  const stage = tripStage(row.trip, today)
+  if (stage) return stage
   if (reached) return 'reached'
   return row.targetDate !== null && row.targetDate < today ? 'past_due' : 'in_progress'
 }

@@ -2,6 +2,9 @@
 // total. Which trips there are, and which purchases each holds, is decided
 // once (find.ts); the list, a trip's page and a transaction's sheet all read
 // that one claim, so they always agree with each other and with the forecast.
+// A trip's page sets its spending against its budget, when one was planned.
+// Both screens are the app's own, so they also bring budgets in step with
+// moved trips (match.ts); nothing an agent reads writes.
 
 import type { Db } from '../../db/pool.js'
 import { AppError, notFound } from '../../errors.js'
@@ -24,6 +27,8 @@ import {
   type TripSummary,
 } from './find.js'
 import { partOf, TRIP_PARTS, type TripPart } from './parts.js'
+import { onDays, shownBudget, withLeft, type BudgetLeft } from './budget.js'
+import { syncBudgets } from './match.js'
 
 /** The most trips listed. */
 const LIST_LIMIT = 24
@@ -34,6 +39,8 @@ export interface TripDetail extends TripSummary {
   days: number
   status: 'upcoming' | 'under_way' | 'past'
   spentByPart: Record<TripPart, number>
+  /** The trip's budget beside what it spent; null when none was planned. */
+  budget: BudgetLeft | null
   transactions: Transaction[]
 }
 
@@ -44,17 +51,26 @@ export interface TripLink {
   name: string | null
 }
 
-const summaryOf = ({ startsOn, endsOn, name, source, totalCents }: FoundTrip): TripSummary => ({
+const summaryOf = ({
   startsOn,
   endsOn,
   name,
   source,
   totalCents,
+  goalId,
+}: FoundTrip): TripSummary => ({
+  startsOn,
+  endsOn,
+  name,
+  source,
+  totalCents,
+  goalId,
 })
 
 /** Recent and coming trips, newest first. */
 export async function listTrips(db: Db, today: IsoDate): Promise<TripSummary[]> {
-  const { trips } = await findTrips(db, today)
+  const { trips, matched, unmatched } = await findTrips(db, today)
+  await syncBudgets(db, matched, unmatched)
   return trips.slice(0, LIST_LIMIT).map(summaryOf)
 }
 
@@ -128,10 +144,13 @@ export async function getTrip(
   if (endsOn < startsOn || daysOf({ startsOn, endsOn }) > MAX_TRIP_DAYS) {
     throw new AppError('invalid_input', `A trip runs forward, up to ${MAX_TRIP_DAYS} days`)
   }
-  const { spans, trips } = await findTrips(db, today)
+  const { spans, trips, matched, unmatched } = await findTrips(db, today)
+  await syncBudgets(db, matched, unmatched)
   const trip = trips.find((t) => t.startsOn === startsOn && t.endsOn === endsOn)
   if (!trip) throw notFound('Trip')
   const { spentByPart, ids } = await spendingOf(db, spans, trip)
+  // Planned on the trip's days as they are now, as the sync just saved them.
+  const found = matched.find(({ budget }) => budget.goalId === trip.goalId)?.budget
   let status: TripDetail['status'] = 'under_way'
   if (today < startsOn) status = 'upcoming'
   else if (today > endsOn) status = 'past'
@@ -142,6 +161,7 @@ export async function getTrip(
     days: daysOf({ startsOn, endsOn }),
     status,
     spentByPart,
+    budget: found ? withLeft(onDays(shownBudget(found), { startsOn, endsOn }), spentByPart) : null,
     transactions: await transactionsByIds(db, ids),
   }
 }

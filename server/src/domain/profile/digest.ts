@@ -134,12 +134,17 @@ function rateLine({ savingsRate: rate }: FinancialProfile, money: Money): string
 /** How many goals the digest names; the rest are counted, so it stays a few hundred tokens. */
 export const DIGEST_GOALS = 5
 
-/** Open goals first, then stale ones (progress only known as of an earlier day), then reached. */
+/**
+ * Open goals first, then stale ones (progress only known as of an earlier
+ * day), then those done with saving: reached, or spent on a trip under way.
+ */
 const STANDING_ORDER: Record<ProfileGoal['status'], number> = {
   in_progress: 0,
   past_due: 0,
   stale: 1,
   reached: 2,
+  trip_under_way: 2,
+  trip_done: 2,
 }
 
 /**
@@ -163,6 +168,9 @@ function goalWords(goal: ProfileGoal, money: Money, locale: string): string {
     const asOf = shortDate(goal.balanceAsOf!, locale)
     return `${goal.name} ${goal.percent}% as of ${asOf}, its account is no longer shared`
   }
+  // A trip's goal is spent on the trip once it starts, so its date passing is no lateness.
+  if (goal.status === 'trip_under_way') return `${goal.name}, trip under way`
+  if (goal.status === 'trip_done') return `${goal.name}, trip done`
   const by = goal.targetDate ? ` by ${shortDate(goal.targetDate, locale)}` : ''
   const pace = paceWords(goal.onTrack)
   return `${goal.name} ${goal.percent}% (${money(goal.remainingCents)} to go${by}${pace})`

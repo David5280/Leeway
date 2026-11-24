@@ -32,7 +32,7 @@ describe('Coming up', () => {
       calendar_status: () => linked(),
       get_forecast: () => forecastOf(ITEMS),
       list_trips: () => [
-        tripSummary(),
+        tripSummary({ goalId: 'g1' }),
         tripSummary({
           name: null,
           source: 'spending',
@@ -74,21 +74,29 @@ describe('Coming up', () => {
       'href',
       '/trips/2026-12-10/2026-12-14',
     )
-    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveTextContent('Dec 10 to Dec 14')
+    expect(trips.getByRole('link', { name: /Lisbon trip/ })).toHaveTextContent(
+      'Dec 10 to Dec 14, budget planned',
+    )
     expect(trips.getByRole('link', { name: /Travel/ })).toHaveAttribute(
       'href',
       '/trips/2026-07-01/2026-07-01',
     )
   })
 
-  it('opens a bill’s own form, and a purchase to save for an event', async () => {
+  it('opens a bill’s own form, a trip’s page, and a purchase to save for an event', async () => {
     planServer({ calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) })
     renderPlan('/plan/ahead')
     const rent = await screen.findByRole('link', { name: /Rent/ })
     expect(rent).toHaveAttribute('href', '/plan/bills?bill=b1')
-    expect(screen.getByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
+    // A trip is saved for on its page, by its budget: before, it opened a second "Trip" goal.
+    const week = within(screen.getByRole('region', { name: 'Week of Dec 8' }))
+    expect(week.getByRole('link', { name: /Lisbon trip/ })).toHaveAttribute(
       'href',
-      '/plan/goals?new=purchase&name=Trip&by=2026-12-10&price=125000',
+      '/trips/2026-12-10/2026-12-14',
+    )
+    expect(screen.getByRole('link', { name: /Sam's birthday/ })).toHaveAttribute(
+      'href',
+      '/plan/goals?new=purchase&name=Birthday+gift&by=2026-12-01&price=6000',
     )
     // A payday has nothing to open.
     expect(screen.queryByRole('link', { name: /Payday/ })).not.toBeInTheDocument()
@@ -196,17 +204,30 @@ describe('Coming up', () => {
   })
 
   it('shows no amount and no goal link for an event with nothing left to set aside', async () => {
-    const lisbon = ITEMS[3] as Extract<ForecastItem, { type: 'event' }>
+    const birthday = ITEMS[2] as Extract<ForecastItem, { type: 'event' }>
     planServer({
       calendar_status: () => linked(),
-      get_forecast: () => forecastOf([{ ...lisbon, suggestedCents: 0 }]),
+      get_forecast: () => forecastOf([{ ...birthday, suggestedCents: 0 }]),
     })
     renderPlan('/plan/ahead')
-    const week = await screen.findByRole('region', { name: 'Week of Dec 8' })
-    expect(week).toHaveTextContent('Lisbon tripTrip, Dec 10 to Dec 14. Nothing left to set aside')
+    const week = await screen.findByRole('region', { name: 'Week of Dec 1' })
+    expect(week).toHaveTextContent("Sam's birthdayBirthday, Tue, Dec 1. Nothing left to set aside")
     expect(week).not.toHaveTextContent('$0')
     // There is nothing to save for, so the row starts no purchase goal.
     expect(within(week).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('says a trip with a budget is planned, with nothing more to set aside', async () => {
+    const lisbon = ITEMS[3] as Extract<ForecastItem, { type: 'event' }>
+    planServer({
+      calendar_status: () => linked(),
+      get_forecast: () => forecastOf([{ ...lisbon, suggestedCents: 0, budgeted: true }]),
+    })
+    renderPlan('/plan/ahead')
+    const week = await screen.findByRole('region', { name: 'Week of Dec 8' })
+    expect(week).toHaveTextContent('Lisbon tripTrip, Dec 10 to Dec 14. Trip budget planned')
+    expect(week).not.toHaveTextContent('set aside')
+    expect(within(week).getByRole('link')).toHaveAttribute('href', '/trips/2026-12-10/2026-12-14')
   })
 
   it('notes quietly when some repeating events were left out of the weeks', async () => {

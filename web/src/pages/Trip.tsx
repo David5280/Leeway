@@ -1,5 +1,7 @@
 // One trip: what it cost, by part (getting there, a place to stay, food and
-// things to do), and the transactions that make it up, each opening its sheet.
+// things to do) against its budget when one was planned, and the
+// transactions that make it up, each opening its sheet. A trip still ahead
+// offers to plan its budget, or to change the one planned.
 
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -12,26 +14,12 @@ import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { shortDate } from '../lib/format'
 import { dayRange } from '../lib/calendar'
-import { TRIP_PART_NAMES, tripName } from '../lib/trips'
+import { tripName } from '../lib/trips'
 import { TransactionSheet } from './transactions/TransactionSheet'
+import { PlanBudget } from './trips/PlanBudget'
+import { TripParts } from './trips/TripParts'
 
 const STATUS = { upcoming: 'Coming up', under_way: 'Under way', past: 'Done' } as const
-const PARTS = ['travel', 'stay', 'food', 'activities'] as const
-
-function Parts({ trip }: { trip: TripDetail }) {
-  return (
-    <Card static="list" label="By part" className="stack-sm">
-      <h2>By part</h2>
-      {PARTS.map((part) => (
-        <div key={part} className="trip-part">
-          <span>{TRIP_PART_NAMES[part]}</span>
-          <Money cents={trip.spentByPart[part]} />
-        </div>
-      ))}
-    </Card>
-  )
-}
-
 function Transactions({ trip }: { trip: TripDetail }) {
   const { settings } = useApp()
   const categories = useAction('list_categories').data ?? []
@@ -101,7 +89,8 @@ export function TripPage() {
           </span>
         )}
       </p>
-      <Parts trip={detail} />
+      {detail.status === 'upcoming' && <PlanBudget trip={detail} />}
+      <TripParts trip={detail} />
       <Transactions trip={detail} />
     </Shell>
   )
