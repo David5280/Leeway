@@ -9,7 +9,7 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import type { CountedKind } from '../counted.js'
-import { cleanMerchantName, tidyMerchantName } from '../merchantName.js'
+import { cleanMerchantName } from '../merchantName.js'
 import { withoutPlace } from '../merchantPlace.js'
 import { personToPersonApp, type Movement } from '../transfers.js'
 
@@ -52,8 +52,6 @@ const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?)\b/i
 const PAY_WORDS = /\b(salary|paycheck|wages?)\b/i
 /** Words that end a business's name, "ACME Corp" or "Initech LLC", and never a person's. */
 const BUSINESS_ENDINGS = 'inc|corp|corporation|llc|ltd|co|company'
-/** One of BUSINESS_ENDINGS in a line. A hyphen ends no word here, so "co-worker" is not "Co". */
-const BUSINESS_WORDS = new RegExp(`(?<![\\w-])(${BUSINESS_ENDINGS})(?![\\w-])`, 'i')
 /** A word that is only one of BUSINESS_ENDINGS, with or without its dot: "Inc.". */
 const BUSINESS_ENDING_WORD = new RegExp(`^(${BUSINESS_ENDINGS})\\.?$`, 'i')
 
@@ -146,11 +144,13 @@ function textNamesBusiness(text: string): boolean {
 
 /**
  * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
- * a person, by its bank text or the merchant name Plaid gave.
+ * a person, by its bank text or the merchant name Plaid gave. Both are read
+ * the same careful way, since Plaid may give a person's name with a state
+ * after it ("Jane Doe Co") as readily as a bank prints one.
  */
 export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
-  const merchant = tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : ''
-  return textNamesBusiness(tx.name) || BUSINESS_WORDS.test(merchant)
+  const merchant = tx.merchantName?.trim() ?? ''
+  return textNamesBusiness(tx.name) || (merchant !== '' && textNamesBusiness(merchant))
 }
 
 /**
