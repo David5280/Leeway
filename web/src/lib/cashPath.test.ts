@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CashFlow } from '../api/client'
-import { cashPath, firstBelowZero, lowestPoint } from './cashPath'
+import { cashPath, lowestPoint } from './cashPath'
 
 const bill = (name: string, dueDate: string, amountCents: number, overdue = false) => ({
   billId: name,
@@ -28,6 +28,7 @@ const flow = (cashCents: number, billsDue: CashFlow['billsDue']): CashFlow => ({
   shortfallCents: 0,
   perDayCents: 0,
   spendable: null,
+  belowZero: null,
 })
 
 describe('cashPath', () => {
@@ -76,7 +77,5 @@ describe('cashPath', () => {
     const short = cashPath(flow(-2000, [bill('Rent', '2026-11-28', 9e14)]))
     expect(short.at(-1)).toEqual({ date: '2026-11-28', cents: -2000 - 9e14, bills: ['Rent'] })
     expect(lowestPoint(short).cents).toBe(-2000 - 9e14)
-    expect(firstBelowZero(short)).toEqual({ date: '2026-11-17', cents: -2000, bills: [] })
-    expect(firstBelowZero(cashPath(flow(0, [])))).toBeNull()
   })
 })

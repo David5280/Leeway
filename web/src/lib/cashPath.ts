@@ -42,7 +42,12 @@ export function lowestPoint(points: CashPoint[]): CashPoint {
   return points.reduce((low, point) => (point.cents < low.cents ? point : low), points[0]!)
 }
 
-/** The first day the cash goes below $0 before payday, or null when it never does. */
-export function firstBelowZero(points: CashPoint[]): CashPoint | null {
-  return points.find((point) => point.cents < 0) ?? null
+/**
+ * How a shortfall before payday is drawn: red when checking is below zero
+ * already or the payday is read for sure, amber against a payday that is
+ * only a guess, where the paycheck may land in time. The card's answer, its
+ * math and the below zero warning all share it, so they never disagree.
+ */
+export function shortTone(flow: Pick<CashFlow, 'paydayEstimate' | 'belowZero'>) {
+  return flow.belowZero?.now || !flow.paydayEstimate ? 'problem' : 'warn'
 }
