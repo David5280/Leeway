@@ -2,7 +2,7 @@
 // amount and press Enter (or click away) to save, Escape to leave it as it
 // was. Clearing the box removes the budget, so the category is only tracked.
 
-import { useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { Category } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
 import { CADENCE_LABELS } from '../../components/CategoryForm'
@@ -32,13 +32,26 @@ export function InlineBudget({
   const editing = text !== null
   const typed = typedBudget(text ?? '')
   const field = useAmountField(text ?? '', { min: 0 })
+  // Enter saves, then the box is disabled while it saves, which also blurs it.
+  // A ref (not isPending) so that blur can't start a second save of the same amount.
+  const saving = useRef(false)
 
   function save(event?: FormEvent) {
     event?.preventDefault()
+    if (saving.current) return
     field.reveal()
     if (typed === undefined) return
     if (typed === category.budgetCents) return setText(null)
-    update.mutate({ id: category.id, budgetCents: typed }, { onSuccess: () => setText(null) })
+    saving.current = true
+    update.mutate(
+      { id: category.id, budgetCents: typed },
+      {
+        onSuccess: () => setText(null),
+        onSettled: () => {
+          saving.current = false
+        },
+      },
+    )
   }
 
   function onKey(event: KeyboardEvent) {

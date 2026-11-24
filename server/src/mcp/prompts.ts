@@ -48,6 +48,13 @@ export const COACH_PROMPTS: CoachPrompt[] = [
       'Help me pay off my debts. Use plan_debt_payoff. If any debt is missing an interest rate or payment, ask me for it and save it with update_account. Compare avalanche and snowball in months and interest, ask how much extra I could pay each month, and show what that changes.',
   },
   {
+    name: 'payday',
+    title: 'Plan my paycheck',
+    description: 'What was left from the last paycheck, and a plan for the new one.',
+    text: () =>
+      'Help me plan my paycheck. Use get_payday_playbook. First tell me what I had left from my last pay period against my budget, and what it suggests doing with it. Then walk me through the new paycheck: the bills due before my next payday, the set-asides, and what is left for everyday spending. Say plainly if checking may go below zero before payday. These are suggestions: remind me that I move the money myself.',
+  },
+  {
     name: 'subscriptions',
     title: 'Review subscriptions',
     description: 'What subscriptions and repeating charges cost, and which to track.',
