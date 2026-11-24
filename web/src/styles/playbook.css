@@ -1,0 +1,22 @@
+/* The payday playbook (pages/plan/payday/Playbook.tsx): quiet rows under a
+   card's figure, a name over a short reason, the amount lined up at the end. */
+
+.playbook-rows,
+.playbook-note {
+  display: block;
+}
+
+.playbook-rows .list-row {
+  padding: 8px 0;
+}
+
+.playbook-row-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.playbook-row-name {
+  font-weight: 500;
+}

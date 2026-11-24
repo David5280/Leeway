@@ -115,6 +115,11 @@ export const SCREENS: Screen[] = [
     then: open('Not quite', (page) => page.getByRole('form', { name: 'Enter your pay' })),
   }),
   at('planSection', '/plan/payday', {
+    // The new paycheck's card always shows, with or without a pay schedule.
+    name: '/plan/payday what this paycheck covers',
+    then: open(/This paycheck/, (page) => page.getByRole('dialog', { name: 'This paycheck' })),
+  }),
+  at('planSection', '/plan/payday', {
     name: '/plan/payday adding a yearly cost',
     then: open('Add a yearly cost', (page) => page.getByRole('form', { name: 'New yearly cost' })),
   }),

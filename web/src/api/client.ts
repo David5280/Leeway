@@ -35,6 +35,11 @@ export type SinkingFundsView = Output<'list_sinking_funds'>
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
 export type TaxExport = Output<'export_tax_year'>
+export type Playbook = Output<'get_payday_playbook'>
+export type CloseOut = NonNullable<Playbook['closeOut']>
+export type LeftoverSuggestion = Playbook['suggestions'][number]
+export type PaycheckPlan = Playbook['plan']
+export type PlanLine = PaycheckPlan['lines'][number]
 
 /**
  * A failure the server explained: its HTTP status, error code, a message for

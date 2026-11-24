@@ -18,6 +18,7 @@ import './styles/motion.css'
 import './styles/chat.css'
 import './styles/goals.css'
 import './styles/trips.css'
+import './styles/playbook.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
