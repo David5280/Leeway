@@ -15,10 +15,11 @@ import { SectionHead } from '../../../components/design/SectionHead'
 import { LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { closeOutDrill, planDrill, suggestionsDrill } from '../../../lib/drills/playbook'
-import { dayLabel, periodLabel, shortDate } from '../../../lib/format'
+import { dayLabel, longDate, periodLabel, shortDate } from '../../../lib/format'
 import { PlanRows } from './PlanRows'
 import {
   hasCloseOut,
+  ideaReason,
   leftoverLabel,
   leftoverTone,
   shortClass,
@@ -58,9 +59,12 @@ function LastPaycheck({ closeOut, ideas }: { closeOut: CloseOut; ideas: boolean 
 
 /** The leftover shared out over the ideas for it, most pressing first. */
 function LeftoverIdeas({ ideas, leftover }: { ideas: LeftoverSuggestion[]; leftover: number }) {
+  const { settings } = useApp()
+  // A goal's target date can be a year or more away, so it keeps its year.
+  const date = (iso: string) => longDate(iso, settings.locale)
   return (
     <Card
-      drill={suggestionsDrill(ideas, leftover)}
+      drill={suggestionsDrill(ideas, leftover, date)}
       label="Ideas for what was left"
       className="stack-sm"
     >
@@ -70,7 +74,7 @@ function LeftoverIdeas({ ideas, leftover }: { ideas: LeftoverSuggestion[]; lefto
           <span key={`${idea.kind}-${index}`} className="list-row">
             <span className="grow playbook-row-words">
               <span className="playbook-row-name">{idea.label}</span>
-              <span className="small muted">{idea.reason}</span>
+              <span className="small muted">{ideaReason(idea, date)}</span>
             </span>
             <b className="num">
               <Money cents={idea.amountCents} />

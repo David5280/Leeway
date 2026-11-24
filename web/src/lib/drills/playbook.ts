@@ -4,6 +4,7 @@
 
 import type { CloseOut, LeftoverSuggestion, PaycheckPlan, PlanLine } from '../../api/client'
 import {
+  ideaReason,
   leftoverLabel,
   leftoverTone,
   LINE_WORDS,
@@ -47,6 +48,7 @@ export function closeOutDrill(closeOut: CloseOut, period: string, money: Money):
 export function suggestionsDrill(
   suggestions: LeftoverSuggestion[],
   leftoverCents: number,
+  date: Dates,
 ): DrillDown {
   const given = suggestions.reduce((sum, one) => sum + one.amountCents, 0)
   const terms: MathTerm[] = [
@@ -71,31 +73,31 @@ export function suggestionsDrill(
       rows: suggestions.map((one, index) => ({
         key: `${one.kind}-${index}`,
         label: one.label,
-        detail: one.reason,
+        detail: ideaReason(one, date),
         value: { cents: one.amountCents },
       })),
     },
   }
 }
 
-/** The paycheck less what is spoken for, or safe to spend while pay is unknown. */
+/** The paycheck less what is spoken for; while pay is unknown, the same math with the gaps named. */
 function planMath(plan: PaycheckPlan): DrillDown['math'] {
   const note =
     'Bills due before your next payday come first, then this paycheck’s share of goals, trips and yearly costs. What is left is for everyday spending.'
+  const spokenFor: MathTerm[] = [
+    { label: 'bills before payday', value: { cents: plan.billsCents }, op: 'minus' },
+    { label: 'set aside', value: { cents: plan.setAsideCents }, op: 'minus' },
+  ]
   if (plan.paycheckCents === null) {
     return {
-      terms: [{ label: 'Safe to spend now', value: { cents: plan.safeToSpendCents } }],
-      result: { label: 'Safe to spend now', value: { cents: plan.safeToSpendCents } },
-      note: `${note} Add your pay to see what each paycheck leaves.`,
+      terms: [{ label: 'Paycheck', value: { text: 'not added yet' } }, ...spokenFor],
+      result: { label: 'Left for everyday spending', value: { text: 'not known yet' } },
+      note: `${note} Add your pay to see what each paycheck leaves. Until then, the figure is what is safe to spend now.`,
     }
   }
   const left = plan.leftCents ?? 0
   return {
-    terms: [
-      { label: 'Paycheck', value: { cents: plan.paycheckCents, tone: 'in' } },
-      { label: 'bills before payday', value: { cents: plan.billsCents }, op: 'minus' },
-      { label: 'set aside', value: { cents: plan.setAsideCents }, op: 'minus' },
-    ],
+    terms: [{ label: 'Paycheck', value: { cents: plan.paycheckCents, tone: 'in' } }, ...spokenFor],
     result: {
       label: 'Left for everyday spending',
       value: { cents: left, tone: left < 0 ? 'warn' : 'neutral' },
@@ -121,7 +123,8 @@ export function planDrill(plan: PaycheckPlan, date: Dates): DrillDown {
   return {
     title: 'This paycheck',
     subtitle: `Until payday ${date(plan.nextPayday)}. ${SUGGESTIONS_ONLY}`,
-    figure: math.result.value,
+    // Without pay the math has no total, so the figure is safe to spend, as the card's is.
+    figure: plan.paycheckCents === null ? { cents: plan.safeToSpendCents } : math.result.value,
     math,
     items:
       plan.lines.length > 0

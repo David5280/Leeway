@@ -1,8 +1,9 @@
 // Plain words for the payday playbook, kept apart from the cards so they can
-// be tested alone: how the last paycheck's leftover reads, what each line of
-// the new paycheck's plan is called, and the tone of the short-cash note.
+// be tested alone: how the last paycheck's leftover reads, why each idea is
+// offered, what each line of the new paycheck's plan is called, and the tone
+// of the short-cash note.
 
-import type { CloseOut, PlanLine, Playbook } from '../../../api/client'
+import type { CloseOut, LeftoverSuggestion, PlanLine, Playbook } from '../../../api/client'
 import type { MoneyTone } from '../../../lib/money'
 
 /** What the leftover is called: money left, or how far spending ran over. */
@@ -19,6 +20,11 @@ export function leftoverTone(cents: number): MoneyTone {
 /** Whether the close-out has anything to show: a flexible budget, or spending in one. */
 export const hasCloseOut = (closeOut: CloseOut | null): closeOut is CloseOut =>
   closeOut !== null && (closeOut.budgetedCents > 0 || closeOut.spentCents > 0)
+
+/** Why an idea is offered, with a goal's target date in the owner's locale: "... Due Mar 1, 2027." */
+export function ideaReason(idea: LeftoverSuggestion, date: (iso: string) => string): string {
+  return idea.targetDate ? `${idea.reason} Due ${date(idea.targetDate)}.` : idea.reason
+}
 
 /** Each kind of plan line in everyday words. */
 export const LINE_WORDS: Record<PlanLine['kind'], string> = {

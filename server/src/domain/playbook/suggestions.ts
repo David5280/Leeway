@@ -25,8 +25,10 @@ export interface Suggestion {
   label: string
   /** The share of the leftover suggested for it. */
   amountCents: number
-  /** Why, in one short line. */
+  /** Why, in one short line. Never a date: the app formats targetDate in the owner's locale. */
   reason: string
+  /** A goal's target date; null for a goal with none and for every other kind. */
+  targetDate: IsoDate | null
 }
 
 /** A goal that still needs money. */
@@ -93,6 +95,7 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       label: 'Emergency fund',
       needCents: facts.emergencyShortCents,
       reason: 'Your emergency fund is short of its target.',
+      targetDate: null,
     })
   }
   for (const goal of [...facts.goals].sort(byUrgency).slice(0, MAX_GOALS)) {
@@ -100,7 +103,8 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       kind: 'goal',
       label: goal.name,
       needCents: goal.remainingCents,
-      reason: goal.targetDate ? `A goal due ${goal.targetDate}.` : 'A goal still to reach.',
+      reason: 'A goal still to reach.',
+      targetDate: goal.targetDate,
     })
   }
   if (facts.debt) {
@@ -109,6 +113,7 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       label: facts.debt.name,
       needCents: facts.debt.balanceCents,
       reason: `Your highest interest debt, at ${rateWords(facts.debt.aprBps)}.`,
+      targetDate: null,
     })
   }
   if (facts.retirement?.cents) {
@@ -119,6 +124,7 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       needCents: cents,
       // Never "short" or "behind": the bank may not see a 401(k) taken from pay (profile/lenses.ts).
       reason: `A nudge toward your ${targetPercent}% savings rate target, ${counting}.`,
+      targetDate: null,
     })
   }
   if (facts.idleCents) {
@@ -127,6 +133,7 @@ function orderedNeeds(facts: SuggestionFacts): Need[] {
       label: 'Move to savings',
       needCents: facts.idleCents,
       reason: 'Checking holds more than it needs until payday.',
+      targetDate: null,
     })
   }
   return list

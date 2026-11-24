@@ -5,8 +5,8 @@ import { screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Playbook } from '../../api/client'
 import { failing, fakeServer, renderSignedIn } from '../../test/fake'
-import { OVER_BUDGET, playbookOf } from '../../test/playbook'
-import { PaydayNotice } from './PaydayNotice'
+import { LAST_PAYDAY, OVER_BUDGET, playbookOf } from '../../test/playbook'
+import { PaydayNotice, paydayTitle } from './PaydayNotice'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -20,7 +20,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 describe('PaydayNotice', () => {
   it('greets a new paycheck with what was left and opens Payday', async () => {
-    show(playbookOf({ justPaid: true }))
+    show(playbookOf({ justPaid: true, today: LAST_PAYDAY }))
     const card = await screen.findByRole('region', { name: 'Payday' })
     expect(card).toHaveTextContent(
       "It's paydayYou had $44 left from your last paycheck. See what this one covers.",
@@ -29,11 +29,19 @@ describe('PaydayNotice', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', '/plan/payday')
   })
 
-  it('leaves out the leftover when spending ran over, or no period was closed', async () => {
-    show(playbookOf({ budgets: OVER_BUDGET, justPaid: true }))
+  it('leaves out the leftover when spending ran over', async () => {
+    show(playbookOf({ budgets: OVER_BUDGET, justPaid: true, today: '2026-11-15' }))
     expect(await screen.findByRole('region', { name: 'Payday' })).toHaveTextContent(
-      "It's paydaySee what this one covers.",
+      'Payday was FridaySee what this one covers.',
     )
+  })
+
+  it('says payday is today only on the day, and when it was after that', () => {
+    // The last payday is Friday, Nov 13.
+    const title = (today: string) => paydayTitle({ lastPayday: LAST_PAYDAY, today }, 'en-US')
+    expect(title('2026-11-13')).toBe("It's payday")
+    expect(title('2026-11-14')).toBe('Payday was yesterday')
+    expect(title('2026-11-15')).toBe('Payday was Friday')
   })
 
   it('shows nothing once the few days after payday have passed', async () => {

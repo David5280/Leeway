@@ -65,6 +65,7 @@ describe('suggestLeftover', () => {
       label: 'Acme Card',
       amountCents: 5_000,
       reason: 'Your highest interest debt, at 24.99%.',
+      targetDate: null,
     })
   })
 
@@ -76,6 +77,12 @@ describe('suggestLeftover', () => {
     ]
     const labels = suggestLeftover(10_000, { ...NOTHING, goals }).map((one) => one.label)
     expect(labels).toEqual(['New laptop', 'Spring trip'])
+  })
+
+  it("sends a goal's target date as a field, never as a date in its reason", () => {
+    const [goal] = suggestLeftover(5_000, { ...NOTHING, goals: EVERY_NEED.goals })
+    expect(goal).toMatchObject({ reason: 'A goal still to reach.', targetDate: '2027-03-01' })
+    expect(goal?.reason).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 })
 
