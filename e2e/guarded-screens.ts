@@ -8,6 +8,7 @@ import { ALERT_SCREENS } from './alert-screens'
 import { BANK_SCREENS } from './bank-screens'
 import { pretendCalendar } from './calendar'
 import { CALENDAR_SCREENS } from './calendar-screens'
+import { CHAT_SCREENS } from './chat-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
@@ -107,6 +108,7 @@ export const SCREENS: Screen[] = [
     path: categoryPage,
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
+  ...CHAT_SCREENS,
   at('plan', '/plan'),
   at('planSection', '/plan/payday', {
     name: '/plan/payday changing the pay',

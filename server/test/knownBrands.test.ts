@@ -2,7 +2,7 @@
 // (leaks/knownBrands.ts): whole names only, however a bank or a CSV writes them.
 
 import { describe, expect, it } from 'vitest'
-import { brandKey, isKnownBrand } from '../src/domain/leaks/knownBrands.js'
+import { brandKey, isKnownBrand, withoutKnownBrands } from '../src/domain/leaks/knownBrands.js'
 
 describe('isKnownBrand', () => {
   it.each([
@@ -42,6 +42,12 @@ describe('isKnownBrand', () => {
     'American Eagle',
     'T-Mobile',
     'Sirius XM',
+    'Warby Parker',
+    'Johns Hopkins',
+    'Planned Parenthood',
+    'Optum Rx',
+    'White Castle',
+    'Price Chopper',
   ])('knows %s', (name) => {
     expect(isKnownBrand(name)).toBe(true)
   })
@@ -58,6 +64,14 @@ describe('isKnownBrand', () => {
   ])('does not know %s, which is not a whole brand name', (name) => {
     expect(isKnownBrand(name)).toBe(false)
   })
+
+  // Each is a person's whole name too, so a line naming that person would read as the brand.
+  it.each(['Lane Bryant', 'Jack Henry', 'Hunter Douglas', 'Bob Evans', 'Grant Thornton'])(
+    "does not know %s, which is also a person's name",
+    (name) => {
+      expect(isKnownBrand(name)).toBe(false)
+    },
+  )
 })
 
 describe('brandKey', () => {
@@ -66,5 +80,23 @@ describe('brandKey', () => {
     expect(brandKey('Chick-fil-A')).toBe('chick fil a')
     expect(brandKey('TRADER JOE S')).toBe('trader joes')
     expect(brandKey("Trader Joe's")).toBe('trader joes')
+    expect(brandKey('JOHNS HOPKINS/JANE (DOE)')).toBe('johns hopkins jane doe')
+  })
+})
+
+describe('withoutKnownBrands', () => {
+  it('leaves each whole brand out of a name, and the rest as brandKey reads it', () => {
+    expect(withoutKnownBrands('Johns Hopkins Medicine')).toBe('medicine')
+    expect(withoutKnownBrands('JOHNS HOPKINS JANE')).toBe('jane')
+    expect(withoutKnownBrands('Johns Hopkins (Jane Doe)')).toBe('jane doe')
+    expect(withoutKnownBrands('JOHNS HOPKINS/JANE')).toBe('jane')
+    expect(withoutKnownBrands('Whole Foods Market #10')).toBe('')
+    expect(withoutKnownBrands('Jane Doe Planned Parenthood')).toBe('jane doe')
+  })
+
+  it('is null for a name with no whole brand in it', () => {
+    expect(withoutKnownBrands('Jane Doe')).toBeNull()
+    expect(withoutKnownBrands("ST LUKE'S HEALTH")).toBeNull()
+    expect(withoutKnownBrands('Jane Johns Hopkinson')).toBeNull()
   })
 })

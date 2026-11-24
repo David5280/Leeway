@@ -24,8 +24,9 @@ export const listTransactionsAction = defineAction({
   input: transactionFilterSchema,
   scope: 'read',
   surface: 'all',
-  // An agent's search matches only the display name and note it can read.
-  run: (ctx, filter) => listTransactions(ctx.db, filter, { searchBankText: !ctx.agent }),
+  // An agent's search matches only what it can read: the display name, and the note but in Chat.
+  run: (ctx, filter) =>
+    listTransactions(ctx.db, filter, { searchBankText: !ctx.agent, searchNotes: !ctx.chat }),
 })
 
 export const updateTransactionAction = defineAction({

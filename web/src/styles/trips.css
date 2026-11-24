@@ -1,4 +1,10 @@
-/* Trips: the trip page's parts and the trip budget form. */
+/* Trips: the trip page's parts, the day column of its transactions
+   (.trip-date), the trip budget form and the link back. */
+
+/* The link back to Coming up, its arrow close to its words. */
+.trip-back {
+  gap: 4px;
+}
 
 /* The four parts of a trip budget, two across where there is room. */
 .trip-parts {
@@ -25,4 +31,10 @@
 .trip-part > :last-child {
   flex: none;
   text-align: right;
+}
+
+/* A transaction's day, in a column of one width down the list. */
+.trip-date {
+  width: 56px;
+  flex: none;
 }

@@ -71,6 +71,8 @@ interface PlaidTransaction {
   authorized_date?: IsoDate | null
   name: string
   merchant_name: string | null
+  /** Plaid's id for the business, when it recognised one. */
+  merchant_entity_id?: string | null
   amount: number
   iso_currency_code: string | null
   unofficial_currency_code: string | null
@@ -295,6 +297,7 @@ export function toBankTransaction(tx: PlaidTransaction): BankTransaction {
     date: tx.authorized_date ?? tx.date,
     name: tx.name,
     merchantName: tx.merchant_name,
+    merchantEntityId: tx.merchant_entity_id ?? null,
     amountCents: toCents(tx.amount),
     currency: tx.iso_currency_code ?? tx.unofficial_currency_code ?? 'USD',
     pending: tx.pending,

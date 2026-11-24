@@ -108,16 +108,18 @@ describe('config', () => {
     expect(loadConfig(base).anthropic).toBeNull()
     expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'key' }).anthropic).toEqual({ apiKey: 'key' })
     // Unset, each job follows the owner's pick in Settings, or its small default.
-    expect(loadConfig(base).modelOverrides).toEqual({ summary: null, paystub: null })
+    expect(loadConfig(base).modelOverrides).toEqual({ summary: null, paystub: null, chat: null })
     const named = loadConfig({
       ...base,
       ANTHROPIC_API_KEY: 'key',
       SUMMARY_MODEL: 'claude-sonnet-5-5',
       PAYSTUB_MODEL: 'claude-opus-5-5',
+      CHAT_MODEL: 'claude-sonnet-5-5',
     })
     expect(named.modelOverrides).toEqual({
       summary: 'claude-sonnet-5-5',
       paystub: 'claude-opus-5-5',
+      chat: 'claude-sonnet-5-5',
     })
     // Left blank in a .env file, a variable is not set.
     expect(loadConfig({ ...base, PAYSTUB_MODEL: ' ' }).modelOverrides.paystub).toBeNull()

@@ -132,6 +132,7 @@ import {
   importConfigAction,
   starterCategoriesAction,
 } from './setup.js'
+import { clearChatAction, forgetFactAction, getChatAction, getChatStatusAction } from './chat.js'
 import { exportTaxYearAction } from './taxExport.js'
 import { createTokenAction, deleteTokenAction, listTokensAction } from './tokens.js'
 import { createWidgetTokenAction, getWidgetTokenAction, revokeWidgetTokenAction } from './widget.js'
@@ -171,6 +172,10 @@ export const actionList = [
   setAiModelAction,
   setAiLimitAction,
   dismissAiAlertAction,
+  getChatStatusAction,
+  getChatAction,
+  clearChatAction,
+  forgetFactAction,
   getWeeklyEmailAction,
   setWeeklyEmailAction,
   sendTestWeeklyEmailAction,

@@ -14,7 +14,7 @@ import { isTransfer, NO_ACCOUNTS, type Movement, type OwnAccounts } from './tran
 export type Categorizable = Movement
 
 /** A transaction as rules read it: its fields and its shown name (see withShownNames). */
-export type RuleReadable = Categorizable & Pick<RuleSubject, 'shownName'>
+export type RuleReadable = Categorizable & Pick<RuleSubject, 'shownName' | 'shownNames'>
 
 export interface CategoryChoice {
   categoryId: string

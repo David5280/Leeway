@@ -1,5 +1,5 @@
-// The HTTP server: sign-in, the action API, the MCP endpoint, bank webhooks and
-// the web app. Each part registers its own routes; this file puts them in order.
+// The HTTP server: sign-in, the action API, Chat, the MCP endpoint, bank
+// webhooks and the web app. Each part registers its own routes; this file puts them in order.
 
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -15,6 +15,7 @@ import { generateSetupCode, type SetupCodeSource } from '../lib/setupCode.js'
 import { createClientDocumentLoader, type LoadClientDocument } from '../oauth/clientDocument.js'
 import { registerActionRoutes } from './actions.js'
 import { registerAuthRoutes, sessionGuard } from './auth.js'
+import { registerChatRoutes } from './chat.js'
 import { refuseCrossSiteChanges } from './crossSite.js'
 import { registerErrorHandler } from './errors.js'
 import { registerMcpRoute } from './mcp.js'
@@ -121,6 +122,7 @@ export async function buildApp(
   })
   registerActionRoutes(app, ctx, sessionGuard(ctx))
   await registerPaystubRoutes(app, ctx, sessionGuard(ctx))
+  registerChatRoutes(app, ctx, sessionGuard(ctx))
   registerWidgetRoutes(
     app,
     ctx,

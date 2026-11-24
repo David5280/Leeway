@@ -75,6 +75,7 @@ const envSchema = z.object({
   // Each fixes one job's model, over the owner's pick in Settings (ai/jobs.ts).
   SUMMARY_MODEL: z.string().optional(),
   PAYSTUB_MODEL: z.string().optional(),
+  CHAT_MODEL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z
     .string()
@@ -145,7 +146,7 @@ export interface Config {
    */
   anthropic: AnthropicConfig | null
   /**
-   * A model fixed for a job by SUMMARY_MODEL or PAYSTUB_MODEL, over the
+   * A model fixed for a job by SUMMARY_MODEL, PAYSTUB_MODEL or CHAT_MODEL, over the
    * owner's pick in Settings; null where the variable is not set.
    */
   modelOverrides: Record<AiJob, string | null>
@@ -210,7 +211,11 @@ function optionalServices(
   return {
     plaid,
     anthropic: e.ANTHROPIC_API_KEY ? { apiKey: e.ANTHROPIC_API_KEY } : null,
-    modelOverrides: { summary: e.SUMMARY_MODEL ?? null, paystub: e.PAYSTUB_MODEL ?? null },
+    modelOverrides: {
+      summary: e.SUMMARY_MODEL ?? null,
+      paystub: e.PAYSTUB_MODEL ?? null,
+      chat: e.CHAT_MODEL ?? null,
+    },
     mail: e.RESEND_API_KEY && e.MAIL_FROM ? { apiKey: e.RESEND_API_KEY, from: e.MAIL_FROM } : null,
   }
 }

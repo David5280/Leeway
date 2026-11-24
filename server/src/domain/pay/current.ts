@@ -162,8 +162,13 @@ const SIDE_JOB_MISSED_CYCLES = 1
  * the main job only. The first that speaks wins, so the owner's word goes
  * before a paystub's.
  */
-function givenForRun(givens: GivenCadence[], run: EmployerRun, rank: number) {
-  return givens.find((given) => ('payerKey' in given || rank === 0) && givenFor(given, run))
+function givenForRun(
+  givens: GivenCadence[],
+  run: EmployerRun,
+  others: EmployerRun[],
+  rank: number,
+) {
+  return givens.find((given) => ('payerKey' in given || rank === 0) && givenFor(given, run, others))
 }
 
 /**
@@ -177,8 +182,10 @@ function payingEmployers(runs: EmployerRun[], today: IsoDate, givens: GivenCaden
     .map((run) => ({ run, employer: employerOf(run, today) }))
     .sort((a, b) => mostFirst(a.employer, b.employer))
     .map((ranking, rank) => {
-      // A paystub from a job that has since ended says nothing of how the new one pays.
-      const given = givenForRun(givens, ranking.run, rank)
+      // A paystub from a job that has since ended says nothing of how the new
+      // one pays: every other run seen, an old job's included, may be the one it names.
+      const others = runs.filter((run) => run !== ranking.run)
+      const given = givenForRun(givens, ranking.run, others, rank)
       if (!given) return ranking
       const run = withGivenCadence(ranking.run, given.cadence)
       return { run, employer: employerOf(run, today) }

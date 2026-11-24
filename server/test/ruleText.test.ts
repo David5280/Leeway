@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { shownName, withShownNames } from '../src/domain/ruleText.js'
-import type { Rule } from '../src/domain/rules.js'
+import { shownName, shownNamesOf, withShownNames } from '../src/domain/ruleText.js'
+import { ruleMatches, type Rule } from '../src/domain/rules.js'
 
 const masks = ['9876', '4417']
 
@@ -56,5 +56,26 @@ describe('withShownNames', () => {
   it('leaves it empty when no rule reads it', () => {
     const rows = withShownNames([line('GYM DUES', 'Iron Gym')], [rule('bank_text')], masks)
     expect(rows[0]!.shownName).toBe('')
+  })
+})
+
+describe('every name a row has been shown under', () => {
+  it('is its name now, then the one before names were read more closely, when it differs', () => {
+    const via = line('Payment to Wilhelmina Ashcombe via Zelle')
+    expect(shownNamesOf(via, masks)).toEqual([
+      'To Wilhelmina Ashcombe',
+      'To Wilhelmina Ashcombe via Zelle',
+    ])
+    expect(shownNamesOf(line('GYM DUES', 'Iron Gym'), masks)).toEqual(['Iron Gym'])
+  })
+
+  it('is what a rule reading shown names matches, any of them, or the name now alone', () => {
+    const saved = { ...rule('shown_name'), pattern: 'ashcombe via zelle' }
+    const tx = {
+      ...line('Payment to Wilhelmina Ashcombe via Zelle'),
+      shownName: 'To Wilhelmina Ashcombe',
+    }
+    expect(ruleMatches(saved, tx)).toBe(false)
+    expect(ruleMatches(saved, { ...tx, shownNames: shownNamesOf(tx, masks) })).toBe(true)
   })
 })

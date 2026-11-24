@@ -400,6 +400,13 @@ describe('Plaid provider', () => {
       ])
     })
 
+    it("keeps Plaid's merchant id, which says it recognised a business", () => {
+      expect(mapped({ merchant_entity_id: 'ent_fake_coffee' }).merchantEntityId).toBe(
+        'ent_fake_coffee',
+      )
+      expect(mapped().merchantEntityId).toBeNull()
+    })
+
     it('dates a transaction by the day it was made, not the day the bank posted it', () => {
       expect(mapped({ date: '2026-11-16', authorized_date: '2026-11-13' }).date).toBe('2026-11-13')
     })

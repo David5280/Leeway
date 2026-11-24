@@ -1,11 +1,14 @@
 // The tax export's reading of single transactions: which categories may be
 // deductible, who paid a deposit and whether a credit only pays down a card
-// or loan. Which income line a deposit counts on is in taxIncomeLine.test.ts.
+// or loan. Which income line a deposit counts on is in taxIncomeLine.test.ts,
+// apart from money in from a person through an app, read here.
 // Pure, so no database.
 
 import { describe, expect, it } from 'vitest'
+import { personPayment } from '../src/domain/betweenPeople.js'
 import { mayBeDeductible, paysDownDebt } from '../src/domain/tax/classify.js'
 import { payerKey } from '../src/domain/tax/income.js'
+import { incomeLine } from '../src/domain/tax/incomeLine.js'
 import type { Transaction } from '../src/domain/transactions.js'
 import { madeUpTransaction } from './fixtures/transaction.js'
 
@@ -137,5 +140,38 @@ describe('a payment into a card or loan', () => {
     expect(credit({ name: 'ESCROW REFUND', bankCategory: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT' })).toBe(
       false,
     )
+  })
+})
+
+describe('money in from a person through an app, as the tax export reads it', () => {
+  /** Money in with the bank's line, merchant and code, its person read as the app reads it. */
+  const line = (name: string, merchantName: string | null, code: string | null) => {
+    const bank = { name, merchantName, amountCents: -5000 }
+    const movement = { ...bank, providerCategoryPrimary: null, providerCategoryDetailed: code }
+    return incomeLine(
+      madeUpTransaction({ ...bank, bankCategory: code, person: personPayment(movement) }),
+    )
+  }
+
+  it('is from a person with no code, or only "other income", through a people app', () => {
+    for (const [name, merchant, code] of [
+      ['VENMO PAYMENT JANE FOXHALL', null, 'INCOME_OTHER_INCOME'],
+      ['CASH APP*JANE FOXHALL', null, null],
+      ['APPLE CASH RECEIVED MONEY', 'Ottoline Grimsby', null],
+      ['APPLE CASH RECEIVED MONEY', null, 'INCOME_OTHER_INCOME'],
+      ['VENMO', 'Venmo', null],
+      ['PAYPAL TRANSFER JANEFOXHALL', null, 'INCOME_OTHER_INCOME'],
+      ['Zelle payment from Jane Foxhall', null, 'INCOME_OTHER_INCOME'],
+      ['ZEL FROM JANE FOXHALL', null, null],
+    ] as const) {
+      expect([name, line(name, merchant, code)]).toEqual([name, 'person'])
+    }
+  })
+
+  it('keeps what a purchase or a move between accounts says it is', () => {
+    expect(line('VENMO *JANE FOXHALL', null, 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE')).toBe(
+      'pay',
+    )
+    expect(line('PAYPAL INST XFER', 'PayPal', 'TRANSFER_IN_ACCOUNT_TRANSFER')).toBe('moved_in')
   })
 })

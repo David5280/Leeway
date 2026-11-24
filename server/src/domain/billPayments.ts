@@ -6,7 +6,7 @@ import type { Db } from '../db/pool.js'
 import { addDays, type IsoDate } from '../lib/dates.js'
 import { accountMasks } from './accounts.js'
 import { textKey } from './merchantKey.js'
-import { shownNameOf } from './ruleText.js'
+import { shownNamesOf } from './ruleText.js'
 import type { RuleReads } from './rules.js'
 import type { Movement } from './transfers.js'
 
@@ -61,14 +61,15 @@ export async function paidByShownName<Row extends MatchingBill>(
 ): Promise<Row[]> {
   if (!rows.some((row) => row.reads === 'shown_name' && row.matchPattern)) return rows
   const [payments, masks] = await Promise.all([recentPayments(db, today), accountMasks(db)])
+  // Every name a payment was shown under, so a pattern saved from an earlier one still finds it.
   const keyed = payments.map((payment) => ({
     payment,
-    key: textKey(shownNameOf(payment, masks)),
+    keys: shownNamesOf(payment, masks).map(textKey),
   }))
   return rows.map((row) => {
     if (row.reads !== 'shown_name' || !row.matchPattern) return row
     const pattern = textKey(row.matchPattern)
-    const paid = keyed.find(({ key }) => key.includes(pattern))?.payment
+    const paid = keyed.find(({ keys }) => keys.some((key) => key.includes(pattern)))?.payment
     return { ...row, lastPaidDate: paid?.date ?? null, lastPaidCents: paid?.amountCents ?? null }
   })
 }

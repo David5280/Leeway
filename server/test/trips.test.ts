@@ -100,6 +100,20 @@ describe('partOf', () => {
     expect(tx({ categoryName: 'Entertainment' })).toBe('activities')
     expect(tx({})).toBe('activities')
   })
+
+  it('reads a travel site by its bank category: a room is a place to stay, else getting there', () => {
+    expect(tx({ merchant: 'EXPEDIA 72AB', providerCategoryDetailed: 'TRAVEL_LODGING' })).toBe(
+      'stay',
+    )
+    expect(
+      tx({
+        merchant: 'EXPEDIA 72AB',
+        providerCategoryPrimary: 'TRAVEL',
+        providerCategoryDetailed: 'TRAVEL_FLIGHTS',
+      }),
+    ).toBe('travel')
+    expect(tx({ merchant: 'Expedia' })).toBe('travel')
+  })
 })
 
 describe('clusters', () => {
@@ -163,6 +177,7 @@ describe('trips', () => {
       spentByPart: { travel: 70000, stay: 0, food: 0, activities: 0 },
     })
     expect(lisbon.transactions.map((t) => t.id)).toEqual([ids.lisbonFlight])
+    expect(lisbon.moreTransactions).toBe(false)
 
     const ski = await call('get_trip', SKI)
     expect(ski).toMatchObject({
@@ -171,6 +186,25 @@ describe('trips', () => {
       spentByPart: { travel: 40000, stay: 50000, food: 8000, activities: 12000 },
     })
     expect(ski.transactions).toHaveLength(4)
+  })
+
+  it('lists the newest 500 transactions and says when the totals count more', async () => {
+    await seed()
+    const { rows } = await ctx.db.query<{ id: string }>('SELECT id FROM accounts LIMIT 1')
+    // 500 coffees in Lisbon, $1 each, on top of the flight booked before.
+    await ctx.db.query(
+      `INSERT INTO transactions (account_id, provider_transaction_id, date, name, amount_cents,
+         pending, provider_category_primary)
+       SELECT $1, 'lisbon-' || n, '2026-12-11', 'Cafe', 100, false, 'FOOD_AND_DRINK'
+       FROM generate_series(1, 500) AS n`,
+      [rows[0]!.id],
+    )
+    const lisbon = await call('get_trip', LISBON)
+    expect(lisbon.totalCents).toBe(70000 + 50000)
+    expect(lisbon.transactions).toHaveLength(500)
+    // The flight, the oldest, is the one the list leaves out.
+    expect(lisbon.transactions.map((t) => t.id)).not.toContain(ids.lisbonFlight)
+    expect(lisbon.moreTransactions).toBe(true)
   })
 
   it('counts only travel for a run of travel spending', async () => {

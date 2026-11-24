@@ -14,8 +14,11 @@
 //   When nothing readable is left, a plain "Bank transaction" says so.
 //
 // The raw text itself stays stored and is shown in the transaction's details.
+// How a name is cased is merchantCase.ts; the place a line ends with, merchantPlace.ts.
 
 import { asciiDigits } from './accountNumber.js'
+import { readableName } from './merchantCase.js'
+import { withoutPlace } from './merchantPlace.js'
 
 /** What a transaction is called when the bank's text holds nothing readable or safe to show. */
 export const GENERIC_NAME = 'Bank transaction'
@@ -29,64 +32,6 @@ const CARD_PAYMENT_NAME = 'Card payment'
  * its names can't be shown (transactionName.ts).
  */
 export const TRANSFER_NAME = 'Transfer'
-
-/** Short words that stay uppercase: acronyms people know in merchant and bank names. */
-const ACRONYMS = new Set([
-  'ACH',
-  'AMC',
-  'ATM',
-  'BECU',
-  'BMO',
-  'BOK',
-  'BP',
-  'CD',
-  'CVS',
-  'DMV',
-  'HSA',
-  'HSBC',
-  'IKEA',
-  'IRA',
-  'IRS',
-  'LLC',
-  'NYC',
-  'PNC',
-  'QT',
-  'TD',
-  'TJ',
-  'UPS',
-  'US',
-  'USA',
-  'USAA',
-  'USPS',
-])
-
-/** Small words that stay lowercase inside a name, as in "Bank of America". */
-export const SMALL_WORDS: ReadonlySet<string> = new Set([
-  'of',
-  'and',
-  'the',
-  'for',
-  'at',
-  'by',
-  'in',
-  'on',
-  'to',
-  'from',
-])
-
-/** Abbreviations banks use that have one plain meaning, spelled out. */
-const SPELLED_OUT = new Map([
-  ['CHK', 'Checking'],
-  ['CHKG', 'Checking'],
-  ['CRD', 'Card'],
-  ['MKTP', 'Marketplace'],
-  ['PMT', 'Payment'],
-  ['PYMT', 'Payment'],
-  ['SAV', 'Savings'],
-  ['SVGS', 'Savings'],
-  ['WHSE', 'Warehouse'],
-  ['AMZN', 'Amazon'],
-])
 
 /**
  * Card processors and payment platforms that put their own code before the
@@ -129,67 +74,11 @@ const TRANSFER =
 const CARD_PAYMENT = /^(?:(?:autopay|online|mobile|electronic|internet)\s+)*payment\W*thank you\b/i
 
 /** The company in a Chase ACH line: "ORIG CO NAME:GUSTO ORIG ID:..." */
-const ACH_COMPANY = /\borig co name:\s*(.+?)\s+(?:orig id|co entry|desc date|entry descr|sec):/i
+const ACH_COMPANY =
+  /\borig co name:\s*(.+?)\s+(?:orig id|co entry descr|desc date|entry descr|sec):/i
 
 /** A Bank of America ACH line: "ACME CORP DES:PAYROLL ID:... INDN:..." keeps the company and the description. */
 const ACH_DESCRIPTION = /^(.+?)\s+des:\s*(\S+)/i
-
-/**
- * US state codes, which end a card line's place: "LOWRY BEER GARDEN DENVER
- * CO". Codes that are also common English words (IN, ME, OR, OK, OH, HI)
- * are left out, since a name can end in one.
- */
-const STATES = new Set(
-  (
-    'AK AL AR AZ CA CO CT DC DE FL GA IA ID IL KS KY LA MA MD MI MN MO MS MT NC ND NE NH NJ NM ' +
-    'NV NY PA RI SC SD TN TX UT VA VT WA WI WV WY'
-  ).split(' '),
-)
-
-/** First words of cities named in two or three words: "SAN JOSE", "FORT COLLINS". */
-const CITY_STARTS = new Set(
-  'SAN SANTA LOS LAS NEW FORT FT ST SAINT EL PALM SALT WEST EAST NORTH SOUTH GRAND BATON BOCA COLORADO KANSAS OKLAHOMA JERSEY VIRGINIA LONG'.split(
-    ' ',
-  ),
-)
-
-/** Last words of cities named in two or three words: "KANSAS CITY", "LONG BEACH". */
-const CITY_ENDS = new Set(
-  'CITY BEACH SPRINGS PARK HEIGHTS FALLS VALLEY LAKE RAPIDS ROCK HILLS GROVE CREEK'.split(' '),
-)
-
-/**
- * Cities common on card lines, named in one word. With the words above they
- * are the known city words: a place is taken off a short name only when it
- * holds one, so "JERSEY MIKES NJ" keeps "Mikes".
- */
-const CITIES = new Set(
-  (
-    'ALBUQUERQUE ANAHEIM ANCHORAGE ARLINGTON ARVADA ATLANTA AURORA AUSTIN BALTIMORE BELLEVUE ' +
-    'BERKELEY BOISE BOSTON BOULDER BROOKLYN BROOMFIELD BUFFALO CENTENNIAL CHARLOTTE CHICAGO ' +
-    'CINCINNATI CLEVELAND COLUMBUS DALLAS DENVER DETROIT DURHAM ENGLEWOOD FRESNO GOLDEN HONOLULU ' +
-    'HOUSTON INDIANAPOLIS IRVINE LAKEWOOD LITTLETON LONGMONT LOUISVILLE MANHATTAN MEMPHIS MIAMI ' +
-    'MILWAUKEE MINNEAPOLIS NASHVILLE NEWARK OAKLAND OMAHA ORLANDO PASADENA PHILADELPHIA PHOENIX ' +
-    'PITTSBURGH PORTLAND RALEIGH RICHMOND SACRAMENTO SEATTLE SPOKANE SPRINGFIELD TACOMA TAMPA ' +
-    'THORNTON TUCSON WESTMINSTER'
-  ).split(' '),
-)
-
-/**
- * Words that say what a business does. One is never taken for a city
- * ("GRAND CANYON RAILWAY AZ"), and a "CO" after one is the company, not
- * Colorado ("GREAT DIVIDE BREWING CO").
- */
-const BUSINESS_WORDS = new Set(
-  (
-    'AUTO BAKERY BAR BBQ BISTRO BOOKS BREWERY BREWING BURGERS CAFE CANDLE CHOCOLATE CLEANERS ' +
-    'CLOTHING COFFEE CREAMERY DAIRY DELI DISTILLERY DISTILLING DONUTS DRUG ELECTRIC EXPRESS FARM ' +
-    'FARMS FOOD FOODS FURNITURE GAS GOODS GRILL HARDWARE INSURANCE KITCHEN LAUNDRY LUMBER ' +
-    'MANUFACTURING MARKET MEATS MILLS MOTOR MOTORS MUSIC OIL OUTFITTERS PAPER PHARMACY PIZZA PUB ' +
-    'RAILROAD RAILWAY RANCH ROASTERS ROASTING SALOON SEAFOOD SERVICE SERVICES SHOP SPORTS STORE ' +
-    'STUDIO SUPPLY TACOS TAVERN TEA TIRE TOYS TRADING WINE'
-  ).split(' '),
-)
 
 /** Where a counterparty's name ends in a transfer line. */
 const COUNTERPARTY_END =
@@ -267,47 +156,6 @@ function namePart(text: string): string {
 }
 
 /**
- * Takes off the place a card line ends with, a city and a state code in
- * capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY BEER GARDEN". The state
- * goes whenever two or more words come before it; the city with it only when
- * it is a known city word or two words of name are left ("JERSEY MIKES NJ"
- * reads "JERSEY MIKES"). A line that is all place keeps its city ("SALT LAKE
- * CITY UT" reads "SALT LAKE CITY"), and "SMITH & CO" and "BREWING CO" keep
- * their "CO", which there means company.
- */
-function withoutPlace(text: string): string {
-  const all = words(text)
-  const state = all.at(-1)!
-  if (all.length < 3 || !STATES.has(state)) return text
-  const before = all.at(-2)!.toUpperCase()
-  if (state === 'CO' && (/^(&|AND)$/.test(before) || BUSINESS_WORDS.has(before))) return text
-  const name = all.slice(0, -1)
-  return name.slice(0, name.length - cityLength(name)).join(' ')
-}
-
-/**
- * How many words at the end of a card line's name are its city: none, or one
- * to three ("SALT LAKE CITY"). See withoutPlace for when a city counts.
- */
-function cityLength(name: string[]): number {
-  const upper = name.map((word) => word.toUpperCase())
-  let start = upper.length - 1
-  if (!/^[\p{L}.'-]+$/u.test(name[start]!) || BUSINESS_WORDS.has(upper[start]!)) return 0
-  // Take in more of a city named in more than one word: "FORT COLLINS", "KANSAS CITY".
-  for (let more = 0; more < 2 && start > 0; more++) {
-    if (!CITY_ENDS.has(upper[start]!) && !CITY_STARTS.has(upper[start - 1]!)) break
-    start -= 1
-  }
-  const city = upper.slice(start)
-  const left = start
-  if (left === 0) return 0
-  const known = city.some(
-    (word) => CITIES.has(word) || CITY_STARTS.has(word) || CITY_ENDS.has(word),
-  )
-  return known || left >= 2 ? city.length : 0
-}
-
-/**
  * Takes off a processor's code: "SQ *BLUE BOTTLE" reads "BLUE BOTTLE". A code
  * that is not a known processor is the merchant itself, so "UBER *TRIP"
  * reads "UBER". "APPLE.COM/BILL" reads "APPLE.COM".
@@ -322,48 +170,14 @@ function withoutProcessor(text: string): string {
   return text.replace(/\*\S*.*$/u, '').replace(/\/bill\b/i, '')
 }
 
-/** One word as people would write it; "CVS/PHARMACY" is cased a part at a time. */
-function caseWord(word: string, first: boolean): string {
-  return word
-    .split('/')
-    .map((part, index) => casePart(part, first && index === 0))
-    .join('/')
-}
-
-/** One part of a word as people would write it. Parts with a lowercase letter are kept as the bank wrote them. */
-function casePart(word: string, first: boolean): string {
-  const spelled = SPELLED_OUT.get(word.toUpperCase())
-  if (spelled) return spelled
-  if (word !== word.toUpperCase()) return word
-  const core = word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-  if (ACRONYMS.has(core) || core.includes('&') || /^(\p{L}\.)+\p{L}?$/u.test(core)) return word
-  const lower = word.toLowerCase()
-  if (!first && SMALL_WORDS.has(lower)) return lower
-  // A capital starts each part after a bracket, hyphen or dot ("7-Eleven",
-  // "Netflix.com" keeps its ".com" low), but not after an apostrophe ("Joe's").
-  return lower
-    .replace(/(^|[(-])(\p{L})/gu, (_match, before: string, letter: string) => {
-      return before + letter.toUpperCase()
-    })
-    .replace(/^(Mc|O')(\p{L}\p{L})/u, (_match, prefix: string, letters: string) => {
-      // Family names keep their second capital: "McDonald's", "O'Reilly".
-      return prefix + letters[0]!.toUpperCase() + letters.slice(1)
-    })
-}
-
-/** A name in readable case, word by word. */
-export function readableName(text: string): string {
-  return words(text)
-    .map((word, index) => caseWord(word, index === 0))
-    .join(' ')
-}
-
 /** "Transfer to BOK Financial" from what follows "TRANSFER TO" in a bank's line. */
 function transferName(direction: string, rest: string): string {
   const [counterparty = ''] = rest.split(COUNTERPARTY_END)
   // A code before the name ("TRANSFER TO 12AB") is a reference, not who it went to.
   const named = words(counterparty)
   while (named.length > 0 && endsName(named[0]!)) named.shift()
+  // The place stays: a transfer's name is what rules match on (pay/deposits.ts
+  // reads past a sender's state on its own).
   const name = trimEnds(withoutNumbers(namePart(named.join(' '))))
   const way = direction.toLowerCase()
   return name ? `${TRANSFER_NAME} ${way} ${readableName(name)}` : TRANSFER_NAME
@@ -378,6 +192,8 @@ function withoutLeadingNoise(text: string): string {
 
 /** The merchant's words from a bank's line, before casing; empty when none are left. */
 function merchantWords(text: string): string {
+  // An ACH payer keeps its words, a place included, so rules made on the
+  // name keep matching; only the payroll reading (pay/deposits.ts) drops it.
   const company = ACH_COMPANY.exec(text)?.[1]
   if (company) return trimEnds(withoutNumbers(company))
   const described = ACH_DESCRIPTION.exec(text)

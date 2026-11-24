@@ -41,7 +41,10 @@ export interface TripDetail extends TripSummary {
   spentByPart: Record<TripPart, number>
   /** The trip's budget beside what it spent; null when none was planned. */
   budget: BudgetLeft | null
+  /** The newest SHOWN_LIMIT of its transactions. */
   transactions: Transaction[]
+  /** True when the totals count more transactions than the list shows. */
+  moreTransactions: boolean
 }
 
 /** A trip's days and name, as a transaction's sheet links to it. */
@@ -118,7 +121,7 @@ async function spendingOf(db: Db, spans: EventSpan[], trip: FoundTrip) {
   )
   const ids = await db.query<{ id: string }>(
     `${read} SELECT t.id FROM ${TRANSACTIONS_SQL} ${where}
-     ORDER BY t.date DESC, t.id LIMIT ${SHOWN_LIMIT}`,
+     ORDER BY t.date DESC, t.id LIMIT ${SHOWN_LIMIT + 1}`,
     values,
   )
   const spentByPart: Record<TripPart, number> = { travel: 0, stay: 0, food: 0, activities: 0 }
@@ -131,7 +134,9 @@ async function spendingOf(db: Db, spans: EventSpan[], trip: FoundTrip) {
     })
     spentByPart[part] += Number(row.cents)
   }
-  return { spentByPart, ids: ids.rows.map((row) => row.id) }
+  // One more than is shown is read, to tell whether the list leaves any out.
+  const shown = ids.rows.slice(0, SHOWN_LIMIT).map((row) => row.id)
+  return { spentByPart, ids: shown, more: ids.rows.length > SHOWN_LIMIT }
 }
 
 /** One trip's spending, by part: the trip on exactly these days, or not found. */
@@ -148,7 +153,7 @@ export async function getTrip(
   await syncBudgets(db, matched, unmatched)
   const trip = trips.find((t) => t.startsOn === startsOn && t.endsOn === endsOn)
   if (!trip) throw notFound('Trip')
-  const { spentByPart, ids } = await spendingOf(db, spans, trip)
+  const { spentByPart, ids, more } = await spendingOf(db, spans, trip)
   // Planned on the trip's days as they are now, as the sync just saved them.
   const found = matched.find(({ budget }) => budget.goalId === trip.goalId)?.budget
   let status: TripDetail['status'] = 'under_way'
@@ -163,6 +168,7 @@ export async function getTrip(
     spentByPart,
     budget: found ? withLeft(onDays(shownBudget(found), { startsOn, endsOn }), spentByPart) : null,
     transactions: await transactionsByIds(db, ids),
+    moreTransactions: more,
   }
 }
 

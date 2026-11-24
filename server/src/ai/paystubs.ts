@@ -3,7 +3,8 @@
 // request is counted first, free of charge, so a long file is never read.
 // Only used when the owner sets ANTHROPIC_API_KEY themselves.
 
-import type { AiAsk, AiGateway } from '../domain/ai/gateway.js'
+import type { AiGateway } from '../domain/ai/gateway.js'
+import type { AiAsk } from '../domain/ai/limit.js'
 import type { PaystubFile } from '../domain/paystubs/files.js'
 import { paystubReadingSchema, type PaystubReading } from '../domain/paystubs/reading.js'
 import { ReaderError, type DocumentReader, type ReaderUsage } from './documents.js'

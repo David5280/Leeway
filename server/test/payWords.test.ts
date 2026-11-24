@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { currentPay } from '../src/domain/pay/current.js'
-import { depositKind, namesBusiness, type Deposit } from '../src/domain/pay/deposits.js'
+import { depositKind, type Deposit } from '../src/domain/pay/deposits.js'
 import { payerKeyOf } from '../src/domain/pay/paychecks.js'
 import { biweeklyPaid } from './fixtures/paydays.js'
 
@@ -167,25 +167,6 @@ describe('pay found from words alone', () => {
     for (const name of FROM_A_PERSON) {
       expect(payFrom(name)).toMatchObject({ employers: [], nextPayday: null })
     }
-  })
-})
-
-describe('a deposit that names a business', () => {
-  const names = (name: string, merchantName: string | null = null) =>
-    namesBusiness({ name, merchantName })
-
-  it('reads the ending of a business name, in the bank text or the merchant name', () => {
-    expect(names('ACME CORP DIR DEP')).toBe(true)
-    expect(names('BLUTH CO PAYROLL')).toBe(true)
-    expect(names('ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(true)
-    expect(names('DIRECT DEP', 'Initech LLC')).toBe(true)
-  })
-
-  it("never reads an ACH line's own labels or a trailing state as a company", () => {
-    expect(names('ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(false)
-    expect(names('JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(false)
-    expect(names('JANE DOE DENVER CO')).toBe(false)
-    expect(names('JOHN SMITH DIR DEP')).toBe(false)
   })
 })
 

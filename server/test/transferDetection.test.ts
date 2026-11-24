@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { budgetSummary } from '../src/domain/budgetReport.js'
-import { nextPayday } from '../src/domain/cashFlow.js'
+import { getCashFlow } from '../src/domain/cashFlow.js'
 import { createCategory, listCategories } from '../src/domain/categories.js'
 import { recategorize } from '../src/domain/categorize.js'
 import { linkBank, removeConnection } from '../src/domain/connections.js'
@@ -215,9 +215,10 @@ describe('what transfers do to totals', () => {
     }
     await recategorize(ctx.db)
 
-    const payday = await nextPayday(ctx.db, settings, '2026-11-17')
+    const flow = await getCashFlow(ctx.db, settings, '2026-11-17')
 
-    expect(payday.source).toBe('period_end')
+    // No paycheck read from them: payday is the budget period's end.
+    expect(flow.paydaySource).toBe('period_end')
   })
 })
 

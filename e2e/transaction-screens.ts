@@ -1,6 +1,6 @@
 // The Transactions screens the phone layout guard checks (guarded-screens.ts):
-// the list, adding one, a transaction's sheet in each of its views, the
-// filter chips each open, and one account's transactions.
+// the list, its add menu and filter chips, and a transaction's sheet in each
+// of its views, opened on the seeded transaction with the longest name.
 
 import { expect, type Page } from '@playwright/test'
 import { pretendCalendar } from './calendar'
@@ -30,6 +30,7 @@ const inTransaction = (
     await stillOn(sheet)
   }
 
+/** The transaction list and everything that opens on it. */
 export const TRANSACTION_SCREENS: Screen[] = [
   at('transactions', '/transactions'),
   at('transactions', '/transactions', {

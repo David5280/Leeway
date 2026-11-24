@@ -3,11 +3,23 @@
 // records every request, so a test sees exactly what would have left.
 
 import type { AiJob } from '../../src/ai/jobs.js'
-import type { AiProvider, AiReply, AiRequest, TokenUsage } from '../../src/ai/provider.js'
+import type {
+  AiChatReply,
+  AiChatRequest,
+  AiProvider,
+  AiReply,
+  AiRequest,
+  AiToolCall,
+  TokenUsage,
+} from '../../src/ai/provider.js'
 import type { AppContext } from '../../src/context.js'
 import { AiGateway } from '../../src/domain/ai/gateway.js'
 
-export const NO_OVERRIDES: Record<AiJob, string | null> = { summary: null, paystub: null }
+export const NO_OVERRIDES: Record<AiJob, string | null> = {
+  summary: null,
+  paystub: null,
+  chat: null,
+}
 
 /** Tokens a call used, with no cache tokens unless given. */
 export function tokens(fields: Partial<TokenUsage> = {}): TokenUsage {
@@ -20,6 +32,16 @@ export function tokens(fields: Partial<TokenUsage> = {}): TokenUsage {
   }
 }
 
+/** A conversation step that answers with words, streamed in two pieces. */
+export function says(text: string, usage = tokens()): AiChatReply {
+  return { stop: 'done', text, toolCalls: [], turn: [{ type: 'text', text }], usage }
+}
+
+/** A conversation step that asks for tools, after a few words or none. */
+export function calls(toolCalls: AiToolCall[], text = '', usage = tokens()): AiChatReply {
+  return { stop: 'tools', text, toolCalls, turn: [{ type: 'tool_calls', toolCalls }], usage }
+}
+
 export class FakeProvider implements AiProvider {
   readonly name = 'Claude'
   readonly sent: AiRequest[] = []
@@ -30,6 +52,10 @@ export class FakeProvider implements AiProvider {
   inputTokens: number | Error = 2_000
   /** While set, sends wait for it, so a test can hold calls under way. */
   gate: Promise<void> | null = null
+  /** Each conversation step as it was asked, its messages as they were then. */
+  readonly conversed: AiChatRequest[] = []
+  /** What the next conversation steps answer, in order, or the error each fails with. */
+  steps: (AiChatReply | Error)[] = []
 
   async send(request: AiRequest): Promise<AiReply> {
     this.sent.push(request)
@@ -38,6 +64,20 @@ export class FakeProvider implements AiProvider {
     await new Promise((resolve) => setImmediate(resolve))
     if (this.reply instanceof Error) throw this.reply
     return this.reply
+  }
+
+  async converse(request: AiChatRequest, onText: (text: string) => void): Promise<AiChatReply> {
+    this.conversed.push({ ...request, messages: [...request.messages] })
+    if (this.gate) await this.gate
+    await new Promise((resolve) => setImmediate(resolve))
+    const step = this.steps.shift() ?? says('Fine.')
+    if (step instanceof Error) throw step
+    // The words arrive in two pieces, as a stream brings them.
+    const half = Math.ceil(step.text.length / 2)
+    for (const piece of [step.text.slice(0, half), step.text.slice(half)]) {
+      if (piece) onText(piece)
+    }
+    return step
   }
 
   async count(request: AiRequest): Promise<number> {

@@ -18,12 +18,16 @@
  */
 export const OWNER_ONLY_FIELDS: ReadonlySet<string> = new Set(['mask', 'bankName', 'fileName'])
 
-/** A tool's result as indented JSON for an agent, with every owner-only field left out. */
-export function agentJson(result: unknown): string {
+/**
+ * A tool's result as JSON for an agent, with every owner-only field left
+ * out. Indented for an assistant over MCP; compact where every byte is paid
+ * for again on each step, as in Chat.
+ */
+export function agentJson(result: unknown, { compact = false } = {}): string {
   return JSON.stringify(
     result,
     // Returning undefined from a replacer drops that key wherever it appears.
     (key, value: unknown) => (OWNER_ONLY_FIELDS.has(key) ? undefined : value),
-    2,
+    compact ? undefined : 2,
   )
 }
