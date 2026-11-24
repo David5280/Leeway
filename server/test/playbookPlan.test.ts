@@ -138,4 +138,22 @@ describe('periodBills', () => {
       expect.objectContaining({ dueDate: '2026-11-14', paid: false, overdue: true }),
     ])
   })
+
+  it('marks a passed due date paid only when its payment was seen', () => {
+    const seen = billOf({
+      anchorDate: '2026-10-14',
+      matchPattern: 'NETCO',
+      lastPaidDate: '2026-11-14',
+    })
+    expect(periodBills([seen], periodStart, nextPayday, today)).toEqual([
+      expect.objectContaining({ dueDate: '2026-11-14', paid: true, overdue: false }),
+    ])
+  })
+
+  it('leaves a passed date of a bill Leeway cannot see paid as a plain due date', () => {
+    const phone = billOf({ anchorDate: '2026-10-15' })
+    expect(periodBills([phone], periodStart, nextPayday, today)).toEqual([
+      expect.objectContaining({ dueDate: '2026-11-15', paid: false, overdue: false }),
+    ])
+  })
 })

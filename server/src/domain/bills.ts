@@ -87,7 +87,7 @@ const EARLY_DAYS: Record<Cadence, number> = {
 }
 
 /** Whether the bill's latest payment counts toward the due date `due`. */
-function covers(bill: BillRow, due: IsoDate): boolean {
+export function covers(bill: BillRow, due: IsoDate): boolean {
   return bill.lastPaidDate !== null && bill.lastPaidDate >= addDays(due, -EARLY_DAYS[bill.cadence])
 }
 

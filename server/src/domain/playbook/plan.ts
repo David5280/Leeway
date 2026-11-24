@@ -13,7 +13,7 @@
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import { convertCadence, type Cadence } from '../../lib/periods.js'
 import { occurrences } from '../../lib/schedule.js'
-import type { Bill } from '../bills.js'
+import { covers, type Bill } from '../bills.js'
 import type { SetAside } from '../budget.js'
 
 export type PlanLineKind = 'bill' | 'set_aside' | 'sinking_fund'
@@ -73,7 +73,10 @@ const total = (lines: PlanLine[]) => lines.reduce((sum, line) => sum + line.amou
  * Every due date of every bill from `start` up to, not including, the next
  * payday, soonest first. A bill due on payday belongs to the paycheck that
  * lands that day. Dates before the bill's first due date (its anchor) never
- * count. A date before the bill's next unpaid one is paid (scheduleOf).
+ * count. A date on or after the bill's next unpaid one (scheduleOf) is still
+ * owed, and overdue once passed. An earlier date reads paid only when a payment
+ * was seen for it: a bill without a match pattern is never seen paid, so its
+ * passed dates read as plain due dates, as on the Bills page.
  */
 export function periodBills(bills: Bill[], start: IsoDate, payday: IsoDate, today: IsoDate) {
   return bills
@@ -81,14 +84,14 @@ export function periodBills(bills: Bill[], start: IsoDate, payday: IsoDate, toda
       occurrences(bill.anchorDate, bill.cadence, start, addDays(payday, -1))
         .filter((dueDate) => dueDate >= bill.anchorDate)
         .map((dueDate): PlanLine => {
-          const paid = dueDate < bill.nextDueDate
+          const owed = dueDate >= bill.nextDueDate
           return {
             kind: 'bill',
             name: bill.name,
             amountCents: bill.amountCents,
             dueDate,
-            paid,
-            overdue: !paid && dueDate < today,
+            paid: !owed && covers(bill, dueDate),
+            overdue: owed && dueDate < today,
           }
         }),
     )
