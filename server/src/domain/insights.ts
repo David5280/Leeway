@@ -1,6 +1,6 @@
-// Looking back and around: spending by period, by day and by merchant, and
-// budget suggestions from what was actually spent. These feed the dashboard
-// charts and give an AI agent what it needs to coach.
+// Looking back and around: spending by period and by day, and budget
+// suggestions from what was actually spent (by merchant, merchantTotals.ts).
+// These feed the dashboard charts and give an AI agent what it needs to coach.
 
 import type { Db } from '../db/pool.js'
 import {
@@ -15,14 +15,10 @@ import {
 import { shiftPeriod } from '../lib/periods.js'
 import { currentPeriod } from './budgetReport.js'
 import { categoryTotals, categoryTotalsByRange, sumTotals } from './categoryTotals.js'
-import { accountMasks } from './accounts.js'
 import { chooseCategory, loadOwnAccounts, type Categorizable } from './categorize.js'
 import { listCategories, type Category, type CategoryInput } from './categories.js'
-import { spendingSql } from './counted.js'
-import { GENERIC_NAME } from './merchantName.js'
 import { withShownNames } from './ruleText.js'
 import { periodConfig, type Settings } from './settings.js'
-import { merchantDisplayName } from './transactionName.js'
 
 export interface PeriodTrend {
   offset: number
@@ -180,57 +176,6 @@ function tidyStep(cents: number): number {
   if (cents < 10_000) return 500
   if (cents < 100_000) return 1_000
   return 5_000
-}
-
-export interface MerchantTotal {
-  merchant: string
-  spentCents: number
-  count: number
-}
-
-/**
- * Where the money went in a period, by merchant, biggest first. Refunds count
- * against a merchant. Merchants are named as everywhere else (see
- * transactionName.ts), so "STARBUCKS #123" and "STARBUCKS #456" add up as one
- * Starbucks. Lines with nothing readable in them are left out: under their
- * shared "Bank transaction" they would add up unrelated spending as if it
- * were one merchant.
- */
-export async function topMerchants(
-  db: Db,
-  settings: Settings,
-  now: Date,
-  offset: number,
-  limit: number,
-): Promise<MerchantTotal[]> {
-  const { period } = currentPeriod(settings, now, offset)
-  const { rows } = await db.query<{ name: string; merchantName: string | null } & MerchantTotal>(
-    `SELECT t.name, t.merchant_name AS "merchantName",
-            sum(t.amount_cents)::bigint AS "spentCents", count(*)::int AS count
-     FROM transactions t
-     JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.date >= $1 AND t.date < $2
-       AND NOT t.excluded AND NOT a.hidden AND ($3 OR NOT t.pending)
-       AND ${spendingSql()}
-     GROUP BY 1, 2`,
-    [period.start, period.end, settings.includePending],
-  )
-  // Merchant names go to assistants and the AI writer, so they show no account number.
-  const masks = await accountMasks(db)
-  const byMerchant = new Map<string, MerchantTotal>()
-  for (const row of rows) {
-    const merchant = merchantDisplayName(row, { masks })
-    const total = byMerchant.get(merchant) ?? { merchant, spentCents: 0, count: 0 }
-    total.spentCents += row.spentCents
-    total.count += row.count
-    byMerchant.set(merchant, total)
-  }
-  byMerchant.delete(GENERIC_NAME)
-  return [...byMerchant.values()]
-    .filter((total) => total.spentCents > 0)
-    .sort((a, b) => b.spentCents - a.spentCents || a.merchant.localeCompare(b.merchant))
-    .slice(0, limit)
 }
 
 export interface SpendingPace {

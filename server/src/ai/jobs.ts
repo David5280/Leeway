@@ -1,10 +1,9 @@
 // The jobs Leeway pays an AI model for, each with its own model. Usage is
-// recorded by job, so the owner sees what each one costs. The AI chat will
-// be another job.
+// recorded by job, so the owner sees what each one costs.
 
 import type { ModelId } from './models.js'
 
-export const AI_JOBS = ['summary', 'paystub'] as const
+export const AI_JOBS = ['summary', 'paystub', 'chat'] as const
 
 export type AiJob = (typeof AI_JOBS)[number]
 
@@ -30,5 +29,11 @@ export const JOB_INFO: Record<AiJob, JobInfo> = {
     description: 'Reads the figures off a paystub you upload, once per file.',
     defaultModel: 'claude-haiku-5-5',
     envVar: 'PAYSTUB_MODEL',
+  },
+  chat: {
+    title: 'Chat',
+    description: 'Answers what you ask in Chat, a few calls for each question.',
+    defaultModel: 'claude-haiku-5-5',
+    envVar: 'CHAT_MODEL',
   },
 }

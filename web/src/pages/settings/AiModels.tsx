@@ -25,6 +25,11 @@ export function AiModelsSection() {
   )
 }
 
+/** The jobs to choose a model for. Chat only exists with a key, so its row waits for one. */
+function jobsShown(usage: AiUsage): AiUsage['jobs'] {
+  return usage.keySet ? usage.jobs : usage.jobs.filter((job) => job.job !== 'chat')
+}
+
 function AiModels({ usage }: { usage: AiUsage }) {
   const { locale } = useApp().settings
   return (
@@ -35,13 +40,13 @@ function AiModels({ usage }: { usage: AiUsage }) {
       <UsageSummary usage={usage} locale={locale} />
       <LimitField capCents={usage.monthlyCapCents} />
       <h3>Models</h3>
-      {usage.jobs.map((job) => (
+      {jobsShown(usage).map((job) => (
         <ModelPicker key={job.job} job={job} models={usage.models} locale={locale} />
       ))}
       <span className="small muted">
         Costs are worked out from Anthropic&apos;s list prices as each call is made, so your
-        Anthropic bill is the final word. Leeway keeps only the token counts and the cost of each
-        call, never what was asked or answered.
+        Anthropic bill is the final word. The usage record keeps only the token counts and the cost
+        of each call. Chat keeps its conversation on your server until you start over.
       </span>
     </div>
   )

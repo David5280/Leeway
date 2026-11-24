@@ -8,7 +8,7 @@ import {
   listConnections,
   removeConnection,
 } from '../src/domain/connections.js'
-import { latestOfEach, syncConnection } from '../src/domain/sync.js'
+import { latestOfEach, syncAll, syncConnection } from '../src/domain/sync.js'
 import { listTransactions, setCategory } from '../src/domain/transactions.js'
 import { account, bankTx, FakeBank, newLink, page } from './fakeBank.js'
 import { createTestContext, resetData } from './helpers.js'
@@ -234,6 +234,23 @@ describe('applying many changes at once', () => {
 
     expect(result).toMatchObject({ added: 1, modified: 1, error: null })
     expect((await all()).map((t) => [t.name, t.amountCents])).toEqual([['Coffee bar', 475]])
+  })
+
+  it("stores Plaid's merchant id, and the newest one when a change brings another", async () => {
+    const coffee = bankTx({ name: 'Coffee', amountCents: 400, merchantEntityId: 'ent_fake_1' })
+    const plain = bankTx({ name: 'Bakery', amountCents: 300 })
+    bank.pages = [page({ added: [coffee, plain] })]
+    await linkBank(ctx, newLink('public-entity'))
+    bank.pages = [page({ modified: [{ ...coffee, merchantEntityId: 'ent_fake_2' }] })]
+    await syncAll(ctx)
+
+    const { rows } = await ctx.db.query<{ name: string; entity: string | null }>(
+      'SELECT name, merchant_entity_id AS entity FROM transactions ORDER BY name',
+    )
+    expect(rows).toEqual([
+      { name: 'Bakery', entity: null },
+      { name: 'Coffee', entity: 'ent_fake_2' },
+    ])
   })
 
   it('saves a large first sync in full', async () => {

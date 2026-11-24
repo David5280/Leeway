@@ -71,7 +71,7 @@ export async function resetData(db: pg.Pool): Promise<void> {
        held_charges, bills, goals, goal_contributions, dismissed_recurring, applied_upgrades,
        ai_summaries, imports, pension_plans, paystubs, paystub_details, ai_usage, ai_spend_alerts,
        ai_unavailable_models, widget_tokens, notifications, push_subscriptions, push_keys,
-       alert_hides, calendar_feed, calendar_events, trip_budgets CASCADE;
+       alert_hides, chat_messages, coach_facts, calendar_feed, calendar_events, trip_budgets CASCADE;
      UPDATE settings SET data = '{}';
      DELETE FROM weekly_email; INSERT INTO weekly_email (id) VALUES (true);
      DELETE FROM notification_settings; INSERT INTO notification_settings (id) VALUES (true);`,
@@ -132,13 +132,15 @@ export async function insertBankTransaction(
     pending?: boolean
     primary?: string | null
     detailed?: string | null
+    merchantEntityId?: string | null
   },
 ): Promise<string> {
   counter += 1
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO transactions (account_id, provider_transaction_id, date, name, merchant_name,
-       amount_cents, pending, provider_category_primary, provider_category_detailed)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+       amount_cents, pending, provider_category_primary, provider_category_detailed,
+       merchant_entity_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
     [
       accountId,
       `tx-${counter}`,
@@ -149,6 +151,7 @@ export async function insertBankTransaction(
       fields.pending ?? false,
       fields.primary ?? null,
       fields.detailed ?? null,
+      fields.merchantEntityId ?? null,
     ],
   )
   return rows[0]!.id

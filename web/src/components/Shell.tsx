@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useChatAvailable } from '../api/chat'
 import { useUpdateSettings } from '../api/settings'
 import { useApp, usePrefersDark } from '../lib/app'
 import { THEMES, themeVariables, type ThemeId } from '../lib/theme'
@@ -44,6 +45,21 @@ function ThemeDots() {
   )
 }
 
+/** The way to Chat, in the header on every screen, only when Chat is on. */
+function ChatLink() {
+  if (!useChatAvailable()) return null
+  return (
+    <NavLink
+      to="/chat"
+      className={({ isActive }) => (isActive ? 'bell active' : 'bell')}
+      aria-label="Chat"
+      title="Chat"
+    >
+      <Icon name="chat" size={20} />
+    </NavLink>
+  )
+}
+
 export function Shell({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
   return (
     <>
@@ -66,6 +82,7 @@ export function Shell({ children, actions }: { children: ReactNode; actions?: Re
             ))}
           </nav>
           <div className="row">
+            <ChatLink />
             <Bell />
             <ThemeDots />
             {actions}

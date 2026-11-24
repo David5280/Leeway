@@ -11,18 +11,20 @@ import { activeSpendAlert, dismissSpendAlerts } from '../src/domain/ai/alerts.js
 import {
   AiLimitError,
   billedNothing,
+  estimateChatTokens,
   estimateInputTokens,
   FRAMING_TOKENS,
   limitMessage,
   type AiAsk,
-} from '../src/domain/ai/gateway.js'
+  type AiChatAsk,
+} from '../src/domain/ai/limit.js'
 import { aiMonth } from '../src/domain/ai/month.js'
 import { DEFAULT_MONTHLY_CAP_CENTS } from '../src/domain/ai/settings.js'
 import { unavailableModels } from '../src/domain/ai/unavailable.js'
 import { monthSpend } from '../src/domain/ai/usage.js'
 import { getSettings, saveSettings, type Settings } from '../src/domain/settings.js'
 import { createTestContext, resetData } from './helpers.js'
-import { FakeProvider, gatewayFor, tokens } from './fixtures/ai.js'
+import { FakeProvider, gatewayFor, says, tokens } from './fixtures/ai.js'
 
 let ctx: Awaited<ReturnType<typeof createTestContext>>
 
@@ -86,7 +88,7 @@ describe('AiGateway: models', () => {
     expect(provider.sent[0]!.model).toBe('claude-haiku-5-5')
     await changeSettings((s) => ({
       ...s,
-      ai: { ...s.ai, models: { summary: 'claude-opus-5-5', paystub: null } },
+      ai: { ...s.ai, models: { summary: 'claude-opus-5-5', paystub: null, chat: null } },
     }))
     const result = await ai.run('summary', ASK)
     expect(provider.sent[1]!.model).toBe('claude-opus-5-5')
@@ -100,10 +102,11 @@ describe('AiGateway: models', () => {
     const { ai, provider } = gatewayFor(ctx, new FakeProvider(), {
       summary: null,
       paystub: 'claude-sonnet-4-6',
+      chat: null,
     })
     await changeSettings((s) => ({
       ...s,
-      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5' } },
+      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5', chat: null } },
     }))
     await ai.run('paystub', FILE_ASK)
     expect(await ai.count('paystub', FILE_ASK)).toBe(2_000)
@@ -280,7 +283,7 @@ describe('AiGateway: recording', () => {
   })
 
   it('lets go of the held cost even when recording fails', async () => {
-    const overrides = { summary: 'x'.repeat(101), paystub: null }
+    const overrides = { summary: 'x'.repeat(101), paystub: null, chat: null }
     const { ai } = gatewayFor(ctx, new FakeProvider(), overrides)
     // The model's name is too long to record, so recording throws.
     await expect(ai.run('summary', ASK)).rejects.toThrow()
@@ -295,7 +298,7 @@ describe('AiGateway: the monthly limit', () => {
   it('has a $5 limit unless the owner sets another', async () => {
     expect(DEFAULT_MONTHLY_CAP_CENTS).toBe(500)
     expect((await getSettings(ctx.db)).ai).toEqual({
-      models: { summary: null, paystub: null },
+      models: { summary: null, paystub: null, chat: null },
       monthlyCapCents: 500,
     })
   })
@@ -320,6 +323,32 @@ describe('AiGateway: the monthly limit', () => {
     expect(provider.sent).toHaveLength(1)
   })
 
+  it('holds a Chat step to the limit by its input estimate, not its output alone', async () => {
+    const { ai, provider } = gatewayFor(ctx)
+    // A step whose cost is mostly what it sends: long history, little output.
+    const step: AiChatAsk = {
+      system: 'You are a money coach.',
+      context: 'Today is Tuesday.',
+      tools: [],
+      messages: [{ role: 'user', text: 'x'.repeat(200_000) }],
+      effort: 'low',
+      maxTokens: 100,
+    }
+    const worst = worstCostMicros('claude-haiku-5-5', estimateChatTokens(step), step.maxTokens)
+    const outputOnly = worstCostMicros('claude-haiku-5-5', 0, step.maxTokens)
+    expect(worst).toBeGreaterThan(outputOnly * 10)
+    provider.steps = [{ ...says(''), usage: tokens({ inputTokens: 0, outputTokens: 0 }) }]
+    await spend(500 * MICROS_PER_CENT - worst)
+    // Exactly the estimate is left, so it goes.
+    await ai.converse('chat', step, () => {})
+    expect(provider.conversed).toHaveLength(1)
+
+    // One millionth short of the estimate, though far more than the output costs: refused unsent.
+    await spend(1)
+    await expect(ai.converse('chat', step, () => {})).rejects.toThrow(/could cost up to/)
+    expect(provider.conversed).toHaveLength(1)
+  })
+
   it('says the limit is reached and when it resets, once the month has spent it', async () => {
     const { ai } = gatewayFor(ctx)
     await spend(500 * MICROS_PER_CENT)
@@ -336,7 +365,7 @@ describe('AiGateway: the monthly limit', () => {
     provider.inputTokens = 20_000
     await changeSettings((s) => ({
       ...s,
-      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5' } },
+      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5', chat: null } },
     }))
     await expect(ai.run('paystub', FILE_ASK)).rejects.toThrow(
       "This could cost up to $0.18, and $0.02 of this month's AI limit of $5 is left. It resets on Dec 1, or you can raise it in Settings, then AI models.",
@@ -353,7 +382,7 @@ describe('AiGateway: the monthly limit', () => {
     provider.inputTokens = 50_000
     await changeSettings((s) => ({
       ...s,
-      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5' } },
+      ai: { ...s.ai, models: { summary: null, paystub: 'claude-opus-5-5', chat: null } },
     }))
     await expect(ai.run('paystub', FILE_ASK)).rejects.toThrow(/could cost up to/)
     expect(await activeSpendAlert(ctx.db, '2026-11-01')).toBeNull()
@@ -501,7 +530,7 @@ describe('limitMessage', () => {
   it("speaks the owner's language", () => {
     const settings = {
       locale: 'de-DE',
-      ai: { models: { summary: null, paystub: null }, monthlyCapCents: 500 },
+      ai: { models: { summary: null, paystub: null, chat: null }, monthlyCapCents: 500 },
     }
     expect(limitMessage(settings, 500 * MICROS_PER_CENT, 1, '2026-12-01')).toMatch(
       /^This month's AI limit of 5\s\$ is reached\. It resets on 1\. Dez\./,
