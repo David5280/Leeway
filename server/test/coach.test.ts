@@ -414,6 +414,18 @@ describe('can_i_afford', () => {
     expect(two.reasons[0]).toBe(
       'It fits the budgets only by using the $200 set aside for your goals.',
     )
+
+    // A sinking fund's share is held back too, and named with the goals.
+    await call('add_sinking_fund', {
+      name: 'Car insurance',
+      amountCents: 120_000,
+      cadence: 'year',
+      dueDate: '2027-03-01',
+    })
+    const three = await call('can_i_afford', { amountCents: 45000, categoryId: fun.id })
+    expect(three.reasons[0]).toBe(
+      'It fits the budgets only by using the $300 set aside for your goals and yearly costs.',
+    )
   })
 })
 

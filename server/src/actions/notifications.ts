@@ -189,3 +189,16 @@ const TEST_FAILURES = {
   retry: 'The push service is busy or out of reach. Try again in a minute.',
   rejected: 'The push service refused the test. Turn push off and on again.',
 }
+
+/** The notification actions, in the order the action list shows them. */
+export const notificationActions = [
+  countNotificationsAction,
+  listNotificationsAction,
+  markNotificationsReadAction,
+  dismissNotificationAction,
+  getNotificationSettingsAction,
+  updateNotificationSettingsAction,
+  subscribePushAction,
+  unsubscribePushAction,
+  sendTestPushAction,
+] as const

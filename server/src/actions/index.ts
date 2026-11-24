@@ -61,17 +61,7 @@ import {
   startEmergencyFundAction,
 } from './goalPlans.js'
 import { importTransactionsAction, listImportsAction, undoImportAction } from './imports.js'
-import {
-  countNotificationsAction,
-  dismissNotificationAction,
-  getNotificationSettingsAction,
-  listNotificationsAction,
-  markNotificationsReadAction,
-  sendTestPushAction,
-  subscribePushAction,
-  unsubscribePushAction,
-  updateNotificationSettingsAction,
-} from './notifications.js'
+import { notificationActions } from './notifications.js'
 import {
   getCashFlowAction,
   getNetWorthAction,
@@ -79,6 +69,7 @@ import {
   planDebtPayoffAction,
 } from './planning.js'
 import { confirmPayAction, getPayAction, setPayAction } from './pay.js'
+import { sinkingFundActions } from './sinkingFunds.js'
 import { addOwnedOrOwedAction, listOwnedAndOwedAction, updateOwnedOrOwedAction } from './owned.js'
 import { getIdleCashAction } from './idleCash.js'
 import {
@@ -151,7 +142,8 @@ import {
 
 /**
  * Every action in Leeway. The HTTP API and the MCP endpoint are both built
- * from this list, which is what keeps the app and an agent at parity.
+ * from this list, which is what keeps the app and an agent at parity. A
+ * module with many actions hands over its own ordered list, spread in here.
  */
 export const actionList = [
   getCheckinAction,
@@ -179,15 +171,7 @@ export const actionList = [
   getWeeklyEmailAction,
   setWeeklyEmailAction,
   sendTestWeeklyEmailAction,
-  countNotificationsAction,
-  listNotificationsAction,
-  markNotificationsReadAction,
-  dismissNotificationAction,
-  getNotificationSettingsAction,
-  updateNotificationSettingsAction,
-  subscribePushAction,
-  unsubscribePushAction,
-  sendTestPushAction,
+  ...notificationActions,
   listCategoriesAction,
   createCategoryAction,
   updateCategoryAction,
@@ -254,6 +238,7 @@ export const actionList = [
   getPayAction,
   confirmPayAction,
   setPayAction,
+  ...sinkingFundActions,
   getIdleCashAction,
   calendarStatusAction,
   connectCalendarAction,
