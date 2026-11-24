@@ -78,6 +78,17 @@ describe('a deposit that names a business', () => {
     'JANE DOE CO SALARY 15',
     'Transfer from Jane Doe Co bi-weekly pay',
     'From Jane Doe Co payroll bonus',
+    // A second "CO" later in the line names no one either.
+    'JANE DOE CO ACH CO PAYROLL',
+    'JANE DOE CO WEEKLY CO PAYROLL',
+    'JANE DOE CO TRN CO PAYROLL',
+    'JANE DOE CO DENVER CO PAYROLL',
+    'JANE DOE DENVER CO PAYROLL CO',
+    // Punctuation after the person's "CO".
+    'JANE DOE CO, PAYROLL',
+    'JANE DOE CO; PAYROLL',
+    'JANE DOE CO/PAYROLL',
+    'JANE DOE, CO PAYROLL',
   ])('never reads a person in Colorado as a company: %j', (name) => {
     expect(names(name)).toBe(false)
   })

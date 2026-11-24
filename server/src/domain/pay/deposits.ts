@@ -101,9 +101,12 @@ function payerWords(text: string): string[] {
  * Whether the payer word at `index` ends a business's name. Any ending but
  * "CO" always does. A "CO" is judged by the words up to and including it,
  * whatever follows ("WEEKLY", "ACH", "BONUS", a date): it is the company
- * only when those words still end in "CO" once their place is taken off
- * (merchantPlace.ts). So "ACME CO" and "BREWING CO" are companies, while
- * "JANE DOE CO" and "JOHN SMITH DENVER CO" are people in Colorado.
+ * only when taking off a place (merchantPlace.ts) leaves those words whole,
+ * so the "CO" itself is not the place. So "ACME CO" and "BREWING CO" are
+ * companies, while "JANE DOE CO" and "JOHN SMITH DENVER CO" are people in
+ * Colorado. Asking only whether the words still end in "CO" would let a
+ * second one through: in "JANE DOE CO ACH CO" the place taken off would be
+ * "ACH CO", leaving the person's own "CO" at the end.
  *
  * Known limit: a person named in two words before "CO" ("JANE CO") reads
  * as a company, as it cannot be told from one ("IDEAL CO").
@@ -111,8 +114,8 @@ function payerWords(text: string): string[] {
 function endsBusiness(words: string[], index: number): boolean {
   const word = words[index]!
   if (word !== 'CO') return isBusinessEnding(word)
-  const upToIt = withoutPlace(words.slice(0, index + 1).join(' '))
-  return upToIt.split(' ').at(-1) === 'CO'
+  const upToIt = words.slice(0, index + 1).join(' ')
+  return withoutPlace(upToIt) === upToIt
 }
 
 /**
