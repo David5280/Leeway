@@ -106,6 +106,26 @@ describe('the payers the profile names', () => {
     ['JANE DOE DENVER CO EFT PAYROLL', null],
     // As some banks write it, in title case.
     ['Jane Doe Co DES:PAYROLL ID:1', null],
+    // Any word after the state, under a salary code or none: a "CO" is the
+    // company only when the words up to it still end in "CO".
+    ['JANE DOE CO BI-WEEKLY PAY', 'INCOME_SALARY'],
+    ['JANE DOE CO PAY', 'INCOME_SALARY'],
+    ['JANE DOE CO DES:PAY ID:1', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL 12', null],
+    ['JANE DOE CO PAYROLL NOV 15', null],
+    ['JANE DOE CO SEMI MONTHLY PAYROLL', null],
+    ['JANE DOE CO BI WEEKLY PAYROLL', null],
+    ['JANE DOE CO WKLY PAYROLL', null],
+    ['JANE DOE CO. PAYROLL', null],
+    ['JANE DOE CO BONUS PAYROLL', null],
+    ['JANE DOE CO PAYROLL PMT', null],
+    ['JANE DOE CO ACH CREDIT PAYROLL', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL CREDIT', 'INCOME_SALARY'],
+    ['JANE DOE CO PAYROLL TRANSFER', 'INCOME_SALARY'],
+    ['JANE DOE CO DD', 'INCOME_SALARY'],
+    ['JANE DOE CO SALARY 15', 'INCOME_SALARY'],
+    ['Transfer from Jane Doe Co bi-weekly pay', 'INCOME_SALARY'],
+    ['From Jane Doe Co payroll bonus', 'INCOME_SALARY'],
   ]
 
   /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
@@ -159,7 +179,17 @@ describe('the payers the profile names', () => {
     ['GREAT DIVIDE BREWING CO PAYROLL', 'Great Divide Brewing Co Payroll'],
     // A business ending before the place still names the business.
     ['ACME LLC DENVER CO PAYROLL', 'Acme LLC Denver Co Payroll'],
-  ])('still names a business whose name ends in Co: %s', async (name, shown) => {
+    // Whatever follows the ending, the business is still named.
+    ['IDEAL CO PAYROLL', 'Ideal Co Payroll'],
+    ['ACME & CO PAYROLL', 'Acme & Co Payroll'],
+    ['SMITH AND CO PAYROLL', 'Smith and Co Payroll'],
+    ['ACME CO DENVER CO PAYROLL', 'Acme Co Denver Co Payroll'],
+    ['FORD MOTOR CO PAYROLL', 'Ford Motor Co Payroll'],
+    ['ACME CO BONUS PAYROLL', 'Acme Co Bonus Payroll'],
+    ['ACME CO PAYROLL 12', 'Acme Co Payroll 12'],
+    ['ACME COMPANY PAYROLL', 'Acme Company Payroll'],
+    ['ADP PAYROLL FOR ACME INC', 'Adp Payroll for Acme Inc'],
+  ])('still names a business by its ending: %s', async (name, shown) => {
     const result = await paidBy(name)
     expect(result.pay.employer).toBe(shown)
     expect(JSON.stringify(result.pay)).not.toMatch(/jane|doe/i)

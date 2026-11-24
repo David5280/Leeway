@@ -180,6 +180,17 @@ describe('namesPayer', () => {
     expect(namesPayer('State of Colorado', 'univ of colorado payroll')).toBe(false)
   })
 
+  it('reads the last word of a name the bank cut off at 16 characters', () => {
+    expect(namesPayer('Denver Public Schools', 'denver public sc payroll')).toBe(true)
+    expect(namesPayer('Denver Public Schools', 'denver public schoo dir dep')).toBe(true)
+    // Only at the end of the line's name, and only from two letters on.
+    expect(namesPayer('Denver Public Schools', 'denver public sc west payroll')).toBe(false)
+    expect(namesPayer('Denver Public Schools', 'denver public sx payroll')).toBe(false)
+    expect(namesPayer('Denver Public Schools', 'denver public s payroll')).toBe(false)
+    // A lone cut word, with no whole word of the stub before it, names no one.
+    expect(namesPayer('Acme', 'globex ac payroll')).toBe(false)
+  })
+
   it('never matches an employer that shares only some of its words with the line', () => {
     // Every stub word is in the line, but not side by side.
     expect(namesPayer('University of Denver', 'univ of colorado denver payroll')).toBe(false)

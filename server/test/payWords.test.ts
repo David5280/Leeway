@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { currentPay } from '../src/domain/pay/current.js'
-import { depositKind, namesBusiness, type Deposit } from '../src/domain/pay/deposits.js'
+import { depositKind, type Deposit } from '../src/domain/pay/deposits.js'
 import { payerKeyOf } from '../src/domain/pay/paychecks.js'
 import { biweeklyPaid } from './fixtures/paydays.js'
 
@@ -167,65 +167,6 @@ describe('pay found from words alone', () => {
     for (const name of FROM_A_PERSON) {
       expect(payFrom(name)).toMatchObject({ employers: [], nextPayday: null })
     }
-  })
-})
-
-describe('a deposit that names a business', () => {
-  const names = (name: string, merchantName: string | null = null) =>
-    namesBusiness({ name, merchantName })
-
-  it('reads the ending of a business name, in the bank text or the merchant name', () => {
-    expect(names('ACME CORP DIR DEP')).toBe(true)
-    expect(names('BLUTH CO PAYROLL')).toBe(true)
-    expect(names('ORIG CO NAME:ACME CORP ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(true)
-    expect(names('DIRECT DEP', 'Initech LLC')).toBe(true)
-  })
-
-  it("never reads an ACH line's own labels or a trailing state as a company", () => {
-    expect(names('ORIG CO NAME:JOHN SMITH ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(false)
-    expect(names('JOHN SMITH DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(false)
-    expect(names('JANE DOE DENVER CO')).toBe(false)
-    expect(names('JOHN SMITH DIR DEP')).toBe(false)
-  })
-
-  it('never reads the state ending an ACH payer or a transfer sender as a company', () => {
-    expect(names('JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD')).toBe(
-      false,
-    )
-    expect(names('JANE DOE CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD')).toBe(false)
-    expect(
-      names('ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 DESC DATE: CO ENTRY DESCR:DIR DEP'),
-    ).toBe(false)
-    expect(names('ORIG CO NAME:JANE DOE CO CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(false)
-    expect(names('Transfer from Jane Doe CO salary')).toBe(false)
-  })
-
-  // A word between the state and the pay word (how often, the ACH rails)
-  // leaves a person a person, and a business a business.
-  it.each([
-    ['JANE DOE CO WEEKLY PAYROLL', false],
-    ['JOHN SMITH DENVER CO ACH PAYROLL', false],
-    ['JANE DOE CO MONTHLY SALARY', false],
-    ['JANE DOE DENVER CO EFT PAYROLL', false],
-    ['JANE DOE CO BIWEEKLY DIR DEP PPD', false],
-    ['JANE DOE CO SEMI-MONTHLY PAYROLL REF 12', false],
-    ['Jane Doe Co DES:PAYROLL ID:1', false],
-    ['ACME CO WEEKLY PAYROLL', true],
-    ['Acme Co Payroll', true],
-    ['3M CO DES:PAYROLL', true],
-    ['ACME INC ACH PAYROLL', true],
-    ['GREAT DIVIDE BREWING CO PAYROLL', true],
-    ['ACME LLC DENVER CO PAYROLL', true],
-    ['IDEAL CO PAYROLL', true],
-  ])('reads %j as naming a business: %s', (name, business) => {
-    expect(names(name)).toBe(business)
-  })
-
-  it('still reads a business ending in Co in an ACH line', () => {
-    expect(names('ACME CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
-    expect(names('3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
-    expect(names('ORIG CO NAME:ACME INC ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD')).toBe(true)
-    expect(names('GREAT DIVIDE BREWING CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD')).toBe(true)
   })
 })
 

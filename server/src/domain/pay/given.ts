@@ -80,6 +80,23 @@ function nameWords(text: string): string[] {
 const holdsRun = (words: string[], run: string[]) =>
   words.some((_, start) => run.every((word, index) => words[start + index] === word))
 
+/** The fewest letters a cut off word must keep to be read as the start of a stub's word. */
+const MIN_CUT_LETTERS = 2
+
+/**
+ * Whether `payer` ends with the stub's words, its last one cut off: banks
+ * cut an ACH company name at 16 characters, so "Denver Public Schools" is
+ * printed "DENVER PUBLIC SC". The stub needs at least one whole word before
+ * the cut one, so a lone "AC" never reads as "Acme".
+ */
+function endsWithCutRun(payer: string[], stub: string[]): boolean {
+  const start = payer.length - stub.length
+  if (stub.length < 2 || start < 0) return false
+  const cut = payer.at(-1)!
+  const whole = stub.slice(0, -1).every((word, index) => payer[start + index] === word)
+  return whole && cut.length >= MIN_CUT_LETTERS && stub.at(-1)!.startsWith(cut)
+}
+
 /**
  * Whether a paystub's employer name and a payer's key, read from the bank's
  * text, name the same payer. Shared words are not enough, since employers
@@ -87,6 +104,8 @@ const holdsRun = (words: string[], run: string[]) =>
  * - every name word of the stub is in the key, side by side as the stub
  *   writes them: "University of Colorado" and "UNIV OF COLORADO PAYROLL", or
  *   "Acme Corp" and "ORIG CO NAME:ACME CORP ...", whose labels come first, or
+ * - the key ends with them, the last one cut off as a bank cuts a long
+ *   name: "Denver Public Schools" and "DENVER PUBLIC SC PAYROLL", or
  * - the key names one word, the stub's first, as a bank may print only a
  *   brand: "Acme Widgets Inc" and "ACME PAYROLL". Never a general word, so
  *   "NATL PAYROLL" names no "National Western Life".
@@ -95,7 +114,7 @@ export function namesPayer(employerName: string, payerKey: string): boolean {
   const stub = nameWords(employerName)
   const payer = nameWords(payerKey)
   if (stub.length === 0 || payer.length === 0) return false
-  if (holdsRun(payer, stub)) return true
+  if (holdsRun(payer, stub) || endsWithCutRun(payer, stub)) return true
   const [brand] = payer
   return payer.length === 1 && brand === stub[0] && !GENERAL_WORDS.has(brand!)
 }

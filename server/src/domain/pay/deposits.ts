@@ -78,47 +78,54 @@ const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 
 /** The text with every payroll and pay word taken off ("ACME CORP DIR DEP" is "ACME CORP"). */
 export const withoutPayWords = (text: string) => text.replace(ANY_PAY_WORDS, ' ')
 
-/**
- * Words a pay line carries beside its payer that name no one: how often it
- * pays, the ACH rails and a deposit's own labels. "JANE DOE CO WEEKLY
- * PAYROLL" without them is "JANE DOE CO", which ends in a place.
- */
-const FILLER_WORD =
-  /^(?:(?:bi|semi)-?)?(?:weekly|monthly)$|^(?:ach|eft|dir|dep|direct|deposit|ppd|ccd)$/i
 /** A reference label, "ID:K3J9X" or "REF", which with any code after it names no one. */
 const REFERENCE_WORD = /^(?:id|ref)(?![a-z])/i
 
 /**
  * The payer's own words in a bank's text, in capitals, as namesBusiness
  * reads them. Read from the clean name the app shows, which already drops an
- * ACH line's labels ("ORIG CO NAME:", "INDN:... CO ID:"). Then:
- * - pay words and filler words go ("WEEKLY PAYROLL", "ACH", "EFT", "DIR DEP"),
- * - a reference and everything after it goes ("ID:1", "REF 12"),
- * - the place left at the end goes, a state and the city before it
- *   (merchantPlace.ts), in any case: "Jane Doe Denver Co" is "JANE DOE".
- * Only this reading drops the place an ACH payer or a transfer's sender ends
- * with; the name shown keeps it, so rules made on it still match.
+ * ACH line's labels ("ORIG CO NAME:", "INDN:... CO ID:"). Pay words go
+ * ("PAYROLL", "DIR DEP"), as do a reference and everything after it ("ID:1",
+ * "REF 12") and the punctuation ending a word ("CO." is "CO").
  */
-function payerWords(text: string): string {
+function payerWords(text: string): string[] {
   const all = withoutPayWords(cleanMerchantName(text))
     .split(/\s+/)
-    .map((word) => word.replace(/[,;:]+$/, '').toUpperCase())
+    .map((word) => word.replace(/[.,;:]+$/, '').toUpperCase())
+    .filter((word) => word !== '')
   const reference = all.findIndex((word) => REFERENCE_WORD.test(word))
-  const kept = (reference === -1 ? all : all.slice(0, reference)).filter(
-    (word) => word !== '' && !FILLER_WORD.test(word),
-  )
-  return withoutPlace(kept.join(' '))
+  return reference === -1 ? all : all.slice(0, reference)
 }
 
 /**
- * Whether a bank's text names a business: its payer's words (payerWords)
- * hold a business ending. A "CO" there is the company only when it is not
- * the place: "ACME CO PAYROLL" names Acme, while "JANE DOE CO WEEKLY
- * PAYROLL" is Jane Doe in Colorado. When unsure it names no one, since a
- * person's name must never be shown. The one reading namesBusiness and a
- * "From ..." sender both go by.
+ * Whether the payer word at `index` ends a business's name. Any ending but
+ * "CO" always does. A "CO" is judged by the words up to and including it,
+ * whatever follows ("WEEKLY", "ACH", "BONUS", a date): it is the company
+ * only when those words still end in "CO" once their place is taken off
+ * (merchantPlace.ts). So "ACME CO" and "BREWING CO" are companies, while
+ * "JANE DOE CO" and "JOHN SMITH DENVER CO" are people in Colorado.
+ *
+ * Known limit: a person named in two words before "CO" ("JANE CO") reads
+ * as a company, as it cannot be told from one ("IDEAL CO").
  */
-const textNamesBusiness = (text: string) => BUSINESS_WORDS.test(payerWords(text))
+function endsBusiness(words: string[], index: number): boolean {
+  const word = words[index]!
+  if (word !== 'CO') return isBusinessEnding(word)
+  const upToIt = withoutPlace(words.slice(0, index + 1).join(' '))
+  return upToIt.split(' ').at(-1) === 'CO'
+}
+
+/**
+ * Whether a bank's text names a business: one of its payer's words
+ * (payerWords) ends a business's name (endsBusiness). A "From ..." line is
+ * read by its sender alone, so "TRANSFER FROM" is never taken as part of a
+ * name. When unsure it names no one, since a person's name must never be
+ * shown. The one reading namesBusiness and a "From ..." sender both go by.
+ */
+function textNamesBusiness(text: string): boolean {
+  const words = payerWords(FROM_SOMEONE.exec(text)?.groups?.sender ?? text)
+  return words.some((_, index) => endsBusiness(words, index))
+}
 
 /**
  * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
