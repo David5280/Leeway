@@ -764,27 +764,6 @@ button.chip {
   }
 }
 
-/* A page's sections in one row under its title (TabRow): it scrolls sideways
-   rather than wrapping when the sections do not all fit, as on a phone. */
-.seg.seg-scroll {
-  display: flex;
-  flex-wrap: nowrap;
-  width: fit-content;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.seg.seg-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.seg.seg-scroll button {
-  flex: none;
-  padding: 0 14px;
-  white-space: nowrap;
-}
-
 .seg button[aria-pressed='true'] {
   background: var(--surface);
   color: var(--ink);

@@ -25,7 +25,6 @@ import {
   shortClass,
   SUGGESTIONS_ONLY,
 } from './playbookText'
-import { paths } from '../../../routes'
 
 /** The last paycheck closed out: the everyday budgets less what was spent. */
 function LastPaycheck({ closeOut, ideas }: { closeOut: CloseOut; ideas: boolean }) {
@@ -131,14 +130,17 @@ function ThisPaycheck({ playbook }: { playbook: PlaybookView }) {
   )
 }
 
-/** Checking running low before payday, in one line that opens the full warning in Bills. */
+/**
+ * Checking running low before payday, in one line. The full warning, with what
+ * would cover it, is in the Until payday card just below on the same page.
+ */
 function ShortCash({ playbook }: { playbook: PlaybookView }) {
   const { settings } = useApp()
   const short = playbook.plan.short
   if (!short) return null
   const zero = <Money cents={0} />
   return (
-    <Card to={paths.bills()} label="Cash before payday" className="stack-xs">
+    <Card static="words" label="Cash before payday" className="stack-xs">
       <p className={`small ${shortClass(playbook)}`}>
         {short.now ? (
           <>Checking is already below {zero}.</>
@@ -149,7 +151,7 @@ function ShortCash({ playbook }: { playbook: PlaybookView }) {
           </>
         )}
       </p>
-      <p className="small muted">See what would cover it in Bills.</p>
+      <p className="small muted">What would cover it is just below, under Until payday.</p>
     </Card>
   )
 }

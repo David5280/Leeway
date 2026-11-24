@@ -10,6 +10,7 @@ import { useHomeAlerts } from '../../api/homeAlerts'
 import { AlertRows, alertsTint } from '../../components/AccountAlerts'
 import { Card } from '../../components/design/Card'
 import { ALERT_ROWS, moreAlerts } from '../../lib/alertRows'
+import { paths } from '../../routes'
 
 /** Nothing at all when every account is fine. */
 export function AccountHealth() {
@@ -25,7 +26,7 @@ export function AccountHealth() {
           {more > 0 ? moreAlerts(more) : 'From your last bank sync'}
         </span>
         {/* A real 44px box, so its tap never reaches up into the last alert. */}
-        <Link to="/alerts" className="linkbtn small tap">
+        <Link to={paths.alerts()} className="linkbtn small tap">
           See all alerts
         </Link>
       </div>

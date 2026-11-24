@@ -1,6 +1,6 @@
 // Plain-language lines about a savings goal or a purchase being saved for:
 // what to set aside, and whether recent progress makes the date. Kept apart
-// from the screens so the Plan tab and the overview read the same, and so
+// from the screens so the Goals tab and Home read the same, and so
 // every wording can be tested alone.
 
 import type { Goal } from '../api/client'

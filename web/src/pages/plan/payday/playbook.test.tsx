@@ -103,12 +103,15 @@ describe('This paycheck', () => {
 })
 
 describe('Cash before payday', () => {
-  it('says when checking may dip and opens the full warning in Bills', async () => {
+  it('says when checking may dip and points to the full warning just below', async () => {
     show(playbookOf({ plan: planOf(undefined, undefined, { short: SHORT }), paydayEstimate: true }))
     const card = await region('Cash before payday')
     expect(card).toHaveTextContent('Checking may go below $0 on Nov 24, before payday.')
-    expect(within(card).getByRole('link')).toHaveAttribute('href', '/payday/bills')
-    // An estimated payday is a heads up in amber; the cover amount stays in Bills.
+    expect(card).toHaveTextContent('What would cover it is just below, under Until payday.')
+    // The warning sits on this same page now, so the card leads nowhere else.
+    expect(within(card).queryByRole('link')).toBeNull()
+    expect(within(card).queryByRole('button')).toBeNull()
+    // An estimated payday is a heads up in amber; the cover amount stays in Until payday.
     expect(within(card).getByText(/Checking may go below/)).toHaveClass('warn')
     expect(card).not.toHaveTextContent('$100')
   })

@@ -9,6 +9,7 @@ import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel } from '../lib/format'
+import { paths } from '../routes'
 import { useUrgentHeadsUp } from '../widgets/Alerts'
 import { Board } from '../widgets/Board'
 import { AccountHealth } from './overview/AccountHealth'
@@ -25,7 +26,7 @@ import {
 /** The way into Chat from Overview, drawn only when Chat is on. */
 function AskBar() {
   return (
-    <Link to="/chat" className="card ask-bar">
+    <Link to={paths.chat()} className="card ask-bar">
       <Icon name="chat" size={20} />
       <span className="ask-bar-text">
         <span className="ask-bar-title">Ask about your money</span>

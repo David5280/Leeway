@@ -1,4 +1,4 @@
-// Dashboard widgets from the Plan screen: cash until payday, bills, goals,
+// Home widgets from the Payday, Goals and Wealth tabs: cash until payday, bills, goals,
 // debts and net worth. A card with a figure opens the math behind it
 // (lib/drills/plan.ts); the lists open each row's own page.
 

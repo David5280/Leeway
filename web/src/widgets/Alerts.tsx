@@ -14,6 +14,7 @@ import { Card } from '../components/design/Card'
 import { Icon } from '../components/ui'
 import { useApp } from '../lib/app'
 import { ALERT_ROWS, moreAlerts } from '../lib/alertRows'
+import { paths } from '../routes'
 import { headsUpItems, headsUpTint, type HeadsUpBudget, type HeadsUpItem } from './headsUp'
 import type { WidgetProps } from './types'
 
@@ -61,7 +62,7 @@ export function AlertsWidget({ budget }: WidgetProps) {
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>
           <span className="small muted">{moreAlerts(more)}</span>
           {/* A real 44px box, so its tap never reaches up into the last row. */}
-          <Link to="/alerts" className="linkbtn small tap">
+          <Link to={paths.alerts()} className="linkbtn small tap">
             See all alerts
           </Link>
         </div>
