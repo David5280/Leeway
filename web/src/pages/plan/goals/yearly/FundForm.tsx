@@ -2,10 +2,10 @@
 // often and when it is next due.
 
 import { useState, type FormEvent } from 'react'
-import { useActionMutation } from '../../../api/hooks'
-import { AmountNote, useAmountField } from '../../../components/AmountNote'
-import { ErrorNote, Segmented, Setting } from '../../../components/ui'
-import { parseMoney } from '../../../lib/format'
+import { useActionMutation } from '../../../../api/hooks'
+import { AmountNote, useAmountField } from '../../../../components/AmountNote'
+import { ErrorNote, Segmented, Setting } from '../../../../components/ui'
+import { parseMoney } from '../../../../lib/format'
 import { FUND_CADENCE_CHOICES } from './fundText'
 
 type Cadence = (typeof FUND_CADENCE_CHOICES)[number]['value']

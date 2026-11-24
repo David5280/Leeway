@@ -2,7 +2,7 @@
 // tested alone: how often a cost comes due, why a cost was suggested, and
 // which cost is due before its shares can cover it.
 
-import type { SinkingFundsView } from '../../../api/client'
+import type { SinkingFundsView } from '../../../../api/client'
 
 type Fund = SinkingFundsView['funds'][number]
 type Suggestion = SinkingFundsView['suggestions'][number]

@@ -1,11 +1,11 @@
 // The quiet rows under the new paycheck's figure: bills due before payday,
 // what is set aside, and what is safe to spend now. Totals only; the card's
-// drill-down lists every line, and the Yearly costs card explains its own.
+// drill-down lists every line, and the Goals tab explains what is set aside.
 
 import type { ReactNode } from 'react'
 import type { PaycheckPlan } from '../../../api/client'
 import { Money } from '../../../components/design/Money'
-import { billNames, holdsYearlyCosts, setAsideWords } from './playbookText'
+import { billNames, setAsideWords } from './playbookText'
 
 function Row({ name, detail, cents }: { name: string; detail?: ReactNode; cents: number }) {
   return (
@@ -24,18 +24,13 @@ function Row({ name, detail, cents }: { name: string; detail?: ReactNode; cents:
 /** Each total only when there is something in it; safe to spend is the figure itself without pay. */
 export function PlanRows({ plan }: { plan: PaycheckPlan }) {
   const held = plan.lines.filter((line) => line.kind !== 'bill')
-  const yearly = holdsYearlyCosts(held) ? ' (see Yearly costs below)' : ''
   return (
     <span className="playbook-rows">
       {plan.billsCents > 0 && (
         <Row name="Bills before payday" detail={billNames(plan.lines)} cents={plan.billsCents} />
       )}
       {plan.setAsideCents > 0 && (
-        <Row
-          name="Set aside"
-          detail={`${setAsideWords(held)}${yearly}`}
-          cents={plan.setAsideCents}
-        />
+        <Row name="Set aside" detail={setAsideWords(held)} cents={plan.setAsideCents} />
       )}
       {plan.paycheckCents !== null && (
         <Row name="Safe to spend now" cents={plan.safeToSpendCents} />

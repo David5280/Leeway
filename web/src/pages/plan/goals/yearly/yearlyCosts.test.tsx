@@ -1,16 +1,16 @@
-// Sinking funds on Payday, in one Yearly costs card: the total set aside
+// Sinking funds on Goals, in one Yearly costs card: the total set aside
 // each budget period (what safe to spend holds back), a calm note for a cost
 // due too soon, the costs Leeway found added or waved off in one tap, and
-// the funds opened, removed or added by hand.
+// the funds opened, removed or added by hand. Payday keeps only the total
+// set aside, as one line linking here.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SinkingFundsView } from '../../../api/client'
-import { failing } from '../../../test/fake'
-import { fund, fundsView, suggestion } from '../../../test/funds'
-import { payView } from '../../../test/pay'
-import { planServer, renderPlanning } from '../../../test/planning'
+import type { SinkingFundsView } from '../../../../api/client'
+import { failing } from '../../../../test/fake'
+import { fund, fundsView, suggestion } from '../../../../test/funds'
+import { planServer, renderPlanning } from '../../../../test/planning'
 import { basisWords, firstShort } from './fundText'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -31,13 +31,16 @@ const bill = suggestion({
   basis: 'bill',
 })
 
+/** Goals with no goals of its own, so only the yearly costs differ from test to test. */
+const NO_GOALS = { list_goals: () => [], list_accounts: () => [] }
+
 function show(view: SinkingFundsView) {
   const server = planServer({
-    get_pay: () => payView(),
+    ...NO_GOALS,
     list_sinking_funds: () => view,
     add_sinking_fund: () => insurance,
   })
-  renderPlanning('/payday')
+  renderPlanning('/goals')
   return { server, user: userEvent.setup() }
 }
 
@@ -166,12 +169,23 @@ describe('Yearly costs', () => {
   })
 
   it('shows why the funds could not load', async () => {
-    planServer(
-      { get_pay: () => payView() },
-      { '/api/actions/list_sinking_funds': failing('Funds failed', 500) },
-    )
-    renderPlanning('/payday')
+    planServer(NO_GOALS, { '/api/actions/list_sinking_funds': failing('Funds failed', 500) })
+    renderPlanning('/goals')
     expect(await screen.findByText('Funds failed')).toBeVisible()
+  })
+})
+
+describe('Yearly costs on Payday', () => {
+  it('are gone but for the total set aside each paycheck, linking to Goals', async () => {
+    const server = planServer({ list_sinking_funds: () => fundsView([insurance]) })
+    renderPlanning('/payday')
+    const link = await screen.findByRole('link', { name: /Set aside: \$150 each paycheck/ })
+    expect(link).toHaveAttribute('href', '/goals')
+    expect(link).toHaveTextContent('Goals, trips and yearly costs, on Goals')
+    expect(screen.queryByRole('region', { name: 'Yearly costs' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add a yearly cost' })).not.toBeInTheDocument()
+    // Payday no longer asks for the funds at all.
+    expect(server.actions('list_sinking_funds')).toEqual([])
   })
 })
 

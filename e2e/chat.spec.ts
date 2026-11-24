@@ -73,7 +73,7 @@ test('it closes on Escape and carries the screen it was opened on', async ({ pag
   await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toHaveCount(0)
   await expect(button).toBeFocused()
 
-  await page.getByRole('link', { name: 'Goals' }).click()
+  await page.getByRole('link', { name: 'Goals', exact: true }).click()
   await page.getByRole('button', { name: 'Ask Leeway' }).click()
   const box = page
     .getByRole('dialog', { name: 'Ask Leeway' })

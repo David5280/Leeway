@@ -1,6 +1,7 @@
 // Saving for a purchase: starting one from the Goals tab, holding its share
 // back from the budget, recording money put toward it, and seeing it on the
-// overview. Also a budget changed in place on the Spending list.
+// overview; and starting one from "Can I afford it?", which needs no AI. Also
+// a budget changed in place on the Spending list.
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -85,4 +86,25 @@ test('saving for a purchase sets money aside and counts what goes toward it', as
     page.getByRole('dialog').getByRole('region', { name: 'How it adds up' }),
   ).toContainText(/minus set aside for goals \$\d+/)
   await page.keyboard.press('Escape')
+})
+
+test('can I afford it answers with no AI, and a not yet starts a purchase goal', async ({
+  page,
+}) => {
+  await page.goto('/goals')
+  const form = page.getByRole('form', { name: 'Can I afford it?' })
+  await form.getByRole('textbox', { name: 'What is it?' }).fill('Sailboat')
+  // More than any seeded account holds, so it never fits today.
+  await form.getByRole('textbox', { name: 'Price' }).fill('1000000')
+  await form.getByRole('button', { name: 'Check' }).click()
+
+  const answer = page.getByRole('status', { name: 'The answer' })
+  await expect(answer).toContainText('Sailboat at $1,000,000')
+  await answer.getByRole('button', { name: 'Save for it' }).click()
+
+  const goal = page.getByRole('form', { name: 'New purchase' })
+  await expect(goal.getByRole('textbox', { name: 'What are you saving for?' })).toHaveValue(
+    'Sailboat',
+  )
+  await expect(goal.getByRole('textbox', { name: 'Price' })).toHaveValue('1000000')
 })

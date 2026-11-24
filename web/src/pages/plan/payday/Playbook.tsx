@@ -2,9 +2,9 @@
 // general to detailed: what was left of the last paycheck, ideas for that
 // leftover, then what the new paycheck covers before the next payday. Each
 // card opens its math. Checking running low gets one line that opens the
-// Bills section, where the full warning lives, and yearly costs are only
-// totalled here because the Yearly costs card below explains them. The
-// playbook only suggests: Leeway never moves money.
+// Bills section, where the full warning lives, and what is set aside is only
+// totalled here because the Goals tab explains it. The playbook only
+// suggests: Leeway never moves money.
 
 import type { CloseOut, LeftoverSuggestion, Playbook as PlaybookView } from '../../../api/client'
 import { usePaydayPlaybook } from '../../../api/playbook'
