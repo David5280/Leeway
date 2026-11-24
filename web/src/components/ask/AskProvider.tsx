@@ -1,20 +1,16 @@
 // Ask Leeway on every screen: one conversation for the whole app, opened from
-// the bar above the tabs, a card pressed and held, or the "/" key.
+// the round logo button in the corner, a card pressed and held, or the "/"
+// key, into a box anchored to that corner (AskFab.tsx).
 //
-// It lives above the routes, so a question keeps streaming and a typed draft
-// survives moving between screens. Two contexts keep typing cheap: the
-// controls (open, close, which screen) change rarely and are read by every
-// card; the talk (the draft, the answer streaming) changes with each key and
-// is read only by the conversation.
+// It lives above the routes, so a question keeps streaming while the box is
+// closed or the owner moves between screens, and a typed draft survives both.
+// Two contexts keep typing cheap: the controls (open, close, which screen)
+// change rarely and are read by every card; the talk (the draft, the answer
+// streaming) changes with each key and is read only by the conversation.
 //
-// Where it opens depends on the frame (shell/frame.ts):
-//   - a phone: a sheet over the screen, entered as a history entry of the
-//     same address, so Back closes it and the screen under it, scroll
-//     included, is never left;
-//   - a computer: a panel beside the page, open or collapsed as this browser
-//     last left it (panelMemory.ts). Each page draws its own frame, so the
-//     panel is drawn anew on every tab; its scroll is kept here, above the
-//     pages, so it opens on each tab where the owner left it.
+// Each page draws its own frame, so the button and box are drawn anew on
+// every tab. What must outlast that is kept here: whether the box is open,
+// how far it was scrolled, and whether focus goes back to the button.
 // Without an AI key none of it exists: `available` is false everywhere.
 
 import {
@@ -28,43 +24,39 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useChatAvailable, type ScreenContext } from '../../api/chat'
 import { useAsk, type Asking } from '../../pages/chat/useAsk'
 import { paths } from '../../routes'
-import { useFrame } from '../shell/frame'
-import { readPanelOpen, writePanelOpen } from './panelMemory'
 import { screenName } from './screens'
 
 /** A card the next question is about, from a press and hold: its name and figure. */
 export type CardAbout = NonNullable<ScreenContext['card']>
 
-/** The mark on a history entry that shows the phone's sheet. */
-const SHEET_STATE = 'askLeeway'
-
-/** Whether a history entry's state shows the sheet. */
-function showsSheet(state: unknown): boolean {
-  return typeof state === 'object' && state !== null && SHEET_STATE in state
+/** How the box was closed: focus goes back to the button unless the owner pressed something that takes it. */
+export interface Closing {
+  refocus?: boolean
 }
 
 export interface AskControls {
   /** Whether Ask Leeway is on: only with an AI key on the server. */
   available: boolean
-  /** The screen's name, like "Payday", for the bar and the question. */
+  /** The screen's name, like "Payday", for the box and the question. */
   screen: string
-  /** Whether this is the full Chat page, where the bar and panel step aside. */
+  /** Whether this is the full Chat page, where the button steps aside. */
   onChatPage: boolean
-  /** The phone's sheet is showing. */
-  sheetOpen: boolean
-  /** The computer's panel is open, not collapsed to its rail. */
-  panelOpen: boolean
-  /** Opens the conversation, about a card when given one, and moves focus to its box. */
+  /** The box is open over the corner. Never on the full Chat page. */
+  boxOpen: boolean
+  /** Opens the box, about a card when given one, and moves focus to its question field. */
   open: (card?: CardAbout | null) => void
-  /** Closes the phone's sheet, back to the screen under it. */
-  closeSheet: () => void
-  setPanelOpen: (open: boolean) => void
-  /** How far the computer's panel was scrolled, kept across tabs; null until it is. */
-  panelScroll: RefObject<number | null>
+  /** Shrinks the box back into the button. The conversation, and any answer streaming, carry on. */
+  close: (closing?: Closing) => void
+  /** Called as a link in an answer is followed: the box closes, and focus goes to the new screen's button. */
+  followLink: (to: string) => void
+  /** Whether the button should take focus now that the box closed; true once per close. */
+  claimRefocus: () => boolean
+  /** How far the box's conversation was scrolled, kept across tabs; null until it is. */
+  boxScroll: RefObject<number | null>
   /** Lets a page name itself more exactly, like "Category: Groceries". */
   nameScreen: (pathname: string, name: string) => void
 }
@@ -78,9 +70,9 @@ export interface AskTalk extends Omit<Asking, 'ask'> {
   forgetAbout: () => void
   /** Sends a question with the screen (and card) it was asked from. */
   ask: (question: string) => void
-  /** Whether the question box should take focus once it is on screen. */
+  /** Whether the question field should take focus once it is on screen. */
   wantsFocus: boolean
-  /** Called by the box once it has taken focus. */
+  /** Called by the field once it has taken focus. */
   focused: () => void
 }
 
@@ -95,82 +87,81 @@ function useScreen(pathname: string) {
   return { screen, nameScreen }
 }
 
-/** The computer's panel, open or collapsed, as this browser last left it. */
-function usePanel() {
-  const [panelOpen, setOpen] = useState(readPanelOpen)
-  const setPanelOpen = useCallback((open: boolean) => {
-    setOpen(open)
-    writePanelOpen(open)
+/**
+ * Whether the box is open, and whether focus goes back to the button once it
+ * closes. The box belongs to the screen it was opened on: moving to another
+ * screen closes it in the same render as the move, so the old screen's
+ * button never takes focus on its way out. The wish to refocus is a ref, not
+ * state: the button that reads it may be the next screen's.
+ */
+function useBox(pathname: string, onChatPage: boolean) {
+  const [openOn, setOpenOn] = useState<string | null>(null)
+  const refocus = useRef(false)
+  // Left behind by a move to another screen: forget it, so Back never reopens it.
+  if (openOn !== null && openOn !== pathname) setOpenOn(null)
+
+  const show = useCallback(() => setOpenOn(pathname), [pathname])
+  const close = useCallback(({ refocus: back = true }: Closing = {}) => {
+    refocus.current = back
+    setOpenOn(null)
   }, [])
-  return { panelOpen, setPanelOpen }
+  const followLink = useCallback(
+    (to: string) => {
+      refocus.current = true
+      // A link to this same screen moves nowhere, so it closes the box itself.
+      if (to === pathname) setOpenOn(null)
+    },
+    [pathname],
+  )
+  const claimRefocus = useCallback(() => {
+    const claimed = refocus.current
+    refocus.current = false
+    return claimed
+  }, [])
+  // The full Chat page is the conversation itself: no box over it.
+  const boxOpen = openOn === pathname && !onChatPage
+  return { boxOpen, show, close, followLink, claimRefocus }
 }
 
 export function AskProvider({ children }: { children: ReactNode }) {
   // Asked for by the shell on every screen; here it only listens (api/chat.ts).
   const available = useChatAvailable({ ask: false }) === true
-  const frame = useFrame()
   const location = useLocation()
-  const navigate = useNavigate()
   const { screen, nameScreen } = useScreen(location.pathname)
-  const { panelOpen, setPanelOpen } = usePanel()
-  const panelScroll = useRef<number | null>(null)
   const onChatPage = location.pathname === paths.chat()
-  const sheetOpen = available && frame !== 'sidebar' && !onChatPage && showsSheet(location.state)
+  const { boxOpen, show, close, followLink, claimRefocus } = useBox(location.pathname, onChatPage)
+  const boxScroll = useRef<number | null>(null)
 
   const [draft, setDraft] = useState('')
   const [about, setAbout] = useState<CardAbout | null>(null)
   const [wantsFocus, setWantsFocus] = useState(false)
   const { ask: send, ...asking } = useAsk(setDraft)
 
-  // Set the moment the sheet is asked for, so a second open in the same
-  // moment (a hold, then its context menu) never adds a second entry.
-  const sheetAsked = useRef(sheetOpen)
-  useEffect(() => {
-    sheetAsked.current = sheetOpen
-  }, [sheetOpen])
-
+  // Opening twice in a moment (a hold, then its context menu) only refocuses the field.
   const open = useCallback(
     (card: CardAbout | null = null) => {
       setAbout(card)
       setWantsFocus(true)
-      if (onChatPage) return
-      if (frame === 'sidebar') return setPanelOpen(true)
-      if (sheetAsked.current) return
-      sheetAsked.current = true
-      const state = typeof location.state === 'object' ? location.state : {}
-      navigate(location, { state: { ...state, [SHEET_STATE]: true } })
+      // On the full Chat page "/" focuses its own field; there is no box to open.
+      if (!onChatPage) show()
     },
-    [onChatPage, frame, location, navigate, setPanelOpen],
+    [onChatPage, show],
   )
-
-  const closeSheet = useCallback(() => {
-    if (sheetAsked.current) navigate(-1)
-  }, [navigate])
 
   const controls = useMemo<AskControls>(
     () => ({
       available,
       screen,
       onChatPage,
-      sheetOpen,
-      panelOpen,
+      boxOpen: available && boxOpen,
       open,
-      closeSheet,
-      setPanelOpen,
-      panelScroll,
+      close,
+      followLink,
+      claimRefocus,
+      boxScroll,
       nameScreen,
     }),
-    [
-      available,
-      screen,
-      onChatPage,
-      sheetOpen,
-      panelOpen,
-      open,
-      closeSheet,
-      setPanelOpen,
-      nameScreen,
-    ],
+    [available, screen, onChatPage, boxOpen, open, close, followLink, claimRefocus, nameScreen],
   )
 
   // The full Chat page asks about no screen: it is the conversation itself.
@@ -212,7 +203,7 @@ export function useAskTalk(): AskTalk {
 
 /**
  * Names the screen more exactly than its address can, like "Category:
- * Groceries", for the bar and the questions asked from it. Nothing happens
+ * Groceries", for the box and the questions asked from it. Nothing happens
  * until the name is known, or outside the provider.
  */
 export function useScreenName(name: string | undefined): void {

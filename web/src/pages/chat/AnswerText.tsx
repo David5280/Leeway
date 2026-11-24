@@ -4,9 +4,8 @@
 // (screens.ts, isAppLink); an outside address, or a screen that does not
 // exist, shows as its words alone and can never be followed.
 //
-// Followed from the phone's sheet, the link takes the sheet's place in the
-// history, so the sheet closes and Back returns to the screen it was over.
-// From the computer's panel or the Chat page it is an ordinary link.
+// Every link is an ordinary one. Followed from Ask Leeway's box, it also
+// shrinks the box back into its button, so the screen it leads to is in view.
 
 import { Fragment } from 'react'
 import { Link } from 'react-router-dom'
@@ -34,10 +33,12 @@ export function answerPieces(answer: string): AnswerPiece[] {
 }
 
 export function AnswerText({ text }: { text: string }) {
-  const replace = useAskControls()?.sheetOpen ?? false
+  const ask = useAskControls()
+  // Only from the open box: on the full Chat page there is nothing to close.
+  const leaving = ask?.boxOpen ? ask.followLink : undefined
   return answerPieces(text).map((piece, index) =>
     'to' in piece ? (
-      <Link key={index} to={piece.to} replace={replace} className="chat-link">
+      <Link key={index} to={piece.to} onClick={() => leaving?.(piece.to)} className="chat-link">
         {piece.text}
       </Link>
     ) : (

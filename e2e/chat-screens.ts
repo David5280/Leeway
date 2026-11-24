@@ -1,9 +1,9 @@
 // The Chat screens the phone layout guard checks (guarded-screens.ts). Chat is
 // hidden without an Anthropic key, so it is turned on by stand-ins (chat.ts):
 // the full Chat page before the first question and with an answer and what
-// Leeway remembers, then Ask Leeway on a screen of its own: the bar above
-// the tabs, which every page leaves room for, and the conversation open over
-// the screen.
+// Leeway remembers, then Ask Leeway on a screen of its own: the logo button
+// in the corner, which every page leaves room for, and the box it opens with
+// a conversation in it.
 
 import { open, type Screen } from './screen'
 import { pretendChatOn } from './chat'
@@ -31,8 +31,8 @@ export const CHAT_SCREENS: Screen[] = [
     before: (page) => pretendChatOn(page, true),
     then: (page) => page.getByText('Leeway remembers 2 things').click(),
   }),
-  askScreen('with the Ask Leeway bar'),
-  askScreen('asking Leeway over the screen', {
-    then: open(/^Ask Leeway: /, (page) => page.getByRole('dialog', { name: 'Ask Leeway' })),
+  askScreen('with the Ask Leeway button'),
+  askScreen('asking Leeway in the box', {
+    then: open('Ask Leeway', (page) => page.getByRole('dialog', { name: 'Ask Leeway' })),
   }),
 ]

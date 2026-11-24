@@ -180,12 +180,23 @@ function tapProblem(control: Element): string | null {
 }
 
 /**
+ * The controls a finger can reach now. A box open over the page without
+ * making it inert (Ask Leeway's) covers what lies behind it, and a tap
+ * outside it closes it, so while it is open only its own controls count.
+ * The page behind is checked on its own screen, with the box closed.
+ */
+function reachableControls(): Element[] {
+  const box = document.querySelector('[role="dialog"]:not([aria-modal="true"])')
+  return [...(box ?? document).querySelectorAll(CONTROLS)]
+}
+
+/**
  * Each control on the page a finger can miss, named, with its box. This
  * scrolls the page and any scrolling boxes, so run it after the checks that
  * need the page where it was.
  */
 export function findMissedTaps(): string[] {
-  return [...document.querySelectorAll(CONTROLS)].flatMap((control) => {
+  return reachableControls().flatMap((control) => {
     if (isHiddenByDesign(control) || inRunningText(control)) return []
     control.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
     const problem = tapProblem(control)

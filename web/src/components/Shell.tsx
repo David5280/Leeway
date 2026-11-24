@@ -5,9 +5,9 @@
 //     and the header's links, so the little height there is goes to the page;
 //   - a computer or a tablet turned sideways: a sidebar on the left with the
 //     logo, the five tabs, and the Inbox and Settings at its foot.
-// With an AI key, Ask Leeway is on every screen too (ask/AskDock.tsx): a bar
-// just above the phone's tabs that opens the conversation over the screen,
-// or a panel on the computer's right. Keys 1 to 5 switch tabs in every
+// With an AI key, Ask Leeway is on every screen too (ask/AskFab.tsx): a round
+// logo button in the bottom right corner that opens the conversation in a box
+// anchored there. Keys 1 to 5 switch tabs in every
 // shape, and "/" jumps to Ask Leeway. The page carries the place of the tab
 // it belongs to (data-place), which colors its card labels, card tints and
 // charts (styles/places.css); pages outside the tabs carry none.
@@ -16,7 +16,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useChatAvailable } from '../api/chat'
 import { paths } from '../routes'
-import { AskBar, AskPanel, AskSheet, useAskOffered } from './ask/AskDock'
+import { AskFab, useAskOffered } from './ask/AskFab'
 import { useAskControls, type AskControls } from './ask/AskProvider'
 import { useSlashKey } from './ask/keys'
 import { type Frame, useFrame } from './shell/frame'
@@ -72,8 +72,7 @@ function Header({ actions, tabs }: { actions?: ReactNode; tabs?: boolean }) {
 
 /**
  * The shell's classes: its frame, and whether Ask Leeway is on it, so the
- * page leaves room for the bar (or the computer's panel, which sizes its
- * own column, open or not).
+ * page's end leaves room for its button and nothing rests under it.
  */
 function shellClass(frame: Frame, ask: AskControls | null): string {
   return ['shell', `shell-${frame}`, ...(ask ? ['shell-ask'] : [])].join(' ')
@@ -105,13 +104,12 @@ export function Shell({ children, actions }: { children: ReactNode; actions?: Re
         )}
         {children}
       </div>
-      {ask && (frame === 'sidebar' ? <AskPanel ask={ask} /> : <AskBar ask={ask} />)}
       {frame === 'tabbar' && (
         <nav aria-label="Main" className="tabbar">
           <TabLinks className="tab" />
         </nav>
       )}
-      {ask?.sheetOpen && <AskSheet ask={ask} />}
+      {ask && <AskFab ask={ask} frame={frame} />}
     </div>
   )
 }

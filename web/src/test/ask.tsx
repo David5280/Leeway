@@ -41,6 +41,30 @@ export function answered(question: string, answer: string): Response {
   return new Response(`event: done\ndata: ${JSON.stringify(done)}\n\n`)
 }
 
+/** An answer still streaming, sent a piece at a time by the test: `response` goes to the fake server. */
+export function answerStream() {
+  const encoder = new TextEncoder()
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const response = new Response(new ReadableStream({ start: (c) => void (controller = c) }))
+  const send = (event: ChatEvent) =>
+    controller.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`))
+  return {
+    response,
+    /** Sends a piece of the answer's text. */
+    text: (text: string) => act(() => send({ type: 'text', text })),
+    /** Finishes the answer, as the server does once it is kept. */
+    done: (question: string, answer: string) =>
+      act(() => {
+        send({
+          type: 'done',
+          question: message('q', 'user', question),
+          answer: message('a', 'assistant', answer),
+        })
+        controller.close()
+      }),
+  }
+}
+
 /** Shows where the router is, as the address bar would, and hands its navigate to the test. */
 function Address({ onNavigate }: { onNavigate: (navigate: NavigateFunction) => void }) {
   const { pathname } = useLocation()
@@ -62,6 +86,8 @@ export interface AskOptions {
    * own <Shell>; otherwise one frame stays across addresses.
    */
   shellPerPage?: boolean
+  /** How the server answers a question; a finished "Fine." unless given. */
+  answer?: (question: string) => Response
 }
 
 /** The screen at every address: one frame, or a new one per address with `shellPerPage`. */
@@ -82,6 +108,7 @@ export function renderAsk(route = '/payday', options: AskOptions = {}) {
     messages = [],
     children,
     shellPerPage = false,
+    answer = (question: string) => answered(question, 'Fine.'),
   } = options
   const resize = windowOf(size)
   const asked: { message: string; context?: ScreenContext }[] = []
@@ -94,7 +121,7 @@ export function renderAsk(route = '/payday', options: AskOptions = {}) {
     '/api/chat': () => {
       const body = server.calls.at(-1)!.body as { message: string; context?: ScreenContext }
       asked.push(body)
-      return answered(body.message, 'Fine.')
+      return answer(body.message)
     },
   })
   let navigate: NavigateFunction = () => {}

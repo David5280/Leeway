@@ -2,7 +2,7 @@
 // right click or the context menu key opens Ask Leeway carrying the card's
 // name and figure, while a tap still drills, a link card still goes, and a
 // press that moves or scrolls is left alone. However a hold is let go, it
-// neither closes the sheet it opened nor swallows a later press.
+// neither closes the box it opened nor swallows a later press.
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -12,7 +12,6 @@ import { renderAsk } from '../../test/ask'
 import { COMPUTER } from '../../test/frames'
 import { Card } from '../design/Card'
 import { Money } from '../design/Money'
-import { SCRIM_SETTLE_MS } from '../design/Sheet'
 import { HELD_CLICK_MS, HOLD_MS, HOLD_SLOP_PX } from './useCardHold'
 
 afterEach(() => {
@@ -67,10 +66,10 @@ function holdDown(element: Element) {
   act(() => vi.advanceTimersByTime(HOLD_MS))
 }
 
-/** Ask Leeway's screen, ready: the bar shows once the server says Chat is on. */
+/** Ask Leeway's screen, ready: the button shows once the server says Chat is on. */
 async function ready(options: Parameters<typeof renderAsk>[1] = {}) {
   const rendered = renderAsk('/payday', { children: CARDS, ...options })
-  await screen.findByRole('button', { name: /Ask Leeway/ })
+  await screen.findByRole('button', { name: 'Ask Leeway' })
   return rendered
 }
 
@@ -79,13 +78,13 @@ describe('pressing and holding a card', () => {
     const user = userEvent.setup()
     const { asked } = await ready()
     hold(drillButton())
-    const sheet = await screen.findByRole('dialog', { name: 'Ask Leeway' })
-    expect(await aboutNote(within(sheet), /About Until payday/)).toHaveTextContent('$1,180')
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    expect(await aboutNote(within(askBox), /About Until payday/)).toHaveTextContent('$1,180')
     // The click a held press ends with is swallowed: the card's own sheet stays shut.
     fireEvent.click(drillButton())
     expect(screen.queryByRole('dialog', { name: 'Until payday' })).not.toBeInTheDocument()
 
-    await user.type(await within(sheet).findByRole('textbox'), 'Why so low?{Enter}')
+    await user.type(await within(askBox).findByRole('textbox'), 'Why so low?{Enter}')
     await waitFor(() => expect(asked).toHaveLength(1))
     expect(asked[0]!.context).toEqual({
       screen: 'Payday',
@@ -96,17 +95,17 @@ describe('pressing and holding a card', () => {
   it('reads the name a card shows when it has no label of its own', async () => {
     await ready()
     hold(screen.getByRole('link', { name: /Top goal/ }))
-    const sheet = await screen.findByRole('dialog', { name: 'Ask Leeway' })
-    expect(await aboutNote(within(sheet), /About Top goal/)).toHaveTextContent('$500')
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    expect(await aboutNote(within(askBox), /About Top goal/)).toHaveTextContent('$500')
   })
 
   it('asks about the screen alone once the card is let go', async () => {
     const user = userEvent.setup()
     const { asked } = await ready()
     hold(drillButton())
-    const sheet = await screen.findByRole('dialog', { name: 'Ask Leeway' })
-    await user.click(await within(sheet).findByRole('button', { name: 'Not about Until payday' }))
-    await user.type(await within(sheet).findByRole('textbox'), 'Hi{Enter}')
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    await user.click(await within(askBox).findByRole('button', { name: 'Not about Until payday' }))
+    await user.type(await within(askBox).findByRole('textbox'), 'Hi{Enter}')
     await waitFor(() => expect(asked[0]?.context).toEqual({ screen: 'Payday' }))
   })
 })
@@ -161,7 +160,7 @@ describe('what a hold leaves alone', () => {
     window.getSelection()!.selectAllChildren(figure)
     expect(fireEvent.contextMenu(figure)).toBe(true)
     window.getSelection()!.removeAllRanges()
-    expect(screen.queryByRole('complementary', { name: 'Ask Leeway' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Ask Leeway' })).not.toBeInTheDocument()
   })
 })
 
@@ -173,38 +172,37 @@ describe('letting go of a hold', () => {
     fireEvent.pointerUp(document.body)
     act(() => vi.advanceTimersByTime(HELD_CLICK_MS))
     vi.useRealTimers()
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    // The panel takes focus into its box first; the owner then comes back to the card.
-    await waitFor(() => expect(within(panel).getByRole('textbox')).toHaveFocus())
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    // The box takes focus into its field first; the owner then comes back to the card.
+    await waitFor(() => expect(within(askBox).getByRole('textbox')).toHaveFocus())
     drillButton().focus()
     await userEvent.keyboard('{Enter}')
     expect(await screen.findByRole('dialog', { name: 'Until payday' })).toBeVisible()
   })
 
-  it("on a phone, over the sheet's dimmed page, leaves the sheet open", async () => {
+  it('on a phone, let go off the card, leaves the box it opened open', async () => {
     await ready()
     holdDown(drillButton())
-    const askSheet = () => screen.queryByRole('dialog', { name: 'Ask Leeway' })
-    const scrim = document.querySelector('.sheet-scrim')!
-    // The release lands on the scrim now over the card, as a click (iOS).
-    fireEvent.pointerUp(scrim)
-    fireEvent.click(scrim)
-    expect(askSheet()).toBeInTheDocument()
+    const askBox = () => screen.queryByRole('dialog', { name: 'Ask Leeway' })
+    // The release lands on the page beside the card, as a click (iOS): no new press.
+    fireEvent.pointerUp(document.body)
+    fireEvent.click(document.body)
+    expect(askBox()).toBeInTheDocument()
     // A press there a moment later is the owner's own, and closes it.
-    act(() => vi.advanceTimersByTime(SCRIM_SETTLE_MS))
-    fireEvent.click(scrim)
+    act(() => vi.advanceTimersByTime(HELD_CLICK_MS))
+    fireEvent.pointerDown(document.body)
     vi.useRealTimers()
-    await waitFor(() => expect(askSheet()).not.toBeInTheDocument())
+    await waitFor(() => expect(askBox()).not.toBeInTheDocument())
   })
 })
 
 describe('on a computer and from the keyboard', () => {
-  it('a right click opens the panel about the card', async () => {
+  it('a right click opens the box about the card', async () => {
     await ready({ size: COMPUTER })
     // The browser's own menu is replaced (the event's default is prevented).
     expect(fireEvent.contextMenu(drillButton())).toBe(false)
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    expect(await aboutNote(within(panel), /About Until payday/)).toBeVisible()
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    expect(await aboutNote(within(askBox), /About Until payday/)).toBeVisible()
   })
 
   it.each([
@@ -214,8 +212,8 @@ describe('on a computer and from the keyboard', () => {
     await ready({ size: COMPUTER })
     drillButton().focus()
     fireEvent.keyDown(drillButton(), press)
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    expect(await aboutNote(within(panel), /About Until payday/)).toBeVisible()
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    expect(await aboutNote(within(askBox), /About Until payday/)).toBeVisible()
   })
 })
 

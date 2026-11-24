@@ -1,7 +1,8 @@
-// Ask Leeway on every screen: the bar above the phone's tabs naming the
-// screen, the conversation in a sheet over the screen that closes back to
-// it, the computer's panel and its rail, the screen sent with each
-// question, and the "/" key. Without an AI key none of it is there.
+// Ask Leeway's button and box: the round logo button in the corner of every
+// screen, placed per frame; the box it opens, naming the screen; and every
+// way the box shrinks back into the button (a press outside it, Escape, its
+// close button, a link in an answer), focus returning to the button each
+// time. Without an AI key none of it is there.
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -12,58 +13,53 @@ import { useScreenName } from './AskProvider'
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  vi.restoreAllMocks()
-  localStorage.clear()
 })
 
 const address = () => screen.getByLabelText('Address')
-const bar = () => screen.findByRole('button', { name: /^Ask Leeway: / })
-const sheet = () => screen.findByRole('dialog', { name: 'Ask Leeway' })
+const button = () => screen.findByRole('button', { name: 'Ask Leeway' })
+const box = () => screen.findByRole('dialog', { name: 'Ask Leeway' })
+const field = async () => within(await box()).findByRole('textbox', { name: 'Your question' })
+/** Waits until the box has shrunk away and left the page. */
+const closed = () => waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-describe('the Ask Leeway bar', () => {
+/** Opens the box from its button, returning the box. */
+async function openBox(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await button())
+  return box()
+}
+
+describe('the Ask Leeway button', () => {
   it.each([
-    ['/payday', 'Payday'],
-    ['/', 'Home'],
-    ['/spending/activity', 'All activity'],
-    ['/spending/groceries', 'Category'],
-    ['/payday/bills', 'Bills and subscriptions'],
-    ['/settings/banks', 'Settings'],
-  ])('on %s names the screen: "Ask about %s"', async (route, name) => {
-    renderAsk(route)
-    expect(await bar()).toHaveTextContent(`Ask about ${name}`)
+    ['a phone', PHONE, 'tabbar'],
+    ['a phone turned sideways', PHONE_SIDEWAYS, 'short'],
+    ['a computer', COMPUTER, 'sidebar'],
+  ])('sits in the corner of %s, the page leaving room for it', async (_, size, frame) => {
+    renderAsk('/payday', { size })
+    const corner = (await button()).closest('.ask-fab')
+    expect(corner).toHaveAttribute('data-frame', frame)
+    expect(document.querySelector('.shell')).toHaveClass(`shell-${frame}`, 'shell-ask')
+    // It wears the logo, and says it opens a box.
+    expect(
+      within(corner as HTMLElement)
+        .getByRole('button')
+        .querySelector('svg'),
+    ).not.toBeNull()
+    expect(await button()).toHaveAttribute('aria-haspopup', 'dialog')
   })
 
-  it('sits above the phone tab bar, and the page leaves room for both', async () => {
-    renderAsk('/payday', { size: PHONE })
-    const dock = (await bar()).parentElement!
-    expect(dock).toHaveClass('ask-dock')
-    // Drawn before the tab bar, so it reads first and sits just above it.
-    const tabbar = screen.getByRole('navigation', { name: 'Main' })
-    expect(dock.compareDocumentPosition(tabbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(document.querySelector('.shell')).toHaveClass('shell-tabbar', 'shell-ask')
-  })
-
-  it('sits at the foot of a phone turned sideways, with room left for it', async () => {
-    renderAsk('/payday', { size: PHONE_SIDEWAYS })
-    expect((await bar()).parentElement).toHaveClass('ask-dock')
-    expect(document.querySelector('.shell')).toHaveClass('shell-short', 'shell-ask')
-  })
-
-  it('takes a page name more exact than the address, like a category', async () => {
-    function Groceries() {
-      useScreenName('Category: Groceries')
-      return null
-    }
-    renderAsk('/spending/c1', { children: <Groceries /> })
+  it('follows the window as it narrows from a computer to a phone', async () => {
+    const { resize } = renderAsk('/payday', { size: COMPUTER })
+    expect((await button()).closest('.ask-fab')).toHaveAttribute('data-frame', 'sidebar')
+    resize(PHONE)
     await waitFor(async () =>
-      expect(await bar()).toHaveTextContent('Ask about Category: Groceries'),
+      expect((await button()).closest('.ask-fab')).toHaveAttribute('data-frame', 'tabbar'),
     )
   })
 
   it('steps aside on the full Chat page, which is the conversation itself', async () => {
     renderAsk('/chat')
     expect(await screen.findByRole('heading', { name: 'Ask Leeway' })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /^Ask Leeway: / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ask Leeway' })).not.toBeInTheDocument()
   })
 })
 
@@ -72,11 +68,11 @@ describe('without an AI key', () => {
     ['a phone', PHONE],
     ['a phone turned sideways', PHONE_SIDEWAYS],
     ['a computer', COMPUTER],
-  ])('has no bar, panel or "/" on %s, and the page no extra room', async (_, size) => {
+  ])('has no button, box or "/" on %s, and the page no extra room', async (_, size) => {
     const { server } = renderAsk('/payday', { chat: false, size })
     await waitFor(() => expect(server.actions('get_chat_status')).toHaveLength(1))
     expect(screen.queryByRole('button', { name: /Ask Leeway/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('complementary', { name: 'Ask Leeway' })).not.toBeInTheDocument()
+    expect(document.querySelector('.ask-fab')).toBeNull()
     expect(document.querySelector('.shell')).not.toHaveClass('shell-ask')
     fireEvent.keyDown(document.body, { key: '/' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -84,189 +80,149 @@ describe('without an AI key', () => {
   })
 })
 
-describe('the conversation over the screen, on a phone', () => {
-  it('opens over the screen and closes back to it, the page untouched', async () => {
+describe('opening the box', () => {
+  it.each([
+    ['/payday', 'Payday'],
+    ['/', 'Home'],
+    ['/spending/activity', 'All activity'],
+    ['/payday/bills', 'Bills and subscriptions'],
+    ['/settings/banks', 'Settings'],
+  ])('on %s focuses the field, which asks about %s', async (route, name) => {
     const user = userEvent.setup()
-    renderAsk('/payday')
+    renderAsk(route)
+    await openBox(user)
+    const input = await field()
+    expect(input).toHaveAttribute('placeholder', `Ask about ${name}`)
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
+  it('takes a page name more exact than the address, like a category', async () => {
+    function Groceries() {
+      useScreenName('Category: Groceries')
+      return null
+    }
+    const user = userEvent.setup()
+    renderAsk('/spending/c1', { children: <Groceries /> })
+    await openBox(user)
+    expect(await field()).toHaveAttribute('placeholder', 'Ask about Category: Groceries')
+  })
+
+  it('covers the button, shows the conversation, and leaves the page as it was', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday', { size: COMPUTER })
     await user.type(screen.getByRole('textbox', { name: 'Note' }), 'half typed')
     const page = document.querySelector('.page')
-    await user.click(await bar())
-    const dialog = await sheet()
-    expect(within(dialog).getByRole('heading', { name: 'Ask anything about your money' }))
-    expect(within(dialog).getByRole('textbox', { name: 'Your question' })).toHaveAttribute(
-      'placeholder',
-      'Ask about Payday',
-    )
-    expect(address()).toHaveTextContent('/payday')
-    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    // The same page, never drawn again: what was typed, and so where it was scrolled, is kept.
+    const opened = await openBox(user)
+    expect(within(opened).getByRole('heading', { name: 'Ask anything about your money' }))
+    expect(document.querySelector('.ask-fab-button')).toHaveAttribute('aria-expanded', 'true')
+    // Not a page of its own: no dimmed layer, the same page under it, the address unchanged.
+    expect(document.querySelector('.sheet-scrim')).toBeNull()
     expect(document.querySelector('.page')).toBe(page)
     expect(screen.getByRole('textbox', { name: 'Note' })).toHaveValue('half typed')
     expect(address()).toHaveTextContent('/payday')
   })
+})
 
-  it('closes with Escape', async () => {
+describe('closing the box', () => {
+  it('a press outside it shrinks it back, focus returning to the button', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday')
+    await openBox(user)
+    fireEvent.pointerDown(screen.getByRole('heading', { name: 'A screen' }))
+    await closed()
+    expect(await button()).toHaveFocus()
+  })
+
+  it('a press outside on a field leaves focus in that field, and the press goes through', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday')
+    await openBox(user)
+    await user.click(screen.getByRole('textbox', { name: 'Note' }))
+    await closed()
+    expect(screen.getByRole('textbox', { name: 'Note' })).toHaveFocus()
+  })
+
+  it('a press outside on a tab closes it and still follows the tab', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday', { size: COMPUTER })
+    await openBox(user)
+    await user.click(screen.getByRole('link', { name: 'Goals' }))
+    await closed()
+    expect(address()).toHaveTextContent('/goals')
+  })
+
+  it('a press inside it, anywhere, keeps it open', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday')
+    const opened = await openBox(user)
+    await user.click(within(opened).getByRole('heading', { name: 'Ask Leeway' }))
+    await user.click(await field())
+    expect(await box()).toBeVisible()
+  })
+
+  it('Escape shrinks it back, focus returning to the button', async () => {
     const user = userEvent.setup()
     renderAsk('/goals')
-    await user.click(await bar())
-    await sheet()
+    await openBox(user)
+    await waitFor(async () => expect(await field()).toHaveFocus())
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await closed()
+    expect(await button()).toHaveFocus()
     expect(address()).toHaveTextContent('/goals')
   })
 
-  it('closes with Back, staying on the screen', async () => {
+  it('its close button shrinks it back, focus returning to the button', async () => {
     const user = userEvent.setup()
-    const { back } = renderAsk('/goals')
-    await user.click(await bar())
-    await sheet()
-    back()
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(address()).toHaveTextContent('/goals')
+    renderAsk('/goals', { size: COMPUTER })
+    const opened = await openBox(user)
+    await user.click(within(opened).getByRole('button', { name: 'Close Ask Leeway' }))
+    await closed()
+    expect(await button()).toHaveFocus()
   })
 
-  it('follows a link in an answer, closing the sheet; Back returns to the screen', async () => {
+  it("a link in an answer goes to its screen, shrinking the box into that screen's button", async () => {
     const user = userEvent.setup()
     const messages = [
       message('q', 'user', 'Where are my bills?'),
       message('a', 'assistant', 'They are on [Bills](/payday/bills).'),
     ]
-    const { back } = renderAsk('/', { messages })
-    await user.click(await bar())
-    await user.click(await within(await sheet()).findByRole('link', { name: 'Bills' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    renderAsk('/', { messages, shellPerPage: true })
+    const opened = await openBox(user)
+    await user.click(await within(opened).findByRole('link', { name: 'Bills' }))
     expect(address()).toHaveTextContent('/payday/bills')
+    await closed()
+    // The new screen draws its own button, and focus lands on it.
+    await waitFor(async () => expect(await button()).toHaveFocus())
+  })
+
+  it('a link to the screen it is on shrinks it back too, focus on the button', async () => {
+    const user = userEvent.setup()
+    const messages = [message('a', 'assistant', 'See [Payday](/payday).')]
+    renderAsk('/payday', { messages })
+    const opened = await openBox(user)
+    await user.click(await within(opened).findByRole('link', { name: 'Payday' }))
+    await closed()
+    expect(await button()).toHaveFocus()
+  })
+
+  it('stays closed after moving away and coming Back to its screen', async () => {
+    const user = userEvent.setup()
+    const messages = [message('a', 'assistant', 'See [Goals](/goals).')]
+    const { back } = renderAsk('/payday', { messages })
+    const opened = await openBox(user)
+    await user.click(await within(opened).findByRole('link', { name: 'Goals' }))
+    await closed()
     back()
-    await waitFor(() => expect(address()).toHaveTextContent('/'))
+    await waitFor(() => expect(address()).toHaveTextContent('/payday'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-})
 
-describe('the panel, on a computer', () => {
-  it('starts as a slim rail, opens beside the page, and collapses back', async () => {
-    const user = userEvent.setup()
-    renderAsk('/payday', { size: COMPUTER })
-    const open = await screen.findByRole('button', { name: 'Open Ask Leeway: Ask about Payday' })
-    expect(screen.queryByRole('button', { name: /^Ask Leeway: / })).not.toBeInTheDocument()
-    await user.click(open)
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    expect(await within(panel).findByRole('textbox', { name: 'Your question' })).toHaveFocus()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(document.querySelector('.shell')).toHaveClass('shell-sidebar', 'shell-ask')
-    await user.click(within(panel).getByRole('button', { name: 'Collapse Ask Leeway' }))
-    expect(await screen.findByRole('button', { name: /^Open Ask Leeway/ })).toBeVisible()
-    expect(localStorage.getItem('leeway.askPanel')).toBe('closed')
-  })
-
-  it('stays open moving between tabs, and is remembered for next time', async () => {
-    const user = userEvent.setup()
-    const first = renderAsk('/payday', { size: COMPUTER })
-    await user.click(await screen.findByRole('button', { name: /^Open Ask Leeway/ }))
-    await user.click(screen.getByRole('link', { name: 'Goals' }))
-    expect(address()).toHaveTextContent('/goals')
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    expect(await within(panel).findByRole('textbox')).toHaveAttribute(
-      'placeholder',
-      'Ask about Goals',
-    )
-    first.unmount()
-    renderAsk('/wealth', { size: COMPUTER })
-    expect(await screen.findByRole('complementary', { name: 'Ask Leeway' })).toBeVisible()
-  })
-
-  it('keeps its conversation and scroll when each tab draws its own frame', async () => {
-    const user = userEvent.setup()
-    const { server } = renderAsk('/payday', {
-      size: COMPUTER,
-      shellPerPage: true,
-      messages: [message('m1', 'user', 'How am I doing?'), message('m2', 'assistant', 'Fine.')],
-    })
-    await user.click(await screen.findByRole('button', { name: /^Open Ask Leeway/ }))
-    const before = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    await within(before).findByText('How am I doing?')
-    before.scrollTop = 120
-    fireEvent.scroll(before)
-    await user.click(screen.getByRole('link', { name: 'Goals' }))
-    const after = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    // A new panel, drawn by the new tab's frame, showing the conversation at once.
-    expect(after).not.toBe(before)
-    expect(within(after).getByText('How am I doing?')).toBeVisible()
-    expect(after.scrollTop).toBe(120)
-    expect(server.actions('get_chat')).toHaveLength(1)
-  })
-
-  it('still opens and collapses when the browser refuses storage', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('blocked')
-    })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked')
-    })
-    const user = userEvent.setup()
-    renderAsk('/payday', { size: COMPUTER })
-    await user.click(await screen.findByRole('button', { name: /^Open Ask Leeway/ }))
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    await user.click(within(panel).getByRole('button', { name: 'Collapse Ask Leeway' }))
-    expect(await screen.findByRole('button', { name: /^Open Ask Leeway/ })).toBeVisible()
-  })
-
-  it('turns into the bar and sheet when the window narrows', async () => {
-    const { resize } = renderAsk('/payday', { size: COMPUTER })
-    await screen.findByRole('button', { name: /^Open Ask Leeway/ })
-    resize(PHONE)
-    expect(await bar()).toBeVisible()
-  })
-})
-
-describe('the screen sent with each question', () => {
-  it('names the screen it was asked on', async () => {
-    const user = userEvent.setup()
-    const { asked } = renderAsk('/payday')
-    await user.click(await bar())
-    await user.type(within(await sheet()).getByRole('textbox'), 'Why so low?{Enter}')
-    await waitFor(() => expect(asked).toHaveLength(1))
-    expect(asked[0]).toEqual({ message: 'Why so low?', context: { screen: 'Payday' } })
-  })
-
-  it('names none from the full Chat page', async () => {
-    const user = userEvent.setup()
-    const { asked } = renderAsk('/chat')
-    await user.type(await screen.findByRole('textbox', { name: 'Your question' }), 'Hi{Enter}')
-    await waitFor(() => expect(asked).toEqual([{ message: 'Hi' }]))
-  })
-})
-
-describe('the "/" key', () => {
-  it('opens the conversation on a phone with its box ready to type in', async () => {
-    renderAsk('/payday')
-    await bar()
-    fireEvent.keyDown(document.body, { key: '/' })
-    const box = await within(await sheet()).findByRole('textbox', { name: 'Your question' })
-    await waitFor(() => expect(box).toHaveFocus())
-  })
-
-  it('opens the panel on a computer, and focuses the full page box on Chat', async () => {
-    const first = renderAsk('/payday', { size: COMPUTER })
-    await screen.findByRole('button', { name: /^Open Ask Leeway/ })
-    fireEvent.keyDown(document.body, { key: '/' })
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    await waitFor(() => expect(within(panel).getByRole('textbox')).toHaveFocus())
-    first.unmount()
-    renderAsk('/chat', { size: COMPUTER })
-    const box = await screen.findByRole('textbox', { name: 'Your question' })
-    fireEvent.keyDown(document.body, { key: '/' })
-    await waitFor(() => expect(box).toHaveFocus())
-  })
-
-  it('types a slash in a field instead, and leaves a slash with a modifier alone', async () => {
+  it('opens again from the button after closing', async () => {
     const user = userEvent.setup()
     renderAsk('/payday')
-    await bar()
-    const note = screen.getByRole('textbox', { name: 'Note' })
-    await user.type(note, 'a/b')
-    expect(note).toHaveValue('a/b')
-    fireEvent.keyDown(document.body, { key: '/', ctrlKey: true })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await openBox(user)
+    await user.keyboard('{Escape}')
+    await closed()
+    expect(await openBox(user)).toBeVisible()
   })
 })

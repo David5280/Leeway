@@ -303,9 +303,11 @@ the camera to **Most Compatible**.
 ### Chat (optional)
 
 With `ANTHROPIC_API_KEY` set, **Chat** asks Claude about your money in your
-own words, like "Can I afford a PS5 Pro right now?". It is a button in the
-header and on **Overview**. Without a key there is no Chat at all: no button,
-no page.
+own words, like "Can I afford a PS5 Pro right now?". **Ask Leeway**, a round
+logo button in the bottom right of every screen, opens it in a box there that
+knows which screen you are on; press and hold any card (or right click it) to
+ask about that card, or press "/". Without a key there is no Chat at all: no
+button, no page.
 
 - Claude answers by reading Leeway through the same read-only tools an
   assistant gets, so it can look at everything and change nothing. A purchase

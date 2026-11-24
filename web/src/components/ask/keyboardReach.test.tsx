@@ -63,8 +63,8 @@ describe('a card with nothing to focus, with Ask Leeway on', () => {
     await waitFor(() => expect(card('Net worth')).toHaveAttribute('tabindex', '0'))
     card('Net worth').focus()
     fireEvent.keyDown(card('Net worth'), { key: 'F10', shiftKey: true })
-    const panel = await screen.findByRole('complementary', { name: 'Ask Leeway' })
-    expect(await within(panel).findByText(/About Net worth/)).toHaveTextContent('$12,500')
+    const askBox = await screen.findByRole('dialog', { name: 'Ask Leeway' })
+    expect(await within(askBox).findByText(/About Net worth/)).toHaveTextContent('$12,500')
   })
 
   it('adds no stop to cards the keyboard already reaches through their own controls', async () => {

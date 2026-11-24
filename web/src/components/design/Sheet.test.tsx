@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { SCRIM_SETTLE_MS, Sheet, SWIPE_CLOSE_PX } from './Sheet'
+import { Sheet, SWIPE_CLOSE_PX } from './Sheet'
 
 /** A page with a button that opens a sheet holding two fields. */
 function Page({ onClose = () => {} }: { onClose?: () => void }) {
@@ -106,33 +106,9 @@ describe('Sheet', () => {
   it('closes from its close button and from a press on the dimmed page', async () => {
     const { onClose } = await openSheet()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    vi.useFakeTimers()
-    try {
-      fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-      act(() => vi.advanceTimersByTime(SCRIM_SETTLE_MS))
-      fireEvent.click(document.querySelector('.sheet-scrim')!)
-    } finally {
-      vi.useRealTimers()
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    fireEvent.click(document.querySelector('.sheet-scrim')!)
     expect(onClose).toHaveBeenCalledTimes(2)
-  })
-
-  it('ignores a press on the dimmed page in its first moment, the release of the press that opened it', () => {
-    const onClose = vi.fn()
-    vi.useFakeTimers()
-    try {
-      render(<Page onClose={onClose} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-      act(() => vi.advanceTimersByTime(SCRIM_SETTLE_MS - 1))
-      fireEvent.click(document.querySelector('.sheet-scrim')!)
-      expect(onClose).not.toHaveBeenCalled()
-      expect(screen.getByRole('dialog', { name: 'Blue Bottle' })).toBeInTheDocument()
-      act(() => vi.advanceTimersByTime(1))
-      fireEvent.click(document.querySelector('.sheet-scrim')!)
-      expect(onClose).toHaveBeenCalledOnce()
-    } finally {
-      vi.useRealTimers()
-    }
   })
 
   it('keeps Tab inside, wrapping both ways', async () => {

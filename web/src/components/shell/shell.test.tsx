@@ -74,7 +74,7 @@ describe('on a phone', () => {
     renderShell('/', { chat: true, unread: 3 })
     const more = within(screen.getByRole('navigation', { name: 'More' }))
     expect(await more.findByRole('link', { name: 'Inbox, 3 unread' })).toHaveTextContent('3')
-    // Ask Leeway's bar replaces it.
+    // Ask Leeway's button stands in for it.
     expect(await screen.findByRole('button', { name: /^Ask Leeway/ })).toBeVisible()
     expect(more.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument()
   })

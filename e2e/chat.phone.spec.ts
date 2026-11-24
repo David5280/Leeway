@@ -1,13 +1,34 @@
 // Chat on a phone, upright, narrowest and turned sideways: the conversation,
 // the box to type in and what Leeway remembers stay inside the screen, the
 // box stays clear of the tab bar, and every control is at least 44px tall.
-// Ask Leeway's bar sits above the tabs, clear of them, and opens the
-// conversation over the screen, which Back closes to the same place.
+// Ask Leeway's logo button sits in the corner above the tabs, clear of
+// them, and opens a box inside the screen, which a tap outside shrinks back
+// into the button with the page where it was.
 // Chat is turned on by stand-ins (chat.ts); no model is called.
 
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { askStarter, openChat, pretendChatOn } from './chat'
 import { boxes, overflow, overlapping, PHONES } from './phone'
+import { stillOn } from './screen'
+
+/**
+ * A spot on the page outside Ask Leeway's box where a tap does nothing but
+ * close it: words or empty space, not a link, button or field.
+ */
+async function quietSpotOutside(page: Page): Promise<{ x: number; y: number }> {
+  const spot = await page.evaluate(() => {
+    const taps = 'a, button, input, select, textarea, summary, label, [tabindex], [data-ask-hold]'
+    for (let y = 8; y < window.innerHeight; y += 16) {
+      for (let x = 8; x < window.innerWidth; x += 16) {
+        const at = document.elementFromPoint(x, y)
+        if (at && !at.closest('.ask-box') && !at.closest(taps)) return { x, y }
+      }
+    }
+    return null
+  })
+  expect(spot).not.toBeNull()
+  return spot!
+}
 
 for (const [name, viewport] of PHONES) {
   test.describe(`on ${name}`, () => {
@@ -41,23 +62,39 @@ for (const [name, viewport] of PHONES) {
       }
     })
 
-    test('Ask Leeway sits above the tabs and opens over the screen', async ({ page }) => {
+    test('Ask Leeway sits above the tabs and opens a box inside the screen', async ({ page }) => {
       await pretendChatOn(page)
       await page.goto('/payday')
-      const askBar = page.getByRole('button', { name: 'Ask Leeway: Ask about Payday' })
-      const bar = (await askBar.boundingBox())!
-      expect(bar.height).toBeGreaterThanOrEqual(44)
-      expect(bar.x + bar.width).toBeLessThanOrEqual(viewport.width)
+      const askButton = page.getByRole('button', { name: 'Ask Leeway' })
+      const button = (await askButton.boundingBox())!
+      expect(button.height).toBeGreaterThanOrEqual(44)
+      expect(button.x + button.width).toBeLessThanOrEqual(viewport.width)
       const tabs = page.locator('.tabbar')
-      if ((await tabs.count()) > 0)
-        expect(overlapping(bar, (await tabs.boundingBox())!)).toBe(false)
+      const tabbar = (await tabs.count()) > 0 ? await tabs.boundingBox() : null
+      if (tabbar) expect(overlapping(button, tabbar)).toBe(false)
 
       await page.evaluate(() => window.scrollTo({ top: 200 }))
       const scrolled = await page.evaluate(() => window.scrollY)
-      await askBar.click()
-      await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toBeVisible()
-      await page.goBack()
-      await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toHaveCount(0)
+      await askButton.click()
+      const box = page.getByRole('dialog', { name: 'Ask Leeway' })
+      await expect(box.getByRole('textbox', { name: 'Your question' })).toBeFocused()
+      // Measured once it has grown from the corner, not partway through.
+      await stillOn(box)
+      // Inside the screen, clear of the tab bar, its field and close button full taps.
+      const opened = (await box.boundingBox())!
+      expect(opened.x).toBeGreaterThanOrEqual(0)
+      expect(opened.y).toBeGreaterThanOrEqual(0)
+      expect(opened.x + opened.width).toBeLessThanOrEqual(viewport.width)
+      expect(opened.y + opened.height).toBeLessThanOrEqual(viewport.height)
+      if (tabbar) expect(overlapping(opened, tabbar)).toBe(false)
+      const targets = box.locator('.chat-foot textarea, .ask-box-close')
+      for (const target of await boxes(targets)) expect(target.height).toBeGreaterThanOrEqual(44)
+
+      // A tap on the page outside it shrinks it back, the page where it was.
+      const outside = await quietSpotOutside(page)
+      await page.mouse.click(outside.x, outside.y)
+      await expect(box).toHaveCount(0)
+      await expect(askButton).toBeVisible()
       await expect(page).toHaveURL(/\/payday$/)
       expect(await page.evaluate(() => window.scrollY)).toBe(scrolled)
     })
