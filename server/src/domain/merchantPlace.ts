@@ -1,6 +1,10 @@
 // The place a card line ends with, a city and a state code: "LOWRY BEER
-// GARDEN DENVER CO" is Lowry Beer Garden in Denver, Colorado. Pure. Used by
-// merchantName.ts, which shows the name without its place.
+// GARDEN DENVER CO" is Lowry Beer Garden in Denver, Colorado. Pure.
+//
+// Used twice: merchantName.ts shows a card line's name without its place,
+// and pay/deposits.ts reads a payer's name without it, so a person in
+// Colorado is never read as a company ("JANE DOE CO"). An ACH payer's or a
+// transfer's shown name keeps its place, since rules match on it.
 
 /**
  * US state codes, which end a card line's place: "LOWRY BEER GARDEN DENVER
@@ -60,14 +64,12 @@ const BUSINESS_WORDS = new Set(
 )
 
 /**
- * Takes off the place a card line or an ACH payer's name ends with, a city
- * and a state code in capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY
- * BEER GARDEN", and "JOHN SMITH DENVER CO" reads "JOHN SMITH". The state
- * goes whenever two or more words come before it; the city with it only when
- * it is a known city word or two words of name are left ("JERSEY MIKES NJ"
- * reads "JERSEY MIKES"). A line that is all place keeps its city ("SALT LAKE
- * CITY UT" reads "SALT LAKE CITY"), and "SMITH & CO" and "BREWING CO" keep
- * their "CO", which there means company.
+ * Takes off the place a name ends with, a city and a state code in
+ * capitals: "LOWRY BEER GARDEN DENVER CO" reads "LOWRY BEER GARDEN", and
+ * "JOHN SMITH DENVER CO" reads "JOHN SMITH". The state goes whenever two or
+ * more words come before it, and the city with it as cityLength says
+ * ("JERSEY MIKES NJ" keeps "JERSEY MIKES"). "SMITH & CO" and "BREWING CO"
+ * keep their "CO", which there means company.
  */
 export function withoutPlace(text: string): string {
   const all = text.split(/\s+/).filter(Boolean)
@@ -80,8 +82,11 @@ export function withoutPlace(text: string): string {
 }
 
 /**
- * How many words at the end of a card line's name are its city: none, or one
- * to three ("SALT LAKE CITY"). See withoutPlace for when a city counts.
+ * How many words at the end of a name are its city: none, or one to three
+ * ("SALT LAKE CITY"). A city counts when it holds a known city word or two
+ * or more words of name come before it, unless it is a business word ("GRAND
+ * CANYON RAILWAY"), the whole name, or follows "OF" (then it is the name's
+ * own: "TASTE OF PHILLY").
  */
 function cityLength(name: string[]): number {
   const upper = name.map((word) => word.toUpperCase())

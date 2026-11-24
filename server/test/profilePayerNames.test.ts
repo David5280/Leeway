@@ -99,6 +99,13 @@ describe('the payers the profile names', () => {
     ],
     ['JANE DOE CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD', null],
     ['Transfer from Jane Doe CO salary', 'INCOME_SALARY'],
+    // A word between the state and the pay word: how often, or the ACH rails.
+    ['JANE DOE CO WEEKLY PAYROLL', null],
+    ['JOHN SMITH DENVER CO ACH PAYROLL', null],
+    ['JANE DOE CO MONTHLY SALARY', 'INCOME_SALARY'],
+    ['JANE DOE DENVER CO EFT PAYROLL', null],
+    // As some banks write it, in title case.
+    ['Jane Doe Co DES:PAYROLL ID:1', null],
   ]
 
   /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
@@ -145,6 +152,13 @@ describe('the payers the profile names', () => {
     ['3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD', '3m Co Payroll'],
     ['ORIG CO NAME:ACME INC ORIG ID:123 CO ENTRY DESCR:PAYROLL SEC:PPD', 'Acme Inc'],
     ['GREAT DIVIDE BREWING CO DIR DEP', 'Great Divide Brewing Co Dir Dep'],
+    ['ACME CO WEEKLY PAYROLL', 'Acme Co Weekly Payroll'],
+    ['Acme Co Payroll', 'Acme Co Payroll'],
+    ['3M CO DES:PAYROLL', '3m Co Payroll'],
+    ['ACME INC ACH PAYROLL', 'Acme Inc ACH Payroll'],
+    ['GREAT DIVIDE BREWING CO PAYROLL', 'Great Divide Brewing Co Payroll'],
+    // A business ending before the place still names the business.
+    ['ACME LLC DENVER CO PAYROLL', 'Acme LLC Denver Co Payroll'],
   ])('still names a business whose name ends in Co: %s', async (name, shown) => {
     const result = await paidBy(name)
     expect(result.pay.employer).toBe(shown)

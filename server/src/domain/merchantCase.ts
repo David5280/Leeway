@@ -60,6 +60,7 @@ const SPELLED_OUT = new Map([
   ['WHSE', 'Warehouse'],
   ['AMZN', 'Amazon'],
 ])
+
 /** One word as people would write it; "CVS/PHARMACY" is cased a part at a time. */
 function caseWord(word: string, first: boolean): string {
   return word

@@ -68,15 +68,28 @@ const BANK_LINES: [raw: string, name: string][] = [
   ],
   ['ACME CORP DES:PAYROLL ID:XXXXX12345 INDN:DOE JANE CO ID:XXXXX54321 PPD', 'Acme Corp Payroll'],
   ['ACH DEPOSIT ACME CORP PAYROLL', 'Acme Corp Payroll'],
-  // An ACH payer's trailing state goes too, so a person in Colorado is no "Co".
-  ['JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD', 'John Smith Payroll'],
-  ['ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 CO ENTRY DESCR:DIR DEP', 'John Smith'],
-  ['ORIG CO NAME:JANE DOE CO CO ENTRY DESCR:PAYROLL SEC:PPD', 'Jane Doe'],
+  // An ACH payer or a transfer keeps every word, a place included: rules and
+  // bills match on these names. Only the payroll reading drops the place.
+  [
+    'JOHN SMITH DENVER CO DES:PAYROLL ID:1234 INDN:SMITH JOHN CO ID:999 PPD',
+    'John Smith Denver Co Payroll',
+  ],
+  ['ORIG CO NAME:JOHN SMITH DENVER CO ORIG ID:12 CO ENTRY DESCR:DIR DEP', 'John Smith Denver Co'],
+  ['ORIG CO NAME:JANE DOE CO CO ENTRY DESCR:PAYROLL SEC:PPD', 'Jane Doe Co'],
   ['ACME CO DES:PAYROLL ID:XXXXX PPD', 'Acme Co Payroll'],
   ['GREAT DIVIDE BREWING CO DES:PAYROLL ID:1 PPD', 'Great Divide Brewing Co Payroll'],
+  ['THE SHERWIN WILLIAMS CO DES:PAYROLL ID:1 PPD', 'The Sherwin Williams Co Payroll'],
+  ['JOHN Q SMITH CO DES:PAYROLL ID:1 PPD', 'John Q Smith Co Payroll'],
+  ['JOHN SMITH AUSTIN TX DES:PAYROLL ID:1 PPD', 'John Smith Austin Tx Payroll'],
+  [
+    'ORIG CO NAME:ROCKY MOUNTAIN POWER CO ORIG ID:1 CO ENTRY DESCR:BILLPAY',
+    'Rocky Mountain Power Co',
+  ],
   // "CO ENTRY DESCR:" is a label, never part of the company's name.
   ['ORIG CO NAME:ACME CORP CO ENTRY DESCR:PAYROLL SEC:PPD', 'Acme Corp'],
-  ['TRANSFER FROM JANE DOE DENVER CO', 'Transfer from Jane Doe'],
+  ['TRANSFER FROM JANE DOE DENVER CO', 'Transfer from Jane Doe Denver Co'],
+  ['TRANSFER TO ACME HOLDINGS GROUP CA REF 1', 'Transfer to Acme Holdings Group Ca'],
+  ['TRANSFER TO ACME CA HOLDINGS', 'Transfer to Acme Ca Holdings'],
   ['VENMO PAYMENT 1234567890 WEB ID: 3264681992', 'Venmo Payment'],
   ['Zelle payment to JANE DOE JPM99A1B2C3', 'Zelle payment to Jane Doe'],
   // Casing: acronyms and initials stay, small words go low, mixed case is kept.
@@ -96,7 +109,9 @@ const BANK_LINES: [raw: string, name: string][] = [
   ['TRADER JOES SALT LAKE CITY UT', 'Trader Joes'],
   ['SNOOZE Fort Collins CO', 'Snooze'],
   ['SMITH & CO', 'Smith & Co'],
+  // A city after "OF" is the name's own, not where the card was used.
   ['CITY OF DENVER CO', 'City of Denver'],
+  ['TASTE OF PHILLY CO', 'Taste of Philly'],
   ['BAKER AND CO', 'Baker and Co'],
   ['PANERA BREAD DENVER', 'Panera Bread Denver'],
   ['BLUE BOTTLE ...21 DENVER', 'Blue Bottle'],

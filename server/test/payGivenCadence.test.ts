@@ -164,7 +164,7 @@ describe('namesPayer', () => {
     expect(namesPayer('State of Colorado', 'state farm payroll')).toBe(false)
   })
 
-  it('matches the same leading words, or most of the stub’s name in the bank’s line', () => {
+  it('matches every name word of the stub side by side, or a brand the bank prints alone', () => {
     expect(namesPayer('State of Colorado', 'state of colorado payroll')).toBe(true)
     expect(namesPayer('Denver Public Schools', 'denver public schools dir dep')).toBe(true)
     expect(namesPayer('Acme Widgets Inc', 'acme payroll')).toBe(true)
@@ -178,5 +178,17 @@ describe('namesPayer', () => {
     expect(namesPayer('Acme Svcs', 'acme services dir dep')).toBe(true)
     // Spelled out, two employers that share one word are still two.
     expect(namesPayer('State of Colorado', 'univ of colorado payroll')).toBe(false)
+  })
+
+  it('never matches an employer that shares only some of its words with the line', () => {
+    // Every stub word is in the line, but not side by side.
+    expect(namesPayer('University of Denver', 'univ of colorado denver payroll')).toBe(false)
+    // The stub names more than the line does.
+    expect(namesPayer('University of Colorado Health', 'univ of colorado payroll')).toBe(false)
+    // The two go apart after their shared start.
+    expect(namesPayer('National Western Life', 'natl western stock show payroll')).toBe(false)
+    // A general word the bank prints alone names no one employer.
+    expect(namesPayer('National Western Life', 'natl payroll')).toBe(false)
+    expect(namesPayer('University of Denver', 'univ payroll')).toBe(false)
   })
 })

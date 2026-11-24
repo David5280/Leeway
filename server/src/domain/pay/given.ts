@@ -60,8 +60,8 @@ const SHORT_FORMS = new Map([
   ['ctr', 'center'],
 ])
 
-/** How many leading name words two names are held to, at most. */
-const LEADING_WORDS = 2
+/** The full words SHORT_FORMS spell out, too general to name a company alone: "university". */
+const GENERAL_WORDS = new Set(SHORT_FORMS.values())
 
 /**
  * The words of a name that say which company it is, in order: no small word
@@ -76,23 +76,28 @@ function nameWords(text: string): string[] {
     .filter((word) => word.length > 1 && !SMALL_WORDS.has(word) && !COMPANY_WORDS.has(word))
 }
 
+/** Whether `run` sits in `words` word for word, side by side: [b, c] in [a, b, c]. */
+const holdsRun = (words: string[], run: string[]) =>
+  words.some((_, start) => run.every((word, index) => words[start + index] === word))
+
 /**
  * Whether a paystub's employer name and a payer's key, read from the bank's
- * text, name the same payer. One shared word is not enough, since many
- * employers share one ("State of Colorado" and "Univ of Colorado"). Either
- * - both start with the same name words, as far as the shorter goes and at
- *   most two: "Initech, Inc." and "INITECH PAYROLL", or
- * - most of the stub's name words are in the key, for a bank line that puts
- *   its own labels first: "Acme Corp" and "ORIG CO NAME:ACME CORP ...".
+ * text, name the same payer. Shared words are not enough, since employers
+ * share them ("University of Denver" and "UNIV OF COLORADO DENVER"). Either
+ * - every name word of the stub is in the key, side by side as the stub
+ *   writes them: "University of Colorado" and "UNIV OF COLORADO PAYROLL", or
+ *   "Acme Corp" and "ORIG CO NAME:ACME CORP ...", whose labels come first, or
+ * - the key names one word, the stub's first, as a bank may print only a
+ *   brand: "Acme Widgets Inc" and "ACME PAYROLL". Never a general word, so
+ *   "NATL PAYROLL" names no "National Western Life".
  */
 export function namesPayer(employerName: string, payerKey: string): boolean {
   const stub = nameWords(employerName)
   const payer = nameWords(payerKey)
   if (stub.length === 0 || payer.length === 0) return false
-  const leading = Math.min(stub.length, payer.length, LEADING_WORDS)
-  const sameStart = stub.slice(0, leading).every((word, index) => payer[index] === word)
-  const shared = stub.filter((word) => payer.includes(word)).length
-  return sameStart || shared > stub.length / 2
+  if (holdsRun(payer, stub)) return true
+  const [brand] = payer
+  return payer.length === 1 && brand === stub[0] && !GENERAL_WORDS.has(brand!)
 }
 
 /**

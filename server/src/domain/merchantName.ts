@@ -176,8 +176,9 @@ function transferName(direction: string, rest: string): string {
   // A code before the name ("TRANSFER TO 12AB") is a reference, not who it went to.
   const named = words(counterparty)
   while (named.length > 0 && endsName(named[0]!)) named.shift()
-  // A trailing state goes as on a card line: "JANE DOE CO" is a person in Colorado.
-  const name = trimEnds(withoutNumbers(withoutPlace(namePart(named.join(' ')))))
+  // The place stays: a transfer's name is what rules match on (pay/deposits.ts
+  // reads past a sender's state on its own).
+  const name = trimEnds(withoutNumbers(namePart(named.join(' '))))
   const way = direction.toLowerCase()
   return name ? `${TRANSFER_NAME} ${way} ${readableName(name)}` : TRANSFER_NAME
 }
@@ -191,15 +192,12 @@ function withoutLeadingNoise(text: string): string {
 
 /** The merchant's words from a bank's line, before casing; empty when none are left. */
 function merchantWords(text: string): string {
-  // An ACH payer's name drops a trailing place too, so "JOHN SMITH DENVER CO"
-  // never reads as a company: the payroll reading (pay/deposits.ts) relies on it.
+  // An ACH payer keeps its words, a place included, so rules made on the
+  // name keep matching; only the payroll reading (pay/deposits.ts) drops it.
   const company = ACH_COMPANY.exec(text)?.[1]
-  if (company) return trimEnds(withoutNumbers(withoutPlace(company)))
+  if (company) return trimEnds(withoutNumbers(company))
   const described = ACH_DESCRIPTION.exec(text)
-  if (described) {
-    const [, payer = '', description = ''] = described
-    return trimEnds(withoutNumbers(`${withoutPlace(payer)} ${description}`))
-  }
+  if (described) return trimEnds(withoutNumbers(`${described[1]} ${described[2]}`))
   const rest = withoutProcessor(withoutLeadingNoise(text))
   return trimEnds(withoutNumbers(withoutPlace(namePart(rest))))
 }

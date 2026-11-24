@@ -200,6 +200,27 @@ describe('a deposit that names a business', () => {
     expect(names('Transfer from Jane Doe CO salary')).toBe(false)
   })
 
+  // A word between the state and the pay word (how often, the ACH rails)
+  // leaves a person a person, and a business a business.
+  it.each([
+    ['JANE DOE CO WEEKLY PAYROLL', false],
+    ['JOHN SMITH DENVER CO ACH PAYROLL', false],
+    ['JANE DOE CO MONTHLY SALARY', false],
+    ['JANE DOE DENVER CO EFT PAYROLL', false],
+    ['JANE DOE CO BIWEEKLY DIR DEP PPD', false],
+    ['JANE DOE CO SEMI-MONTHLY PAYROLL REF 12', false],
+    ['Jane Doe Co DES:PAYROLL ID:1', false],
+    ['ACME CO WEEKLY PAYROLL', true],
+    ['Acme Co Payroll', true],
+    ['3M CO DES:PAYROLL', true],
+    ['ACME INC ACH PAYROLL', true],
+    ['GREAT DIVIDE BREWING CO PAYROLL', true],
+    ['ACME LLC DENVER CO PAYROLL', true],
+    ['IDEAL CO PAYROLL', true],
+  ])('reads %j as naming a business: %s', (name, business) => {
+    expect(names(name)).toBe(business)
+  })
+
   it('still reads a business ending in Co in an ACH line', () => {
     expect(names('ACME CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
     expect(names('3M CO DES:PAYROLL ID:XXXXX INDN:DOE JANE CO ID:XXXXX PPD')).toBe(true)
