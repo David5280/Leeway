@@ -144,13 +144,14 @@ function textNamesBusiness(text: string): boolean {
 
 /**
  * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
- * a person, by its bank text or the merchant name Plaid gave. Both are read
- * the same careful way, since Plaid may give a person's name with a state
- * after it ("Jane Doe Co") as readily as a bank prints one.
+ * a person, read from the text it is shown under: the merchant name Plaid
+ * gave when there is one, else the bank's text (see transactionDisplayName).
+ * So a business in one never vouches for a person's name in the other, and
+ * Plaid's "Jane Doe Co" is read as carefully as a bank's.
  */
 export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
   const merchant = tx.merchantName?.trim() ?? ''
-  return textNamesBusiness(tx.name) || (merchant !== '' && textNamesBusiness(merchant))
+  return textNamesBusiness(merchant !== '' ? merchant : tx.name)
 }
 
 /**

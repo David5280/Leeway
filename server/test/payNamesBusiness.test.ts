@@ -148,6 +148,9 @@ describe('a deposit that names a business', () => {
     ['DIRECT DEP', 'Jane Ann Mills Co.'],
     ['DIRECT DEP', 'Jane Doe co-worker'],
     ['DIRECT DEP', '   '],
+    // The name shown is Plaid's, so a business in the bank's text vouches for nothing.
+    ['ACME CORP PAYROLL', 'Jane Doe'],
+    ['INITECH LLC DIR DEP', 'John Smith'],
   ])('never names a person by the merchant name Plaid gave: %j, %j', (name, merchantName) => {
     expect(names(name, merchantName)).toBe(false)
   })

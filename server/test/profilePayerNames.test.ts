@@ -172,6 +172,8 @@ describe('the payers the profile names', () => {
     ['JOHN SMITH DIR DEP', 'Jane Doe Co'],
     ['JANE DOE PAYROLL', 'John Mills Co'],
     ['JOHN SMITH DIR DEP', 'John Smith Denver CO'],
+    // A business in the bank's text never vouches for the name shown.
+    ['ACME CORP PAYROLL', 'Jane Doe'],
   ])('never names a person by the merchant name Plaid gave: %s, %s', async (name, merchant) => {
     const result = await paidBy(name, 'INCOME_SALARY', merchant)
     expect(result.pay).toMatchObject({ cadence: 'biweek', employer: null })
