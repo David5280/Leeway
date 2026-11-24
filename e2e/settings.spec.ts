@@ -66,10 +66,13 @@ test('old Customize addresses and unknown groups land on a real group', async ({
   // A group this version does not have opens the one last opened here instead.
   await page.goto('/settings/nowhere')
   await expect(page).toHaveURL(/\/settings\/budgeting$/)
-  // The main menu calls it Settings.
+  // The header's gear calls it Settings, and no tab is lit.
   await expect(
-    page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Settings' }),
+    page.getByRole('navigation', { name: 'More' }).getByRole('link', { name: 'Settings' }),
   ).toHaveAttribute('aria-current', 'page')
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).locator('[aria-current="page"]'),
+  ).toHaveCount(0)
 })
 
 test('Settings reopens the group last opened on this device', async ({ page }) => {

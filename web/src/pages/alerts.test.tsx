@@ -39,7 +39,7 @@ describe('the account health banner', () => {
     fakeServer({ list_home_alerts: () => homeList(alertsFor([low('b'), overdrawn])) })
     renderSignedIn(<AccountHealth />)
     const link = await screen.findByRole('link', { name: /Everyday is overdrawn by \$42\.10/ })
-    expect(link).toHaveAttribute('href', '/accounts/a')
+    expect(link).toHaveAttribute('href', '/wealth/accounts/a')
     expect(banner()).toHaveClass('over-card')
     expect(within(banner()).getAllByRole('link')[0]).toBe(link)
     expect(within(banner()).getByRole('link', { name: 'See all alerts' })).toHaveAttribute(
@@ -171,12 +171,9 @@ describe('the Alerts page', () => {
       'href',
       '/settings/accounts',
     )
-    // Accounts is in the main menu, beside the Overview it came from.
-    const menu = screen.getAllByRole('navigation', { name: 'Main' })[0]!
-    expect(within(menu).getByRole('link', { name: 'Accounts' })).toHaveAttribute(
-      'href',
-      '/accounts',
-    )
+    // The accounts are on Wealth, a tab in the main menu, beside the Home it came from.
+    const menu = screen.getByRole('navigation', { name: 'Main' })
+    expect(within(menu).getByRole('link', { name: 'Wealth' })).toHaveAttribute('href', '/wealth')
   })
 
   it('says when all is well', async () => {
@@ -231,8 +228,8 @@ describe('the Alerts page, beyond the accounts', () => {
         .map((link) => link.getAttribute('href')),
     ).toEqual([
       '/settings/banks',
-      '/budgets/cat-dining-out',
-      '/transactions?category=uncategorized',
+      '/spending/cat-dining-out',
+      '/spending/activity?category=uncategorized',
       '/settings/ai',
     ])
     expect(others()).toHaveTextContent('The AI limit is reached.')

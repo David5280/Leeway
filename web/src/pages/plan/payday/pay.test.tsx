@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PayView } from '../../../api/client'
 import { failing } from '../../../test/fake'
 import { noPay, payView } from '../../../test/pay'
-import { planServer, renderPlan } from '../../../test/planning'
+import { planServer, renderPlanning } from '../../../test/planning'
 import { JOB_STOPPED_NOTE } from './payText'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -16,7 +16,7 @@ const yours = { amountCents: 250_000, cadence: 'semimonth' as const, nextPayday:
 
 function show(view: PayView, more: Parameters<typeof planServer>[0] = {}) {
   const server = planServer({ get_pay: () => view, ...more })
-  renderPlan('/plan/payday')
+  renderPlanning('/payday')
   return { server, user: userEvent.setup() }
 }
 
@@ -207,7 +207,7 @@ describe('Your pay', () => {
 
   it('shows why the pay could not load', async () => {
     planServer({}, { '/api/actions/get_pay': failing('Server is down', 500) })
-    renderPlan('/plan/payday')
+    renderPlanning('/payday')
     expect(await screen.findByText('Server is down')).toBeVisible()
   })
 })

@@ -18,6 +18,7 @@ import { useApp } from '../lib/app'
 import { leewayDrill } from '../lib/drills/budget'
 import { dayLabel, periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
+import { paths } from '../routes'
 
 /** Each goal's share held back this period, which the drill-down's math takes out. */
 function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
@@ -44,7 +45,7 @@ function NoBudgets() {
       <p style={{ fontSize: 17 }}>
         Give a few categories a budget and this shows how much room you have left.
       </p>
-      <Link to="/budgets" className="btn primary tap" style={{ alignSelf: 'flex-start' }}>
+      <Link to={paths.spending()} className="btn primary tap" style={{ alignSelf: 'flex-start' }}>
         Set budgets
       </Link>
     </Card>

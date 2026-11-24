@@ -26,7 +26,7 @@ describe('PaydayNotice', () => {
       "It's paydayYou had $44 left from your last paycheck. See what this one covers.",
     )
     expect(screen.getByText('$44')).toHaveClass('money-in')
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/plan/payday')
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/payday')
   })
 
   it('leaves out the leftover when spending ran over', async () => {

@@ -10,6 +10,7 @@ import { ErrorNote } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { periodBarLabel, shortDate } from '../../lib/format'
 import { amountSign } from '../../lib/transactions'
+import { paths } from '../../routes'
 
 /** How many of this period's transactions to list before linking to the full list. */
 const SHOWN = 12
@@ -132,7 +133,7 @@ export function InThisCategory({
         </div>
       ))}
       {total > SHOWN && (
-        <Link to={`/transactions?category=${category.id}`} className="linkbtn">
+        <Link to={paths.activity({ category: category.id })} className="linkbtn">
           All transactions
         </Link>
       )}

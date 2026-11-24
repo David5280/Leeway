@@ -7,11 +7,12 @@ import { useAction, useActionMutation } from '../../api/hooks'
 import { ErrorNote } from '../../components/ui'
 import { settingsPath } from '../settings/paths'
 import { Frame, Nav } from './Frame'
+import { paths } from '../../routes'
 
 /** Where someone without bank sync adds their money, once setup is done. */
 const NEXT_STEPS = [
   {
-    path: '/transactions/import',
+    path: paths.importTransactions(),
     title: 'Import a CSV file',
     text: "Download your transactions from your bank's website, then bring them in",
   },

@@ -5,6 +5,7 @@
 
 import type { Category, Transaction } from '../api/client'
 import type { MoneySign } from './money'
+import { paths } from '../routes'
 
 type CategoryKind = Category['kind'] | null
 
@@ -142,5 +143,5 @@ export function merchantActivityPath(
 ): string {
   const params = new URLSearchParams({ account: accountId, range: 'all', merchant: charge.id })
   if (charge.merchant !== null) params.set('merchantName', charge.merchant)
-  return `/transactions?${params}`
+  return paths.activity(params)
 }

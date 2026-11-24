@@ -28,7 +28,7 @@ export async function removeAccount(page: Page, name: string): Promise<void> {
 
 /** Opens the form for adding a transaction by hand, from the Transactions screen's + menu. */
 export async function openAddForm(page: Page): Promise<Locator> {
-  await page.goto('/transactions')
+  await page.goto('/spending/activity')
   await page.getByRole('button', { name: 'Add or import' }).click()
   await page.getByRole('menuitem', { name: 'Add by hand' }).click()
   return page.getByRole('form', { name: 'Add a transaction' })

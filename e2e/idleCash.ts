@@ -153,7 +153,7 @@ export const IDLE_CASH = checkIdleCash({
   tight: false,
 })
 
-/** Answers get_idle_cash with IDLE_CASH, so Plan, Bills shows its card over any install. */
+/** Answers get_idle_cash with IDLE_CASH, so Wealth's idle cash page shows its card over any install. */
 export async function fakeIdleCash(page: Page): Promise<void> {
   await page.route('**/api/actions/get_idle_cash', (route) =>
     route.fulfill({ json: { result: IDLE_CASH } }),

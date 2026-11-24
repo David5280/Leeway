@@ -4,7 +4,7 @@ import { tripName, tripPath } from './trips'
 describe('trip words', () => {
   it('builds a trip’s address', () => {
     expect(tripPath({ startsOn: '2026-12-10', endsOn: '2026-12-14' })).toBe(
-      '/trips/2026-12-10/2026-12-14',
+      '/goals/trips/2026-12-10/2026-12-14',
     )
   })
 

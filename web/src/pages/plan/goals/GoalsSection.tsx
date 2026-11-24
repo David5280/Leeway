@@ -1,8 +1,8 @@
-// The Goals section of the Plan tab, most general first: the emergency fund
+// The Goals tab's content, most general first: the emergency fund
 // offer while there is none, then which goal comes first and when each lands,
 // then each goal (purchases being saved for among them) with what each budget
 // period needs and whether recent progress makes it.
-// "/plan/goals?new=purchase" opens straight onto a new purchase, which is how
+// "/goals?new=purchase" opens straight onto a new purchase, which is how
 // the overview's "Save for a purchase" link gets here; Coming up adds the
 // event's name, price and day (&name=, &price= in cents, &by=) to start from.
 // When the fund alone fails to load, the goals still show, with a way to try
@@ -179,7 +179,7 @@ export function GoalsSection() {
   const [editing, setEditing] = useState(() => editingFrom(params))
   const goals = useAction('list_goals')
   const accounts = useAction('list_accounts')
-  // The Plan screen loads cash flow anyway; its date is the server's today.
+  // Cash flow's date is the server's today.
   const cash = useAction('get_cash_flow')
   const emergency = useAction('get_emergency_fund')
 
@@ -208,7 +208,7 @@ export function GoalsSection() {
       )}
 
       <div className="row-between wrap">
-        <h2>Goals</h2>
+        <h1>Goals</h1>
         <div className="row wrap">
           <button
             type="button"

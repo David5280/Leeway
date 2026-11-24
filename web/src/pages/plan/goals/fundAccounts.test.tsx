@@ -15,7 +15,7 @@ import {
   serveEmergency,
 } from '../../../test/emergency'
 import { account } from '../../../test/fake'
-import { renderPlan } from '../../../test/planning'
+import { renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -24,7 +24,7 @@ const FUND = fundView()
 describe('the accounts the fund counts', () => {
   it('picks an account, which switches to counting only the picked', async () => {
     const server = serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -45,7 +45,7 @@ describe('the accounts the fund counts', () => {
     const server = serveEmergency(fundView({ counts: 'marked', accounts: [marked, EVERYDAY] }), [
       fundGoal(),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText(/Counts Rainy Day\./)).toBeVisible()
@@ -61,7 +61,7 @@ describe('the accounts the fund counts', () => {
     const server = serveEmergency(fundView({ counts: 'marked', accounts: [marked, EVERYDAY] }), [
       fundGoal(),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -75,7 +75,7 @@ describe('the accounts the fund counts', () => {
 
   it('closes on Cancel without saving, as the essentials form does', async () => {
     const server = serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -91,7 +91,7 @@ describe('the accounts the fund counts', () => {
 
   it('asks for at least one account before counting only the picked', async () => {
     serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -105,7 +105,7 @@ describe('the accounts the fund counts', () => {
     const server = serveEmergency(fundView({ counts: 'marked', accounts: [marked, EVERYDAY] }), [
       fundGoal(),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -122,7 +122,7 @@ describe('the accounts the fund counts', () => {
     const server = serveEmergency(view, [
       fundGoal({ accountId: 'acct-rainy', followedAccountIds: null }),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText(/Counts Rainy Day\./)).toBeVisible()
@@ -143,7 +143,7 @@ describe('the accounts the fund counts', () => {
       otherGoal: 'Trip',
     })
     serveEmergency(fundView({ accounts: [RAINY, trip] }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     expect(fund.getByText('Trip savings is left out, since Trip follows it.')).toBeVisible()
@@ -161,7 +161,7 @@ describe('the accounts the fund counts', () => {
       leftOut: 'hidden',
     })
     serveEmergency(fundView({ counts: 'marked', accounts: [hidden, EVERYDAY] }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     expect(fund.getByText(/Counts none of the accounts you picked yet\./)).toBeVisible()
     expect(
@@ -176,7 +176,7 @@ describe('the accounts the fund counts', () => {
     const server = serveEmergency(fundView({ counts: 'hand' }), [
       fundGoal({ followedAccountIds: null }),
     ])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -190,7 +190,7 @@ describe('the accounts the fund counts', () => {
 
   it('goes back to counting by hand while a count by hand is kept', async () => {
     const server = serveEmergency(FUND, [fundGoal({ savedCents: 20_000 })])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     const fund = await fundCard()
     await user.click(fund.getByRole('button', { name: 'Change accounts' }))
@@ -202,7 +202,7 @@ describe('the accounts the fund counts', () => {
 
   it('offers no count by hand when none was ever kept', async () => {
     serveEmergency(FUND, [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     await userEvent.setup().click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.queryByRole('radio', { name: 'What I add by hand' })).toBeNull()
@@ -210,7 +210,7 @@ describe('the accounts the fund counts', () => {
 
   it('asks for a savings account when there is none to count', async () => {
     serveEmergency(fundView({ accounts: [] }), [fundGoal()])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const fund = await fundCard()
     await userEvent.setup().click(fund.getByRole('button', { name: 'Change accounts' }))
     expect(fund.getByText('Link or add a savings account to hold the fund.')).toBeVisible()
@@ -221,7 +221,7 @@ describe("another goal's form", () => {
   it('warns that following an account the fund counts leaves it out of the fund', async () => {
     const rainy = account({ id: 'acct-rainy', name: 'Rainy Day', type: 'depository' })
     serveEmergency(FUND, [fundGoal()], { list_accounts: () => [rainy] })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a goal' }))
     const form = within(await screen.findByRole('form', { name: 'New goal' }))

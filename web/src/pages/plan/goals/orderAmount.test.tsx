@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sentence } from '../../../test/fake'
 import { car, orderCard, orderOf, serveOrder, trip } from '../../../test/goalOrder'
-import { renderPlan } from '../../../test/planning'
+import { renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,7 +17,7 @@ const AMOUNT = { name: 'How much can you put toward goals each month?' }
 describe('the amount that fills goals', () => {
   it('says plainly how the amount the owner set fills them', async () => {
     serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     expect(
       card.getByText(
@@ -28,7 +28,7 @@ describe('the amount that fills goals', () => {
 
   it('asks for it once when none has gone into goals yet, and saves it', async () => {
     const server = serveOrder(orderOf([trip, car], 0, 'none'))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     expect(card.getAllByText('No date yet')).toHaveLength(2)
     // Nothing to cancel back to, and no pace to hand it to.
@@ -49,7 +49,7 @@ describe('the amount that fills goals', () => {
     ['-500', "The amount can't be negative."],
   ])('names %j once the field is left, and saves nothing', async (typed, note) => {
     const server = serveOrder(orderOf([trip, car], 0, 'none'))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.type(card.getByRole('textbox', AMOUNT), typed)
@@ -61,7 +61,7 @@ describe('the amount that fills goals', () => {
 
   it('says the pace found lately, and lets it be changed', async () => {
     const server = serveOrder(orderOf([trip, car], 30_000, 'found'))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     expect(
       card.getByText(
@@ -88,7 +88,7 @@ describe('the amount that fills goals', () => {
 
   it('closes unchanged on Cancel', async () => {
     const server = serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.click(card.getByRole('button', { name: 'Change' }))
@@ -101,7 +101,7 @@ describe('the amount that fills goals', () => {
 
   it('hands an amount the owner set back to the pace Leeway sees', async () => {
     const server = serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.click(card.getByRole('button', { name: 'Change' }))
@@ -116,7 +116,7 @@ describe('the amount that fills goals', () => {
 
   it('asks for an amount, rather than saying $0, when the owner set none', async () => {
     serveOrder(orderOf([trip, car], 0, 'entered'))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     expect(card.getByText(sentence(/^Set an amount to see dates\./))).toBeVisible()
     expect(card.queryByText('$0')).toBeNull()

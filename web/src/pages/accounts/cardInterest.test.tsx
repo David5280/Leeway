@@ -8,7 +8,7 @@ import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Account } from '../../api/client'
 import { fakeServer, renderSignedIn, settingsWith } from '../../test/fake'
-import { account, planServer, renderPlan } from '../../test/planning'
+import { account, planServer, renderPlanning } from '../../test/planning'
 import { CardsInterestLine, InterestCard } from './CardInterest'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -92,7 +92,7 @@ describe("a card's interest on its page", () => {
     )
     expect(within(drill).getByRole('link', { name: /Change the APR/ })).toHaveAttribute(
       'href',
-      '/plan/debts',
+      '/wealth/debts',
     )
   })
 
@@ -124,7 +124,7 @@ describe('the interest line under the cards on Accounts', () => {
       owing({ aprPercent: 24.99 }),
       owing({ id: 'b', name: 'Store card', aprPercent: null }),
     ])
-    expect(link).toHaveAttribute('href', '/plan/debts')
+    expect(link).toHaveAttribute('href', '/wealth/debts')
     expect(link).toHaveTextContent(
       'Carrying these balances costs about $50 a month in interest, not counting 1 card with no APR yet.',
     )
@@ -166,7 +166,7 @@ describe('what the cards cost, atop Plan, Debts', () => {
 
   it('leads the debts with the interest a month', async () => {
     serve([owing({ aprPercent: 24.99 })])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(await screen.findByRole('region', { name: 'Your debts' })).toHaveTextContent(
       'Carrying this balance costs about $50 a month in interest.',
     )
@@ -178,7 +178,7 @@ describe('what the cards cost, atop Plan, Debts', () => {
       owing({ balanceCents: 10_000, aprPercent: 24.99 }),
       owing({ id: 'big', name: 'Store card', balanceCents: 900_000, aprPercent: null }),
     ])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(await screen.findByRole('region', { name: 'Your debts' })).toHaveTextContent(
       'Carrying these balances costs about $2 a month in interest, not counting 1 card with no APR yet.',
     )
@@ -186,7 +186,7 @@ describe('what the cards cost, atop Plan, Debts', () => {
 
   it('waits for an APR before saying it', async () => {
     serve([owing({ aprPercent: null })])
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     expect(await screen.findByRole('region', { name: 'Your debts' })).not.toHaveTextContent(
       'a month in interest',
     )

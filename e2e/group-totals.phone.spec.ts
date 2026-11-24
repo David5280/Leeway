@@ -1,4 +1,4 @@
-// Each group heading on Accounts ends in the group's total. On every phone
+// Each group heading in Wealth's accounts ends in the group's total. On every phone
 // size, upright and sideways, the figure sits on the title's row, clear of
 // the title, never cut short, and the title stays on one line.
 
@@ -47,7 +47,7 @@ test("each group's total fits its heading on every phone, upright and sideways",
     ].map((input) => action<{ id: string }>(request, 'create_account', input)),
   )
   try {
-    await page.goto('/accounts')
+    await page.goto('/wealth')
     await expect(page.getByRole('region', { name: 'Credit cards' })).toContainText('owed')
     for (const [name, viewport] of PHONES) {
       await page.setViewportSize(viewport)

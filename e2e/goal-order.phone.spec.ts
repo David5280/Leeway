@@ -16,7 +16,7 @@ for (const [name, phone] of [
     test.afterEach(async ({ page }) => tearDownOrder(page))
 
     test('goals in order fit the width, buttons and all', async ({ page }) => {
-      await page.goto('/plan/goals')
+      await page.goto('/goals')
       const card = page.getByRole('region', { name: 'Which goal comes first?' })
       await expect(card).toBeVisible()
       expect(await overflow(page)).toBeLessThanOrEqual(0)

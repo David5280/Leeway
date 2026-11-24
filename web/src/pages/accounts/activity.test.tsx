@@ -66,7 +66,7 @@ describe('the activity under the cards', () => {
     const sheet = screen.getByRole('dialog', { name: 'Spending by category' })
     expect(within(sheet).getByRole('link', { name: /Needs a category/ })).toHaveAttribute(
       'href',
-      '/transactions?category=uncategorized',
+      '/spending/activity?category=uncategorized',
     )
   })
 

@@ -1,10 +1,11 @@
-// The Plan tab: bills, savings goals, debts and net worth.
+// What the old Plan screen held, now on Payday, Goals and Wealth: bills,
+// savings goals, debts and net worth.
 
 import { expect, test } from '@playwright/test'
 import { action, addAccount } from './manual'
 
 test('a bill added by hand is listed with the others', async ({ page }) => {
-  await page.goto('/plan/bills')
+  await page.goto('/payday/bills')
   await page.getByRole('button', { name: 'Add a bill' }).click()
   const form = page.getByRole('form', { name: 'New bill' })
   await form.getByRole('textbox', { name: 'Name' }).fill('Rent')
@@ -25,7 +26,7 @@ test.describe('a goal named as an emergency fund', () => {
   })
 
   test('a savings goal shows what is saved so far', async ({ page }) => {
-    await page.goto('/plan/goals')
+    await page.goto('/goals')
     await page.getByRole('button', { name: 'Add a goal' }).click()
     const form = page.getByRole('form', { name: 'New goal' })
     await form.getByRole('textbox', { name: 'Name' }).fill('Emergency fund')
@@ -45,11 +46,12 @@ test.describe('a goal named as an emergency fund', () => {
 test('a credit card balance shows under debts and in net worth', async ({ page }) => {
   await addAccount(page, { name: 'Travel card', type: 'Credit card', balance: '800' })
 
-  await page.goto('/plan/debts')
+  await page.goto('/wealth/debts')
   await expect(page.getByText('Travel card').first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Net worth' }).click()
-  await expect(page).toHaveURL(/\/plan\/net-worth$/)
+  // Debts leads back to Wealth, which leads with net worth.
+  await page.getByRole('link', { name: 'Wealth', exact: true }).first().click()
+  await expect(page).toHaveURL(/\/wealth$/)
   await expect(page.getByRole('region', { name: 'Net worth', exact: true })).toContainText(
     '$800 owed',
   )

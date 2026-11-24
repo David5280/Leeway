@@ -65,17 +65,17 @@ const unnamed: AccountAlert = priceRiseAlert(
 describe('a leak alert', () => {
   it('opens the merchant’s charges on that account', () => {
     expect(alertPath(twice)).toBe(
-      '/transactions?account=chk&range=all&merchant=22222222-2222-4222-8222-222222222222&merchantName=Netflix+%26+Co',
+      '/spending/activity?account=chk&range=all&merchant=22222222-2222-4222-8222-222222222222&merchantName=Netflix+%26+Co',
     )
     expect(alertPath(rise)).toBe(
-      '/transactions?account=chk&range=all&merchant=33333333-3333-4333-8333-333333333333&merchantName=Spotify',
+      '/spending/activity?account=chk&range=all&merchant=33333333-3333-4333-8333-333333333333&merchantName=Spotify',
     )
   })
 
   it('that names no one still opens the matching charges, with no name in the link', () => {
     expect(unnamed.message).toBe('A repeating payment went up to $1650.00, from $1500.00.')
     expect(alertPath(unnamed)).toBe(
-      '/transactions?account=chk&range=all&merchant=44444444-4444-4444-8444-444444444444',
+      '/spending/activity?account=chk&range=all&merchant=44444444-4444-4444-8444-444444444444',
     )
   })
 

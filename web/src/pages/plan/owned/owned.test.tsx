@@ -6,7 +6,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, sentence } from '../../../test/fake'
-import { renderPlan } from '../../../test/planning'
+import { renderPlanning } from '../../../test/planning'
 import { BOTH, house, mortgage, NOTHING, ownedCard, serveOwned as serve } from '../../../test/owned'
 
 afterEach(() => {
@@ -20,7 +20,7 @@ describe('things entered by hand', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-17T18:00:00Z'))
     serve(BOTH)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const card = within(await ownedCard())
     expect(card.getByText('Not from your bank. Update them now and then.')).toBeVisible()
     expect(card.getByRole('group', { name: 'You own' })).toHaveTextContent(/^You own\$320,000/)
@@ -33,7 +33,7 @@ describe('things entered by hand', () => {
 
   it('invites a first one when there is none', async () => {
     serve(NOTHING)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const card = within(await ownedCard())
     expect(
       card.getByText(
@@ -45,7 +45,7 @@ describe('things entered by hand', () => {
 
   it('adds a home with the loan against it', async () => {
     const server = serve(NOTHING)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: 'Add' }))
     const form = within(screen.getByRole('form', { name: 'Add something' }))
@@ -63,7 +63,7 @@ describe('things entered by hand', () => {
 
   it('adds a loan with its rate and payment', async () => {
     const server = serve(NOTHING)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: 'Add' }))
     const form = within(screen.getByRole('form', { name: 'Add something' }))
@@ -88,7 +88,7 @@ describe('things entered by hand', () => {
 
   it('changes one from its row, and closes on cancel', async () => {
     const server = serve(BOTH)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const user = userEvent.setup()
     const card = within(await ownedCard())
     await user.click(card.getByRole('button', { name: /^House/ }))
@@ -114,7 +114,7 @@ describe('things entered by hand', () => {
 
   it('deletes one', async () => {
     const server = serve(BOTH)
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: /^Mortgage/ }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -125,7 +125,7 @@ describe('things entered by hand', () => {
     serve(BOTH, {
       '/api/actions/update_owned_or_owed': failing('Mortgage is not a loan'),
     })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: /^House/ }))
     const form = within(screen.getByRole('form', { name: 'Edit House' }))
@@ -135,7 +135,7 @@ describe('things entered by hand', () => {
 
   it('says why the list could not load', async () => {
     serve(BOTH, { '/api/actions/list_owned_and_owed': failing('Database is down', 500) })
-    renderPlan('/plan/net-worth')
+    renderPlanning('/wealth')
     expect(await screen.findByText(/Database is down/)).toBeVisible()
   })
 })

@@ -50,11 +50,3 @@ function useScrollToSection() {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
   }, [hash])
 }
-
-/** Sends an address from when Settings was called Customize to the same place now. */
-export function OldSettingsAddress() {
-  const { group } = useParams()
-  const { search, hash } = useLocation()
-  const pathname = group ? `/settings/${encodeURIComponent(group)}` : '/settings'
-  return <Navigate to={{ pathname, search, hash }} replace />
-}

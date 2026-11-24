@@ -7,6 +7,7 @@
 // screen, so it names only what the owner named (an account, a category, a
 // bill) and never an amount, an account number or a bank's own text.
 
+import { APP_PATHS } from '../../lib/appPaths.js'
 import type { IsoDate } from '../../lib/dates.js'
 import type { AccountAlert, AlertFormat } from '../accountAlerts.js'
 import type { SpendAlertLevel } from '../ai/alerts.js'
@@ -95,7 +96,7 @@ export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
     title: ALERT_WORDS[alert.kind].title,
     message: alert.message,
     pushBody: ALERT_WORDS[alert.kind].push(alert),
-    link: alert.kind === 'bill_change' ? '/plan/bills' : '/alerts',
+    link: alert.kind === 'bill_change' ? APP_PATHS.bills : APP_PATHS.alerts,
   }))
 }
 
@@ -130,7 +131,7 @@ export function budgetCandidates(
         pushBody: over
           ? `${row.name} is over its budget.`
           : `${row.name} has used ${percent}% of its budget.`,
-        link: `/budgets/${row.categoryId}`,
+        link: APP_PATHS.category(row.categoryId),
       }
     })
 }
@@ -175,7 +176,7 @@ export function billCandidates(bills: DueBill[], days: number, format: AlertForm
         title: bill.daysUntilDue < 0 ? 'Bill overdue' : 'Bill due soon',
         message: `${bill.name} ${when} (${format.date(bill.nextDueDate)}), usually ${format.money(bill.amountCents)}.`,
         pushBody: `${bill.name} ${when}.`,
-        link: '/plan/bills',
+        link: APP_PATHS.bills,
       }
     })
 }
@@ -209,7 +210,7 @@ export function largeChargeCandidates(
       title: 'Large charge',
       message: `${charge.label} charged ${format.money(charge.amountCents)} to ${account} on ${format.date(charge.date)}.`,
       pushBody: `A large charge was made on ${account}.`,
-      link: '/transactions',
+      link: APP_PATHS.activity,
     }
   })
 }
@@ -233,7 +234,7 @@ export function bankLoginCandidates(connections: BankLogin[]): Candidate[] {
         title: 'Bank needs you',
         message: `${bank} asks you to sign in again before Leeway can update its accounts.`,
         pushBody: `${bank} needs you to sign in again.`,
-        link: '/settings/banks',
+        link: APP_PATHS.settings('banks'),
       }
     })
 }
@@ -264,6 +265,6 @@ export function aiLimitCandidate(news: AiLimitNews): Candidate {
     pushBody: reached
       ? "AI is paused until this month's limit resets."
       : "AI has spent most of this month's limit.",
-    link: '/settings/ai',
+    link: APP_PATHS.settings('ai'),
   }
 }

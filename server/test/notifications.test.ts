@@ -203,7 +203,7 @@ describe('the rules, from stored data', () => {
       }),
     ])
     const { rows } = await ctx.db.query('SELECT subject, link FROM notifications')
-    expect(rows).toEqual([{ subject: `${food.id}:2026-11-01`, link: `/budgets/${food.id}` }])
+    expect(rows).toEqual([{ subject: `${food.id}:2026-11-01`, link: `/spending/${food.id}` }])
   })
 
   it('adds a bill due soon, by the days chosen', async () => {

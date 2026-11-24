@@ -3,6 +3,7 @@
 
 import type { DrillDown } from '../drill'
 import type { Flows } from '../flows'
+import { paths } from '../../routes'
 
 export function flowsDrill(flows: Flows, month: (iso: string) => string): DrillDown {
   const usual = flows.usual
@@ -43,6 +44,6 @@ export function flowsDrill(flows: Flows, month: (iso: string) => string): DrillD
         },
       })),
     },
-    more: { to: '/transactions', label: 'Open activity' },
+    more: { to: paths.activity(), label: 'Open activity' },
   }
 }

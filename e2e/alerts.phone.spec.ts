@@ -27,7 +27,7 @@ test('a tapped alert row stays inside its card and paints nothing once let go', 
       })
     }
 
-    await page.goto('/accounts')
+    await page.goto('/wealth')
     const card = page.getByRole('region', { name: 'Alerts for these accounts' })
     const rows = card.getByRole('link')
     await expect(rows).toHaveCount(2)

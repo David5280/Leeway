@@ -8,6 +8,7 @@ import { call, type Input } from '../../api/client'
 import { ErrorNote } from '../../components/ui'
 import { downloadText } from '../../lib/download'
 import { Section } from './Section'
+import { paths } from '../../routes'
 
 export function DataSection() {
   const [mode, setMode] = useState<'merge' | 'replace'>('merge')
@@ -47,7 +48,7 @@ export function DataSection() {
           bank was connected.
         </span>
         <div>
-          <Link to="/transactions/import" className="btn">
+          <Link to={paths.importTransactions()} className="btn">
             Import a CSV file
           </Link>
         </div>

@@ -5,11 +5,11 @@ import tseslint from 'typescript-eslint'
 import { moneyText } from './eslint/moneyText.js'
 
 // A <Route> path that is neither the catch-all "*" nor a name from routes.ts
-// (ROUTES, SCREEN_ROUTES or CONNECT_ROUTES).
+// (ROUTES, SCREEN_ROUTES, CONNECT_ROUTES, or OLD_ROUTES for the redirects).
 const ROUTE_PATH_NOT_FROM_ROUTES = [
   "JSXOpeningElement[name.name='Route'] > JSXAttribute[name.name='path']",
   ":not([value.value='*'])",
-  ":not([value.expression.type='MemberExpression'][value.expression.object.name=/^(SCREEN_|CONNECT_)?ROUTES$/])",
+  ":not([value.expression.type='MemberExpression'][value.expression.object.name=/^(SCREEN_|CONNECT_|OLD_)?ROUTES$/])",
 ].join('')
 
 /**

@@ -94,7 +94,7 @@ test('a new owner sets up Leeway without bank sync and is shown how to add money
   await expect(page.getByRole('button', { name: /Add an account by hand/ })).toBeVisible()
   await page.getByRole('button', { name: /Import a CSV file/ }).click()
   await expect(page.getByRole('heading', { name: 'Import transactions' })).toBeVisible()
-  await expect(page).toHaveURL(/\/transactions\/import$/)
+  await expect(page).toHaveURL(/\/spending\/activity\/import$/)
 
   // Setup is over: the app's own navigation is there, and accounts can be added by hand.
   await page.goto('/settings/accounts')

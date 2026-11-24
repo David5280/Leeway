@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => setUpOrder(page))
 test.afterEach(async ({ page }) => tearDownOrder(page))
 
 test('goals are ranked with up and down, and the dates follow', async ({ page }) => {
-  await page.goto('/plan/goals')
+  await page.goto('/goals')
   const card = page.getByRole('region', { name: 'Which goal comes first?' })
   await expect(card).toContainText(
     'Your $300 a month goes to the top goal until it’s done, then the next.',

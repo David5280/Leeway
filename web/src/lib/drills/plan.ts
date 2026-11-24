@@ -6,6 +6,7 @@ import type { CashFlow, DebtPlans, NetWorth, Output } from '../../api/client'
 import { shortTone } from '../cashPath'
 import type { DrillDown } from '../drill'
 import { startReference, worthChange } from '../worth'
+import { paths } from '../../routes'
 
 type Merchants = Output<'top_merchants'>
 
@@ -78,11 +79,11 @@ export function cashFlowDrill(flow: CashFlow, date: (iso: string) => string): Dr
               label: bill.name,
               detail: bill.overdue ? 'No payment found yet' : `Due ${date(bill.dueDate)}`,
               value: { cents: bill.amountCents },
-              to: '/plan/bills',
+              to: paths.bills(),
             })),
           }
         : undefined,
-    more: { to: '/plan', label: 'Open the plan' },
+    more: { to: paths.payday(), label: 'Open payday' },
   }
 }
 
@@ -115,7 +116,7 @@ export function netWorthDrill(worth: NetWorth): DrillDown {
             reference: startReference(worthChange(worth)),
           }
         : undefined,
-    more: { to: '/plan/net-worth', label: 'Open net worth' },
+    more: { to: paths.wealth(), label: 'Open net worth' },
   }
 }
 
@@ -148,10 +149,10 @@ export function debtsDrill(
         label: debt.name,
         detail: duration(debt.months),
         value: { cents: debt.interestCents },
-        to: '/plan/debts',
+        to: paths.debts(),
       })),
     },
-    more: { to: '/plan/debts', label: 'Plan it' },
+    more: { to: paths.debts(), label: 'Plan it' },
   }
 }
 
@@ -189,6 +190,6 @@ export function merchantsDrill(merchants: Merchants): DrillDown {
             })),
           }
         : undefined,
-    more: { to: '/transactions', label: 'See the transactions' },
+    more: { to: paths.activity(), label: 'See the transactions' },
   }
 }

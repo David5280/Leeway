@@ -10,6 +10,7 @@ import {
   alertTone,
 } from '../components/AccountAlerts'
 import { settingsPath } from '../pages/settings/paths'
+import { paths } from '../routes'
 
 export interface HeadsUpItem {
   key: string
@@ -76,7 +77,7 @@ export function headsUpItems({
       tone: alert.level === 'over' ? 'over' : 'warn',
       text: alert.message,
       level: BUDGET_LABELS[alert.level],
-      to: `/budgets/${alert.categoryId}`,
+      to: paths.category(alert.categoryId),
     })
   }
   const { uncategorizedCount, uncategorizedCents } = budget.totals
@@ -87,7 +88,7 @@ export function headsUpItems({
       tone: 'info',
       text: uncategorizedText(uncategorizedCount, money(uncategorizedCents)),
       level: 'Info',
-      to: '/transactions?category=uncategorized',
+      to: paths.activity({ category: 'uncategorized' }),
     })
   }
   return items

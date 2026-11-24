@@ -7,14 +7,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Playbook } from '../../../api/client'
 import { payView } from '../../../test/pay'
-import { planServer, renderPlan } from '../../../test/planning'
+import { planServer, renderPlanning } from '../../../test/planning'
 import { IDEAS, OVER_BUDGET, planOf, playbookOf, SHORT } from '../../../test/playbook'
 
 afterEach(() => vi.unstubAllGlobals())
 
 function show(playbook: Playbook) {
   planServer({ get_pay: () => payView(), get_payday_playbook: () => playbook })
-  renderPlan('/plan/payday')
+  renderPlanning('/payday')
   return userEvent.setup()
 }
 
@@ -52,7 +52,7 @@ describe('Last paycheck', () => {
     const sheet = screen.getByRole('dialog', { name: 'Last paycheck' })
     expect(within(sheet).getByRole('link', { name: /Groceries/ })).toHaveAttribute(
       'href',
-      '/budgets/cat-groceries',
+      '/spending/cat-groceries',
     )
   })
 
@@ -107,7 +107,7 @@ describe('Cash before payday', () => {
     show(playbookOf({ plan: planOf(undefined, undefined, { short: SHORT }), paydayEstimate: true }))
     const card = await region('Cash before payday')
     expect(card).toHaveTextContent('Checking may go below $0 on Nov 24, before payday.')
-    expect(within(card).getByRole('link')).toHaveAttribute('href', '/plan/bills')
+    expect(within(card).getByRole('link')).toHaveAttribute('href', '/payday/bills')
     // An estimated payday is a heads up in amber; the cover amount stays in Bills.
     expect(within(card).getByText(/Checking may go below/)).toHaveClass('warn')
     expect(card).not.toHaveTextContent('$100')

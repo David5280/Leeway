@@ -14,9 +14,10 @@ import {
   weeklyEmailHandlers,
   withBank,
 } from '../test/fake'
-import { OldSettingsAddress, SettingsPage } from './Settings'
+import { Moved, NEW_HOMES } from './OldAddresses'
+import { SettingsPage } from './Settings'
 import { SETTINGS_GROUPS } from './settings/groups'
-import { SCREEN_ROUTES } from '../routes'
+import { OLD_ROUTES, SCREEN_ROUTES } from '../routes'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -41,7 +42,7 @@ function renderSettings(route: string, options: Parameters<typeof renderSignedIn
     <>
       <Routes>
         <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />
-        <Route path={SCREEN_ROUTES.oldSettings} element={<OldSettingsAddress />} />
+        <Route path={OLD_ROUTES.customize} element={<Moved to={NEW_HOMES.customize} />} />
       </Routes>
       <Address />
     </>,
@@ -240,7 +241,7 @@ describe('Settings page', () => {
   it("adds no banner landmark of its own beside the app's", () => {
     fakeServer(quiet)
     renderSettings('/settings/banks')
-    // The one banner is the app's top bar, with the main menu in it.
+    // The one banner is the app's top bar, with the logo, the Inbox and Settings in it.
     expect(screen.getAllByRole('banner')).toHaveLength(1)
     expect(screen.getByRole('banner')).toHaveClass('topbar')
     expect(groupHeading()).toHaveTextContent('Banks')

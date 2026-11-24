@@ -1,5 +1,6 @@
-// The Budgets screen: every category this period, with budgets editable in
-// place and a plain sentence on each, plus new categories and suggestions.
+// The Spending tab: every category this period, with budgets editable in
+// place and a plain sentence on each, plus new categories and suggestions,
+// and the way to all activity a tap deeper.
 
 import { Card } from '../components/design/Card'
 import { useState } from 'react'
@@ -7,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { Budget } from '../api/client'
 import { useAction, useActionMutation } from '../api/hooks'
 import { CategoryForm } from '../components/CategoryForm'
+import { LinkRows } from '../components/LinkRows'
 import { Money } from '../components/design/Money'
 import { ProgressRing } from '../components/design/ProgressRing'
 import { Shell } from '../components/Shell'
@@ -16,6 +18,7 @@ import { periodLabel } from '../lib/format'
 import { groupNames } from '../lib/groups'
 import { SpendingList } from './budgets/SpendingList'
 import { Suggestions } from './budgets/Suggestions'
+import { paths } from '../routes'
 
 export function Budgets() {
   const { settings } = useApp()
@@ -42,7 +45,7 @@ export function Budgets() {
     <Shell>
       <div className="row-between wrap">
         <div>
-          <h1>Budgets</h1>
+          <h1>Spending</h1>
           <span className="muted">
             {periodLabel(b.period.start, b.period.end, settings.locale)}
           </span>
@@ -78,7 +81,7 @@ export function Budgets() {
             className="mid-number"
           />
           {b.totals.setAsideCents > 0 && (
-            <Link to="/plan/goals" className="small muted tap">
+            <Link to={paths.goals()} className="small muted tap">
               {/* One span: on a phone .tap is a flex box, which would drop the space. */}
               <span>
                 <Money cents={b.totals.setAsideCents} /> of it set aside for goals
@@ -92,6 +95,18 @@ export function Budgets() {
         </Card>
       </div>
 
+      <LinkRows
+        label="More on spending"
+        rows={[
+          {
+            to: paths.activity(),
+            label: 'All activity',
+            icon: 'activity',
+            detail: 'Search, filter, add by hand or import a file',
+          },
+        ]}
+      />
+
       {adding && (
         <Card static="form" label="New category" className="stack">
           <h2>New category</h2>
@@ -103,7 +118,7 @@ export function Budgets() {
             onCancel={() => setAdding(false)}
             onSubmit={(fields) =>
               create.mutate(fields, {
-                onSuccess: (category) => navigate(`/budgets/${category.id}`),
+                onSuccess: (category) => navigate(paths.category(category.id)),
               })
             }
           />
@@ -130,7 +145,7 @@ export function Budgets() {
           {income.map((row) => (
             <Link
               key={row.categoryId}
-              to={`/budgets/${row.categoryId}`}
+              to={paths.category(row.categoryId)}
               className="list-row"
               style={{ color: 'inherit', textDecoration: 'none' }}
             >
@@ -144,7 +159,7 @@ export function Budgets() {
           {transfers.map((c) => (
             <Link
               key={c.id}
-              to={`/budgets/${c.id}`}
+              to={paths.category(c.id)}
               className="list-row"
               style={{ color: 'inherit', textDecoration: 'none' }}
             >

@@ -1,12 +1,12 @@
-// The Accounts screen's test setup: three accounts of different kinds, a
-// fake server that answers for any pick of them, and the screen rendered at
-// /accounts with a stand-in for an account's own page to land on.
+// The accounts' test setup: three accounts of different kinds, a fake server
+// that answers for any pick of them, and the Wealth tab's accounts section
+// rendered at /wealth with a stand-in for an account's own page to land on.
 
 import { screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import type { Account } from '../api/client'
-import { Accounts } from '../pages/Accounts'
-import { SCREEN_ROUTES } from '../routes'
+import { AccountsActivity, AccountsSection } from '../pages/accounts/AccountsSection'
+import { paths, SCREEN_ROUTES } from '../routes'
 import {
   account,
   accountsViewFor,
@@ -70,14 +70,25 @@ export function server(accounts: Account[] = everyAccount, extra: Handlers = {})
   })
 }
 
-/** Accounts at /accounts, with a stand-in for an account's own page to land on. */
+/**
+ * The accounts and their activity at /wealth, as the Wealth tab shows them,
+ * with a stand-in for an account's own page to land on.
+ */
 export function renderAccounts(options: Parameters<typeof renderSignedIn>[1] = {}) {
   return renderSignedIn(
     <Routes>
-      <Route path={SCREEN_ROUTES.accounts} element={<Accounts />} />
+      <Route
+        path={SCREEN_ROUTES.wealth}
+        element={
+          <>
+            <AccountsSection />
+            <AccountsActivity />
+          </>
+        }
+      />
       <Route path={SCREEN_ROUTES.account} element={<p>One account&apos;s page</p>} />
     </Routes>,
-    { route: '/accounts', ...options },
+    { route: paths.wealth(), ...options },
   )
 }
 

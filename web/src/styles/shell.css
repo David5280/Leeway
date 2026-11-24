@@ -1,0 +1,200 @@
+/* The app's frame (components/Shell.tsx): the phone's header and tab bar,
+   the rail of a phone turned sideways, and a computer's sidebar. Which one
+   shows is decided in components/shell/frame.ts, so only one is ever on the
+   page and these rules need no media queries to hide the others. */
+
+/* Header ------------------------------------------------------------------ */
+
+.header-links {
+  gap: 8px;
+}
+
+/* Beside a sidebar the top row holds only the screen's own buttons. */
+.topbar-actions {
+  justify-content: flex-end;
+}
+
+/* Tab bar (phone) ---------------------------------------------------------- */
+
+/* Fixed along the bottom, frosted and lifted off the page. Mostly opaque, so
+   the words passing under it never compete with its labels. */
+.tabbar {
+  display: flex;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, 0.35);
+  padding: 4px calc(8px + var(--sar)) calc(8px + var(--sab)) calc(8px + var(--sal));
+}
+
+/* The page's end clears the bar (about 64px tall plus the home indicator),
+   so the last card stays visible, at any width the bar shows. */
+.shell-tabbar .page {
+  padding-bottom: calc(96px + var(--sab));
+}
+
+/* One tab: its icon over its name, the bar's height a finger's tap or more. */
+.tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+.tab.active svg,
+.side-link.active svg {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+
+/* Rail (phone turned sideways) and sidebar (computer) ---------------------- */
+
+/* The rail or sidebar in a column of its own, the page beside it. */
+.shell-rail,
+.shell-sidebar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Both stay in view as the page scrolls, and scroll on their own if a very
+   short window cannot fit them. The rail or sidebar clears the left notch,
+   so the page beside it needs no left inset of its own. */
+.rail,
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.shell-rail .page {
+  padding-left: 16px;
+}
+
+.shell-sidebar .page {
+  padding-left: 40px;
+}
+
+/* The rail: the five tabs stacked, each its icon over its name, as in the tab bar. */
+.rail {
+  justify-content: center;
+  gap: 2px;
+  width: calc(76px + var(--sal));
+  padding: calc(8px + var(--sat)) 6px calc(8px + var(--sab)) calc(6px + var(--sal));
+}
+
+.rail .tab {
+  flex: none;
+  min-height: 48px;
+}
+
+/* The sidebar: the logo at the top, the tabs under it, Chat, the Inbox and
+   Settings at its foot. */
+.sidebar {
+  gap: 28px;
+  width: calc(232px + var(--sal));
+  padding: max(28px, calc(var(--sat) + 8px)) 16px calc(24px + var(--sab)) calc(16px + var(--sal));
+}
+
+.sidebar .brand {
+  padding: 0 12px;
+}
+
+.side-tabs,
+.side-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.side-foot {
+  margin-top: auto;
+}
+
+/* One sidebar row: its icon, then its name, a finger's tap tall. */
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .side-link:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+}
+
+.side-link.active {
+  color: var(--ink);
+  background: var(--surface-2);
+  box-shadow: var(--hi);
+}
+
+.side-link.active svg {
+  color: var(--accent);
+}
+
+/* The icon holds the Inbox's unread badge at its corner, as the bell does. */
+.side-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.side-icon .bell-badge {
+  top: -7px;
+  right: -10px;
+}
+
+/* Rows to a page a tap deeper (components/LinkRows.tsx) ------------------- */
+
+.link-row {
+  align-items: center;
+  gap: 14px;
+  color: inherit;
+}
+
+.link-row > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.link-row-words {
+  gap: 0;
+  min-width: 0;
+}
+
+.link-row-label {
+  font-weight: 500;
+}

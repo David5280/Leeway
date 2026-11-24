@@ -14,7 +14,7 @@ async function showAllDates(page: Page) {
 
 /** Opens the Import screen and chooses the fixture file. */
 async function chooseFixture(page: Page) {
-  await page.goto('/transactions')
+  await page.goto('/spending/activity')
   await page.getByRole('button', { name: 'Add or import' }).click()
   await page.getByRole('menuitem', { name: 'Import a file' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Import transactions' })).toBeVisible()
@@ -77,7 +77,7 @@ test('a CSV export imports once, skips what is already there, and can be undone'
   await past.getByRole('button', { name: 'Delete its 4 transactions' }).click()
   await expect(past).toHaveCount(0)
 
-  await page.goto('/transactions')
+  await page.goto('/spending/activity')
   await showAllDates(page)
   await page.getByRole('searchbox', { name: 'Search transactions' }).fill('fresh fields')
   await expect(list.getByText('Nothing matches these filters.')).toBeVisible()

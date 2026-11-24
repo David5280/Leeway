@@ -12,10 +12,10 @@ afterEach(() => vi.unstubAllGlobals())
 
 const NONE = { travel: 0, stay: 0, food: 0, activities: 0 }
 
-function renderTrip(path = '/trips/2026-12-10/2026-12-14') {
+function renderTrip(path = '/goals/trips/2026-12-10/2026-12-14') {
   return renderSignedIn(
     <Routes>
-      <Route path="/trips/:start/:end" element={<TripPage />} />
+      <Route path="/goals/trips/:start/:end" element={<TripPage />} />
     </Routes>,
     { route: path },
   )
@@ -28,7 +28,10 @@ describe('Trip page', () => {
     expect(await screen.findByRole('heading', { name: 'Lisbon trip' })).toBeVisible()
     expect(screen.getByText(/Dec 10 to Dec 14, 5 days\. Coming up/)).toBeVisible()
     expect(screen.getByText('Nothing spent on it yet.')).toBeVisible()
-    expect(screen.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan/ahead')
+    expect(screen.getByRole('link', { name: 'Goals', current: false })).toHaveAttribute(
+      'href',
+      '/goals',
+    )
   })
 
   it('shows what each part cost during the trip, and its transactions', async () => {
@@ -86,7 +89,7 @@ describe('Trip page', () => {
           days: 1,
         }),
     })
-    renderTrip('/trips/2026-07-01/2026-07-01')
+    renderTrip('/goals/trips/2026-07-01/2026-07-01')
     expect(await screen.findByRole('heading', { name: 'Travel' })).toBeVisible()
     expect(screen.getByText(/Jul 1, 1 day\. Done/)).toBeVisible()
     expect(screen.queryByText(/booked in the two months before/)).not.toBeInTheDocument()
@@ -94,16 +97,22 @@ describe('Trip page', () => {
 
   it('says why the trip could not be read, with a way back', async () => {
     fakeServer({}, { '/api/actions/get_trip': failing('A trip runs forward', 400) })
-    renderTrip('/trips/2026-07-03/2026-07-01')
+    renderTrip('/goals/trips/2026-07-03/2026-07-01')
     expect(await screen.findByRole('alert')).toHaveTextContent('A trip runs forward')
-    expect(screen.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan/ahead')
+    expect(screen.getByRole('link', { name: 'Goals', current: false })).toHaveAttribute(
+      'href',
+      '/goals',
+    )
   })
 
-  it('leads back to Coming up from a trip that is not there', async () => {
+  it('leads back to Goals from a trip that is not there', async () => {
     fakeServer({}, { '/api/actions/get_trip': failing('Trip not found', 404) })
-    renderTrip('/trips/2026-01-01/2026-01-02')
+    renderTrip('/goals/trips/2026-01-01/2026-01-02')
     expect(await screen.findByRole('alert')).toHaveTextContent('Trip not found')
-    expect(screen.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan/ahead')
+    expect(screen.getByRole('link', { name: 'Goals', current: false })).toHaveAttribute(
+      'href',
+      '/goals',
+    )
   })
 
   it('says when the list shows only the newest of a trip’s transactions', async () => {

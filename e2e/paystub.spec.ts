@@ -42,7 +42,7 @@ test('reads a paystub, lets each figure be checked, and saves it to the pension'
 }) => {
   await addPension(page)
   const uploads = await mockReader(page)
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   const card = page.getByRole('region', { name: 'Paystub' })
   await expect(card.getByText(/Import a paystub to fill in/)).toBeVisible()
   await importPaystub(page)
@@ -86,7 +86,7 @@ test('reads a paystub, lets each figure be checked, and saves it to the pension'
 test("imports from a pension's own form, with that pension chosen", async ({ page }) => {
   await addPension(page)
   await mockReader(page)
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   await page
     .getByRole('group', { name: PENSION })
     .getByRole('button', { name: 'Edit figures' })
@@ -107,7 +107,7 @@ test("imports from a pension's own form, with that pension chosen", async ({ pag
 
 test('adds a pension from a paystub, named by the owner, in one step', async ({ page }) => {
   await mockReader(page)
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   await addPensionFromPaystub(page)
 
   const review = page.getByRole('form', { name: 'Review the paystub' })
@@ -130,7 +130,7 @@ test('adds a pension from a paystub, named by the owner, in one step', async ({ 
 
 test('refuses an iPhone HEIC photo before sending it', async ({ page }) => {
   const uploads = await mockReader(page)
-  await page.goto('/plan/retirement')
+  await page.goto('/wealth/retirement')
   await page
     .getByRole('region', { name: 'Paystub' })
     .getByRole('button', { name: 'Import a paystub' })

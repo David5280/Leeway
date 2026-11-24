@@ -6,7 +6,7 @@ import { expect, type Page } from '@playwright/test'
 
 /** The heights of the Budgets summary cards, by label. */
 export async function summaryHeights(page: Page): Promise<Record<string, number>> {
-  await page.goto('/budgets')
+  await page.goto('/spending')
   const heights: Record<string, number> = {}
   for (const label of ['Budgeted', 'Spent', 'Left']) {
     const card = page.getByRole('region', { name: label, exact: true })

@@ -12,6 +12,7 @@ import { SectionHead } from '../../components/design/SectionHead'
 import { useApp } from '../../lib/app'
 import { daysBetween } from '../../lib/dates'
 import { weekdayName } from '../../lib/format'
+import { paths } from '../../routes'
 
 /** The title for the day it is: "It's payday", then "Payday was yesterday" or "Payday was Friday". */
 export function paydayTitle(playbook: Pick<Playbook, 'lastPayday' | 'today'>, locale: string) {
@@ -29,7 +30,7 @@ export function PaydayNotice() {
   if (!data?.justPaid) return null
   const left = data.closeOut?.leftoverCents ?? 0
   return (
-    <Card to="/plan/payday" label="Payday" className="stack-xs">
+    <Card to={paths.payday()} label="Payday" className="stack-xs">
       <SectionHead icon="moneyIn" title={paydayTitle(data, settings.locale)} />
       <p className="small">
         {left > 0 && (

@@ -34,6 +34,7 @@ import { acceptBillChange } from '../domain/billChangeSource.js'
 import { getSettings } from '../domain/settings.js'
 import { todayIn } from '../lib/dates.js'
 import { defineAction } from './action.js'
+import { APP_PATHS } from '../lib/appPaths.js'
 
 /** The bell's count, for the kinds the owner has on. */
 async function unread(ctx: AppContext): Promise<{ unread: number }> {
@@ -175,7 +176,7 @@ export const sendTestPushAction = defineAction({
     const outcome = await ctx.push.send(device, {
       title: 'Leeway',
       body: 'Notifications are on for this device.',
-      url: '/inbox',
+      url: APP_PATHS.inbox,
       tag: 'leeway-test',
     })
     if (outcome === 'sent') return { devices: (await listSubscriptions(ctx.db)).length }

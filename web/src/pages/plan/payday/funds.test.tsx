@@ -10,7 +10,7 @@ import type { SinkingFundsView } from '../../../api/client'
 import { failing } from '../../../test/fake'
 import { fund, fundsView, suggestion } from '../../../test/funds'
 import { payView } from '../../../test/pay'
-import { planServer, renderPlan } from '../../../test/planning'
+import { planServer, renderPlanning } from '../../../test/planning'
 import { basisWords, firstShort } from './fundText'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -37,7 +37,7 @@ function show(view: SinkingFundsView) {
     list_sinking_funds: () => view,
     add_sinking_fund: () => insurance,
   })
-  renderPlan('/plan/payday')
+  renderPlanning('/payday')
   return { server, user: userEvent.setup() }
 }
 
@@ -170,7 +170,7 @@ describe('Yearly costs', () => {
       { get_pay: () => payView() },
       { '/api/actions/list_sinking_funds': failing('Funds failed', 500) },
     )
-    renderPlan('/plan/payday')
+    renderPlanning('/payday')
     expect(await screen.findByText('Funds failed')).toBeVisible()
   })
 })

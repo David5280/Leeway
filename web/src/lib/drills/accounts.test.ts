@@ -60,7 +60,7 @@ describe('accountDrill', () => {
     const drill = accountDrill(card, { today: '2026-11-17' })
     expect(said(drill)).toBe('Credit left to use $630 = Credit limit $1,000 minus owed now $370')
     expect(drill.math.note).toBe('Using 37% of the limit. Under 30% is kinder to a credit score.')
-    expect(drill.more).toEqual({ to: '/transactions?account=c', label: 'See all activity' })
+    expect(drill.more).toEqual({ to: '/spending/activity?account=c', label: 'See all activity' })
   })
 
   it('leaves the note out for a card with no balance read yet', () => {
@@ -127,7 +127,7 @@ describe('accountDrill', () => {
         label: 'Market',
         detail: '2026-11-16',
         value: { cents: 4210, sign: 'transaction' },
-        to: '/transactions?account=k',
+        to: '/spending/activity?account=k',
       },
     ])
   })
@@ -214,8 +214,8 @@ describe('spendingDrill', () => {
     expect(said(drill)).toBe(
       'Spent this period $2,550 = Rent $1,800 plus Groceries $400 plus Dining $200 plus Gas $90 plus everything else $60',
     )
-    expect(drill.items!.rows.at(0)!.to).toBe('/budgets/Rent')
-    expect(drill.items!.rows.at(-1)!.to).toBe('/transactions?category=uncategorized')
+    expect(drill.items!.rows.at(0)!.to).toBe('/spending/Rent')
+    expect(drill.items!.rows.at(-1)!.to).toBe('/spending/activity?category=uncategorized')
   })
 
   it('says when nothing was spent, with no categories to list', () => {

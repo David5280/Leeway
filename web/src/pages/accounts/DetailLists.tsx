@@ -13,6 +13,7 @@ import { SectionHead } from '../../components/design/SectionHead'
 import type { IconName } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import { shortDate } from '../../lib/format'
+import { paths } from '../../routes'
 
 /** One row: what it is, a line about it, and its amount or progress, opening `to`. */
 function Row({
@@ -64,7 +65,7 @@ export function BillsCard({ bills }: { bills: readonly Bill[] }) {
       rows={bills.map((bill) => (
         <Row
           key={bill.id}
-          to="/plan/bills"
+          to={paths.bills()}
           name={bill.name}
           detail={`${BILL_STATUS[bill.status]}, next due ${shortDate(bill.nextDueDate, settings.locale)}`}
           end={<Money cents={bill.amountCents} />}
@@ -83,7 +84,7 @@ export function RecurringCard({ series }: { series: readonly RecurringSeries[] }
       rows={series.map((one) => (
         <Row
           key={one.key}
-          to="/plan/bills"
+          to={paths.bills()}
           name={one.name}
           detail={`${one.suggestedKind === 'subscription' ? 'Subscription' : 'Repeats'}, next about ${shortDate(one.nextDate, settings.locale)}`}
           end={<Money cents={one.typicalAmountCents} />}
@@ -102,7 +103,7 @@ export function FeesCard({ fees, accountId }: { fees: readonly Transaction[]; ac
       rows={fees.map((fee) => (
         <Row
           key={fee.id}
-          to={`/transactions?account=${encodeURIComponent(accountId)}`}
+          to={paths.activity({ account: accountId })}
           name={fee.displayName}
           detail={shortDate(fee.date, settings.locale)}
           end={<Money cents={fee.amountCents} tone="problem" />}
@@ -120,7 +121,7 @@ export function GoalsCard({ goals }: { goals: readonly Goal[] }) {
       rows={goals.map((goal) => (
         <Row
           key={goal.id}
-          to="/plan/goals"
+          to={paths.goals()}
           name={goal.name}
           detail={
             <>

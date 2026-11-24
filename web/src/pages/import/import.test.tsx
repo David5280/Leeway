@@ -102,7 +102,7 @@ describe('importing a bank export', () => {
     expect(screen.queryByRole('heading', { name: '2. Match the columns' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to transactions' })).toHaveAttribute(
       'href',
-      '/transactions',
+      '/spending/activity',
     )
   })
 
@@ -171,7 +171,7 @@ describe('importing a bank export', () => {
     expect(screen.queryByRole('heading', { name: '2. Match the columns' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See transactions' })).toHaveAttribute(
       'href',
-      '/transactions',
+      '/spending/activity',
     )
   })
 

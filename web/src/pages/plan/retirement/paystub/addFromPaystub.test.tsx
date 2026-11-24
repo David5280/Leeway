@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { failing, holdRequest } from '../../../../test/fake'
 import { addPension, fromPaystub, review, serve } from '../../../../test/newPension'
 import { chosenFile, cityRead, noPensionRead, paystubStatus, reads } from '../../../../test/paystub'
-import { renderPlan } from '../../../../test/planning'
+import { renderPlanning } from '../../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -26,7 +26,7 @@ describe('adding a pension', () => {
 
   it('goes straight to the form when nothing can read a paystub', async () => {
     serve({ status: paystubStatus(null, false) })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
     expect(await screen.findByRole('form', { name: 'New pension' })).toBeVisible()
@@ -36,7 +36,7 @@ describe('adding a pension', () => {
   it('waits to know whether a paystub can be read before offering a way', async () => {
     serve()
     const release = holdRequest('/api/actions/get_paystub')
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a pension' }))
     const waiting = within(screen.getByRole('region', { name: 'Add a pension' }))

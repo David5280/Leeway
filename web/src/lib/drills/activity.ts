@@ -5,6 +5,7 @@
 import type { Category, Transaction } from '../../api/client'
 import type { DrillDown } from '../drill'
 import { amountSign, isMove } from '../transactions'
+import { paths } from '../../routes'
 
 type Kind = Category['kind'] | null
 
@@ -53,7 +54,7 @@ export function recentDrill(
           label: tx.displayName,
           detail: tx.accountName,
           value: { cents: tx.amountCents, sign: amountSign(kind) },
-          to: '/transactions',
+          to: paths.activity(),
           icon: {
             category: tx.categoryId ? (categories.get(tx.categoryId) ?? null) : null,
             transfer: isMove(kind),
@@ -61,6 +62,6 @@ export function recentDrill(
         }
       }),
     },
-    more: { to: '/transactions', label: 'See all transactions' },
+    more: { to: paths.activity(), label: 'See all transactions' },
   }
 }

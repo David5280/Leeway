@@ -47,11 +47,11 @@ const everything: DrillDown = {
   items: {
     title: 'When each clears',
     rows: [
-      { key: 'card', label: 'Rewards card', detail: '58 months', to: '/plan/debts' },
+      { key: 'card', label: 'Rewards card', detail: '58 months', to: '/wealth/debts' },
       { key: 'loan', label: 'Car loan', value: { text: 'Paid off', tone: 'in' } },
     ],
   },
-  more: { to: '/plan/debts', label: 'Plan it' },
+  more: { to: '/wealth/debts', label: 'Plan it' },
 }
 
 describe('DrillSheet', () => {
@@ -92,7 +92,7 @@ describe('DrillSheet', () => {
     )
     expect(within(sheet).getByRole('link', { name: 'Plan it' })).toHaveAttribute(
       'href',
-      '/plan/debts',
+      '/wealth/debts',
     )
   })
 
@@ -101,7 +101,7 @@ describe('DrillSheet', () => {
     const rows = screen.getByRole('region', { name: 'When each clears' })
     expect(within(rows).getByRole('link', { name: /Rewards card/ })).toHaveAttribute(
       'href',
-      '/plan/debts',
+      '/wealth/debts',
     )
     expect(within(rows).queryByRole('link', { name: /Car loan/ })).not.toBeInTheDocument()
     expect(within(rows).getByText('Paid off')).toHaveClass('money-in')
@@ -137,13 +137,13 @@ describe('Card', () => {
   it('as a link, is one link to its page, named by what it shows', () => {
     render(
       <MemoryRouter>
-        <Card to="/accounts/a" label="Everyday checking">
+        <Card to="/wealth/accounts/a" label="Everyday checking">
           <span>Everyday checking</span>
         </Card>
       </MemoryRouter>,
     )
     const card = screen.getByRole('region', { name: 'Everyday checking' })
-    expect(within(card).getByRole('link')).toHaveAttribute('href', '/accounts/a')
+    expect(within(card).getByRole('link')).toHaveAttribute('href', '/wealth/accounts/a')
     expect(within(card).getByRole('link')).toHaveTextContent('Everyday checking, open details')
   })
 

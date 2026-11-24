@@ -4,6 +4,7 @@
 
 import type { DrillDown, MathTerm } from '../drill'
 import { reachedTarget, usualRate, type MonthRate, type SavingsRates } from '../rates'
+import { paths } from '../../routes'
 
 /** What the usual month is made of, in a few words. */
 function subtitleFor(count: number): string {
@@ -67,6 +68,6 @@ export function savingsRateDrill(
         },
       })),
     },
-    more: { to: '/plan/retirement', label: 'Add money taken from pay' },
+    more: { to: paths.retirement(), label: 'Add money taken from pay' },
   }
 }

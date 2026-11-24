@@ -5,7 +5,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, debtPlans, planServer, renderPlan } from '../../test/planning'
+import { account, debtPlans, planServer, renderPlanning } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -40,7 +40,7 @@ function serve() {
 }
 
 async function rewardsTerms() {
-  renderPlan('/plan/debts')
+  renderPlanning('/wealth/debts')
   const terms = within(await screen.findByRole('form', { name: 'Rewards card terms' }))
   return {
     terms,
@@ -107,7 +107,7 @@ describe("a debt's monthly payment", () => {
 describe('the extra each month', () => {
   it('says it could not read "1.5mm", and plans with no extra rather than $1.50', async () => {
     const server = serve()
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const plan = within(await screen.findByRole('region', { name: 'Payoff plan' }))
     const user = userEvent.setup()
     await user.type(plan.getByRole('textbox', { name: 'Extra each month' }), '1.5mm')
@@ -118,7 +118,7 @@ describe('the extra each month', () => {
 
   it('says a negative extra, "-50", is not one, rather than plan with none quietly', async () => {
     const server = serve()
-    renderPlan('/plan/debts')
+    renderPlanning('/wealth/debts')
     const plan = within(await screen.findByRole('region', { name: 'Payoff plan' }))
     const user = userEvent.setup()
     await user.type(plan.getByRole('textbox', { name: 'Extra each month' }), '-50')

@@ -18,6 +18,7 @@ import { CashFacts } from '../pages/plan/CashFlow'
 import { billStatus, durationText } from '../pages/plan/text'
 import { historyNote, worthChange } from '../lib/worth'
 import { WorthChangeLine } from '../components/WorthChange'
+import { paths } from '../routes'
 
 /** A widget before it has a figure to explain: its head, and loading or the error. */
 function Waiting({
@@ -67,7 +68,7 @@ export function BillsWidget() {
       {bills.data?.bills.slice(0, 5).map((bill) => {
         const status = billStatus(bill, settings.locale)
         return (
-          <Link key={bill.id} to="/plan/bills" className="list-row clickrow">
+          <Link key={bill.id} to={paths.bills()} className="list-row clickrow">
             <span className="grow">{bill.name}</span>
             <span className={`small ${status.tone || 'muted'}`}>{status.text}</span>
             <Money cents={bill.amountCents} precision="cents" />
@@ -91,7 +92,7 @@ export function GoalsWidget() {
       {goals.data?.slice(0, 4).map((goal) => {
         const plan = shortPlan(goal, money, word)
         return (
-          <Link key={goal.id} to="/plan/goals" className="clickrow">
+          <Link key={goal.id} to={paths.goals()} className="clickrow">
             <span className="row-between small">
               <span>{goal.name}</span>
               <span className="num muted">
@@ -108,7 +109,7 @@ export function GoalsWidget() {
         )
       })}
       {goals.data && (
-        <Link to="/plan/goals?new=purchase" className="linkbtn small tap">
+        <Link to={paths.goals({ new: 'purchase' })} className="linkbtn small tap">
           Save for a purchase
         </Link>
       )}

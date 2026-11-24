@@ -8,22 +8,31 @@ import { useAction } from './api/hooks'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
 import { AccountDetail } from './pages/AccountDetail'
-import { Accounts } from './pages/Accounts'
 import { Alerts } from './pages/Alerts'
+import { BillsPage } from './pages/Bills'
 import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
 import { ChatPage } from './pages/Chat'
 import { Connect, ConnectProblem } from './pages/Connect'
+import { DebtsPage } from './pages/Debts'
+import { Goals } from './pages/Goals'
+import { IdleCashPage } from './pages/IdleCash'
 import { ImportTransactions } from './pages/ImportTransactions'
 import { Inbox } from './pages/Inbox'
 import { Login } from './pages/Login'
+import { Moved, NEW_HOMES } from './pages/OldAddresses'
 import { Overview } from './pages/Overview'
-import { Plan } from './pages/Plan'
-import { OldSettingsAddress, SettingsPage } from './pages/Settings'
+import { Payday } from './pages/Payday'
+import { RetirementPage } from './pages/Retirement'
+import { SettingsPage } from './pages/Settings'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
 import { TripPage } from './pages/Trip'
-import { CONNECT_ROUTES, SCREEN_ROUTES } from './routes'
+import { Wealth } from './pages/Wealth'
+import { CONNECT_ROUTES, OLD_ROUTES, paths, SCREEN_ROUTES } from './routes'
+
+/** The old addresses by name, each sent on to its new home (pages/OldAddresses.tsx). */
+const OLD_NAMES = Object.keys(OLD_ROUTES) as (keyof typeof OLD_ROUTES)[]
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="auth">{children}</div>
@@ -33,22 +42,28 @@ function Centered({ children }: { children: React.ReactNode }) {
 function Screens() {
   return (
     <Routes>
-      <Route path={SCREEN_ROUTES.overview} element={<Overview />} />
-      <Route path={SCREEN_ROUTES.accounts} element={<Accounts />} />
+      <Route path={SCREEN_ROUTES.home} element={<Overview />} />
+      <Route path={SCREEN_ROUTES.spending} element={<Budgets />} />
+      <Route path={SCREEN_ROUTES.activity} element={<Transactions />} />
+      <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
+      <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
+      <Route path={SCREEN_ROUTES.payday} element={<Payday />} />
+      <Route path={SCREEN_ROUTES.bills} element={<BillsPage />} />
+      <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
+      <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
+      <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
       <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
+      <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />
+      <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />
+      <Route path={SCREEN_ROUTES.idleCash} element={<IdleCashPage />} />
       <Route path={SCREEN_ROUTES.alerts} element={<Alerts />} />
       <Route path={SCREEN_ROUTES.inbox} element={<Inbox />} />
-      <Route path={SCREEN_ROUTES.transactions} element={<Transactions />} />
-      <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
-      <Route path={SCREEN_ROUTES.budgets} element={<Budgets />} />
-      <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
       <Route path={SCREEN_ROUTES.chat} element={<ChatPage />} />
-      <Route path={SCREEN_ROUTES.plan} element={<Plan />} />
-      <Route path={SCREEN_ROUTES.planSection} element={<Plan />} />
-      <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
       <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />
-      <Route path={SCREEN_ROUTES.oldSettings} element={<OldSettingsAddress />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {OLD_NAMES.map((name) => (
+        <Route key={name} path={OLD_ROUTES[name]} element={<Moved to={NEW_HOMES[name]} />} />
+      ))}
+      <Route path="*" element={<Navigate to={paths.home()} replace />} />
     </Routes>
   )
 }

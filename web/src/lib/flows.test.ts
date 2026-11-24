@@ -121,7 +121,7 @@ describe('flowsDrill', () => {
       ['2026-10', 'Short', { cents: 100000, tone: 'problem' }],
       ['2026-09', 'Kept', { cents: 200000, tone: undefined }],
     ])
-    expect(drill.more).toEqual({ to: '/transactions', label: 'Open activity' })
+    expect(drill.more).toEqual({ to: '/spending/activity', label: 'Open activity' })
   })
 
   it('says when no month has finished, and when a usual month runs short', () => {

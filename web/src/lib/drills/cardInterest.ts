@@ -2,6 +2,7 @@
 
 import type { DrillDown } from '../drill'
 import { percentText } from '../money'
+import { paths } from '../../routes'
 
 /** A card's interest: what is owed, times the APR (written as `locale` writes it), over twelve months. */
 export function cardInterestDrill(
@@ -26,6 +27,6 @@ export function cardInterestDrill(
       result: { label: 'Interest a month, about', value: { cents: card.monthlyInterestCents } },
       note: "An estimate, since the bank counts interest on each day's balance. Paying the balance in full by the due date usually costs no interest. Promo rates and when they end aren't tracked, so update the APR when yours changes.",
     },
-    more: { to: '/plan/debts', label: 'Change the APR, or plan paying it off' },
+    more: { to: paths.debts(), label: 'Change the APR, or plan paying it off' },
   }
 }

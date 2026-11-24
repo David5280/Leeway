@@ -14,6 +14,7 @@ import {
 import { getSettings } from '../settings.js'
 import { isQuiet } from './quietHours.js'
 import { kindsOn, type NotificationKind, type NotificationSettings } from './settings.js'
+import { APP_PATHS } from '../../lib/appPaths.js'
 
 /** The least time between two pushes; news in between is rolled into the next one. */
 export const MIN_PUSH_GAP_MS = 15 * MINUTE_MS
@@ -63,7 +64,7 @@ export function composePush(pending: PendingPush[]): PushMessage {
   return {
     title: `${pending.length} new alerts`,
     body: `${listOf(titles)}.`,
-    url: '/inbox',
+    url: APP_PATHS.inbox,
     tag: 'leeway-inbox',
   }
 }

@@ -157,7 +157,7 @@ function tripDetail(budgeted: boolean) {
 
 /** The trip the stand-ins describe: its days, and the path of its page. */
 export const SOON_TRIP = SOON
-export const SOON_TRIP_PATH = `/trips/${SOON.startsOn}/${SOON.endsOn}`
+export const SOON_TRIP_PATH = `/goals/trips/${SOON.startsOn}/${SOON.endsOn}`
 
 async function answer(page: Page, action: string, result: unknown) {
   await page.route(`**/api/actions/${action}`, (route) => route.fulfill({ json: { result } }))

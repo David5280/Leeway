@@ -33,7 +33,9 @@ describe('a <Route> path', () => {
   it.each([
     ['a screen route', '<Route path={SCREEN_ROUTES.alerts} element={null} />'],
     ['a connect route', '<Route path={CONNECT_ROUTES.connect} element={null} />'],
-    ['any route', '<Route path={ROUTES.overview} element={null} />'],
+    ['any route', '<Route path={ROUTES.home} element={null} />'],
+    ['an old address that redirects', '<Route path={OLD_ROUTES.plan} element={null} />'],
+    ['an old address by its name', '<Route path={OLD_ROUTES[name]} element={null} />'],
     ['the catch-all', '<Route path="*" element={null} />'],
   ])('is allowed when it is %s', async (_, route) => {
     expect(await routeProblems(route)).toEqual([])

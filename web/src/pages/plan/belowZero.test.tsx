@@ -6,7 +6,7 @@
 import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CashFlow } from '../../api/client'
-import { cashFlow, planServer, renderPlan } from '../../test/planning'
+import { cashFlow, planServer, renderPlanning } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -31,7 +31,7 @@ async function show(flow: CashFlow) {
     find_recurring: () => [],
     get_cash_flow: () => flow,
   })
-  renderPlan('/plan/bills')
+  renderPlanning('/payday')
   // The card is drawn anew once the numbers arrive, so it is found after them.
   await screen.findByText(/in checking/)
   return screen.getByRole('region', { name: 'Until payday' })

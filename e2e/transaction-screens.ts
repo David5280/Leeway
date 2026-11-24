@@ -32,13 +32,13 @@ const inTransaction = (
 
 /** The transaction list and everything that opens on it. */
 export const TRANSACTION_SCREENS: Screen[] = [
-  at('transactions', '/transactions'),
-  at('transactions', '/transactions', {
-    name: '/transactions with the add menu open',
+  at('activity', '/spending/activity'),
+  at('activity', '/spending/activity', {
+    name: '/spending/activity with the add menu open',
     then: open('Add or import', (page) => page.getByRole('menu', { name: 'Add or import' })),
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions adding one by hand',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity adding one by hand',
     then: async (page) => {
       await open('Add or import', (on) => on.getByRole('menuitem', { name: 'Add by hand' }))(page)
       await page.getByRole('menuitem', { name: 'Add by hand' }).click()
@@ -48,48 +48,48 @@ export const TRANSACTION_SCREENS: Screen[] = [
     },
   }),
   // A transaction's sheet, in each of its three views.
-  at('transactions', '/transactions', {
-    name: "/transactions with a transaction's sheet open",
+  at('activity', '/spending/activity', {
+    name: "/spending/activity with a transaction's sheet open",
     then: async (page) => {
       await openTransaction(page)
     },
   }),
-  at('transactions', '/transactions', {
-    name: "/transactions with a transaction's sheet open, part of a trip",
+  at('activity', '/spending/activity', {
+    name: "/spending/activity with a transaction's sheet open, part of a trip",
     before: (page) => pretendCalendar(page),
     then: async (page) => {
       const sheet = await openTransaction(page)
       await expect(sheet.getByRole('link', { name: /^Lisbon, Porto/ })).toBeVisible()
     },
   }),
-  at('transactions', '/transactions', {
-    name: "/transactions changing a transaction's category",
+  at('activity', '/spending/activity', {
+    name: "/spending/activity changing a transaction's category",
     then: inTransaction(/Change$/, (sheet) => sheet.getByRole('list', { name: /^Category for / })),
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions making a rule from one',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity making a rule from one',
     then: inTransaction(/^Always categorize/, (sheet) =>
       sheet.getByRole('form', { name: 'New rule' }),
     ),
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions starting a new rule',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity starting a new rule',
     then: async (page) => {
       await open('+ New rule', (on) => on.getByRole('form', { name: 'New rule' }))(page)
       await stillOn(page.getByRole('dialog', { name: 'New rule' }))
     },
   }),
   // The filter chips, each open.
-  at('transactions', '/transactions', {
-    name: '/transactions choosing dates',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity choosing dates',
     then: open(/^Dates:/, (page) => page.getByRole('menu', { name: /^Dates:/ })),
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions choosing an account',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity choosing an account',
     then: open(/^Account:/, (page) => page.getByRole('menu', { name: /^Account:/ })),
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions filtering by category',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity filtering by category',
     then: async (page) => {
       await page.getByRole('button', { name: 'Category: all' }).click()
       const sheet = page.getByRole('dialog', { name: 'Filter by category' })
@@ -97,8 +97,8 @@ export const TRANSACTION_SCREENS: Screen[] = [
       await stillOn(sheet)
     },
   }),
-  at('transactions', '/transactions', {
-    name: '/transactions showing only what needs a category',
+  at('activity', '/spending/activity', {
+    name: '/spending/activity showing only what needs a category',
     then: async (page) => {
       await page.getByRole('button', { name: /need a category$/ }).click()
       await expect(page.getByRole('button', { name: /need a category$/ })).toHaveAttribute(
@@ -109,7 +109,7 @@ export const TRANSACTION_SCREENS: Screen[] = [
   }),
   {
     name: "one account's transactions",
-    route: 'transactions',
-    path: (seeded) => `/transactions?account=${seeded.accounts[0]}`,
+    route: 'activity',
+    path: (seeded) => `/spending/activity?account=${seeded.accounts[0]}`,
   },
 ]

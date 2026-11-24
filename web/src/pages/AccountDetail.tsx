@@ -6,7 +6,7 @@
 // out, spending, bills and repeating charges paid from it, fees, its goals,
 // then recent activity.
 
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import type { Account, Goal, Transaction } from '../api/client'
 import { useAction } from '../api/hooks'
 import { AlertsCard } from '../components/AccountAlerts'
@@ -28,6 +28,8 @@ import { shortDate } from '../lib/format'
 import { InterestCard } from './accounts/CardInterest'
 import { BillsCard, FeesCard, GoalsCard, RecurringCard } from './accounts/DetailLists'
 import { RecentCard, SummaryCard, ViewBreakdowns } from './accounts/ViewParts'
+import { paths } from '../routes'
+import { BackLink } from '../components/BackLink'
 
 /** Transactions read to find this account's bills, repeating charges and fees. */
 const HISTORY_DAYS = 90
@@ -38,10 +40,7 @@ export function AccountDetail() {
   const account = accounts.data?.find((one) => one.id === id)
   return (
     <Shell>
-      <Link to="/accounts" className="linkbtn tap back-link">
-        <Icon name="back" size={16} />
-        Accounts
-      </Link>
+      <BackLink to={paths.wealth()} label="Wealth" />
       {account && <DetailBody account={account} />}
       {accounts.data && !account && (
         <>

@@ -14,9 +14,9 @@ afterEach(() => vi.unstubAllGlobals())
 function renderTrip() {
   return renderSignedIn(
     <Routes>
-      <Route path="/trips/:start/:end" element={<TripPage />} />
+      <Route path="/goals/trips/:start/:end" element={<TripPage />} />
     </Routes>,
-    { route: '/trips/2026-12-10/2026-12-14' },
+    { route: '/goals/trips/2026-12-10/2026-12-14' },
   )
 }
 

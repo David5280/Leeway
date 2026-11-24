@@ -1,9 +1,11 @@
 // Words and addresses for trips, shared by the forecast, the trip page and
 // the transaction sheet.
 
+import { paths } from '../routes'
+
 /** The trip's own page. */
 export function tripPath({ startsOn, endsOn }: { startsOn: string; endsOn: string }): string {
-  return `/trips/${startsOn}/${endsOn}`
+  return paths.trip(startsOn, endsOn)
 }
 
 /** A trip's name, or "Travel" for a run of travel spending no calendar named. */

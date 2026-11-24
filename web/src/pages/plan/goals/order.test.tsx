@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fundGoal, fundView, serveEmergency } from '../../../test/emergency'
 import { failing } from '../../../test/fake'
 import { car, held, laptop, orderCard, orderOf, serveOrder, trip } from '../../../test/goalOrder'
-import { renderPlan } from '../../../test/planning'
+import { renderPlanning } from '../../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -28,7 +28,7 @@ const namesInOrder = async () =>
 describe('goals in order', () => {
   it('lists each goal with its landing month, and says what moving one up costs', async () => {
     serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     expect(await rowTexts()).toEqual([
       expect.stringContaining('TripLands Mar 2027'),
@@ -44,7 +44,7 @@ describe('goals in order', () => {
 
   it('shows only once two goals are still being saved for', async () => {
     serveOrder(orderOf([trip]), [trip])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     await screen.findByRole('region', { name: 'Trip' })
     expect(screen.queryByRole('region', { name: 'Which goal comes first?' })).toBeNull()
   })
@@ -53,7 +53,7 @@ describe('goals in order', () => {
 describe('moving a goal', () => {
   it('moves it up, says what that did to the dates, and keeps focus on it at the top', async () => {
     const server = serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     await userEvent.setup().click(card.getByRole('button', { name: 'Move Car up' }))
     await waitFor(() =>
@@ -69,7 +69,7 @@ describe('moving a goal', () => {
 
   it('moves it down the same way', async () => {
     const server = serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     await userEvent.setup().click(card.getByRole('button', { name: 'Move Trip down' }))
     await waitFor(() =>
@@ -80,7 +80,7 @@ describe('moving a goal', () => {
 
   it('keeps focus on the button pressed while the goal can keep moving that way', async () => {
     serveOrder(orderOf([trip, car, laptop]), [trip, car, laptop])
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.click(card.getByRole('button', { name: 'Move Laptop up' }))
@@ -108,7 +108,7 @@ describe('moving a goal', () => {
       '/api/actions/reorder_goals': held(answer),
       '/api/actions/get_goal_order': () => held(read())(),
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     await userEvent.setup().click(card.getByRole('button', { name: 'Move Car up' }))
     // Moved at once, the goal cards too, with nothing turned off while it saves.
@@ -130,7 +130,7 @@ describe('moving a goal', () => {
     const server = serveOrder(orderOf([trip, car]), [trip, car], {
       '/api/actions/reorder_goals': held(later),
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.click(card.getByRole('button', { name: 'Move Car up' }))
@@ -142,7 +142,7 @@ describe('moving a goal', () => {
 
   it('stops saying what a move did once a new amount changes the dates', async () => {
     serveOrder(orderOf([trip, car]))
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     const user = userEvent.setup()
     await user.click(card.getByRole('button', { name: 'Move Car up' }))
@@ -169,7 +169,7 @@ describe('the emergency fund in the order', () => {
       get_goal_order: () => orderOf([fund, trip]),
       reorder_goals: () => orderOf([trip, fund]),
     })
-    renderPlan('/plan/goals')
+    renderPlanning('/goals')
     const card = within(await orderCard())
     // The fund's $1,500 to go at $500 a month lands in three months, then the trip's $2,000.
     expect(await rowTexts()).toEqual([

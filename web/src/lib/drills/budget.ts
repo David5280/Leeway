@@ -5,6 +5,7 @@
 
 import type { Budget, CategoryBudget, Output } from '../../api/client'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
+import { paths } from '../../routes'
 
 type Money = (cents: number) => string
 type Trends = Output<'get_trends'>
@@ -26,7 +27,7 @@ function categoryItem(row: CategoryBudget, detail?: string): DrillItem {
     label: row.name,
     detail,
     value: { cents: row.spentCents },
-    to: `/budgets/${row.categoryId}`,
+    to: paths.category(row.categoryId),
     icon: { category: { name: row.name, color: row.color, icon: row.icon, kind: row.kind } },
   }
 }
@@ -101,7 +102,7 @@ export function leewayDrill(budget: Budget, money: Money): DrillDown {
         .filter((row) => row.kind === 'expense' && row.budgetCents !== null)
         .map((row) => categoryItem(row, budgetDetail(row, money))),
     },
-    more: { to: '/budgets', label: 'Open budgets' },
+    more: { to: paths.spending(), label: 'Open budgets' },
   }
 }
 
@@ -148,7 +149,7 @@ export function spentDrill(budget: Budget, word: string, trends?: Trends): Drill
         .slice(0, LISTED)
         .map((row) => categoryItem(row)),
     },
-    more: { to: '/transactions', label: `See this ${word}'s transactions` },
+    more: { to: paths.activity(), label: `See this ${word}'s transactions` },
   }
 }
 
@@ -181,7 +182,7 @@ export function categoriesDrill(budget: Budget, word: string, money: Money): Dri
       title: 'Categories',
       rows: rows.map((row) => categoryItem(row, budgetDetail(row, money))),
     },
-    more: { to: '/budgets', label: 'Open budgets' },
+    more: { to: paths.spending(), label: 'Open budgets' },
   }
 }
 
@@ -222,7 +223,7 @@ export function incomeDrill(budget: Budget, word: string): DrillDown {
         : undefined,
     items:
       rows.length > 0 ? { title: 'Income', rows: rows.map((row) => categoryItem(row)) } : undefined,
-    more: { to: '/transactions', label: `See this ${word}'s transactions` },
+    more: { to: paths.activity(), label: `See this ${word}'s transactions` },
   }
 }
 
@@ -249,7 +250,7 @@ export function uncategorizedDrill(budget: Budget): DrillDown {
     more:
       uncategorizedCount > 0
         ? {
-            to: '/transactions?category=uncategorized',
+            to: paths.activity({ category: 'uncategorized' }),
             label: `Sort ${uncategorizedCount} ${word}`,
           }
         : undefined,

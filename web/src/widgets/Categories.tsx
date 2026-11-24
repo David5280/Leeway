@@ -12,6 +12,7 @@ import { useApp } from '../lib/app'
 import { categoriesDrill } from '../lib/drills/budget'
 import { periodWord } from '../lib/format'
 import type { WidgetProps } from './types'
+import { paths } from '../routes'
 
 /** How a category is doing, in words, with the color to say it in. */
 export function categoryStatus(row: CategoryBudget, money: (cents: number) => string) {
@@ -58,7 +59,7 @@ export function CategoriesWidget({ budget }: WidgetProps) {
       <Card static="empty" label="Categories" className="stack-sm">
         <SectionHead icon="budgets" title="Where did your money go?" />
         <p className="empty">
-          No categories yet. <Link to="/budgets">Add one</Link>
+          No categories yet. <Link to={paths.spending()}>Add one</Link>
         </p>
       </Card>
     )

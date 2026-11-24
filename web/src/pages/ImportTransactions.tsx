@@ -20,6 +20,7 @@ import { ImportDone } from './import/ImportDone'
 import { MappingForm } from './import/MappingForm'
 import { PastImports } from './import/PastImports'
 import { Preview } from './import/Preview'
+import { paths } from '../routes'
 
 const MAX_ROWS = IMPORT_LIMITS.maxRows
 
@@ -121,7 +122,7 @@ export function ImportTransactions() {
     <Shell>
       <div className="stack-sm">
         <Link
-          to="/transactions"
+          to={paths.activity()}
           className="linkbtn small row"
           style={{ gap: 4 }}
           aria-label="Back to transactions"

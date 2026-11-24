@@ -25,6 +25,7 @@ import {
   shortClass,
   SUGGESTIONS_ONLY,
 } from './playbookText'
+import { paths } from '../../../routes'
 
 /** The last paycheck closed out: the everyday budgets less what was spent. */
 function LastPaycheck({ closeOut, ideas }: { closeOut: CloseOut; ideas: boolean }) {
@@ -137,7 +138,7 @@ function ShortCash({ playbook }: { playbook: PlaybookView }) {
   if (!short) return null
   const zero = <Money cents={0} />
   return (
-    <Card to="/plan/bills" label="Cash before payday" className="stack-xs">
+    <Card to={paths.bills()} label="Cash before payday" className="stack-xs">
       <p className={`small ${shortClass(playbook)}`}>
         {short.now ? (
           <>Checking is already below {zero}.</>

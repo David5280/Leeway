@@ -25,14 +25,12 @@ test('with no calendar linked, it is one quiet entry in Settings and nowhere els
   await expect(page.getByRole('status')).toHaveCount(0)
   await expect(page.getByText(/calendar|coming up/i)).toHaveCount(0)
   await expect(page.getByRole('link', { name: /calendar/i })).toHaveCount(0)
-  // Plan offers Coming up only once the calendar's status is in, so wait for it.
+  // Payday adds Coming up only once the calendar's status is in, so wait for it.
   const status = page.waitForResponse('**/api/actions/calendar_status')
-  await page.goto('/plan')
+  await page.goto('/payday')
   await status
-  // Exact names, in Plan's own sections: a card's button elsewhere can hold the word Bills.
-  const sections = page.getByRole('group', { name: 'Plan section' })
-  await expect(sections.getByRole('button', { name: 'Bills', exact: true })).toBeVisible()
-  await expect(sections.getByRole('button', { name: 'Coming up', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Until payday' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Coming up' })).toHaveCount(0)
   await page.goto('/settings/calendar')
   await expect(page.getByRole('button', { name: 'Connect a calendar', exact: true })).toBeDisabled()
 })
@@ -54,12 +52,8 @@ test('a calendar link is checked before anything is saved', async ({ page }) => 
 
 test('the weeks ahead show paydays, bills and events, and open a trip', async ({ page }) => {
   await pretendCalendar(page)
-  await page.goto('/plan/ahead')
-  const sections = page.getByRole('group', { name: 'Plan section' })
-  await expect(sections.getByRole('button', { name: 'Coming up', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await page.goto('/payday')
+  await expect(page.getByRole('heading', { level: 2, name: 'Coming up' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'This week' })).toContainText('Payday')
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText(LONG_TRIP)
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText('to set aside')
@@ -70,7 +64,7 @@ test('the weeks ahead show paydays, bills and events, and open a trip', async ({
   await expect(page.getByText(/^Nothing due .+ to .+\.$/)).toHaveCount(1)
   // A bill opens its own form; an event, a purchase to save for it.
   await page.getByRole('link', { name: /Renters insurance/ }).click()
-  await expect(page).toHaveURL(/\/plan\/bills\?bill=b1$/)
+  await expect(page).toHaveURL(/\/payday\/bills\?bill=b1$/)
   await page.goBack()
   await page.getByRole('link', { name: new RegExp(LONG_EVENT) }).click()
   await expect(page.getByRole('form', { name: 'New purchase' })).toBeVisible()

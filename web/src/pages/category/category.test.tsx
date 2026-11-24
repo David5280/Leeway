@@ -123,11 +123,11 @@ function renderCategory(
 ) {
   return renderSignedIn(
     <Routes>
-      <Route path="/budgets/:id" element={<CategoryPage />} />
-      <Route path="/budgets" element={<Landed name="budgets" />} />
-      <Route path="/transactions" element={<Landed name="transactions" />} />
+      <Route path="/spending/:id" element={<CategoryPage />} />
+      <Route path="/spending" element={<Landed name="budgets" />} />
+      <Route path="/spending/activity" element={<Landed name="transactions" />} />
     </Routes>,
-    { route: `/budgets/${id}`, ...options },
+    { route: `/spending/${id}`, ...options },
   )
 }
 
@@ -588,7 +588,7 @@ describe('Category page', () => {
       expect(within(list).queryByText('Shop 13')).not.toBeInTheDocument()
       expect(list).toHaveTextContent('40 this period')
       const all = within(list).getByRole('link', { name: 'All transactions' })
-      expect(all).toHaveAttribute('href', `/transactions?category=${groceries.id}`)
+      expect(all).toHaveAttribute('href', `/spending/activity?category=${groceries.id}`)
       await userEvent.setup().click(all)
       expect(
         await screen.findByText(`Landed on transactions?category=${groceries.id}`),

@@ -1,5 +1,5 @@
-// Cash that could earn more: shown under "Will the cash last until payday?"
-// only when checking holds well more than it needs before payday, saying how
+// Cash that could earn more, on its own page under Wealth: shown only when
+// checking holds well more than it needs before payday, saying how
 // much could sit in savings and roughly what it would earn there. The
 // assumed savings rate is in the words, since the figure means nothing
 // without it. The card opens the math; it never moves money.

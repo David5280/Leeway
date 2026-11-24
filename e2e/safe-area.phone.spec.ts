@@ -16,10 +16,11 @@ import {
 const GUTTER = 16
 const SCREENS = [
   '/',
-  '/accounts',
-  '/transactions',
-  '/budgets',
-  '/plan',
+  '/wealth',
+  '/spending/activity',
+  '/spending',
+  '/payday',
+  '/goals',
   // Settings runs its pill row edge to edge, so its gutters are worth a look.
   '/settings/appearance',
   '/settings/accounts',

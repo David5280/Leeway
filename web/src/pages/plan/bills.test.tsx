@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Bill } from '../../api/client'
 import { category, failing, type Handlers } from '../../test/fake'
-import { bill, planServer, renderPlan, series } from '../../test/planning'
+import { bill, planServer, renderPlanning, series } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -52,7 +52,7 @@ const billsCard = () => screen.findByRole('region', { name: 'Bills and subscript
 describe('Bills', () => {
   it('lists bills with how often, when due and the monthly totals', async () => {
     serve()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const card = within(await billsCard())
     expect(card.getByText(/a month, with/)).toHaveTextContent(
       'About $75 a month, with $15 in subscriptions',
@@ -66,14 +66,14 @@ describe('Bills', () => {
 
   it('says so when there are no bills', async () => {
     serve([])
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     expect(await screen.findByText(/No bills yet/)).toBeInTheDocument()
     expect(screen.queryByText(/a month, with/)).not.toBeInTheDocument()
   })
 
   it('adds a bill', async () => {
     const server = serve([])
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a bill' }))
     const form = within(screen.getByRole('form', { name: 'New bill' }))
@@ -112,7 +112,7 @@ describe('Bills', () => {
 
   it('sends no pattern when it is left blank, and closes on cancel', async () => {
     const server = serve([])
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a bill' }))
     const form = within(screen.getByRole('form', { name: 'New bill' }))
@@ -130,7 +130,7 @@ describe('Bills', () => {
 
   it('sends no amount when only other fields changed, so an old figure is never sent back', async () => {
     const server = serve()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await billsCard()).getByRole('button', { name: /Phone/ }))
     const form = within(screen.getByRole('form', { name: 'Edit Phone' }))
@@ -145,7 +145,7 @@ describe('Bills', () => {
 
   it('edits a bill, changing only what the form holds', async () => {
     const server = serve()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await billsCard()).getByRole('button', { name: /Phone/ }))
     const form = within(screen.getByRole('form', { name: 'Edit Phone' }))
@@ -166,7 +166,7 @@ describe('Bills', () => {
 
   it('opens straight onto a bill from its address, as Coming up links to it', async () => {
     serve()
-    renderPlan(`/plan/bills?bill=${netflix.id}`)
+    renderPlanning(`/payday/bills?bill=${netflix.id}`)
     expect(await screen.findByRole('form', { name: 'Edit Netflix' })).toBeInTheDocument()
     const user = userEvent.setup()
     // Another bill opened instead takes its place.
@@ -178,7 +178,7 @@ describe('Bills', () => {
 
   it('deletes a bill', async () => {
     const server = serve()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await billsCard()).getByRole('button', { name: /Netflix/ }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -195,7 +195,7 @@ describe('Bills', () => {
 
   it('shows why a bill could not be saved', async () => {
     serve([], {}, { '/api/actions/create_bill': failing('Use a real date as YYYY-MM-DD') })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Add a bill' }))
     const form = within(screen.getByRole('form', { name: 'New bill' }))
@@ -207,7 +207,7 @@ describe('Bills', () => {
 
   it('shows why bills could not load', async () => {
     serve([], {}, { '/api/actions/list_bills': failing('Database is down', 500) })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     expect(await screen.findByText('Database is down')).toBeInTheDocument()
   })
 })
@@ -229,7 +229,7 @@ describe('Recurring charges found in history', () => {
 
   it('suggests repeating charges, but not paychecks', async () => {
     serve([], { find_recurring: () => [spotify, power, pay] })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const card = within(await suggestions())
     expect(card.getByText('SPOTIFY P1A2').parentElement).toHaveTextContent(
       '$11.99 monthly, next around Nov 20',
@@ -240,7 +240,7 @@ describe('Recurring charges found in history', () => {
 
   it('shows nothing when there is nothing to suggest', async () => {
     serve([], { find_recurring: () => [pay] })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     await billsCard()
     await waitFor(() => expect(screen.queryByText('Found in your history')).not.toBeInTheDocument())
   })
@@ -269,7 +269,7 @@ describe('Recurring charges found in history', () => {
 
   it('tracks a suggestion as a bill in one tap, and says so in a toast', async () => {
     const server = trackingServer()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
     expect(await screen.findByRole('status')).toHaveTextContent('CITY POWER added to Bills')
@@ -284,7 +284,7 @@ describe('Recurring charges found in history', () => {
 
   it('undoes the tracking from the toast', async () => {
     const server = trackingServer()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
     await user.click(
@@ -317,7 +317,7 @@ describe('Recurring charges found in history', () => {
       },
       { '/api/actions/delete_bill': failing('Could not undo it') },
     )
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
     // Nothing left to suggest, so the card goes; the toast stays.
@@ -332,7 +332,7 @@ describe('Recurring charges found in history', () => {
 
   it('closes the toast, keeping the bill', async () => {
     const server = trackingServer()
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     const user = userEvent.setup()
     await user.click(within(await suggestions()).getByRole('button', { name: 'Track' }))
     // It also goes by itself after TOAST_MS (Toast.test.tsx).
@@ -349,7 +349,7 @@ describe('Recurring charges found in history', () => {
       { find_recurring: () => [spotify] },
       { '/api/actions/track_recurring': failing('Could not track it') },
     )
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     await userEvent
       .setup()
       .click(within(await suggestions()).getByRole('button', { name: 'Track' }))
@@ -359,7 +359,7 @@ describe('Recurring charges found in history', () => {
 
   it('stops suggesting a charge that is not a bill', async () => {
     const server = serve([], { find_recurring: () => [spotify] })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     await userEvent
       .setup()
       .click(within(await suggestions()).getByRole('button', { name: 'Not a bill' }))
@@ -374,7 +374,7 @@ describe('Recurring charges found in history', () => {
       { find_recurring: () => [spotify] },
       { '/api/actions/dismiss_recurring': failing('Try again') },
     )
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     await userEvent
       .setup()
       .click(within(await suggestions()).getByRole('button', { name: 'Not a bill' }))
@@ -383,7 +383,7 @@ describe('Recurring charges found in history', () => {
 
   it('shows why suggestions could not load', async () => {
     serve([], {}, { '/api/actions/find_recurring': failing('History is unavailable', 500) })
-    renderPlan('/plan/bills')
+    renderPlanning('/payday/bills')
     expect(await screen.findByText('History is unavailable')).toBeInTheDocument()
   })
 })

@@ -1,4 +1,5 @@
-// Fixtures for the Plan screen, built with the server's own math where there is some.
+// Fixtures for the planning screens (Payday, Bills, Goals and Wealth's pages),
+// built with the server's own math where there is some.
 
 import { belowZero, type SavingsSource } from '../../../server/src/domain/belowZero'
 import { billInputSchema, scheduleOf } from '../../../server/src/domain/bills'
@@ -21,9 +22,17 @@ import type {
   Settings,
 } from '../api/client'
 import type { RetirementView } from '../pages/plan/retirement/fields'
-import { Plan } from '../pages/Plan'
+import { BillsPage } from '../pages/Bills'
+import { DebtsPage } from '../pages/Debts'
+import { Goals } from '../pages/Goals'
+import { IdleCashPage } from '../pages/IdleCash'
+import { Payday } from '../pages/Payday'
+import { RetirementPage } from '../pages/Retirement'
+import { Wealth } from '../pages/Wealth'
+import { paths, SCREEN_ROUTES } from '../routes'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
 import { fundsView } from './funds'
+import { noPay } from './pay'
 import { playbookOf } from './playbook'
 import { retirementProfile } from './profile'
 
@@ -183,32 +192,47 @@ export function debtPlans(
 }
 
 /**
- * The server for the Plan screen: cash flow and an everyday payday playbook
- * are always there, with no emergency fund to offer, no goal order, nothing
- * entered by hand and no trips unless a test says otherwise; the rest per test.
+ * The server for the planning screens (Payday, Goals, Wealth and the pages
+ * under them): cash flow and an everyday payday playbook are always there,
+ * with no emergency fund to offer, no goal order, nothing entered by hand, no
+ * calendar, no trips and no accounts' extras unless a test says otherwise;
+ * the rest per test.
  */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
   return fakeServer(
     {
       get_cash_flow: () => cashFlow(),
+      get_pay: () => noPay,
       get_emergency_fund: () => null,
       get_goal_order: () => ({ monthlyCents: 0, source: 'none', goals: [] }),
       list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       list_trips: () => [],
       list_sinking_funds: () => fundsView(),
       get_payday_playbook: () => playbookOf(),
+      calendar_status: () => ({ connected: false }),
+      list_recent_balances: () => [],
+      list_alerts: () => [],
       ...handlers,
     },
     routes,
   )
 }
 
-/** The Plan screen at an address, with its routes, as the app has them, and the settings given. */
-export function renderPlan(path = '/plan', settings?: Settings) {
+/**
+ * The planning screens at an address, with their routes as the app has them,
+ * and the settings given: Payday and Bills, Goals, and Wealth with Debts,
+ * Retirement and cash that could earn more.
+ */
+export function renderPlanning(path: string = paths.payday(), settings?: Settings) {
   return renderSignedIn(
     <Routes>
-      <Route path="/plan" element={<Plan />} />
-      <Route path="/plan/:section" element={<Plan />} />
+      <Route path={SCREEN_ROUTES.payday} element={<Payday />} />
+      <Route path={SCREEN_ROUTES.bills} element={<BillsPage />} />
+      <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
+      <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
+      <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />
+      <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />
+      <Route path={SCREEN_ROUTES.idleCash} element={<IdleCashPage />} />
     </Routes>,
     { route: path, settings },
   )

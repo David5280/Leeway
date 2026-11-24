@@ -23,7 +23,7 @@ test('cash spending added by hand shows everywhere it counts', async ({ page }) 
   await search.fill('corner')
   await expect(list.getByText('Corner market')).toBeVisible()
 
-  await page.goto('/budgets')
+  await page.goto('/spending')
   await page.getByRole('link', { name: /^Groceries/ }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Groceries' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'In this category' })).toContainText(

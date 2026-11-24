@@ -63,7 +63,7 @@ describe('Bills widget', () => {
     expect(await widget.findByText('Bill A')).toBeInTheDocument()
     expect(widget.getByText('Bill E').parentElement).toHaveTextContent('Bill EDue Dec 5$10.00')
     expect(widget.queryByText('Bill F')).not.toBeInTheDocument()
-    expect(widget.getByRole('link', { name: /Bill A/ })).toHaveAttribute('href', '/plan/bills')
+    expect(widget.getByRole('link', { name: /Bill A/ })).toHaveAttribute('href', '/payday/bills')
   })
 
   it('says when there are none', async () => {
@@ -91,7 +91,7 @@ describe('Goals widget', () => {
     expect(widget.getByText('Trip').parentElement).toHaveTextContent('$250 of $1,000')
     expect(widget.getAllByRole('progressbar')).toHaveLength(4)
     expect(widget.queryByText('Boat')).not.toBeInTheDocument()
-    expect(widget.getByRole('link', { name: /Trip/ })).toHaveAttribute('href', '/plan/goals')
+    expect(widget.getByRole('link', { name: /Trip/ })).toHaveAttribute('href', '/goals')
   })
 
   it('gives what each goal needs per period and whether it is on track', async () => {
@@ -112,7 +112,7 @@ describe('Goals widget', () => {
     expect(widget.getByText('$1,000 to go')).toHaveClass('muted')
     expect(widget.getByRole('link', { name: 'Save for a purchase' })).toHaveAttribute(
       'href',
-      '/plan/goals?new=purchase',
+      '/goals?new=purchase',
     )
   })
 

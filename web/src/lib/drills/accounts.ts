@@ -9,6 +9,7 @@ import { accountDetailPath, isCounted } from '../accounts'
 import { addDays } from '../dates'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
 import { startReference, worthChange } from '../worth'
+import { paths } from '../../routes'
 
 /**
  * Daily balances, oldest first and ending today, as dated points for the
@@ -108,7 +109,7 @@ function transactionItem(
     label: tx.displayName,
     detail: date(tx.date),
     value: { cents: tx.amountCents, sign: 'transaction' },
-    to: `/transactions?account=${encodeURIComponent(accountId)}`,
+    to: paths.activity({ account: accountId }),
   }
 }
 
@@ -150,7 +151,7 @@ export function accountDrill(
           }
         : undefined,
     more: {
-      to: `/transactions?account=${encodeURIComponent(account.id)}`,
+      to: paths.activity({ account: account.id }),
       label: 'See all activity',
     },
   }
@@ -209,7 +210,7 @@ export function allAccountsDrill(accounts: readonly Account[], netWorth?: NetWor
           }
         : undefined,
     items: { title: 'Accounts', rows: accountItems(counted) },
-    more: { to: '/accounts', label: 'Open accounts' },
+    more: { to: paths.wealth(), label: 'Open accounts' },
   }
 }
 

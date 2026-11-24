@@ -13,7 +13,7 @@ import {
   reads,
   savedPaystub,
 } from '../../../../test/paystub'
-import { planServer, renderPlan, retirementOf } from '../../../../test/planning'
+import { planServer, renderPlanning, retirementOf } from '../../../../test/planning'
 import { pension } from '../../../../test/profile'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -59,7 +59,7 @@ const card = () => screen.findByRole('region', { name: 'Paystub' })
 /** Opens the import from the Paystub card and chooses a file. */
 async function importFrom(file = chosenFile()) {
   const user = userEvent.setup({ applyAccept: false })
-  renderPlan('/plan/retirement')
+  renderPlanning('/wealth/retirement')
   await user.click(within(await card()).getByRole('button', { name: 'Import a paystub' }))
   await user.upload(await screen.findByLabelText('Choose a paystub'), file)
   return user
@@ -70,7 +70,7 @@ const review = () => screen.findByRole('form', { name: 'Review the paystub' })
 describe('the Paystub card', () => {
   it('stays out of the way when the server cannot read a paystub', async () => {
     serve({ status: paystubStatus(null, false) })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await screen.findByRole('region', { name: 'Pensions' })
     expect(screen.queryByRole('region', { name: 'Paystub' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Import a paystub' })).toBeNull()
@@ -78,14 +78,14 @@ describe('the Paystub card', () => {
 
   it('invites an import when no paystub is kept', async () => {
     serve()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     expect(within(await card()).getByText(/Import a paystub to fill in/)).toBeVisible()
   })
 
   it('shows the newest paystub to the cent, leaving out figures it did not show', async () => {
     const server = serve({ status: paystubStatus(savedPaystub()) })
     const user = userEvent.setup()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const kept = within(await card())
     expect(kept.getByText('From City of Example, paid Nov 13, 2026')).toBeVisible()
     // Only take-home pay reaches the owner, so it alone is money in: a plus and its color.
@@ -112,7 +112,7 @@ describe('the Paystub card', () => {
 
   it('names a paystub with no employer or pay date plainly', async () => {
     serve({ status: paystubStatus(savedPaystub({ employerName: null, payDate: null })) })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     expect(within(await card()).getByText('Your latest paystub')).toBeVisible()
   })
 
@@ -126,7 +126,7 @@ describe('the Paystub card', () => {
       },
     })
     const user = userEvent.setup()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await user.click(within(await card()).getByRole('button', { name: 'Delete this paystub' }))
     expect(await within(await card()).findByRole('alert')).toBeVisible()
   })
@@ -137,7 +137,7 @@ describe('choosing a file', () => {
     const server = serve()
     const file = chosenFile()
     const user = userEvent.setup()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await user.click(within(await card()).getByRole('button', { name: 'Import a paystub' }))
     const form = within(await screen.findByRole('region', { name: 'Import a paystub' }))
     // Plain that the file goes as it is: identifiers come out only of what Leeway keeps.
@@ -182,7 +182,7 @@ describe('choosing a file', () => {
   it('does nothing when the chooser is closed with no file', async () => {
     const server = serve()
     const user = userEvent.setup()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await user.click(within(await card()).getByRole('button', { name: 'Import a paystub' }))
     fireEvent.change(screen.getByLabelText('Choose a paystub'), { target: { files: [] } })
     expect(screen.queryByRole('alert')).toBeNull()
@@ -227,7 +227,7 @@ describe('choosing a file', () => {
   it('closes when cancelled', async () => {
     serve()
     const user = userEvent.setup()
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     await user.click(within(await card()).getByRole('button', { name: 'Import a paystub' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('region', { name: 'Import a paystub' })).toBeNull()
@@ -387,7 +387,7 @@ describe('from a pension', () => {
   /** Opens a kept pension's form. */
   async function editPension() {
     const user = userEvent.setup({ applyAccept: false })
-    renderPlan('/plan/retirement')
+    renderPlanning('/wealth/retirement')
     const pensions = within(await screen.findByRole('region', { name: 'Pensions' }))
     await user.click(pensions.getByRole('button', { name: 'Edit figures' }))
     return user
