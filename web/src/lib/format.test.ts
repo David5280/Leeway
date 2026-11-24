@@ -12,6 +12,7 @@ import {
   periodWord,
   relativeDay,
   timeAgo,
+  weekdayName,
 } from './format'
 
 describe('format', () => {
@@ -59,6 +60,10 @@ describe('format', () => {
     expect(relativeDay('2026-11-20', today)).toBe('Tomorrow')
     expect(relativeDay('2026-11-13', today)).toBe('Fri, Nov 13')
     expect(relativeDay('2025-12-31', today)).toBe('Wed, Dec 31, 2025')
+  })
+
+  it('names the day of the week alone', () => {
+    expect(weekdayName('2026-11-13')).toBe('Friday')
   })
 })
 

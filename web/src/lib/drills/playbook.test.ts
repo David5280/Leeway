@@ -8,7 +8,7 @@ const money = (cents: number) => `$${cents / 100}`
 
 describe('closeOutDrill', () => {
   it('takes what was spent from the budget, and flags a budget that went over', () => {
-    const drill = closeOutDrill(closeOutOf(OVER_BUDGET), 'Oct 31 to Nov 13', money)
+    const drill = closeOutDrill(closeOutOf(OVER_BUDGET), 'Oct 30 to Nov 12', money)
     expect(drill.figure).toEqual({ cents: 3_600, tone: 'warn' })
     expect(mathSentence(drill.math, money)).toBe(
       'Over budget by $36 = Budgeted $274 minus spent $310',
@@ -23,10 +23,11 @@ describe('closeOutDrill', () => {
 
 describe('suggestionsDrill', () => {
   it('shares the leftover out over the ideas, with what is still free', () => {
-    const drill = suggestionsDrill(IDEAS, closeOutOf(UNDER_BUDGET).leftoverCents + 1_000)
+    const drill = suggestionsDrill(IDEAS, closeOutOf(UNDER_BUDGET).leftoverCents + 1_000, date)
     expect(mathSentence(drill.math, money)).toBe(
       'Still free $10 = Left over $54 minus Emergency fund $30 minus New laptop $14',
     )
+    expect(drill.items?.rows[1]?.detail).toBe('A goal still to reach. Due 2027-01-15.')
   })
 })
 
@@ -57,5 +58,12 @@ describe('planDrill', () => {
     expect(drill.figure).toEqual({ cents: 45_000 })
     expect(drill.math.note).toMatch(/Add your pay/)
     expect(drill.items).toBeUndefined()
+  })
+
+  it('names what is not known yet in the math while pay is unknown, never safe to spend twice', () => {
+    const drill = planDrill(planOf(LINES, null), date)
+    expect(mathSentence(drill.math, money)).toBe(
+      'Left for everyday spending not known yet = Paycheck not added yet minus bills before payday $1260 minus set aside $150',
+    )
   })
 })
