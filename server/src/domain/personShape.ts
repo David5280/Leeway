@@ -170,8 +170,10 @@ export function holdsAPersonsName(line: string): boolean {
     .filter((word, at, all) => !isAbbreviated(word) && !isAbbreviated(all[at - 1]))
     .filter((word) => word && !/\d/.test(word) && !isCredential(word))
     .filter((word) => nameInALine(word.replace(/\.$/, '')))
-  // Any two words side by side that read as a name, as every name holds such a pair. A word
-  // no name has ("Joe's") only parts the line, so "Jane Doe Joe's Clinic" still holds "Jane Doe".
+  // Any two kept words side by side that read as a name, as every name holds such a pair.
+  // Everyday words are dropped above, so their neighbours pair ("Jane the Doe" holds "Jane
+  // Doe"). Only a kept word no name has ("Joe's") parts a pair: "Jane Doe Joe's Clinic"
+  // still holds "Jane Doe", but "Jane Joe's Doe" pairs neither with "Doe".
   return words.slice(1).some((word, at) => hasAPersonsShape(`${words[at]} ${word}`))
 }
 

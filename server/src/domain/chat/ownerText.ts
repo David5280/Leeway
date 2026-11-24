@@ -24,12 +24,16 @@
 // - A given name is a person but in a few set phrases ("Hope chest", "Will &
 //   Trust"). One that is also an everyday word ("Bill", "June") is a person
 //   too, unless a small, explicit everyday sense vouches for it where it
-//   stands ("Electric bill", "Due in June", wordNames.ts).
+//   stands ("Electric bill", "Due in June", wordNames.ts). A shop's word
+//   vouches for "Bill" only when that word is itself shown ("Target bill",
+//   but not "Pemberton Bill").
 // - Nothing vouches for a word after one a person is named after: "for",
-//   "with", "to", "from", kin, a title or a payment app ("For Rose", "Uncle
-//   Bill", "Venmo Brown").
-// - Every mark parts words, a dash, dot or underscore included ("Venmo-June",
-//   "Braces_Bill"), but an apostrophe inside a word ("O'Brien", "Bill's").
+//   "with", "to", "from", kin, a title, a role or a payment app ("For Rose",
+//   "Uncle Bill", "Coach Bill", "Venmo Brown"; personCues.ts).
+// - Every mark parts words, a dot or a spaced dash included ("Venmo.June",
+//   "Braces - Bill"), but an apostrophe inside a word ("O'Brien", "Bill's").
+//   A hyphen or underscore between letters joins them as a space does
+//   ("Electric-Bill" is "Electric Bill", "Braces_Bill" is "Braces Bill").
 
 import type { Db } from '../../db/pool.js'
 import { NO_SHOPS, startsAShop, type KnownShops } from '../knownShops.js'
@@ -37,13 +41,14 @@ import { APOSTROPHES, isEverydayWord } from '../personShape.js'
 import { wordsOf } from './billLabels.js'
 import { isNameInALine, isWordInLabels, withoutEverydayPhrases } from './commonWords.js'
 import { isGivenName, isNamedLikeAPerson } from './givenNames.js'
+import { afterANamer, afterAPerson, isNamerWord, lettered, nearest } from './personCues.js'
 import { withoutShops } from './shownText.js'
 import { isWordName, meansTheWord, SHOP_MARK } from './wordNames.js'
 
 // What a label is written in: a word, inner apostrophes kept ("O'Brien"); a
 // number ("15th", "2027"); where a known shop was (SHOP_MARK); or any one mark
-// (a dash, dot, "&", "_"), which parts the words around it ("Mary-Kate" is
-// two). Spaces are no part.
+// (a dash, dot, "&", "_"), which parts the words around it. Spaces are no
+// part, and a hyphen or underscore between letters (JOINER) reads as one.
 const LABEL_WORDS = new RegExp(
   [
     `[\\p{L}\\p{M}]+(?:[${APOSTROPHES}][\\p{L}\\p{M}]+)*`,
@@ -53,6 +58,11 @@ const LABEL_WORDS = new RegExp(
   ].join('|'),
   'gu',
 )
+// A hyphen or underscore between two letters, which joins words as a space
+// does: "Electric-Bill" reads as "Electric Bill" and "Mary-Kate" as "Mary
+// Kate", so "Bill" means the word there exactly where it would with a space.
+// Spaced around, a dash still parts ("Braces - Bill").
+const JOINER = /(?<=\p{L})[-_\u2010\u2011](?=\p{L})/gu
 // An owner's "'s" ("Bettina's Savings"), which is no part of the name.
 const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'iu')
 
@@ -60,22 +70,6 @@ const POSSESSIVE = new RegExp(`[${APOSTROPHES}]s$`, 'iu')
 // and "Al" are not, nor "LA" in "Trip to LA". A given name of two ("Jo
 // allowance") is, and so is one kin, a title or a payment app names ("Zelle to Ed").
 const SHORTEST_NAME = 3
-
-// Small words a person is named after ("gift for", "w/"), where nothing vouches.
-const CONNECTORS = new Set(['for', 'with', 'w', 'to', 'from'])
-
-// Words that name a person right after them, or after one of CONNECTORS
-// ("Zelle to Ed"): kin, titles and payment apps, of one word or two.
-const NAMERS = new Set([
-  ...['uncle', 'aunt', 'cousin', 'grandma', 'grandpa', 'grandmother', 'grandfather', 'nana'],
-  ...['brother', 'sister', 'son', 'daughter', 'wife', 'husband', 'friend', 'partner'],
-  ...['boyfriend', 'girlfriend', 'fiance', 'fiancee', 'niece', 'nephew', 'mom', 'dad'],
-  ...['papa', 'mr', 'mrs', 'ms', 'dr'],
-  // "app" stands for Cash App.
-  ...['venmo', 'zelle', 'paypal', 'chime', 'app', 'apple cash', 'square cash'],
-])
-// Every word of NAMERS, which is no one's itself ("Mrs", "Square").
-const NAMER_WORDS = new Set([...NAMERS].flatMap((namer) => namer.split(' ')))
 
 /** Whether a word (wordsOf) is surely no one's beyond everyday words: an account's. */
 type Plain = (word: string) => boolean
@@ -115,52 +109,7 @@ export async function ownerLabels(db: Db): Promise<string[]> {
 /** A text's words, numbers and marks as written (LABEL_WORDS), shops marked, set phrases left out. */
 function writtenWords(text: string, shops: KnownShops): string[] {
   const marked = withoutShops(text.normalize('NFC'), shops, ` ${SHOP_MARK} `)
-  return withoutEverydayPhrases(marked).match(LABEL_WORDS) ?? []
-}
-
-/** Whether a written token is a word, unlike a number or a mark that parts a label. */
-const lettered = (word: string | undefined) => word !== undefined && /^\p{L}/u.test(word)
-
-/** Where the nearest word is before (-1) or after (1) a written one, or -1 at an end. */
-function nearest(words: readonly string[], at: number, step: -1 | 1): number {
-  for (let next = at + step; next >= 0 && next < words.length; next += step) {
-    if (lettered(words[next])) return next
-  }
-  return -1
-}
-
-/** The word before a written word, alone and with the one before it ("cash", "apple cash"). */
-interface Before {
-  at: number
-  one: string
-  two: string
-}
-
-/** The words before a written word, or null when it starts the label. */
-function wordsBefore(words: readonly string[], at: number): Before | null {
-  const before = nearest(words, at, -1)
-  if (before < 0) return null
-  const one = wordsOf(words[before]!).join(' ')
-  const earlier = nearest(words, before, -1)
-  const two = earlier < 0 ? one : `${wordsOf(words[earlier]!).join(' ')} ${one}`
-  return { at: before, one, two }
-}
-
-/** Whether words before one are kin, a title or a payment app ("Uncle", "Apple Cash"). */
-const byANamer = (before: Before | null) =>
-  before !== null && (NAMERS.has(before.one) || NAMERS.has(before.two))
-
-/** Whether a written word follows one a person is named after ("for", "Uncle", "Venmo"). */
-function afterAPerson(words: readonly string[], at: number): boolean {
-  const before = wordsBefore(words, at)
-  return before !== null && (CONNECTORS.has(before.one) || byANamer(before))
-}
-
-/** Whether a written word follows kin, a title or a payment app, or one by "to" ("Zelle to Ed"). */
-function afterANamer(words: readonly string[], at: number): boolean {
-  const before = wordsBefore(words, at)
-  if (before === null) return false
-  return byANamer(before) || (CONNECTORS.has(before.one) && byANamer(wordsBefore(words, before.at)))
+  return withoutEverydayPhrases(marked).replace(JOINER, ' ').match(LABEL_WORDS) ?? []
 }
 
 /** Whether a word (wordsOf) is a shop's whole name of one word, named for no one ("target"). */
@@ -215,10 +164,16 @@ function wordNameAsWord(
   at: number,
   reading: Reading,
 ): boolean {
-  // A shop's name, or the first word of a longer one ("Xcel" of Xcel Energy), named for no one.
-  const shop = (written: string) => {
+  // A shop's name, or the first word of a longer one ("Xcel" of Xcel Energy), named for no
+  // one, vouches only when each of its words is itself shown where it stands: "Pemberton
+  // Bill" (Pemberton Plumbing) and "Gift for Target Bill" hide both. Its words are all before
+  // `at`, so reading them never comes back here.
+  const shop = (written: string, from: number) => {
     const word = written.toLowerCase()
-    return startsAShop(reading.shops, word) && !isNamedLikeAPerson(word) && !NAMER_WORDS.has(word)
+    if (!startsAShop(reading.shops, word) || isNamedLikeAPerson(word) || isNamerWord(word))
+      return false
+    const shopWords = words.slice(from, at).map((_word, offset) => from + offset)
+    return shopWords.every((place) => plainWord(label, words, place, reading))
   }
   if (afterAPerson(words, at) || unvouched(words, nearest(words, at, 1), reading)) return false
   return meansTheWord(label, words, at, shop)
@@ -244,7 +199,7 @@ function plainWord(label: string, words: readonly string[], at: number, reading:
   if (!lettered(word)) return true
   if (ownedName(word)) return false
   const whole = wordsOf(word).join('')
-  if (NAMER_WORDS.has(whole)) return true
+  if (isNamerWord(whole)) return true
   if (isWordName(whole)) return wordNameAsWord(label, words, at, reading)
   if (isEverydayWord(whole)) return true
   if (afterAPerson(words, at))

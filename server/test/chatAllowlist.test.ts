@@ -14,6 +14,8 @@ const SERVICES = 'GENERAL_SERVICES_OTHER_GENERAL_SERVICES'
 const MERCHANDISE = 'GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE'
 const LOAN = 'LOAN_PAYMENTS_OTHER_PAYMENT'
 const CARD = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+// A row's id, as every tool sends it.
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const probe = useChatProbe()
 const { pay } = probe
 
@@ -128,8 +130,11 @@ describe('a row that is surely no purchase from a business', () => {
 
     const text = await probe.everything()
     expect(HIDDEN.filter((name) => text.includes(name))).toEqual([])
+    // Row ids are random UUIDs, sent on purpose, and one holds "4417" by chance in a run
+    // or two in a hundred, so the numbers are looked for in the text without them.
+    const withoutIds = text.replace(UUID, '')
     for (const number of ['4417', '123456789', '55512', 'jpm99a1b2c3']) {
-      expect([number, text.includes(number)]).toEqual([number, false])
+      expect([number, withoutIds.includes(number)]).toEqual([number, false])
     }
     expect([...new Set(await shown())]).toEqual([
       'Bill payment',
