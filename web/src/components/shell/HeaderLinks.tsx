@@ -1,6 +1,6 @@
 // The round links in the phone's header, and at the foot of the sidebar: the
 // Inbox bell and Settings. Chat has no link here: Ask Leeway is on every
-// screen instead (ask/AskDock.tsx).
+// screen instead (ask/AskFab.tsx).
 
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'

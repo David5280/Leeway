@@ -1,8 +1,8 @@
 // Chat on a desktop. With no Anthropic key, as the test server runs, Chat is
-// hidden for real: no Ask Leeway rail or panel, and its address leads home.
-// Turned on by stand-ins (chat.ts), Ask Leeway opens as a panel beside any
-// screen, answers a starter as a stream, remembers, forgets and starts over,
-// and the full Chat page still works for old links.
+// hidden for real: no Ask Leeway button or box, and its address leads home.
+// Turned on by stand-ins (chat.ts), Ask Leeway's logo button opens a box in
+// the corner of any screen, which answers a starter as a stream, remembers,
+// forgets and starts over, and the full Chat page still works for old links.
 
 import { expect, test } from '@playwright/test'
 import { askStarter, openChat, pretendChatOn } from './chat'
@@ -19,13 +19,23 @@ test('is hidden entirely without an AI key', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Ask Leeway' })).toHaveCount(0)
 })
 
-test('with a key, it opens beside any screen and answers a starter', async ({ page }) => {
+test('with a key, it opens in the corner of any screen and answers a starter', async ({ page }) => {
   await pretendChatOn(page)
   await page.goto('/payday')
-  await page.getByRole('button', { name: 'Open Ask Leeway: Ask about Payday' }).click()
-  const panel = page.getByRole('complementary', { name: 'Ask Leeway' })
-  await expect(panel.getByRole('heading', { name: 'Ask anything about your money' })).toBeVisible()
+  await page.getByRole('button', { name: 'Ask Leeway' }).click()
+  const box = page.getByRole('dialog', { name: 'Ask Leeway' })
+  await expect(box.getByRole('heading', { name: 'Ask anything about your money' })).toBeVisible()
+  await expect(box.getByRole('textbox', { name: 'Your question' })).toHaveAttribute(
+    'placeholder',
+    'Ask about Payday',
+  )
   await expect(page).toHaveURL(/\/payday$/)
+  // About 400px wide, anchored to the bottom right, inside the window.
+  const opened = (await box.boundingBox())!
+  const screenSize = page.viewportSize()!
+  expect(opened.width).toBeLessThanOrEqual(400)
+  expect(opened.x + opened.width).toBeLessThanOrEqual(screenSize.width)
+  expect(opened.y + opened.height).toBeLessThanOrEqual(screenSize.height)
 
   await askStarter(page)
   const log = page.getByRole('list', { name: 'Conversation' })
@@ -54,15 +64,19 @@ test('a typed question goes with Enter', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Start over' })).toBeVisible()
 })
 
-test('the panel stays open across tabs, carries the screen, and is remembered', async ({
-  page,
-}) => {
+test('it closes on Escape and carries the screen it was opened on', async ({ page }) => {
   await pretendChatOn(page)
   await page.goto('/payday')
-  await page.getByRole('button', { name: /^Open Ask Leeway/ }).click()
+  const button = page.getByRole('button', { name: 'Ask Leeway' })
+  await button.click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Ask Leeway' })).toHaveCount(0)
+  await expect(button).toBeFocused()
+
   await page.getByRole('link', { name: 'Goals' }).click()
+  await page.getByRole('button', { name: 'Ask Leeway' }).click()
   const box = page
-    .getByRole('complementary', { name: 'Ask Leeway' })
+    .getByRole('dialog', { name: 'Ask Leeway' })
     .getByRole('textbox', { name: 'Your question' })
   await expect(box).toHaveAttribute('placeholder', 'Ask about Goals')
   const asked = page.waitForRequest('**/api/chat')
@@ -72,6 +86,4 @@ test('the panel stays open across tabs, carries the screen, and is remembered', 
     message: 'Am I on track?',
     context: { screen: 'Goals' },
   })
-  await page.reload()
-  await expect(page.getByRole('complementary', { name: 'Ask Leeway' })).toBeVisible()
 })

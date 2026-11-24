@@ -24,7 +24,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react'
-import { useAskOffered } from './AskDock'
+import { useAskOffered } from './AskFab'
 import { cardAbout } from './cardAbout'
 import { useKeyboardReach } from './useKeyboardReach'
 
@@ -37,7 +37,7 @@ export const HOLD_SLOP_PX = 10
 /**
  * How long after a held press is let go its click may still arrive, in
  * milliseconds. Past it no click is swallowed, even when the release landed
- * off the card (or on a sheet over it) and the card never saw a click.
+ * off the card (or on the box it opened) and the card never saw a click.
  */
 export const HELD_CLICK_MS = 300
 
@@ -98,7 +98,7 @@ function useHeldRelease() {
 
   const hold = useCallback(() => {
     held.current = true
-    // Heard on the whole document, captured: the release may land on a sheet or off the card.
+    // Heard on the whole document, captured: the release may land on the box or off the card.
     const letGo = () => {
       stop.current()
       timer.current = setTimeout(() => (held.current = false), HELD_CLICK_MS)

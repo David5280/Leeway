@@ -204,10 +204,10 @@ describe('moveWidget', () => {
 })
 
 describe('Ask Leeway on the Overview', () => {
-  it('is the frame bar alone, naming Home, with no Ask bar on the page itself', async () => {
+  it("is the frame's button alone, with no Ask link on the page itself", async () => {
     serve(settings, { get_chat_status: () => ({ available: true }) })
     renderOverview()
-    expect(await screen.findByRole('button', { name: 'Ask Leeway: Ask about Home' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Ask Leeway' })).toBeVisible()
     expect(screen.getAllByRole('button', { name: /^Ask Leeway/ })).toHaveLength(1)
     expect(screen.queryByRole('link', { name: /Ask about your money/ })).not.toBeInTheDocument()
   })

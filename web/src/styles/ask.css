@@ -1,96 +1,218 @@
-/* Ask Leeway on every screen (components/ask/AskDock.tsx): the slim bar
-   above the phone's tabs, the conversation in a sheet over the screen, and
-   the computer's panel on the right or the rail it collapses to. Plain ink,
-   muted and line colors only: the bar wears no place or status color, and
-   only the box to type in lights with the accent when it has focus. */
+/* Ask Leeway on every screen (components/ask/AskFab.tsx and AskBox.tsx): a
+   round logo button in the bottom right corner, and the box it grows into.
+   Plain surface, ink, muted and line colors only: neither wears a place or
+   status color, and only the question field lights with the accent when it
+   has focus. */
 
-/* The bar (phone) ---------------------------------------------------------- */
+/* The corner ------------------------------------------------------------- */
 
-/* How much the bar takes from the bottom of the page: its 44px tap height
-   and the 8px around it. */
-.shell {
-  --ask-dock: 60px;
+/* Where the button and box sit, per frame (shell/frame.ts), measured from
+   the bottom right. The phone's tab bar is about 65px tall with its border. */
+.ask-fab {
+  --ask-fab-size: 52px;
+  --ask-fab-right: calc(16px + var(--sar));
+  --ask-fab-bottom: calc(65px + 12px + var(--sab));
 }
 
-/* Fixed just above the tab bar (about 65px tall with its border), clear of
-   the notch at either side. Only the bar takes taps; the strip around it
-   lets them through to the page. */
-.ask-dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(65px + var(--sab));
-  z-index: 10;
-  display: flex;
-  justify-content: center;
-  padding: 8px calc(16px + var(--sar)) 8px calc(16px + var(--sal));
-  pointer-events: none;
+.ask-fab[data-frame='short'] {
+  --ask-fab-bottom: calc(12px + var(--sab));
 }
 
-/* A phone turned sideways has no tab bar: the bar sits at the foot. */
-.shell-short .ask-dock {
-  bottom: var(--sab);
+.ask-fab[data-frame='sidebar'] {
+  --ask-fab-right: calc(24px + var(--sar));
+  --ask-fab-bottom: calc(24px + var(--sab));
 }
 
-/* The page's end clears the bar as well as the tab bar, so nothing hides under it. */
+/* The page's end clears the button (its size and a gap) as well as the tab
+   bar, so the last card never rests under it. */
 .shell-tabbar.shell-ask .page {
-  padding-bottom: calc(96px + var(--ask-dock) + var(--sab));
+  padding-bottom: calc(96px + 64px + var(--sab));
 }
 
 .shell-short.shell-ask .page {
-  padding-bottom: calc(16px + var(--ask-dock) + var(--sab));
+  padding-bottom: calc(12px + 64px + 12px + var(--sab));
 }
 
-/* Looks like a box to type in; a tap opens the conversation. */
-.ask-bar {
+.shell-sidebar.shell-ask .page {
+  padding-bottom: calc(24px + 64px + 16px + var(--sab));
+}
+
+/* The button ------------------------------------------------------------- */
+
+.ask-fab-button {
+  position: fixed;
+  right: var(--ask-fab-right);
+  bottom: var(--ask-fab-bottom);
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  width: var(--ask-fab-size);
+  height: var(--ask-fab-size);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--elev-1), var(--hi);
+  cursor: pointer;
+  transition: transform var(--duration-quick) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .ask-fab-button:hover {
+    transform: scale(1.05);
+  }
+}
+
+.ask-fab-button:active {
+  transform: scale(0.96);
+}
+
+/* Covered by the open box: it hides at once, so it never peeks out as the
+   box grows. */
+.ask-fab-button[aria-expanded='true'] {
+  visibility: hidden;
+}
+
+/* The box ---------------------------------------------------------------- */
+
+/* Anchored to the same corner, over the button. A computer's box is about
+   400px wide and two thirds of the window tall. Above the tab bar, below
+   menus and sheets. */
+.ask-box {
+  position: fixed;
+  right: var(--ask-fab-right);
+  bottom: var(--ask-fab-bottom);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 32px - var(--sal) - var(--sar)));
+  height: 65vh;
+  height: 65dvh;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--elev-2), var(--hi);
+  overflow: hidden;
+  transform-origin: bottom right;
+  animation: ask-box-grow var(--duration-quick) var(--ease-out) both;
+}
+
+/* A phone: nearly the full width, and most of the height above the tab bar,
+   short of the header's top row (wider tablets keep a readable width). */
+.ask-fab[data-frame='tabbar'] .ask-box {
+  right: calc(8px + var(--sar));
+  width: min(520px, calc(100vw - 16px - var(--sal) - var(--sar)));
+  height: auto;
+  top: calc(var(--sat) + 56px);
+}
+
+/* A phone turned sideways has little height: the box takes nearly all of it. */
+.ask-fab[data-frame='short'] .ask-box {
+  height: auto;
+  top: calc(var(--sat) + 12px);
+}
+
+/* Shrinks back into the button; AskFab.tsx's BOX_EXIT_MS matches this. */
+.ask-box[data-state='closing'] {
+  animation: ask-box-shrink 140ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes ask-box-grow {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+@keyframes ask-box-shrink {
+  to {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+/* No growing or shrinking when the device asks for less motion: a closing
+   box simply goes. */
+@media (prefers-reduced-motion: reduce) {
+  .ask-fab-button,
+  .ask-box {
+    animation: none;
+    transition: none;
+  }
+
+  .ask-box[data-state='closing'] {
+    visibility: hidden;
+  }
+}
+
+/* Its header: the logo and name, and the close button. */
+.ask-box-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.ask-box-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
-  max-width: 640px;
-  min-height: var(--tap);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--elev-1);
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.ask-box-close {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--muted);
-  font: 400 15px var(--font-ui);
-  text-align: left;
-  cursor: text;
-  pointer-events: auto;
+  cursor: pointer;
 }
 
-.ask-bar > svg {
-  flex: none;
-  color: var(--ink);
+@media (hover: hover) {
+  .ask-box-close:hover {
+    background: var(--surface-2);
+  }
 }
 
-.ask-bar-prompt {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The conversation, docked (pages/chat/ChatThread.tsx): it scrolls on its
+   own, the question field held at the bottom. */
+.ask-box .chat-docked {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  gap: 0;
 }
 
-.ask-bar:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-}
-
-/* The sheet (phone) -------------------------------------------------------- */
-
-/* Tall enough to read a conversation without the sheet jumping as it grows. */
-.ask-sheet-body {
-  min-height: 55dvh;
-}
-
-.ask-sheet-body .chat,
-.ask-panel .chat {
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
-/* The card a question is about, over the box to type in. */
+.chat-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+/* The card a question is about, over the question field. */
 .ask-about {
   display: flex;
   align-items: center;
@@ -134,79 +256,4 @@
    preview away; its text can still be selected. */
 [data-ask-hold] {
   -webkit-touch-callout: none;
-}
-
-/* The panel (computer) ----------------------------------------------------- */
-
-/* A third column beside the page: the slim rail, or the open panel. */
-.shell-sidebar.shell-ask {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-
-/* Both stay in view as the page scrolls, as the sidebar does. */
-.ask-rail,
-.ask-panel {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
-  border-left: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.ask-rail {
-  display: flex;
-  justify-content: center;
-  width: calc(64px + var(--sar));
-  padding: max(28px, calc(var(--sat) + 8px)) var(--sar) 0 0;
-}
-
-.ask-rail-open,
-.ask-panel-collapse {
-  display: inline-grid;
-  place-items: center;
-  width: var(--tap);
-  height: var(--tap);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.ask-panel-collapse {
-  border-color: transparent;
-  color: var(--muted);
-}
-
-@media (hover: hover) {
-  .ask-rail-open:hover,
-  .ask-panel-collapse:hover {
-    background: var(--surface-2);
-  }
-}
-
-/* The open panel: its title, then the conversation, scrolling on its own. */
-.ask-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  width: calc(360px + var(--sar));
-  padding: max(24px, calc(var(--sat) + 8px)) calc(16px + var(--sar)) calc(16px + var(--sab)) 16px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-.ask-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ask-panel-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-lg);
 }

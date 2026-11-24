@@ -13,8 +13,8 @@
 
 import { useEffect, useState } from 'react'
 
-/** What Tab can land on inside a card, matching the Sheet's own list. */
-const FOCUSABLE =
+/** What Tab can land on (inside a card, or where an outside press lands), matching the Sheet's own list. */
+export const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable], [tabindex]:not([tabindex="-1"])'
 
 /** Whether anything inside `card` (not the card itself) can take focus. */

@@ -1,7 +1,11 @@
-// The conversation with Leeway, wherever it is shown: the full Chat page,
-// the phone's sheet over a screen, or the computer's panel beside one. Its
-// state lives in AskProvider, so all three are the same conversation and a
-// question keeps streaming while the owner moves between screens.
+// The conversation with Leeway, wherever it is shown: the full Chat page, or
+// Ask Leeway's box in the corner of any screen. Its state lives in
+// AskProvider, so both are the same conversation and a question keeps
+// streaming while the box is closed or the owner moves between screens.
+//
+// Laid out two ways: on the page, one column with the question field under
+// the conversation; docked in the box, the conversation scrolls on its own
+// with the field (and the card asked about) held at the bottom.
 
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import type { Output } from '../../api/client'
@@ -15,6 +19,7 @@ import { Starters } from './Starters'
 import { StartOver } from './StartOver'
 import type { Unanswered } from './useAsk'
 import { useFollowEnd } from './useFollowEnd'
+import { useKeptScroll } from './useKeptScroll'
 
 /** Past this share of the day's allowance, Chat says how much is used. */
 const ALLOWANCE_NOTE_AT = 0.75
@@ -23,8 +28,8 @@ const ALLOWANCE_NOTE_AT = 0.75
 const ANSWER_POLL_MS = 1500
 
 /**
- * How long the conversation read counts as fresh, in milliseconds. The
- * computer's panel is drawn anew on every tab, and this keeps a tab switch
+ * How long the conversation read counts as fresh, in milliseconds. The box
+ * is drawn anew each time it opens and on every tab, and this keeps those
  * from reading it again. A question asked here refreshes it at once
  * (useAsk.ts), so this only delays seeing one asked on another device.
  */
@@ -47,12 +52,12 @@ function useConversation() {
   })
 }
 
-/** Moves focus to the question box when asked to (the "/" key, a bar or a card), once it is drawn. */
+/** Moves focus to the question field when asked to (the "/" key, the button or a card), once it is drawn. */
 function useTakeFocus(input: RefObject<HTMLTextAreaElement | null>, talk: AskTalk, drawn: boolean) {
   const { wantsFocus, focused } = talk
   useEffect(() => {
     if (!wantsFocus || !drawn) return
-    // After every effect of this render, so a sheet focusing itself on open cannot take it back.
+    // After every effect of this render, so nothing focusing itself on open can take it back.
     queueMicrotask(() => input.current?.focus())
     focused()
   }, [wantsFocus, drawn, input, focused])
@@ -105,24 +110,52 @@ function AboutCard({ talk }: { talk: AskTalk }) {
   )
 }
 
+/** The page's heading, if any, and the way to start over once there is something to clear. */
+function Head({
+  heading,
+  canStartOver,
+  onCleared,
+}: {
+  heading?: ReactNode
+  canStartOver: boolean
+  onCleared: () => void
+}) {
+  if (!heading && !canStartOver) return null
+  return (
+    <header className="row-between chat-head">
+      {heading ?? <span />}
+      {canStartOver && <StartOver onCleared={onCleared} />}
+    </header>
+  )
+}
+
 export function ChatThread({
   heading,
   placeholder,
+  docked = false,
+  keptScroll,
 }: {
-  /** The page's own heading; the sheet and panel have theirs already. */
+  /** The page's own heading; the box has its own already. */
   heading?: ReactNode
-  /** What the empty box says, like "Ask about Payday". */
+  /** What the empty field says, like "Ask about Payday". */
   placeholder?: string
+  /** Laid out for Ask Leeway's box: the conversation scrolls, the field stays at the bottom. */
+  docked?: boolean
+  /** Where the docked conversation's scroll is kept between drawings (AskProvider). */
+  keptScroll?: RefObject<number | null>
 }) {
   const chat = useConversation()
   const talk = useAskTalk()
   const { draft, setDraft, pending, error, finished, ask } = talk
   const end = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
+  const drawn = chat.data !== undefined
   // Changes with each new message and each piece of streamed text.
   const progress = `${chat.data?.messages.length}:${pending?.question}:${pending?.text.length}`
   useFollowEnd(end, progress)
-  useTakeFocus(input, talk, chat.data !== undefined)
+  useTakeFocus(input, talk, drawn)
+  // After useFollowEnd, so a kept scroll wins over the jump to the end on first drawing.
+  const scroll = useKeptScroll(keptScroll, drawn)
 
   if (!chat.data) return <LoadingOrError error={chat.error} />
   const { messages, facts, allowance } = chat.data
@@ -135,20 +168,23 @@ export function ChatThread({
     ask(question)
   }
 
-  return (
-    <div className="chat">
-      {(heading || canStartOver) && (
-        <header className="row-between chat-head">
-          {heading ?? <span />}
-          {canStartOver && <StartOver onCleared={() => input.current?.focus()} />}
-        </header>
-      )}
+  const conversation = (
+    <>
+      <Head
+        heading={heading}
+        canStartOver={canStartOver}
+        onCleared={() => input.current?.focus()}
+      />
       {messages.length === 0 && !pending ? (
         <Starters ask={send} busy={busy} />
       ) : (
         <Conversation messages={messages} pending={pending} />
       )}
       <Notes elsewhere={elsewhere} error={error} />
+    </>
+  )
+  const field = (
+    <>
       <AboutCard talk={talk} />
       <Composer
         draft={draft}
@@ -158,6 +194,10 @@ export function ChatThread({
         inputRef={input}
         placeholder={placeholder}
       />
+    </>
+  )
+  const extras = (
+    <>
       <AllowanceNote allowance={allowance} />
       <Remembered facts={facts} />
       {/* One stable place that announces each finished answer, once. */}
@@ -165,6 +205,25 @@ export function ChatThread({
         {finished}
       </p>
       <div ref={end} />
+    </>
+  )
+
+  if (docked) {
+    return (
+      <div className="chat chat-docked">
+        <div className="chat-scroll" {...scroll}>
+          {conversation}
+          {extras}
+        </div>
+        <div className="chat-foot">{field}</div>
+      </div>
+    )
+  }
+  return (
+    <div className="chat">
+      {conversation}
+      {field}
+      {extras}
     </div>
   )
 }

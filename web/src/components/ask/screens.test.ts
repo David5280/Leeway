@@ -1,18 +1,20 @@
 // Ask Leeway's pure pieces: each screen's name, which addresses in an
 // answer are the app's own screens, the "/" key's rules, what a card is
-// about, and the panel remembered without storage.
+// about, which presses outside the box keep their own focus, and the box
+// kept on screen while it plays its way out.
 
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LINKABLE_SCREENS } from '../../../../server/src/lib/appPaths'
 import { SCREEN_ROUTES } from '../../routes'
 import { cardAbout } from './cardAbout'
 import { slashKey } from './keys'
-import { readPanelOpen, writePanelOpen } from './panelMemory'
 import { isAppLink, screenName } from './screens'
+import { takesFocus } from './useOutsidePress'
+import { usePresence } from './usePresence'
 
 afterEach(() => {
-  vi.restoreAllMocks()
-  localStorage.clear()
+  vi.useRealTimers()
 })
 
 describe('screenName', () => {
@@ -101,21 +103,51 @@ describe('cardAbout', () => {
   })
 })
 
-describe('the panel remembered', () => {
-  it('is closed until left open, then open', () => {
-    expect(readPanelOpen()).toBe(false)
-    writePanelOpen(true)
-    expect(readPanelOpen()).toBe(true)
+describe('takesFocus', () => {
+  /** An element made from markup, found by its id. */
+  const element = (html: string, id: string) => {
+    document.body.innerHTML = html
+    return document.getElementById(id)
+  }
+
+  it('is true for a field, a link or a button, and for words inside one', () => {
+    expect(takesFocus(element('<input id="x" />', 'x'))).toBe(true)
+    expect(takesFocus(element('<a href="/goals"><span id="x">Goals</span></a>', 'x'))).toBe(true)
+    expect(takesFocus(element('<button><svg id="x"></svg></button>', 'x'))).toBe(true)
   })
 
-  it('is closed, quietly, when storage refuses', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('blocked')
+  it('is false for plain words, a disabled button, or nothing at all', () => {
+    expect(takesFocus(element('<p id="x">Just words</p>', 'x'))).toBe(false)
+    expect(takesFocus(element('<button disabled id="x">Off</button>', 'x'))).toBe(false)
+    expect(takesFocus(null)).toBe(false)
+  })
+})
+
+describe('usePresence', () => {
+  it('draws at once on opening, and stays exitMs past closing, marked as leaving', () => {
+    vi.useFakeTimers()
+    const { result, rerender } = renderHook(({ open }) => usePresence(open, 140), {
+      initialProps: { open: false },
     })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked')
+    expect(result.current).toEqual({ mounted: false, leaving: false })
+    rerender({ open: true })
+    expect(result.current).toEqual({ mounted: true, leaving: false })
+    rerender({ open: false })
+    expect(result.current).toEqual({ mounted: true, leaving: true })
+    act(() => vi.advanceTimersByTime(139))
+    expect(result.current.mounted).toBe(true)
+    act(() => vi.advanceTimersByTime(1))
+    expect(result.current).toEqual({ mounted: false, leaving: false })
+  })
+
+  it('stays drawn, no longer leaving, when opened again on its way out', () => {
+    vi.useFakeTimers()
+    const { result, rerender } = renderHook(({ open }) => usePresence(open, 140), {
+      initialProps: { open: true },
     })
-    expect(() => writePanelOpen(true)).not.toThrow()
-    expect(readPanelOpen()).toBe(false)
+    rerender({ open: false })
+    rerender({ open: true })
+    act(() => vi.advanceTimersByTime(500))
+    expect(result.current).toEqual({ mounted: true, leaving: false })
   })
 })
