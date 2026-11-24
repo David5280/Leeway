@@ -12,6 +12,7 @@
 // suggestions (untrackedRecurring.ts): once tracked, it comes back here as
 // a bill, so the same charge is never offered in two places.
 
+import { createHash } from 'node:crypto'
 import { dateParts, daysBetween, makeDate, type IsoDate } from '../../lib/dates.js'
 import { median } from '../../lib/money.js'
 import { addCadence } from '../../lib/periods.js'
@@ -75,11 +76,16 @@ export const isFundCadence = (cadence: string): cadence is FundCadence =>
 export const billKey = (billId: string) => `bill:${billId}`
 
 /**
- * The key a charge's suggestion is kept under: made from the name the app
- * shows, never the bank's text, so an assistant handed it learns nothing the
- * owner cannot see.
+ * The key a charge's suggestion is kept under: a digest of the name the app
+ * shows, written like an id. Stable, so a dismissal sticks, and holding no
+ * name, so Chat can hand it to a model whole (chat/toolOutput.ts keeps ids
+ * as they are) while the model reads the suggestion by its label.
  */
-export const shownKey = (name: string) => `name:${textKey(name)}`
+export function shownKey(name: string): string {
+  const hex = createHash('sha256').update(textKey(name)).digest('hex')
+  const parts = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20)]
+  return [...parts, hex.slice(20, 32)].join('-')
+}
 
 /** Bills the owner tracks that come due yearly or quarterly. */
 export function billFunds(bills: Bill[]): FundSuggestion[] {

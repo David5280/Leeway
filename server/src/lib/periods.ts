@@ -109,7 +109,7 @@ export function shiftPeriod(current: Period, offset: number, config: PeriodConfi
  */
 export type Cadence = 'week' | 'biweek' | 'semimonth' | 'month' | 'quarter' | 'year'
 
-const DAYS_PER_YEAR = 365.25
+export const DAYS_PER_YEAR = 365.25
 
 export const PER_YEAR: Record<Cadence, number> = {
   week: DAYS_PER_YEAR / 7,

@@ -11,7 +11,7 @@ import type { Cadence } from '../../lib/periods.js'
 import { isoDateSchema } from '../../lib/schemas.js'
 import { listBills, type Bill } from '../bills.js'
 import { billKey, isFundCadence } from './detect.js'
-import { FUND_CADENCES, nextDue, shareOf, type FundCadence } from './math.js'
+import { FUND_CADENCES, nextDue, shareOf, shortAtDue, type FundCadence } from './math.js'
 
 export const fundInputSchema = z
   .object({
@@ -49,6 +49,8 @@ export interface SinkingFund {
   nextDueDate: IsoDate
   /** Its steady share of one budget period, held back from the budget's room. */
   perPeriodCents: number
+  /** What those shares will still be short of the cost on nextDueDate; 0 when covered. */
+  shortCents: number
 }
 
 interface FundRow {
@@ -58,10 +60,12 @@ interface FundRow {
   amountCents: number | null
   cadence: FundCadence | null
   anchorDate: IsoDate | null
+  /** The day it was added, from which its shares were held back. */
+  addedOn: IsoDate
 }
 
 const COLUMNS = `id, bill_id AS "billId", name, amount_cents::int AS "amountCents", cadence,
-  anchor_date AS "anchorDate"`
+  anchor_date AS "anchorDate", created_at::date AS "addedOn"`
 
 /** What a fund saves toward: the cost's name, amount, cadence and next due date. */
 type Cost = Pick<SinkingFund, 'name' | 'amountCents' | 'cadence' | 'nextDueDate'>
@@ -97,7 +101,12 @@ function fundOf(row: FundRow, bills: Bill[], today: IsoDate, period: Cadence): S
   if (!cost) return null
   const { name, amountCents, cadence, nextDueDate } = cost
   const perPeriodCents = shareOf(cost, period)
-  return { id: row.id, billId: row.billId, name, amountCents, cadence, nextDueDate, perPeriodCents }
+  // The app's clock can trail the database's (as a test's does); no share is held before today.
+  const startedOn = row.addedOn < today ? row.addedOn : today
+  const span = { startedOn, dueDate: nextDueDate }
+  const shortCents = shortAtDue(cost, perPeriodCents, period, span)
+  const shares = { perPeriodCents, shortCents }
+  return { id: row.id, billId: row.billId, name, amountCents, cadence, nextDueDate, ...shares }
 }
 
 /** Every fund, the soonest due first, with its share of a budget period on `period`. */

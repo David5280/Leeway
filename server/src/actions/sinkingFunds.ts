@@ -15,7 +15,7 @@ import { defineAction } from './action.js'
 import { settingsAndToday } from './today.js'
 
 const VIEW =
-  'funds are the sinking funds added, each with its cost (amountCents), cadence (quarter or year), nextDueDate, billId (the tracked bill it follows, whose name, amount and due dates it takes; null for one standing alone) and perPeriodCents (held back from safe to spend each budget period, the same way a goal set aside is; the cash flow does not count it). suggestions are costs not added or dismissed yet, with key, billId, name, amountCents, cadence, dueDate and basis (bill: a tracked yearly or quarterly bill; renewal: one large charge about a year ago that reads like insurance, a registration or a membership; holidays: December spending above a usual month). shareCents is the steady share of each paycheck (shareOf paycheck, the same payday get_cash_flow uses) or, while no pay is known, of each budget period (shareOf period) that covers the cost over its cycle. Amounts are in cents.'
+  'funds are the sinking funds added, each with its cost (amountCents), cadence (quarter or year), nextDueDate, billId (the tracked bill it follows, whose name, amount and due dates it takes; null for one standing alone), perPeriodCents (its steady share of each budget period, held back from safe to spend the same way a goal set aside is; the cash flow does not count it) and shortCents (what those shares will still be short of the cost on nextDueDate, when it was added too close to it; 0 when covered). totalPerPeriodCents is what the funds hold back each budget period, in all. suggestions are costs not added or dismissed yet, with key, billId, name, amountCents, cadence, dueDate, perPeriodCents (the share it would hold back) and basis (bill: a tracked yearly or quarterly bill; renewal: one large charge about a year ago that reads like insurance, a registration or a membership; holidays: December spending above a usual month). Amounts are in cents.'
 
 export const listSinkingFundsAction = defineAction({
   name: 'list_sinking_funds',
@@ -34,7 +34,7 @@ export const addSinkingFundAction = defineAction({
   name: 'add_sinking_fund',
   title: 'Add a sinking fund',
   description:
-    "Adds a sinking fund. For a bill's suggestion pass its billId alone: the fund follows the bill. Otherwise pass name, amountCents (the cost each time), cadence (quarter or year) and dueDate (when it is next due), with sourceKey set to a suggestion's key so it is not suggested again. Ask the owner first, since its share of each budget period is then held back from safe to spend, like a goal set aside. Refused when that bill or suggestion was already added. Returns the fund. Nothing moves money.",
+    "Adds a sinking fund. For a bill's suggestion pass its billId alone: the fund follows the bill. Otherwise pass name, amountCents (the cost each time), cadence (quarter or year) and dueDate (when it is next due), with sourceKey set to a suggestion's key so it is not suggested again. Ask the owner first, since its share of each budget period (perPeriodCents) is then held back from safe to spend, like a goal set aside. Refused when that bill or suggestion was already added. Returns the fund. Nothing moves money.",
   input: fundInputSchema,
   scope: 'write',
   surface: 'all',
@@ -71,3 +71,11 @@ export const dismissSinkingFundAction = defineAction({
     return { dismissed: true }
   },
 })
+
+/** The sinking fund actions, in the order the action list shows them. */
+export const sinkingFundActions = [
+  listSinkingFundsAction,
+  addSinkingFundAction,
+  deleteSinkingFundAction,
+  dismissSinkingFundAction,
+] as const

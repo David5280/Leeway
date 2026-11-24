@@ -1,5 +1,7 @@
-// Sinking funds on Payday: the total set aside each paycheck, the costs
-// Leeway found added or waved off in one tap, and one added by hand.
+// Sinking funds on Payday, in one Yearly costs card: the total set aside
+// each budget period (what safe to spend holds back), a calm note for a cost
+// due too soon, the costs Leeway found added or waved off in one tap, and
+// the funds opened, removed or added by hand.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -9,7 +11,7 @@ import { failing } from '../../../test/fake'
 import { fund, fundsView, suggestion } from '../../../test/funds'
 import { payView } from '../../../test/pay'
 import { planServer, renderPlan } from '../../../test/planning'
-import { basisWords, shareWords } from './fundText'
+import { basisWords, firstShort } from './fundText'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -39,35 +41,49 @@ function show(view: SinkingFundsView) {
   return { server, user: userEvent.setup() }
 }
 
+/** The one Yearly costs card, once it has loaded. */
+const yearlyCosts = () => screen.findByRole('region', { name: 'Yearly costs' })
+
 describe('Yearly costs', () => {
-  it('leads with what the funds take from each paycheck, and the next one due', async () => {
+  it('leads with what the funds hold back each budget period, and the next one due', async () => {
     show(fundsView([water, insurance]))
-    const total = await screen.findByRole('region', { name: 'Yearly costs' })
-    // $240 a quarter is $36.82 a paycheck; $780 a year is $29.90.
-    expect(total).toHaveTextContent('Set aside each paycheck$67')
-    expect(total).toHaveTextContent(
+    const card = await yearlyCosts()
+    // $240 a quarter is $80 a month; $780 a year is $65.
+    expect(card).toHaveTextContent('Set aside each month$145')
+    expect(card).toHaveTextContent(
       'For 2 costs, so none lands all at once. Next up: Water, Thu, Dec 10.',
     )
+    // The funds stay folded away until asked for.
+    expect(within(card).queryByRole('group', { name: 'Saving for' })).not.toBeInTheDocument()
+  })
+
+  it('says calmly when a cost lands before its shares cover it', async () => {
+    const { user } = show(fundsView([{ ...insurance, shortCents: 52_000 }]))
+    const card = await yearlyCosts()
+    expect(card).toHaveTextContent('Car insurance: $520 short by Mon, Mar 1, set aside more now.')
+    await user.click(within(card).getByRole('button', { name: 'Your costs' }))
+    const list = within(card).getByRole('group', { name: 'Saving for' })
+    expect(list).toHaveTextContent('$520 short by Mon, Mar 1, set aside more now.')
   })
 
   it('opens the math, cost by cost', async () => {
     const { user } = show(fundsView([insurance]))
-    const total = await screen.findByRole('region', { name: 'Yearly costs' })
-    expect(total).toHaveTextContent('For one cost')
-    await user.click(within(total).getByRole('button'))
+    const card = await yearlyCosts()
+    expect(card).toHaveTextContent('For one cost')
+    await user.click(within(card).getByRole('button', { name: /show how it adds up/ }))
     const sheet = screen.getByRole('dialog', { name: 'Yearly costs' })
     expect(
-      within(sheet).getByText('Set aside each paycheck $30 = Car insurance $30'),
+      within(sheet).getByText('Set aside each month $65 = Car insurance $65'),
     ).toBeInTheDocument()
     expect(sheet).toHaveTextContent('a year, next Mon, Mar 1')
   })
 
   it('adds a cost it found in one tap, with its key so it is not offered again', async () => {
-    const { server, user } = show(fundsView([], [renewal]))
-    const found = await screen.findByRole('region', { name: 'Worth saving for' })
-    expect(found).toHaveTextContent('Acme Auto Insurance')
-    expect(found).toHaveTextContent('$640 a year, next Tue, Dec 15. $25 each paycheck.')
-    expect(found).toHaveTextContent('Charged about a year ago')
+    const { server, user } = show(fundsView([insurance], [renewal]))
+    const found = await screen.findByRole('group', { name: 'Worth saving for' })
+    expect(found).toHaveTextContent(
+      'Acme Auto Insurance$640 a year, next Tue, Dec 15. Charged about a year ago.',
+    )
     await user.click(within(found).getByRole('button', { name: 'Add' }))
     await waitFor(() =>
       expect(server.actions('add_sinking_fund')).toEqual([
@@ -76,7 +92,7 @@ describe('Yearly costs', () => {
           amountCents: 64_000,
           cadence: 'year',
           dueDate: '2026-12-15',
-          sourceKey: 'name:acme auto insurance',
+          sourceKey: renewal.key,
         },
       ]),
     )
@@ -84,7 +100,7 @@ describe('Yearly costs', () => {
 
   it('adds a bill by its id alone, so the fund follows the bill', async () => {
     const { server, user } = show(fundsView([], [bill]))
-    const found = await screen.findByRole('region', { name: 'Worth saving for' })
+    const found = await screen.findByRole('group', { name: 'Worth saving for' })
     expect(found).toHaveTextContent('A bill you track')
     await user.click(within(found).getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(server.actions('add_sinking_fund')).toEqual([{ billId: 'bill-1' }]))
@@ -94,17 +110,17 @@ describe('Yearly costs', () => {
     const { server, user } = show(fundsView([], [renewal]))
     await user.click(await screen.findByRole('button', { name: 'Not needed' }))
     await waitFor(() =>
-      expect(server.actions('dismiss_sinking_fund')).toEqual([{ key: 'name:acme auto insurance' }]),
+      expect(server.actions('dismiss_sinking_fund')).toEqual([{ key: renewal.key }]),
     )
   })
 
   it('explains itself before any fund, and adds one by hand', async () => {
     const { server, user } = show(fundsView())
-    const card = await screen.findByRole('region', { name: 'Saving for' })
+    const card = await yearlyCosts()
     expect(card).toHaveTextContent(
-      'Insurance, registrations and the holidays come round once a year.',
+      'Insurance, registrations and the holidays come round once a year. Saving a little each month',
     )
-    expect(screen.queryByRole('region', { name: 'Yearly costs' })).not.toBeInTheDocument()
+    expect(card).not.toHaveTextContent('Set aside')
     await user.click(within(card).getByRole('button', { name: 'Add a yearly cost' }))
     const form = screen.getByRole('form', { name: 'New yearly cost' })
     const add = within(form).getByRole('button', { name: 'Add' })
@@ -132,14 +148,21 @@ describe('Yearly costs', () => {
     expect(screen.queryByRole('form', { name: 'New yearly cost' })).not.toBeInTheDocument()
   })
 
-  it('removes a fund', async () => {
+  it('opens the funds, removes one, adds another, and folds them away again', async () => {
     const { server, user } = show(fundsView([insurance]))
-    const list = await screen.findByRole('region', { name: 'Saving for' })
+    const card = await yearlyCosts()
+    await user.click(within(card).getByRole('button', { name: 'Your costs' }))
+    const list = within(card).getByRole('group', { name: 'Saving for' })
     expect(list).toHaveTextContent('Car insurance$780 a year, next Mon, Mar 1')
+    expect(list).not.toHaveTextContent('short')
     await user.click(within(list).getByRole('button', { name: 'Remove Car insurance' }))
     await waitFor(() =>
       expect(server.actions('delete_sinking_fund')).toEqual([{ id: 'fund-car insurance' }]),
     )
+    await user.click(within(card).getByRole('button', { name: 'Add a yearly cost' }))
+    expect(screen.getByRole('form', { name: 'New yearly cost' })).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Hide costs' }))
+    expect(within(card).queryByRole('group', { name: 'Saving for' })).not.toBeInTheDocument()
   })
 
   it('shows why the funds could not load', async () => {
@@ -153,8 +176,10 @@ describe('Yearly costs', () => {
 })
 
 describe('fund words', () => {
-  it('shares by budget period while no pay is known', () => {
-    expect(shareWords({ shareOf: 'period' })).toBe('each budget period')
+  it('finds the soonest fund its shares will not cover in time', () => {
+    const short = { ...insurance, shortCents: 52_000 }
+    expect(firstShort(fundsView([water, insurance]))).toBeUndefined()
+    expect(firstShort(fundsView([water, short]))).toBe(short)
   })
 
   it('says why each cost was suggested', () => {

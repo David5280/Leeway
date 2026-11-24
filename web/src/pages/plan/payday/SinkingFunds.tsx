@@ -1,148 +1,116 @@
-// Sinking funds on Payday: yearly and irregular costs (insurance, a
-// registration, the holidays) saved toward a little each paycheck, so none
-// lands all at once. The total opens its math; the costs Leeway found are
-// added or waved off in one tap; any other is added by hand. Each fund's
-// share is held back from safe to spend like a goal's.
+// Sinking funds on Payday, all in one Yearly costs card: what the yearly
+// and irregular costs (insurance, a registration, the holidays) hold back
+// each budget period on top, opening its math; the costs Leeway found,
+// added or waved off in one tap; and the funds themselves, opened on
+// request. The figure is the very amount safe to spend holds back, so the
+// two never disagree.
 
 import { useState } from 'react'
 import type { SinkingFundsView } from '../../../api/client'
-import { useAction, useActionMutation } from '../../../api/hooks'
+import { useAction } from '../../../api/hooks'
 import { Card } from '../../../components/design/Card'
 import { KeyFigure } from '../../../components/design/KeyFigure'
-import { Money } from '../../../components/design/Money'
 import { SectionHead } from '../../../components/design/SectionHead'
-import { ErrorNote, LoadingOrError } from '../../../components/ui'
+import { LoadingOrError } from '../../../components/ui'
 import { useApp } from '../../../lib/app'
 import { fundsDrill } from '../../../lib/drills/funds'
-import { dayLabel } from '../../../lib/format'
+import { periodWord } from '../../../lib/format'
 import { FormCard } from '../FormCard'
 import { FundForm } from './FundForm'
-import { basisWords, FUND_CADENCE_WORDS, shareWords, suggestionInput } from './fundText'
+import { FundList, ShortNote, Suggestions, useDate } from './FundRows'
+import { firstShort } from './fundText'
 
-type Suggestion = SinkingFundsView['suggestions'][number]
-
-/** The day as the owner's locale writes it, like "Mon, Mar 1". */
-function useDate() {
-  const { settings } = useApp()
-  return (iso: string) => dayLabel(iso, settings.locale)
+/** The budget period's name in everyday words, like "month". */
+function usePeriodWord() {
+  return periodWord(useApp().settings.period.kind)
 }
 
-/** What the funds come to each paycheck, opening the math cost by cost. */
-function FundsTotal({ view }: { view: SinkingFundsView }) {
-  const date = useDate()
-  const next = view.funds[0]!
-  const count = view.funds.length
+function AddButton({ onAdd }: { onAdd: () => void }) {
   return (
-    <Card drill={fundsDrill(view, date)} label="Yearly costs" className="stack-sm">
-      <SectionHead icon="piggy" title="Yearly costs" />
-      <KeyFigure
-        label={`Set aside ${shareWords(view)}`}
-        cents={view.totalShareCents}
-        caption={
-          <>
-            For {count === 1 ? 'one cost' : `${count} costs`}, so none lands all at once. Next up:{' '}
-            <b>{next.name}</b>, {date(next.nextDueDate)}.
-          </>
-        }
-      />
-    </Card>
-  )
-}
-
-/** One cost Leeway found, with Add and Not needed beside it. */
-function SuggestionRow({ suggestion, each }: { suggestion: Suggestion; each: string }) {
-  const date = useDate()
-  const add = useActionMutation('add_sinking_fund')
-  const dismiss = useActionMutation('dismiss_sinking_fund')
-  const { name, amountCents, cadence, dueDate, key } = suggestion
-  return (
-    <div className="list-row wrap">
-      <span className="grow stack-sm" style={{ gap: 0, minWidth: 160 }}>
-        <span style={{ fontWeight: 500 }}>{name}</span>
-        <span className="small muted">
-          <Money cents={amountCents} /> {FUND_CADENCE_WORDS[cadence]}, next {date(dueDate)}.{' '}
-          <Money cents={suggestion.shareCents} /> {each}.
-        </span>
-        <span className="small muted">{basisWords(suggestion)}</span>
-      </span>
-      <button
-        type="button"
-        className="btn"
-        disabled={add.isPending}
-        onClick={() => add.mutate(suggestionInput(suggestion))}
-      >
-        Add
+    <div className="row">
+      <button type="button" className="btn" onClick={onAdd}>
+        Add a yearly cost
       </button>
-      <button
-        type="button"
-        className="btn ghost"
-        disabled={dismiss.isPending}
-        onClick={() => dismiss.mutate({ key })}
-      >
-        Not needed
-      </button>
-      <ErrorNote error={add.error ?? dismiss.error} />
     </div>
   )
 }
 
-/** The costs Leeway found in the bills and the history. */
-function Suggestions({ view }: { view: SinkingFundsView }) {
-  const each = shareWords(view)
+/** Under the total: the next cost due, or the soonest one its shares will not cover in time. */
+function Caption({ view }: { view: SinkingFundsView }) {
+  const date = useDate()
+  const short = firstShort(view)
+  if (short) {
+    return (
+      <>
+        <b>{short.name}</b>: <ShortNote fund={short} />
+      </>
+    )
+  }
+  const next = view.funds[0]!
+  const count = view.funds.length
   return (
-    <Card static="form" label="Worth saving for" className="stack-sm">
-      <h2>Worth saving for</h2>
-      <p className="small muted">Costs that come round once in a while.</p>
-      {view.suggestions.map((suggestion) => (
-        <SuggestionRow key={suggestion.key} suggestion={suggestion} each={each} />
-      ))}
-    </Card>
+    <>
+      For {count === 1 ? 'one cost' : `${count} costs`}, so none lands all at once. Next up:{' '}
+      <b>{next.name}</b>, {date(next.nextDueDate)}.
+    </>
   )
 }
 
-/** The funds saved toward, each removable, and the button that adds one by hand. */
-function FundList({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) {
-  const date = useDate()
-  const remove = useActionMutation('delete_sinking_fund')
+/** Inside the card, under the total: suggestions, then the funds behind a toggle. */
+function Inside({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) {
+  const [open, setOpen] = useState(false)
   return (
-    <Card static="form" label="Saving for" className="stack-sm">
-      {view.funds.length === 0 ? (
+    <div className="stack-sm">
+      <Suggestions view={view} />
+      <button
+        type="button"
+        className="linkbtn small tap"
+        aria-expanded={open}
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? 'Hide costs' : 'Your costs'}
+      </button>
+      {open && (
         <>
-          <SectionHead icon="piggy" title="Yearly costs" />
-          <p className="small muted">
-            Insurance, registrations and the holidays come round once a year. Saving a little{' '}
-            {shareWords(view)} means none lands all at once.
-          </p>
+          <FundList view={view} />
+          <AddButton onAdd={onAdd} />
         </>
-      ) : (
-        <h2>Saving for</h2>
       )}
-      {view.funds.map((fund) => (
-        <div key={fund.id} className="list-row wrap">
-          <span className="grow stack-sm" style={{ gap: 0, minWidth: 140 }}>
-            <span style={{ fontWeight: 500 }}>{fund.name}</span>
-            <span className="small muted">
-              <Money cents={fund.amountCents} /> {FUND_CADENCE_WORDS[fund.cadence]}, next{' '}
-              {date(fund.nextDueDate)}
-            </span>
-          </span>
-          <button
-            type="button"
-            className="btn ghost small"
-            aria-label={`Remove ${fund.name}`}
-            disabled={remove.isPending}
-            onClick={() => remove.mutate({ id: fund.id })}
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-      <ErrorNote error={remove.error} />
-      <div className="row">
-        <button type="button" className="btn" onClick={onAdd}>
-          Add a yearly cost
-        </button>
-      </div>
+    </div>
+  )
+}
+
+/** The one card: an invitation before any fund, the total and its parts after. */
+function YearlyCosts({ view, onAdd }: { view: SinkingFundsView; onAdd: () => void }) {
+  const word = usePeriodWord()
+  const date = useDate()
+  if (view.funds.length === 0) {
+    return (
+      <Card static="form" label="Yearly costs" className="stack-sm">
+        <SectionHead icon="piggy" title="Yearly costs" />
+        <p className="small muted">
+          Insurance, registrations and the holidays come round once a year. Saving a little each{' '}
+          {word} means none lands all at once.
+        </p>
+        <Suggestions view={view} />
+        <AddButton onAdd={onAdd} />
+      </Card>
+    )
+  }
+  return (
+    <Card
+      drill={fundsDrill(view, date, word)}
+      below={<Inside view={view} onAdd={onAdd} />}
+      label="Yearly costs"
+      className="stack-sm"
+    >
+      <SectionHead icon="piggy" title="Yearly costs" />
+      <KeyFigure
+        label={`Set aside each ${word}`}
+        cents={view.totalPerPeriodCents}
+        caption={<Caption view={view} />}
+      />
     </Card>
   )
 }
@@ -151,12 +119,9 @@ export function SinkingFunds() {
   const view = useAction('list_sinking_funds')
   const [adding, setAdding] = useState(false)
   if (!view.data) return <LoadingOrError error={view.error} label="Loading yearly costs" />
-  const data = view.data
   return (
     <>
-      {data.funds.length > 0 && <FundsTotal view={data} />}
-      {data.suggestions.length > 0 && <Suggestions view={data} />}
-      <FundList view={data} onAdd={() => setAdding(true)} />
+      <YearlyCosts view={view.data} onAdd={() => setAdding(true)} />
       {adding && (
         <FormCard title="New yearly cost">
           <FundForm onDone={() => setAdding(false)} />

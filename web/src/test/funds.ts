@@ -1,5 +1,5 @@
 // Sinking funds as list_sinking_funds returns them, with shares worked out
-// by the server's own math. Every name and amount is made up.
+// by the server's own math, for a monthly budget. Every name and amount is made up.
 
 import { shareOf } from '../../../server/src/domain/sinkingFunds/math'
 import type { SinkingFundsView } from '../api/client'
@@ -15,7 +15,7 @@ export function fund(fields: Partial<Fund> & { name: string; amountCents: number
     cadence,
     nextDueDate: '2027-03-01',
     perPeriodCents: shareOf({ amountCents: fields.amountCents, cadence }, 'month'),
-    shareCents: shareOf({ amountCents: fields.amountCents, cadence }, 'biweek'),
+    shortCents: 0,
     ...fields,
   }
 }
@@ -25,23 +25,21 @@ export function suggestion(
 ): Suggestion {
   const cadence = fields.cadence ?? 'year'
   return {
-    key: `name:${fields.name.toLowerCase()}`,
+    key: '0f1e2d3c-4b5a-4968-8776-655443322110',
     billId: null,
     cadence,
     dueDate: '2026-12-15',
     basis: 'renewal',
-    shareCents: shareOf({ amountCents: fields.amountCents, cadence }, 'biweek'),
+    perPeriodCents: shareOf({ amountCents: fields.amountCents, cadence }, 'month'),
     ...fields,
   }
 }
 
-/** The view for these funds and suggestions, shared by paycheck every two weeks. */
+/** The view for these funds and suggestions. */
 export function fundsView(funds: Fund[] = [], suggestions: Suggestion[] = []): SinkingFundsView {
   return {
-    shareOf: 'paycheck',
-    cadence: 'biweek',
     funds,
     suggestions,
-    totalShareCents: funds.reduce((sum, one) => sum + one.shareCents, 0),
+    totalPerPeriodCents: funds.reduce((sum, one) => sum + one.perPeriodCents, 0),
   }
 }

@@ -13,7 +13,7 @@ import {
   shownKey,
   type FundSuggestion,
 } from '../src/domain/sinkingFunds/detect.js'
-import { nextDue, shareOf } from '../src/domain/sinkingFunds/math.js'
+import { nextDue, shareOf, shortAtDue } from '../src/domain/sinkingFunds/math.js'
 
 const TODAY = '2026-11-17'
 
@@ -49,6 +49,33 @@ describe('shareOf and nextDue', () => {
   it('finds the next due date, today counting', () => {
     expect(nextDue({ cadence: 'year', anchorDate: '2020-03-01' }, TODAY)).toBe('2027-03-01')
     expect(nextDue({ cadence: 'quarter', anchorDate: '2026-11-17' }, TODAY)).toBe(TODAY)
+  })
+})
+
+describe('shortAtDue', () => {
+  const cost = { amountCents: 120_000 }
+  const short = (startedOn: string, dueDate: string) =>
+    shortAtDue(cost, 10_000, 'month', { startedOn, dueDate })
+
+  it('counts a share for each budget period held, the current one in full', () => {
+    expect(short(TODAY, '2027-11-17')).toBe(0)
+    // About three weeks out: this month's share alone is held by then.
+    expect(short(TODAY, '2026-12-08')).toBe(110_000)
+    expect(short(TODAY, TODAY)).toBe(110_000)
+  })
+
+  it('counts the shares held before today too', () => {
+    expect(short('2025-12-10', '2026-12-08')).toBe(0)
+    expect(short('2026-01-10', '2026-12-08')).toBe(10_000)
+  })
+})
+
+describe('shownKey', () => {
+  it('is stable, holds no name, and reads as an id', () => {
+    const key = shownKey('Jane Doe Annual Membership')
+    expect(key).toBe(shownKey('JANE DOE ANNUAL MEMBERSHIP'))
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    expect(key).not.toBe(shownKey('Acme Annual Membership'))
   })
 })
 

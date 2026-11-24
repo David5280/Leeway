@@ -49,13 +49,11 @@ const registration = () =>
   })
 
 describe('list_sinking_funds', () => {
-  it('has nothing to show at first, and shares by budget period while no pay is known', async () => {
+  it('has nothing to show at first', async () => {
     expect(await call('list_sinking_funds')).toEqual({
-      shareOf: 'period',
-      cadence: 'month',
       funds: [],
       suggestions: [],
-      totalShareCents: 0,
+      totalPerPeriodCents: 0,
     })
   })
 
@@ -78,7 +76,7 @@ describe('list_sinking_funds', () => {
       ['renewal', null, 64_000, '2026-12-15'],
     ])
     // $640 a year is $53.34 a month, rounded up a cent.
-    expect(suggestions[1]!.shareCents).toBe(5_334)
+    expect(suggestions[1]!.perPeriodCents).toBe(5_334)
     const said = JSON.stringify(suggestions)
     expect(said).not.toContain('Pat')
     expect(said).not.toContain('9876')
@@ -129,15 +127,16 @@ describe('list_sinking_funds', () => {
     })
   })
 
-  it('shares by the paycheck the cash flow uses once pay is known', async () => {
+  it('shares by the budget period, the very amount safe to spend holds, whatever the pay', async () => {
     const accountId = await checking()
     await insertPaychecks(ctx.db, accountId, everyDays('2026-09-04', 14, 6), 210_000)
     await call('add_sinking_fund', insurance)
     const view = await call('list_sinking_funds')
-    expect(view).toMatchObject({ shareOf: 'paycheck', cadence: 'biweek' })
-    // $780 a year over 26.09 paychecks.
-    expect(view.funds[0]!.shareCents).toBe(2_990)
-    expect(view.totalShareCents).toBe(2_990)
+    // $780 a year is $65 a month, though pay comes every two weeks.
+    expect(view.funds[0]!.perPeriodCents).toBe(6_500)
+    expect(view.totalPerPeriodCents).toBe(6_500)
+    const { setAsides } = await call('get_budget')
+    expect(setAsides).toEqual([expect.objectContaining({ amountCents: 6_500 })])
   })
 })
 
@@ -217,14 +216,39 @@ describe('funds standing alone', () => {
     })
     await call('add_sinking_fund', insurance)
     const { funds } = await call('list_sinking_funds')
-    expect(funds.map((f) => [f.name, f.nextDueDate, f.perPeriodCents])).toEqual([
-      ['Water', '2026-12-10', 8_000],
-      ['Car insurance', '2027-03-01', 6_500],
+    // Added today, Water has one month's share by Dec 10 and the insurance four by Mar 1.
+    expect(funds.map((f) => [f.name, f.nextDueDate, f.perPeriodCents, f.shortCents])).toEqual([
+      ['Water', '2026-12-10', 8_000, 16_000],
+      ['Car insurance', '2027-03-01', 6_500, 52_000],
     ])
     expect(await call('delete_sinking_fund', { id: water.id })).toEqual({ deleted: true })
     expect(await callError('delete_sinking_fund', { id: water.id })).toMatchObject({
       code: 'not_found',
     })
+  })
+})
+
+describe('a cost due soon', () => {
+  it('is short nothing when added a whole cycle ahead, and nearly all of it days before', async () => {
+    const ahead = await call('add_sinking_fund', { ...insurance, dueDate: '2027-11-16' })
+    expect(ahead).toMatchObject({ nextDueDate: '2027-11-16', shortCents: 0 })
+    // A yearly cost due Nov 20 last came due a year before that, so it is due in three days.
+    const soon = await call('add_sinking_fund', {
+      ...insurance,
+      name: 'Dues',
+      dueDate: '2027-11-20',
+    })
+    expect(soon).toMatchObject({ nextDueDate: '2026-11-20', shortCents: 78_000 - 6_500 })
+  })
+
+  it('counts the shares held since it was added', async () => {
+    const fund = await call('add_sinking_fund', insurance)
+    // Added a year before it is due: twelve shares of $65 cover $780.
+    await ctx.db.query(`UPDATE sinking_funds SET created_at = '2026-03-01' WHERE id = $1`, [
+      fund.id,
+    ])
+    const [read] = (await call('list_sinking_funds')).funds
+    expect(read!.shortCents).toBe(0)
   })
 })
 

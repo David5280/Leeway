@@ -1,9 +1,10 @@
-// Plain words for sinking funds, kept apart from the cards so they can be
-// tested alone: how often a cost comes due, what a share is a share of, and
-// why a cost was suggested.
+// Plain words for sinking funds, kept apart from the card so they can be
+// tested alone: how often a cost comes due, why a cost was suggested, and
+// which cost is due before its shares can cover it.
 
 import type { SinkingFundsView } from '../../../api/client'
 
+type Fund = SinkingFundsView['funds'][number]
 type Suggestion = SinkingFundsView['suggestions'][number]
 
 /** How often a cost comes due, finishing "$780 ...". */
@@ -15,11 +16,6 @@ export const FUND_CADENCE_CHOICES = [
   { value: 'quarter', label: 'Every 3 months' },
 ] as const
 
-/** What a share is a share of: "each paycheck", or each budget period while no pay is known. */
-export function shareWords(view: Pick<SinkingFundsView, 'shareOf'>): string {
-  return view.shareOf === 'paycheck' ? 'each paycheck' : 'each budget period'
-}
-
 /** Why a cost was suggested, in a few words. */
 export function basisWords(suggestion: Pick<Suggestion, 'basis'>): string {
   switch (suggestion.basis) {
@@ -30,6 +26,11 @@ export function basisWords(suggestion: Pick<Suggestion, 'basis'>): string {
     default:
       return 'December ran above a usual month'
   }
+}
+
+/** The soonest fund its shares will not cover in time, if any (funds come soonest due first). */
+export function firstShort(view: Pick<SinkingFundsView, 'funds'>): Fund | undefined {
+  return view.funds.find((fund) => fund.shortCents > 0)
 }
 
 /** What adding a suggestion sends: a bill by its id, so the fund follows it; anything else whole. */

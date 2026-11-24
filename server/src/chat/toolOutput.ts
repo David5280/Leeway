@@ -61,9 +61,15 @@ function withoutOwnersNote(row: Row): Row {
   return rest
 }
 
-/** A row's naming fields, each that is set reading as the label. */
+/**
+ * A row's naming fields, each that is set reading as the label. One holding
+ * an id (a sinking fund suggestion's key) is kept, so a tool can take it back.
+ */
 function named(row: Row, label: string, fields: readonly string[] = NAME_FIELDS): Row {
-  const set = fields.filter((field) => typeof row[field] === 'string')
+  const set = fields.filter((field) => {
+    const value = row[field]
+    return typeof value === 'string' && !AN_ID.test(value)
+  })
   return { ...row, ...Object.fromEntries(set.map((field) => [field, label])) }
 }
 
