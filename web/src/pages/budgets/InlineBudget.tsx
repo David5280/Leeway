@@ -34,7 +34,14 @@ export function InlineBudget({
   const field = useAmountField(text ?? '', { min: 0 })
   // Enter saves, then the box is disabled while it saves, which also blurs it.
   // A ref (not isPending) so that blur can't start a second save of the same amount.
+  // It stays set after a save that worked, because a late blur can still reach this
+  // box before it closes; only a failed save (to retry) or opening the box clears it.
   const saving = useRef(false)
+
+  function open() {
+    saving.current = false
+    setText(category.budgetCents === null ? '' : String(category.budgetCents / 100))
+  }
 
   function save(event?: FormEvent) {
     event?.preventDefault()
@@ -47,7 +54,7 @@ export function InlineBudget({
       { id: category.id, budgetCents: typed },
       {
         onSuccess: () => setText(null),
-        onSettled: () => {
+        onError: () => {
           saving.current = false
         },
       },
@@ -69,9 +76,7 @@ export function InlineBudget({
         aria-label={
           shown !== null ? `Change ${category.name} budget` : `Set ${category.name} budget`
         }
-        onClick={() =>
-          setText(category.budgetCents === null ? '' : String(category.budgetCents / 100))
-        }
+        onClick={open}
       >
         {shown === null ? 'Set budget' : <Money cents={shown} />}
       </button>

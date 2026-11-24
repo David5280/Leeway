@@ -61,6 +61,8 @@ export interface PayingEmployer {
   nextPayday: IsoDate
   /** True while it has paid once, so its cadence is a guess. */
   estimate: boolean
+  /** True when its usual paycheck is the take-home a confirmed paystub shows (pay/paystubPay.ts). */
+  fromPaystub?: boolean
 }
 
 /** Pay the owner entered that stands in for no job the bank shows (pay/ownPay.ts). */
@@ -212,6 +214,7 @@ async function payScheduleOf(
     since: employer.firstPaycheck,
     nextPayday: employer.nextPayday,
     estimate: employer.estimate,
+    ...(employer.fromPaystub ? { fromPaystub: true } : {}),
   }))
   return {
     cadence: source ? payday.cadence : null,

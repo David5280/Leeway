@@ -201,6 +201,8 @@ function withOverride(pay: CurrentPay, given: PaySettings, today: IsoDate): Curr
     monthlyCents,
     nextPayday,
     estimate: false,
+    // The owner's own amount, not the paystub's.
+    fromPaystub: false,
   }
   // With no job in its place, the main pay is the owner's own, which no
   // employer stands for: `employer` is null and `employers` lists only the

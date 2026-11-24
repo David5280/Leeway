@@ -1,7 +1,10 @@
 // Reads the deposits pay is worked out from, and the cadence a saved paystub
-// gives, for current.ts; then lays the owner's own word on their pay over it
-// (ownPay.ts): a confirmation reads the employer it names their way, and
-// their own pay stands in for a job's.
+// gives, for current.ts; then lays a confirmed paystub's take-home over its
+// job's paycheck (paystubPay.ts), and the owner's own word on their pay over
+// that (ownPay.ts): a confirmation reads the employer it names their way,
+// and their own pay stands in for a job's, the paystub's included. So the
+// owner's own pay wins, then a confirmed paystub, then the deposits alone.
+// The Payday screen reads the pay found (readFoundPay), as the bank shows it.
 //
 // A paycheck budget period is never read as how the paychecks come: it moves
 // with the pay the owner confirms or enters (owner.ts), so reading it back
@@ -10,6 +13,7 @@
 
 import type { Db } from '../../db/pool.js'
 import { addDays, type IsoDate } from '../../lib/dates.js'
+import { paystubPayOf, readLatestDetail } from '../paystubs/applied.js'
 import { latestPaystub } from '../paystubs/paystubs.js'
 import { freshPaystub } from '../savings/payrollMonths.js'
 import type { Settings } from '../settings.js'
@@ -17,6 +21,7 @@ import { currentPay, type CurrentPay } from './current.js'
 import type { Deposit } from './deposits.js'
 import type { GivenCadence } from './given.js'
 import { readAsConfirmed, withOwnersPay } from './ownPay.js'
+import { withPaystubPay } from './paystubPay.js'
 
 /** How far back pay is read: long enough to see a job end and a long gap before the next. */
 export const PAY_HISTORY_DAYS = 550
@@ -69,11 +74,17 @@ export async function readFoundPay(
   return readAsConfirmed(deposits, detected, settings.pay, today, paystub)
 }
 
-/** The owner's pay now, read fresh, with their own word on it laid over (ownPay.ts). */
+/**
+ * The owner's pay now, read fresh: a confirmed paystub's take-home laid over
+ * its job (paystubPay.ts), then the owner's own word over that (ownPay.ts).
+ */
 export async function readCurrentPay(
   db: Db,
   settings: Settings,
   today: IsoDate,
 ): Promise<CurrentPay> {
-  return withOwnersPay(await readFoundPay(db, settings, today), settings.pay, today)
+  const found = await readFoundPay(db, settings, today)
+  const detail = await readLatestDetail(db, today)
+  const paystub = detail ? paystubPayOf(detail) : null
+  return withOwnersPay(withPaystubPay(found, paystub), settings.pay, today)
 }

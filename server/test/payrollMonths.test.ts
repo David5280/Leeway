@@ -193,13 +193,21 @@ describe('payrollStreams', () => {
       // The paystub's year-to-date figures show the plan ran from January.
       { kind: 'plan', monthlyCents: 40000, since: '2026-01-01' },
     ])
-    expect(streamKinds(streams)).toEqual({ pension: true, plan: true })
+    expect(streamKinds(streams)).toEqual({ pension: true, plan: true, match: false })
+  })
+
+  it("adds the employer's match a recent paystub shows, from when its plan began", () => {
+    const streams = payrollStreams([], null, saved('2026-11-13'), TODAY, 12_000)
+    expect(streams).toContainEqual({ kind: 'match', monthlyCents: 12_000, since: '2026-01-01' })
+    expect(streamKinds(streams).match).toBe(true)
+    // An old paystub's match counts nowhere, as its plan does not.
+    expect(payrollStreams([], null, saved('2026-03-13'), TODAY, 12_000)).toEqual([])
   })
 
   it('leaves out a paystub too old to say what pay takes now', () => {
     const streams = payrollStreams([], null, saved('2026-03-13'), TODAY)
     expect(streams).toEqual([])
-    expect(streamKinds(streams)).toEqual({ pension: false, plan: false })
+    expect(streamKinds(streams)).toEqual({ pension: false, plan: false, match: false })
   })
 })
 
@@ -232,16 +240,25 @@ describe('monthPayroll', () => {
     expect(monthPayroll(streams, month('2026-10-01', '2026-10-31', 1), 1)).toEqual({
       pensionCents: 30000,
       planCents: null,
+      matchCents: null,
     })
     expect(monthPayroll(streams, month('2026-11-01', '2026-11-30', 1), 1)).toEqual({
       pensionCents: 30000,
       planCents: 40001,
+      matchCents: null,
     })
   })
 
   it('counts the running month in proportion, and nothing at a share of zero', () => {
     const running = month('2026-11-01', '2026-11-30', 1, true)
-    expect(monthPayroll(streams, running, 0.5)).toEqual({ pensionCents: 15000, planCents: 20001 })
-    expect(monthPayroll(streams, running, 0)).toEqual({ pensionCents: null, planCents: null })
+    expect(monthPayroll(streams, running, 0.5)).toMatchObject({
+      pensionCents: 15000,
+      planCents: 20001,
+    })
+    expect(monthPayroll(streams, running, 0)).toEqual({
+      pensionCents: null,
+      planCents: null,
+      matchCents: null,
+    })
   })
 })

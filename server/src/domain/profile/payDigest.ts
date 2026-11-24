@@ -32,8 +32,12 @@ function employerWords(
 ): string {
   const since = shortDate(employer.since, locale)
   const name = employer.name ?? (index === 0 ? 'the main employer' : 'another employer')
-  return `${name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
+  return `${name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each${paystubWords(employer)}`
 }
+
+/** Said of a paycheck whose size a confirmed paystub gives, not the bank's deposits. */
+const paystubWords = (employer: { fromPaystub?: boolean }) =>
+  employer.fromPaystub ? ' (take-home from a confirmed paystub)' : ''
 
 /** Said when a job's cadence is still a guess. */
 const guessWords = (pay: PaySchedule) =>
@@ -60,7 +64,11 @@ export function payLine({ pay, locale }: FinancialProfile, money: Money): string
     const each = pay.employers.map((employer, i) => employerWords(employer, i, locale, money))
     return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${guessWords(pay)}`
   }
-  const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
+  const main = pay.employers[0]
+  const amount =
+    pay.typicalPayCents === null
+      ? ''
+      : `, about ${money(pay.typicalPayCents)} each${main ? paystubWords(main) : ''}`
   const from = pay.employer ? ` from ${pay.employer}` : ''
   const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
   // Too few paychecks cannot show how often pay comes, so the schedule is said to be a guess.

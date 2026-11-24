@@ -3,20 +3,28 @@
 // assistant) can see exactly what was counted and what was not.
 //
 // Payroll deductions leave pay before it reaches the bank, so a rate built
-// from bank transfers alone can read low. Two count once Leeway knows them: a
-// pension's contributions the owner entered (retirement/pensions.ts), and the
-// 401(k), 457 or 403(b) a recent paystub shows (paystubs/paystubs.ts). Every
-// place that shows the rate says which, with countedNote. There is no target
+// from bank transfers alone can read low. These count once Leeway knows them:
+// a pension's contributions the owner entered (retirement/pensions.ts), the
+// 401(k), 457 or 403(b) a recent paystub shows (paystubs/paystubs.ts), and
+// the employer's match a recent confirmed paystub shows (paystubs/applied.ts).
+// Every place that shows the rate says which, with countedNote.
+//
+// The match is money the employer adds on top of pay, so like a deduction it
+// is added to both sides: to what is saved, and to the pay it is a share of. There is no target
 // until the owner sets one, and no progress bar toward it, so a partial rate
 // never reads as falling short.
 
-/** The payroll deductions Leeway can count, once the owner gives them. */
-export type PayrollKind = 'pension' | 'plan'
+import type { BankContributions } from './contributions.js'
+
+/** The payroll deductions Leeway can count, once the owner gives them, and the employer's match. */
+export type PayrollKind = 'pension' | 'plan' | 'match'
 
 /** Which payroll deductions a rate counts. */
 export interface PayrollCounted {
   pension: boolean
   plan: boolean
+  /** The employer's match a recent confirmed paystub shows; absent reads as false. */
+  match?: boolean
   /**
    * The name of a workplace plan the newest paystub shows but that is left
    * out ("401(k)", "457", "403(b)" or "workplace plan"), since that paystub
@@ -33,7 +41,13 @@ const stalePlanNote = (plan: string) =>
  * Said to the owner beside a savings rate: what it counts, naming only what
  * it leaves out and how to add it.
  */
-export function payrollNote({ pension, plan, stalePlan = null }: PayrollCounted): string {
+export function payrollNote(counted: PayrollCounted): string {
+  const note = deductionsNote(counted)
+  return counted.match ? `${note} Your employer's match counts too.` : note
+}
+
+/** What payrollNote says of the deductions taken from pay. */
+function deductionsNote({ pension, plan, stalePlan = null }: PayrollCounted): string {
   if (pension && plan) {
     return 'Counts your pension and workplace plan contributions from pay, as well as transfers your bank shows.'
   }
@@ -59,7 +73,7 @@ export function payrollNote({ pension, plan, stalePlan = null }: PayrollCounted)
  * right, whatever goes into a 401(k), IRA or brokerage account.
  */
 export const RATE_GUARD_FOR_AI =
-  'Payroll deductions are counted only where Leeway knows them (a pension the owner entered, or a 401(k), 457 or 403(b) a paystub from the last six months shows), so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
+  'Payroll deductions are counted only where Leeway knows them (a pension the owner entered, or a 401(k), 457 or 403(b) and any employer match a paystub from the last six months shows), so never say this rate is too little. A pension is retirement saving: never say someone with one under-saves for retirement because little or nothing goes into a 401(k), IRA or brokerage account.'
 
 /** One stream of saving that counts toward the rate. */
 export interface SavingSource {
@@ -86,10 +100,11 @@ export interface SavingsRate {
   stalePlan?: string
 }
 
-/** The payroll deductions Leeway knows, as sources taken before the paycheck. */
+/** The payroll deductions Leeway knows, and the employer's match, as sources taken before the paycheck. */
 export function payrollSources(
   pensionMonthlyCents: number | null,
   planMonthlyCents: number | null,
+  matchMonthlyCents: number | null = null,
 ): SavingSource[] {
   const sources: SavingSource[] = []
   if (pensionMonthlyCents) {
@@ -108,7 +123,42 @@ export function payrollSources(
       payroll: 'plan',
     })
   }
+  if (matchMonthlyCents) {
+    sources.push({
+      label: 'Employer match',
+      monthlyCents: matchMonthlyCents,
+      beforePaycheck: true,
+      payroll: 'match',
+    })
+  }
   return sources
+}
+
+/**
+ * The streams of saving Leeway can see, for the savings rate: transfers the
+ * bank shows, the pension contributions the owner entered, the 401(k), 457
+ * or 403(b) a recent paystub shows, and the match a recent confirmed paystub
+ * shows. The last three never pass through the bank. An employer's pension
+ * share is not counted: it pays a pension, not savings the owner holds.
+ */
+export function savingSources(
+  contributions: BankContributions | null,
+  pensionMonthlyCents: number | null,
+  planMonthlyCents: number | null = null,
+  matchMonthlyCents: number | null = null,
+): SavingSource[] {
+  const monthly = contributions?.monthlyCents
+  const bank: SavingSource[] = monthly
+    ? [
+        { label: 'Transfers to savings', monthlyCents: monthly.cash, beforePaycheck: false },
+        {
+          label: 'Transfers to investment and retirement accounts',
+          monthlyCents: monthly.invested,
+          beforePaycheck: false,
+        },
+      ]
+    : []
+  return [...bank, ...payrollSources(pensionMonthlyCents, planMonthlyCents, matchMonthlyCents)]
 }
 
 /**
@@ -158,6 +208,7 @@ export function payrollCounted(rate: SavingsRate): PayrollCounted {
   return {
     pension: kinds.has('pension'),
     plan: kinds.has('plan'),
+    match: kinds.has('match'),
     stalePlan: rate.stalePlan ?? null,
   }
 }
@@ -169,11 +220,16 @@ export function countedNote(rate: SavingsRate): string {
 
 /** What a comparison with a target counts, in a few words: "counting bank transfers and your pension". */
 export function countingWords(rate: SavingsRate): string {
-  const { pension, plan } = payrollCounted(rate)
-  const payroll = [pension && 'your pension', plan && 'your workplace plan'].filter(Boolean)
-  return payroll.length
-    ? `counting bank transfers and ${payroll.join(' and ')}`
-    : 'counting only bank transfers'
+  const { pension, plan, match } = payrollCounted(rate)
+  const payroll = [
+    pension && 'your pension',
+    plan && 'your workplace plan',
+    match && "your employer's match",
+  ].filter((words): words is string => Boolean(words))
+  if (payroll.length === 0) return 'counting only bank transfers'
+  // "bank transfers, your workplace plan and your employer's match"
+  const parts = ['bank transfers', ...payroll]
+  return `counting ${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
 }
 
 /**

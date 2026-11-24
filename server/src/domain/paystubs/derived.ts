@@ -69,7 +69,7 @@ export const MIN_DAY_FOR_YEAR_TO_DATE = 90
 const ONE_OFF_EARNINGS = ['bonus', 'commission'] as const
 
 /** This paycheck's one-off earnings, in cents: 0 when it shows none. */
-function oneOffCents(detail: DerivableDetail): number {
+export function oneOffCents(detail: DerivableDetail): number {
   return sumKnown(ONE_OFF_EARNINGS.map((line) => detail.earnings[line].current)) ?? 0
 }
 
@@ -216,6 +216,14 @@ export function retirementSavingsRate(detail: DerivableDetail): SavingsRate | nu
     employeeCents: columnSum(employee, share.basis),
     employerCents: columnSum(employer, share.basis),
   }
+}
+
+/**
+ * The employer's match as a share of gross pay. Its pension share is left
+ * out: a pension the owner entered already carries what the employer adds.
+ */
+export function employerMatchShare(detail: DerivableDetail): Share | null {
+  return shareOf(detail, [detail.employer.match], PERIOD_FIRST)
 }
 
 /** Take-home share: net pay divided by gross pay, the part of each paycheck that reaches the owner. */

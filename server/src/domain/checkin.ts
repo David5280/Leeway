@@ -17,7 +17,7 @@ import { essentialsOf } from './goalFunds.js'
 import { goalReading } from './goalProgress.js'
 import { listGoals } from './goals.js'
 import { listLeaks } from './leaks/leakSource.js'
-import { latestPaystub } from './paystubs/paystubs.js'
+import { readPaystubPayroll } from './paystubs/applied.js'
 import { getNetWorth } from './netWorth.js'
 import { typicalMonth } from './profile/income.js'
 import { savingsMeasures, type SavingsMeasures } from './profile/profile.js'
@@ -27,7 +27,6 @@ import {
   type PensionMonthlyTotals,
 } from './retirement/pensions.js'
 import { pensionsOf } from './retirement/pensionStore.js'
-import { paystubPlan } from './savings/payrollMonths.js'
 import { bankSeenRate, countedNote, countsPayroll, type SavingsRate } from './savings/rate.js'
 import { getSavingsGlance, type SavingsGlance } from './savings/report.js'
 import type { Settings } from './settings.js'
@@ -70,13 +69,12 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
       pensions: await pensionsOf(db, accounts),
     })),
     typicalMonth(db, settings, today),
-    latestPaystub(db),
+    readPaystubPayroll(db, today),
   ])
   const budget = withRoom(report, cashFlow, settings)
   // Read once with the goals, so the fund's goal, its card and this check-in agree.
   const { essentials } = await essentialsOf(db, reading)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
-  const plan = paystubPlan(paystub, today)
   const billsMonthlyCents = bills.reduce((sum, b) => sum + b.monthlyCents, 0)
   const money = (cents: number) => formatCents(cents, settings.currency, settings.locale)
   const attention: AttentionItem[] = attentionItems(
@@ -177,8 +175,9 @@ export async function getCheckin(db: Db, settings: Settings, now: Date, today: I
         fundSavedCents: fundSaved(goals, accounts, settings.currency, savings.cashCents !== null),
         contributions: savings.contributions,
         pensionMonthlyCents: pensionPay.memberCents,
-        planMonthlyCents: plan.monthlyCents,
-        stalePlan: plan.stale,
+        planMonthlyCents: paystub.planMonthlyCents,
+        stalePlan: paystub.stalePlan,
+        matchMonthlyCents: paystub.matchMonthlyCents,
         monthly,
         essentials,
         settings,
@@ -199,7 +198,8 @@ function rateGlance(savingsRate: SavingsRate | null) {
     bankSeenSavingsRatePercent: bankSeenRate(savingsRate)?.percent ?? null,
     /**
      * The rate with the payroll deductions Leeway knows (a pension the owner
-     * entered, a 401(k), 457 or 403(b) a recent paystub shows); null when none are known.
+     * entered, a 401(k), 457 or 403(b) and any employer match a recent paystub shows);
+     * null when none are known.
      */
     payrollIncludedSavingsRatePercent:
       savingsRate && countsPayroll(savingsRate) ? savingsRate.percent : null,

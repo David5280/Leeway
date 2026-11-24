@@ -111,6 +111,7 @@ export function retirementProfile(
     savingsRate: null,
     savingsRateTargetPercent: null,
     pensionPay,
+    paystub: null,
     retirement: retirementPlan({
       today: AS_OF,
       assumptions: retirementSchema.parse(assumptions),
