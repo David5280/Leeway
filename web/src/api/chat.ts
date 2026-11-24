@@ -1,11 +1,12 @@
 // Chat's way to the server: whether Chat is on, and a question sent to
 // POST /api/chat, whose answer streams back as server-sent events.
 
+import type { ScreenContext } from '../../../server/src/chat/screen.js'
 import type { ChatEvent } from '../../../server/src/chat/turn.js'
 import { ApiError, errorFrom, UNREACHABLE } from './client'
 import { useAction } from './hooks'
 
-export type { ChatEvent }
+export type { ChatEvent, ScreenContext }
 
 const CHAT_PATH = '/api/chat'
 
@@ -15,9 +16,13 @@ export const STOPPED = 'The answer stopped partway. Ask again in a moment.'
 /**
  * Whether Chat is on: only when the server has an Anthropic key, which
  * changes only when the server restarts. Undefined while unknown.
+ *
+ * With `ask: false` it only listens for the answer another part of the
+ * screen asked for (the shell does, on every screen), so something always
+ * mounted, like Ask Leeway's provider, never asks the server on its own.
  */
-export function useChatAvailable(): boolean | undefined {
-  const status = useAction('get_chat_status', undefined, { staleTime: Infinity })
+export function useChatAvailable({ ask = true } = {}): boolean | undefined {
+  const status = useAction('get_chat_status', undefined, { staleTime: Infinity, enabled: ask })
   if (status.isError) return false
   return status.data?.available
 }
@@ -37,18 +42,20 @@ export function readEvents(buffer: string): { events: ChatEvent[]; rest: string 
  * Asks a question, calling onEvent for each event as it arrives. A refusal
  * before the answer starts throws an ApiError; once it streams, a failure
  * comes as an error event. Stopping it with the signal ends quietly.
+ * `context` says which screen (and card) it was asked from.
  */
 export async function askChat(
   message: string,
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal,
+  context?: ScreenContext,
 ): Promise<void> {
   let response: Response
   try {
     response = await fetch(CHAT_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, context }),
       credentials: 'same-origin',
       signal,
     })

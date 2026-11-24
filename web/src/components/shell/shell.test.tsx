@@ -2,53 +2,14 @@
 // for the window's size, the header's links, which tab is lit, and the keys
 // that switch tabs.
 
-import { act, fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeServer, renderSignedIn } from '../../test/fake'
+import { COMPUTER, PHONE, PHONE_SIDEWAYS, TABLET, windowOf } from '../../test/frames'
 import { Shell } from '../Shell'
-import { SHORT_QUERY, SIDEBAR_QUERY } from './frame'
 
 afterEach(() => vi.unstubAllGlobals())
-
-/** The window's size, as the media queries the shell asks about see it. */
-interface Size {
-  width: number
-  height: number
-}
-
-/** Whether each query the shell asks matches a window of this size. */
-function matches(query: string, { width, height }: Size): boolean {
-  if (query === SIDEBAR_QUERY) return width >= 1024
-  if (query === SHORT_QUERY) return width > height && height <= 500 && width >= 560
-  throw new Error(`The shell asked an unexpected query: ${query}`)
-}
-
-/**
- * Stands in for the browser's matchMedia at a window size. Returns a resize,
- * which tells every listening query that the size changed, as a browser does.
- */
-function windowOf(size: Size) {
-  let current = size
-  const listeners = new Set<() => void>()
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    get matches() {
-      return matches(query, current)
-    },
-    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
-    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
-  }))
-  return (next: Size) =>
-    act(() => {
-      current = next
-      for (const listener of listeners) listener()
-    })
-}
-
-const PHONE = { width: 390, height: 844 }
-const PHONE_SIDEWAYS = { width: 844, height: 390 }
-const TABLET = { width: 820, height: 1180 }
-const COMPUTER = { width: 1440, height: 900 }
 
 /** Shows where the router is, as the address bar would. */
 function Address() {
@@ -108,12 +69,14 @@ describe('on a phone', () => {
     expect(screen.queryByRole('button', { name: /theme/ })).not.toBeInTheDocument()
   })
 
-  it('shows how much is unread on the bell, and Chat only when it is on', async () => {
+  it('shows how much is unread on the bell, and no Chat link even when Chat is on', async () => {
     windowOf(PHONE)
     renderShell('/', { chat: true, unread: 3 })
     const more = within(screen.getByRole('navigation', { name: 'More' }))
     expect(await more.findByRole('link', { name: 'Inbox, 3 unread' })).toHaveTextContent('3')
-    expect(await more.findByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/chat')
+    // Ask Leeway's bar replaces it.
+    expect(await screen.findByRole('button', { name: /^Ask Leeway/ })).toBeVisible()
+    expect(more.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
   it('keeps the tab bar on a tablet held upright', () => {

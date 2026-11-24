@@ -34,8 +34,8 @@ export function tabFor(pathname: string): Tab | undefined {
   )
 }
 
-/** Where focus means typing, so a number key is the person's, never a shortcut. */
-function isTyping(target: EventTarget | null): boolean {
+/** Where focus means typing, so a key is the person's, never a shortcut. */
+export function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true
   return target.matches('input, textarea, select')

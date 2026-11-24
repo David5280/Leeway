@@ -12,6 +12,7 @@ export function Composer({
   send,
   busy,
   inputRef,
+  placeholder = 'Ask about your money',
 }: {
   draft: string
   setDraft: (draft: string) => void
@@ -19,6 +20,8 @@ export function Composer({
   busy: boolean
   /** The box itself, so Chat can move focus to it. */
   inputRef?: Ref<HTMLTextAreaElement>
+  /** What the empty box says; Ask Leeway names the screen, like "Ask about Payday". */
+  placeholder?: string
 }) {
   const ready = draft.trim().length > 0 && !busy
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -38,7 +41,7 @@ export function Composer({
         ref={inputRef}
         className="chat-input"
         aria-label="Your question"
-        placeholder="Ask about your money"
+        placeholder={placeholder}
         rows={1}
         maxLength={QUESTION_MAX_LENGTH}
         value={draft}

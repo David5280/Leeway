@@ -1,9 +1,11 @@
 // The conversation in Chat: the owner's questions on the right, Leeway's
-// answers on the left, and the answer still arriving at the end. The log is
-// marked busy while an answer streams; the finished answer is announced
-// once, from Chat's own live region, not word by word from here.
+// answers on the left (their links to screens made real, AnswerText.tsx),
+// and the answer still arriving at the end. The log is marked busy while an
+// answer streams; the finished answer is announced once, from Chat's own
+// live region, not word by word from here.
 
 import type { Output } from '../../api/client'
+import { AnswerText } from './AnswerText'
 import type { Pending } from './useAsk'
 
 type Message = Output<'get_chat'>['messages'][number]
@@ -19,7 +21,9 @@ function Question({ text }: { text: string }) {
 function Answer({ text }: { text: string }) {
   return (
     <li className="chat-line from-leeway">
-      <p className="chat-answer">{text}</p>
+      <p className="chat-answer">
+        <AnswerText text={text} />
+      </p>
     </li>
   )
 }

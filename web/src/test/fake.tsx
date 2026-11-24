@@ -32,6 +32,7 @@ import { periodContaining } from '../../../server/src/lib/periods'
 import type { Account, AccountAlert, AccountsView, Budget, Settings, Status } from '../api/client'
 import { useAction } from '../api/hooks'
 import { SETTINGS_KEY } from '../api/settings'
+import { AskProvider } from '../components/ask/AskProvider'
 import { AppProvider } from '../lib/app'
 import type { WeeklyEmailView } from '../pages/settings/email/emailText'
 import { WIDGET_LIBRARY, type WidgetType } from '../widgets/library'
@@ -72,7 +73,9 @@ export function fakeServer(
       if (routes[path]) return routes[path]()
       const action = path.match(/^\/api\/actions\/(.+)$/)?.[1]
       if (action && handlers[action]) {
-        return Response.json({ result: handlers[action](body ?? {}) ?? null })
+        // Awaited, so a handler can answer later, or never (a pending promise
+        // keeps the request in flight, as a slow server would).
+        return Response.json({ result: (await handlers[action](body ?? {})) ?? null })
       }
       return Response.json({ error: 'not_found', message: `No fake for ${path}` }, { status: 404 })
     }),
@@ -343,7 +346,7 @@ function LiveSettings({ server, children }: { server: Status; children: ReactNod
   if (!current.data) return null
   return (
     <AppProvider settings={current.data} status={server}>
-      {children}
+      <AskProvider>{children}</AskProvider>
     </AppProvider>
   )
 }
