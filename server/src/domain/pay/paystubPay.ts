@@ -4,56 +4,85 @@
 // job's month of pay; the bank's deposits still set the paydays, so only a
 // job the bank shows paying now takes it: a paystub never makes up a payday.
 //
-// It speaks for one job: the payer it names, or, when it names none the
-// bank shows (as when only a payroll service shows), the main job if it was
-// paid during that job's run, as a paystub's cadence does (given.ts). And
-// only while it still fits that job:
+// It speaks for one job, and only one the bank backs. The deposit nearest
+// the paystub's payday (within a few days, as it can post late) must be
+// within PAY_MOVED_SHARE of the paystub's take-home: the job it names when
+// the bank shows that name, otherwise whichever job's deposit matches (as
+// when only a payroll service's name shows). So a side job's paystub never
+// lands on the main job, and a paycheck split into an account Leeway does
+// not see (the bank shows less than the paystub's take-home) leaves pay as
+// the bank shows it, since that is what reaches the accounts Leeway reads.
+// With no deposit near the payday to compare, as before the bank's history
+// starts, it falls back to the main job only when there is exactly one job,
+// and only if the paystub was paid during that job's run (given.ts).
+// Otherwise pay is left alone; the profile's paystub figures (gross, taxes,
+// retirement) still apply, as they never depend on which job it is.
+//
+// And only while it still fits that job:
 // - the job pays on the paystub's cadence, since a paycheck's size depends on it
-// - the job's paychecks have not moved since: the deposit on the paystub's
-//   payday is within PAY_MOVED_SHARE of the usual paycheck now. A raise or
-//   a new election after the paystub moves them, and the bank then knows
-//   better. A paycheck split into an account Leeway does not see keeps the
-//   same ratio, so the paystub's full take-home still counts.
+// - the job's paychecks have not moved since: the usual paycheck now is
+//   within PAY_MOVED_SHARE of the deposit on the paystub's payday. A raise or
+//   a new election after the paystub moves them, and the bank then knows better.
 
 import { addDays, daysBetween } from '../../lib/dates.js'
 import { PER_YEAR } from '../../lib/periods.js'
 import type { PaystubPay } from '../paystubs/applied.js'
 import type { CurrentPay, Employer } from './current.js'
 import { namesPayer, PAYSTUB_RUN_SLACK_DAYS } from './given.js'
-import { payerKeyOf } from './paychecks.js'
+import { payerKeyOf, type Paycheck } from './paychecks.js'
 
-/** How far the usual paycheck may sit from the one on the paystub's payday: 5%. */
+/** How far two paychecks may sit apart and still be the same pay: 5%. */
 export const PAY_MOVED_SHARE = 0.05
 
-/** Which job paying now the paystub is from, by index, or -1 for none. */
-function paystubJob(employers: Employer[], paystub: PaystubPay): number {
-  const { employerName } = paystub
-  if (employerName !== null) {
-    const named = employers.findIndex((job) => namesPayer(employerName, payerKeyOf(job.newest)))
-    if (named !== -1) return named
+/** Whether `cents` is within PAY_MOVED_SHARE of `of`. */
+const closeTo = (cents: number, of: number) => Math.abs(cents - of) <= of * PAY_MOVED_SHARE
+
+/** The job's deposit nearest the paystub's payday, within a few days of it, or null. */
+function depositNear(pay: CurrentPay, job: Employer, paystub: PaystubPay): Paycheck | null {
+  const key = payerKeyOf(job.newest)
+  let nearest: Paycheck | null = null
+  let nearestDays = PAYSTUB_RUN_SLACK_DAYS + 1
+  for (const paycheck of pay.paychecks) {
+    if (paycheck.payerKey !== key) continue
+    const days = Math.abs(daysBetween(paystub.payDate, paycheck.date))
+    if (days < nearestDays) [nearest, nearestDays] = [paycheck, days]
   }
-  const main = employers[0]
-  return main && paystub.payDate >= addDays(main.firstPaycheck, -PAYSTUB_RUN_SLACK_DAYS) ? 0 : -1
+  return nearest
+}
+
+/** Which job paying now the paystub is from, by index, or -1 for none: see the note at the top. */
+function paystubJob(pay: CurrentPay, paystub: PaystubPay): number {
+  const { employers } = pay
+  const { employerName } = paystub
+  const named =
+    employerName === null
+      ? -1
+      : employers.findIndex((job) => namesPayer(employerName, payerKeyOf(job.newest)))
+  // A job it names is the only one it can be; otherwise any job the bank shows.
+  const candidates = named !== -1 ? [named] : employers.map((_, i) => i)
+  const matched = candidates.find((i) => {
+    const deposit = depositNear(pay, employers[i]!, paystub)
+    return deposit !== null && closeTo(deposit.amountCents, paystub.netCents)
+  })
+  if (matched !== undefined) return matched
+
+  // No deposit backs it. Only a lone job with no deposit near the payday to compare takes it.
+  const only = employers.length === 1 ? employers[0]! : null
+  if (!only || depositNear(pay, only, paystub)) return -1
+  return paystub.payDate >= addDays(only.firstPaycheck, -PAYSTUB_RUN_SLACK_DAYS) ? 0 : -1
 }
 
 /** Whether the job's paychecks moved since the paystub: see the note at the top. */
 function payMovedSince(pay: CurrentPay, job: Employer, paystub: PaystubPay): boolean {
-  const key = payerKeyOf(job.newest)
-  // The deposit can post a few days after the paystub's date.
-  const onPayday = pay.paychecks.find(
-    (paycheck) =>
-      paycheck.payerKey === key &&
-      Math.abs(daysBetween(paystub.payDate, paycheck.date)) <= PAYSTUB_RUN_SLACK_DAYS,
-  )
+  const onPayday = depositNear(pay, job, paystub)
   // No deposit that day to compare, as before the bank's history starts: nothing says it moved.
-  if (!onPayday) return false
-  return Math.abs(onPayday.amountCents - job.paycheckCents) > job.paycheckCents * PAY_MOVED_SHARE
+  return onPayday !== null && !closeTo(onPayday.amountCents, job.paycheckCents)
 }
 
 /** The pay found, with the paystub's take-home standing for its job's paycheck while it fits. */
 export function withPaystubPay(pay: CurrentPay, paystub: PaystubPay | null): CurrentPay {
   if (!paystub) return pay
-  const index = paystubJob(pay.employers, paystub)
+  const index = paystubJob(pay, paystub)
   const job = pay.employers[index]
   if (!job || job.cadence !== paystub.cadence || payMovedSince(pay, job, paystub)) return pay
   const monthlyCents = Math.round((paystub.netCents * PER_YEAR[paystub.cadence]) / 12)

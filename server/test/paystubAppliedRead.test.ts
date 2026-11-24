@@ -1,7 +1,8 @@
 // The newest confirmed paystub read from the database and applied: only
 // while it is the newest paystub and recent, so an old one or a newer one
 // saved without its lines never overrides better data; and once it is, it
-// feeds current pay, the financial profile and its savings rate.
+// feeds current pay, the financial profile, its savings rate and the
+// month-by-month rate.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
@@ -12,6 +13,7 @@ import { insertPaystub } from '../src/domain/paystubs/paystubs.js'
 import { readCurrentPay } from '../src/domain/pay/source.js'
 import { profileDigest } from '../src/domain/profile/digest.js'
 import { getFinancialProfile } from '../src/domain/profile/profile.js'
+import { savingsRates } from '../src/domain/savingsRates.js'
 import { getSettings } from '../src/domain/settings.js'
 import { confirmedDetail, confirmedPaystub, line } from './fixtures/paystub.js'
 import { insertBiweeklyPay } from './fixtures/pay.js'
@@ -33,13 +35,13 @@ beforeEach(async () => {
 
 /**
  * Acme's paystub for the biweekly fixture's last payday (13 November):
- * 2,500.00 take-home, of which the bank sees 2,100.00, and a 5% match.
+ * 2,140.00 take-home, within 5% of the 2,100.00 the bank sees, and a 5% match.
  */
 function acmeDetail(fields: Partial<ConfirmedDetail> = {}): ConfirmedDetail {
   const detail = confirmedDetail({ employerName: 'Acme Corp', payCadence: 'biweek', ...fields })
   return {
     ...detail,
-    pay: { ...detail.pay, net: line(250_000) },
+    pay: { ...detail.pay, net: line(214_000) },
     employer: { ...detail.employer, match: line(19_225, 403_725) },
     ...fields,
   }
@@ -89,7 +91,7 @@ describe('a confirmed paystub applied', () => {
 
     await saveDetail(ctx.db, acmeDetail())
     const read = await readCurrentPay(ctx.db, settings, TODAY)
-    expect(read.paycheckCents).toBe(250_000)
+    expect(read.paycheckCents).toBe(214_000)
     expect(read.nextPayday).toBe(found.nextPayday)
   })
 
@@ -111,5 +113,13 @@ describe('a confirmed paystub applied', () => {
     const digest = profileDigest(profile, (cents) => `$${cents / 100}`)
     expect(digest).toContain('Confirmed paystub paid')
     expect(digest).toContain('(take-home from a confirmed paystub)')
+  })
+
+  it("counts the match in the month-by-month rate too, as the profile's rate does", async () => {
+    await insertBiweeklyPay(ctx.db)
+    await saveDetail(ctx.db, acmeDetail())
+    const settings = await getSettings(ctx.db)
+    const rates = await savingsRates(ctx.db, settings, new Date(`${TODAY}T12:00:00Z`), 3)
+    expect(rates.note).toContain("Your employer's match counts too.")
   })
 })

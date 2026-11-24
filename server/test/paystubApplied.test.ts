@@ -87,6 +87,19 @@ describe('paystubFigures', () => {
     // The city paystub's employer pays only a pension share, which is no match.
     expect(paystubFigures(saved()).matchMonthlyCents).toBeNull()
   })
+
+  it('takes the match of regular pay when a bonus is left out of yearly gross', () => {
+    // A 500.00 bonus on top: gross 4,345.00, yearly gross the 92,280.00 salary without it.
+    const detail = withMatch()
+    const bonus: SavedDetail = {
+      ...detail,
+      pay: { ...detail.pay, gross: line(434_500, 8_124_500) },
+      earnings: { ...detail.earnings, bonus: line(50_000, 50_000) },
+    }
+    expect(paystubFigures(bonus).yearlyGross).toEqual({ cents: 9_228_000, basis: 'salary' })
+    // Still 5% of regular pay, not 4.4% of a gross the bonus swelled.
+    expect(paystubFigures(bonus).matchMonthlyCents).toBe(38_450)
+  })
 })
 
 describe('paystubLine', () => {
@@ -106,6 +119,15 @@ describe('paystubLine', () => {
   it("names last year's withholding by its year", () => {
     const text = paystubLine(profile(saved({ payDate: '2025-12-19' })), dollars)!
     expect(text).toContain('Income tax withheld in 2025: federal $7,350')
+  })
+
+  it("labels a share read from last year's totals with its year", () => {
+    // Without the local tax printed only this period, the tax rate reads from the year's totals.
+    const detail = saved({ payDate: '2025-12-19' })
+    const yearOnly = { ...detail, taxes: { ...detail.taxes, local: line(null) } }
+    const text = paystubLine(profile(yearOnly), dollars)!
+    expect(text).toContain('about 14% of gross (from its 2025 totals)')
+    expect(text).not.toContain('the year so far')
   })
 
   it('has no line without a recent confirmed paystub', () => {

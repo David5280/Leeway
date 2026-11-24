@@ -23,11 +23,11 @@ const acmePay = () =>
     TODAY,
   )
 
-/** Acme's paystub for 13 November: 2,500.00 take-home, part of it paid where the bank cannot see. */
+/** Acme's paystub for 13 November: 2,040.00 take-home, within 5% of the deposit that day. */
 const stub = (fields: Partial<PaystubPay> = {}): PaystubPay => ({
   payDate: '2026-11-13',
   cadence: 'biweek',
-  netCents: 250_000,
+  netCents: 204_000,
   employerName: 'Acme Corp',
   ...fields,
 })
@@ -46,10 +46,10 @@ describe('withPaystubPay: which source wins', () => {
   it("sets the job's paycheck and month from the paystub, its paydays still the bank's", () => {
     const pay = acmePay()
     const read = withPaystubPay(pay, stub())
-    expect(read.paycheckCents).toBe(250_000)
-    expect(read.nextPaycheckCents).toBe(250_000)
-    expect(read.monthlyCents).toBe(monthOf(250_000, 'biweek'))
-    expect(read.employer).toMatchObject({ paycheckCents: 250_000, fromPaystub: true })
+    expect(read.paycheckCents).toBe(204_000)
+    expect(read.nextPaycheckCents).toBe(204_000)
+    expect(read.monthlyCents).toBe(monthOf(204_000, 'biweek'))
+    expect(read.employer).toMatchObject({ paycheckCents: 204_000, fromPaystub: true })
     expect(read.nextPayday).toBe(pay.nextPayday)
     expect(read.employer!.projection).toBe(pay.employer!.projection)
   })
@@ -91,7 +91,7 @@ describe('withPaystubPay: only while the paystub fits its job', () => {
 
   it('still counts a paystub whose payday matches the deposits, however old within its run', () => {
     const read = withPaystubPay(acmePay(), stub({ payDate: '2026-10-02' }))
-    expect(read.paycheckCents).toBe(250_000)
+    expect(read.paycheckCents).toBe(204_000)
   })
 
   it('never makes up pay or a payday with no job paying now', () => {
@@ -99,10 +99,15 @@ describe('withPaystubPay: only while the paystub fits its job', () => {
     expect(withPaystubPay(none, stub())).toBe(none)
   })
 
-  it('reads a paystub naming no payer the bank shows as the main job only within its run', () => {
+  it('reads a paystub naming no payer the bank shows by the deposit that matches it', () => {
     // As when the bank shows only a payroll service's name.
-    expect(withPaystubPay(acmePay(), stub({ employerName: 'Initech' })).paycheckCents).toBe(250_000)
-    expect(withPaystubPay(acmePay(), stub({ employerName: null })).paycheckCents).toBe(250_000)
+    expect(withPaystubPay(acmePay(), stub({ employerName: 'Initech' })).paycheckCents).toBe(204_000)
+    expect(withPaystubPay(acmePay(), stub({ employerName: null })).paycheckCents).toBe(204_000)
+  })
+
+  it("falls back to a lone job with no deposit near the payday, only within that job's run", () => {
+    // 9 October sits a week from either payday, as if that deposit were missing.
+    expect(withPaystubPay(acmePay(), stub({ payDate: '2026-10-09' })).paycheckCents).toBe(204_000)
     // Paid before this job's first paycheck: an earlier job's paystub.
     const pay = acmePay()
     expect(withPaystubPay(pay, stub({ employerName: 'Initech', payDate: '2026-08-01' }))).toBe(pay)
@@ -124,13 +129,54 @@ describe('withPaystubPay: only while the paystub fits its job', () => {
         employerName: 'Corner Cafe',
         payDate: '2026-11-10',
         cadence: side.cadence,
-        netCents: 45_000,
+        netCents: 41_000,
       }),
     )
-    expect(read.employers[1]).toMatchObject({ paycheckCents: 45_000, fromPaystub: true })
+    expect(read.employers[1]).toMatchObject({ paycheckCents: 41_000, fromPaystub: true })
     expect(read.employer).toBe(pay.employer)
     expect(read.paycheckCents).toBe(200_000)
     expect(read.nextPayday).toBe(pay.nextPayday)
-    expect(read.monthlyCents).toBe(pay.employer!.monthlyCents + monthOf(45_000, side.cadence))
+    expect(read.monthlyCents).toBe(pay.employer!.monthlyCents + monthOf(41_000, side.cadence))
+  })
+})
+
+describe('withPaystubPay: only where a deposit backs it', () => {
+  /** Acme paying 3,000.00 and a side job 800.00 through a payroll service, both every two weeks. */
+  const twoJobs = () =>
+    currentPay(
+      [
+        ...PAYDAYS.map((day) => paycheck(day, 300_000)),
+        ...everyDays('2026-09-02', 14, 6).map((day) => paycheck(day, 80_000, 'GUSTO PAYROLL')),
+      ],
+      TODAY,
+    )
+
+  it("never lands a side job's paystub on the main job", () => {
+    const pay = twoJobs()
+    expect(pay.employers).toHaveLength(2)
+    // The side job's paystub names an employer the bank never shows.
+    const read = withPaystubPay(
+      pay,
+      stub({ employerName: 'Corner Cafe', payDate: '2026-11-11', netCents: 80_000 }),
+    )
+    expect(read.employer).toBe(pay.employer)
+    expect(read.paycheckCents).toBe(300_000)
+    expect(read.employers[1]).toMatchObject({ paycheckCents: 80_000, fromPaystub: true })
+    expect(read.monthlyCents).toBe(pay.monthlyCents)
+  })
+
+  it('leaves pay alone with several jobs and no deposit to match the paystub', () => {
+    const pay = twoJobs()
+    // 30 August, as the bank's history starts: no deposit matches it.
+    expect(withPaystubPay(pay, stub({ employerName: null, payDate: '2026-08-30' }))).toBe(pay)
+    // A paystub matching neither job's deposit that day.
+    expect(withPaystubPay(pay, stub({ employerName: null, netCents: 150_000 }))).toBe(pay)
+  })
+
+  it('leaves pay as the bank shows it when part of the paycheck goes where Leeway cannot see', () => {
+    const pay = acmePay()
+    // 2,400.00 take-home, 400.00 of it to an account the bank link does not show.
+    expect(withPaystubPay(pay, stub({ netCents: 240_000 }))).toBe(pay)
+    expect(withPaystubPay(pay, stub({ employerName: null, netCents: 240_000 }))).toBe(pay)
   })
 })

@@ -9,6 +9,7 @@ import { savingsMeasures } from '../src/domain/profile/profile.js'
 import type { BankContributions } from '../src/domain/savings/contributions.js'
 import { countedNote, countingWords, type SavingsRate } from '../src/domain/savings/rate.js'
 import { settingsSchema } from '../src/domain/settings.js'
+import { monthRates } from '../src/domain/savingsRates.js'
 import { emptyProfile } from './fixtures/profile.js'
 
 /** 500.00 a month moved to savings at the bank. */
@@ -79,5 +80,43 @@ describe("the payday playbook's retirement idea", () => {
     // 15 points short of 5,000.00 against 5 points short of 5,600.00.
     expect(bankOnly.cents).toBe(75_000)
     expect(withPayroll.cents).toBe(28_000)
+  })
+})
+
+describe('the monthly history and the profile agree', () => {
+  it("counts the match in a month's rate exactly as the profile's rate does", () => {
+    const profile = rateWith({ planMonthlyCents: 40_000, matchMonthlyCents: 12_000 })
+    // A finished month of the same pay, the same transfer and the same payroll streams.
+    const [month] = monthRates(
+      [
+        {
+          start: '2026-10-01',
+          end: '2026-10-31',
+          current: false,
+          incomeCents: 500_000,
+          spentCents: 0,
+          unfiledInCents: 0,
+          categories: [],
+        },
+      ],
+      [
+        {
+          date: '2026-10-05',
+          amountCents: 50_000,
+          providerCategoryDetailed: 'TRANSFER_OUT_SAVINGS',
+        },
+      ],
+      [
+        { kind: 'plan', monthlyCents: 40_000, since: null },
+        { kind: 'match', monthlyCents: 12_000, since: null },
+      ],
+    )
+    expect(month).toMatchObject({
+      percent: profile.percent,
+      savedCents: profile.savedMonthlyCents,
+      payCents: profile.payMonthlyCents,
+    })
+    // $500 + $400 + $120 saved, of $5,000 take-home plus the $520 from payroll.
+    expect(month?.percent).toBe(18)
   })
 })

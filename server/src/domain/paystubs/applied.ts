@@ -87,11 +87,25 @@ export function paystubPayOf(detail: SavedDetail): PaystubPay | null {
 /**
  * The match a month: its share of gross times a month of yearly gross, so
  * a share read from the year so far and one read from this paycheck both
- * come out as a usual month.
+ * come out as a usual month. Both sides use the same gross: when the yearly
+ * figure leaves out this paycheck's bonus or commission (regularPay or
+ * salary), a share read from this paycheck is taken of its regular pay too,
+ * not of a gross the bonus swelled.
  */
-function matchMonthly(share: Share | null, gross: YearlyGross | null): number | null {
+function matchMonthly(detail: SavedDetail, gross: YearlyGross | null): number | null {
+  const share = employerMatchShare(detail)
   if (share === null || gross === null || share.rate <= 0) return null
-  return Math.round((share.rate * gross.cents) / 12)
+  return Math.round((matchRate(detail, share, gross) * gross.cents) / 12)
+}
+
+/** The match's share of the gross the yearly figure counts: see matchMonthly. */
+function matchRate(detail: SavedDetail, share: Share, gross: YearlyGross): number {
+  const paycheckGross = detail.pay.gross.current
+  const regular = paycheckGross === null ? 0 : paycheckGross - oneOffCents(detail)
+  const leavesOutOneOff = gross.basis === 'regularPay' || gross.basis === 'salary'
+  if (share.basis !== 'current' || !leavesOutOneOff || regular <= 0) return share.rate
+  // The share was match over the whole paycheck; rescale it to match over regular pay.
+  return (share.rate * paycheckGross!) / regular
 }
 
 /** The figures a confirmed paystub gives the profile, worked out by derived.ts. */
@@ -108,7 +122,7 @@ export function paystubFigures(detail: SavedDetail): PaystubFigures {
       effectiveRate: effectiveTaxRate(detail),
     },
     retirement: retirementSavingsRate(detail),
-    matchMonthlyCents: matchMonthly(employerMatchShare(detail), gross),
+    matchMonthlyCents: matchMonthly(detail, gross),
   }
 }
 

@@ -18,15 +18,15 @@ const BASIS_WORDS: Record<YearlyBasis, string> = {
   salary: 'the yearly salary it states',
 }
 
-/** Which column of the paystub a share was read from. */
-const COLUMN_WORDS: Record<Column, string> = {
-  current: 'this paycheck',
-  yearToDate: 'the year so far',
+/**
+ * Which column of the paystub a share was read from. Year-to-date totals
+ * from another year (a December paystub read in January) are named by
+ * their year, never read as this year's.
+ */
+function columnWords(column: Column, year: number, sameYear: boolean): string {
+  if (column === 'current') return 'this paycheck'
+  return sameYear ? 'the year so far' : `its ${year} totals`
 }
-
-/** A share of gross pay as a whole percent, with the column it was read from. */
-const percentOf = (share: { rate: number; basis: Column }) =>
-  `about ${Math.round(share.rate * 100)}% of gross (from ${COLUMN_WORDS[share.basis]})`
 
 /** "federal $7,350, state $3,147", leaving out what the paystub does not show; null with neither. */
 function withheldWords(taxes: NonNullable<FinancialProfile['paystub']>['taxes'], money: Money) {
@@ -50,6 +50,9 @@ export function paystubLine({ paystub, asOf, locale }: FinancialProfile, money: 
   const withheld = withheldWords(taxes, money)
   // Last year's totals are named by their year, never read as this year's.
   const sameYear = taxes.year === dateParts(asOf).year
+  /** A share of gross pay as a whole percent, with the column it was read from. */
+  const percentOf = (share: { rate: number; basis: Column }) =>
+    `about ${Math.round(share.rate * 100)}% of gross (from ${columnWords(share.basis, taxes.year, sameYear)})`
   if (withheld)
     parts.push(
       `Income tax withheld ${sameYear ? 'so far this year' : `in ${taxes.year}`}: ${withheld}.`,

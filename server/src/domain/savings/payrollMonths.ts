@@ -1,10 +1,12 @@
-// When each payroll deduction Leeway knows counts toward the savings rate,
-// month by month. Pure.
+// When each payroll deduction Leeway knows, and the employer's match, counts
+// toward the savings rate, month by month. Pure.
 //
 // A deduction counts only from when it is known to exist: a pension from when
 // the owner's service began (their years of service, back from when they last
 // checked them), a 401(k), 457 or 403(b) from the first paycheck its
-// year-to-date total takes (planStart), within the paystub's year. A
+// year-to-date total takes (planStart), within the paystub's year, and the
+// match a recent confirmed paystub shows from the same day, as it follows
+// the owner's own contributions. A
 // pension with no years of service entered counts in every month, since the
 // owner said they pay in and nothing says since when. A paystub
 // older than PAYSTUB_FRESH_DAYS no longer says what pay takes now (a raise, a
@@ -83,12 +85,16 @@ export interface PayrollStream {
   since: IsoDate | null
 }
 
-/** Each pension with a known contribution, and the plan a recent paystub shows. */
+/**
+ * Each pension with a known contribution, the plan a recent paystub shows,
+ * and the employer's match a month it shows (paystubs/applied.ts), or null.
+ */
 export function payrollStreams(
   pensions: Pension[],
   cadence: Cadence | null,
   paystub: DatedPaystub | null,
   today: IsoDate,
+  matchMonthlyCents: number | null = null,
 ): PayrollStream[] {
   const streams: PayrollStream[] = []
   for (const { plan } of pensions) {
@@ -100,6 +106,8 @@ export function payrollStreams(
   const planCents = planMonthlyCents(fresh)
   if (fresh && planCents)
     streams.push({ kind: 'plan', monthlyCents: planCents, since: planStart(fresh) })
+  if (fresh && matchMonthlyCents)
+    streams.push({ kind: 'match', monthlyCents: matchMonthlyCents, since: planStart(fresh) })
   return streams
 }
 
@@ -157,12 +165,10 @@ export function planStart(paystub: DatedPaystub): IsoDate {
   return first > yearStart ? first : yearStart
 }
 
-/** Which payroll deductions are counted anywhere, for the note beside the rate. */
-export function streamKinds(streams: PayrollStream[]): { pension: boolean; plan: boolean } {
-  return {
-    pension: streams.some((stream) => stream.kind === 'pension'),
-    plan: streams.some((stream) => stream.kind === 'plan'),
-  }
+/** Which payroll streams are counted anywhere, for the note beside the rate. */
+export function streamKinds(streams: PayrollStream[]): Record<PayrollKind, boolean> {
+  const has = (kind: PayrollKind) => streams.some((stream) => stream.kind === kind)
+  return { pension: has('pension'), plan: has('plan'), match: has('match') }
 }
 
 /**
@@ -178,12 +184,12 @@ export function runningPayShare(months: MonthTotals[], typicalMonthCents: number
   return Math.min(1, current.incomeCents / typicalMonthCents)
 }
 
-/** What each kind of payroll deduction took in a month, or null when none counts there. */
+/** What each kind of payroll stream came to in a month, or null when none counts there. */
 export function monthPayroll(
   streams: PayrollStream[],
   month: MonthTotals,
   runningShare: number,
-): { pensionCents: number | null; planCents: number | null } {
+): { pensionCents: number | null; planCents: number | null; matchCents: number | null } {
   // A stream counts from the month it began; the running month only in part.
   const share = month.current ? runningShare : 1
   const total = (kind: PayrollKind) => {
@@ -194,5 +200,5 @@ export function monthPayroll(
       .reduce((sum, stream) => sum + stream.monthlyCents, 0)
     return cents > 0 && share > 0 ? Math.round(cents * share) : null
   }
-  return { pensionCents: total('pension'), planCents: total('plan') }
+  return { pensionCents: total('pension'), planCents: total('plan'), matchCents: total('match') }
 }
