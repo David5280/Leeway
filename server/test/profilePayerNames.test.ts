@@ -107,7 +107,7 @@ describe('the payers the profile names', () => {
     // As some banks write it, in title case.
     ['Jane Doe Co DES:PAYROLL ID:1', null],
     // Any word after the state, under a salary code or none: a "CO" is the
-    // company only when the words up to it still end in "CO".
+    // company only when taking off a place leaves the words up to it whole.
     ['JANE DOE CO BI-WEEKLY PAY', 'INCOME_SALARY'],
     ['JANE DOE CO PAY', 'INCOME_SALARY'],
     ['JANE DOE CO DES:PAY ID:1', 'INCOME_SALARY'],
@@ -126,6 +126,14 @@ describe('the payers the profile names', () => {
     ['JANE DOE CO SALARY 15', 'INCOME_SALARY'],
     ['Transfer from Jane Doe Co bi-weekly pay', 'INCOME_SALARY'],
     ['From Jane Doe Co payroll bonus', 'INCOME_SALARY'],
+    // A second "CO" later in the line, which a place taken off would leave
+    // the person's own "CO" behind.
+    ['JANE DOE CO ACH CO PAYROLL', null],
+    ['JOHN SMITH DENVER CO ACH CO PAYROLL', null],
+    // A surname that is also a business word ("MILLS") keeps its "CO" a state.
+    ['JOHN MILLS CO PAYROLL', null],
+    ['JANE MARKET CO PAYROLL', 'INCOME_SALARY'],
+    ['JANE ANN MILLS CO DIR DEP', null],
   ]
 
   /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
@@ -154,7 +162,7 @@ describe('the payers the profile names', () => {
       expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
       const { digest } = await call('get_financial_profile')
       expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
-      expect(digest).not.toMatch(/john|smith|jane|doe|denver|dir dep/i)
+      expect(digest).not.toMatch(/john|smith|jane|doe|mills|market|denver|dir dep/i)
     },
   )
 

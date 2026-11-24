@@ -191,6 +191,18 @@ describe('namesPayer', () => {
     expect(namesPayer('Acme', 'globex ac payroll')).toBe(false)
   })
 
+  it('never reads a whole word as cut off when the name is too short to have been cut', () => {
+    // Each name is under 15 characters, so its last word is whole and names another employer.
+    expect(namesPayer('Denver Healthcare', 'denver health payroll')).toBe(false)
+    expect(namesPayer('Summit Careers', 'summit care payroll')).toBe(false)
+    expect(namesPayer('Acme Builders Inc', 'acme build dir dep')).toBe(false)
+    // A name that fills the cut still matches, one character short included.
+    expect(namesPayer('Denver Healthcare Partners', 'denver healthcare pa payroll')).toBe(true)
+    expect(namesPayer('Rocky Mountain Hospital', 'rocky mountain h payroll')).toBe(false)
+    expect(namesPayer('Rocky Mountain Hospital', 'rocky mountain ho payroll')).toBe(true)
+    expect(namesPayer('Acme Widget Supply', 'acme widget sup payroll')).toBe(true)
+  })
+
   it('never matches an employer that shares only some of its words with the line', () => {
     // Every stub word is in the line, but not side by side.
     expect(namesPayer('University of Denver', 'univ of colorado denver payroll')).toBe(false)
