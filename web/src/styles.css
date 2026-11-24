@@ -1299,6 +1299,17 @@ code.code {
   flex: 1;
 }
 
+/* With something drawn under it (Overview's Ask bar), the hero grows instead. */
+.band-column > .widget:has(+ .under-hero:last-child) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.band-column > .widget:has(+ .under-hero:last-child) > .card {
+  flex: 1;
+}
+
 .widget {
   position: relative;
   min-width: 0;

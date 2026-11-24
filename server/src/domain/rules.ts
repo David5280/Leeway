@@ -38,6 +38,8 @@ export interface RuleSubject {
   amountCents: number
   /** The transaction's own name as the app shows it, free of account numbers. */
   shownName: string
+  /** Every name it has been shown under (ruleText.ts shownNamesOf); shownName alone when unset. */
+  shownNames?: readonly string[]
 }
 
 export const ruleFieldsSchema = z.object({
@@ -49,26 +51,34 @@ export const ruleFieldsSchema = z.object({
   categoryId: z.uuid(),
 })
 
-/** The text a rule reads: the shown name, or the bank's merchant name or description. */
-function textFor(rule: Rule, tx: RuleSubject): string {
-  if (rule.reads === 'shown_name') return tx.shownName
-  return rule.field === 'merchant' ? (tx.merchantName ?? tx.name) : tx.name
+/**
+ * The texts a rule reads: every name the transaction has been shown under,
+ * or the bank's merchant name or description.
+ */
+function textsFor(rule: Rule, tx: RuleSubject): readonly string[] {
+  if (rule.reads === 'shown_name') return tx.shownNames ?? [tx.shownName]
+  return [rule.field === 'merchant' ? (tx.merchantName ?? tx.name) : tx.name]
+}
+
+/** Whether a rule's pattern matches one text, as its match type says, in any case. */
+function patternMatches(rule: Rule, text: string): boolean {
+  const lower = text.toLowerCase()
+  const pattern = rule.pattern.toLowerCase()
+  switch (rule.matchType) {
+    case 'contains':
+      return lower.includes(pattern)
+    case 'equals':
+      return lower === pattern
+    case 'starts_with':
+      return lower.startsWith(pattern)
+  }
 }
 
 /** Whether a rule matches a transaction; rules read only its text and amount. */
 export function ruleMatches(rule: Rule, tx: RuleSubject): boolean {
   if (rule.minAmountCents !== null && tx.amountCents < rule.minAmountCents) return false
   if (rule.maxAmountCents !== null && tx.amountCents > rule.maxAmountCents) return false
-  const text = textFor(rule, tx).toLowerCase()
-  const pattern = rule.pattern.toLowerCase()
-  switch (rule.matchType) {
-    case 'contains':
-      return text.includes(pattern)
-    case 'equals':
-      return text === pattern
-    case 'starts_with':
-      return text.startsWith(pattern)
-  }
+  return textsFor(rule, tx).some((text) => patternMatches(rule, text))
 }
 
 export function amountBoundsValid(rule: {

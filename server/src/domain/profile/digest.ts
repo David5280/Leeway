@@ -4,25 +4,16 @@
 // Leeway does not know is said too, so an assistant asks rather than assumes.
 
 import type { IsoDate } from '../../lib/dates.js'
-import type { Cadence } from '../../lib/periods.js'
 import { longDate, shortDate } from '../../lib/words.js'
 import type { CombinedChange } from '../savings/history.js'
 import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/plan.js'
 import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
+import { payFromWords, payLine } from './payDigest.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 import { middleCase, percent, range } from './rangeWords.js'
 
 type Money = (cents: number) => string
-
-const CADENCE_WORDS: Record<Cadence, string> = {
-  week: 'every week',
-  biweek: 'every 2 weeks',
-  semimonth: 'twice a month',
-  month: 'monthly',
-  quarter: 'every 3 months',
-  year: 'once a year',
-}
 
 /** A goal's pace; nothing when it has no date to be on track for. */
 function paceWords(onTrack: boolean | null): string {
@@ -32,48 +23,6 @@ function paceWords(onTrack: boolean | null): string {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-/**
- * "Initech Inc twice a month since Nov 13, about $2,000 each", for one of
- * several employers; one not named as a business is "the main employer" or
- * "another employer", never a person's name read from the bank.
- */
-function employerWords(
-  employer: FinancialProfile['pay']['employers'][number],
-  index: number,
-  locale: string,
-  money: Money,
-): string {
-  const since = shortDate(employer.since, locale)
-  const name = employer.name ?? (index === 0 ? 'the main employer' : 'another employer')
-  return `${name} ${CADENCE_WORDS[employer.cadence]} since ${since}, about ${money(employer.typicalPayCents)} each`
-}
-
-function payLine({ pay, locale }: FinancialProfile, money: Money): string | null {
-  if (!pay.cadence || !pay.nextPayday) return null
-  if (pay.employers.length > 1) {
-    // Each employer's amount is listed, so a side job's guess is said too.
-    const estimate = pay.employers.some((employer) => employer.estimate)
-      ? ' This is an estimate until more paychecks confirm how often each employer pays.'
-      : ''
-    // A second job counts beside the first, so each is named with its own schedule.
-    const each = pay.employers.map((employer, i) => employerWords(employer, i, locale, money))
-    return `Pay: from ${pay.employers.length} employers: ${each.join('; ')}. Next payday ${shortDate(pay.nextPayday, locale)}.${estimate}`
-  }
-  const amount = pay.typicalPayCents === null ? '' : `, about ${money(pay.typicalPayCents)} each`
-  const from = pay.employer ? ` from ${pay.employer}` : ''
-  const since = pay.since ? ` since ${shortDate(pay.since, locale)}` : ''
-  // Too few paychecks cannot show how often pay comes, so the schedule is said to be a guess.
-  const estimate = pay.estimate
-    ? ' This is an estimate until more paychecks confirm how often pay comes.'
-    : ''
-  return `Pay: ${CADENCE_WORDS[pay.cadence]}${from}${since}${amount}, next on ${shortDate(pay.nextPayday, locale)}.${estimate}`
-}
-
-/** "current employer", or "2 current employers" when a second job pays too. */
-function employersWord({ employers }: FinancialProfile['pay']): string {
-  return employers.length > 1 ? `${employers.length} current employers` : 'current employer'
-}
-
 function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): string | null {
   if (monthly.spendingCents === null) return null
   // Pay not seen is left out here and listed as not known, never shown as $0.
@@ -81,10 +30,12 @@ function monthLine({ monthly, pay, locale }: FinancialProfile, money: Money): st
   const payIn =
     monthly.incomeCents === null
       ? ''
-      : `${money(monthly.incomeCents)} take-home pay in from the ${employersWord(pay)}${estimated}, `
+      : `${money(monthly.incomeCents)} take-home pay in ${payFromWords(pay)}${estimated}, `
   const since = shortDate(monthly.spendingSince!, locale)
+  // Pay the owner entered is theirs, not read from paychecks.
+  const paychecksOnly = pay.entered ? '' : ', pay from paychecks only'
   // Essentials are left to the emergency fund line, so the digest gives one figure to quote.
-  return `Typical month (spending since ${since}, pay from paychecks only): ${payIn}${money(monthly.spendingCents)} spent.`
+  return `Typical month (spending since ${since}${paychecksOnly}): ${payIn}${money(monthly.spendingCents)} spent.`
 }
 
 function accountsLine({ accounts }: FinancialProfile, money: Money): string | null {

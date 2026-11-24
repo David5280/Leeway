@@ -27,7 +27,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetData(ctx.db)
   ctx.setNow(NOW)
-  ctx.config = { ...ctx.config, modelOverrides: { summary: null, paystub: null } }
+  ctx.config = { ...ctx.config, modelOverrides: { summary: null, paystub: null, chat: null } }
   ctx.ai = gatewayFor(ctx, provider).ai
   provider.reply = { stop: 'done', output: null, usage: tokens() }
 })
@@ -75,6 +75,19 @@ describe('get_ai_usage', () => {
           retiresOn: null,
           spend: { calls: 0, costMicros: 0 },
         },
+        {
+          job: 'chat',
+          title: 'Chat',
+          description: expect.any(String),
+          model: 'claude-haiku-5-5',
+          source: 'default',
+          envVar: 'CHAT_MODEL',
+          defaultModel: 'claude-haiku-5-5',
+          priced: true,
+          unavailable: false,
+          retiresOn: null,
+          spend: { calls: 0, costMicros: 0 },
+        },
       ],
       monthlyCapCents: 500,
       spentMicros: 0,
@@ -89,11 +102,13 @@ describe('get_ai_usage', () => {
     await spend(800, 'summary')
     await spend(3_000, 'paystub')
     await spend(99_999, 'paystub', new Date('2026-10-31T23:59:59Z'))
+    await spend(500, 'chat')
     const usage = await call('get_ai_usage')
-    expect(usage).toMatchObject({ spentMicros: 5_000, calls: 3 })
+    expect(usage).toMatchObject({ spentMicros: 5_500, calls: 4 })
     expect(usage.jobs.map((job) => job.spend)).toEqual([
       { calls: 2, costMicros: 2_000 },
       { calls: 1, costMicros: 3_000 },
+      { calls: 1, costMicros: 500 },
     ])
   })
 
@@ -105,7 +120,7 @@ describe('get_ai_usage', () => {
   it('shows a model fixed on the server, and one it has no prices for', async () => {
     ctx.config = {
       ...ctx.config,
-      modelOverrides: { summary: null, paystub: 'claude-something-9' },
+      modelOverrides: { summary: null, paystub: 'claude-something-9', chat: null },
     }
     const [, paystub] = (await call('get_ai_usage')).jobs
     expect(paystub).toMatchObject({ model: 'claude-something-9', source: 'server', priced: false })
@@ -114,7 +129,11 @@ describe('get_ai_usage', () => {
   it('shows a model Anthropic does not have, and the day a retiring one goes', async () => {
     ctx.config = {
       ...ctx.config,
-      modelOverrides: { summary: 'claude-sonnet-4-5-20250929', paystub: 'claude-typo-1' },
+      modelOverrides: {
+        summary: 'claude-sonnet-4-5-20250929',
+        paystub: 'claude-typo-1',
+        chat: null,
+      },
     }
     await markUnavailable(ctx.db, 'claude-typo-1', ctx.now())
     const [summary, paystub] = (await call('get_ai_usage')).jobs
@@ -167,17 +186,22 @@ describe('set_ai_model', () => {
     expect(usage.jobs.map((job) => [job.model, job.source])).toEqual([
       ['claude-haiku-5-5', 'default'],
       ['claude-opus-5-5', 'owner'],
+      ['claude-haiku-5-5', 'default'],
     ])
     await call('set_ai_model', { job: 'summary', model: 'claude-sonnet-5-5' })
     const back = await call('set_ai_model', { job: 'paystub', model: null })
-    expect(back.jobs.map((job) => job.model)).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5'])
+    expect(back.jobs.map((job) => job.model)).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+      'claude-haiku-5-5',
+    ])
   })
 
   it('takes only a model from the list, for a job that exists', async () => {
     expect((await callError('set_ai_model', { job: 'paystub', model: 'gpt-5' })).code).toBe(
       'invalid_input',
     )
-    expect((await callError('set_ai_model', { job: 'chat', model: null })).code).toBe(
+    expect((await callError('set_ai_model', { job: 'agent', model: null })).code).toBe(
       'invalid_input',
     )
   })
@@ -220,7 +244,7 @@ describe('the AI actions and agents', () => {
     await call('set_ai_model', { job: 'paystub', model: 'claude-sonnet-5-5' })
     expect(findAction('get_settings')).toMatchObject({ surface: 'all' })
     expect((await call('get_settings')).ai).toEqual({
-      models: { summary: null, paystub: 'claude-sonnet-5-5' },
+      models: { summary: null, paystub: 'claude-sonnet-5-5', chat: null },
       monthlyCapCents: 500,
     })
   })

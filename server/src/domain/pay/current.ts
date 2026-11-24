@@ -57,9 +57,14 @@ export interface Employer {
 }
 
 export interface CurrentPay {
-  /** The employer paying the most a month, or null when no payroll is paying now. */
+  /**
+   * The employer paying the most a month, or null when no payroll is paying
+   * now. With the owner's own pay laid over (ownPay.ts), the job it stands
+   * in for, or null when it stands in for none: the main pay is then theirs,
+   * so this is employers[0] only while a job is the main pay.
+   */
   employer: Employer | null
-  /** Every employer paying now, the one paying the most a month first. */
+  /** Every employer paying now, the main one first (see `employer`). */
   employers: Employer[]
   /** How often the main employer pays. */
   cadence: Cadence | null
@@ -152,51 +157,57 @@ const mostFirst = (a: Employer, b: Employer) => b.monthlyCents - a.monthlyCents
 const SIDE_JOB_MISSED_CYCLES = 1
 
 /**
- * The employers paying now, the main one first. `given` is the cadence the
- * owner gave (given.ts), which overrides what the paydays suggest for the
- * main employer when it speaks for that job: the owner's own word on it.
+ * The cadence given for the run ranked `rank`, if one speaks for it: a
+ * confirmation for the payer it names wherever it ranks, anything else for
+ * the main job only. The first that speaks wins, so the owner's word goes
+ * before a paystub's.
  */
-function payingEmployers(
-  runs: EmployerRun[],
-  today: IsoDate,
-  given: GivenCadence | null,
-): Employer[] {
+function givenForRun(
+  givens: GivenCadence[],
+  run: EmployerRun,
+  others: EmployerRun[],
+  rank: number,
+) {
+  return givens.find((given) => ('payerKey' in given || rank === 0) && givenFor(given, run, others))
+}
+
+/**
+ * The employers paying now, the main one first. `givens` are the cadences
+ * the owner gave (given.ts), each overriding what the paydays suggest for
+ * the job it speaks for: the owner's own word on it.
+ */
+function payingEmployers(runs: EmployerRun[], today: IsoDate, givens: GivenCadence[]): Employer[] {
   const paying = runs.filter((run) => stillPaying(run, today))
   const ranked = paying
     .map((run) => ({ run, employer: employerOf(run, today) }))
     .sort((a, b) => mostFirst(a.employer, b.employer))
-  // A paystub from a job that has since ended says nothing of how the new one
-  // pays: every other run seen, an old job's included, may be the one it names.
-  const top = ranked[0]?.run
-  if (
-    given &&
-    top &&
-    givenFor(
-      given,
-      top,
-      runs.filter((run) => run !== top),
-    )
-  ) {
-    const main = withGivenCadence(top, given.cadence)
-    ranked[0] = { run: main, employer: employerOf(main, today) }
-  }
+    .map((ranking, rank) => {
+      // A paystub from a job that has since ended says nothing of how the new
+      // one pays: every other run seen, an old job's included, may be the one it names.
+      const others = runs.filter((run) => run !== ranking.run)
+      const given = givenForRun(givens, ranking.run, others, rank)
+      if (!given) return ranking
+      const run = withGivenCadence(ranking.run, given.cadence)
+      return { run, employer: employerOf(run, today) }
+    })
   // The main job may miss a payroll; a side job that has missed one has likely stopped.
   const [main, ...side] = ranked
   const onSchedule = side.filter(({ run }) => stillPaying(run, today, SIDE_JOB_MISSED_CYCLES))
   return (main ? [main, ...onSchedule] : []).map(({ employer }) => employer).sort(mostFirst)
 }
 
-/** The owner's pay now, from deposits oldest first. */
+/** The owner's pay now, from deposits oldest first, with any cadences given (see payingEmployers). */
 export function currentPay(
   deposits: Deposit[],
   today: IsoDate,
-  given: GivenCadence | null = null,
+  given: GivenCadence | GivenCadence[] | null = null,
 ): CurrentPay {
   const runs = payRuns(deposits)
   const paychecks = runs
     .flatMap((run) => run.paychecks)
     .sort((a, b) => a.date.localeCompare(b.date))
-  const employers = payingEmployers(runs, today, given)
+  const givens = given === null ? [] : [given].flat()
+  const employers = payingEmployers(runs, today, givens)
   const main = employers[0]
   if (!main) return { ...NO_PAY, paychecks }
   return {

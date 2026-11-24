@@ -12,7 +12,7 @@ import {
 import { AiProviderError, type AiFailure } from '../src/ai/provider.js'
 import { aiServices } from '../src/ai/services.js'
 import { AiSummaryWriter, SUMMARY_MAX_TOKENS, SYSTEM_PROMPT } from '../src/ai/summary.js'
-import { AiLimitError } from '../src/domain/ai/gateway.js'
+import { AiLimitError } from '../src/domain/ai/limit.js'
 import { checkPaystubFile } from '../src/domain/paystubs/files.js'
 import { PaystubReader } from '../src/domain/paystubs/reader.js'
 import { getSettings, saveSettings } from '../src/domain/settings.js'
@@ -157,7 +157,7 @@ describe('AiDocumentReader', () => {
     const settings = await getSettings(ctx.db)
     await saveSettings(ctx.db, {
       ...settings,
-      ai: { ...settings.ai, models: { summary: null, paystub: 'claude-sonnet-5-5' } },
+      ai: { ...settings.ai, models: { summary: null, paystub: 'claude-sonnet-5-5', chat: null } },
     })
     const file = checkPaystubFile(jpeg())
     expect(await reader.countPaystubTokens(file)).toBe(2_000)

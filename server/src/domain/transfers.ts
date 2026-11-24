@@ -62,12 +62,20 @@ function codeOf(tx: Movement): string {
   return tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 }
 
+/** Whether Plaid filed a transaction as money sent or received through an app. */
+export function isAppTransfer(tx: Movement): boolean {
+  return APP_TRANSFER_CODES.has(codeOf(tx))
+}
+
+/** The payment app a text names, if any: "Zelle" for "Zelle payment to JANE DOE". */
+export function appNamedIn(text: string): string | null {
+  return PERSON_TO_PERSON_APPS.find(({ pattern }) => pattern.test(text))?.app ?? null
+}
+
 /** The payment app a transaction went through, if it looks like one person paying another. */
 export function personToPersonApp(tx: Movement): string | null {
-  const text = `${tx.name} ${tx.merchantName ?? ''}`
-  const found = PERSON_TO_PERSON_APPS.find(({ pattern }) => pattern.test(text))
-  if (found) return found.app
-  return APP_TRANSFER_CODES.has(codeOf(tx)) ? 'a payment app' : null
+  const app = appNamedIn(`${tx.name} ${tx.merchantName ?? ''}`)
+  return app ?? (isAppTransfer(tx) ? 'a payment app' : null)
 }
 
 // "ending in 1234", "x1234", "*1234" and "...1234": how banks write a card's
@@ -123,7 +131,17 @@ export interface PersonPayment {
 
 // "Zelle payment to JANE DOE JPM99A1B2C3" or "Zelle Payment From Jane Doe 12345":
 // the name sits between "to" or "from" and a trailing confirmation code.
-const NAMED_PAYMENT = /\b(?:to|from)\s+(.+)$/i
+const NAMED_PAYMENT = /\b(to|from)\s+(.+)$/i
+
+// Where the name ends when a bank adds more after it: a date ("ZELLE TO JANE
+// DOE ON 11/15"), a reference ("... REF # PP0ABC", "... CONF 12AB", "... #4471"),
+// the sender's memo ("... FOR RENT", '... "dinner"', "...; dinner") or the
+// app it went through ("... VIA ZELLE", "... WITH VENMO").
+const NAME_END =
+  /\s+(?:on\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?(?!\d)|(?:ref|conf|for|via)\b|with\s+(?:zelle|venmo|cash\s?app|paypal|apple\s+cash)\b)|\s*[;#"\u201C\u201D]/i
+
+// After "from", where the account it arrived in starts: "Zelle from JANE DOE to CHASE CHECKING".
+const ARRIVED_IN = /\s+to\s+/i
 
 /** Drops trailing reference codes (any word with a digit in it) from a name. */
 function withoutReference(text: string): string {
@@ -139,18 +157,28 @@ function tidyName(name: string): string {
 }
 
 /**
- * Reads a payment between people. The direction always comes from the amount,
- * never from "to" or "from" in the description, so a bank's wording can never
- * turn money received into money sent.
+ * A payment between people as the app read it before names were read more
+ * closely: any app named in the line, the whole rest of the line after "to"
+ * or "from" as the person. Names an assistant was given then, and patterns it
+ * saved from them, still match by it (ruleText.ts).
  */
-export function personPayment(tx: Movement): PersonPayment | null {
+export function earlierPersonPayment(tx: Movement): PersonPayment | null {
   const app = personToPersonApp(tx)
   if (!app || tx.amountCents === 0) return null
-  const named = NAMED_PAYMENT.exec(tx.name)?.[1]
+  const named = NAMED_PAYMENT.exec(tx.name)?.[2]
   const counterparty = named ? withoutReference(named) : ''
   return {
     app,
     direction: tx.amountCents < 0 ? 'in' : 'out',
     counterparty: counterparty ? tidyName(counterparty) : null,
   }
+}
+
+/** The name a bank wrote after "to" or "from", without what it added after it, if any. */
+export function nameAfterToOrFrom(line: string): string | null {
+  const [, word, rest] = NAMED_PAYMENT.exec(line) ?? []
+  const named = rest?.split(NAME_END)[0]
+  const sender = word?.toLowerCase() === 'from' ? named?.split(ARRIVED_IN)[0] : named
+  const name = sender ? withoutReference(sender) : ''
+  return name ? tidyName(name) : null
 }

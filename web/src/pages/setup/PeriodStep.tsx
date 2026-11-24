@@ -1,6 +1,7 @@
 // Step 3: how budgets reset, the time zone, and when to warn.
 
 import { useState, type FormEvent } from 'react'
+import { useAction } from '../../api/hooks'
 import { useUpdateSettings } from '../../api/settings'
 import { PeriodEditor, timeZones, type PeriodSetting } from '../../components/PeriodEditor'
 import { PercentInput } from '../../components/PercentInput'
@@ -17,6 +18,8 @@ export function PeriodStep({ onNext }: { onNext: () => void }) {
   )
   const [warnAt, setWarnAt] = useState(settings.defaultWarnAtPercent)
   const update = useUpdateSettings()
+  // A setup picked up after a bank sync may already know the pay schedule; then it is not asked.
+  const pay = useAction('get_pay').data
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -31,7 +34,12 @@ export function PeriodStep({ onNext }: { onNext: () => void }) {
           Budgets start fresh at the start of each period. Monthly suits most people; pick Every
           paycheck to plan from one payday to the next.
         </p>
-        <PeriodEditor value={period} onChange={setPeriod} />
+        <PeriodEditor
+          value={period}
+          found={pay?.period ?? null}
+          entered={Boolean(pay?.yours)}
+          onChange={setPeriod}
+        />
         <Setting label="Time zone" hint="So your days start and end at your midnight">
           <select
             className="input"

@@ -6,6 +6,7 @@ import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { aiSettingsSchema } from './ai/settings.js'
+import { paySettingsSchema } from './pay/ownPay.js'
 import type { PeriodConfig } from '../lib/periods.js'
 import {
   MAX_MONTHLY_CENTS,
@@ -206,6 +207,8 @@ export const settingsSchema = z.object({
   savingsPlan: savingsPlanSchema.default(savingsPlanSchema.parse({})),
   /** Assumptions for retirement projections (retirement/assumptions.ts). */
   retirement: retirementSchema.default(retirementSchema.parse({})),
+  /** The owner's word on their pay (pay/ownPay.ts), set only by confirm_pay and set_pay. */
+  pay: paySettingsSchema.default(paySettingsSchema.parse({})),
 })
 
 export type Settings = z.infer<typeof settingsSchema>

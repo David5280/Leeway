@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto'
 import { ReaderError, type DocumentReader } from '../../ai/documents.js'
-import { AiLimitError } from '../ai/gateway.js'
+import { AiLimitError } from '../ai/limit.js'
 import { AppError } from '../../errors.js'
 import { AttemptLimiter } from '../../lib/attemptLimiter.js'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../lib/time.js'

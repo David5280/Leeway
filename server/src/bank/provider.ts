@@ -28,6 +28,8 @@ export interface BankTransaction {
   date: IsoDate
   name: string
   merchantName: string | null
+  /** Plaid's id for the business, when it recognised one; never set for a person. */
+  merchantEntityId?: string | null
   /** Positive is money leaving the account. */
   amountCents: number
   currency: string

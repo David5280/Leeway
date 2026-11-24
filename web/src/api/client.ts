@@ -30,6 +30,7 @@ export type ForecastItem = Forecast['weeks'][number]['items'][number]
 export type TripSummary = Output<'list_trips'>[number]
 export type TripDetail = Output<'get_trip'>
 export type CashFlow = Output<'get_cash_flow'>
+export type PayView = Output<'get_pay'>
 export type AccountAlert = Output<'list_alerts'>[number]
 export type AccountsView = Output<'summarize_accounts'>
 export type TaxExport = Output<'export_tax_year'>
@@ -105,25 +106,28 @@ async function send<T>(
     throw new ApiError(0, 'unreachable', UNREACHABLE)
   }
   if (response.status === 204) return undefined as T
-  if (!response.ok) {
-    // The error body; details carry what the app can act on, like a duplicate bank's logins.
-    const data = (await readJson(response)) as {
-      error?: string
-      message?: string
-      details?: unknown
-    }
-    if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
-    const fallback = PROXY_DOWN.has(response.status)
-      ? UNREACHABLE
-      : 'Something went wrong. Please try again.'
-    throw new ApiError(
-      response.status,
-      data.error ?? 'error',
-      data.message ?? fallback,
-      data.details,
-    )
-  }
+  if (!response.ok) throw await errorFrom(response, path)
   return (await read(response)) as T
+}
+
+/** The ApiError for a refused request, showing sign-in when the session has lapsed. */
+export async function errorFrom(response: Response, path: string): Promise<ApiError> {
+  // The error body; details carry what the app can act on, like a duplicate bank's logins.
+  const data = (await readJson(response)) as {
+    error?: string
+    message?: string
+    details?: unknown
+  }
+  if (response.status === 401 && !path.startsWith('/api/auth/')) onSignedOut()
+  const fallback = PROXY_DOWN.has(response.status)
+    ? UNREACHABLE
+    : 'Something went wrong. Please try again.'
+  return new ApiError(
+    response.status,
+    data.error ?? 'error',
+    data.message ?? fallback,
+    data.details,
+  )
 }
 
 /** Runs a server action by name, typed by the server's own definition. */

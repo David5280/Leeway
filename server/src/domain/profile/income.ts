@@ -21,8 +21,10 @@ import { essentialCentsOf, readEssentialMonths } from '../essentialMonths.js'
 import { firstTransactionDay } from '../monthlyTotals.js'
 import type { CurrentPay, Employer } from '../pay/current.js'
 import { namesBusiness } from '../pay/deposits.js'
+import { ownMonthlyCents } from '../pay/ownPay.js'
 import { readCurrentPay } from '../pay/source.js'
 import { paydayFrom, type PaydaySource } from '../pay/payday.js'
+import { nextOwnPayday } from '../pay/periodPayday.js'
 import type { Settings } from '../settings.js'
 import { merchantDisplayName } from '../transactionName.js'
 
@@ -61,6 +63,15 @@ export interface PayingEmployer {
   estimate: boolean
 }
 
+/** Pay the owner entered that stands in for no job the bank shows (pay/ownPay.ts). */
+export interface EnteredPay {
+  cadence: Cadence
+  /** One paycheck, as they entered it. */
+  typicalPayCents: number
+  monthlyCents: number
+  nextPayday: IsoDate
+}
+
 export interface PaySchedule {
   /** How often the main employer pays; null when no employer is paying now. */
   cadence: Cadence | null
@@ -72,10 +83,20 @@ export interface PaySchedule {
   nextPayday: IsoDate | null
   /** True while the main employer's cadence is unconfirmed: the next payday is a projection. */
   estimate: boolean
-  /** The main employer's name, as PayingEmployer names it, or null. */
+  /**
+   * The main employer's name, as PayingEmployer names it, or null; null too
+   * when the main pay is the owner's own, standing in for no job (`entered`).
+   */
   employer: string | null
   /** Every employer paying now, the main one first: a second job counts beside the first. */
   employers: PayingEmployer[]
+  /**
+   * The pay the owner entered, when it stands in for no job found (none was
+   * found as it was entered, or the job it was entered for stopped): it is
+   * the main pay, and every employer listed counts beside it. Null when they
+   * entered none, or it stands in for a job, which is then listed as that job.
+   */
+  entered: EnteredPay | null
   /** The first paycheck from any employer paying now: where typical income starts. */
   since: IsoDate | null
 }
@@ -160,6 +181,18 @@ function employerName(employer: Employer, masks: string[]): string | null {
   return namesBusiness(employer.newest) ? merchantDisplayName(employer.newest, { masks }) : null
 }
 
+/** The owner's own pay when it stands in for no job: the main pay, with no employer for it. */
+function enteredPay(pay: CurrentPay, settings: Settings, today: IsoDate): EnteredPay | null {
+  const { override } = settings.pay
+  if (!override || pay.employer) return null
+  return {
+    cadence: override.cadence,
+    typicalPayCents: override.amountCents,
+    monthlyCents: ownMonthlyCents(override),
+    nextPayday: nextOwnPayday(override, today),
+  }
+}
+
 /** How often pay comes and when next, as the profile and an agent read it. */
 async function payScheduleOf(
   db: Db,
@@ -186,8 +219,10 @@ async function payScheduleOf(
     typicalPayCents: pay.paycheckCents,
     nextPayday: source ? payday.date : null,
     estimate: payday.estimate,
-    employer: employers[0]?.name ?? null,
+    // The main pay's payer: never a job the owner's own pay only counts beside.
+    employer: pay.employer ? employerName(pay.employer, masks) : null,
     employers,
+    entered: enteredPay(pay, settings, today),
     since: payingSince(pay),
   }
 }

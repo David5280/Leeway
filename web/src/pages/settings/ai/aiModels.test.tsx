@@ -107,6 +107,21 @@ describe('Settings > AI models', () => {
     expect(screen.getByText(/AI needs an Anthropic API key, and none is set/)).toBeInTheDocument()
   })
 
+  it('offers a model for Chat only once there is a key, since Chat needs one', async () => {
+    const chat = job({ job: 'chat', title: 'Chat', envVar: 'CHAT_MODEL' })
+    const withChat = (keySet: boolean) =>
+      usage({ keySet, jobs: [...usage().jobs, chat], provider: keySet ? 'Claude' : null })
+    serve(withChat(false))
+    const { unmount } = renderSignedIn(<AiModelsSection />)
+    expect(await screen.findByRole('group', { name: 'Paystub reader' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Chat' })).not.toBeInTheDocument()
+    unmount()
+
+    serve(withChat(true))
+    renderSignedIn(<AiModelsSection />)
+    expect(await screen.findByRole('group', { name: 'Chat' })).toBeInTheDocument()
+  })
+
   it('offers each model with what it is for and its price, the default marked', async () => {
     serve()
     renderSignedIn(<AiModelsSection />)

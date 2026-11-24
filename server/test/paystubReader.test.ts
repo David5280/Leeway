@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { ReaderError } from '../src/ai/documents.js'
-import { AiLimitError } from '../src/domain/ai/gateway.js'
+import { AiLimitError } from '../src/domain/ai/limit.js'
 import {
   CACHE_SIZE,
   CACHE_TTL_MS,

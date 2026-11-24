@@ -5,8 +5,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { MINUTE_MS } from '../lib/time.js'
+import { chatParams, chatReplyOf, usageOf } from './anthropicChat.js'
 import {
   AiProviderError,
+  type AiChatReply,
+  type AiChatRequest,
   type AiContent,
   type AiProvider,
   type AiReply,
@@ -67,11 +70,12 @@ export function failureFrom(error: unknown): AiProviderError {
 }
 
 /**
- * Prompt caching is left off on purpose. Leeway's jobs are a few calls a day,
- * hours apart, while a cached prompt lives five minutes, so a cache write
- * (1.25 times the input price) would almost never be read back. Leeway caches
- * whole answers instead: the summary per day, a paystub by its file. Cache
- * tokens are still recorded and priced, for a future job that turns it on.
+ * Prompt caching is left off for the one-off jobs on purpose. The summary and
+ * the paystub reader make a few calls a day, hours apart, while a cached
+ * prompt lives five minutes, so a cache write (1.25 times the input price)
+ * would almost never be read back. Leeway caches their whole answers instead:
+ * the summary per day, a paystub by its file. Chat turns caching on, since a
+ * question makes several calls in a row (anthropicChat.ts).
  */
 export class AnthropicProvider implements AiProvider {
   readonly name = 'Claude'
@@ -92,17 +96,26 @@ export class AnthropicProvider implements AiProvider {
         ...this.params(request),
         max_tokens: request.maxTokens,
       })
-      const usage = response.usage
       return {
         stop: stopOf(response.stop_reason),
         output: response.parsed_output ?? null,
-        usage: {
-          inputTokens: usage.input_tokens,
-          outputTokens: usage.output_tokens,
-          cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-          cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
-        },
+        usage: usageOf(response.usage),
       }
+    } catch (error) {
+      throw failureFrom(error)
+    }
+  }
+
+  /**
+   * Streams one step of a conversation. Tool inputs here are a few small
+   * fields, so they are left to arrive whole and checked by the server,
+   * rather than streamed as they are written.
+   */
+  async converse(request: AiChatRequest, onText: (text: string) => void): Promise<AiChatReply> {
+    try {
+      const stream = this.client.messages.stream(chatParams(request))
+      stream.on('text', (text) => onText(text))
+      return chatReplyOf(await stream.finalMessage())
     } catch (error) {
       throw failureFrom(error)
     }

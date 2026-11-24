@@ -99,7 +99,8 @@ export function settingsHandlers(initial: Settings = settings): Handlers {
   return {
     get_settings: () => current,
     update_settings: (patch) => {
-      current = mergeSettings(current, settingsPatchSchema.parse(patch))
+      // Merged as the server merges what it stores, its own fields included.
+      current = mergeSettings(settingsSchema.parse(current), settingsPatchSchema.parse(patch))
       return current
     },
   }
@@ -297,7 +298,7 @@ export function budgetFor(
       period: periodContaining('2026-11-17', { kind: 'monthly', startDay: 1 }),
       offset: 0,
       today: '2026-11-17',
-      settings,
+      settings: settingsSchema.parse(settings),
       ...extra,
     }),
     previous: { spentCents: 0, spentToDateCents: 0, categories: [] },

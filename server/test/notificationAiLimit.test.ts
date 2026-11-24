@@ -5,7 +5,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { AiGateway, AiLimitError, type AiAsk } from '../src/domain/ai/gateway.js'
+import { AiGateway } from '../src/domain/ai/gateway.js'
+import { AiLimitError, type AiAsk } from '../src/domain/ai/limit.js'
 import { listNotifications } from '../src/domain/notifications/inbox.js'
 import { runNotifier } from '../src/domain/notifications/notifier.js'
 import {

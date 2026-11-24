@@ -5,12 +5,13 @@ import type { Db } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { isoDateSchema } from '../lib/schemas.js'
 import { accountMasks, accountNames } from './accounts.js'
+import { personPayment, shownPerson } from './betweenPeople.js'
 import { assertCategoryExists, type Category } from './categories.js'
 import { recategorize } from './categorize.js'
 import type { AccountMasks } from './safeName.js'
 import { safePerson, transactionDisplayName } from './transactionName.js'
 import { loadTransferPairs, type PairCandidate } from './transferPairs.js'
-import { personPayment, type Movement, type PersonPayment } from './transfers.js'
+import type { Movement, PersonPayment } from './transfers.js'
 
 /** The other side of a transfer between two of the owner's accounts. */
 export interface TransferPartner {
@@ -115,7 +116,9 @@ function present(row: StoredTransaction, { names, masks, partners }: Presenting)
         toAccount: row.amountCents > 0 ? transfer.accountName : accountName,
       }
     : null
-  const displayName = transactionDisplayName({ ...row, person }, accounts, {
+  // Named by whoever its line pays, a person or not (shownPerson).
+  const named = safePerson(shownPerson(row), masks)
+  const displayName = transactionDisplayName({ ...row, person: named }, accounts, {
     masks,
     fallback: categoryName ?? undefined,
   })
@@ -171,14 +174,18 @@ const SELECT = `
  * Transactions matching a filter, newest first. A search matches the bank's
  * description and merchant name or the note, unless `searchBankText` is
  * false: then it matches only what the caller can read, the display name and
- * the note. Agents search that way (see context.ts).
+ * the note, or the display name alone when `searchNotes` is false too.
+ * Agents search that way, and Chat without notes (see context.ts).
  */
 export async function listTransactions(
   db: Db,
   filter: TransactionFilter,
-  { searchBankText = true }: { searchBankText?: boolean } = {},
+  {
+    searchBankText = true,
+    searchNotes = true,
+  }: { searchBankText?: boolean; searchNotes?: boolean } = {},
 ): Promise<{ transactions: Transaction[]; total: number }> {
-  if (filter.search && !searchBankText) return searchDisplayNames(db, filter)
+  if (filter.search && !searchBankText) return searchDisplayNames(db, filter, searchNotes)
   const { whereSql, params } = filterSql(filter)
   const [list, count] = await Promise.all([
     db.query<StoredTransaction>(
@@ -239,13 +246,15 @@ function filterSql(filter: TransactionFilter, withSearch = true) {
 }
 
 /**
- * A search matched against what an agent can read: the display name and the
- * note, never the bank's own text. Display names are worked out in code, so
- * every transaction the other filters allow is read, then matched and paged.
+ * A search matched against what an agent can read: the display name and,
+ * with `searchNotes`, the note, never the bank's own text. Display names are
+ * worked out in code, so every transaction the other filters allow is read,
+ * then matched and paged.
  */
 async function searchDisplayNames(
   db: Db,
   filter: TransactionFilter,
+  searchNotes: boolean,
 ): Promise<{ transactions: Transaction[]; total: number }> {
   const { whereSql, params } = filterSql(filter, false)
   const { rows } = await db.query<StoredTransaction>(
@@ -254,11 +263,11 @@ async function searchDisplayNames(
   )
   const context = await presenting(db, rows)
   const term = filter.search!.toLowerCase()
+  const searched = (tx: Transaction) =>
+    searchNotes ? [tx.displayName, tx.note ?? ''] : [tx.displayName]
   const matches = rows
     .map((row) => present(row, context))
-    .filter((tx) =>
-      [tx.displayName, tx.note ?? ''].some((text) => text.toLowerCase().includes(term)),
-    )
+    .filter((tx) => searched(tx).some((text) => text.toLowerCase().includes(term)))
   return {
     transactions: matches.slice(filter.offset, filter.offset + filter.limit),
     total: matches.length,

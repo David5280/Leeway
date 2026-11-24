@@ -1,0 +1,263 @@
+/* Chat (pages/Chat.tsx): one readable column, the owner's questions as
+   accent bubbles on the right, Leeway's answers as plain text on the left,
+   and the box to type in right under the conversation. Messages keep their
+   line breaks but not runs of spaces (pre-line), so no space at the end of
+   a wrapped line hangs past the edge. */
+
+.chat {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.chat-head h1 {
+  margin-top: var(--space-1);
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chat-empty h2 {
+  font-size: var(--text-lg);
+}
+
+.chat-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+}
+
+.chat-starter {
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 14px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .chat-starter:hover {
+    border-color: var(--accent);
+  }
+}
+
+.chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chat-line {
+  display: flex;
+  min-width: 0;
+}
+
+.chat-line.from-owner {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--radius) var(--radius) 4px var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: var(--text-md);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.chat-answer {
+  max-width: 100%;
+  font-size: var(--text-md);
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.chat-working {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.chat-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.chat-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--muted);
+  animation: chat-dot 1.2s ease-in-out infinite;
+}
+
+.chat-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.chat-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes chat-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-dots span {
+    animation: none;
+  }
+}
+
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: 4px 4px 4px var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+}
+
+.chat-composer:focus-within {
+  border-color: var(--accent);
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  max-height: 160px;
+  padding: 12px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  field-sizing: content;
+  background: transparent;
+  color: var(--ink);
+  font: 500 15px var(--font-ui);
+}
+
+.chat-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 99px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.chat-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (pointer: coarse) {
+  .chat-send {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* The summary row is the tap target, so the card's own padding above and below is slim. */
+.chat-facts {
+  padding-block: var(--space-1);
+}
+
+.chat-facts[open] {
+  padding-bottom: var(--space-4);
+}
+
+/* 22px lines with 11px above and below: a 44px tap, keeping the disclosure arrow. */
+.chat-facts summary {
+  padding: 11px 0;
+  line-height: 22px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.chat-fact-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* A fact and its Forget button stay on one row, the fact wrapping beside it. */
+.chat-fact-list li {
+  flex-wrap: nowrap;
+  gap: var(--space-3);
+  font-size: var(--text-md);
+}
+
+.chat-fact-list li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The way into Chat on Overview: one slim row. */
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px 18px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.ask-bar > svg:first-child {
+  color: var(--accent);
+  flex: none;
+}
+
+.ask-bar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ask-bar-title {
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .ask-bar:hover {
+    border-color: var(--accent);
+  }
+}

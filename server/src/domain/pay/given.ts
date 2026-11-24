@@ -1,10 +1,10 @@
 // A cadence the owner gave, and the job it speaks for. Pure.
 //
-// A paycheck budget period is the owner's word on how often the main job
-// pays. A saved paystub speaks only for the job it came from: one from a
-// job that has since ended must never set how often a new one pays, so it
-// counts for the main employer only when it names the same payer the bank
-// does, or names no payer seen and was paid during that job's run of paychecks.
+// Each speaks only for the job it came from. The owner's confirmation names
+// its payer (ownPay.ts). A saved paystub from a job that has since ended
+// must never set how often a new one pays, so it counts for the main
+// employer only when it names the same payer the bank does, or names no
+// payer seen and was paid during that job's run of paychecks.
 
 import { addDays, type IsoDate } from '../../lib/dates.js'
 import type { Cadence } from '../../lib/periods.js'
@@ -13,15 +13,32 @@ import { SMALL_WORDS } from '../merchantCase.js'
 import { withoutPayWords } from './deposits.js'
 import type { EmployerRun } from './paychecks.js'
 
-export interface GivenCadence {
+/** A cadence from a saved paystub, with what it shows of the job it came from. */
+interface PaystubCadence {
   cadence: Cadence
-  /** The paystub it came from; absent when a paycheck budget period gave it. */
-  paystub?: {
+  paystub: {
     /** The day it was paid, or null when it shows none. */
     payDate: IsoDate | null
     employerName: string | null
   }
 }
+
+/** A cadence the owner confirmed for one payer, by its key (paychecks.ts). */
+interface ConfirmedCadence {
+  cadence: Cadence
+  payerKey: string
+}
+
+/**
+ * A cadence alone, speaking for the main job whatever it is. Nothing in the
+ * app gives one this way now, since a paystub and a confirmation each name
+ * their job; it stays so a cadence can be read on its own, as tests do.
+ */
+interface MainJobCadence {
+  cadence: Cadence
+}
+
+export type GivenCadence = PaystubCadence | ConfirmedCadence | MainJobCadence
 
 /**
  * Days a paystub may predate the first paycheck seen from a job and still be
@@ -137,16 +154,17 @@ export function namesPayer(employerName: string, payerKey: string): boolean {
 }
 
 /**
- * Whether a given cadence speaks for a run: a budget period's always, a
- * paystub's only for its own job. A stub that names this run's payer is its
- * own; one that names another payer seen (`others`, an old job's) is that
- * job's, whatever its date; one that names neither, as when the bank shows
- * only a payroll service, counts when it was paid during the run.
+ * Whether a given cadence speaks for a run: a confirmation for its own
+ * payer, a cadence alone for any, and a paystub only for its own job. A stub
+ * that names this run's payer is its own; one that names another payer seen
+ * (`others`, an old job's) is that job's, whatever its date; one that names
+ * neither, as when the bank shows only a payroll service, counts when it was
+ * paid during the run.
  */
 export function givenFor(given: GivenCadence, run: EmployerRun, others: EmployerRun[]): boolean {
-  const { paystub } = given
-  if (!paystub) return true
-  const { employerName, payDate } = paystub
+  if ('payerKey' in given) return given.payerKey === run.payerKey
+  if (!('paystub' in given)) return true
+  const { employerName, payDate } = given.paystub
   if (employerName !== null) {
     if (namesPayer(employerName, run.payerKey)) return true
     if (others.some((other) => namesPayer(employerName, other.payerKey))) return false

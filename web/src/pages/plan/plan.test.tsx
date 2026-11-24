@@ -11,6 +11,7 @@ import {
   renderPlan,
   retirementOf,
 } from '../../test/planning'
+import { noPay } from '../../test/pay'
 import { worthPoint } from '../../test/worth'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -25,9 +26,10 @@ const quietBills = {
 }
 
 describe('Plan screen', () => {
-  it('opens on bills and switches sections', async () => {
+  it('opens on payday and switches sections', async () => {
     planServer({
       ...quietBills,
+      get_pay: () => noPay,
       list_goals: () => [],
       list_accounts: () => [],
       get_net_worth: () => ({ assetsCents: 0, liabilitiesCents: 0, netWorthCents: 0, history: [] }),
@@ -35,9 +37,12 @@ describe('Plan screen', () => {
     })
     renderPlan('/plan')
     const user = userEvent.setup()
-    expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
+    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
     const sections = within(screen.getByRole('group', { name: 'Plan section' }))
-    expect(sections.getByRole('button', { name: 'Bills' })).toHaveAttribute('aria-pressed', 'true')
+    expect(sections.getByRole('button', { name: 'Payday' })).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(sections.getByRole('button', { name: 'Bills' }))
+    expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
     // Cash until payday leads the bills, and stays off the other sections.
     expect(screen.getByRole('region', { name: 'Until payday' })).toBeVisible()
 
@@ -52,17 +57,17 @@ describe('Plan screen', () => {
     expect(await screen.findByRole('region', { name: 'Retirement projection' })).toBeVisible()
   })
 
-  it('shows bills for an address it does not know', async () => {
-    planServer(quietBills)
+  it('shows payday for an address it does not know', async () => {
+    planServer({ get_pay: () => noPay })
     renderPlan('/plan/somewhere')
-    expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
+    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
   })
 })
 
 describe('Until payday', () => {
   async function show(flow: CashFlow) {
     planServer({ ...quietBills, get_cash_flow: () => flow })
-    renderPlan('/plan')
+    renderPlan('/plan/bills')
     // The card is drawn anew once the numbers arrive, so it is found after them.
     await screen.findByText(/in checking/)
     return screen.getByRole('region', { name: 'Until payday' })
@@ -117,7 +122,7 @@ describe('Until payday', () => {
       ...quietBills,
       get_cash_flow: () => cashFlow({ cashKnown: false, cashCents: 0, safeCents: 0 }),
     })
-    renderPlan('/plan')
+    renderPlan('/plan/bills')
     await screen.findByText(/balance isn.t known yet/)
     const card = screen.getByRole('region', { name: 'Until payday' })
     expect(card).toHaveTextContent("Checking's balance isn't known yet.")
@@ -269,7 +274,7 @@ describe('Until payday', () => {
 
   it('shows why it could not load', async () => {
     planServer(quietBills, { '/api/actions/get_cash_flow': failing('No accounts yet', 500) })
-    renderPlan('/plan')
+    renderPlan('/plan/bills')
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
   })
 })

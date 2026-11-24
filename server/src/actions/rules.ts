@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { withTransaction } from '../db/pool.js'
 import { accountMasks } from '../domain/accounts.js'
 import { recategorize } from '../domain/categorize.js'
-import { shownName } from '../domain/ruleText.js'
+import type { Db } from '../db/pool.js'
+import { shownNamesOf } from '../domain/ruleText.js'
 import {
   AMOUNT_BOUNDS_MESSAGE,
   amountBoundsValid,
@@ -18,11 +19,34 @@ import {
   type Rule,
 } from '../domain/rules.js'
 import { listTransactions } from '../domain/transactions.js'
+import type { Movement } from '../domain/transfers.js'
 import { patchOf } from '../lib/schemas.js'
 import { defineAction } from './action.js'
 
 const RULES_EXPLAINED =
   'Rules run top to bottom and the first match sets the category of any transaction not categorized by hand. A rule reads "shown_name" or "bank_text". Rules you make, or whose pattern, field or match you change, read "shown_name": the displayName you see (a paired transfer by its own name, not its two accounts), whatever the field. The owner\'s rules read "bank_text", the bank\'s own text, which you are never shown: field "merchant" is the merchant name (or the description when there is none) and "description" the bank description. Amount bounds are in cents, positive for money out.'
+
+/**
+ * The names each listed transaction is shown under, by id, as a rule that
+ * reads shown names sees them (ruleText.ts): worked out from its bank fields,
+ * as categorizing does, so a preview matches what saving the rule would.
+ */
+async function shownNamesById(
+  db: Db,
+  transactions: readonly { id: string }[],
+): Promise<Map<string, string[]>> {
+  const [{ rows }, masks] = await Promise.all([
+    db.query<Movement & { id: string }>(
+      `SELECT id::text, name, merchant_name AS "merchantName", amount_cents AS "amountCents",
+         provider_category_primary AS "providerCategoryPrimary",
+         provider_category_detailed AS "providerCategoryDetailed"
+       FROM transactions WHERE id = ANY($1::uuid[])`,
+      [transactions.map((tx) => tx.id)],
+    ),
+    accountMasks(db),
+  ])
+  return new Map(rows.map((row) => [row.id, shownNamesOf(row, masks)]))
+}
 
 export const listRulesAction = defineAction({
   name: 'list_rules',
@@ -120,10 +144,11 @@ export const previewRuleAction = defineAction({
       offset: 0,
       includeExcluded: false,
     })
-    const masks = await accountMasks(ctx.db)
-    const matches = transactions.filter((tx) =>
-      ruleMatches(rule, { ...tx, shownName: reads === 'shown_name' ? shownName(tx, masks) : '' }),
-    )
+    const shown = reads === 'shown_name' ? await shownNamesById(ctx.db, transactions) : new Map()
+    const matches = transactions.filter((tx) => {
+      const shownNames = shown.get(tx.id) ?? ['']
+      return ruleMatches(rule, { ...tx, shownName: shownNames[0]!, shownNames })
+    })
     const moving = target
       ? matches.filter((tx) => tx.categorySource !== 'manual' && tx.categoryId !== target)
       : []

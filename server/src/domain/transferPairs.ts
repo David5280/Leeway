@@ -239,7 +239,7 @@ export async function readPairLegs(
     [addDays(start, -PAIR_WINDOW_DAYS), addDays(end, PAIR_WINDOW_DAYS), hiddenDebts],
   )
   return withShownNames(rows, rules, masks).map((row) => {
-    const { categorySource: _source, shownName: _name, ...leg } = row
+    const { categorySource: _source, shownName: _name, shownNames: _names, ...leg } = row
     return { ...leg, filedElsewhere: filedElsewhere(row, rules, kinds) }
   })
 }

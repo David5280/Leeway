@@ -48,4 +48,11 @@ export interface AppContext {
    * which transactions carry an account's last digits.
    */
   agent?: boolean
+  /**
+   * True when the in-app chat called (agent is set too). Its model never
+   * reads a transaction's note (see chat/toolOutput.ts), so no search it
+   * asks matches one: a search for "jack" would otherwise find the Costco
+   * row noted "dinner with Jack".
+   */
+  chat?: boolean
 }

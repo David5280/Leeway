@@ -53,11 +53,74 @@ export interface AiReply {
   usage: TokenUsage
 }
 
+/** A tool the model may call in a conversation, its input described by a JSON schema. */
+export interface AiTool {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+/** A tool the model asked to run, with the input it gave, still unchecked. */
+export interface AiToolCall {
+  id: string
+  name: string
+  input: unknown
+}
+
+/** What a tool returned, to send back for the call with the same id. */
+export interface AiToolResult {
+  id: string
+  content: string
+  isError: boolean
+}
+
+/**
+ * One message of a conversation. A reply that called tools is passed back as
+ * the provider gave it (`turn`), since it may carry the model's own thinking,
+ * which has to go back unchanged.
+ */
+export type AiMessage =
+  | { role: 'user'; text: string }
+  | { role: 'assistant'; text: string }
+  | { role: 'assistant'; turn: unknown }
+  | { role: 'tool_results'; results: AiToolResult[] }
+
+/** One step of a conversation: the model answers, or asks for tools. */
+export interface AiChatRequest {
+  model: string
+  /** The fixed instructions, the same on every call, so the provider can cache them. */
+  system: string
+  /** What changes from day to day, like today's date, sent after the fixed part. */
+  context: string
+  tools: AiTool[]
+  messages: AiMessage[]
+  effort: AiEffort
+  maxTokens: number
+}
+
+/** Why a conversation step ended: as AiStop, or 'tools' when the model wants tools run. */
+export type AiChatStop = AiStop | 'tools'
+
+export interface AiChatReply {
+  stop: AiChatStop
+  /** The words the model wrote in this step. */
+  text: string
+  toolCalls: AiToolCall[]
+  /** The reply as the provider gave it, to pass back as an assistant message's turn. */
+  turn: unknown
+  usage: TokenUsage
+}
+
 export interface AiProvider {
   /** Shown in the app as who wrote or read something, like "Claude". */
   readonly name: string
   /** Sends one paid request, or throws an AiProviderError. */
   send(request: AiRequest): Promise<AiReply>
+  /**
+   * Sends one paid step of a conversation, handing each piece of text to
+   * `onText` as it arrives, or throws an AiProviderError.
+   */
+  converse(request: AiChatRequest, onText: (text: string) => void): Promise<AiChatReply>
   /**
    * The input tokens `send` would bill for this request, counted free of
    * charge with the same model, or throws an AiProviderError.
