@@ -7,7 +7,7 @@
 // shrinks it back into the button (so does following a link in an answer,
 // pages/chat/AnswerText.tsx). Closing never stops an answer on its way.
 
-import { useId, type KeyboardEvent } from 'react'
+import { useEffect, useId } from 'react'
 import { ChatThread } from '../../pages/chat/ChatThread'
 import { Icon, Logo } from '../ui'
 import type { AskControls } from './AskProvider'
@@ -23,11 +23,21 @@ export function AskBox({ ask, leaving }: { ask: AskControls; leaving: boolean })
   // A press on something that takes focus (a field, a tab) keeps it; anywhere else, focus returns to the button.
   const outside = useOutsidePress(!leaving, (target) => ask.close({ refocus: !takesFocus(target) }))
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== 'Escape' || event.defaultPrevented) return
-    event.preventDefault()
-    ask.close()
-  }
+  // Escape is heard on the whole page, since the box does not hold focus:
+  // after a press on the page beside it, the box is still open and Escape
+  // still closes it. Another dialog (a sheet) with focus answers its own.
+  useEffect(() => {
+    if (leaving) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      const focused = document.activeElement
+      if (focused instanceof Element && focused.closest('[role="dialog"]:not(.ask-box)')) return
+      event.preventDefault()
+      ask.close()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [leaving, ask])
 
   return (
     <section
@@ -38,7 +48,6 @@ export function AskBox({ ask, leaving }: { ask: AskControls; leaving: boolean })
       // While it plays its way out it can be neither reached nor read.
       inert={leaving}
       aria-hidden={leaving || undefined}
-      onKeyDown={onKeyDown}
       {...outside}
     >
       <header className="ask-box-head">

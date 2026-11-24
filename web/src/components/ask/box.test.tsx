@@ -134,3 +134,17 @@ describe('the "/" key', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
+
+describe('closing from the page beside it', () => {
+  it('closes on Escape even after focus has left the box', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday')
+    await user.click(await button())
+    await field()
+    // Focus moves to the page while the box stays open (it holds no focus trap).
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    expect(await box()).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await closed()
+  })
+})

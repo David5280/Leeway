@@ -83,6 +83,9 @@
 
   /* Layers. */
   --layer-sticky: 4;
+  /* Ask Leeway's corner button, and the box it opens: over sticky bars, under menus. */
+  --layer-float: 15;
+  --layer-float-open: 25;
   --layer-menu: 30;
   --layer-sheet: 60;
 }
