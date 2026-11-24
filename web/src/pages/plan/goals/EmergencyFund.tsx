@@ -210,7 +210,7 @@ export function EmergencyCard({
       className="span-6 stack-sm"
     >
       <h2>{goal.name}</h2>
-      <span className="badge accent">{targetWords(view)}</span>
+      <span className="badge">{targetWords(view)}</span>
       <div className="row wrap" style={{ alignItems: 'baseline' }}>
         <Money cents={goal.currentCents} className="mid-number" />
         <span className="muted">

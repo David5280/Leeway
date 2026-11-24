@@ -1,8 +1,10 @@
-// Every theme, light and dark, reads at WCAG AA: text tones on every surface,
-// status pills and usual chips on their tints, category icons and tile icons
-// on their tinted circles, and chart bars on the card, the running period's
-// lighter fill included, with money in apart in lightness from money out,
-// plain or red.
+// Every theme, light and dark, reads at WCAG AA: text tones on every surface
+// (the status tones good, warn and over, muted text and the accent among
+// them, with good and over apart in lightness), status pills and usual chips
+// on their tints, category icons and tile icons on their tinted circles, and
+// chart bars on the card, the running period's lighter fill included, with
+// money in apart in lightness from money out, plain or red. The tab colors
+// have their own checks (lib/places.test.ts).
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -132,6 +134,12 @@ describe.each(MODES)('the $name theme', ({ tokens }) => {
       const text = mixRgb(parseHex(tokens[tone]), parseHex(tokens.ink), chip.text)
       expect(contrastRatio(text, tint), tone).toBeGreaterThanOrEqual(4.5)
     }
+  })
+
+  // Green and red merge for red-green color blindness, so the good and over
+  // tones also differ in lightness (and never show without a sign or a word).
+  it('sets the good and over tones apart in lightness, not hue alone', () => {
+    expect(contrastRatio(parseHex(tokens.good), parseHex(tokens.over))).toBeGreaterThanOrEqual(1.3)
   })
 
   it('draws money out apart from money in by lightness, not hue alone, and both at 3:1 on the card', () => {

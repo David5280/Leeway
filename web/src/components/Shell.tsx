@@ -5,14 +5,17 @@
 //     and the header's links, so the little height there is goes to the page;
 //   - a computer or a tablet turned sideways: a sidebar on the left with the
 //     logo, the five tabs, and Chat, the Inbox and Settings at its foot.
-// Keys 1 to 5 switch tabs in every shape.
+// Keys 1 to 5 switch tabs in every shape. The page carries the place of the
+// tab it belongs to (data-place), which colors its card labels, card tints
+// and charts (styles/places.css); pages outside the tabs carry none.
 
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { paths } from '../routes'
 import { useFrame } from './shell/frame'
 import { HeaderLinks, SidebarFoot } from './shell/HeaderLinks'
 import { TabLinks } from './shell/TabLinks'
+import { tabFor } from './shell/tabs'
 import { useTabKeys } from './shell/useTabKeys'
 import { Logo } from './ui'
 
@@ -67,11 +70,12 @@ function Header({ actions, tabs }: { actions?: ReactNode; tabs?: boolean }) {
  */
 export function Shell({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
   const frame = useFrame()
+  const place = tabFor(useLocation().pathname)?.place
   useTabKeys()
   return (
     <div className={`shell shell-${frame}`}>
       {frame === 'sidebar' && <Sidebar />}
-      <div className="page">
+      <div className="page" data-place={place}>
         {frame === 'sidebar' ? (
           actions && <div className="topbar topbar-actions">{actions}</div>
         ) : (

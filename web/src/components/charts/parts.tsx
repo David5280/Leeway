@@ -103,7 +103,7 @@ export function EndLabel({
   name: string
   /** Drawn inside an SVG <text>: an amount as <Money as="tspan" />. */
   value: ReactNode
-  tone?: 'muted' | 'accent' | 'ink'
+  tone?: 'muted' | 'ink'
 }) {
   return (
     <g aria-hidden="true">

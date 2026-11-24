@@ -20,7 +20,7 @@ function Badges({ goal, word }: { goal: Goal; word: string }) {
     <div className="row wrap" style={{ gap: 6 }}>
       {goal.kind === 'purchase' && <span className="badge">Purchase</span>}
       {goal.heldBackCents > 0 && (
-        <span className="badge accent">
+        <span className="badge">
           <Money cents={goal.heldBackCents} /> held from this {word}&apos;s budget
         </span>
       )}

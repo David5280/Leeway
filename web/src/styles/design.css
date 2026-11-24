@@ -204,7 +204,7 @@ tspan.money-neutral {
 
 .spark polyline {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--place-mark);
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;

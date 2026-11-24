@@ -40,6 +40,8 @@ export function Budgets() {
   const expenses = b.categories.filter((c) => c.kind === 'expense')
   const income = b.categories.filter((c) => c.kind === 'income')
   const transfers = categories.data.filter((c) => c.kind === 'transfer')
+  // Gone past the budgets: red, and said in words, never a bare minus.
+  const overBudget = b.totals.leftCents < 0
 
   return (
     <Shell>
@@ -74,10 +76,10 @@ export function Budgets() {
           </div>
         </Card>
         <Card static="pending" className="span-4 stack-sm" label="Left">
-          <span className="eyebrow">Left</span>
+          <span className="eyebrow">{overBudget ? 'Over by' : 'Left'}</span>
           <Money
-            cents={b.totals.leftCents}
-            tone={b.totals.leftCents < 0 ? 'problem' : undefined}
+            cents={Math.abs(b.totals.leftCents)}
+            tone={overBudget ? 'problem' : undefined}
             className="mid-number"
           />
           {b.totals.setAsideCents > 0 && (

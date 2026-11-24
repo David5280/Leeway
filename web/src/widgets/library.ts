@@ -2,6 +2,7 @@
 
 import type { ComponentType } from 'react'
 import type { Settings } from '../api/client'
+import type { PlaceId } from '../lib/places'
 import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
 import { AlertsWidget } from './Alerts'
 import { FlowsWidget } from './Flows'
@@ -27,29 +28,55 @@ export type WidgetType = Widget['type']
 export const DEPTHS = ['answer', 'alerts', 'words', 'trend', 'tiles', 'breakdown', 'list'] as const
 export type Depth = (typeof DEPTHS)[number]
 
+/** One widget the dashboard can draw. */
+export interface WidgetEntry {
+  name: string
+  component: ComponentType<WidgetProps>
+  depth: Depth
+  /**
+   * The tab whose figures it shows, and which it leads to, so its card wears
+   * that tab's color (lib/places.ts). Widgets that mix several tabs, or only
+   * carry a status, have none and stay plain.
+   */
+  place?: Exclude<PlaceId, 'home'>
+}
+
 /**
  * The widgets that exist so far, in the order the library lists them. Settings
  * may also name widgets a newer Leeway (or an agent) added; those are kept in
  * the saved list but not drawn.
  */
-export const WIDGET_LIBRARY: Partial<
-  Record<WidgetType, { name: string; component: ComponentType<WidgetProps>; depth: Depth }>
-> = {
+export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
   summary: { name: 'Summary', component: SummaryWidget, depth: 'words' },
   leeway: { name: 'Your leeway', component: LeewayWidget, depth: 'answer' },
   glance: { name: 'At a glance', component: GlanceWidget, depth: 'tiles' },
   alerts: { name: 'Heads up', component: AlertsWidget, depth: 'alerts' },
-  categories: { name: 'Categories', component: CategoriesWidget, depth: 'breakdown' },
-  pace: { name: 'Spending pace', component: PaceWidget, depth: 'trend' },
-  recent: { name: 'Recent', component: RecentWidget, depth: 'list' },
-  accounts: { name: 'Accounts', component: AccountsWidget, depth: 'list' },
-  merchants: { name: 'Top merchants', component: MerchantsWidget, depth: 'breakdown' },
-  trends: { name: 'Spending over time', component: TrendsWidget, depth: 'trend' },
-  'cash-flow': { name: 'Until payday', component: CashFlowWidget, depth: 'trend' },
-  bills: { name: 'Bills', component: BillsWidget, depth: 'list' },
-  goals: { name: 'Goals', component: GoalsWidget, depth: 'list' },
-  debts: { name: 'Debt payoff', component: DebtsWidget, depth: 'breakdown' },
-  'net-worth': { name: 'Net worth', component: NetWorthWidget, depth: 'answer' },
+  categories: {
+    name: 'Categories',
+    component: CategoriesWidget,
+    depth: 'breakdown',
+    place: 'spend',
+  },
+  pace: { name: 'Spending pace', component: PaceWidget, depth: 'trend', place: 'spend' },
+  recent: { name: 'Recent', component: RecentWidget, depth: 'list', place: 'spend' },
+  accounts: { name: 'Accounts', component: AccountsWidget, depth: 'list', place: 'wealth' },
+  merchants: {
+    name: 'Top merchants',
+    component: MerchantsWidget,
+    depth: 'breakdown',
+    place: 'spend',
+  },
+  trends: { name: 'Spending over time', component: TrendsWidget, depth: 'trend', place: 'spend' },
+  'cash-flow': { name: 'Until payday', component: CashFlowWidget, depth: 'trend', place: 'pay' },
+  bills: { name: 'Bills', component: BillsWidget, depth: 'list', place: 'pay' },
+  goals: { name: 'Goals', component: GoalsWidget, depth: 'list', place: 'goal' },
+  debts: { name: 'Debt payoff', component: DebtsWidget, depth: 'breakdown', place: 'wealth' },
+  'net-worth': {
+    name: 'Net worth',
+    component: NetWorthWidget,
+    depth: 'answer',
+    place: 'wealth',
+  },
   flows: { name: 'Money in and out', component: FlowsWidget, depth: 'trend' },
 }
 

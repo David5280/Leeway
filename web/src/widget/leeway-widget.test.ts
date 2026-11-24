@@ -187,9 +187,9 @@ describe('themes', () => {
 
   it('gives each tone one color when the mode is fixed, and two when it follows the device', () => {
     const fixed = paletteFor({ theme: 'night', mode: 'dark' })
-    expect(toneColors(fixed, 'over')).toEqual({ light: '#FF8371', dark: '#FF8371' })
+    expect(toneColors(fixed, 'over')).toEqual({ light: '#F7705E', dark: '#F7705E' })
     const system = paletteFor({ theme: 'night', mode: 'system' })
-    expect(toneColors(system, 'over')).toEqual({ light: '#BA3127', dark: '#FF8371' })
+    expect(toneColors(system, 'over')).toEqual({ light: '#A3281F', dark: '#F7705E' })
   })
 })
 

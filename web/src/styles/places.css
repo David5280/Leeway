@@ -1,0 +1,68 @@
+/* Place colors (lib/places.ts): each tab's own color, which says where you
+   are and never colors a number. An element with data-place sets --place to
+   its tab's color; the shell sets it on the page for the tab it belongs to,
+   on each tab link, and on each Home card that belongs to a tab. Components
+   then only use these variables:
+     --place        the tab's color, for the active tab's icon and name
+     --place-fill   a card's background: the surface, faintly tinted
+     --place-edge   a card's border, a little more tinted
+     --place-label  a card's small label
+     --place-mark   a chart's line, bars and fill that show the tab's data
+   Status colors (good, warn, over) stay on what shows a status, so a bar over
+   budget is still red on a violet page. Home holds a bit of everything: it
+   wears the ink on its tab and leaves its cards plain. */
+
+[data-place='home'] {
+  --place: var(--place-home);
+}
+[data-place='spend'] {
+  --place: var(--place-spend);
+}
+[data-place='pay'] {
+  --place: var(--place-pay);
+}
+[data-place='goal'] {
+  --place: var(--place-goal);
+}
+[data-place='wealth'] {
+  --place: var(--place-wealth);
+}
+
+/* Plain cards and labels, and the accent on charts: everywhere no tab's
+   color applies, Home included. */
+:root,
+[data-place='home'] {
+  --place-fill: var(--surface);
+  --place-edge: var(--line);
+  --place-label: var(--muted);
+  --place-mark: var(--accent);
+}
+
+/* A tab's own pages. The tints stay faint so a screen never gets busier:
+   the card takes 8% of the color, its border 28% (lib/places.test.ts holds
+   every text color at 4.5:1 on the tint, reading these numbers from here). */
+[data-place]:not([data-place='home']) {
+  --place-fill: color-mix(in srgb, var(--place) 8%, var(--surface));
+  --place-edge: color-mix(in srgb, var(--place) 28%, var(--line));
+  --place-label: var(--place);
+  --place-mark: var(--place);
+}
+
+/* Cards that carry a status keep their own tint, and their labels stay quiet. */
+.card.soft,
+.card.warn-card,
+.card.over-card {
+  --place-label: var(--muted);
+}
+
+.card {
+  background-color: var(--place-fill);
+  border-color: var(--place-edge);
+}
+
+/* A card's small labels: the words over its figure, never the figure itself. */
+.card .eyebrow,
+.card .key-figure-label,
+.card .hero-figure-label {
+  color: var(--place-label);
+}

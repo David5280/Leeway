@@ -2,7 +2,16 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settings } from '../test/fake'
 import { useAppearance } from './app'
-import { applyAppearance, FONTS, inkOn, NUMBER_MARKS, THEMES, themeVariables } from './theme'
+import { PLACE_IDS, PLACES, placeVariable } from './places'
+import {
+  applyAppearance,
+  FONTS,
+  inkOn,
+  NUMBER_MARKS,
+  THEMES,
+  themeVariables,
+  type ThemeId,
+} from './theme'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -51,6 +60,24 @@ describe('theme', () => {
     expect(themeVariables({ ...base, font: 'ibm-plex' }, true).vars['--font-mono']).toBe(
       "'IBM Plex Mono', ui-monospace, monospace",
     )
+  })
+
+  it('sets the five place colors for every theme and mode, Home wearing the ink', () => {
+    for (const theme of Object.keys(THEMES) as ThemeId[]) {
+      for (const mode of ['light', 'dark'] as const) {
+        const { vars } = themeVariables({ ...base, theme, mode }, false)
+        for (const place of PLACE_IDS) expect(vars[placeVariable(place)]).toMatch(/^#[0-9A-F]{6}$/i)
+        expect(vars['--place-home']).toBe(THEMES[theme][mode].ink)
+        expect(vars['--place-spend']).toBe(PLACES[theme][mode].spend)
+        expect(vars['--place-wealth']).toBe(PLACES[theme][mode].wealth)
+      }
+    }
+  })
+
+  it('keeps the place colors when the owner picks an accent, which is for buttons and links', () => {
+    const { vars } = themeVariables({ ...base, accent: 'orange' }, true)
+    expect(vars['--accent']).not.toBe(THEMES.night.dark.accent)
+    expect(vars['--place-spend']).toBe(PLACES.night.dark.spend)
   })
 
   it('picks readable text for a color', () => {
