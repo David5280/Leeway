@@ -12,6 +12,7 @@ import { periodLabel } from '../lib/format'
 import { useUrgentHeadsUp } from '../widgets/Alerts'
 import { Board } from '../widgets/Board'
 import { AccountHealth } from './overview/AccountHealth'
+import { PaydayNotice } from './overview/PaydayNotice'
 import {
   addableTypes,
   DEFAULT_LAYOUT,
@@ -89,6 +90,7 @@ export function Overview() {
       )}
 
       {!headsUpShown && <AccountHealth />}
+      {!editing && <PaydayNotice />}
 
       <section className="row-between" style={{ alignItems: 'end' }}>
         <div>

@@ -24,6 +24,7 @@ import type { RetirementView } from '../pages/plan/retirement/fields'
 import { Plan } from '../pages/Plan'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
 import { fundsView } from './funds'
+import { playbookOf } from './playbook'
 import { retirementProfile } from './profile'
 
 export const TODAY = '2026-11-17'
@@ -182,9 +183,9 @@ export function debtPlans(
 }
 
 /**
- * The server for the Plan screen: cash flow is always there, with no
- * emergency fund to offer, no goal order, nothing entered by hand and no
- * trips unless a test says otherwise; the rest per test.
+ * The server for the Plan screen: cash flow and an everyday payday playbook
+ * are always there, with no emergency fund to offer, no goal order, nothing
+ * entered by hand and no trips unless a test says otherwise; the rest per test.
  */
 export function planServer(handlers: Handlers, routes: Record<string, () => Response> = {}) {
   return fakeServer(
@@ -195,6 +196,7 @@ export function planServer(handlers: Handlers, routes: Record<string, () => Resp
       list_owned_and_owed: () => ({ owned: [], owed: [], ownedCents: 0, owedCents: 0 }),
       list_trips: () => [],
       list_sinking_funds: () => fundsView(),
+      get_payday_playbook: () => playbookOf(),
       ...handlers,
     },
     routes,
