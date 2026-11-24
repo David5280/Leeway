@@ -36,7 +36,13 @@ let fake: FakeReader
 let cookie: string
 const { call, callError } = actionCaller(() => ctx)
 
-const PAYSTUB_ACTIONS = ['get_paystub', 'save_paystub', 'save_paystub_detail', 'delete_paystub']
+const PAYSTUB_ACTIONS = [
+  'get_paystub',
+  'get_paystub_use',
+  'save_paystub',
+  'save_paystub_detail',
+  'delete_paystub',
+]
 
 beforeAll(async () => {
   ctx = await createTestContext()

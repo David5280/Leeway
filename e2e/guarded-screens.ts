@@ -11,6 +11,7 @@ import { CALENDAR_SCREENS } from './calendar-screens'
 import { CHAT_SCREENS } from './chat-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
+import { mockReader } from './paystub'
 import { PAYSTUB_SCREENS } from './paystub-screens'
 import { at, open, type Screen } from './screen'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
@@ -165,6 +166,21 @@ export const SCREENS: Screen[] = [
   }),
   ...CALENDAR_SCREENS,
   ...SETTINGS_GROUPS.map((group) => at('settings', `/settings/${group}`)),
+  // With no Anthropic key the plain visit shows the key note; these stand in for the reader.
+  at('settings', '/settings/paystub', {
+    name: '/settings/paystub able to read a paystub',
+    before: async (page) => {
+      await mockReader(page)
+    },
+    then: (page) => expect(page.getByRole('button', { name: 'Import a paystub' })).toBeVisible(),
+  }),
+  at('settings', '/settings/paystub', {
+    name: '/settings/paystub choosing a file',
+    before: async (page) => {
+      await mockReader(page)
+    },
+    then: open('Import a paystub', (page) => page.getByText(/reads every line on it/)),
+  }),
   at('settings', '/settings/accounts', {
     name: '/settings/accounts adding an account by hand',
     then: open('Add an account by hand', (page) => page.getByRole('form', { name: 'New account' })),

@@ -1,6 +1,6 @@
 // The frame every setup step sits in, and the buttons at its foot.
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { AUTH_LOGO_SIZE, Logo } from '../../components/ui'
 
 /** The steps in order, as the step list names them. Step numbers count from 1. */
@@ -9,12 +9,18 @@ export const STEPS = [
   'Your sign-in',
   'Budget period',
   'Bank sync',
+  'Paystub',
   'Categories',
   'Done',
 ] as const
 
 /** The step list beside the current step's card; on a phone, only the current name shows. */
 export function Frame({ step, children }: { step: number; children: ReactNode }) {
+  const current = useRef<HTMLLIElement>(null)
+  // On a phone the list runs across and scrolls, so bring the current step into view.
+  useEffect(() => {
+    current.current?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [step])
   return (
     <main className="setup">
       <aside className="stack">
@@ -26,6 +32,7 @@ export function Frame({ step, children }: { step: number; children: ReactNode })
           {STEPS.map((name, i) => (
             <li
               key={name}
+              ref={i + 1 === step ? current : undefined}
               className={stepClass(i + 1, step)}
               aria-current={i + 1 === step ? 'step' : undefined}
             >
