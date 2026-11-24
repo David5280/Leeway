@@ -32,19 +32,25 @@
 //   "Braces_Bill"), but an apostrophe inside a word ("O'Brien", "Bill's").
 
 import type { Db } from '../../db/pool.js'
-import { NO_SHOPS, type KnownShops } from '../knownShops.js'
+import { NO_SHOPS, startsAShop, type KnownShops } from '../knownShops.js'
 import { APOSTROPHES, isEverydayWord } from '../personShape.js'
 import { wordsOf } from './billLabels.js'
 import { isNameInALine, isWordInLabels, withoutEverydayPhrases } from './commonWords.js'
 import { isGivenName, isNamedLikeAPerson } from './givenNames.js'
 import { withoutShops } from './shownText.js'
-import { isWordName, meansTheWord } from './wordNames.js'
+import { isWordName, meansTheWord, SHOP_MARK } from './wordNames.js'
 
 // What a label is written in: a word, inner apostrophes kept ("O'Brien"); a
-// number ("15th", "2027"); or any one mark (a dash, dot, "&", "_"), which
-// parts the words around it ("Mary-Kate" is two). Spaces are no part.
+// number ("15th", "2027"); where a known shop was (SHOP_MARK); or any one mark
+// (a dash, dot, "&", "_"), which parts the words around it ("Mary-Kate" is
+// two). Spaces are no part.
 const LABEL_WORDS = new RegExp(
-  `[\\p{L}\\p{M}]+(?:[${APOSTROPHES}][\\p{L}\\p{M}]+)*|\\p{N}[\\p{N}\\p{L}]*|[\\p{P}\\p{S}]`,
+  [
+    `[\\p{L}\\p{M}]+(?:[${APOSTROPHES}][\\p{L}\\p{M}]+)*`,
+    '\\p{N}[\\p{N}\\p{L}]*',
+    SHOP_MARK,
+    '[\\p{P}\\p{S}]',
+  ].join('|'),
   'gu',
 )
 // An owner's "'s" ("Bettina's Savings"), which is no part of the name.
@@ -106,9 +112,10 @@ export async function ownerLabels(db: Db): Promise<string[]> {
   return rows.flatMap((row) => (row.text ? [row.text] : []))
 }
 
-/** A text's words, numbers and marks as written (LABEL_WORDS), shops and set phrases left out. */
+/** A text's words, numbers and marks as written (LABEL_WORDS), shops marked, set phrases left out. */
 function writtenWords(text: string, shops: KnownShops): string[] {
-  return withoutEverydayPhrases(withoutShops(text.normalize('NFC'), shops)).match(LABEL_WORDS) ?? []
+  const marked = withoutShops(text.normalize('NFC'), shops, ` ${SHOP_MARK} `)
+  return withoutEverydayPhrases(marked).match(LABEL_WORDS) ?? []
 }
 
 /** Whether a written token is a word, unlike a number or a mark that parts a label. */
@@ -202,8 +209,17 @@ function besideAName(words: readonly string[], at: number, reading: Reading): bo
  * "for" or kin ("Venmo June 15"), nor before a word no rule vouches for
  * ("Electric Bill Ostrowski").
  */
-function wordNameAsWord(label: string, words: readonly string[], at: number, reading: Reading) {
-  const shop = (word: string) => aShopsName(word, reading.shops) && !NAMER_WORDS.has(word)
+function wordNameAsWord(
+  label: string,
+  words: readonly string[],
+  at: number,
+  reading: Reading,
+): boolean {
+  // A shop's name, or the first word of a longer one ("Xcel" of Xcel Energy), named for no one.
+  const shop = (written: string) => {
+    const word = written.toLowerCase()
+    return startsAShop(reading.shops, word) && !isNamedLikeAPerson(word) && !NAMER_WORDS.has(word)
+  }
   if (afterAPerson(words, at) || unvouched(words, nearest(words, at, 1), reading)) return false
   return meansTheWord(label, words, at, shop)
 }
@@ -223,7 +239,7 @@ function ownedName(word: string): boolean {
  * word, a shop's name of one word, or a surname read as the word beside no
  * name ("Price Club").
  */
-function plainWord(label: string, words: readonly string[], at: number, reading: Reading) {
+function plainWord(label: string, words: readonly string[], at: number, reading: Reading): boolean {
   const word = words[at]!
   if (!lettered(word)) return true
   if (ownedName(word)) return false

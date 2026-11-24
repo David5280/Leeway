@@ -43,9 +43,10 @@ function shopPattern(shops: KnownShops): RegExp | null {
 /**
  * A text without the whole names of the shops the owner buys from, which
  * Chat shows anyway: "Trader Joe's run" reads " run", so the "Joe" of a shop
- * is never read as a person, while "gift for Joe" still is.
+ * is never read as a person, while "gift for Joe" still is. Each name is
+ * replaced by `standIn`, a space unless the reader marks where a shop was.
  */
-export function withoutShops(text: string, shops: KnownShops): string {
+export function withoutShops(text: string, shops: KnownShops, standIn = ' '): string {
   const pattern = shopPattern(shops)
-  return pattern ? straight(text).replace(pattern, ' ') : text
+  return pattern ? straight(text).replace(pattern, standIn) : text
 }

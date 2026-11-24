@@ -66,8 +66,11 @@ const EVERYDAY_PHRASES = [
   'bill splitting',
 ]
 
-/** A phrase as a RegExp source: its words with any spaces between ("Hope  Chest"). */
-const phraseSource = (phrase: string) => phrase.split(' ').join('\\s+')
+// What may part a phrase's words: spaces, or a hyphen of any kind or an underscore.
+const BETWEEN = '(?:\\s+|\\s*[-_\u2010\u2011]\\s*)'
+
+/** A phrase as a RegExp source: its words with BETWEEN ("Hope  Chest", "Bill-pay", "Bill_pay"). */
+const phraseSource = (phrase: string) => phrase.split(' ').join(BETWEEN)
 
 // The phrases as one pattern, whole words only, in any case.
 const PHRASES = new RegExp(

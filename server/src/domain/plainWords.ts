@@ -15,6 +15,8 @@ const PLAIN_WORDS = new Set(
     'on one only or other our out over own per same she so some than that the their them',
     'then there these they this those too two under up us was we were what when where which',
     'who why you your great runs trips',
+    // Words a date follows ("Save until June", "Vacation through June").
+    'until till thru through since',
     // Time and how often.
     'annual annually biweekly daily day days month monthly months quarter quarterly today',
     'tomorrow week weekend weekly weeks year yearly years yesterday',
@@ -84,6 +86,8 @@ const PLAIN_WORDS = new Set(
     'bread ending giving lady payoff projects support',
     // More words budgets are named with ("Pay off", "Oil Change", "Coffee Shops", "Meal Prep").
     'cell cells change changes halloween hotels pay plant plants prep shops',
+    // What is done about a bill ("Bill autopay", "Phone bill reminders").
+    'autopay reminder reminders',
   ]
     .join(' ')
     .split(' '),
