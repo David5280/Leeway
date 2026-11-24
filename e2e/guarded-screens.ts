@@ -50,6 +50,9 @@ async function revealKey(page: Page) {
   await expect(page.getByLabel('New key')).toBeVisible()
 }
 
+/** The first seeded category's page. */
+const categoryPage = (seeded: Seeded) => `/budgets/${seeded.categories[0]}`
+
 /** Every screen the app's router answers, and the forms that open on them. */
 export const SCREENS: Screen[] = [
   at('overview', '/'),
@@ -98,27 +101,28 @@ export const SCREENS: Screen[] = [
     name: '/budgets adding a category',
     then: open('New category', (page) => page.getByRole('region', { name: 'New category' })),
   }),
-  {
-    name: 'a category page',
-    route: 'category',
-    path: (seeded) => `/budgets/${seeded.categories[0]}`,
-  },
+  { name: 'a category page', route: 'category', path: categoryPage },
   {
     name: 'a category page making a rule',
     route: 'category',
-    path: (seeded) => `/budgets/${seeded.categories[0]}`,
+    path: categoryPage,
     then: open(/New rule/, (page) => page.getByRole('form', { name: 'New rule' })),
   },
   ...CHAT_SCREENS,
   at('plan', '/plan'),
-  at('plan', '/plan', {
-    name: '/plan with cash that could earn more',
+  at('planSection', '/plan/payday', {
+    name: '/plan/payday changing the pay',
+    then: open('Not quite', (page) => page.getByRole('form', { name: 'Enter your pay' })),
+  }),
+  at('planSection', '/plan/bills'),
+  at('planSection', '/plan/bills', {
+    name: '/plan/bills with cash that could earn more',
     // The shared install holds an overdrawn account, which hides the card, so
     // the answer is stood in for (idle-cash.spec.ts reads the server's own).
     before: fakeIdleCash,
   }),
-  at('plan', '/plan', {
-    name: '/plan adding a bill',
+  at('planSection', '/plan/bills', {
+    name: '/plan/bills adding a bill',
     then: open('Add a bill', (page) => page.getByRole('region', { name: 'New bill' })),
   }),
   at('planSection', '/plan/goals'),

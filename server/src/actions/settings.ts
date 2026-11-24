@@ -7,19 +7,26 @@ import {
   mergeSettings,
   saveSettings,
   settingsPatchSchema,
+  type Settings,
 } from '../domain/settings.js'
 import { todayIn } from '../lib/dates.js'
 import { defineAction } from './action.js'
+
+/**
+ * Settings as any caller sees them, without the owner's word on their pay:
+ * get_pay reads that, so its payer salt and payer ids never leave the server.
+ */
+export const shownSettings = ({ pay: _pay, ...shown }: Settings) => shown
 
 export const getSettingsAction = defineAction({
   name: 'get_settings',
   title: 'Get settings',
   description:
-    'Read all preferences: budget period (monthly, weekly or per paycheck), time zone, currency, warning threshold, appearance, dashboard layout and the savings plan (emergency fund target in months, and which spending categories count as essential: null finds them from the bank codes or name of each category, counting housing, utilities, groceries, transport, health, insurance, child care and fixed loan payments, never credit card payments, with a loan or child care payment filed in another category, or an essential payment with no category, counted by its own bank code; a list counts exactly those categories, whole, never credit card payments; and goalsMonthlyCents, what goes to goals each month).',
+    "Read all preferences: budget period (monthly, weekly or per paycheck), time zone, currency, warning threshold, appearance, dashboard layout and the savings plan (emergency fund target in months, and which spending categories count as essential: null finds them from the bank codes or name of each category, counting housing, utilities, groceries, transport, health, insurance, child care and fixed loan payments, never credit card payments, with a loan or child care payment filed in another category, or an essential payment with no category, counted by its own bank code; a list counts exactly those categories, whole, never credit card payments; and goalsMonthlyCents, what goes to goals each month). The owner's pay is not here: read get_pay.",
   input: z.object({}),
   scope: 'read',
   surface: 'all',
-  run: (ctx) => getSettings(ctx.db),
+  run: async (ctx) => shownSettings(await getSettings(ctx.db)),
 })
 
 export const updateSettingsAction = defineAction({
@@ -35,6 +42,6 @@ export const updateSettingsAction = defineAction({
     // Today where the owner lives, after any time zone change in the same patch.
     const today = todayIn(settings.timeZone, ctx.now())
     checkBirthYear(patch.retirement?.birthYear, today, 'retirement.birthYear')
-    return saveSettings(ctx.db, settings)
+    return shownSettings(await saveSettings(ctx.db, settings))
   },
 })

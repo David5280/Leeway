@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getSettings, saveSettings } from '../domain/settings.js'
 import { getSummary } from '../domain/summary.js'
 import { defineAction } from './action.js'
+import { shownSettings } from './settings.js'
 import { settingsAndToday } from './today.js'
 
 export const getSummaryAction = defineAction({
@@ -34,6 +35,6 @@ export const setAiSummaryAction = defineAction({
   surface: 'app',
   run: async (ctx, { on }) => {
     const settings = await getSettings(ctx.db)
-    return saveSettings(ctx.db, { ...settings, aiSummary: on })
+    return shownSettings(await saveSettings(ctx.db, { ...settings, aiSummary: on }))
   },
 })

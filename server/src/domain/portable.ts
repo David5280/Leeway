@@ -30,6 +30,10 @@ export const portableConfigSchema = z.object({
   // retirement assumptions are among them: a birth year, income target and
   // contribution are the owner's own, so a file shared with someone else
   // never carries them, and an import never sets them.
+  //
+  // The owner's word on their pay stays on this install too, like the
+  // retirement assumptions: what one paycheck brings is their own, so a
+  // shared file never carries it, and an import never sets it.
   settings: z.object(settingsPatchSchema.omit({ retirement: true }).shape).default({}),
   categories: z.array(categoryInputSchema).default([]),
   // Rules point at categories by name so the file works on any install. A
@@ -50,11 +54,12 @@ export const portableConfigSchema = z.object({
 
 export type PortableConfig = z.infer<typeof portableConfigSchema>
 
-/** Settings without the retirement assumptions, which never leave this install. */
-function withoutRetirement<T extends { retirement: unknown }>({
+/** Settings without the owner's retirement assumptions and pay, which never leave this install. */
+function withoutOwnersOwn<T extends { retirement: unknown; pay: unknown }>({
   retirement: _retirement,
+  pay: _pay,
   ...rest
-}: T): Omit<T, 'retirement'> {
+}: T): Omit<T, 'retirement' | 'pay'> {
   return rest
 }
 
@@ -72,8 +77,8 @@ export async function exportConfig(db: Db): Promise<PortableConfig & { exportedA
     version: 1,
     exportedAt: new Date().toISOString(),
     // Essential categories go by name below, not by this install's ids; the
-    // retirement assumptions stay on this install (see the schema above).
-    settings: { ...withoutRetirement(settings), savingsPlan },
+    // retirement assumptions and pay stay on this install (see the schema above).
+    settings: { ...withoutOwnersOwn(settings), savingsPlan },
     // Rollover counts from a day on this install, so it stays here.
     categories: categories.map(
       ({ id: _id, position: _position, rollover: _r, rolloverSince: _since, ...rest }) => rest,

@@ -94,6 +94,7 @@ export function retirementProfile(
       employer: null,
       employers: [],
       since: null,
+      entered: null,
     },
     monthly: {
       incomeCents: null,

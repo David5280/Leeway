@@ -1,12 +1,14 @@
-// A cadence the owner gave (domain/pay/given.ts): a paycheck budget
-// period's always speaks for the main job, a saved paystub's only for the
-// job it came from, so an old job's paystub never sets how a new job pays.
+// A cadence the owner gave (domain/pay/given.ts): a confirmation speaks
+// only for its own payer, a saved paystub's only for the job it came from,
+// so an old job's paystub never sets how a new job pays, and a cadence
+// alone for the main job.
 // Every name and amount is made up.
 
 import { describe, expect, it } from 'vitest'
 import { currentPay } from '../src/domain/pay/current.js'
 import type { Deposit } from '../src/domain/pay/deposits.js'
 import { namesPayer, type GivenCadence } from '../src/domain/pay/given.js'
+import { payerKeyOf } from '../src/domain/pay/paychecks.js'
 
 const TODAY = '2026-11-17'
 
@@ -139,11 +141,24 @@ describe("the main job's own paystub", () => {
   })
 })
 
-describe('a paycheck budget period', () => {
+describe('a cadence given alone', () => {
   it('always sets the main job cadence', () => {
     expect(currentPay(DEPOSITS, TODAY, { cadence: 'semimonth' })).toMatchObject({
       cadence: 'semimonth',
     })
+  })
+})
+
+describe('a cadence the owner confirmed for a payer', () => {
+  it('sets the main job cadence when it is that payer, and never another', () => {
+    const initech = payerKeyOf(DEPOSITS.at(-1)!)
+    const globex = payerKeyOf(DEPOSITS[0]!)
+    expect(currentPay(DEPOSITS, TODAY, { cadence: 'semimonth', payerKey: initech })).toMatchObject({
+      cadence: 'semimonth',
+    })
+    expect(currentPay(DEPOSITS, TODAY, { cadence: 'semimonth', payerKey: globex })).toMatchObject(
+      NEW_JOB,
+    )
   })
 })
 

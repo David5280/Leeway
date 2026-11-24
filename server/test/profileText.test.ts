@@ -193,6 +193,7 @@ describe('profileDigest', () => {
   it('lists every fact in plain words, with no account names or numbers', () => {
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'biweek',
         source: 'detected_income',
         typicalPayCents: 240_000,
@@ -303,6 +304,7 @@ describe('profileDigest', () => {
     })
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'month',
         source: 'pay_period',
         typicalPayCents: 250_000,
@@ -396,6 +398,7 @@ describe('profileDigest', () => {
   it('names each employer paying now, and adds their pay up', () => {
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'semimonth',
         source: 'detected_income',
         typicalPayCents: 200_000,
@@ -433,6 +436,7 @@ describe('profileDigest', () => {
     })
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'semimonth',
         source: 'detected_income',
         typicalPayCents: 200_000,
@@ -452,6 +456,7 @@ describe('profileDigest', () => {
     // The main job is confirmed, so its payday is not a guess; the side job's amount is.
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'semimonth',
         source: 'detected_income',
         typicalPayCents: 200_000,
@@ -473,6 +478,7 @@ describe('profileDigest', () => {
   it('never prints pay it did not see, and lists it and the emergency fund as not known', () => {
     const profile = emptyProfile({
       pay: {
+        entered: null,
         cadence: 'month',
         source: 'pay_period',
         typicalPayCents: null,

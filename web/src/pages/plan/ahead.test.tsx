@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastItem } from '../../api/client'
 import { failing, holdRequest } from '../../test/fake'
 import { forecastOf, INCOMPLETE, ITEMS, linked, tripSummary, unlinked } from '../../test/calendar'
+import { noPay } from '../../test/pay'
 import { planServer, renderPlan } from '../../test/planning'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -17,10 +18,12 @@ const quietBills = {
 
 describe('Coming up', () => {
   it('stays out of sight with no calendar linked, even at its own address', async () => {
-    planServer({ ...quietBills, calendar_status: () => unlinked })
+    planServer({ ...quietBills, get_pay: () => noPay, calendar_status: () => unlinked })
     renderPlan('/plan/ahead')
-    expect(await screen.findByRole('region', { name: 'Bills and subscriptions' })).toBeVisible()
+    // The Plan's first section stands in: Payday.
+    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
     const sections = within(screen.getByRole('group', { name: 'Plan section' }))
+    expect(sections.getByRole('button', { name: 'Payday' })).toHaveAttribute('aria-pressed', 'true')
     expect(sections.queryByRole('button', { name: 'Coming up' })).not.toBeInTheDocument()
   })
 
