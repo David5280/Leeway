@@ -1,8 +1,8 @@
 // The frame around every screen, in one of three shapes (shell/frame.ts):
 //   - a phone: a header (the logo, then Chat, the Inbox bell and Settings)
 //     over the page, and the five tabs in a bar along the bottom;
-//   - a phone turned sideways: the same header, with the tabs in a slim rail
-//     down the left, so the little height there is goes to the page;
+//   - a phone turned sideways: one slim top row with the logo, the five tabs
+//     and the header's links, so the little height there is goes to the page;
 //   - a computer or a tablet turned sideways: a sidebar on the left with the
 //     logo, the five tabs, and Chat, the Inbox and Settings at its foot.
 // Keys 1 to 5 switch tabs in every shape.
@@ -39,11 +39,19 @@ function Sidebar() {
   )
 }
 
-/** The phone's header: the logo, then Chat, the Inbox bell, Settings and the screen's actions. */
-function Header({ actions }: { actions?: ReactNode }) {
+/**
+ * The phone's header: the logo, then Chat, the Inbox bell, Settings and the
+ * screen's actions. Turned sideways it also holds the five tabs (`tabs`).
+ */
+function Header({ actions, tabs }: { actions?: ReactNode; tabs?: boolean }) {
   return (
     <header className="topbar">
       <Brand />
+      {tabs && (
+        <nav aria-label="Main" className="row-tabs">
+          <TabLinks className="row-tab" />
+        </nav>
+      )}
       <div className="row">
         <HeaderLinks />
         {actions}
@@ -63,16 +71,11 @@ export function Shell({ children, actions }: { children: ReactNode; actions?: Re
   return (
     <div className={`shell shell-${frame}`}>
       {frame === 'sidebar' && <Sidebar />}
-      {frame === 'rail' && (
-        <nav aria-label="Main" className="rail">
-          <TabLinks className="tab" />
-        </nav>
-      )}
       <div className="page">
         {frame === 'sidebar' ? (
           actions && <div className="topbar topbar-actions">{actions}</div>
         ) : (
-          <Header actions={actions} />
+          <Header actions={actions} tabs={frame === 'short'} />
         )}
         {children}
       </div>

@@ -1,5 +1,5 @@
 /* The app's frame (components/Shell.tsx): the phone's header and tab bar,
-   the rail of a phone turned sideways, and a computer's sidebar. Which one
+   the top row of a phone turned sideways, and a computer's sidebar. Which one
    shows is decided in components/shell/frame.ts, so only one is ever on the
    page and these rules need no media queries to hide the others. */
 
@@ -60,24 +60,61 @@
 }
 
 .tab.active svg,
+.row-tab.active svg,
 .side-link.active svg {
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent));
 }
 
-/* Rail (phone turned sideways) and sidebar (computer) ---------------------- */
+/* Top row (phone turned sideways) ------------------------------------------ */
 
-/* The rail or sidebar in a column of its own, the page beside it. */
-.shell-rail,
+/* The five tabs between the logo and the header's links, each its icon beside
+   its name. A wide font scrolls them sideways rather than wrapping the row. */
+.row-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.row-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.row-tab svg {
+  width: 18px;
+  height: 18px;
+}
+
+.row-tab.active {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+/* Sidebar (computer) ------------------------------------------------------- */
+
+/* The sidebar in a column of its own, the page beside it. */
 .shell-sidebar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
 }
 
-/* Both stay in view as the page scrolls, and scroll on their own if a very
-   short window cannot fit them. The rail or sidebar clears the left notch,
-   so the page beside it needs no left inset of its own. */
-.rail,
+/* It stays in view as the page scrolls, and scrolls on its own if a short
+   window cannot fit it. It clears the left notch, so the page beside it
+   needs no left inset of its own. */
 .sidebar {
   position: sticky;
   top: 0;
@@ -91,25 +128,8 @@
   background: var(--surface);
 }
 
-.shell-rail .page {
-  padding-left: 16px;
-}
-
 .shell-sidebar .page {
   padding-left: 40px;
-}
-
-/* The rail: the five tabs stacked, each its icon over its name, as in the tab bar. */
-.rail {
-  justify-content: center;
-  gap: 2px;
-  width: calc(76px + var(--sal));
-  padding: calc(8px + var(--sat)) 6px calc(8px + var(--sab)) calc(6px + var(--sal));
-}
-
-.rail .tab {
-  flex: none;
-  min-height: 48px;
 }
 
 /* The sidebar: the logo at the top, the tabs under it, Chat, the Inbox and

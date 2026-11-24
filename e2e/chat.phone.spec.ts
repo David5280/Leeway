@@ -28,7 +28,9 @@ for (const [name, viewport] of PHONES) {
       // Scrolled to the end, the box to type in rests above the tab bar.
       await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight }))
       const composer = (await page.locator('.chat-composer').boundingBox())!
-      const tabbar = await page.locator('.tabbar').boundingBox()
+      // Turned sideways there is no tab bar at all (the tabs are in the top row).
+      const bar = page.locator('.tabbar')
+      const tabbar = (await bar.count()) > 0 ? await bar.boundingBox() : null
       if (tabbar) expect(overlapping(composer, tabbar)).toBe(false)
       const lines = await boxes(page.locator('.chat-line'))
       for (const [i, a] of lines.entries()) {

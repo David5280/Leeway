@@ -2593,9 +2593,9 @@ details.more[open] summary {
 
 /* Short screens: a phone turned sideways (or any window under 500px tall).
    The header would take a third of the height on its own, so it becomes one
-   slim row: the logo, then Chat, the Inbox and Settings. The tabs stand in a
-   rail down the left instead (styles/shell.css), so the page keeps the
-   height. The right gutter still clears the notch; the rail clears the left. */
+   slim row: the logo, the five tabs (styles/shell.css), then Chat, the Inbox
+   and Settings, and the tab bar gives its height back to the page. The left
+   and right gutters still clear the notch. */
 @media (orientation: landscape) and (max-height: 500px) {
   .page {
     padding: max(12px, calc(var(--sat) + 8px)) calc(16px + var(--sar)) calc(16px + var(--sab))

@@ -137,10 +137,10 @@ for (const phone of GUARDED_PHONES) {
         const { width, height } = phone.screen.viewport
         const header = (await page.getByRole('banner').boundingBox())!
         expect(header.y + header.height).toBeLessThanOrEqual(height * 0.2)
-        // Sideways, the tabs stand in a rail down the left and the tab bar gives its height back.
+        // Sideways, the tabs move into the slim top row and the tab bar gives its height back.
         const tabs = page.getByRole('navigation', { name: 'Main' })
         await expect(tabs).toBeVisible()
-        await expect(tabs).toHaveClass(width > height ? /\brail\b/ : /\btabbar\b/)
+        await expect(tabs).toHaveClass(width > height ? /\brow-tabs\b/ : /\btabbar\b/)
         await expect(page.locator('.tabbar')).toHaveCount(width > height ? 0 : 1)
         // The tap sizes checked on every screen (problemsOn) hold only where
         // the phone reports a finger rather than a mouse.

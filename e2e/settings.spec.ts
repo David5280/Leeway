@@ -16,9 +16,10 @@ async function saveBy(page: Page, click: () => Promise<void>) {
 }
 
 test('the theme switch changes the look and sticks after a reload', async ({ page }) => {
-  await page.goto('/')
+  // Themes are chosen in Settings, Appearance; the header no longer holds them.
+  await page.goto('/settings/appearance')
   const html = page.locator('html')
-  const harbor = page.getByRole('button', { name: 'Harbor theme' })
+  const harbor = page.getByRole('button', { name: /^Harbor/ })
   await expect(harbor).toHaveAttribute('aria-pressed', 'false')
   await expect(html).toHaveAttribute('data-mode', 'dark')
 
@@ -28,7 +29,7 @@ test('the theme switch changes the look and sticks after a reload', async ({ pag
   await expect(harbor).toHaveAttribute('aria-pressed', 'true')
   await expect(html).toHaveAttribute('data-mode', 'light')
 
-  await saveBy(page, () => page.getByRole('button', { name: 'Night theme' }).click())
+  await saveBy(page, () => page.getByRole('button', { name: /^Night/ }).click())
   await expect(html).toHaveAttribute('data-mode', 'dark')
 })
 

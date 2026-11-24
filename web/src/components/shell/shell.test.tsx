@@ -7,7 +7,7 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeServer, renderSignedIn } from '../../test/fake'
 import { Shell } from '../Shell'
-import { RAIL_QUERY, SIDEBAR_QUERY } from './frame'
+import { SHORT_QUERY, SIDEBAR_QUERY } from './frame'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -20,7 +20,7 @@ interface Size {
 /** Whether each query the shell asks matches a window of this size. */
 function matches(query: string, { width, height }: Size): boolean {
   if (query === SIDEBAR_QUERY) return width >= 1024
-  if (query === RAIL_QUERY) return width > height && height <= 500 && width >= 560
+  if (query === SHORT_QUERY) return width > height && height <= 500 && width >= 560
   throw new Error(`The shell asked an unexpected query: ${query}`)
 }
 
@@ -93,7 +93,7 @@ describe('on a phone', () => {
     expect(screen.getByRole('navigation', { name: 'Main' })).toHaveClass('tabbar')
     expect(tabNames()).toEqual(['Home', 'Spending', 'Payday', 'Goals', 'Wealth'])
     expect(document.querySelector('.sidebar')).toBeNull()
-    expect(document.querySelector('.rail')).toBeNull()
+    expect(document.querySelector('.row-tabs')).toBeNull()
   })
 
   it('heads each screen with the logo, then the Inbox and Settings, and no theme switch', async () => {
@@ -124,13 +124,18 @@ describe('on a phone', () => {
 })
 
 describe('on a phone turned sideways', () => {
-  it('stands the tabs in a rail down the left, keeping the slim header', () => {
+  it('puts the tabs in the slim top row, leaving the page its full width and height', () => {
     windowOf(PHONE_SIDEWAYS)
     renderShell()
-    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveClass('rail')
+    const tabs = screen.getByRole('navigation', { name: 'Main' })
+    expect(tabs).toHaveClass('row-tabs')
     expect(tabNames()).toEqual(['Home', 'Spending', 'Payday', 'Goals', 'Wealth'])
-    expect(screen.getByRole('banner')).toHaveClass('topbar')
+    // The tabs sit inside the header, so nothing stands beside or under the page.
+    const header = screen.getByRole('banner')
+    expect(header).toHaveClass('topbar')
+    expect(header).toContainElement(tabs)
     expect(document.querySelector('.tabbar')).toBeNull()
+    expect(document.querySelector('.sidebar')).toBeNull()
   })
 })
 
