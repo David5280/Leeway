@@ -24,9 +24,11 @@ import {
   type PayOverride,
   type PaySettings,
 } from './ownPay.js'
+import { paydayFrom } from './payday.js'
 import { nextOwnPayday } from './periodPayday.js'
 import { paycheckPeriod, type PaycheckPeriod } from './period.js'
 import { payerKeyOf, type Paycheck } from './paychecks.js'
+import { withPayerSalt } from './salt.js'
 import { readFoundPay } from './source.js'
 
 export interface FoundEmployer {
@@ -72,10 +74,12 @@ export type PaySource = 'found' | 'confirmed' | 'yours'
 
 /** The pay every figure goes by. */
 export interface PayInUse {
+  /** Where the main pay came from: confirmed only when the main job is the one confirmed. */
   source: PaySource
   paycheckCents: number
   cadence: Cadence
   monthlyCents: number
+  /** The one payday every figure goes by (payday.ts), a paycheck budget period's when it has one. */
   nextPayday: IsoDate
   /** The paycheck expected that day: with two jobs, the one that lands then. */
   nextPaycheckCents: number
@@ -91,6 +95,8 @@ export interface YourPay extends PayOverride {
    * counts beside every job still paying, until the owner updates it.
    */
   jobStopped: boolean
+  /** True when it stands in for no job and counts beside every job paying. */
+  besideJobs: boolean
 }
 
 export interface PayView {
@@ -174,17 +180,25 @@ function foundOf(reading: CurrentPay, settings: Settings, name: Namer): FoundPay
   }
 }
 
-function inUseOf(pay: CurrentPay, settings: Settings, found: FoundPay | null): PayInUse | null {
+function inUseOf(
+  pay: CurrentPay,
+  settings: Settings,
+  found: FoundPay | null,
+  today: IsoDate,
+): PayInUse | null {
   if (pay.paycheckCents === null || pay.nextPayday === null) return null
   let source: PaySource = 'found'
   if (settings.pay.override) source = 'yours'
-  else if (found?.confirmed) source = 'confirmed'
+  // A lower ranked job confirmed leaves the main pay shown as found.
+  else if (found?.employers[0]?.confirmed) source = 'confirmed'
   return {
     source,
     paycheckCents: pay.paycheckCents,
     cadence: pay.cadence!,
     monthlyCents: pay.monthlyCents!,
-    nextPayday: pay.nextPayday,
+    // The payday get_cash_flow and safe to spend go by, even when a paycheck
+    // budget period keeps another schedule than the paychecks.
+    nextPayday: paydayFrom(pay, settings, today).date,
     nextPaycheckCents: pay.nextPaycheckCents ?? pay.paycheckCents,
     estimate: pay.estimate,
   }
@@ -217,6 +231,7 @@ function yoursOf(found: CurrentPay, pay: PaySettings, today: IsoDate): YourPay |
     nextPayday: nextOwnPayday(override, today),
     monthlyCents: ownMonthlyCents(override),
     jobStopped: jobStopped(found.employers, pay),
+    besideJobs: found.employers.length > 0 && replacedIndex(found.employers, pay) === -1,
   }
 }
 
@@ -233,7 +248,7 @@ export function payViewOf(
   return {
     found: shown,
     yours: yoursOf(found, settings.pay, today),
-    pay: inUseOf(withOwnersPay(found, settings.pay, today), settings, shown),
+    pay: inUseOf(withOwnersPay(found, settings.pay, today), settings, shown, today),
     lastPaycheck: last ? { date: last.date, amountCents: last.amountCents } : null,
     paydays: mainPaychecks(found).map((paycheck) => paycheck.date),
     period: periodOfPay(found, override),
@@ -246,8 +261,9 @@ function employerNamer(masks: string[]): Namer {
     namesBusiness(employer.newest) ? merchantDisplayName(employer.newest, { masks }) : null
 }
 
-/** The owner's pay as the Payday screen shows it, read fresh. */
-export async function readPayView(db: Db, settings: Settings, today: IsoDate): Promise<PayView> {
+/** The owner's pay as the Payday screen shows it, read fresh, its payer ids keyed with the saved salt. */
+export async function readPayView(db: Db, given: Settings, today: IsoDate): Promise<PayView> {
+  const settings = await withPayerSalt(db, given)
   const found = await readFoundPay(db, settings, today)
   return payViewOf(found, settings, today, employerNamer(await accountMasks(db)))
 }

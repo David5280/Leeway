@@ -57,9 +57,15 @@ export function payLine(view: PayView, pay: PayInUse): string {
 /** Said when the owner confirmed pay the paychecks no longer show. */
 export const STALE_NOTE = 'Your paychecks changed since you said this looked right.'
 
-/** Said when the job the owner entered pay for no longer pays: their pay still counts until they act. */
+/**
+ * Said when the job the owner entered pay for no longer pays: their pay
+ * counts beside any job still paying, and saving it again keeps it so.
+ */
 export const JOB_STOPPED_NOTE =
-  'The job you entered pay for has stopped paying. Update or remove it.'
+  'The job you entered pay for has stopped paying. Your pay still counts, beside any job still paying, until you update or remove it.'
+
+/** Said when the owner's own pay stands in for no job, so every job found counts too. */
+const BESIDE_JOBS_NOTE = 'The pay you entered. Leeway counts it beside the pay your paychecks show.'
 
 /** Said while a second job is still a guess, whatever the main job is. */
 const SIDE_GUESS_NOTE = "A second job's pay is an estimate until more of its paychecks land."
@@ -67,14 +73,10 @@ const SIDE_GUESS_NOTE = "A second job's pay is an estimate until more of its pay
 /** Whether the main job's own reading is a guess: a second job's guess never makes it one. */
 const mainIsGuess = (view: PayView) => view.found?.employers[0]?.estimate ?? false
 
-/**
- * A settled note, with a word that a second job is still a guess when it
- * is. With `everyJob`, the main job counts too: a job the owner confirmed
- * may not be the main one, and the main one's guess is then another's.
- */
-function withSideGuess(view: PayView, note: string, everyJob = false): string {
+/** A settled note about the main job, with a word that a second job is still a guess when it is. */
+function withSideGuess(view: PayView, note: string): string {
   const jobs = view.found?.employers ?? []
-  const guess = (everyJob ? jobs : jobs.slice(1)).some((employer) => employer.estimate)
+  const guess = jobs.slice(1).some((employer) => employer.estimate)
   return guess ? `${note} ${SIDE_GUESS_NOTE}` : note
 }
 
@@ -82,12 +84,12 @@ function withSideGuess(view: PayView, note: string, everyJob = false): string {
 export function sourceNote(view: PayView, pay: PayInUse): string {
   const seen = view.paydays.length
   if (pay.source === 'yours') {
-    const note =
-      'The pay you entered. Leeway uses it everywhere instead of what your paychecks show.'
-    return view.yours?.jobStopped ? `${note} ${JOB_STOPPED_NOTE}` : note
+    if (view.yours?.jobStopped) return JOB_STOPPED_NOTE
+    if (view.yours?.besideJobs) return BESIDE_JOBS_NOTE
+    return 'The pay you entered. Leeway uses it everywhere instead of what your paychecks show.'
   }
-  // The owner vouches for the job they confirmed only; another job's guess is still one.
-  if (pay.source === 'confirmed') return withSideGuess(view, 'You said this looks right.', true)
+  // Confirmed only when the main job is the one the owner vouched for; another job's guess is still one.
+  if (pay.source === 'confirmed') return withSideGuess(view, 'You said this looks right.')
   if (view.found?.confirmationStale) return `${STALE_NOTE} This is what they show now.`
   if (seen < 2) {
     return 'An estimate from one paycheck so far. It firms up after the next one, or once you say it looks right.'

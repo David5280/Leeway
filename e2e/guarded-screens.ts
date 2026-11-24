@@ -11,13 +11,11 @@ import { CALENDAR_SCREENS } from './calendar-screens'
 import { CONNECT_SCREEN } from './connect-screen'
 import { fakeIdleCash } from './idleCash'
 import { PAYSTUB_SCREENS } from './paystub-screens'
-import { at, open, type Screen } from './screen-kit'
+import { at, open, type Screen } from './screen'
 import { SEEDED_ACCOUNTS, type Seeded } from './seed'
 import { SETTINGS_GROUPS } from './settings-groups'
 import { TRANSACTION_SCREENS } from './transaction-screens'
 import { revealWidgetToken } from './widget'
-
-export type { Screen }
 
 /** Every account as the server lists it, with no APR, as a card is before one is added. */
 async function withoutAprs(page: Page) {

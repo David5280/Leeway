@@ -168,7 +168,8 @@ describe('confirm_pay', () => {
     expect(globex).toMatchObject({ confirmed: false, cadence: 'week' })
     // ACME still read every two weeks, as confirmed, never a guess again.
     expect(acme).toMatchObject({ confirmed: true, estimate: false, nextPayday: '2026-11-27' })
-    expect(view.pay!.source).toBe('confirmed')
+    // The pay shown is GLOBEX's, the main job, which the owner never confirmed.
+    expect(view.pay!.source).toBe('found')
   })
 
   it('clears pay the owner entered, since the paychecks have it right', async () => {

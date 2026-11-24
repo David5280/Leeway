@@ -6,15 +6,17 @@
 // Each period starts on a payday as the schedule means it (lib/periods.ts).
 // Payrolls pay one that falls on a weekend or a bank holiday the business
 // day before (businessDays.ts), and the next payday is the first paid after
-// today, as the paydays Leeway finds are counted (cadence.ts). A period's
-// anchor is a payday to count from, often a recent one, so it is never
-// read as the next payday itself.
+// today, as the paydays Leeway finds are counted (cadence.ts): on payday
+// itself the paycheck is landing, so the next one is the payday after. A
+// period's anchor is a payday to count from, often a recent one, so it is
+// never read as the next payday itself.
 //
 // A payday the owner gave as their next one is their word, so while it is
-// today or later it is the next payday: none before it counts, and it is
-// never skipped or moved later. Monday Jan 18, 2027 (MLK Day) given on the
-// Saturday before stays Jan 18, though a payroll paying the business day
-// before would have paid it on the Friday.
+// still to come none before it counts. It is paid the business day before,
+// like any payday on the schedule, unless that day had already come when it
+// was given: the owner then knew it was not paid early. Monday Jan 18, 2027
+// (MLK Day) given on the Saturday before stays Jan 18, but Sunday Feb 28
+// given on Feb 10 is paid Friday Feb 26, and is past from then on.
 
 import type { IsoDate } from '../../lib/dates.js'
 import { periodContaining } from '../../lib/periods.js'
@@ -25,18 +27,36 @@ import { paycheckPeriod, type PaycheckPeriod } from './period.js'
 /** A payday moved off a weekend or bank holiday, as most payrolls move one. */
 const paidOn = businessDayOnOrBefore
 
+/** The next payday the owner gave, and the day they gave it. */
+export interface GivenPayday {
+  nextPayday: IsoDate
+  /** The day it was given; null for pay saved before that was kept, read as paid early. */
+  givenOn?: IsoDate | null
+}
+
 /**
- * The next payday on a paycheck period's schedule, as seen today. `given`
- * is the next payday the owner gave, on this schedule, when they gave one:
- * paid the business day before while that is not yet past, else on the day
- * itself, until it passes.
+ * Whether a payday given stands on its own day rather than the business day
+ * before: only when that business day had come by the day it was given.
+ */
+const standsLate = ({ nextPayday, givenOn = null }: GivenPayday) =>
+  givenOn !== null && paidOn(nextPayday) <= givenOn
+
+/**
+ * The next payday on a paycheck period's schedule, as seen today: always
+ * after today. `given` is the next payday the owner gave on this schedule,
+ * when they gave one: see the note at the top.
  */
 export function nextPeriodPayday(
   period: PaycheckPeriod,
   today: IsoDate,
-  given: IsoDate | null = null,
+  given: GivenPayday | null = null,
 ): IsoDate {
-  if (given !== null && given >= today) return paidOn(given) >= today ? paidOn(given) : given
+  if (given !== null && given.nextPayday > today) {
+    const early = paidOn(given.nextPayday)
+    if (early > today) return early
+    if (standsLate(given)) return given.nextPayday
+    // Paid early already: the schedule goes on from it.
+  }
   let start = periodContaining(today, period).start
   // `end` is exclusive: it is the next period's start, the next payday as meant.
   while (paidOn(start) <= today) start = periodContaining(start, period).end
@@ -48,9 +68,9 @@ export function nextPeriodPayday(
  * paycheck period their pay sets (period.ts), so it is the very date a
  * paycheck budget period on that schedule gives (payday.ts).
  */
-export function nextOwnPayday(schedule: OwnSchedule, today: IsoDate): IsoDate {
+export function nextOwnPayday(schedule: OwnSchedule & GivenPayday, today: IsoDate): IsoDate {
   const { cadence, nextPayday } = schedule
-  return nextPeriodPayday(paycheckPeriod(cadence, nextPayday), today, nextPayday)
+  return nextPeriodPayday(paycheckPeriod(cadence, nextPayday), today, schedule)
 }
 
 /** Whether a paycheck period is the one the owner's own pay sets, so its payday is theirs. */

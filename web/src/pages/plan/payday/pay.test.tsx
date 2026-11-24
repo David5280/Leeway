@@ -8,6 +8,7 @@ import type { PayView } from '../../../api/client'
 import { failing } from '../../../test/fake'
 import { noPay, payView } from '../../../test/pay'
 import { planServer, renderPlan } from '../../../test/planning'
+import { JOB_STOPPED_NOTE } from './payText'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -88,11 +89,7 @@ describe('Your pay', () => {
   it('says when the job the owner entered pay for has stopped, and offers to change it', async () => {
     const gig = { name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }
     show(payView([gig], { override: yours, forStoppedJob: true }))
-    expect(
-      await screen.findByText(
-        'The job you entered pay for has stopped paying. Update or remove it.',
-      ),
-    ).toBeVisible()
+    expect(await screen.findByText(JOB_STOPPED_NOTE)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Change my pay' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Use my paychecks' })).toBeVisible()
   })
@@ -106,9 +103,13 @@ describe('Your pay', () => {
       'Every 2 weeks',
     )
     expect(within(form).getByLabelText('Next payday')).toHaveValue('2026-11-27')
+    // Pay every two weeks counts from its own day, so no word on paydays moved early.
+    const hint = 'Paid early for a weekend or holiday? Enter either day.'
+    expect(within(form).queryByText(hint)).not.toBeInTheDocument()
     await user.clear(within(form).getByLabelText('One paycheck'))
     await user.type(within(form).getByLabelText('One paycheck'), '2,500')
     await user.selectOptions(within(form).getByLabelText('How often you are paid'), 'Twice a month')
+    expect(within(form).getByText(hint)).toBeVisible()
     await user.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(server.actions('set_pay')).toEqual([

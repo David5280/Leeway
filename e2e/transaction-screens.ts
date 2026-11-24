@@ -4,7 +4,7 @@
 
 import { expect, type Page } from '@playwright/test'
 import { pretendCalendar } from './calendar'
-import { at, open, stillOn, type Screen } from './screen-kit'
+import { at, open, stillOn, type Screen } from './screen'
 
 /** The seeded transaction with the longest name, as its row and its sheet are named. */
 const LONG_TRANSACTION = /^Amazon Marketplace/i

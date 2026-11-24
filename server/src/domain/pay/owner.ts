@@ -11,19 +11,21 @@ import { periodConfig, saveSettings, settingsSchema, type Settings } from '../se
 import type { PayCadence } from './cadence.js'
 import {
   employerIdOf,
+  jobStopped,
   NO_PAY_SETTINGS,
-  payerSaltOf,
   replacedIndex,
   type PayOverride,
+  type SavedOverride,
 } from './ownPay.js'
 import { PAYDAY_RANGE_DAYS } from './paydayRange.js'
 import { paycheckPeriod, periodInStep } from './period.js'
+import { withPayerSalt } from './salt.js'
 import { readDetectedPay, readFoundPay } from './source.js'
 import { periodOfPay, readPayView, type PayView } from './view.js'
 
 /**
  * Saves new pay settings and budget period, then reads the view back. The
- * salt payer ids are keyed with is saved too, so an id saved keeps its job.
+ * salt payer ids are keyed with (salt.ts) is kept, so an id saved keeps its job.
  */
 async function savePay(
   db: Db,
@@ -31,7 +33,7 @@ async function savePay(
   change: { pay: Omit<Settings['pay'], 'payerSalt'>; period: PeriodConfig },
   today: IsoDate,
 ): Promise<PayView> {
-  const pay = { ...change.pay, payerSalt: payerSaltOf(settings.pay) }
+  const pay = { ...change.pay, payerSalt: settings.pay.payerSalt }
   const next = settingsSchema.parse({ ...settings, ...change, pay })
   await saveSettings(db, next)
   return readPayView(db, next, today)
@@ -42,7 +44,8 @@ async function savePay(
  * It stops being an estimate, and any pay the owner entered is cleared,
  * since they have said the paychecks have it right.
  */
-export async function confirmPay(db: Db, settings: Settings, today: IsoDate): Promise<PayView> {
+export async function confirmPay(db: Db, given: Settings, today: IsoDate): Promise<PayView> {
+  const settings = await withPayerSalt(db, given)
   const detected = await readDetectedPay(db, today)
   const main = detected.employer
   if (!main) {
@@ -82,16 +85,24 @@ async function backToPaychecks(db: Db, settings: Settings, today: IsoDate): Prom
   return savePay(db, settings, { pay: NO_PAY_SETTINGS, period }, today)
 }
 
+type StandsFor = Pick<SavedOverride, 'payerId' | 'besideJobs'>
+
 /**
- * The id of the job the owner's pay stands in for: the one it already does
- * while that job still pays, else (none entered yet, or its job stopped)
- * the main job; null with none found.
+ * The job the owner's pay stands in for as it is saved: the one it already
+ * does while that job still pays, else (none entered yet) the main job, by
+ * id; no id with none found. Pay that stood for a job that has stopped, or
+ * already stood beside every job, stands beside every job still paying: it
+ * never takes the place of a different job unasked.
  */
-async function replacedPayerId(db: Db, settings: Settings, today: IsoDate): Promise<string | null> {
+async function standsFor(db: Db, settings: Settings, today: IsoDate): Promise<StandsFor> {
   const { employers } = await readFoundPay(db, settings, today)
+  const { override } = settings.pay
+  if (override && (override.besideJobs || jobStopped(employers, settings.pay))) {
+    return { payerId: null, besideJobs: true }
+  }
   const index = replacedIndex(employers, settings.pay)
   const job = employers[index >= 0 ? index : 0]
-  return job ? employerIdOf(job, settings.pay) : null
+  return { payerId: job ? employerIdOf(job, settings.pay) : null, besideJobs: false }
 }
 
 /**
@@ -102,21 +113,24 @@ async function replacedPayerId(db: Db, settings: Settings, today: IsoDate): Prom
  */
 export async function setPay(
   db: Db,
-  settings: Settings,
+  given: Settings,
   override: PayOverride | null,
   today: IsoDate,
 ): Promise<PayView> {
+  const settings = await withPayerSalt(db, given)
   if (override === null) return backToPaychecks(db, settings, today)
   if (!nearToday(override.nextPayday, today)) {
     throw new AppError('invalid_input', 'Pick a payday within a year of today')
   }
-  const payerId = await replacedPayerId(db, settings, today)
+  const job = await standsFor(db, settings, today)
   const aligned = paycheckPeriod(override.cadence, override.nextPayday)
+  // The day it is given says whether a payday on a weekend stands (periodPayday.ts).
+  const saved = { ...override, ...job, givenOn: today }
   return savePay(
     db,
     settings,
     {
-      pay: { ...settings.pay, override: { ...override, payerId } },
+      pay: { ...settings.pay, override: saved },
       period: periodInStep(periodConfig(settings), aligned),
     },
     today,

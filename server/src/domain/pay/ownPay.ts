@@ -9,14 +9,14 @@
 // A payer is kept by an id made from its key, never the key itself: the key
 // is the bank's text, which for a payroll paid in a person's name is that
 // name, and settings are read back by an assistant. The id is keyed with a
-// random salt kept for this install, so it cannot be matched to a name by
-// hashing guesses.
+// random salt kept for this install (salt.ts), so it cannot be matched to a
+// name by hashing guesses.
 //
 // Each word names its job by that id, wherever the job ranks: a
 // confirmation and the owner's own pay both follow their job when another
 // pays more, and neither ever speaks for a different job.
 
-import { createHmac, randomBytes } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import { z } from 'zod'
 import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
@@ -51,6 +51,16 @@ const payerIdSchema = z.string().regex(/^[0-9a-f]{16}$/)
 const savedOverrideSchema = payOverrideSchema.extend({
   /** The employer it replaces, saved when it was entered; null when no job was found then. */
   payerId: payerIdSchema.nullable().default(null),
+  /**
+   * True when it stands in for no job and counts beside every job paying:
+   * saved when the job it was entered for had stopped (owner.ts).
+   */
+  besideJobs: z.boolean().default(false),
+  /**
+   * The day it was entered, which says whether its payday stands on a
+   * weekend or holiday (periodPayday.ts); null for pay saved before.
+   */
+  givenOn: isoDateSchema.nullable().default(null),
 })
 
 export type SavedOverride = z.infer<typeof savedOverrideSchema>
@@ -68,7 +78,7 @@ export const paySettingsSchema = z.object({
   confirmed: confirmedSchema.nullable().default(null),
   /** The owner's own pay, used instead of what was found. */
   override: savedOverrideSchema.nullable().default(null),
-  /** Keys payer ids (employerIdOf); saved with the first id, then kept for good. */
+  /** Keys payer ids (employerIdOf); saved before the first id is made (salt.ts), then kept for good. */
   payerSalt: z
     .string()
     .regex(/^[0-9a-f]{32}$/)
@@ -82,13 +92,14 @@ export type PaySettings = z.infer<typeof paySettingsSchema>
 export const NO_PAY_SETTINGS: PaySettings = { confirmed: null, override: null, payerSalt: null }
 
 /**
- * The salt until one is saved: ids only tell employers apart until then,
- * and the first id saved saves the salt it was made with (owner.ts).
+ * The salt payer ids are keyed with on this install. Every path that makes
+ * an id saves one first (salt.ts), so an id never changes with a restart;
+ * none saved yet means none was ever made, so there is none to match.
  */
-const UNSAVED_SALT = randomBytes(16).toString('hex')
-
-/** The salt payer ids are keyed with on this install. */
-export const payerSaltOf = (pay: Pick<PaySettings, 'payerSalt'>) => pay.payerSalt ?? UNSAVED_SALT
+export function payerSaltOf(pay: Pick<PaySettings, 'payerSalt'>): string {
+  if (pay.payerSalt === null) throw new Error('Save the payer salt before making a payer id')
+  return pay.payerSalt
+}
 
 /** An employer's id: the key its paychecks are grouped by (paychecks.ts), keyed with the salt. */
 export const employerIdOf = (employer: Employer, pay: Pick<PaySettings, 'payerSalt'>) =>
@@ -148,13 +159,14 @@ function withConfirmation(pay: CurrentPay, given: PaySettings): CurrentPay {
 /**
  * Which employer the owner's own pay stands in for: the one it was entered
  * for while that job still pays, or the main one when no job was found as
- * it was entered. -1 with no own pay, with no employer paying now, or when
- * the job it was entered for has stopped (jobStopped): it never takes the
- * place of a different job that is still paying.
+ * it was entered. -1 with no own pay, with no employer paying now, when it
+ * was saved to stand beside every job, or when the job it was entered for
+ * has stopped (jobStopped): it never takes the place of a different job
+ * that is still paying.
  */
 export function replacedIndex(employers: Employer[], pay: PaySettings): number {
   const { override } = pay
-  if (!override) return -1
+  if (!override || override.besideJobs) return -1
   if (override.payerId === null) return employers.length > 0 ? 0 : -1
   return employers.findIndex((employer) => employerIdOf(employer, pay) === override.payerId)
 }
@@ -170,8 +182,8 @@ export function jobStopped(employers: Employer[], pay: PaySettings): boolean {
  * entered for: its paycheck, cadence and next payday, no longer an
  * estimate, and first, since payday is the owner's. Every other job found
  * still adds its month of pay, all of them when the job it was entered for
- * has stopped: the pay entered then counts beside them until the owner
- * updates or removes it (the Payday screen says so).
+ * has stopped (the Payday screen says so) or it was saved to stand beside
+ * every job.
  */
 function withOverride(pay: CurrentPay, given: PaySettings, today: IsoDate): CurrentPay {
   const override = given.override!
@@ -190,7 +202,9 @@ function withOverride(pay: CurrentPay, given: PaySettings, today: IsoDate): Curr
     nextPayday,
     estimate: false,
   }
-  // With no job in its place, the main job is the owner's own: none found paying.
+  // With no job in its place, the main pay is the owner's own, which no
+  // employer stands for: `employer` is null and `employers` lists only the
+  // jobs it counts beside (CurrentPay).
   const employers = own ? [own, ...others] : others
   return {
     ...pay,

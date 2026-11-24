@@ -1,6 +1,7 @@
 // The owner's own pay: one paycheck, how often it lands and the next payday.
 // Saved, it stands in for what the paychecks show everywhere pay is used:
-// for the main job, when two are found.
+// for the main job, when two are found, or beside every job when the one it
+// was entered for has stopped.
 
 import { useState, type FormEvent } from 'react'
 import { PAYDAY_RANGE_DAYS } from '../../../../../server/src/domain/pay/paydayRange'
@@ -13,9 +14,20 @@ import { parseMoney } from '../../../lib/format'
 import { typedAmount } from '../../../lib/money'
 import { cadenceLabel, PAY_CADENCE_CHOICES, type PayCadenceChoice } from './payText'
 
-/** A payday paid early for a weekend or holiday is read as the day it stands for (ownSchedule.ts). */
-const PAYDAY_HINT =
-  'Paid early for a 15th or month end on a weekend or holiday? That day counts as the 15th or month end.'
+/**
+ * Pay on days of the month moves early for a weekend or holiday, and either
+ * day is read as the one it stands for (ownSchedule.ts). Pay every week or
+ * two counts from the day given, so only the real day fits it.
+ */
+const PAYDAY_HINT = 'Paid early for a weekend or holiday? Enter either day.'
+const MONTH_DAY_CADENCES: readonly PayCadenceChoice[] = ['semimonth', 'month']
+
+/** What one paycheck means here: the main job's with two found, or pay beside every job. */
+function paycheckHint(view: PayView): string {
+  if (view.yours?.besideJobs) return 'Counted beside the pay your paychecks show.'
+  const twoJobs = (view.found?.employers.length ?? 0) > 1
+  return twoJobs ? 'From your main job. Your other job still counts.' : 'What lands in your account'
+}
 
 /** What the form opens with: the owner's own pay, else the pay in use, else blank. */
 function startingPay(view: PayView): { amount: string; cadence: PayCadenceChoice; next: string } {
@@ -33,8 +45,6 @@ function startingPay(view: PayView): { amount: string; cadence: PayCadenceChoice
 export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }) {
   const { settings } = useApp()
   const start = startingPay(view)
-  // With two jobs found, the pay entered is the main one's; the other still counts.
-  const twoJobs = (view.found?.employers.length ?? 0) > 1
   // The server takes a payday within a year of today either way.
   const earliest = isoDaysAgo(PAYDAY_RANGE_DAYS, settings.timeZone)
   const latest = isoDaysAgo(-PAYDAY_RANGE_DAYS, settings.timeZone)
@@ -54,14 +64,7 @@ export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }
   return (
     // Named apart from the card around it, which is "Your pay" or "Your own pay".
     <form className="stack-sm" onSubmit={submit} aria-label="Enter your pay">
-      <Setting
-        label="One paycheck"
-        hint={
-          twoJobs
-            ? 'From your main job. Your other job still counts.'
-            : 'What lands in your account'
-        }
-      >
+      <Setting label="One paycheck" hint={paycheckHint(view)}>
         <input
           className="input num"
           inputMode="decimal"
@@ -85,7 +88,10 @@ export function PayForm({ view, onDone }: { view: PayView; onDone?: () => void }
           ))}
         </select>
       </Setting>
-      <Setting label="Next payday" hint={PAYDAY_HINT}>
+      <Setting
+        label="Next payday"
+        hint={MONTH_DAY_CADENCES.includes(cadence) ? PAYDAY_HINT : undefined}
+      >
         <input
           className="input num"
           type="date"

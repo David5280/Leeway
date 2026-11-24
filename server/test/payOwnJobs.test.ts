@@ -19,8 +19,11 @@ import { everyDays, paycheck } from './fixtures/pay.js'
 
 const TODAY = '2026-11-17'
 
+/** Nothing said yet, with the salt payer ids are keyed with saved (salt.ts). */
+const SALTED: PaySettings = { ...NO_PAY_SETTINGS, payerSalt: '0'.repeat(32) }
+
 /** The owner's word: what they said, the rest as when they have said nothing. */
-const said = (word: Partial<PaySettings>): PaySettings => ({ ...NO_PAY_SETTINGS, ...word })
+const said = (word: Partial<PaySettings>): PaySettings => ({ ...SALTED, ...word })
 
 /** Names every employer by the bank's text: fine for made-up payrolls. */
 const byName = (employer: { newest: { name: string } }) => employer.newest.name
@@ -37,8 +40,12 @@ describe("the owner's own pay with two jobs", () => {
     const pay = currentPay(deposits, TODAY)
     const [globex, acme] = pay.employers
     expect(acme!.newest.name).toBe('ACME CORP PAYROLL')
-    const payerId = employerIdOf(acme!, NO_PAY_SETTINGS)
-    const given = withOwnersPay(pay, said({ override: { ...own, payerId } }), TODAY)
+    const payerId = employerIdOf(acme!, SALTED)
+    const given = withOwnersPay(
+      pay,
+      said({ override: { ...own, payerId, besideJobs: false, givenOn: null } }),
+      TODAY,
+    )
     // ACME every two weeks, plus GLOBEX's month, never ACME's month again.
     expect(given.monthlyCents).toBe(456_563 + globex!.monthlyCents)
     expect(given.employers.map(byName)).toEqual(['ACME CORP PAYROLL', 'GLOBEX PAYROLL'])
@@ -62,7 +69,14 @@ describe('when the job the pay was entered for stops', () => {
   function enteredForAcme(): PaySettings {
     const then = currentPay(bySeptember, SEPTEMBER)
     expect(then.employer!.newest.name).toBe('ACME CORP PAYROLL')
-    return said({ override: { ...own, payerId: employerIdOf(then.employer!, NO_PAY_SETTINGS) } })
+    return said({
+      override: {
+        ...own,
+        payerId: employerIdOf(then.employer!, SALTED),
+        besideJobs: false,
+        givenOn: null,
+      },
+    })
   }
 
   it('replaces no other job: every job still paying keeps counting beside it', () => {
@@ -103,7 +117,7 @@ describe('a confirmation when another job pays more', () => {
   /** ACME confirmed every two weeks, while it was the only job. */
   function confirmedAcme(): PaySettings {
     const alone = currentPay(acme, TODAY)
-    const payerId = employerIdOf(alone.employer!, NO_PAY_SETTINGS)
+    const payerId = employerIdOf(alone.employer!, SALTED)
     return said({ confirmed: { payerId, cadence: 'biweek' } })
   }
 
@@ -132,7 +146,8 @@ describe('a confirmation when another job pays more', () => {
       { name: 'GLOBEX PAY', confirmed: false },
       { name: 'ACME CORP PAYROLL', confirmed: true },
     ])
-    expect(view.pay!.source).toBe('confirmed')
+    // The pay shown is GLOBEX's, which the owner never confirmed.
+    expect(view.pay!.source).toBe('found')
   })
 })
 

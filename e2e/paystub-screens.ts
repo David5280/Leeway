@@ -4,7 +4,7 @@
 // choice of how to add it to the review that names it.
 
 import { expect, type Page } from '@playwright/test'
-import type { Screen } from './guarded-screens'
+import type { Screen } from './screen'
 import { addPensionFromPaystub, importPaystub, mockReader } from './paystub'
 
 const RETIREMENT = '/plan/retirement'

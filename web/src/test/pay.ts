@@ -9,9 +9,9 @@ import {
   type PayOverride,
 } from '../../../server/src/domain/pay/ownPay'
 import { payViewOf } from '../../../server/src/domain/pay/view'
+import { settingsSchema } from '../../../server/src/domain/settings'
 import { addDays } from '../../../server/src/lib/dates'
 import type { PayView } from '../api/client'
-import { settingsWith } from './fake'
 
 export const PAY_TODAY = '2026-11-17'
 
@@ -66,15 +66,21 @@ const PAYER_SALT = '0'.repeat(32)
 /** An id for a job that no longer pays: the owner's pay entered for it then. */
 const STOPPED_JOB_ID = 'f'.repeat(16)
 
+/** How the owner's own pay was saved: for the main job, a job since stopped, or beside every job. */
+export interface OwnPayGiven {
+  confirmed?: boolean
+  override?: PayOverride
+  forStoppedJob?: boolean
+  besideJobs?: boolean
+}
+
 /**
  * get_pay's answer for these jobs, with the owner's confirmation or own pay,
  * which stands in for the main job as the server saves it, or with
- * `forStoppedJob` for a job that has since stopped paying.
+ * `forStoppedJob` for a job that has since stopped paying, or `besideJobs`
+ * saved to count beside every job.
  */
-export function payView(
-  jobs: Job[] = [{}],
-  given: { confirmed?: boolean; override?: PayOverride; forStoppedJob?: boolean } = {},
-): PayView {
+export function payView(jobs: Job[] = [{}], given: OwnPayGiven = {}): PayView {
   const all = jobs.flatMap(deposits)
   const detected = currentPay(all, PAY_TODAY, null)
   const main = detected.employer
@@ -83,13 +89,18 @@ export function payView(
     given.confirmed && main
       ? { payerId: employerIdOf(main, salted), cadence: main.cadence as PayOverride['cadence'] }
       : null
-  const mainId = main ? employerIdOf(main, salted) : null
+  const besideJobs = given.besideJobs ?? false
+  // Pay saved beside every job names none; otherwise the job it stands in for.
+  let payerId = main && !besideJobs ? employerIdOf(main, salted) : null
+  if (given.forStoppedJob) payerId = STOPPED_JOB_ID
   const override = given.override && {
     ...given.override,
-    payerId: given.forStoppedJob ? STOPPED_JOB_ID : mainId,
+    payerId,
+    besideJobs,
+    givenOn: PAY_TODAY,
   }
   const pay = { confirmed, override: override ?? null, payerSalt: PAYER_SALT }
-  const settings = settingsWith({ pay })
+  const settings = settingsSchema.parse({ timeZone: 'America/Denver', pay })
   const found = readAsConfirmed(all, detected, pay, PAY_TODAY)
   return payViewOf(found, settings, PAY_TODAY, ({ newest }) =>
     newest.name in NAMES ? (NAMES[newest.name] ?? null) : 'Side Gig',

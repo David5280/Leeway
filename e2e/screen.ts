@@ -1,6 +1,6 @@
-// The pieces the phone layout guard's screen lists are built from
-// (guarded-screens.ts and the lists it gathers): what a screen is, and the
-// steps that open what shows on one.
+// What the phone layout guard (layout-guard.phone.spec.ts) checks on each
+// screen, and the steps the screen lists (guarded-screens.ts and the files
+// beside it) share: naming a route, opening a form, and waiting for it to settle.
 
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import type { RouteName } from '../web/src/routes'
@@ -21,7 +21,6 @@ export interface Screen {
   on?: (phone: GuardedPhone) => boolean
 }
 
-/** A screen at a fixed address, named for it unless `more` names it. */
 export const at = (route: RouteName, path: string, more: Partial<Screen> = {}): Screen => ({
   name: path,
   route,

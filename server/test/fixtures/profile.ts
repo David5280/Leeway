@@ -78,6 +78,7 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
       employer: null,
       employers: [],
       since: null,
+      entered: null,
     },
     monthly: {
       incomeCents: null,

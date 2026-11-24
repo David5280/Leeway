@@ -19,8 +19,11 @@ import { everyDays, paycheck } from './fixtures/pay.js'
 
 const TODAY = '2026-11-17'
 
+/** Nothing said yet, with the salt payer ids are keyed with saved (salt.ts). */
+const SALTED: PaySettings = { ...NO_PAY_SETTINGS, payerSalt: '0'.repeat(32) }
+
 /** The owner's word: what they said, the rest as when they have said nothing. */
-const said = (word: Partial<PaySettings>): PaySettings => ({ ...NO_PAY_SETTINGS, ...word })
+const said = (word: Partial<PaySettings>): PaySettings => ({ ...SALTED, ...word })
 
 /** Budgets by calendar month, so the payday comes from pay, not a paycheck period. */
 const MONTHLY_BUDGET = settingsSchema.parse({})
@@ -46,7 +49,7 @@ describe('withOwnersPay', () => {
 
   it('settles the main employer once the owner confirms it, on the same cadence only', () => {
     const pay = onePaycheck()
-    const key = employerIdOf(pay.employer!, NO_PAY_SETTINGS)
+    const key = employerIdOf(pay.employer!, SALTED)
     const confirmed = withOwnersPay(
       pay,
       said({ confirmed: { payerId: key, cadence: 'month' } }),
@@ -67,7 +70,7 @@ describe('withOwnersPay', () => {
   it("keeps a second job's guess an estimate when only the main job is confirmed", () => {
     const pay = twoJobs()
     expect(pay.employers).toHaveLength(2)
-    const key = employerIdOf(pay.employer!, NO_PAY_SETTINGS)
+    const key = employerIdOf(pay.employer!, SALTED)
     const confirmed = withOwnersPay(
       pay,
       said({ confirmed: { payerId: key, cadence: 'biweek' } }),
@@ -88,6 +91,8 @@ describe('withOwnersPay', () => {
           cadence: 'semimonth',
           nextPayday: '2026-12-15',
           payerId: null,
+          besideJobs: false,
+          givenOn: null,
         },
       }),
       TODAY,
@@ -120,6 +125,8 @@ describe('withOwnersPay', () => {
           cadence: 'biweek',
           nextPayday: '2026-11-20',
           payerId: null,
+          besideJobs: false,
+          givenOn: null,
         },
       }),
       TODAY,
@@ -153,7 +160,7 @@ describe('readAsConfirmed', () => {
       monthlyCents: 420_000,
       nextPayday: '2026-12-01',
     })
-    const payerId = employerIdOf(found.employer!, NO_PAY_SETTINGS)
+    const payerId = employerIdOf(found.employer!, SALTED)
     const word = said({ confirmed: { payerId, cadence: 'biweek' } })
     const settled = withOwnersPay(readAsConfirmed(deposits, found, word, TODAY), word, TODAY)
     // Every two weeks from Nov 13: 26.1 paychecks a year, the next on Nov 27.
@@ -171,7 +178,7 @@ describe('readAsConfirmed', () => {
 
   it('leaves the pay as found when the confirmation no longer matches it', () => {
     const found = currentPay(deposits, TODAY)
-    const payerId = employerIdOf(found.employer!, NO_PAY_SETTINGS)
+    const payerId = employerIdOf(found.employer!, SALTED)
     const stale = said({ confirmed: { payerId, cadence: 'month' } })
     expect(readAsConfirmed(deposits, found, stale, TODAY)).toBe(found)
     expect(readAsConfirmed(deposits, found, NO_PAY_SETTINGS, TODAY)).toBe(found)

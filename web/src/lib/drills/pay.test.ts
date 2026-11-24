@@ -70,7 +70,7 @@ describe('payDrill', () => {
       'Your pay, a month',
       'Side Gig, a month',
     ])
-    expect(drill.math.note).toMatch(/has stopped paying\. Update or remove it\.$/)
+    expect(drill.math.note).toMatch(/has stopped paying\. .* until you update or remove it\.$/)
   })
 
   it('takes the owner’s own pay alone, with no employers under it', () => {

@@ -50,6 +50,7 @@ describe('set_pay', () => {
       // Twice a month is two paychecks a month.
       monthlyCents: 500_000,
       jobStopped: false,
+      besideJobs: false,
     })
     // What the paychecks show is still there, beside it.
     expect(view.found!.paycheckCents).toBe(210_000)
@@ -94,7 +95,12 @@ describe('set_pay', () => {
     const own = { amountCents: 220_000, cadence: 'biweek', nextPayday: '2026-11-27' } as const
     const set = await call('set_pay', { pay: own })
     // Its id says which job, never the bank text the key is made from.
-    expect(set.yours).toEqual({ ...own, monthlyCents: 478_304, jobStopped: false })
+    expect(set.yours).toEqual({
+      ...own,
+      monthlyCents: 478_304,
+      jobStopped: false,
+      besideJobs: false,
+    })
     expect(set.found!.employers.map((e) => e.replaced)).toEqual([true, false])
 
     // GLOBEX turns out to pay every two weeks, and more: it is the main job now.
@@ -112,19 +118,23 @@ describe('set_pay', () => {
     expect(view.pay!.monthlyCents).toBe(478_304 + main!.monthlyCents)
   })
 
-  it('steps a payday given in the past forward when it is read, keeping one given for today', async () => {
+  it('steps a payday given in the past, or today, forward to the next one', async () => {
     const view = await call('set_pay', {
       pay: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-03' },
     })
     // Two weeks on from Nov 3 is today: the next after it, as found pay counts.
     expect(view.yours!.nextPayday).toBe('2026-11-24')
     expect(view.pay).toMatchObject({ source: 'yours', nextPayday: '2026-11-24', estimate: false })
-    // Given as today, it is the owner's word, so it stands.
+    // Given as today, it is landing today, as found pay is read: the next is a week on,
+    // so safe to spend is never spread over no days.
     const today = await call('set_pay', {
       pay: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-17' },
     })
-    expect(today.pay!.nextPayday).toBe('2026-11-17')
-    expect((await call('get_cash_flow')).nextPayday).toBe('2026-11-17')
+    expect(today.pay!.nextPayday).toBe('2026-11-24')
+    expect(await call('get_cash_flow')).toMatchObject({
+      nextPayday: '2026-11-24',
+      daysUntilPayday: 7,
+    })
   })
 
   it('gives one payday everywhere, moved off a holiday the same way', async () => {
@@ -162,21 +172,12 @@ describe('set_pay', () => {
     expect(view.yours).toMatchObject({ amountCents: 220_000, jobStopped: true })
     expect(view.found!.employers).toMatchObject([{ replaced: false, monthlyCents: 173_929 }])
     expect(view.pay!.monthlyCents).toBe(478_304 + 173_929)
-  })
 
-  it('keys payer ids with a salt saved for this install, kept from then on', async () => {
-    await biweeklyPay()
-    const own = { amountCents: 220_000, cadence: 'biweek', nextPayday: '2026-11-27' } as const
-    const view = await call('set_pay', { pay: own })
-    const { pay } = await call('get_settings')
-    expect(pay.payerSalt).toMatch(/^[0-9a-f]{32}$/)
-    expect(pay.override!.payerId).toBe(view.found!.employers[0]!.id)
-    // Going back to the paychecks and confirming keeps the salt, and so the ids.
-    await call('set_pay', { pay: null })
-    await call('confirm_pay')
-    const after = (await call('get_settings')).pay
-    expect(after.payerSalt).toBe(pay.payerSalt)
-    expect(after.confirmed!.payerId).toBe(pay.override!.payerId)
+    // Updating it, as the Payday screen asks, never makes it take GLOBEX's place.
+    const again = await call('set_pay', { pay: { ...own, amountCents: 230_000 } })
+    expect(again.yours).toMatchObject({ jobStopped: false, besideJobs: true })
+    expect(again.found!.employers).toMatchObject([{ replaced: false, monthlyCents: 173_929 }])
+    expect(again.pay!.monthlyCents).toBe(500_045 + 173_929)
   })
 
   it('moves a paycheck budget period to the new schedule, and leaves it when cleared', async () => {

@@ -77,7 +77,19 @@ describe('pay words', () => {
     })
     expect(view.yours!.jobStopped).toBe(true)
     expect(sourceNote(view, view.pay!)).toBe(
-      'The pay you entered. Leeway uses it everywhere instead of what your paychecks show. The job you entered pay for has stopped paying. Update or remove it.',
+      'The job you entered pay for has stopped paying. Your pay still counts, beside any job still paying, until you update or remove it.',
+    )
+  })
+
+  it('says the pay entered counts beside every job once saved that way', () => {
+    const view = payView([{ name: 'GIG PAYOUT', cents: 40_000, every: 7, last: '2026-11-16' }], {
+      override: { amountCents: 100_000, cadence: 'week', nextPayday: '2026-11-20' },
+      besideJobs: true,
+    })
+    expect(view.yours).toMatchObject({ jobStopped: false, besideJobs: true })
+    expect(view.found!.employers[0]!.replaced).toBe(false)
+    expect(sourceNote(view, view.pay!)).toBe(
+      'The pay you entered. Leeway counts it beside the pay your paychecks show.',
     )
   })
 

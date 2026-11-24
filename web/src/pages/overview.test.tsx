@@ -97,7 +97,7 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
     {
       get_settings: () => current,
       update_settings: (patch) => {
-        current = mergeSettings(current, settingsPatchSchema.parse(patch))
+        current = mergeSettings(settingsSchema.parse(current), settingsPatchSchema.parse(patch))
         return current
       },
       get_budget: (input) => budgetAt(Number(input.offset ?? 0)),

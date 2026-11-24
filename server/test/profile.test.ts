@@ -117,6 +117,7 @@ describe('getFinancialProfile', () => {
         employer: null,
         employers: [],
         since: null,
+        entered: null,
       },
       monthly: {
         incomeCents: null,
@@ -345,6 +346,7 @@ describe('getFinancialProfile', () => {
       employer: null,
       employers: [],
       since: null,
+      entered: null,
     })
   })
 

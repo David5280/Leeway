@@ -20,7 +20,6 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import { PER_YEAR, type Cadence } from '../../lib/periods.js'
-import { laterNextPayday, nextPaydayAfter } from './cadence.js'
 import { depositKind, type Deposit, type DepositKind } from './deposits.js'
 import { givenFor, type GivenCadence } from './given.js'
 import {
@@ -32,6 +31,7 @@ import {
   type EmployerRun,
   type Paycheck,
 } from './paychecks.js'
+import { paydayAfter, projectionOf, type PayProjection } from './projection.js'
 
 /** An employer paying now, as far as the owner needs to see it. */
 export interface Employer {
@@ -52,12 +52,19 @@ export interface Employer {
   monthlyCents: number
   /** When its next paycheck is expected, after today. */
   nextPayday: IsoDate
+  /** What its paydays to come are projected from: the next one and those after it. */
+  projection: PayProjection
 }
 
 export interface CurrentPay {
-  /** The employer paying the most a month, or null when no payroll is paying now. */
+  /**
+   * The employer paying the most a month, or null when no payroll is paying
+   * now. With the owner's own pay laid over (ownPay.ts), the job it stands
+   * in for, or null when it stands in for none: the main pay is then theirs,
+   * so this is employers[0] only while a job is the main pay.
+   */
   employer: Employer | null
-  /** Every employer paying now, the one paying the most a month first. */
+  /** Every employer paying now, the main one first (see `employer`). */
   employers: Employer[]
   /** How often the main employer pays. */
   cadence: Cadence | null
@@ -113,30 +120,18 @@ function payRuns(deposits: Deposit[]): EmployerRun[] {
 }
 
 /**
- * Paychecks a year and the next payday. Paydays that fit every two weeks and
- * twice a month alike take the fewer paychecks a year (twice a month) and
- * the later of the two next paydays, so no figure promises more than may come.
+ * Paychecks a year. Paydays that fit every two weeks and twice a month alike
+ * take the fewer (twice a month), so no figure promises more than may come;
+ * the next payday is the later of the two the same way (projection.ts).
  */
-function cautiousReading(run: EmployerRun, today: IsoDate) {
-  // A bonus between paydays says nothing of when the next comes (offCycle.ts).
-  const paydays = run.cycle.map((paycheck) => paycheck.date)
-  if (!run.ambiguous) {
-    return {
-      perYear: PER_YEAR[run.cadence],
-      nextPayday: nextPaydayAfter(paydays, run.cadence, today, run.schedule ?? undefined),
-    }
-  }
-  return {
-    perYear: Math.min(PER_YEAR.biweek, PER_YEAR.semimonth),
-    nextPayday: laterNextPayday(paydays, today, run.schedule!),
-  }
-}
+const paychecksAYear = (run: EmployerRun) =>
+  run.ambiguous ? Math.min(PER_YEAR.biweek, PER_YEAR.semimonth) : PER_YEAR[run.cadence]
 
 /** What a run still paying comes to. */
 function employerOf(run: EmployerRun, today: IsoDate): Employer {
   const paycheckCents = usualPaycheckCents(run)
   const last = run.paychecks.at(-1)!.date
-  const { perYear, nextPayday } = cautiousReading(run, today)
+  const projection = projectionOf(run)
   return {
     newest: run.newest,
     firstPaycheck: run.paychecks[0]!.date,
@@ -145,8 +140,9 @@ function employerOf(run: EmployerRun, today: IsoDate): Employer {
     cadence: run.cadence,
     estimate: !run.cadenceConfirmed || run.shortRunGuess,
     paycheckCents,
-    monthlyCents: Math.round((paycheckCents * perYear) / 12),
-    nextPayday,
+    monthlyCents: Math.round((paycheckCents * paychecksAYear(run)) / 12),
+    nextPayday: paydayAfter(projection, today),
+    projection,
   }
 }
 
