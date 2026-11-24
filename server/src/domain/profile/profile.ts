@@ -20,6 +20,7 @@
  *   fund's savings and essentials read as its card reads them (emergencyPlan.ts,
  *   monthlyEssentials.ts), so both say the same
  * - pensions and the retirement projection: retirement/pensions.ts, retirement/plan.ts
+ * - the newest confirmed paystub's yearly pay, taxes and match: paystubs/applied.ts
  *
  * userContext is where life context the owner writes in their own words will
  * go (and facts an assistant proposes once the owner approves them). It is
@@ -34,23 +35,20 @@ import { listBills } from '../bills.js'
 import { fundSaved } from '../emergencyPlan.js'
 import { goalReading, type Goal } from '../goalProgress.js'
 import { listGoals } from '../goals.js'
-import { latestPaystub } from '../paystubs/paystubs.js'
+import { readPaystubPayroll, type PaystubFigures } from '../paystubs/applied.js'
 import { pensionMonthlyTotals, type PensionMonthlyTotals } from '../retirement/pensions.js'
 import { pensionsOf } from '../retirement/pensionStore.js'
 import { retirementPlan, type RetirementPlan } from '../retirement/plan.js'
 import { essentialsOf } from '../goalFunds.js'
 import { emergencyFund, type EmergencyFund, type EssentialsMeasure } from '../savings/emergency.js'
-import { paystubPlan } from '../savings/payrollMonths.js'
-import {
-  payrollSources,
-  savingsRate,
-  type SavingSource,
-  type SavingsRate,
-} from '../savings/rate.js'
+import { savingSources, savingsRate, type SavingsRate } from '../savings/rate.js'
 import type { BankContributions } from '../savings/contributions.js'
 import { cashSaved, getSavingsReport, type SavingsReport } from '../savings/report.js'
 import type { Settings } from '../settings.js'
 import { typicalMonth, type MonthlyAverages, type PaySchedule } from './income.js'
+
+// Kept here too, where the profile's savings rate has always been read from.
+export { savingSources }
 
 /** The owner's accounts of one kind, added up. */
 export interface KindSummary {
@@ -102,6 +100,8 @@ export interface FinancialProfile {
   pensionPay: PensionMonthlyTotals
   /** Pensions and what savings and pensions could pay in retirement. */
   retirement: RetirementPlan
+  /** Yearly pay, taxes withheld and retirement from the newest recent confirmed paystub, or null. */
+  paystub: PaystubFigures | null
   goals: ProfileGoal[]
   /** Life context in the owner's own words. Empty until the owner can add it. */
   userContext: string[]
@@ -144,31 +144,6 @@ function profileGoal(goal: Goal, accounts: Account[]): ProfileGoal {
   }
 }
 
-/**
- * The streams of saving Leeway can see, for the savings rate: transfers the
- * bank shows, the pension contributions the owner entered, and the 401(k),
- * 457 or 403(b) a recent paystub shows. The last two leave pay before the bank
- * sees it. An employer's share is not the owner's pay, so it is left out.
- */
-export function savingSources(
-  contributions: BankContributions | null,
-  pensionMonthlyCents: number | null,
-  planMonthlyCents: number | null = null,
-): SavingSource[] {
-  const monthly = contributions?.monthlyCents
-  const bank: SavingSource[] = monthly
-    ? [
-        { label: 'Transfers to savings', monthlyCents: monthly.cash, beforePaycheck: false },
-        {
-          label: 'Transfers to investment and retirement accounts',
-          monthlyCents: monthly.invested,
-          beforePaycheck: false,
-        },
-      ]
-    : []
-  return [...bank, ...payrollSources(pensionMonthlyCents, planMonthlyCents)]
-}
-
 /** What the emergency fund and the savings rate are worked out from. */
 export interface SavingsMeasuresInput {
   /**
@@ -183,6 +158,8 @@ export interface SavingsMeasuresInput {
   planMonthlyCents?: number | null
   /** The plan the newest paystub shows but is too old to count, by name, or null. */
   stalePlan?: string | null
+  /** The employer's match a month a recent confirmed paystub shows, or null. */
+  matchMonthlyCents?: number | null
   /** Pay in a typical month, for the savings rate. */
   monthly: MonthlyAverages
   /** Essential spending a month, as the fund's card reads it (monthlyEssentials.ts), or null. */
@@ -207,6 +184,7 @@ export function savingsMeasures({
   pensionMonthlyCents,
   planMonthlyCents = null,
   stalePlan = null,
+  matchMonthlyCents = null,
   monthly,
   essentials,
   settings,
@@ -214,7 +192,7 @@ export function savingsMeasures({
 }: SavingsMeasuresInput): SavingsMeasures {
   const rate = savingsRate(
     monthly.incomeCents,
-    savingSources(contributions, pensionMonthlyCents, planMonthlyCents),
+    savingSources(contributions, pensionMonthlyCents, planMonthlyCents, matchMonthlyCents),
   )
   return {
     emergencyFund:
@@ -253,7 +231,7 @@ export async function getFinancialProfile(
   // Read once with the goals, so the fund's goal, its card and this profile agree.
   const { essentials } = await essentialsOf(db, reading)
   const pensions = await pensionsOf(db, accounts)
-  const plan = paystubPlan(await latestPaystub(db), today)
+  const paystub = await readPaystubPayroll(db, today)
 
   const billsMonthlyCents = bills.reduce((sum, bill) => sum + bill.monthlyCents, 0)
   const pensionPay = pensionMonthlyTotals(pensions, pay.cadence)
@@ -261,8 +239,9 @@ export async function getFinancialProfile(
     fundSavedCents: fundSaved(goals, accounts, settings.currency, cashSaved(savings) !== null),
     contributions: savings.contributions,
     pensionMonthlyCents: pensionPay.memberCents,
-    planMonthlyCents: plan.monthlyCents,
-    stalePlan: plan.stale,
+    planMonthlyCents: paystub.planMonthlyCents,
+    stalePlan: paystub.stalePlan,
+    matchMonthlyCents: paystub.matchMonthlyCents,
     monthly,
     essentials,
     settings,
@@ -293,6 +272,7 @@ export async function getFinancialProfile(
     savingsRateTargetPercent: settings.savingsPlan.savingsRateTargetPercent,
     pensionPay,
     retirement,
+    paystub: paystub.figures,
     goals: goals.map((goal) => profileGoal(goal, accounts)),
     userContext: [],
   }

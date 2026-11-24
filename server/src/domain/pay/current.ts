@@ -54,6 +54,8 @@ export interface Employer {
   nextPayday: IsoDate
   /** What its paydays to come are projected from: the next one and those after it. */
   projection: PayProjection
+  /** True when its paycheck is the take-home a confirmed paystub shows (paystubPay.ts). */
+  fromPaystub?: boolean
 }
 
 export interface CurrentPay {

@@ -96,6 +96,7 @@ export function emptyProfile(fields: Partial<FinancialProfile> = {}): FinancialP
     savingsRateTargetPercent: null,
     pensionPay: { memberCents: null, employerCents: null },
     retirement: retirement(),
+    paystub: null,
     goals: [],
     userContext: [],
     ...fields,

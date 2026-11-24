@@ -135,6 +135,7 @@ describe('getFinancialProfile', () => {
       savingsRateTargetPercent: null,
       pensionPay: { memberCents: null, employerCents: null },
       retirement: expect.objectContaining({ projection: null, hasPension: false, pensions: [] }),
+      paystub: null,
       goals: [],
       userContext: [],
     })

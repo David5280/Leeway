@@ -37,13 +37,16 @@ const DAYS_PER_YEAR = 365.25
 /** A saved paystub, as far as when it is from goes. */
 type DatedPaystub = Paystub & { savedAt: string }
 
+/** What says when a saved paystub is from: its pay date, and the day it was saved. */
+type Dated = Pick<Paystub, 'payDate'> & { savedAt: string }
+
 /** The day a paystub is from: its pay date, or the day it was saved when it shows none. */
-export function paystubDate(paystub: DatedPaystub): IsoDate {
+export function paystubDate(paystub: Dated): IsoDate {
   return paystub.payDate ?? paystub.savedAt.slice(0, 10)
 }
 
 /** The paystub when it is recent enough to say what pay takes now, otherwise null. */
-export function freshPaystub<P extends DatedPaystub>(paystub: P | null, today: IsoDate): P | null {
+export function freshPaystub<P extends Dated>(paystub: P | null, today: IsoDate): P | null {
   if (!paystub || paystubDate(paystub) < addDays(today, -PAYSTUB_FRESH_DAYS)) return null
   return paystub
 }

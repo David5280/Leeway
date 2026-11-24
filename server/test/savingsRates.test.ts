@@ -156,7 +156,7 @@ describe('what a rate says it counted', () => {
       'counting bank transfers and your workplace plan',
     )
     expect(countingWords(savingsRate(100_000, [pension, plan])!)).toBe(
-      'counting bank transfers and your pension and your workplace plan',
+      'counting bank transfers, your pension and your workplace plan',
     )
   })
 

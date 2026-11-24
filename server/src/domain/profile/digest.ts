@@ -10,6 +10,7 @@ import type { PensionInPlan, Projection, RetirementPlan } from '../retirement/pl
 import { countsPayroll, payNoun, RATE_GUARD_FOR_AI } from '../savings/rate.js'
 import { months, monthYear } from './insights.js'
 import { payFromWords, payLine } from './payDigest.js'
+import { paystubLine } from './paystubDigest.js'
 import type { FinancialProfile, ProfileGoal } from './profile.js'
 import { middleCase, percent, range } from './rangeWords.js'
 
@@ -231,6 +232,7 @@ export function profileDigest(profile: FinancialProfile, money: Money): string {
   const lines = [
     `Financial profile as of ${profile.asOf}. Amounts in ${profile.currency}.`,
     payLine(profile, money),
+    paystubLine(profile, money),
     monthLine(profile, money),
     profile.bills.count
       ? `Bills: ${plural(profile.bills.count, 'tracked bill')}, ${money(profile.bills.monthlyCents)} a month.`
