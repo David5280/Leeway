@@ -58,7 +58,11 @@ describe('Below zero before payday', () => {
   })
 
   it('is amber against a payday that is only a guess, as the shortfall is', async () => {
-    const guess = { paydaySource: 'detected_income', paydayEstimate: true, expectedPayCents: 1 }
+    const guess = {
+      paydaySource: 'detected_income' as const,
+      paydayEstimate: true,
+      expectedPayCents: 1,
+    }
     const card = await show(cashFlow(shortForRent(guess), [RAINY_DAY]))
     expect(within(warningIn(card)!).getByText(/goes below/)).toHaveClass('warn')
     expect(within(card).getByText('$200', { selector: '.mid-number' })).toHaveClass('money-warn')
