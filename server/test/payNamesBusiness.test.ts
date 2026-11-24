@@ -107,6 +107,66 @@ describe('a deposit that names a business', () => {
     expect(names(name)).toBe(true)
   })
 
+  // A "CO" after a business word that is also a surname ("MILLS") is the
+  // person's state, however many words come before it: a middle name looks
+  // just like a longer business name.
+  it.each([
+    'JOHN MILLS CO PAYROLL',
+    'JANE MARKET CO PAYROLL',
+    'JOHN KITCHEN CO PAYROLL',
+    'JANE GRILL CO DIR DEP',
+    'JOHN BAR CO PAYROLL',
+    'JANE COFFEE CO PAYROLL',
+    'JANE ANN MILLS CO PAYROLL',
+    'John Mills Co. Payroll',
+    'JOHN MILLS CO WEEKLY PAYROLL',
+    'JOHN MILLS CO ACH CO PAYROLL',
+    'JOHN MILLS CO DES:PAYROLL ID:1 INDN:X CO ID:9 PPD',
+    'Transfer from John Mills Co salary',
+    // A business so named cannot be told from a person, so it goes unnamed too.
+    'ACME MILLS CO PAYROLL',
+  ])('never reads a person whose surname is a business word as a company: %j', (name) => {
+    expect(names(name)).toBe(false)
+  })
+
+  it.each([
+    'ACME MILLS INC PAYROLL',
+    'ACME MARKET LLC PAYROLL',
+    'GREAT DIVIDE BREWING CO PAYROLL',
+    'ROCKY MOUNTAIN BREWING CO DIR DEP',
+  ])('still reads a business ending after a business word: %j', (name) => {
+    expect(names(name)).toBe(true)
+  })
+
+  // Plaid's merchant name is read as carefully as the bank text: a state
+  // after a person's name, or a surname that is a business word, names no one.
+  it.each([
+    ['JOHN SMITH DIR DEP', 'Jane Doe Co'],
+    ['JOHN SMITH DIR DEP', 'JANE DOE CO'],
+    ['JANE DOE PAYROLL', 'John Smith Denver CO'],
+    ['DIRECT DEP', 'John Mills Co'],
+    ['DIRECT DEP', 'Jane Ann Mills Co.'],
+    ['DIRECT DEP', 'Jane Doe co-worker'],
+    ['DIRECT DEP', '   '],
+    // The name shown is Plaid's, so a business in the bank's text vouches for nothing.
+    ['ACME CORP PAYROLL', 'Jane Doe'],
+    ['INITECH LLC DIR DEP', 'John Smith'],
+  ])('never names a person by the merchant name Plaid gave: %j, %j', (name, merchantName) => {
+    expect(names(name, merchantName)).toBe(false)
+  })
+
+  it.each([
+    'Acme Inc',
+    'Acme Co',
+    'Acme Co.',
+    'Great Divide Brewing Co',
+    'Initech LLC',
+    'ACME CORPORATION',
+    'Acme & Co',
+  ])('still names a business by the merchant name Plaid gave: %j', (merchantName) => {
+    expect(names('DIRECT DEP', merchantName)).toBe(true)
+  })
+
   it('reads a transfer by its sender, a business or a person', () => {
     expect(names('Transfer from Acme Co salary')).toBe(true)
     expect(names('From Initech Inc. paycheck')).toBe(true)

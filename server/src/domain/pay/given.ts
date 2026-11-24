@@ -101,10 +101,24 @@ const holdsRun = (words: string[], run: string[]) =>
 const MIN_CUT_LETTERS = 2
 
 /**
- * Whether `payer` ends with the stub's words, its last one cut off: banks
- * cut an ACH company name at 16 characters, so "Denver Public Schools" is
- * printed "DENVER PUBLIC SC". The stub needs at least one whole word before
- * the cut one, so a lone "AC" never reads as "Acme".
+ * The fewest characters a line's name must fill before its last word may be
+ * read as cut off. Banks cut a name at 16; one a character short is allowed
+ * for a dropped dot or space. A shorter name was never cut, so its last word
+ * is whole: "DENVER HEALTH" is not "Denver Healthcare".
+ */
+const MIN_CUT_NAME_LENGTH = 15
+
+/** The name a payer's key prints, without its pay words: "denver public sc payroll" is "denver public sc". */
+const printedName = (payerKey: string) => withoutPayWords(payerKey).replace(/\s+/g, ' ').trim()
+
+/**
+ * Whether `payer` ends with the stub's words, its last one cut off: a bank
+ * cuts a long name at 16 characters, so "Denver Public Schools" is printed
+ * "DENVER PUBLIC SC PAYROLL". Only a name that ends the line is read so; an
+ * ACH line ("... DES:PAYROLL ID:1 INDN:...") prints labels after its name,
+ * so its cut name never ends the key. The stub needs at least one whole
+ * word before the cut one, so a lone "AC" never reads as "Acme". The caller
+ * checks the printed name is long enough to have been cut.
  */
 function endsWithCutRun(payer: string[], stub: string[]): boolean {
   const start = payer.length - stub.length
@@ -122,7 +136,8 @@ function endsWithCutRun(payer: string[], stub: string[]): boolean {
  *   writes them: "University of Colorado" and "UNIV OF COLORADO PAYROLL", or
  *   "Acme Corp" and "ORIG CO NAME:ACME CORP ...", whose labels come first, or
  * - the key ends with them, the last one cut off as a bank cuts a long
- *   name: "Denver Public Schools" and "DENVER PUBLIC SC PAYROLL", or
+ *   name: "Denver Public Schools" and "DENVER PUBLIC SC PAYROLL", never a
+ *   short name whose last word is whole ("DENVER HEALTH PAYROLL"), or
  * - the key names one word, the stub's first, as a bank may print only a
  *   brand: "Acme Widgets Inc" and "ACME PAYROLL". Never a general word, so
  *   "NATL PAYROLL" names no "National Western Life".
@@ -131,7 +146,9 @@ export function namesPayer(employerName: string, payerKey: string): boolean {
   const stub = nameWords(employerName)
   const payer = nameWords(payerKey)
   if (stub.length === 0 || payer.length === 0) return false
-  if (holdsRun(payer, stub) || endsWithCutRun(payer, stub)) return true
+  if (holdsRun(payer, stub)) return true
+  const cut = printedName(payerKey).length >= MIN_CUT_NAME_LENGTH
+  if (cut && endsWithCutRun(payer, stub)) return true
   const [brand] = payer
   return payer.length === 1 && brand === stub[0] && !GENERAL_WORDS.has(brand!)
 }

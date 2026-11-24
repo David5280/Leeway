@@ -9,7 +9,7 @@
 
 import type { IsoDate } from '../../lib/dates.js'
 import type { CountedKind } from '../counted.js'
-import { cleanMerchantName, tidyMerchantName } from '../merchantName.js'
+import { cleanMerchantName } from '../merchantName.js'
 import { withoutPlace } from '../merchantPlace.js'
 import { personToPersonApp, type Movement } from '../transfers.js'
 
@@ -52,8 +52,6 @@ const PAYROLL_WORDS = /\b(payroll|dir\.?\s?dep|direct\s+dep(osit)?)\b/i
 const PAY_WORDS = /\b(salary|paycheck|wages?)\b/i
 /** Words that end a business's name, "ACME Corp" or "Initech LLC", and never a person's. */
 const BUSINESS_ENDINGS = 'inc|corp|corporation|llc|ltd|co|company'
-/** One of BUSINESS_ENDINGS in a line. A hyphen ends no word here, so "co-worker" is not "Co". */
-const BUSINESS_WORDS = new RegExp(`(?<![\\w-])(${BUSINESS_ENDINGS})(?![\\w-])`, 'i')
 /** A word that is only one of BUSINESS_ENDINGS, with or without its dot: "Inc.". */
 const BUSINESS_ENDING_WORD = new RegExp(`^(${BUSINESS_ENDINGS})\\.?$`, 'i')
 
@@ -69,14 +67,22 @@ const FROM_SOMEONE = /^\s*(?:transfer\s+)?from\s+(?<sender>\S.*)$/i
 /** A line's code, most specific first, or '' without one. */
 const codeOf = (tx: Movement) => tx.providerCategoryDetailed ?? tx.providerCategoryPrimary ?? ''
 
-/** Who a "From Jane Doe" line says sent it, or undefined when it names no sender. */
-const senderOf = (tx: Deposit) => FROM_SOMEONE.exec(tx.name)?.groups?.sender
+/** Whether a line says who sent it: "From Jane Doe". */
+const namesSender = (tx: Deposit) => FROM_SOMEONE.test(tx.name)
 
 /** Every payroll or pay word in a text, to take off before reading a name from it. */
 const ANY_PAY_WORDS = new RegExp(`${PAYROLL_WORDS.source}|${PAY_WORDS.source}`, 'gi')
 
 /** The text with every payroll and pay word taken off ("ACME CORP DIR DEP" is "ACME CORP"). */
 export const withoutPayWords = (text: string) => text.replace(ANY_PAY_WORDS, ' ')
+
+/**
+ * Words that say what a business does (BUSINESS_WORDS in merchantPlace.ts)
+ * yet are also common surnames. A "CO" after one names no company here:
+ * "JOHN MILLS CO" is John Mills in Colorado, and "ACME MILLS CO" cannot be
+ * told from him, so neither is named. Display keeps its "CO" (withoutPlace).
+ */
+const SURNAME_BUSINESS_WORDS = new Set(['BAR', 'COFFEE', 'GRILL', 'KITCHEN', 'MARKET', 'MILLS'])
 
 /** A reference label, "ID:K3J9X" or "REF", which with any code after it names no one. */
 const REFERENCE_WORD = /^(?:id|ref)(?![a-z])/i
@@ -108,12 +114,17 @@ function payerWords(text: string): string[] {
  * second one through: in "JANE DOE CO ACH CO" the place taken off would be
  * "ACH CO", leaving the person's own "CO" at the end.
  *
- * Known limit: a person named in two words before "CO" ("JANE CO") reads
+ * A "CO" after a word that is also a surname (SURNAME_BUSINESS_WORDS) never
+ * counts, however many words come before it, since a middle name ("JANE
+ * ANN MILLS CO") looks just like a longer business name.
+ *
+ * Known limit: a person named in one word before "CO" ("JANE CO") reads
  * as a company, as it cannot be told from one ("IDEAL CO").
  */
 function endsBusiness(words: string[], index: number): boolean {
   const word = words[index]!
   if (word !== 'CO') return isBusinessEnding(word)
+  if (SURNAME_BUSINESS_WORDS.has(words[index - 1] ?? '')) return false
   const upToIt = words.slice(0, index + 1).join(' ')
   return withoutPlace(upToIt) === upToIt
 }
@@ -123,7 +134,8 @@ function endsBusiness(words: string[], index: number): boolean {
  * (payerWords) ends a business's name (endsBusiness). A "From ..." line is
  * read by its sender alone, so "TRANSFER FROM" is never taken as part of a
  * name. When unsure it names no one, since a person's name must never be
- * shown. The one reading namesBusiness and a "From ..." sender both go by.
+ * shown. The one reading namesBusiness and the kinds below go by, so a
+ * caller passes the whole line and never pulls out the sender itself.
  */
 function textNamesBusiness(text: string): boolean {
   const words = payerWords(FROM_SOMEONE.exec(text)?.groups?.sender ?? text)
@@ -132,11 +144,14 @@ function textNamesBusiness(text: string): boolean {
 
 /**
  * Whether a deposit names a business ("ACME Corp", "Initech LLC"), never only
- * a person, by its bank text or the merchant name Plaid gave.
+ * a person, read from the text it is shown under: the merchant name Plaid
+ * gave when there is one, else the bank's text (see transactionDisplayName).
+ * So a business in one never vouches for a person's name in the other, and
+ * Plaid's "Jane Doe Co" is read as carefully as a bank's.
  */
 export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): boolean {
-  const merchant = tx.merchantName?.trim() ? tidyMerchantName(tx.merchantName) : ''
-  return textNamesBusiness(tx.name) || BUSINESS_WORDS.test(merchant)
+  const merchant = tx.merchantName?.trim() ?? ''
+  return textNamesBusiness(merchant !== '' ? merchant : tx.name)
 }
 
 /**
@@ -146,8 +161,8 @@ export function namesBusiness(tx: Pick<Movement, 'name' | 'merchantName'>): bool
  * Jane Doe direct deposit" is money passed on, not a paycheck.
  */
 function transferInKind(tx: Deposit): DepositKind {
-  const sender = senderOf(tx)
-  if (sender !== undefined && !textNamesBusiness(sender)) return 'deposit'
+  // textNamesBusiness reads a "From ..." line by its sender alone.
+  if (namesSender(tx) && !textNamesBusiness(tx.name)) return 'deposit'
   return kindFromWords(tx) === 'payroll' ? 'payroll' : 'deposit'
 }
 
@@ -161,11 +176,10 @@ function kindFromWords(tx: Deposit): DepositKind {
   // Checked before the sender: a person passing money on never writes a
   // payroll's own words, so "From GUSTO Payroll" is a paycheck, not a person.
   if (PAYROLL_WORDS.test(words)) return 'payroll'
-  const sender = senderOf(tx)
-  if (sender !== undefined) {
+  if (namesSender(tx)) {
     // "From Jane Doe paycheck share" is money someone passed on, whatever it
     // was to them; "Transfer From ACME Corp Salary" is a business paying.
-    return PAY_WORDS.test(words) && textNamesBusiness(sender) ? 'payroll' : 'deposit'
+    return PAY_WORDS.test(words) && textNamesBusiness(tx.name) ? 'payroll' : 'deposit'
   }
   if (PAY_WORDS.test(words)) return 'payroll'
   if (INTEREST_WORDS.test(words)) return 'interest'

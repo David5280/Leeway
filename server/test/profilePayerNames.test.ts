@@ -107,7 +107,7 @@ describe('the payers the profile names', () => {
     // As some banks write it, in title case.
     ['Jane Doe Co DES:PAYROLL ID:1', null],
     // Any word after the state, under a salary code or none: a "CO" is the
-    // company only when the words up to it still end in "CO".
+    // company only when taking off a place leaves the words up to it whole.
     ['JANE DOE CO BI-WEEKLY PAY', 'INCOME_SALARY'],
     ['JANE DOE CO PAY', 'INCOME_SALARY'],
     ['JANE DOE CO DES:PAY ID:1', 'INCOME_SALARY'],
@@ -126,10 +126,18 @@ describe('the payers the profile names', () => {
     ['JANE DOE CO SALARY 15', 'INCOME_SALARY'],
     ['Transfer from Jane Doe Co bi-weekly pay', 'INCOME_SALARY'],
     ['From Jane Doe Co payroll bonus', 'INCOME_SALARY'],
+    // A second "CO" later in the line, which a place taken off would leave
+    // the person's own "CO" behind.
+    ['JANE DOE CO ACH CO PAYROLL', null],
+    ['JOHN SMITH DENVER CO ACH CO PAYROLL', null],
+    // A surname that is also a business word ("MILLS") keeps its "CO" a state.
+    ['JOHN MILLS CO PAYROLL', null],
+    ['JANE MARKET CO PAYROLL', 'INCOME_SALARY'],
+    ['JANE ANN MILLS CO DIR DEP', null],
   ]
 
-  /** Five biweekly paychecks of $1,500 under the given bank text and code, and the profile they make. */
-  async function paidBy(name: string, detailed: string | null = null) {
+  /** Five biweekly paychecks of $1,500 under the given bank text, code and merchant name, and the profile they make. */
+  async function paidBy(name: string, detailed: string | null = null, merchantName?: string) {
     const checking = await insertBankAccount(ctx.db, { subtype: 'checking', balanceCents: 300_000 })
     for (const date of ['2026-09-04', '2026-09-18', '2026-10-02', '2026-10-16', '2026-10-30']) {
       await insertBankTransaction(ctx.db, checking.accountId, {
@@ -137,6 +145,7 @@ describe('the payers the profile names', () => {
         name,
         amountCents: -150_000,
         detailed,
+        merchantName,
       })
     }
     return profile()
@@ -154,9 +163,29 @@ describe('the payers the profile names', () => {
       expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
       const { digest } = await call('get_financial_profile')
       expect(digest).toContain('Pay: every 2 weeks since Sep 4, about $1,500 each')
-      expect(digest).not.toMatch(/john|smith|jane|doe|denver|dir dep/i)
+      expect(digest).not.toMatch(/john|smith|jane|doe|mills|market|denver|dir dep/i)
     },
   )
+
+  // Plaid's merchant name for a person is read as carefully as the bank's text.
+  it.each([
+    ['JOHN SMITH DIR DEP', 'Jane Doe Co'],
+    ['JANE DOE PAYROLL', 'John Mills Co'],
+    ['JOHN SMITH DIR DEP', 'John Smith Denver CO'],
+    // A business in the bank's text never vouches for the name shown.
+    ['ACME CORP PAYROLL', 'Jane Doe'],
+  ])('never names a person by the merchant name Plaid gave: %s, %s', async (name, merchant) => {
+    const result = await paidBy(name, 'INCOME_SALARY', merchant)
+    expect(result.pay).toMatchObject({ cadence: 'biweek', employer: null })
+    expect(result.pay.employers.map((employer) => employer.name)).toEqual([null])
+    const { digest } = await call('get_financial_profile')
+    expect(digest).not.toMatch(/john|smith|jane|doe|mills|denver|dir dep/i)
+  })
+
+  it('still names a business by the merchant name Plaid gave', async () => {
+    const result = await paidBy('DIRECT DEP', 'INCOME_SALARY', 'Initech LLC')
+    expect(result.pay.employer).toBe('Initech LLC')
+  })
 
   it('still names a business paying through the same ACH line', async () => {
     const result = await paidBy(
