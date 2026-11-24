@@ -101,7 +101,8 @@
   box-shadow: var(--elev-2), var(--hi);
   overflow: hidden;
   transform-origin: bottom right;
-  animation: ask-box-grow var(--duration-quick) var(--ease-out) both;
+  /* Not held once grown, so the box is at rest (no running animation) after. */
+  animation: ask-box-grow var(--duration-quick) var(--ease-out) backwards;
 }
 
 /* A phone: nearly the full width, and most of the height above the tab bar,
