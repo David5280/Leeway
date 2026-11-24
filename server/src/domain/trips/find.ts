@@ -113,7 +113,7 @@ async function unclaimedTravel(
 /**
  * The calendar's occasions around today, merged and in the order they are
  * claimed in; null with no calendar linked, when trips stay out of sight
- * (Coming up, where they are listed, shows only with a calendar).
+ * (the six weeks ahead list them only with a calendar).
  */
 export async function spansAround(db: Db, today: IsoDate): Promise<EventSpan[] | null> {
   const { rowCount } = await db.query('SELECT 1 FROM calendar_feed')

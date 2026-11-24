@@ -109,16 +109,6 @@ export function planOf(
   }
 }
 
-/** Checking going below zero on Nov 24 before payday. */
-export const SHORT: NonNullable<PaycheckPlan['short']> = {
-  date: '2026-11-24',
-  now: false,
-  shortCents: 8_000,
-  coverCents: 10_000,
-  coverBy: '2026-11-23',
-  savingsCanCover: true,
-}
-
 interface PlaybookFacts {
   budgets?: Budgeted[] | null
   ideas?: LeftoverSuggestion[]

@@ -19,6 +19,10 @@ export const SCREEN_ROUTES = {
   /** Payday: will I make it to payday, and what's due before then? */
   payday: '/payday',
   bills: '/payday/bills',
+  /** Your pay: what Leeway found, confirm or change it, and what the paystub shows. */
+  pay: '/payday/pay',
+  /** The six weeks ahead: paydays, bills and calendar events, week by week. */
+  sixWeeks: '/payday/six-weeks',
   /** Goals: am I on track for what I'm saving for? */
   goals: '/goals',
   /** One trip, by its first and last day. */
@@ -97,6 +101,8 @@ export const paths = {
   payday: () => SCREEN_ROUTES.payday,
   /** Bills and subscriptions, opened onto one bill's form when given its id. */
   bills: (billId?: string) => withQuery(SCREEN_ROUTES.bills, billId ? { bill: billId } : {}),
+  pay: () => SCREEN_ROUTES.pay,
+  sixWeeks: () => SCREEN_ROUTES.sixWeeks,
   /** Goals, with a query that can open a new goal's form (see GoalsSection). */
   goals: (query?: Query) => withQuery(SCREEN_ROUTES.goals, query),
   trip: (startsOn: string, endsOn: string) =>
@@ -124,7 +130,7 @@ const PLAN_SECTIONS: Record<string, () => string> = {
   debts: paths.debts,
   'net-worth': paths.wealth,
   retirement: paths.retirement,
-  ahead: paths.payday,
+  ahead: paths.sixWeeks,
 }
 
 /** The new home of an old Plan section, by the section's name in the old address. */

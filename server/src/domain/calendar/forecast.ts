@@ -1,7 +1,7 @@
-// The weeks ahead with a calendar linked: paydays, bills due, and the events
-// likely to cost money, each with an amount to set aside when past events of
-// the same kind show what they usually cost. A trip with a trip budget is
-// saved for by the budget's goal, so it suggests nothing more.
+// The weeks ahead: paydays and bills due, and with a calendar linked the
+// events likely to cost money, each with an amount to set aside when past
+// events of the same kind show what they usually cost. A trip with a trip
+// budget is saved for by the budget's goal, so it suggests nothing more.
 
 import type { Db } from '../../db/pool.js'
 import { addDays, maxDate, type IsoDate } from '../../lib/dates.js'
@@ -195,18 +195,25 @@ async function billItems(db: Db, today: IsoDate, to: IsoDate): Promise<ForecastI
   )
 }
 
-/** The forecast, or nothing when no calendar is linked: it then stays out of the way. */
+/**
+ * The forecast. Paydays and bills need no calendar, so they are always
+ * there; events are read only while a calendar is linked.
+ */
 export async function getForecast(db: Db, settings: Settings, today: IsoDate): Promise<Forecast> {
   const { rows } = await db.query<{ read_note: string | null }>(
     'SELECT read_note FROM calendar_feed',
   )
   const feed = rows[0]
-  if (!feed) return { connected: false, today, weeks: [], note: null }
   const to = addDays(today, FORECAST_WEEKS * 7 - 1)
   const items = [
     ...(await paydayItems(db, settings, today, to)),
     ...(await billItems(db, today, to)),
-    ...(await eventItems(db, today, to)),
+    ...(feed ? await eventItems(db, today, to) : []),
   ]
-  return { connected: true, today, weeks: intoWeeks(items, today), note: feed.read_note }
+  return {
+    connected: feed !== undefined,
+    today,
+    weeks: intoWeeks(items, today),
+    note: feed?.read_note ?? null,
+  }
 }

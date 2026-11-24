@@ -73,7 +73,7 @@ export const getForecastAction = defineAction({
   name: 'get_forecast',
   title: 'The weeks ahead',
   description:
-    'Six weeks ahead, week by week: paydays, bills due and calendar events likely to cost money, with an amount to set aside where past events show one. Empty with no calendar linked.',
+    'Six weeks ahead, week by week: paydays, bills due and calendar events likely to cost money (only with a calendar linked), with an amount to set aside where past events show one.',
   input: z.object({}),
   scope: 'read',
   surface: 'app',

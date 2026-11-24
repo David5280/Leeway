@@ -1,11 +1,11 @@
-// Coming up: the next six weeks with a calendar linked, week by week, with
-// paydays, bills due and the events likely to cost money, each with what to
-// set aside where past ones show it. A bill opens its own form; a trip opens
+// The six weeks ahead, week by week: paydays and bills due, and with a
+// calendar linked the events likely to cost money, each with what to set
+// aside where past ones show it. A bill opens its own form; a trip opens
 // its page, where its budget is planned; any other event opens a purchase
 // goal to save for it, unless nothing is left to set aside.
 // Weeks with nothing in them fold into one quiet line. Recent and coming
-// trips follow, each opening its own page. Shown in Plan only while a
-// calendar is linked.
+// trips follow, each opening its own page. Its own page a tap deeper from
+// Payday (SixWeeks.tsx); Payday's next two weeks share its rows.
 
 import { Link } from 'react-router-dom'
 import type { Forecast, ForecastItem } from '../../api/client'
@@ -104,7 +104,8 @@ function BillRow({ bill, today }: { bill: Bill; today: string }) {
   )
 }
 
-function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
+/** One payday, bill or event, as both the six weeks and Payday's next two weeks list it. */
+export function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
   const { settings } = useApp()
   if (item.type === 'event') return <EventRow event={item} today={today} />
   if (item.type === 'bill') return <BillRow bill={item} today={today} />
@@ -121,7 +122,7 @@ function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
  * an event by the server's own id for it, since two of one kind can share a
  * day (two friends' birthdays).
  */
-function itemKey(item: ForecastItem): string {
+export function itemKey(item: ForecastItem): string {
   if (item.type === 'payday') return `payday ${item.date}`
   if (item.type === 'bill') return `bill ${item.billId} ${item.date}`
   return `event ${item.id}`

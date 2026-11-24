@@ -115,7 +115,7 @@ describe('the old Plan sections', () => {
     ['debts', '/wealth/debts'],
     ['net-worth', '/wealth'],
     ['retirement', '/wealth/retirement'],
-    ['ahead', '/payday'],
+    ['ahead', '/payday/six-weeks'],
   ])('send %s to %s', (section, home) => {
     expect(planSectionHome(section)).toBe(home)
   })

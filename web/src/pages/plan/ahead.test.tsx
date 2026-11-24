@@ -1,40 +1,38 @@
-// Coming up on Payday: shown only with a calendar linked, after the payday
-// section and the cash until payday, with the weeks ahead and trips.
+// The six weeks ahead, a tap deeper from Payday: paydays and bills week by
+// week, events too with a calendar linked, then trips.
 
 import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastItem } from '../../api/client'
 import { failing, holdRequest } from '../../test/fake'
-import { forecastOf, INCOMPLETE, ITEMS, linked, tripSummary, unlinked } from '../../test/calendar'
-import { noPay } from '../../test/pay'
+import { forecastOf, INCOMPLETE, ITEMS, tripSummary } from '../../test/calendar'
 import { planServer, renderPlanning } from '../../test/planning'
+import { paths } from '../../routes'
 
 afterEach(() => vi.unstubAllGlobals())
 
-const quietBills = {
-  list_bills: () => ({ bills: [], monthlyCents: 0, subscriptionsMonthlyCents: 0 }),
-  list_categories: () => [],
-  find_recurring: () => [],
-}
-
-describe('Coming up', () => {
-  it('stays out of sight with no calendar linked', async () => {
-    const server = planServer({
-      ...quietBills,
-      get_pay: () => noPay,
-      calendar_status: () => unlinked,
+describe('Six weeks ahead', () => {
+  it('lists paydays and bills with no calendar linked, under a way back to Payday', async () => {
+    const paydayAndRent = ITEMS.filter((item) => item.type !== 'event')
+    planServer({
+      get_forecast: () => ({ ...forecastOf(paydayAndRent), connected: false }),
     })
-    renderPlanning('/payday')
-    expect(await screen.findByText(/has not found a paycheck yet/)).toBeVisible()
-    await screen.findByRole('region', { name: 'Until payday' })
-    expect(server.actions('calendar_status')).toHaveLength(1)
-    expect(screen.queryByRole('region', { name: 'Coming up' })).not.toBeInTheDocument()
-    expect(server.actions('get_forecast')).toHaveLength(0)
+    renderPlanning(paths.sixWeeks())
+    expect(screen.getByRole('heading', { level: 1, name: 'Six weeks ahead' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Payday', current: false })).toHaveAttribute(
+      'href',
+      '/payday',
+    )
+    expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
+      'PaydayFri, Nov 20+$2,500',
+    )
+    expect(screen.getByRole('region', { name: 'Next week' })).toHaveTextContent(
+      'RentDue Wed, Nov 25$1,500',
+    )
   })
 
   it('lays out the weeks ahead, with what to set aside and trips opening their page', async () => {
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () => forecastOf(ITEMS),
       list_trips: () => [
         tripSummary({ goalId: 'g1' }),
@@ -47,13 +45,8 @@ describe('Coming up', () => {
         }),
       ],
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     const thisWeek = await screen.findByRole('region', { name: 'This week' })
-    // It comes last on Payday, after the cash until payday.
-    const comingUp = screen.getByRole('region', { name: 'Coming up' })
-    const untilPayday = screen.getByRole('region', { name: 'Until payday' })
-    expect(untilPayday.compareDocumentPosition(comingUp)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(within(comingUp).getByRole('heading', { name: 'Coming up' })).toBeInTheDocument()
     expect(thisWeek).toHaveTextContent('PaydayFri, Nov 20+$2,500')
     const nextWeek = screen.getByRole('region', { name: 'Next week' })
     expect(nextWeek).toHaveTextContent('$1,500 in bills')
@@ -89,8 +82,8 @@ describe('Coming up', () => {
   })
 
   it('opens a bill’s own form, a trip’s page, and a purchase to save for an event', async () => {
-    planServer({ calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) })
-    renderPlanning('/payday')
+    planServer({ get_forecast: () => forecastOf(ITEMS) })
+    renderPlanning(paths.sixWeeks())
     const rent = await screen.findByRole('link', { name: /Rent/ })
     expect(rent).toHaveAttribute('href', '/payday/bills?bill=b1')
     // A trip is saved for on its page, by its budget: before, it opened a second "Trip" goal.
@@ -104,13 +97,12 @@ describe('Coming up', () => {
       '/goals?new=purchase&name=Birthday+gift&by=2026-12-01&price=6000',
     )
     // A payday has nothing to open.
-    const comingUp = within(screen.getByRole('region', { name: 'Coming up' }))
-    expect(comingUp.queryByRole('link', { name: /Payday/ })).not.toBeInTheDocument()
+    const thisWeek = within(screen.getByRole('region', { name: 'This week' }))
+    expect(thisWeek.queryByRole('link', { name: /Payday/ })).not.toBeInTheDocument()
   })
 
   it('leads the first week with a bill overdue, said as overdue', async () => {
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () =>
         forecastOf([
           ITEMS[0]!,
@@ -124,7 +116,7 @@ describe('Coming up', () => {
           },
         ]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     const thisWeek = await screen.findByRole('region', { name: 'This week' })
     expect(thisWeek).toHaveTextContent('PhoneOverdue since Nov 10$60.00PaydayFri, Nov 20')
     expect(within(thisWeek).getByText('Overdue since Nov 10')).toHaveClass('over')
@@ -133,7 +125,6 @@ describe('Coming up', () => {
   it('folds weeks in a row with nothing in them into one quiet line', async () => {
     const error = vi.spyOn(console, 'error')
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () =>
         forecastOf([
           ITEMS[0]!,
@@ -142,7 +133,7 @@ describe('Coming up', () => {
           { ...(ITEMS[4] as Extract<ForecastItem, { type: 'event' }>), id: 'comedy-2' },
         ]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
     expect(screen.getByRole('region', { name: 'Nothing due Nov 24 to Dec 14' })).toHaveTextContent(
       'Nothing due Nov 24 to Dec 14.',
@@ -157,14 +148,13 @@ describe('Coming up', () => {
     const error = vi.spyOn(console, 'error')
     const birthday = ITEMS[2] as Extract<ForecastItem, { type: 'event' }>
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () =>
         forecastOf([
           { ...birthday, id: 'alice 2026-12-01', title: "Alice's birthday" },
           { ...birthday, id: 'bob 2026-12-01', title: "Bob's birthday" },
         ]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     const week = await screen.findByRole('region', { name: 'Week of Dec 1' })
     expect(week).toHaveTextContent('$120 to set aside')
     const rows = within(week).getAllByRole('link')
@@ -177,30 +167,15 @@ describe('Coming up', () => {
     error.mockRestore()
   })
 
-  it('shows the rest of Payday while the calendar is asked, then adds the weeks', async () => {
-    planServer({
-      ...quietBills,
-      calendar_status: () => linked(),
-      get_forecast: () => forecastOf(ITEMS),
-    })
-    const answer = holdRequest('/api/actions/calendar_status')
-    renderPlanning('/payday')
-    expect(await screen.findByRole('region', { name: 'Until payday' })).toBeVisible()
-    expect(screen.queryByRole('region', { name: 'Coming up' })).not.toBeInTheDocument()
-    answer()
-    expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
-  })
-
   it('says when there are no trips, and shows bills and set-asides in one week together', async () => {
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () =>
         forecastOf([
           { type: 'bill', date: '2026-11-18', billId: 'b', name: 'Phone', amountCents: 6000 },
           { ...ITEMS[2]!, date: '2026-11-19', endsOn: '2026-11-19' } as (typeof ITEMS)[number],
         ]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     expect(await screen.findByRole('region', { name: 'This week' })).toHaveTextContent(
       '$60 in bills, $60 to set aside',
     )
@@ -210,10 +185,9 @@ describe('Coming up', () => {
   it('shows no amount and no goal link for an event with nothing left to set aside', async () => {
     const birthday = ITEMS[2] as Extract<ForecastItem, { type: 'event' }>
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () => forecastOf([{ ...birthday, suggestedCents: 0 }]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     const week = await screen.findByRole('region', { name: 'Week of Dec 1' })
     expect(week).toHaveTextContent("Sam's birthdayBirthday, Tue, Dec 1. Nothing left to set aside")
     expect(week).not.toHaveTextContent('$0')
@@ -224,10 +198,9 @@ describe('Coming up', () => {
   it('says a trip with a budget is planned, with nothing more to set aside', async () => {
     const lisbon = ITEMS[3] as Extract<ForecastItem, { type: 'event' }>
     planServer({
-      calendar_status: () => linked(),
       get_forecast: () => forecastOf([{ ...lisbon, suggestedCents: 0, budgeted: true }]),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     const week = await screen.findByRole('region', { name: 'Week of Dec 8' })
     expect(week).toHaveTextContent('Lisbon tripTrip, Dec 10 to Dec 14. Trip budget planned')
     expect(week).not.toHaveTextContent('set aside')
@@ -239,10 +212,9 @@ describe('Coming up', () => {
 
   it('notes quietly when some repeating events were left out of the weeks', async () => {
     planServer({
-      calendar_status: () => linked({ note: INCOMPLETE }),
       get_forecast: () => forecastOf(ITEMS, INCOMPLETE),
     })
-    renderPlanning('/payday')
+    renderPlanning(paths.sixWeeks())
     await screen.findByText('No recent or coming trips.')
     const note = screen.getByRole('status')
     expect(note).toHaveTextContent(INCOMPLETE)
@@ -251,30 +223,26 @@ describe('Coming up', () => {
   })
 
   it('notes nothing when every event was read', async () => {
-    planServer({ calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) })
-    renderPlanning('/payday')
+    planServer({ get_forecast: () => forecastOf(ITEMS) })
+    renderPlanning(paths.sixWeeks())
     await screen.findByRole('region', { name: 'This week' })
     expect(screen.queryByText(INCOMPLETE)).not.toBeInTheDocument()
   })
 
   it('says why the weeks ahead could not be read', async () => {
-    planServer(
-      { calendar_status: () => linked() },
-      { '/api/actions/get_forecast': failing('Forecast broke', 500) },
-    )
-    renderPlanning('/payday')
-    const comingUp = await screen.findByRole('region', { name: 'Coming up' })
-    expect(await within(comingUp).findByRole('alert')).toHaveTextContent('Forecast broke')
+    planServer({}, { '/api/actions/get_forecast': failing('Forecast broke', 500) })
+    renderPlanning(paths.sixWeeks())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Forecast broke')
   })
 
   it('shows the weeks while trips load, and when trips could not be read', async () => {
     planServer(
-      { calendar_status: () => linked(), get_forecast: () => forecastOf(ITEMS) },
+      { get_forecast: () => forecastOf(ITEMS) },
       { '/api/actions/list_trips': failing('Trips broke', 500) },
     )
     const answer = holdRequest('/api/actions/list_trips')
-    renderPlanning('/payday')
-    // Before, Coming up waited on trips, and failed whole with them.
+    renderPlanning(paths.sixWeeks())
+    // Before, the weeks waited on trips, and failed whole with them.
     expect(await screen.findByRole('region', { name: 'This week' })).toBeVisible()
     const trips = within(screen.getByRole('region', { name: 'Trips' }))
     expect(trips.getByText('Loading trips')).toBeInTheDocument()

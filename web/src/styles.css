@@ -2120,6 +2120,11 @@ details.more[open] summary {
   stroke-width: 2;
 }
 
+/* The day a line first goes below where it should stay, such as cash under $0. */
+.chart-dot.problem {
+  fill: var(--tone-problem);
+}
+
 /* The goal timeline (GoalTimeline.tsx): a quiet track, the pace drawn in the goal's color. */
 
 .timeline-track {

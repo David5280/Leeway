@@ -1,4 +1,4 @@
-// The below zero warning on "Will the cash last until payday?": when checking
+// The below zero warning on Payday's cash until payday: when checking
 // first goes below $0 and the move that would cover it, worked out by the
 // server's own math (belowZero.ts) from the same cash flow the card shows.
 // Red only for a real problem. Every name is made up.
@@ -65,7 +65,7 @@ describe('Below zero before payday', () => {
     }
     const card = await show(cashFlow(shortForRent(guess), [RAINY_DAY]))
     expect(within(warningIn(card)!).getByText(/goes below/)).toHaveClass('warn')
-    expect(within(card).getByText('$200', { selector: '.mid-number' })).toHaveClass('money-warn')
+    expect(card.querySelector('p.over')).not.toBeInTheDocument()
   })
 
   it('is red, and asks for the move today, when checking is below $0 already', async () => {

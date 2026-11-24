@@ -1,9 +1,10 @@
-// The payday playbook (playbook/ on the server), at the top of Payday,
-// general to detailed: what was left of the last paycheck, ideas for that
-// leftover, then what the new paycheck covers before the next payday. Each
-// card opens its math. Checking running low gets one line that opens the
-// Bills section, where the full warning lives, and what is set aside is only
-// totalled here because the Goals tab explains it. The playbook only
+// The payday playbook (playbook/ on the server), Payday's lead: this
+// paycheck, pay minus the bills before payday minus what is set aside, which
+// is the everyday budget for it. On payday (the few days after one lands)
+// the close-out leads instead: what was left of the last paycheck and ideas
+// for it, then this paycheck. Each card opens its math. What is set aside is
+// only totalled here because the Goals tab explains it, and whether checking
+// dips before payday is the cash line's job, just below. The playbook only
 // suggests: Leeway never moves money.
 
 import type { CloseOut, LeftoverSuggestion, Playbook as PlaybookView } from '../../../api/client'
@@ -22,7 +23,6 @@ import {
   ideaReason,
   leftoverLabel,
   leftoverTone,
-  shortClass,
   SUGGESTIONS_ONLY,
 } from './playbookText'
 
@@ -87,7 +87,7 @@ function LeftoverIdeas({ ideas, leftover }: { ideas: LeftoverSuggestion[]; lefto
   )
 }
 
-/** The big figure: what the paycheck leaves for everyday spending, or safe to spend without pay. */
+/** The big figure: the everyday budget this paycheck leaves, or safe to spend without pay. */
 function PlanFigure({ playbook }: { playbook: PlaybookView }) {
   const { settings } = useApp()
   const { plan } = playbook
@@ -97,21 +97,16 @@ function PlanFigure({ playbook }: { playbook: PlaybookView }) {
       <KeyFigure
         label="Safe to spend now"
         cents={plan.safeToSpendCents}
-        caption={<>Add your pay below to see what each paycheck leaves before {payday}.</>}
+        caption={<>Add your pay under Your pay to see what each paycheck leaves before {payday}.</>}
       />
     )
   }
   return (
     <KeyFigure
-      label="Left for everyday spending"
+      label="Your everyday budget"
       cents={plan.leftCents}
       tone={plan.leftCents < 0 ? 'warn' : 'neutral'}
-      caption={
-        <>
-          Your paycheck of <Money cents={plan.paycheckCents} tone="in" />, after what is due before{' '}
-          {payday}.
-        </>
-      }
+      caption={<>For this paycheck, until payday {payday}.</>}
     />
   )
 }
@@ -131,44 +126,21 @@ function ThisPaycheck({ playbook }: { playbook: PlaybookView }) {
 }
 
 /**
- * Checking running low before payday, in one line. The full warning, with what
- * would cover it, is in the Until payday card just below on the same page.
+ * The lead: this paycheck, or on payday the close-out first. Between paydays
+ * the last period is old news, so it stays out of the way.
  */
-function ShortCash({ playbook }: { playbook: PlaybookView }) {
-  const { settings } = useApp()
-  const short = playbook.plan.short
-  if (!short) return null
-  const zero = <Money cents={0} />
-  return (
-    <Card static="words" label="Cash before payday" className="stack-xs">
-      <p className={`small ${shortClass(playbook)}`}>
-        {short.now ? (
-          <>Checking is already below {zero}.</>
-        ) : (
-          <>
-            Checking may go below {zero} on <b>{shortDate(short.date, settings.locale)}</b>, before
-            payday.
-          </>
-        )}
-      </p>
-      <p className="small muted">What would cover it is just below, under Until payday.</p>
-    </Card>
-  )
-}
-
-/** The playbook's cards, each only when it has something to say. */
 export function Playbook() {
   const playbook = usePaydayPlaybook()
   if (!playbook.data) return <LoadingOrError error={playbook.error} label="Loading your plan" />
   const data = playbook.data
-  const leftover = data.closeOut?.leftoverCents ?? 0
+  const closeOut = data.justPaid && hasCloseOut(data.closeOut) ? data.closeOut : null
+  const leftover = closeOut?.leftoverCents ?? 0
   const ideas = leftover > 0 && data.suggestions.length > 0
   return (
     <>
-      {hasCloseOut(data.closeOut) && <LastPaycheck closeOut={data.closeOut} ideas={ideas} />}
+      {closeOut && <LastPaycheck closeOut={closeOut} ideas={ideas} />}
       {ideas && <LeftoverIdeas ideas={data.suggestions} leftover={leftover} />}
       <ThisPaycheck playbook={data} />
-      <ShortCash playbook={data} />
     </>
   )
 }

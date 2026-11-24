@@ -2,7 +2,7 @@
 // things to do) against its budget when one was planned, and the
 // transactions that make it up, each opening its sheet. A trip still ahead
 // offers to plan its budget, or to change the one planned. Every state, an
-// error or a trip not found included, leads back to Coming up.
+// error or a trip not found included, leads back to Goals.
 
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'

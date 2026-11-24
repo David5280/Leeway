@@ -60,7 +60,11 @@ test.describe('cash that could earn more', () => {
     await page.goto('/payday')
     const cash = page.getByRole('region', { name: 'Until payday' })
     await expect(cash).toContainText(`${dollars(idle.checkingCents)} in checking`)
-    await expect(cash).toContainText(`${dollars(idle.billsCents)} in bills`)
+    // The bills behind it are in the card's math.
+    await cash.getByRole('button', { name: /Cash until payday/ }).click()
+    await expect(page.getByRole('dialog', { name: 'Until payday' })).toContainText(
+      dollars(idle.billsCents),
+    )
 
     // Wealth leads to it a tap deeper.
     await page.goto('/wealth')

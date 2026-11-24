@@ -1,5 +1,5 @@
-// The Payday section's pay card: what Leeway found, the one-tap confirm, and
-// the owner's own pay in its place.
+// Your pay, a tap deeper from Payday: what Leeway found, the one-tap
+// confirm, and the owner's own pay in its place.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,6 +8,7 @@ import type { PayView } from '../../../api/client'
 import { failing } from '../../../test/fake'
 import { noPay, payView } from '../../../test/pay'
 import { planServer, renderPlanning } from '../../../test/planning'
+import { paths } from '../../../routes'
 import { JOB_STOPPED_NOTE } from './payText'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -16,7 +17,7 @@ const yours = { amountCents: 250_000, cadence: 'semimonth' as const, nextPayday:
 
 function show(view: PayView, more: Parameters<typeof planServer>[0] = {}) {
   const server = planServer({ get_pay: () => view, ...more })
-  renderPlanning('/payday')
+  renderPlanning(paths.pay())
   return { server, user: userEvent.setup() }
 }
 
@@ -207,7 +208,7 @@ describe('Your pay', () => {
 
   it('shows why the pay could not load', async () => {
     planServer({}, { '/api/actions/get_pay': failing('Server is down', 500) })
-    renderPlanning('/payday')
+    renderPlanning(paths.pay())
     expect(await screen.findByText('Server is down')).toBeVisible()
   })
 })

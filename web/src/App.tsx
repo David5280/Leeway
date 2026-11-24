@@ -26,10 +26,12 @@ import { Overview } from './pages/Overview'
 import { Payday } from './pages/Payday'
 import { RetirementPage } from './pages/Retirement'
 import { SettingsPage } from './pages/Settings'
+import { SixWeeksPage } from './pages/SixWeeks'
 import { Setup } from './pages/Setup'
 import { Transactions } from './pages/Transactions'
 import { TripPage } from './pages/Trip'
 import { Wealth } from './pages/Wealth'
+import { YourPayPage } from './pages/YourPay'
 import { CONNECT_ROUTES, OLD_ROUTES, paths, SCREEN_ROUTES } from './routes'
 
 /** The old addresses by name, each sent on to its new home (pages/OldAddresses.tsx). */
@@ -50,6 +52,8 @@ function Screens() {
       <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
       <Route path={SCREEN_ROUTES.payday} element={<Payday />} />
       <Route path={SCREEN_ROUTES.bills} element={<BillsPage />} />
+      <Route path={SCREEN_ROUTES.pay} element={<YourPayPage />} />
+      <Route path={SCREEN_ROUTES.sixWeeks} element={<SixWeeksPage />} />
       <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
       <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
       <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />

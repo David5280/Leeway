@@ -1,7 +1,7 @@
 // The goal form as Goals opens it: on an existing goal, on a new goal of a
 // kind, or on a new purchase started from a link or from the afford check.
 // "/goals?new=purchase" opens straight onto a new purchase, which is how the
-// overview's "Save for a purchase" link gets here; Coming up adds the event's
+// overview's "Save for a purchase" link gets here; the weeks ahead add the event's
 // name, price and day (&name=, &price= in cents, &by=) to start from.
 
 import { useState } from 'react'
