@@ -6,6 +6,7 @@
 
 import { expect, test } from '@playwright/test'
 import { askStarter, openChat, pretendChatOn } from './chat'
+import { stillOn } from './screen'
 
 test('is hidden entirely without an AI key', async ({ page }) => {
   await page.goto('/')
@@ -30,7 +31,9 @@ test('with a key, it opens in the corner of any screen and answers a starter', a
     'Ask about Payday',
   )
   await expect(page).toHaveURL(/\/payday$/)
-  // About 400px wide, anchored to the bottom right, inside the window.
+  // About 400px wide, anchored to the bottom right, inside the window, once
+  // it has swung open: mid-turn its bounding box is wider than at rest.
+  await stillOn(box)
   const opened = (await box.boundingBox())!
   const screenSize = page.viewportSize()!
   expect(opened.width).toBeLessThanOrEqual(400)
