@@ -24,6 +24,7 @@ import { CHAT_SYSTEM, chatContext } from './prompt.js'
 import { withAskedFrom, type ScreenContext } from './screen.js'
 import { chatSnapshot } from './snapshotCache.js'
 import { chatToolList, runChatTool, toolTitle } from './tools.js'
+import { chatScreen } from './toolOutput.js'
 
 /** The most calls one question makes: a few looks at the data, then the answer. */
 export const MAX_STEPS = 6
@@ -45,7 +46,8 @@ export type ChatEvent =
   | { type: 'done'; question: ChatMessage; answer: ChatMessage }
   /** The owner started over while this was answered, so the exchange was not kept. */
   | { type: 'cleared' }
-  | { type: 'error'; message: string }
+  /** `limit` marks a spending limit reached: a pause the owner waits out, not a problem. */
+  | { type: 'error'; message: string; limit?: true }
 
 export type Emit = (event: ChatEvent) => void
 
@@ -107,7 +109,7 @@ export async function openTurn(
       try {
         await answer({ ctx, ai, settings, onError, askedFrom }, question, emit)
       } catch (error) {
-        emit({ type: 'error', message: failureMessage(error, onError) })
+        emit(failureEvent(error, onError))
       } finally {
         releaseAnswering(ctx.db)
       }
@@ -135,7 +137,11 @@ async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
   const snapshot = await chatSnapshot(ctx, settings, today, people, turn.onError)
   const context = chatContext(today, settings.currency, facts, snapshot)
   // The screen opens this question's message only; the question alone is kept (saveExchange).
-  const asked: AiMessage = { role: 'user', text: withAskedFrom(question, askedFrom) }
+  // Its screen and card names are the owner's labels, so names in them are hidden as in a tool result.
+  const asked: AiMessage = {
+    role: 'user',
+    text: withAskedFrom(question, chatScreen(askedFrom, people)),
+  }
   const messages: AiMessage[] = [...historyFor(past), asked]
   const steps: string[] = []
   let ending: string | null = null
@@ -196,9 +202,11 @@ async function takeStep(turn: Turn, talk: Conversation, emit: Emit): Promise<str
 }
 
 /** A failure as the owner should hear it; a bug goes to `onError` as well. */
-function failureMessage(error: unknown, onError: (error: unknown) => void): string {
-  if (error instanceof AiLimitError || error instanceof AppError) return error.message
-  if (error instanceof AiProviderError) return FAILURES[error.failure]
+function failureEvent(error: unknown, onError: (error: unknown) => void): ChatEvent {
+  // The monthly limit is checked on each call, so it can be reached partway through an answer.
+  if (error instanceof AiLimitError) return { type: 'error', message: error.message, limit: true }
+  if (error instanceof AppError) return { type: 'error', message: error.message }
+  if (error instanceof AiProviderError) return { type: 'error', message: FAILURES[error.failure] }
   onError(error)
-  return SOMETHING_WRONG
+  return { type: 'error', message: SOMETHING_WRONG }
 }
