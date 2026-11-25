@@ -6,7 +6,7 @@ import { Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OLD_ROUTES } from '../routes'
 import { renderPlain } from '../test/fake'
-import { Moved, NEW_HOMES } from './OldAddresses'
+import { Moved, NEW_HOMES, useSelectedAccount } from './OldAddresses'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -39,10 +39,13 @@ const address = () => screen.getByLabelText('Address').textContent
 
 describe('an old address', () => {
   it.each([
-    ['/accounts', '/wealth'],
-    ['/accounts?select=acct-1', '/wealth?select=acct-1'],
-    ['/accounts/acct-1', '/wealth/accounts/acct-1'],
-    ['/accounts/a%20b', '/wealth/accounts/a%20b'],
+    ['/accounts', '/'],
+    // Home sends a link that picked one account on to its page.
+    ['/accounts?select=acct-1', '/?select=acct-1'],
+    ['/wealth/accounts/acct-1', '/accounts/acct-1'],
+    ['/wealth/accounts/a%20b', '/accounts/a%20b'],
+    ['/wealth/accounts/acct-1?range=all#recent', '/accounts/acct-1?range=all#recent'],
+    ['/wealth/compare', '/accounts/compare'],
     ['/transactions', '/spending/activity'],
     [
       '/transactions?account=acct-1&range=all&merchant=tx-9',
@@ -92,5 +95,31 @@ describe('an old address', () => {
 
   it('has a new home for every old address', () => {
     expect(Object.keys(NEW_HOMES).sort()).toEqual(Object.keys(OLD_ROUTES).sort())
+  })
+})
+
+describe('an old link that picked one account', () => {
+  /** Where Home or Wealth would send the address it is opened at. */
+  function Picked() {
+    return <output aria-label="Goes to">{useSelectedAccount() ?? 'nowhere'}</output>
+  }
+  const goesTo = (route: string) => {
+    renderPlain(
+      <Routes>
+        <Route path="*" element={<Picked />} />
+      </Routes>,
+      route,
+    )
+    return screen.getAllByLabelText('Goes to').at(-1)!.textContent
+  }
+
+  it("goes to that account's own page, its id kept to its own part of the address", () => {
+    expect(goesTo('/?select=acct-1')).toBe('/accounts/acct-1')
+    expect(goesTo('/wealth?select=a%2Fb')).toBe('/accounts/a%2Fb')
+  })
+
+  it('leaves every other address where it is', () => {
+    expect(goesTo('/')).toBe('nowhere')
+    expect(goesTo('/wealth?select=')).toBe('nowhere')
   })
 })

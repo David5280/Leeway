@@ -4,7 +4,15 @@
 import type { Budget } from '../api/client'
 import { Icon, Segmented } from '../components/ui'
 import { arrange, type Band } from './arrange'
-import { canMove, changeWidget, moveWidget, SIZES, WIDGET_LIBRARY, type Widget } from './library'
+import {
+  canMove,
+  changeWidget,
+  moveWidget,
+  showWidget,
+  SIZES,
+  WIDGET_LIBRARY,
+  type Widget,
+} from './library'
 
 interface BoardProps {
   /** The full saved list, the fixed Leeway and Heads up included. */
@@ -130,7 +138,7 @@ function Tools({
       <button
         type="button"
         className="btn small"
-        onClick={() => save(changeWidget(all, widget.type, { visible: !widget.visible }))}
+        onClick={() => save(showWidget(all, widget.type, !widget.visible))}
       >
         {widget.visible ? 'Hide' : 'Show'}
       </button>

@@ -153,7 +153,8 @@ describe('the lit tab', () => {
     ['/spending/cat-1', 'Spending'],
     ['/payday/bills', 'Payday'],
     ['/goals/trips/2026-12-10/2026-12-14', 'Goals'],
-    ['/wealth/accounts/acct-1', 'Wealth'],
+    ['/accounts/acct-1', 'Home'],
+    ['/wealth/debts', 'Wealth'],
   ])('on %s is %s, marked as the current page', (route, label) => {
     renderShell(route)
     const current = mainMenu()

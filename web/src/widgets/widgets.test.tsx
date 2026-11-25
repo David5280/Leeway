@@ -185,8 +185,8 @@ describe('AlertsWidget', () => {
     await screen.findByText('Chase needs you to log in again to keep syncing.')
     const links = within(region()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/wealth/accounts/short',
-      '/wealth/accounts/low',
+      '/accounts/short',
+      '/accounts/low',
       '/settings/banks',
     ])
     expect(links[0]).toHaveTextContent('Overdrawn')
@@ -280,7 +280,7 @@ describe('AlertsWidget', () => {
       within(region())
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/wealth/accounts/low', '/settings/banks', '/spending/cat-dining-out'])
+    ).toEqual(['/accounts/low', '/settings/banks', '/spending/cat-dining-out'])
   })
 
   it('keeps the card, and focus in it, when a row is left after the last alert is hidden', async () => {

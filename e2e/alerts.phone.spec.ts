@@ -28,7 +28,7 @@ test('a tapped alert row stays inside its card and paints nothing once let go', 
     }
 
     // Alerts show on the account's own page only.
-    await page.goto(`/wealth/accounts/${id}`)
+    await page.goto(`/accounts/${id}`)
     const card = page.getByRole('region', { name: 'Alerts for this account' })
     const rows = card.getByRole('link')
     await expect(rows).toHaveCount(2)

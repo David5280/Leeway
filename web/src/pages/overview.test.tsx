@@ -1,18 +1,25 @@
 // Home as the map draws it: Leeway, then Heads up only when something needs
-// the owner, then one card per tab in the map's order, each opening its tab.
-// Leeway and Heads up stay first whatever the saved layout says. Editing the
-// cards is in overviewEditing.test.tsx.
+// the owner, then every account, the bills due by payday, the
+// latest activity and a row of the four tab cards in the map's order, each
+// opening its tab. Leeway and Heads up stay first whatever the saved layout
+// says. Editing the cards is in overviewEditing.test.tsx; what each block
+// holds is tested beside it in widgets/.
 
 import { screen, waitFor, within } from '@testing-library/react'
+import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, alertsFor, forgetWidgets, settings } from '../test/fake'
+import { SCREEN_ROUTES } from '../routes'
+import { account, alertsFor, forgetWidgets, renderSignedIn, settings } from '../test/fake'
 import { homeList } from '../test/homeAlerts'
 import { layout, renderHome, serveHome, shownCards } from '../test/overview'
+import { Overview } from './Overview'
 
 afterEach(() => vi.unstubAllGlobals())
 
-/** The tab cards by default, in the map's order. */
+/** The tab cards, in the map's order. */
 const TAB_CARDS = ['Cash to payday', 'Spending pace', 'Your top goal', 'Net worth']
+/** Home's cards by default, under Leeway and Heads up. */
+const DEFAULT_CARDS = ['Accounts', 'Due by payday', 'Latest activity', ...TAB_CARDS]
 
 const alerts = alertsFor([account({ id: 'a', name: 'Everyday', balanceCents: -4210 })])
 /** An overdrawn account, so Heads up has something to say. */
@@ -22,10 +29,10 @@ const somethingNeedsYou = {
 }
 
 describe('Home', () => {
-  it("leads with Leeway, then the four tab cards in the map's order", async () => {
+  it('leads with Leeway, then the accounts, bills, activity and the tab cards in order', async () => {
     serveHome()
     renderHome()
-    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', ...TAB_CARDS]))
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', ...DEFAULT_CARDS]))
     // Nothing needs the owner, so Heads up takes no room at all.
     expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
   })
@@ -34,7 +41,29 @@ describe('Home', () => {
     serveHome(settings, somethingNeedsYou)
     renderHome()
     await screen.findByText('Everyday is overdrawn by $42.10.')
-    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', 'Heads up', ...TAB_CARDS]))
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', 'Heads up', ...DEFAULT_CARDS]))
+  })
+
+  it('sets the four tab cards in one row of their own', async () => {
+    serveHome()
+    renderHome()
+    await waitFor(() => expect(document.querySelectorAll('.tab-row section')).toHaveLength(4))
+    const row = document.querySelector('.tab-row')!
+    for (const name of TAB_CARDS) {
+      expect(row).toContainElement(screen.getByRole('region', { name }))
+    }
+  })
+
+  it("sends an old link that picked one account to that account's page", async () => {
+    serveHome()
+    renderSignedIn(
+      <Routes>
+        <Route path={SCREEN_ROUTES.home} element={<Overview />} />
+        <Route path={SCREEN_ROUTES.account} element={<p>One account&apos;s page</p>} />
+      </Routes>,
+      { route: '/?select=acct-1' },
+    )
+    expect(await screen.findByText("One account's page")).toBeInTheDocument()
   })
 
   it('opens each tab from its card', async () => {

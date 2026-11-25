@@ -84,23 +84,23 @@ export const SCREENS: Screen[] = [
     before: ai.pretendSummaryModelGone,
     then: ai.seeSummaryModelGone,
   }),
-  at('wealth', '/wealth'),
-  at('compareAccounts', '/wealth/compare'),
-  at('owned', '/wealth/owned'),
-  at('savings', '/wealth/savings'),
-  // Each account's own page, named for its kind.
+  // Each account's own page, a tap deeper from Home, named for its kind.
   ...SEEDED_ACCOUNTS.map((kind, index) => ({
     ...at('account', `the ${kind} account page`),
-    path: (seeded: Seeded) => `/wealth/accounts/${seeded.accounts[index]}`,
+    path: (seeded: Seeded) => `/accounts/${seeded.accounts[index]}`,
   })),
   {
     name: "the credit card account page asking for the card's APR",
     route: 'account',
     path: (seeded: Seeded) =>
-      `/wealth/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
+      `/accounts/${seeded.accounts[SEEDED_ACCOUNTS.indexOf('credit card')]}`,
     // The seeded card has an APR; the prompt shows in its place without one.
     before: withoutAprs,
   },
+  at('compareAccounts', '/accounts/compare'),
+  at('wealth', '/wealth'),
+  at('owned', '/wealth/owned'),
+  at('savings', '/wealth/savings'),
   at('inbox', '/inbox'),
   ...TRANSACTION_SCREENS,
   at('importTransactions', '/spending/activity/import'),

@@ -29,6 +29,20 @@
   gap: var(--space-3);
 }
 
+/* A group's total drops under its title when both do not fit, so a narrow
+   phone never cuts the title short. */
+.acct-group .section-head {
+  flex-wrap: wrap;
+}
+
+.acct-group .section-head :is(h2, h3) {
+  flex: 1 0 auto;
+}
+
+.acct-group .section-aside {
+  margin-left: auto;
+}
+
 /* A line under a group's heading, like what the credit cards cost in
    interest: a link with a finger's full height, close under the heading. */
 .group-note {

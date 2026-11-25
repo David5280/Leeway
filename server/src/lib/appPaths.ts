@@ -24,6 +24,7 @@ export const APP_PATHS = {
  */
 export const LINKABLE_SCREENS = {
   Home: '/',
+  'Compare accounts': '/accounts/compare',
   Spending: '/spending',
   'All activity': APP_PATHS.activity,
   'Spending over time': '/spending/over-time',
@@ -34,7 +35,6 @@ export const LINKABLE_SCREENS = {
   'Six weeks ahead': '/payday/six-weeks',
   Goals: '/goals',
   Wealth: '/wealth',
-  'Compare accounts': '/wealth/compare',
   'Things you own and owe': '/wealth/owned',
   Debts: '/wealth/debts',
   Retirement: '/wealth/retirement',

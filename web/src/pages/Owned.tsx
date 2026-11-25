@@ -1,4 +1,4 @@
-// Things you own and owe, a tap deeper from Wealth's accounts: the home, car
+// Things you own and owe, a tap deeper from Wealth: the home, car
 // and loans the owner enters by hand, which count in net worth beside the
 // bank's balances (plan/owned/OwnedCard.tsx).
 

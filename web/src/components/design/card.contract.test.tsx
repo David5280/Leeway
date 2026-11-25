@@ -72,11 +72,14 @@ const debt = {
   minimumCents: 6000,
 }
 
-/** Every widget the Overview can draw, all shown. */
+/** Every widget the Overview can draw, shown but for the tab cards the tab row draws. */
 const everyWidget: Settings = settingsSchema.parse({
   ...settings,
   dashboard: {
-    widgets: (Object.keys(WIDGET_LIBRARY) as WidgetType[]).map((type) => ({ type })),
+    widgets: (Object.keys(WIDGET_LIBRARY) as WidgetType[]).map((type) => ({
+      type,
+      visible: !['cash-flow', 'pace', 'goals', 'net-worth'].includes(type),
+    })),
   },
 })
 
@@ -252,17 +255,16 @@ describe('every card on the redesigned screens keeps the card contract', () => {
     await waitFor(() =>
       within(screen.getByRole('region', { name: 'Top merchants' })).getByRole('link'),
     )
-    // Leeway opens its math, the seven cards under it their pages, and the summary is words.
-    expect(await checkEveryCard()).toEqual({ drill: 1, to: 7, static: 1 })
+    // Leeway opens its math; the bills, the activity, the row's four tab cards and the three
+    // shortcuts open their pages. The accounts' rows each open a page; the summary is words.
+    expect(await checkEveryCard()).toEqual({ drill: 1, to: 9, static: 2 })
   })
 
   it('on Wealth', async () => {
     serve()
     renderSignedIn(<Wealth />, { route: paths.wealth() })
-    await screen.findByRole('link', { name: new RegExp(everyAccount.at(-1)!.name) })
-    const found = await checkEveryCard()
-    expect(found.drill).toBeGreaterThan(0)
-    expect(found.to).toBe(everyAccount.length)
+    await screen.findByRole('region', { name: 'Net worth over time' })
+    expect((await checkEveryCard()).drill).toBeGreaterThan(0)
   })
 
   it("on an account's own page", async () => {

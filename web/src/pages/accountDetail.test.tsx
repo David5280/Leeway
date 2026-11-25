@@ -94,23 +94,23 @@ function renderAccount(id: string) {
     <Routes>
       <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
     </Routes>,
-    { route: `/wealth/accounts/${id}` },
+    { route: `/accounts/${id}` },
   )
 }
 
 const hero = () => screen.getByRole('region', { name: /balance$/ })
 
 describe("an account's own page", () => {
-  it('names the account and leads back to every account', async () => {
+  it('names the account and leads back to every account, on Home', async () => {
     server()
     renderAccount('chk')
     expect(await screen.findByRole('heading', { name: 'Everyday checking' })).toBeInTheDocument()
     expect(screen.getByText('First Bank ··1234')).toBeInTheDocument()
-    // The tab bar has a Wealth tab too; this one is the way back above the title.
+    // The tab bar has a Home tab too; this one is the way back above the title.
     const back = screen
-      .getAllByRole('link', { name: 'Wealth' })
+      .getAllByRole('link', { name: 'Home' })
       .find((link) => link.classList.contains('back-link'))
-    expect(back).toHaveAttribute('href', '/wealth')
+    expect(back).toHaveAttribute('href', '/')
   })
 
   it('shows an account the bank no longer shares as such, never its old balance as current', async () => {

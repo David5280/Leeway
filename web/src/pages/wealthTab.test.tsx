@@ -1,8 +1,8 @@
 // The Wealth tab in the map's order: net worth and its trend lead, then the
-// accounts grouped by kind, then four rows, each opening its page a tap
-// deeper. What the accounts section holds is in accounts.test.tsx.
+// rows, each opening its page a tap deeper. The accounts are on Home
+// (widgets/accountList.test.tsx), so Wealth lists none of its own.
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,8 +22,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** The four rows under the accounts, in order, by the page each one opens. */
+/** The rows under net worth, in order, by the page each one opens. */
 const ROWS = [
+  ['Things you own and owe', SCREEN_ROUTES.owned],
   ['Debts and payoff', SCREEN_ROUTES.debts],
   ['Retirement', SCREEN_ROUTES.retirement],
   ['How much you save', SCREEN_ROUTES.savings],
@@ -63,21 +64,20 @@ const before = (first: HTMLElement, second: HTMLElement) =>
   first.compareDocumentPosition(second) === Node.DOCUMENT_POSITION_FOLLOWING
 
 describe('Wealth', () => {
-  it('reads top to bottom as the map says: net worth, its trend, the accounts, then the rows', async () => {
+  it('reads top to bottom as the map says: net worth, its trend, then the rows', async () => {
     renderWealth()
     const title = screen.getByRole('heading', { level: 1, name: 'Wealth' })
     const lead = await screen.findByRole('region', { name: 'Net worth' })
     const trend = screen.getByRole('region', { name: 'Net worth over time' })
-    const accounts = screen.getByRole('region', { name: 'Accounts' })
     const more = screen.getByRole('region', { name: 'More on wealth' })
     expect(before(title, lead)).toBe(true)
     expect(before(lead, trend)).toBe(true)
-    expect(before(trend, accounts)).toBe(true)
-    expect(before(accounts, more)).toBe(true)
-    // Each feature has one home: these live a tap deeper now.
+    expect(before(trend, more)).toBe(true)
+    // Each feature has one home: these live a tap deeper now, and the accounts on Home.
     expect(screen.queryByRole('region', { name: 'Savings rate' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Entered by you' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Activity on these accounts' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument()
   })
 
   it('leads with net worth, what is owned less owed, and whether it is growing', async () => {
@@ -90,22 +90,7 @@ describe('Wealth', () => {
     expect(trend).toHaveTextContent('Up $1,200 since Jun 2026')
   })
 
-  it('groups the accounts by kind, each opening its own page', async () => {
-    renderWealth()
-    const accounts = await screen.findByRole('region', { name: 'Accounts' })
-    for (const kind of ['Checking', 'Savings', 'Credit cards']) {
-      expect(await within(accounts).findByRole('region', { name: kind })).toBeInTheDocument()
-    }
-    await waitFor(() =>
-      expect(
-        within(accounts)
-          .getAllByRole('link')
-          .map((link) => link.getAttribute('href')),
-      ).toContain(`/wealth/accounts/${everyAccount[0]!.id}`),
-    )
-  })
-
-  it('lists the four pages a tap deeper, in order', () => {
+  it('lists the pages a tap deeper, in order', () => {
     renderWealth()
     const more = screen.getByRole('region', { name: 'More on wealth' })
     const rows = within(more).getAllByRole('link')
@@ -121,15 +106,11 @@ describe('Wealth', () => {
     expect(await screen.findByText(`${label} page`)).toBeInTheDocument()
   })
 
-  it('says how to start with no accounts, and still offers every row', async () => {
+  it('offers every row with no accounts, as things entered by hand count without a bank', async () => {
     renderWealth(paths.wealth(), [])
-    expect(await screen.findByText(/No accounts yet/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Connect a bank' })).toHaveAttribute(
-      'href',
-      '/settings/banks',
-    )
     const more = screen.getByRole('region', { name: 'More on wealth' })
     expect(within(more).getAllByRole('link')).toHaveLength(ROWS.length)
+    expect(await screen.findByRole('region', { name: 'Net worth' })).toBeInTheDocument()
   })
 
   it('sends an old link that picked one account to that account’s page', async () => {

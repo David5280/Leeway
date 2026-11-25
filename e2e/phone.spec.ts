@@ -184,7 +184,7 @@ test('dashboard rows shorten a long name with an ellipsis rather than clipping i
   const shown = await names.evaluateAll((spans) =>
     spans.filter((span) => span.scrollWidth <= span.clientWidth).map((span) => span.textContent),
   )
-  expect(shown).toContain('Spending pace')
-  expect(shown).toContain('Your top goal')
+  expect(shown).toContain('Latest activity')
+  expect(shown).toContain('Tab summaries')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 })

@@ -1,4 +1,5 @@
-// Home opens with Leeway, Heads up and one card per tab (DEFAULT_WIDGETS in
+// Home opens with Leeway, Heads up, the accounts, the bills due by payday, the
+// latest activity and a row of the tab cards (DEFAULT_WIDGETS in
 // server/src/domain/settings.ts). Tests that read a card the owner adds
 // themselves, like the summary or top merchants, show it on this page only,
 // by standing in for the saved layout, so no other test finds it changed.
@@ -11,10 +12,18 @@ export interface Widget {
   size: 'half' | 'wide' | 'full'
 }
 
-/** Every card Home can show, at the size each reads best at. */
+/**
+ * Every card Home can show, at the size each reads best at. The tab cards
+ * show both in their row and on their own, which the layout tools never
+ * offer together, so the layout guard sees every card kind.
+ */
 export const EVERY_WIDGET: Widget[] = [
   { type: 'leeway', size: 'wide' },
   { type: 'alerts', size: 'full' },
+  { type: 'account-list', size: 'wide' },
+  { type: 'coming-up', size: 'half' },
+  { type: 'latest-activity', size: 'half' },
+  { type: 'tab-row', size: 'full' },
   { type: 'cash-flow', size: 'half' },
   { type: 'pace', size: 'half' },
   { type: 'goals', size: 'half' },
@@ -39,7 +48,7 @@ export async function showWidgets(page: Page, types: string[]): Promise<void> {
   })
 }
 
-/** Shows every card Home can show, as an owner who added them all would see it. */
+/** Shows every card Home can show. */
 export async function showEveryWidget(page: Page): Promise<void> {
   await showWidgets(
     page,

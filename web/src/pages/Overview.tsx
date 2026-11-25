@@ -1,12 +1,14 @@
 // Home: "Am I OK right now?" It reads top to bottom as the map has it:
 // Leeway (what you can spend), Heads up (only when something needs the
 // owner), a payday nudge in the days after one, then the cards the owner
-// arranges, by default one summary per tab. Leeway and Heads up are drawn
-// here, fixed, so nothing urgent can be hidden or moved down; the rest can be
-// added, hidden, resized and reordered. Home is always now: looking back at
-// an earlier period is Spending's job.
+// arranges, by default every account, the bills due by payday,
+// the latest activity and a row with each tab's summary. Leeway and Heads up
+// are drawn here, fixed, so nothing urgent can be hidden or moved down; the
+// rest can be added, hidden, resized and reordered. Home is always now:
+// looking back at an earlier period is Spending's job.
 
 import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { useUpdateSettings } from '../api/settings'
 import { Shell } from '../components/Shell'
@@ -17,14 +19,23 @@ import { Board } from '../widgets/Board'
 import { LeewayWidget } from '../widgets/Leeway'
 import {
   addableTypes,
+  addWidget,
   DEFAULT_LAYOUT,
   drawable,
   WIDGET_LIBRARY,
   type Widget,
 } from '../widgets/library'
+import { useSelectedAccount } from './OldAddresses'
 import { PaydayNotice } from './overview/PaydayNotice'
 
 export function Overview() {
+  const selected = useSelectedAccount()
+  if (selected) return <Navigate to={selected} replace />
+  return <Home />
+}
+
+/** Home's cards, once no old link to one account is being sent on. */
+function Home() {
   const { settings } = useApp()
   const [editing, setEditing] = useState(false)
   const budget = useAction('get_budget', { offset: 0 })
@@ -105,7 +116,7 @@ function AddCards({ all, save }: { all: Widget[]; save: (widgets: Widget[]) => v
             key={type}
             type="button"
             className="chip"
-            onClick={() => save([...all, { type, size: 'half', visible: true }])}
+            onClick={() => save(addWidget(all, type))}
           >
             + {WIDGET_LIBRARY[type]!.name}
           </button>

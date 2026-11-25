@@ -1,7 +1,8 @@
-// The pages a tap deeper from Wealth that this tab added: How much you save,
-// Things you own and owe, and Compare accounts. Each renders under its own
-// heading with a way back to Wealth; what each card holds is tested beside
-// the card. Also the debts page's empty states, which offer the next step.
+// The pages a tap deeper from Wealth that this tab added: How much you save
+// and Things you own and owe, each under its own heading with a way back to
+// Wealth, and Compare accounts, a tap deeper from Home's accounts, with a way
+// back to Home. What each card holds is tested beside the card. Also the
+// debts page's empty states, which offer the next step.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -34,13 +35,17 @@ const saving = {
     totalsOf([month('2026-09-01', 400000, 300000), month('2026-10-01', 400000, 320000)]),
 }
 
-/** The way back to Wealth at the top of a page, and that it lands there. */
-async function goesBackToWealth() {
-  const back = screen.getByRole('link', { name: 'Wealth', current: false })
-  expect(back).toHaveAttribute('href', '/wealth')
+/** The way back above a page's title (not the tab of the same name), and that it lands there. */
+async function goesBack(to: string, path: string) {
+  const back = screen
+    .getAllByRole('link', { name: to })
+    .find((link) => link.classList.contains('back-link'))!
+  expect(back).toHaveAttribute('href', path)
   await userEvent.click(back)
-  expect(await screen.findByRole('heading', { level: 1, name: 'Wealth' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: to })).toBeInTheDocument()
 }
+
+const goesBackToWealth = () => goesBack('Wealth', '/wealth')
 
 describe('How much you save', () => {
   it('leads with the savings rate, then money in and out by month', async () => {
@@ -71,18 +76,18 @@ describe('Things you own and owe', () => {
 })
 
 describe('Compare accounts', () => {
-  it('offers every account to tick, under its own heading', async () => {
+  it('offers every account to tick, under its own heading, with the way back to Home', async () => {
     accountsServer()
     renderSignedIn(
       <Routes>
         <Route path={SCREEN_ROUTES.compareAccounts} element={<CompareAccountsPage />} />
-        <Route path={SCREEN_ROUTES.wealth} element={<h1>Wealth</h1>} />
+        <Route path={SCREEN_ROUTES.home} element={<h1>Home</h1>} />
       </Routes>,
       { route: paths.compareAccounts() },
     )
     expect(screen.getByRole('heading', { level: 1, name: 'Compare accounts' })).toBeVisible()
     expect(await screen.findAllByRole('checkbox')).toHaveLength(everyAccount.length)
-    await goesBackToWealth()
+    await goesBack('Home', '/')
   })
 })
 

@@ -98,26 +98,26 @@ test('an accent color applies right away', async ({ page }) => {
 test('a Home card can be hidden and shown again', async ({ page }) => {
   // The switch flips at once, before the save lands; leaving the page too soon
   // would cancel the save, so each click waits for the server to answer.
-  const togglePace = async () => {
+  const toggleActivity = async () => {
     const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_settings'))
-    await page.getByRole('switch', { name: 'Show Spending pace' }).click()
+    await page.getByRole('switch', { name: 'Show Latest activity' }).click()
     expect((await saved).ok()).toBe(true)
   }
 
   await page.goto('/settings/appearance')
-  await togglePace()
+  await toggleActivity()
   try {
-    await expect(page.getByRole('switch', { name: 'Show Spending pace' })).not.toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Show Latest activity' })).not.toBeChecked()
     await page.goto('/')
     await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
-    await expect(page.getByRole('region', { name: 'Spending pace' })).toHaveCount(0)
+    await expect(page.getByRole('region', { name: 'Latest activity' })).toHaveCount(0)
   } finally {
     // Shown again even when a check above fails, so later specs find Home as they expect.
     await page.goto('/settings/appearance')
-    await togglePace()
+    await toggleActivity()
   }
   await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Spending pace' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Latest activity' })).toBeVisible()
 })
 
 test('a key for an AI assistant is shown once, ready to copy', async ({ page }) => {

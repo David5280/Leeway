@@ -37,7 +37,7 @@ export const BANK_SCREENS: Screen[] = [
     before: standInForPlaid,
     then: askForSecondLogin,
   }),
-  screen('wealth', '/wealth', 'with an account no longer shared', {
+  screen('home', '/', 'with an account no longer shared', {
     before: standInForUnsharedAccount,
   }),
   screen('settings', '/settings/accounts', 'with an account no longer shared', {

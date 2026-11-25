@@ -23,7 +23,9 @@ test('with no calendar linked, it is one quiet entry in Settings and nowhere els
   // Ready first: the hero and every widget loaded, so an absence below means something.
   await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
   await expect(page.getByRole('status')).toHaveCount(0)
-  await expect(page.getByText(/calendar|coming up/i)).toHaveCount(0)
+  await expect(page.getByText(/calendar/i)).toHaveCount(0)
+  // Home's bills are Due by payday; nothing on Home says something is coming up.
+  await expect(page.getByText(/coming up/i)).toHaveCount(0)
   await expect(page.getByRole('link', { name: /calendar/i })).toHaveCount(0)
   // Payday's next two weeks list paydays and bills, and say nothing of a calendar.
   const forecast = page.waitForResponse('**/api/actions/get_forecast')

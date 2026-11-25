@@ -14,14 +14,10 @@ function names(band: Band) {
 }
 
 describe('arrange', () => {
-  it("lays Home's default tab cards out as two even columns, in the map's order", () => {
+  it("lays Home's default out as the accounts beside the bills and activity, then the tab row", () => {
     expect(arrange(drawable(DEFAULT_LAYOUT)).map(names)).toEqual([
-      {
-        pair: [
-          ['cash-flow', 'goals'],
-          ['pace', 'net-worth'],
-        ],
-      },
+      { main: ['account-list'], side: ['coming-up', 'latest-activity'] },
+      { full: 'tab-row' },
     ])
   })
 

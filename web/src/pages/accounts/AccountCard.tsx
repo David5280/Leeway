@@ -1,7 +1,7 @@
-// One account as a card on Wealth: its kind's icon, its name as
+// One account as a card on Compare accounts: its kind's icon, its name as
 // the owner typed it, its balance as the hero figure, and the one or two
-// facts that matter for its kind (lib/accountCards.ts). The whole card opens
-// the account's own page; on Compare accounts it is a tick box instead.
+// facts that matter for its kind (lib/accountCards.ts). The whole card is a
+// tick box. Home lists each account as a row instead (AccountRow.tsx).
 
 import type { Account } from '../../api/client'
 import { Card } from '../../components/design/Card'
@@ -10,7 +10,7 @@ import { ProgressRing } from '../../components/design/ProgressRing'
 import { Sparkline } from '../../components/design/Sparkline'
 import { Icon } from '../../components/ui'
 import { kindIcon, type AccountFact } from '../../lib/accountCards'
-import { accountDetail, accountDetailPath, isOwed, overdrawn } from '../../lib/accounts'
+import { accountDetail, isOwed, overdrawn } from '../../lib/accounts'
 
 /** One fact under the balance, always in words as well as any colour or shape. */
 function Fact({ fact }: { fact: AccountFact }) {
@@ -45,8 +45,8 @@ function Fact({ fact }: { fact: AccountFact }) {
   }
 }
 
-/** What a card shows, the same whether it opens the account or is being picked. */
-export function AccountFace({ account, facts }: { account: Account; facts: AccountFact[] }) {
+/** What a card shows: the account, its balance and its facts. */
+function AccountFace({ account, facts }: { account: Account; facts: AccountFact[] }) {
   const owed = isOwed(account)
   return (
     <>
@@ -83,15 +83,6 @@ export function AccountFace({ account, facts }: { account: Account; facts: Accou
         </span>
       )}
     </>
-  )
-}
-
-/** An account's card, opening its own page. */
-export function AccountCard({ account, facts }: { account: Account; facts: AccountFact[] }) {
-  return (
-    <Card to={accountDetailPath(account.id)} label={account.name} className="acct-card">
-      <AccountFace account={account} facts={facts} />
-    </Card>
   )
 }
 

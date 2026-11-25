@@ -3,7 +3,7 @@
 // pure functions, so the shell's pieces and their tests read the same list.
 
 import { TAB_PLACES, type PlaceId } from '../../lib/places'
-import { paths } from '../../routes'
+import { paths, SCREEN_ROUTES } from '../../routes'
 import type { IconName } from '../ui'
 
 export interface Tab {
@@ -24,13 +24,22 @@ export const TABS: readonly Tab[] = [
 ]
 
 /**
+ * The pages a tap deeper from Home: the accounts it lists live under
+ * /accounts. Taken from the account page's route, up to its id, so the two
+ * never drift apart.
+ */
+const HOME_DEEPER = SCREEN_ROUTES.account.replace(':id', '')
+
+/**
  * The tab a path belongs to: the tab whose address it is, or starts with
- * followed by a slash, so /spending/activity lights Spending. Home owns only
- * "/" itself, so the Inbox, Alerts, Settings and Chat light no tab.
+ * followed by a slash, so /spending/activity lights Spending. Home owns "/"
+ * and its accounts' pages, so the Inbox, Settings and Chat light no tab.
  */
 export function tabFor(pathname: string): Tab | undefined {
   return TABS.find((tab) =>
-    tab.to === '/' ? pathname === '/' : pathname === tab.to || pathname.startsWith(`${tab.to}/`),
+    tab.to === '/'
+      ? pathname === '/' || pathname.startsWith(HOME_DEEPER)
+      : pathname === tab.to || pathname.startsWith(`${tab.to}/`),
   )
 }
 

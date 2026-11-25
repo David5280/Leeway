@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test'
 
 const SCREENS = [
   { path: '/', heading: 'Home' },
+  { path: '/accounts/compare', heading: 'Compare accounts' },
   { path: '/spending', heading: 'Spending' },
   { path: '/spending/activity', heading: 'Activity' },
   { path: '/spending/activity/import', heading: 'Import transactions' },
@@ -18,7 +19,6 @@ const SCREENS = [
   { path: '/payday/six-weeks', heading: 'Six weeks ahead' },
   { path: '/goals', heading: 'Goals' },
   { path: '/wealth', heading: 'Wealth' },
-  { path: '/wealth/compare', heading: 'Compare accounts' },
   { path: '/wealth/owned', heading: 'Things you own and owe' },
   { path: '/wealth/debts', heading: 'Debts' },
   { path: '/wealth/retirement', heading: 'Retirement' },

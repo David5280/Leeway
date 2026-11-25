@@ -46,8 +46,6 @@ describe('the route list', () => {
       'category',
       'bills',
       'trip',
-      'account',
-      'compareAccounts',
       'owned',
       'debts',
       'retirement',
@@ -57,6 +55,11 @@ describe('the route list', () => {
     for (const name of deeper) {
       expect(tabs.some((tab) => SCREEN_ROUTES[name].startsWith(`${tab}/`))).toBe(true)
     }
+  })
+
+  it("puts the accounts' pages under /accounts, a tap deeper from Home, which lists them", () => {
+    expect(SCREEN_ROUTES.account).toBe('/accounts/:id')
+    expect(SCREEN_ROUTES.compareAccounts).toBe('/accounts/compare')
   })
 })
 
@@ -92,7 +95,7 @@ describe('the link builders', () => {
 
   it('builds the addresses as they read', () => {
     expect(paths.category('cat-1')).toBe('/spending/cat-1')
-    expect(paths.account('acct-1')).toBe('/wealth/accounts/acct-1')
+    expect(paths.account('acct-1')).toBe('/accounts/acct-1')
     expect(paths.trip('2026-12-10', '2026-12-14')).toBe('/goals/trips/2026-12-10/2026-12-14')
   })
 
@@ -124,9 +127,10 @@ describe('the link builders', () => {
 
   it('keeps an id with a slash or a space inside its own part of the address', () => {
     expect(paths.category('a/b')).toBe('/spending/a%2Fb')
-    expect(paths.account('a b')).toBe('/wealth/accounts/a%20b')
+    expect(paths.account('a b')).toBe('/accounts/a%20b')
     expect(screenFor(paths.category('a/b'))).toBe('category')
     expect(screenFor(paths.category('activity'))).toBe('activity')
+    expect(screenFor(paths.account('a/b'))).toBe('account')
   })
 })
 

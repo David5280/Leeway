@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Settings } from '../../api/client'
 import { fakeServer, renderSignedIn, settingsHandlers, settingsWith } from '../../test/fake'
-import { WIDGET_LIBRARY } from '../../widgets/library'
+import { WIDGET_LIBRARY, type Widget } from '../../widgets/library'
 import { LayoutSection } from './Layout'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -100,7 +100,11 @@ describe('Home cards in Settings', () => {
   it('offers nothing to add once every card is on Home', () => {
     const everything = settingsWith({
       dashboard: {
-        widgets: Object.keys(WIDGET_LIBRARY).map((type) => ({ type })),
+        // The tab cards on their own sit hidden, as they never show beside the tab row.
+        widgets: Object.keys(WIDGET_LIBRARY).map((type) => ({
+          type,
+          visible: !['cash-flow', 'pace', 'goals', 'net-worth'].includes(type),
+        })),
       },
     })
     fakeServer(settingsHandlers(everything))
@@ -128,5 +132,55 @@ describe('Home cards in Settings', () => {
     await userEvent.setup().click(screen.getByRole('switch', { name: 'Show Spending pace' }))
     await waitFor(() => expect(sentWidgets(server)).toHaveLength(1))
     expect(sentWidgets(server)[0]!.map((w) => w.type)).toEqual(['leeway', 'alerts', 'pace'])
+  })
+})
+
+describe('the tab row and the tab cards on their own in Settings', () => {
+  const withWidgets = (widgets: Partial<Widget>[]) => settingsWith({ dashboard: { widgets } })
+
+  /** Each card sent to the server, with whether it shows. */
+  function sentVisibility(server: ReturnType<typeof fakeServer>) {
+    const sent = server.actions('update_settings') as { dashboard: Settings['dashboard'] }[]
+    return sent.map((patch) => patch.dashboard.widgets.map((w) => [w.type, w.visible]))
+  }
+
+  async function press(saved: Settings, control: { role: 'button' | 'switch'; name: string }) {
+    const server = fakeServer(settingsHandlers(saved))
+    renderSignedIn(<LayoutSection />, { settings: saved })
+    await userEvent.setup().click(screen.getByRole(control.role, { name: control.name }))
+    await waitFor(() => expect(sentVisibility(server)).toHaveLength(1))
+    return sentVisibility(server)[0]
+  }
+
+  it('adds a tab card while the row is hidden, dropping the hidden row', async () => {
+    const saved = withWidgets([{ type: 'leeway' }, { type: 'tab-row', visible: false }])
+    expect(await press(saved, { role: 'button', name: '+ Net worth' })).toEqual([
+      ['leeway', true],
+      ['net-worth', true],
+    ])
+  })
+
+  it('adds the row while the tab cards are hidden, dropping them', async () => {
+    const saved = withWidgets([{ type: 'leeway' }, { type: 'net-worth', visible: false }])
+    expect(await press(saved, { role: 'button', name: '+ Tab summaries' })).toEqual([
+      ['leeway', true],
+      ['tab-row', true],
+    ])
+  })
+
+  it('hides the row when a tab card on its own is shown', async () => {
+    const saved = withWidgets([{ type: 'tab-row' }, { type: 'goals', visible: false }])
+    expect(await press(saved, { role: 'switch', name: 'Show Your top goal' })).toEqual([
+      ['tab-row', false],
+      ['goals', true],
+    ])
+  })
+
+  it('hides the tab cards on their own when the row is shown', async () => {
+    const saved = withWidgets([{ type: 'goals' }, { type: 'tab-row', visible: false }])
+    expect(await press(saved, { role: 'switch', name: 'Show Tab summaries' })).toEqual([
+      ['goals', false],
+      ['tab-row', true],
+    ])
   })
 })

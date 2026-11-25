@@ -33,7 +33,7 @@ describe('the emergency fund drill-down', () => {
           label: 'Rainy Day',
           detail: 'Counted',
           value: { cents: 50_000 },
-          to: '/wealth/accounts/acct-rainy',
+          to: '/accounts/acct-rainy',
         },
       ],
     })
