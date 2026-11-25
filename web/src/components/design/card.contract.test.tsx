@@ -249,9 +249,11 @@ describe('every card on the redesigned screens keeps the card contract', () => {
   it('on the Overview, with every widget shown', async () => {
     serve()
     renderSignedIn(<Overview />, { settings: everyWidget })
-    await screen.findByRole('region', { name: 'Top merchants' })
-    const found = await checkEveryCard()
-    expect(found.drill).toBeGreaterThanOrEqual(10)
+    await waitFor(() =>
+      within(screen.getByRole('region', { name: 'Top merchants' })).getByRole('link'),
+    )
+    // Leeway opens its math, the seven cards under it their pages, and the summary is words.
+    expect(await checkEveryCard()).toEqual({ drill: 1, to: 7, static: 1 })
   })
 
   it('on Wealth', async () => {

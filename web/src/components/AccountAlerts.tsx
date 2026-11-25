@@ -173,8 +173,8 @@ export function AlertsCard({ alerts, label }: { alerts: AccountAlert[]; label: s
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>
           <span className="small muted">{moreAlerts(more)}</span>
           {/* A real 44px box, so its tap never reaches up into the last alert. */}
-          <Link to={paths.alerts()} className="linkbtn small tap">
-            See all alerts
+          <Link to={paths.inbox()} className="linkbtn small tap">
+            See all in Inbox
           </Link>
         </div>
       )}

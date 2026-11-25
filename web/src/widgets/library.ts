@@ -1,127 +1,65 @@
-// The widgets this app can draw, and changes to the dashboard's widget list.
+// The cards Home can draw, and changes to Home's card list.
+//
+// Home reads top to bottom as the map has it: Leeway (what you can spend),
+// Heads up (only when something needs the owner), then one summary card per
+// tab. Leeway and Heads up are fixed: Home draws them itself, first, so
+// nothing urgent can be hidden or moved down. They stay in the saved list
+// (the server's default names them) but are not in the library, so the
+// layout tools never offer them. Every library card is a summary that opens
+// its tab or a page a tap deeper, never a second place to act.
 
 import type { ComponentType } from 'react'
 import type { Settings } from '../api/client'
 import type { PlaceId } from '../lib/places'
-import { AccountsWidget, MerchantsWidget, RecentWidget } from './Activity'
-import { AlertsWidget } from './Alerts'
-import { FlowsWidget } from './Flows'
-import { CategoriesWidget } from './Categories'
-import { GlanceWidget } from './Glance'
-import { LeewayWidget } from './Leeway'
-import { PaceWidget } from './Pace'
-import { BillsWidget, CashFlowWidget, DebtsWidget, GoalsWidget, NetWorthWidget } from './Planning'
-import { arrange, sharesLane } from './arrange'
+import { DebtsWidget, MerchantsWidget, TrendsWidget } from './Shortcuts'
 import { SummaryWidget } from './Summary'
-import { TrendsWidget } from './Trends'
+import { CashToPaydayCard, NetWorthCard, SpendingPaceCard, TopGoalCard } from './TabCards'
+import { sharesLane } from './arrange'
 import type { WidgetProps } from './types'
 
 export type Widget = Settings['dashboard']['widgets'][number]
 export type WidgetType = Widget['type']
 
-/**
- * How general a widget's answer is, most general first: "am I OK?", what needs
- * the owner, the period in words, how it is trending, the quick numbers that
- * need action, where the money went, and the lists. The default Overview reads
- * in this order, from the most general answer down to the most detail.
- */
-export const DEPTHS = ['answer', 'alerts', 'words', 'trend', 'tiles', 'breakdown', 'list'] as const
-export type Depth = (typeof DEPTHS)[number]
-
-/** One widget the dashboard can draw. */
+/** One card Home can draw. */
 export interface WidgetEntry {
   name: string
   component: ComponentType<WidgetProps>
-  depth: Depth
   /**
-   * The tab whose figures it shows, and which it leads to, so its card wears
-   * that tab's color (lib/places.ts). Widgets that mix several tabs, or only
-   * carry a status, have none and stay plain.
+   * The tab whose figures it shows, and which it opens, so its label wears
+   * that tab's color (lib/places.ts). A card that belongs to no tab stays plain.
    */
   place?: Exclude<PlaceId, 'home'>
 }
 
 /**
- * The widgets that exist so far, in the order the library lists them. Settings
- * may also name widgets a newer Leeway (or an agent) added; those are kept in
- * the saved list but not drawn.
+ * The cards the owner can arrange, in the order the library lists them: the
+ * four tab cards, then optional ones. Settings may also name cards a newer
+ * Leeway (or an agent) added; those are kept in the saved list but not drawn.
  */
 export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
-  summary: { name: 'Summary', component: SummaryWidget, depth: 'words' },
-  leeway: { name: 'Your leeway', component: LeewayWidget, depth: 'answer' },
-  glance: { name: 'At a glance', component: GlanceWidget, depth: 'tiles' },
-  alerts: { name: 'Heads up', component: AlertsWidget, depth: 'alerts' },
-  categories: {
-    name: 'Categories',
-    component: CategoriesWidget,
-    depth: 'breakdown',
-    place: 'spend',
-  },
-  pace: { name: 'Spending pace', component: PaceWidget, depth: 'trend', place: 'spend' },
-  recent: { name: 'Recent', component: RecentWidget, depth: 'list', place: 'spend' },
-  accounts: { name: 'Accounts', component: AccountsWidget, depth: 'list', place: 'wealth' },
-  merchants: {
-    name: 'Top merchants',
-    component: MerchantsWidget,
-    depth: 'breakdown',
-    place: 'spend',
-  },
-  trends: { name: 'Spending over time', component: TrendsWidget, depth: 'trend', place: 'spend' },
-  'cash-flow': { name: 'Until payday', component: CashFlowWidget, depth: 'trend', place: 'pay' },
-  bills: { name: 'Bills', component: BillsWidget, depth: 'list', place: 'pay' },
-  goals: { name: 'Goals', component: GoalsWidget, depth: 'list', place: 'goal' },
-  debts: { name: 'Debt payoff', component: DebtsWidget, depth: 'breakdown', place: 'wealth' },
-  'net-worth': {
-    name: 'Net worth',
-    component: NetWorthWidget,
-    depth: 'answer',
-    place: 'wealth',
-  },
-  flows: { name: 'Money in and out', component: FlowsWidget, depth: 'trend' },
+  'cash-flow': { name: 'Cash to payday', component: CashToPaydayCard, place: 'pay' },
+  pace: { name: 'Spending pace', component: SpendingPaceCard, place: 'spend' },
+  goals: { name: 'Your top goal', component: TopGoalCard, place: 'goal' },
+  'net-worth': { name: 'Net worth', component: NetWorthCard, place: 'wealth' },
+  summary: { name: 'Summary', component: SummaryWidget },
+  trends: { name: 'Spending over time', component: TrendsWidget, place: 'spend' },
+  merchants: { name: 'Top merchants', component: MerchantsWidget, place: 'spend' },
+  debts: { name: 'Debt payoff', component: DebtsWidget, place: 'wealth' },
 }
 
 /**
- * The Overview as it first opens, and what "Reset layout" puts back: only
- * what answers "am I OK?", from the most general answer to the most detail
- * (DEPTHS). The same list as the server's DEFAULT_WIDGETS
- * (server/src/domain/settings.ts).
+ * Home as it first opens, and what "Reset layout" puts back: Leeway, Heads
+ * up, then the four tab cards in the map's order. The same list as the
+ * server's DEFAULT_WIDGETS (server/src/domain/settings.ts).
  */
 export const DEFAULT_LAYOUT: Widget[] = [
   { type: 'leeway', size: 'wide', visible: true },
-  { type: 'net-worth', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'flows', size: 'full', visible: true },
-  { type: 'pace', size: 'full', visible: true },
+  { type: 'cash-flow', size: 'half', visible: true },
+  { type: 'pace', size: 'half', visible: true },
+  { type: 'goals', size: 'half', visible: true },
+  { type: 'net-worth', size: 'half', visible: true },
 ]
-
-/**
- * The widgets as drawn while Heads up holds something urgent (an overdrawn
- * account, a budget gone over): Heads up moves up to just under the hero, at
- * full width, so money going wrong shows above the fold on every screen.
- * It only ever moves up, nothing else moves, and the saved layout stays as
- * the owner left it. With no hero shown, it leads.
- */
-export function urgentFirst(widgets: Widget[]): Widget[] {
-  const alerts = widgets.find((widget) => widget.type === 'alerts')
-  if (!alerts) return widgets
-  const rest = widgets.filter((widget) => widget !== alerts)
-  const hero = rest.findIndex((widget) => widget.type === 'leeway')
-  const at = Math.min(widgets.indexOf(alerts), hero + 1)
-  return [...rest.slice(0, at), { ...alerts, size: 'full' }, ...rest.slice(at)]
-}
-
-/**
- * Whether widgets read from the most general answer down to the most detail
- * (DEPTHS) as a phone stacks them: each band's columns one after another.
- */
-export function readsGeneralFirst(widgets: Widget[]): boolean {
-  const drawn = arrange(drawable(widgets)).flatMap((band) => {
-    if (band.kind === 'full') return [band.widget]
-    return band.kind === 'split' ? [...band.main, ...band.side] : band.columns.flat()
-  })
-  const depths = drawn.map((widget) => DEPTHS.indexOf(WIDGET_LIBRARY[widget.type]!.depth))
-  return depths.every((depth, i) => i === 0 || depth >= depths[i - 1]!)
-}
 
 export const SIZES = [
   { value: 'half', label: 'Half' },
@@ -131,10 +69,10 @@ export const SIZES = [
 
 const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
 
-/** The widgets this app draws, in their saved order. */
+/** The cards the owner arranges, in their saved order: not fixed, and known to this build. */
 export const drawable = (widgets: Widget[]) => widgets.filter(canDraw)
 
-/** Library widgets not on the dashboard yet. */
+/** Library cards not on Home yet. */
 export function addableTypes(widgets: Widget[]): WidgetType[] {
   return (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter(
     (type) => !widgets.some((w) => w.type === type),

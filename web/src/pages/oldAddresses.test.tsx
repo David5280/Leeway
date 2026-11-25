@@ -70,6 +70,7 @@ describe('an old address', () => {
     ['/trips/2026-12-10/2026-12-14', '/goals/trips/2026-12-10/2026-12-14'],
     ['/customize', '/settings'],
     ['/customize/banks', '/settings/banks'],
+    ['/alerts', '/inbox'],
   ])('%s lands on %s', (old, expected) => {
     renderOld(old)
     expect(address()).toBe(expected)

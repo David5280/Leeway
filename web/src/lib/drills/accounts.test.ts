@@ -3,9 +3,8 @@ import type { AccountsView } from '../../api/client'
 import { account, transaction } from '../../test/fake'
 import { mathSentence, trendDescription } from '../drill'
 import { money as formatMoney } from '../money'
-import { accountDrill, allAccountsDrill, averageOf, balanceTrend, selectionDrill } from './accounts'
+import { accountDrill, averageOf, balanceTrend, selectionDrill } from './accounts'
 import { earlierPeriods, flowsDrill, leftOver, spendingDrill, usualOut } from './accountView'
-import { worthPoint } from '../../test/worth'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
 const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: 'en-US' })
@@ -133,33 +132,7 @@ describe('accountDrill', () => {
   })
 })
 
-describe('allAccountsDrill and selectionDrill', () => {
-  const hidden = account({ id: 'h', name: 'Old', hidden: true, balanceCents: 99900 })
-  const empty = account({ id: 'e', name: 'New', balanceCents: null })
-
-  it('adds up the counted accounts, leaving out ignored ones, with net worth as the trend', () => {
-    const drill = allAccountsDrill([checking, card, hidden, empty], {
-      history: [worthPoint('2026-10-01', 100), worthPoint('2026-11-01', 200)],
-    } as Parameters<typeof allAccountsDrill>[1])
-    expect(said(drill)).toBe(
-      'Together $2,130 = Owned in these accounts $2,500 minus owed on cards and loans $370',
-    )
-    expect(drill.trend?.points).toHaveLength(2)
-    expect(drill.items!.rows.map((row) => [row.label, row.value])).toEqual([
-      ['Everyday', { cents: 250000, tone: undefined }],
-      ['Travel card', { cents: 37000, tone: undefined }],
-      ['New', { text: 'No balance' }],
-    ])
-  })
-
-  it('has no trend without net worth history, and reads a negative total in red', () => {
-    const short = { ...checking, balanceCents: -5000 }
-    const drill = allAccountsDrill([short])
-    expect(drill.trend).toBeUndefined()
-    expect(drill.math.result.value).toEqual({ cents: -5000, tone: 'problem' })
-    expect(drill.items!.rows[0]!.value).toEqual({ cents: -5000, tone: 'problem' })
-  })
-
+describe('selectionDrill', () => {
   it('adds up a pick, named by how many', () => {
     expect(selectionDrill([checking]).title).toBe('1 account together')
     expect(selectionDrill([checking, card]).title).toBe('2 accounts together')

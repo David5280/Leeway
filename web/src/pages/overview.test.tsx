@@ -1,609 +1,113 @@
+// Home as the map draws it: Leeway, then Heads up only when something needs
+// the owner, then one card per tab in the map's order, each opening its tab.
+// Leeway and Heads up stay first whatever the saved layout says. Editing the
+// cards is in overviewEditing.test.tsx.
+
 import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { billChangeAlert } from '../../../server/src/domain/billChanges'
-import {
-  mergeSettings,
-  settingsPatchSchema,
-  settingsSchema,
-} from '../../../server/src/domain/settings'
-import { formatCents } from '../../../server/src/lib/money'
-import type { Settings } from '../api/client'
-import {
-  account,
-  alertsFor,
-  budgetFor,
-  category,
-  fakeServer,
-  forgetWidgets,
-  renderSignedIn,
-  settings,
-  type Handlers,
-} from '../test/fake'
+import { account, alertsFor, forgetWidgets, settings } from '../test/fake'
 import { homeList } from '../test/homeAlerts'
-import { DEFAULT_LAYOUT, moveWidget, WIDGET_LIBRARY } from '../widgets/library'
-import { Overview } from './Overview'
+import { layout, renderHome, serveHome, shownCards } from '../test/overview'
 
 afterEach(() => vi.unstubAllGlobals())
 
-type Widget = Settings['dashboard']['widgets'][number]
+/** The tab cards by default, in the map's order. */
+const TAB_CARDS = ['Cash to payday', 'Spending pace', 'Your top goal', 'Net worth']
 
-const groceries = category('Groceries', { budgetCents: 60000 })
-const categories = [groceries]
-
-/** The periods Spending over time draws, as get_trends describes them. */
-const PERIODS: Record<number, { start: string; end: string; days: number }> = {
-  0: { start: '2026-11-01', end: '2026-11-30', days: 30 },
-  [-1]: { start: '2026-10-01', end: '2026-10-31', days: 31 },
-  [-2]: { start: '2026-09-01', end: '2026-09-30', days: 30 },
+const alerts = alertsFor([account({ id: 'a', name: 'Everyday', balanceCents: -4210 })])
+/** An overdrawn account, so Heads up has something to say. */
+const somethingNeedsYou = {
+  list_alerts: () => alerts,
+  list_home_alerts: () => homeList(alerts),
 }
 
-/** The region names the widgets render, by type. */
-const REGION: Record<string, string> = {
-  summary: 'Summary',
-  leeway: 'Your leeway',
-  glance: 'This period at a glance',
-  alerts: 'Heads up',
-  categories: 'Categories',
-  pace: 'Spending pace',
-  recent: 'Recent transactions',
-  accounts: 'Accounts',
-  merchants: 'Top merchants',
-  trends: 'Spending by period',
-  'net-worth': 'Net worth',
-  flows: 'Money in and out',
-}
-
-/**
- * The default widgets in page order: the leeway hero with net worth beside it,
- * then money in and out and the pace. Heads up says nothing, and takes no
- * room, while nothing needs the owner.
- */
-const DEFAULT_PAGE_ORDER = ['Your leeway', 'Net worth', 'Money in and out', 'Spending pace']
-
-/**
- * A fuller dashboard for the editing tests, with wide and half widgets in
- * columns between full ones, so every way a widget moves can be tried.
- */
-const EDITABLE_WIDGETS: Partial<Widget>[] = [
-  { type: 'leeway', size: 'wide' },
-  { type: 'alerts', size: 'full' },
-  { type: 'summary', size: 'full' },
-  { type: 'pace', size: 'full' },
-  { type: 'glance', size: 'full' },
-  { type: 'categories', size: 'wide' },
-  { type: 'accounts', size: 'half' },
-  { type: 'recent', size: 'wide' },
-]
-
-function layout(widgets: Partial<Widget>[]): Settings {
-  return settingsSchema.parse({ ...settings, dashboard: { widgets } })
-}
-
-function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {}) {
-  let current = initial
-  return fakeServer(
-    {
-      get_settings: () => current,
-      update_settings: (patch) => {
-        current = mergeSettings(settingsSchema.parse(current), settingsPatchSchema.parse(patch))
-        return current
-      },
-      get_budget: () => budgetFor(categories, [{ categoryId: groceries.id, amountCents: 24000 }]),
-      list_connections: () => [],
-      get_summary: () => ({
-        headline: "You're on track.",
-        points: [],
-        writtenBy: 'Leeway',
-        writtenAt: '2026-11-17T18:00:00Z',
-        ai: 'off',
-      }),
-      get_spending_pace: () => ({
-        start: '2026-11-01',
-        end: '2026-11-30',
-        days: 30,
-        categoryIds: [],
-        budgetCents: 0,
-        cumulative: [],
-        projectedCents: 0,
-      }),
-      list_transactions: () => ({ transactions: [], total: 0 }),
-      list_accounts: () => [],
-      list_alerts: () => [],
-      top_merchants: () => [],
-      get_net_worth: () => ({
-        assetsCents: 0,
-        liabilitiesCents: 0,
-        netWorthCents: 0,
-        history: [],
-      }),
-      get_monthly_totals: () => ({ firstTransactionDate: null, months: [] }),
-      // The server always returns the periods asked for, oldest first.
-      get_trends: () =>
-        [-2, -1, 0].map((offset) => ({
-          offset,
-          ...PERIODS[offset]!,
-          spentCents: 30000,
-          incomeCents: 0,
-          categories: [],
-        })),
-      ...handlers,
-    },
-    routes,
-  )
-}
-
-function refuse() {
-  return Response.json(
-    { error: 'invalid_input', message: 'Layout could not be saved' },
-    { status: 400 },
-  )
-}
-
-function renderOverview(initial: Settings = settings) {
-  return renderSignedIn(<Overview />, { settings: initial })
-}
-
-/** The widget regions on screen, in page order. */
-function shownWidgets() {
-  const names = new Set(Object.values(REGION))
-  return screen
-    .queryAllByRole('region')
-    .map((r) => r.getAttribute('aria-label') ?? '')
-    .filter((name) => names.has(name))
-}
-
-/** The edit tools of one widget, found by the name in its tool bar. */
-function toolsFor(name: string) {
-  const title = screen.getByText(name, { selector: '.widget-tools strong' })
-  return within(title.closest('.widget') as HTMLElement)
-}
-
-function sentLayouts(server: ReturnType<typeof fakeServer>) {
-  const sent = server.actions('update_settings') as { dashboard: { widgets: Widget[] } }[]
-  return sent.map((patch) => patch.dashboard.widgets)
-}
-
-async function startEditing() {
-  const user = userEvent.setup()
-  await screen.findByRole('region', { name: 'Your leeway' })
-  await user.click(screen.getByRole('button', { name: 'Edit layout' }))
-  return user
-}
-
-describe('moveWidget', () => {
-  const widgets = layout([
-    { type: 'leeway', size: 'wide' },
-    { type: 'glance', size: 'half' },
-    { type: 'alerts', size: 'full' },
-  ]).dashboard.widgets
-
-  it('swaps a widget with the next one in its column, or a full one, either way', () => {
-    expect(moveWidget(widgets, 2, -1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
-    expect(moveWidget(widgets, 1, 1).map((w) => w.type)).toEqual(['leeway', 'alerts', 'glance'])
-    expect(moveWidget(widgets, 0, 1).map((w) => w.type)).toEqual(['alerts', 'glance', 'leeway'])
+describe('Home', () => {
+  it("leads with Leeway, then the four tab cards in the map's order", async () => {
+    serveHome()
+    renderHome()
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', ...TAB_CARDS]))
+    // Nothing needs the owner, so Heads up takes no room at all.
+    expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
   })
 
-  it('returns the same list at either end and never changes the one passed in', () => {
-    expect(moveWidget(widgets, 2, 1)).toBe(widgets)
-    expect(moveWidget(widgets, 0, -1)).toBe(widgets)
-    moveWidget(widgets, 0, 1)
-    expect(widgets.map((w) => w.type)).toEqual(['leeway', 'glance', 'alerts'])
-  })
-})
-
-describe('Ask Leeway on the Overview', () => {
-  it("is the frame's button alone, with no Ask link on the page itself", async () => {
-    serve(settings, { get_chat_status: () => ({ available: true }) })
-    renderOverview()
-    expect(await screen.findByRole('button', { name: 'Ask Leeway' })).toBeVisible()
-    expect(screen.getAllByRole('button', { name: /^Ask Leeway/ })).toHaveLength(1)
-    expect(screen.queryByRole('link', { name: /Ask about your money/ })).not.toBeInTheDocument()
-  })
-})
-
-describe('account alerts on the Overview', () => {
-  const alerts = alertsFor([
-    account({ id: 'a', name: 'Everyday', balanceCents: -4210 }),
-    account({ id: 'b', name: 'Bills', balanceCents: 2000, subtype: 'checking' }),
-  ])
-  /** The summary as Leeway writes it with these alerts: the worst leads, the rest counted. */
-  const alertSummary = () => ({
-    headline: alerts[0]!.summary,
-    points: ['1 more account alert is in Heads up on the dashboard.', "You're on track."],
-    writtenBy: 'Leeway',
-    writtenAt: '2026-11-17T18:00:00Z',
-    ai: 'off',
-  })
-
-  it('says each alert once, in Heads up, with no banner above the hero', async () => {
-    const withSummary = layout(EDITABLE_WIDGETS)
-    serve(withSummary, {
-      list_alerts: () => alerts,
-      list_home_alerts: () => homeList(alerts),
-      get_summary: alertSummary,
-    })
-    renderOverview(withSummary)
-    const headsUp = await screen.findByRole('region', { name: 'Heads up' })
-    await within(headsUp).findByText('Everyday is overdrawn by $42.10.')
-    await screen.findByText("You're on track.")
-    expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument()
-    const summary = screen.getByRole('region', { name: 'Summary' })
-    for (const alert of alerts) {
-      expect(screen.getAllByText(alert.message)).toHaveLength(1)
-      expect(within(summary).queryByText(alert.summary)).not.toBeInTheDocument()
-    }
-    expect(screen.queryByText(/in Heads up on the dashboard/)).not.toBeInTheDocument()
-  })
-
-  it('moves Heads up under the hero while an account is overdrawn, saving nothing', async () => {
-    const server = serve(settings, {
-      list_alerts: () => alerts,
-      list_home_alerts: () => homeList(alerts),
-    })
-    renderOverview()
+  it('puts Heads up right under Leeway when something needs the owner', async () => {
+    serveHome(settings, somethingNeedsYou)
+    renderHome()
     await screen.findByText('Everyday is overdrawn by $42.10.')
-    // Ahead of net worth, so it shows above the fold on a phone too.
-    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', ...DEFAULT_PAGE_ORDER.slice(1)])
-    expect(server.actions('update_settings')).toEqual([])
-    // Editing shows the saved order, so moves act on what is saved.
-    await startEditing()
-    expect(shownWidgets()).toEqual([
-      'Your leeway',
-      'Net worth',
-      'Heads up',
-      ...DEFAULT_PAGE_ORDER.slice(2),
-    ])
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', 'Heads up', ...TAB_CARDS]))
   })
 
-  it('leaves Heads up where the layout puts it when nothing is urgent', async () => {
-    const low = alerts.filter((alert) => alert.severity !== 'urgent')
-    expect(low).toHaveLength(1)
-    serve(settings, { list_alerts: () => low, list_home_alerts: () => homeList(low) })
-    renderOverview()
-    await screen.findByText(low[0]!.message)
-    expect(shownWidgets()).toEqual([
-      'Your leeway',
-      'Net worth',
-      'Heads up',
-      ...DEFAULT_PAGE_ORDER.slice(2),
-    ])
+  it('opens each tab from its card', async () => {
+    serveHome()
+    renderHome()
+    // Each card is one link once its figure has loaded.
+    const opens = (name: string) =>
+      waitFor(() =>
+        within(screen.getByRole('region', { name })).getByRole('link').getAttribute('href'),
+      )
+    expect(await opens('Cash to payday')).toBe('/payday')
+    expect(await opens('Spending pace')).toBe('/spending')
+    expect(await opens('Your top goal')).toBe('/goals')
+    expect(await opens('Net worth')).toBe('/wealth')
   })
 
-  it('leaves Heads up in place for a bill that costs more: worth a look, not urgent', async () => {
-    const higher = billChangeAlert(
-      {
-        kind: 'changed',
-        bill: {
-          id: 'power',
-          name: 'Power',
-          amountCents: 8000,
-          cadence: 'month',
-          trackedOn: '2026-09-01',
-          amountVaries: false,
-          amountSetOn: null,
-          followAfterOn: null,
-          charges: [],
-        },
-        charge: { accountId: 'everyday', date: '2026-11-16', amountCents: 12000 },
-      },
-      'Everyday',
-      { money: formatCents },
-    )
-    serve(settings, { list_alerts: () => [higher], list_home_alerts: () => homeList([higher]) })
-    renderOverview()
-    await screen.findByText('Power was $120, usually $80.')
-    expect(shownWidgets()).toEqual([
-      'Your leeway',
-      'Net worth',
-      'Heads up',
-      ...DEFAULT_PAGE_ORDER.slice(2),
-    ])
-  })
-
-  it('moves Heads up under the hero from the bottom of a layout the owner arranged', async () => {
-    const arranged = layout([
-      { type: 'leeway', size: 'wide' },
-      { type: 'pace', size: 'full' },
-      { type: 'alerts', size: 'half' },
-    ])
-    serve(arranged, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
-    renderOverview(arranged)
-    await screen.findByText('Everyday is overdrawn by $42.10.')
-    expect(shownWidgets()).toEqual(['Your leeway', 'Heads up', 'Spending pace'])
-    // At full width, never in a side column beside the hero.
-    expect(screen.getByRole('region', { name: 'Heads up' }).closest('.band')).toBeNull()
-  })
-
-  it('keeps the banner when Heads up is hidden, so an overdrawn account still shows first', async () => {
-    const hidden = layout([{ type: 'leeway' }, { type: 'alerts', visible: false }])
-    serve(hidden, { list_alerts: () => alerts, list_home_alerts: () => homeList(alerts) })
-    renderOverview(hidden)
-    const banner = await screen.findByRole('region', { name: 'Account alerts' })
-    expect(within(banner).getByText('Everyday is overdrawn by $42.10.')).toBeInTheDocument()
-    expect(screen.getAllByText('Everyday is overdrawn by $42.10.')).toHaveLength(1)
-  })
-})
-
-describe('Overview widgets', () => {
-  it('shows the default widgets in the order settings give', async () => {
-    serve()
-    renderOverview()
-    await screen.findByRole('region', { name: 'Your leeway' })
-    expect(shownWidgets()).toEqual(DEFAULT_PAGE_ORDER)
-  })
-
-  it('follows a custom order and size, and leaves out hidden widgets', async () => {
-    const custom = layout([
-      { type: 'merchants', size: 'full' },
+  it('keeps Leeway and Heads up first, even when a saved layout hid them or put them last', async () => {
+    const buried = layout([
+      { type: 'net-worth', size: 'half' },
+      { type: 'alerts', visible: false },
       { type: 'leeway', visible: false },
-      { type: 'trends', size: 'half' },
-      { type: 'accounts' },
     ])
-    serve(custom)
-    renderOverview(custom)
-    await screen.findByRole('region', { name: 'Top merchants' })
-    // Accounts is wide by default, so it leads the main column with the half-size chart beside it.
-    expect(shownWidgets()).toEqual(['Top merchants', 'Accounts', 'Spending by period'])
-    expect(
-      screen.getByRole('region', { name: 'Top merchants' }).closest('.widget'),
-    ).toHaveAttribute('data-size', 'full')
-    // A lone half widget spans the page, the size is still the one saved.
-    expect(
-      screen.getByRole('region', { name: 'Spending by period' }).closest('.widget'),
-    ).toHaveAttribute('data-size', 'half')
+    serveHome(buried, somethingNeedsYou)
+    renderHome(buried)
+    await screen.findByText('Everyday is overdrawn by $42.10.')
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', 'Heads up', 'Net worth']))
   })
 
-  it('sets half widgets side by side, keeping their saved order for a phone', async () => {
-    const halves = layout([
-      { type: 'merchants', size: 'half' },
-      { type: 'accounts', size: 'half' },
-      { type: 'trends', size: 'half' },
-    ])
-    const server = serve(halves)
-    renderOverview(halves)
-    await screen.findByRole('region', { name: 'Top merchants' })
-    // Two columns, filled in turn: the first and third on the left, the second on the right.
-    expect(shownWidgets()).toEqual(['Top merchants', 'Spending by period', 'Accounts'])
-    const slot = (name: string) => screen.getByRole('region', { name }).closest('.widget')
-    expect(slot('Top merchants')!.closest('.band')).toHaveClass('pair')
-    // A phone shows one column, ordered by these.
-    expect(slot('Top merchants')).toHaveStyle({ order: '0' })
-    expect(slot('Accounts')).toHaveStyle({ order: '1' })
-    expect(slot('Spending by period')).toHaveStyle({ order: '2' })
-
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Edit layout' }))
-    await user.click(
-      toolsFor('Top merchants').getByRole('button', { name: 'Move Top merchants down' }),
-    )
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual(['accounts', 'merchants', 'trends'])
+  it('still loads a saved layout naming a card this build no longer draws', async () => {
+    forgetWidgets('summary')
+    const old = layout([{ type: 'leeway' }, { type: 'summary' }, { type: 'pace', size: 'half' }])
+    serveHome(old)
+    renderHome(old)
+    await waitFor(() => expect(shownCards()).toEqual(['Your leeway', 'Spending pace']))
   })
 
-  it('skips widgets this app cannot draw yet', async () => {
-    forgetWidgets('bills', 'net-worth')
-    const future = layout([{ type: 'bills' }, { type: 'leeway' }, { type: 'net-worth' }])
-    serve(future)
-    renderOverview(future)
+  it('is always now: it reads the current period, with no arrows to step back', async () => {
+    const server = serveHome()
+    renderHome()
     await screen.findByRole('region', { name: 'Your leeway' })
-    expect(shownWidgets()).toEqual(['Your leeway'])
-    expect(document.querySelectorAll('.widget')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Previous period' })).not.toBeInTheDocument()
+    expect(server.actions('get_budget')).toEqual([{ offset: 0 }])
+    await waitFor(() => expect(server.actions('get_spending_pace')).toEqual([{ offset: 0 }]))
   })
 
-  it('every widget in the library has a name and a component', () => {
-    for (const [type, entry] of Object.entries(WIDGET_LIBRARY)) {
-      expect(entry!.name, type).toBeTruthy()
-      expect(entry!.component, type).toBeTypeOf('function')
-    }
+  it('names the screen for a screen reader, though Leeway leads what is seen', async () => {
+    serveHome()
+    renderHome()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument()
   })
 
   it('shows loading until the budget arrives', async () => {
-    serve()
-    renderOverview()
+    serveHome()
+    renderHome()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')
-    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Your leeway' })).toBeInTheDocument()
   })
 
   it('shows why the budget could not load', async () => {
-    serve(
-      settings,
-      {},
-      {
-        '/api/actions/get_budget': () =>
-          Response.json({ error: 'internal', message: 'Budget is unavailable' }, { status: 500 }),
-      },
-    )
-    renderOverview()
+    const unavailable = () =>
+      Response.json({ error: 'internal', message: 'Budget is unavailable' }, { status: 500 })
+    serveHome(settings, {}, { '/api/actions/get_budget': unavailable })
+    renderHome()
     expect(await screen.findByRole('alert')).toHaveTextContent('Budget is unavailable')
-    expect(shownWidgets()).toEqual([])
+    expect(shownCards()).toEqual([])
   })
 })
 
-describe('Overview period', () => {
-  it('is always the current period, with how far through it is and no arrows', async () => {
-    const withMerchants = layout([{ type: 'pace' }, { type: 'merchants' }])
-    const server = serve(withMerchants)
-    renderOverview(withMerchants)
-    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
-    expect(screen.getByText('Day 17 of 30')).toBeInTheDocument()
-    // Looking back is Spending's job, so Home has no way to step to another period.
-    expect(screen.queryByRole('button', { name: 'Previous period' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Next period' })).not.toBeInTheDocument()
-    await waitFor(() => expect(server.actions('top_merchants')).toEqual([{ offset: 0, limit: 6 }]))
-    expect(server.actions('get_budget')).toEqual([{ offset: 0 }])
-    expect(server.actions('get_spending_pace')).toEqual([{ offset: 0 }])
-  })
-})
-
-describe('Overview edit mode', () => {
-  it('turns editing on and off', async () => {
-    serve()
-    renderOverview()
-    const user = await startEditing()
-    const toggle = screen.getByRole('button', { name: 'Done' })
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText(/Move, resize or hide widgets/)).toBeInTheDocument()
-    expect(document.querySelector('.board.editing')).not.toBeNull()
-    await user.click(toggle)
-    expect(screen.getByRole('button', { name: 'Edit layout' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-    expect(screen.queryByText(/Move, resize or hide widgets/)).not.toBeInTheDocument()
-    expect(document.querySelector('.widget-tools')).toBeNull()
-  })
-
-  it('moves a widget and saves the new order', async () => {
-    const editable = layout(EDITABLE_WIDGETS)
-    const server = serve(editable)
-    renderOverview(editable)
-    const user = await startEditing()
-    await user.click(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    // Recent swaps with Categories, the wide widget above it, not Accounts beside it.
-    expect(sentLayouts(server)[0]!.map((w) => w.type)).toEqual([
-      'leeway',
-      'alerts',
-      'summary',
-      'pace',
-      'glance',
-      'recent',
-      'accounts',
-      'categories',
-    ])
-    await waitFor(() =>
-      expect(shownWidgets().slice(4, 6)).toEqual(['Recent transactions', 'Categories']),
-    )
-  })
-
-  it('cannot move the first widget up or the last one down', async () => {
-    const editable = layout(EDITABLE_WIDGETS)
-    serve(editable)
-    renderOverview(editable)
-    await startEditing()
-    expect(
-      toolsFor('Your leeway').getByRole('button', { name: 'Move Your leeway up' }),
-    ).toBeDisabled()
-    expect(toolsFor('Recent').getByRole('button', { name: 'Move Recent down' })).toBeDisabled()
-    expect(toolsFor('Recent').getByRole('button', { name: 'Move Recent up' })).toBeEnabled()
-    // Accounts tops the side column, so moving it up trades places with the full-width glance.
-    expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeEnabled()
-  })
-
-  it('resizes a widget', async () => {
-    const server = serve()
-    renderOverview()
-    const user = await startEditing()
-    const size = toolsFor('Your leeway').getByRole('group', { name: 'Your leeway size' })
-    expect(within(size).getByRole('button', { name: 'Wide' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    await user.click(within(size).getByRole('button', { name: 'Full' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![0]).toEqual({ type: 'leeway', size: 'full', visible: true })
-    expect(screen.getByRole('region', { name: 'Your leeway' }).closest('.widget')).toHaveAttribute(
-      'data-size',
-      'full',
-    )
-  })
-
-  it('hides a widget, keeping it in edit mode to show again', async () => {
-    const editable = layout(EDITABLE_WIDGETS)
-    const server = serve(editable)
-    renderOverview(editable)
-    const user = await startEditing()
-    await user.click(toolsFor('Heads up').getByRole('button', { name: 'Hide' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![1]).toEqual({ type: 'alerts', size: 'full', visible: false })
-    // While editing the widget keeps its place, faded and without its content.
-    expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument()
-    expect(toolsFor('Heads up').getByRole('button', { name: 'Show' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Done' }))
-    expect(screen.queryByText('Heads up')).not.toBeInTheDocument()
-  })
-
-  it('shows a hidden widget again', async () => {
-    const hidden = layout([{ type: 'leeway' }, { type: 'accounts', visible: false }])
-    const server = serve(hidden)
-    renderOverview(hidden)
-    const user = await startEditing()
-    expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument()
-    await user.click(toolsFor('Accounts').getByRole('button', { name: 'Show' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![1]).toMatchObject({ type: 'accounts', visible: true })
-    expect(await screen.findByRole('region', { name: 'Accounts' })).toBeInTheDocument()
-  })
-
-  it('adds a widget that is not on the dashboard, at the end and half size', async () => {
-    const server = serve()
-    renderOverview()
-    const user = await startEditing()
-    expect(screen.getByText('Add a widget')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '+ Your leeway' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '+ Top merchants' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]!.at(-1)).toEqual({
-      type: 'merchants',
-      size: 'half',
-      visible: true,
-    })
-    expect(await screen.findByRole('region', { name: 'Top merchants' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '+ Top merchants' })).not.toBeInTheDocument()
-  })
-
-  it('offers nothing to add once every widget is on the dashboard', async () => {
-    const everything = layout(Object.keys(WIDGET_LIBRARY).map((type) => ({ type })) as Widget[])
-    serve(everything)
-    renderOverview(everything)
-    await startEditing()
-    expect(screen.queryByText('Add a widget')).not.toBeInTheDocument()
-  })
-
-  it('resets to the default layout', async () => {
-    const custom = layout([{ type: 'trends' }, { type: 'merchants', visible: false }])
-    const server = serve(custom)
-    renderOverview(custom)
-    const user = userEvent.setup()
-    await screen.findByRole('region', { name: 'Spending by period' })
-    await user.click(screen.getByRole('button', { name: 'Edit layout' }))
-    await user.click(screen.getByRole('button', { name: 'Reset layout' }))
-    await waitFor(() => expect(sentLayouts(server)).toEqual([DEFAULT_LAYOUT]))
-    await user.click(screen.getByRole('button', { name: 'Done' }))
-    await waitFor(() => expect(shownWidgets()).toEqual(DEFAULT_PAGE_ORDER))
-  })
-
-  it('keeps widgets this app cannot draw yet when saving a change', async () => {
-    forgetWidgets('bills')
-    const future = layout([{ type: 'leeway' }, { type: 'bills' }, { type: 'glance' }])
-    const server = serve(future)
-    renderOverview(future)
-    const user = await startEditing()
-    await user.click(toolsFor('At a glance').getByRole('button', { name: 'Hide' }))
-    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]!.map((w) => [w.type, w.visible])).toEqual([
-      ['leeway', true],
-      ['bills', true],
-      ['glance', false],
-    ])
-  })
-
-  it('puts the layout back when the server refuses the change', async () => {
-    const server = serve(settings, {}, { '/api/actions/update_settings': refuse })
-    renderOverview()
-    const user = await startEditing()
-    await user.click(toolsFor('Your leeway').getByRole('button', { name: 'Hide' }))
-    await waitFor(() => expect(server.actions('update_settings')).toHaveLength(1))
-    expect(await screen.findByRole('region', { name: 'Your leeway' })).toBeInTheDocument()
-    expect(toolsFor('Your leeway').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
-  })
-
-  it('shows why a layout change could not be saved', async () => {
-    serve(settings, {}, { '/api/actions/update_settings': refuse })
-    renderOverview()
-    const user = await startEditing()
-    await user.click(toolsFor('Your leeway').getByRole('button', { name: 'Hide' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Layout could not be saved')
+describe('Ask Leeway on Home', () => {
+  it("is the frame's button alone, with no Ask link on the page itself", async () => {
+    serveHome(settings, { get_chat_status: () => ({ available: true }) })
+    renderHome()
+    expect(await screen.findByRole('button', { name: 'Ask Leeway' })).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /^Ask Leeway/ })).toHaveLength(1)
   })
 })

@@ -415,7 +415,7 @@ describe('finishing setup', () => {
     await user.click(screen.getByRole('button', { name: /Start empty/ }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(await screen.findByRole('button', { name: 'Open my overview' }))
-    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Setup steps' })).not.toBeInTheDocument()
   })
 

@@ -1,5 +1,5 @@
 // Money leaks among the account alerts: a charge that went through twice and
-// a repeating charge that went up in price, each on the Alerts page, opening
+// a repeating charge that went up in price, each in the Inbox, opening
 // that merchant's charges on the account, side by side.
 
 import { expect, test, type APIRequestContext } from '@playwright/test'
@@ -49,8 +49,10 @@ test.describe('money leaks', () => {
       [6, 4_210],
       [5, 4_210],
     ])
-    await page.goto('/alerts')
-    const alert = page.getByRole('link', { name: /Corner Hardware charged \$42\.10 twice/ })
+    await page.goto('/inbox')
+    const alert = page
+      .getByRole('region', { name: 'Needs you now' })
+      .getByRole('link', { name: /Corner Hardware charged \$42\.10 twice/ })
     await expect(alert).toBeVisible()
     await alert.click()
     await expect(page).toHaveURL(
@@ -73,8 +75,10 @@ test.describe('money leaks', () => {
       [35, 1_099],
       [5, 1_199],
     ])
-    await page.goto('/alerts')
-    const alert = page.getByRole('link', { name: /Streamly went up to \$11\.99, from \$10\.99/ })
+    await page.goto('/inbox')
+    const alert = page
+      .getByRole('region', { name: 'Needs you now' })
+      .getByRole('link', { name: /Streamly went up to \$11\.99, from \$10\.99/ })
     await expect(alert).toBeVisible()
     await alert.click()
     await expect(page).toHaveURL(

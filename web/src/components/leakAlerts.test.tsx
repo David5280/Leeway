@@ -7,9 +7,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { duplicateAlert, priceRiseAlert } from '../../../server/src/domain/leaks/leakAlerts'
 import type { AccountAlert } from '../api/client'
-import { AccountHealth } from '../pages/overview/AccountHealth'
-import { fakeServer, renderSignedIn } from '../test/fake'
+import { budgetFor, fakeServer, renderSignedIn } from '../test/fake'
 import { homeAlertHandlers } from '../test/homeAlerts'
+import { AlertsWidget } from '../widgets/Alerts'
 import { ALERT_LABELS, alertKey, alertPath, alertTone } from './AccountAlerts'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -92,15 +92,18 @@ describe('a leak alert', () => {
   })
 })
 
-describe('leaks on the home banner', () => {
-  const banner = () => screen.getByRole('region', { name: 'Account alerts' })
+describe('leaks in Heads up on Home', () => {
+  const headsUp = () => screen.getByRole('region', { name: 'Heads up' })
 
   it('lists both in amber, and hides one by its charge', async () => {
-    const server = fakeServer(homeAlertHandlers([twice, rise]).handlers)
-    renderSignedIn(<AccountHealth />)
+    const server = fakeServer({
+      list_connections: () => [],
+      ...homeAlertHandlers([twice, rise]).handlers,
+    })
+    renderSignedIn(<AlertsWidget budget={budgetFor([], [])} />)
     const link = await screen.findByRole('link', { name: /Netflix & Co charged \$15\.49 twice/ })
     expect(link).toHaveAttribute('href', alertPath(twice))
-    expect(banner()).toHaveClass('warn-card')
+    expect(headsUp()).toHaveClass('warn-card')
 
     await userEvent.click(
       screen.getByRole('button', {

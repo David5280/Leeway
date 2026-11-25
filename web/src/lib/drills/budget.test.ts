@@ -1,21 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import type { Budget, Connection, SpendingPace } from '../../api/client'
+import type { Budget, SpendingPace } from '../../api/client'
 import { budgetFor, category, transaction } from '../../test/fake'
 import { mathSentence } from '../drill'
 import { money as formatMoney } from '../money'
 import { inAndOut, recentDrill } from './activity'
 import {
   budgetDetail,
-  categoriesDrill,
-  incomeDrill,
   leewayDrill,
   spendingTrend,
   spendingUsual,
   spentDrill,
-  uncategorizedDrill,
   usualPeriodSpend,
 } from './budget'
-import { paceDrill, syncDrill } from './pace'
+import { paceDrill } from './pace'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
 const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: 'en-US' })
@@ -123,74 +120,6 @@ describe('spentDrill and spendingTrend', () => {
   })
 })
 
-describe('categoriesDrill', () => {
-  it('names six categories, sums the rest, and notes what is unsorted', () => {
-    const many = Array.from({ length: 8 }, (_, index) => category(`C${index}`))
-    const wide = budgetFor(many, [
-      ...many.map((one, index) => ({ categoryId: one.id, amountCents: (8 - index) * 1000 })),
-      { categoryId: null, amountCents: 700 },
-    ])
-    const drill = categoriesDrill(wide, 'month', money)
-    expect(drill.math.terms).toHaveLength(7)
-    expect(drill.math.terms.at(-1)).toEqual({
-      label: 'everything else',
-      value: { cents: 3000 },
-      op: 'plus',
-    })
-    expect(drill.math.note).toBe('$7 more still needs a category.')
-    expect(drill.items!.rows).toHaveLength(8)
-  })
-
-  it('has no note when everything is sorted', () => {
-    const sorted = budgetFor(categories, [{ categoryId: fun.id, amountCents: 5000 }])
-    expect(categoriesDrill(sorted, 'month', money).math.note).toBeUndefined()
-  })
-})
-
-describe('incomeDrill', () => {
-  it('lists each income category, against this point last period', () => {
-    const withHistory = {
-      ...budget,
-      previous: {
-        ...budget.previous,
-        categories: [{ categoryId: paycheck.id, spentToDateCents: -240000 }],
-      },
-    } as Budget
-    const drill = incomeDrill(withHistory, 'month')
-    expect(drill.math.terms).toEqual([
-      { label: 'Paycheck', value: { cents: 250000 }, op: undefined },
-    ])
-    expect(drill.usual).toMatchObject({ currentCents: budget.totals.incomeCents, goodWhen: 'up' })
-    expect(drill.items!.rows).toHaveLength(1)
-  })
-
-  it('says when nothing has come in yet, with no usual to compare', () => {
-    const quiet = budgetFor(categories, [])
-    const drill = incomeDrill(quiet, 'week')
-    expect(drill.math.terms[0]!.label).toBe('Nothing has come in yet')
-    expect(drill.usual).toBeUndefined()
-    expect(drill.items).toBeUndefined()
-  })
-})
-
-describe('uncategorizedDrill', () => {
-  it('counts what needs a category and links to sorting it', () => {
-    const drill = uncategorizedDrill(budget)
-    expect(drill.figure).toEqual({ text: '1 transaction' })
-    expect(drill.more).toEqual({
-      to: '/spending/activity?category=uncategorized',
-      label: 'Sort 1 transaction',
-    })
-  })
-
-  it('says everything has a category, with nothing to open', () => {
-    const drill = uncategorizedDrill(budgetFor(categories, []))
-    expect(drill.figure).toEqual({ text: '0 transactions' })
-    expect(drill.math.note).toBe('Everything has a category.')
-    expect(drill.more).toBeUndefined()
-  })
-})
-
 describe('paceDrill', () => {
   const pace = {
     categoryIds: [groceries.id, dining.id],
@@ -214,41 +143,6 @@ describe('paceDrill', () => {
     const drill = paceDrill({ ...pace, cumulative: [] }, budget, false)
     expect(said(drill)).toBe('Spent $0 = Spent in the period $0')
     expect(drill.figure.tone).toBeUndefined()
-  })
-})
-
-describe('syncDrill', () => {
-  const connection = (fields: Partial<Connection>) =>
-    ({
-      id: 'a',
-      institutionName: 'Chase',
-      status: 'active',
-      lastSyncedAt: null,
-      accountCount: 1,
-      ...fields,
-    }) as Connection
-
-  it('counts the banks syncing on their own and those that need the owner', () => {
-    const drill = syncDrill(
-      [
-        connection({ accountCount: 2 }),
-        connection({ id: 'b', status: 'needs_reauth', institutionName: null }),
-      ],
-      () => '5 min ago',
-    )
-    expect(drill.figure).toEqual({ text: 'Needs you', tone: 'warn' })
-    expect(drill.math.result.value).toEqual({ text: '1 bank' })
-    expect(drill.math.note).toMatch(/^3 accounts come in/)
-    expect(drill.items!.rows.map((one) => [one.label, one.detail])).toEqual([
-      ['Chase', 'Synced 5 min ago'],
-      ['Bank', 'Needs you to sign in again'],
-    ])
-  })
-
-  it('reads up to date with one account', () => {
-    const drill = syncDrill([connection({})], () => 'never')
-    expect(drill.figure).toEqual({ text: 'Up to date', tone: undefined })
-    expect(drill.math.note).toMatch(/^1 account comes in/)
   })
 })
 

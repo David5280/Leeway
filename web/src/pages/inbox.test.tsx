@@ -1,14 +1,15 @@
-// The inbox: alerts as they happened, opened, read and dismissed.
+// The inbox: what needs the owner now on top, then alerts as they happened,
+// opened, read and dismissed, then what Leeway watches for.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { account, alertsFor, failing, fakeServer, renderSignedIn } from '../test/fake'
+import { account, alertsFor, budgetFor, failing, fakeServer, renderSignedIn } from '../test/fake'
 import { homeAlertHandlers } from '../test/homeAlerts'
 import { inboxHandlers, inboxItem } from '../test/notifications'
 import { Inbox, type InboxItem } from './Inbox'
-import { AccountHealth } from './overview/AccountHealth'
+import { AlertsWidget } from '../widgets/Alerts'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -30,8 +31,11 @@ const cleared = inboxItem({
   readAt: new Date(),
 })
 
+/** Quiet answers for Needs you now, so only the earlier alerts have anything to say. */
+const nothingNow = { list_alerts: () => [], get_budget: () => budgetFor([], []) }
+
 function renderInbox(items: InboxItem[], routes: Record<string, () => Response> = {}) {
-  const server = fakeServer(inboxHandlers(items), routes)
+  const server = fakeServer({ ...nothingNow, ...inboxHandlers(items) }, routes)
   renderSignedIn(
     <Routes>
       <Route path="/inbox" element={<Inbox />} />
@@ -62,15 +66,38 @@ describe('Inbox', () => {
     )
   })
 
+  it('puts what needs the owner now above everything earlier, and explains what is watched', async () => {
+    renderInbox([overdrawn])
+    await within(list()).findAllByRole('listitem')
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings.slice(0, 2)).toEqual(['Needs you now', 'Earlier'])
+    const now = screen.getByRole('region', { name: 'Needs you now' })
+    // Compares where the two cards sit in the page: now comes first.
+    expect(now.compareDocumentPosition(list()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'About alerts' })).toHaveTextContent(
+      '$100 for checking accounts',
+    )
+    expect(screen.getByRole('link', { name: 'Settings, then Accounts' })).toHaveAttribute(
+      'href',
+      '/settings/accounts',
+    )
+  })
+
   it('puts its own fresh count on the bell, which may have asked before the inbox caught up', async () => {
-    fakeServer({ ...inboxHandlers([overdrawn, bill]), count_notifications: () => ({ unread: 0 }) })
+    fakeServer({
+      ...nothingNow,
+      ...inboxHandlers([overdrawn, bill]),
+      count_notifications: () => ({ unread: 0 }),
+    })
     renderSignedIn(<Inbox />, { route: '/inbox' })
     expect(await screen.findByRole('link', { name: 'Inbox, 1 unread' })).toBeVisible()
   })
 
   it('says so when there is nothing', async () => {
     renderInbox([])
-    expect(await screen.findByText('Nothing new. Alerts show here as they happen.')).toBeVisible()
+    expect(
+      await screen.findByText('Nothing earlier. Alerts show here as they happen.'),
+    ).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Mark all read' })).not.toBeInTheDocument()
   })
 
@@ -120,6 +147,8 @@ describe('Inbox', () => {
     const home = homeAlertHandlers(alertsFor([everyday]))
     const inbox = inboxHandlers([overdrawn])
     const server = fakeServer({
+      ...nothingNow,
+      list_connections: () => [],
       ...inbox,
       ...home.handlers,
       // The server puts a dismissed alert away from home as well.
@@ -131,17 +160,17 @@ describe('Inbox', () => {
     // Both on one screen, as the home list stays cached while the inbox is open.
     renderSignedIn(
       <>
-        <AccountHealth />
+        <AlertsWidget budget={budgetFor([], [])} />
         <Inbox />
       </>,
       { route: '/inbox' },
     )
-    expect(await screen.findByRole('region', { name: 'Account alerts' })).toBeVisible()
+    expect(await screen.findByRole('region', { name: 'Heads up' })).toBeVisible()
     await userEvent.click(
       await screen.findByRole('button', { name: 'Dismiss Overdrawn: Test Everyday is at -$40.' }),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Account alerts' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('region', { name: 'Heads up' })).not.toBeInTheDocument(),
     )
     expect(server.actions('list_home_alerts')).toHaveLength(2)
   })

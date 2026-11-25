@@ -1,6 +1,6 @@
-// The Overview opens with only what answers "am I OK?" (DEFAULT_WIDGETS in
-// server/src/domain/settings.ts). Tests that read a widget the owner adds
-// themselves, like the summary or the recent list, show it on this page only,
+// Home opens with Leeway, Heads up and one card per tab (DEFAULT_WIDGETS in
+// server/src/domain/settings.ts). Tests that read a card the owner adds
+// themselves, like the summary or top merchants, show it on this page only,
 // by standing in for the saved layout, so no other test finds it changed.
 
 import type { Page } from '@playwright/test'
@@ -11,28 +11,22 @@ export interface Widget {
   size: 'half' | 'wide' | 'full'
 }
 
-/** Every widget the library offers, at the size each reads best at. */
+/** Every card Home can show, at the size each reads best at. */
 export const EVERY_WIDGET: Widget[] = [
   { type: 'leeway', size: 'wide' },
-  { type: 'net-worth', size: 'half' },
   { type: 'alerts', size: 'full' },
-  { type: 'flows', size: 'full' },
-  { type: 'pace', size: 'full' },
-  { type: 'summary', size: 'full' },
-  { type: 'glance', size: 'full' },
-  { type: 'categories', size: 'wide' },
-  { type: 'accounts', size: 'half' },
-  { type: 'recent', size: 'wide' },
-  { type: 'merchants', size: 'half' },
-  { type: 'bills', size: 'half' },
-  { type: 'cash-flow', size: 'full' },
+  { type: 'cash-flow', size: 'half' },
+  { type: 'pace', size: 'half' },
   { type: 'goals', size: 'half' },
+  { type: 'net-worth', size: 'half' },
+  { type: 'summary', size: 'full' },
+  { type: 'trends', size: 'half' },
+  { type: 'merchants', size: 'half' },
   { type: 'debts', size: 'half' },
-  { type: 'trends', size: 'full' },
 ]
 
 /**
- * Shows these widgets on the Overview, after the ones already there, for this
+ * Shows these cards on Home, after the ones already there, for this
  * page only: the saved layout is untouched, so nothing needs putting back.
  */
 export async function showWidgets(page: Page, types: string[]): Promise<void> {
@@ -45,7 +39,7 @@ export async function showWidgets(page: Page, types: string[]): Promise<void> {
   })
 }
 
-/** Shows every widget the library offers, as an owner who added them all would see it. */
+/** Shows every card Home can show, as an owner who added them all would see it. */
 export async function showEveryWidget(page: Page): Promise<void> {
   await showWidgets(
     page,

@@ -43,9 +43,8 @@ async function overdrawnAccountTour(page: Page): Promise<void> {
   await page.goto('/')
   const headsUp = page.getByRole('region', { name: 'Heads up' })
   await expect(headsUp).toContainText('Everyday is overdrawn by $42.10.')
-  // Said once: no banner above the hero, only Heads up.
+  // Said once on Home, in Heads up.
   await expect(page.getByText('Everyday is overdrawn by $42.10.')).toHaveCount(1)
-  await expect(page.getByRole('region', { name: 'Account alerts' })).toHaveCount(0)
   await headsUp.getByRole('link', { name: /Everyday is overdrawn/ }).click()
 
   // The alert opens the account's own page, which leads with the overdraft.
@@ -83,10 +82,9 @@ async function overdrawnAccountTour(page: Page): Promise<void> {
   }
   await expect(bar).toContainText('Tick the accounts to add up')
 
-  // The Alerts page lists every alert.
-  await page.goto('/alerts')
-  await expect(page.getByRole('heading', { level: 1, name: 'Alerts' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Account alerts' })).toContainText(
+  // The Inbox lists every alert that needs the owner now.
+  await page.goto('/inbox')
+  await expect(page.getByRole('region', { name: 'Needs you now' })).toContainText(
     'Everyday is overdrawn by $42.10.',
   )
 }
@@ -95,8 +93,10 @@ test('a low-balance warning set in Settings becomes an alert', async ({ page }) 
   await addAccount(page, { name: 'Bills', balance: '50' })
   try {
     // A cash account other than checking has no warning until one is set.
-    await page.goto('/alerts')
-    await expect(page.getByText(/Every account is fine/)).toBeVisible()
+    await page.goto('/inbox')
+    const now = page.getByRole('region', { name: 'Needs you now' })
+    await expect(now).not.toContainText('Loading')
+    await expect(now).not.toContainText('Bills is down')
 
     await page.goto('/settings/accounts')
     const warning = page.getByRole('textbox', { name: 'Low balance warning for Bills' })
@@ -108,8 +108,8 @@ test('a low-balance warning set in Settings becomes an alert', async ({ page }) 
     await warning.press('Tab')
     expect((await saved).ok()).toBe(true)
 
-    await page.goto('/alerts')
-    await expect(page.getByRole('region', { name: 'Account alerts' })).toContainText(
+    await page.goto('/inbox')
+    await expect(page.getByRole('region', { name: 'Needs you now' })).toContainText(
       'Bills is down to $50, below your $100 warning.',
     )
   } finally {

@@ -45,8 +45,7 @@ export const SCREEN_ROUTES = {
   savings: '/wealth/savings',
   /** Cash in checking that could earn more in savings. */
   idleCash: '/wealth/idle-cash',
-  alerts: '/alerts',
-  /** Notifications: the alerts as they happened, read and unread. */
+  /** The Inbox: what needs the owner now, then every alert as it happened. */
   inbox: '/inbox',
   /** Chat with Leeway about the owner's money, only when the server has an AI key. */
   chat: '/chat',
@@ -79,6 +78,8 @@ export const OLD_ROUTES = {
   trip: '/trips/:start/:end',
   /** The address Settings had when it was called Customize. */
   customize: '/customize/:group?',
+  /** Every alert had its own page before the Inbox held them. */
+  alerts: '/alerts',
 } as const
 
 export const ROUTES = { ...SCREEN_ROUTES, ...CONNECT_ROUTES } as const
@@ -141,7 +142,6 @@ export const paths = {
   retirement: () => SCREEN_ROUTES.retirement,
   savings: () => SCREEN_ROUTES.savings,
   idleCash: () => SCREEN_ROUTES.idleCash,
-  alerts: () => SCREEN_ROUTES.alerts,
   inbox: () => SCREEN_ROUTES.inbox,
   chat: () => SCREEN_ROUTES.chat,
   /** Settings, opening on the group used last (settingsPath links to one group). */

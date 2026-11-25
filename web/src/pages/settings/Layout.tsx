@@ -1,4 +1,5 @@
-// Which widgets the Overview shows, in what order and at what size.
+// Which cards Home shows under Leeway and Heads up, in what order and at what
+// size. The same choices as Edit layout on Home, for a phone too narrow for it.
 
 import { Icon, Segmented, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
@@ -17,17 +18,17 @@ import { Section, useSave } from './Section'
 export function LayoutSection() {
   const { settings } = useApp()
   const save = useSave()
-  // Changes go to the full saved list, keeping widgets this build cannot draw.
+  // Changes go to the full saved list, keeping cards this build cannot draw.
   const all = settings.dashboard.widgets
   const widgets = drawable(all)
   const missing = addableTypes(all)
   const saveWidgets = (next: Widget[]) => save.settings({ dashboard: { widgets: next } })
 
   return (
-    <Section id="layout" title="Dashboard" hint="Or press Edit layout on the overview">
+    <Section id="layout" title="Home cards" hint="Or press Edit layout on Home">
       <p className="small muted">
-        Wide widgets stack on the left and half widgets on the right; full widgets span the page. On
-        a phone they all follow this order.
+        Your leeway and Heads up always lead. Under them, wide cards stack on the left and half
+        cards on the right; full cards span the page. On a phone they all follow this order.
       </p>
       {/* The rows sit in their own box so they lay out by the card's width (styles.css). */}
       <div className="layout-rows">
@@ -84,7 +85,7 @@ export function LayoutSection() {
               key={type}
               type="button"
               className="chip"
-              onClick={() => saveWidgets([...all, { type, size: 'wide', visible: true }])}
+              onClick={() => saveWidgets([...all, { type, size: 'half', visible: true }])}
             >
               + {WIDGET_LIBRARY[type]!.name}
             </button>

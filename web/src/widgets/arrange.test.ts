@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { arrange, sharesLane, type Band } from './arrange'
-import { DEFAULT_LAYOUT, type Widget } from './library'
+import { DEFAULT_LAYOUT, drawable, type Widget } from './library'
 
 const w = (type: string, size: Widget['size']) => ({ type, size, visible: true }) as Widget
 
@@ -14,12 +14,14 @@ function names(band: Band) {
 }
 
 describe('arrange', () => {
-  it('lays the default dashboard out with net worth beside the hero, then full width', () => {
-    expect(arrange(DEFAULT_LAYOUT).map(names)).toEqual([
-      { main: ['leeway'], side: ['net-worth'] },
-      { full: 'alerts' },
-      { full: 'flows' },
-      { full: 'pace' },
+  it("lays Home's default tab cards out as two even columns, in the map's order", () => {
+    expect(arrange(drawable(DEFAULT_LAYOUT)).map(names)).toEqual([
+      {
+        pair: [
+          ['cash-flow', 'goals'],
+          ['pace', 'net-worth'],
+        ],
+      },
     ])
   })
 

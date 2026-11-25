@@ -295,6 +295,14 @@ h2 {
   border-color: transparent;
 }
 
+/* The accent can fall under 4.5:1 on these tints, so their links take the ink,
+   underlined to still read as links (lib/homeContrast.test.ts). */
+.card.warn-card .linkbtn,
+.card.over-card .linkbtn {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
 .eyebrow {
   font-size: 12px;
   letter-spacing: 0.07em;

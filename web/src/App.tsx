@@ -9,7 +9,6 @@ import { AskProvider } from './components/ask/AskProvider'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
 import { AccountDetail } from './pages/AccountDetail'
-import { Alerts } from './pages/Alerts'
 import { BillsPage } from './pages/Bills'
 import { CategoryPage } from './pages/Category'
 import { ChatPage } from './pages/Chat'
@@ -71,7 +70,6 @@ function Screens() {
       <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />
       <Route path={SCREEN_ROUTES.savings} element={<SavingsPage />} />
       <Route path={SCREEN_ROUTES.idleCash} element={<IdleCashPage />} />
-      <Route path={SCREEN_ROUTES.alerts} element={<Alerts />} />
       <Route path={SCREEN_ROUTES.inbox} element={<Inbox />} />
       <Route path={SCREEN_ROUTES.chat} element={<ChatPage />} />
       <Route path={SCREEN_ROUTES.settings} element={<SettingsPage />} />

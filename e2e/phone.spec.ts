@@ -10,7 +10,7 @@ const overflow = (page: Page) =>
 const PATHS = [
   '/',
   '/wealth',
-  '/alerts',
+  '/inbox',
   '/spending/activity',
   '/spending',
   '/payday',
@@ -185,6 +185,6 @@ test('dashboard rows shorten a long name with an ellipsis rather than clipping i
     spans.filter((span) => span.scrollWidth <= span.clientWidth).map((span) => span.textContent),
   )
   expect(shown).toContain('Spending pace')
-  expect(shown).toContain('Money in and out')
+  expect(shown).toContain('Your top goal')
   expect(await overflow(page)).toBeLessThanOrEqual(0)
 })

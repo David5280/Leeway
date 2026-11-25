@@ -83,7 +83,6 @@ describe('the link builders', () => {
     [paths.retirement(), 'retirement'],
     [paths.savings(), 'savings'],
     [paths.idleCash(), 'idleCash'],
-    [paths.alerts(), 'alerts'],
     [paths.inbox(), 'inbox'],
     [paths.chat(), 'chat'],
     [paths.settings(), 'settings'],
@@ -156,7 +155,6 @@ describe("the server's links into the app", () => {
   it('are the same addresses the app builds', () => {
     expect(APP_PATHS.bills).toBe(paths.bills())
     expect(APP_PATHS.activity).toBe(paths.activity())
-    expect(APP_PATHS.alerts).toBe(paths.alerts())
     expect(APP_PATHS.inbox).toBe(paths.inbox())
     expect(APP_PATHS.category('cat 1')).toBe(paths.category('cat 1'))
     expect(APP_PATHS.settings('banks')).toBe(settingsPath('banks'))
@@ -182,7 +180,6 @@ describe("the server's links into the app", () => {
       Retirement: paths.retirement(),
       'How much you save': paths.savings(),
       'Cash that could earn more': paths.idleCash(),
-      Alerts: paths.alerts(),
       Inbox: paths.inbox(),
       Settings: paths.settings(),
     })

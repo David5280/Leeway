@@ -74,17 +74,18 @@ test('saving for a purchase sets money aside and counts what goes toward it', as
   await card.getByRole('button', { name: 'History' }).click()
   await expect(card.getByRole('list', { name: 'Road bike history' })).toContainText('+$50.00')
 
-  // The overview's leeway holds the goal's share back and says so.
+  // Home's leeway says what sets it. When it is the budget, its math takes the
+  // goal's share out (lib/drills/budget.test.ts); the cash sets it otherwise.
   await page.goto('/')
   const leeway = page.getByRole('region', { name: 'Your leeway' })
-  await expect(
-    leeway.getByRole('list', { name: 'Set aside for goals' }).getByRole('listitem'),
-  ).toContainText(['Set aside for Road bike'])
-  // Its math takes the share out of what is left to spend.
   await leeway.getByRole('button', { name: /show how it adds up/ }).click()
-  await expect(
-    page.getByRole('dialog').getByRole('region', { name: 'How it adds up' }),
-  ).toContainText(/minus set aside for goals \$\d+/)
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toContainText(/Set by your (budget|cash)/)
+  if ((await sheet.innerText()).includes('Set by your budget')) {
+    await expect(sheet.getByRole('region', { name: 'How it adds up' })).toContainText(
+      /minus set aside for goals \$\d+/,
+    )
+  }
   await page.keyboard.press('Escape')
 })
 

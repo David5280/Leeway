@@ -101,7 +101,6 @@ export const SCREENS: Screen[] = [
     // The seeded card has an APR; the prompt shows in its place without one.
     before: withoutAprs,
   },
-  at('alerts', '/alerts'),
   at('inbox', '/inbox'),
   ...TRANSACTION_SCREENS,
   at('importTransactions', '/spending/activity/import'),

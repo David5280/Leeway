@@ -90,7 +90,7 @@ describe('Settings menu', () => {
     expect(groupHeading()).toHaveTextContent('Appearance')
     expect(screen.getByText('Theme, colors and type, and what the overview shows.')).toBeVisible()
     expect(screen.getByRole('region', { name: 'Look' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Home cards' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Banks' })).toBeNull()
   })
 

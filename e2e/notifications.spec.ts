@@ -27,17 +27,16 @@ test.describe('the inbox', () => {
     accountId = account.id
 
     await page.goto('/inbox')
-    const item = page.getByRole('listitem').filter({ hasText: 'Inbox test checking' })
+    const item = page
+      .getByRole('region', { name: 'Notifications' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Inbox test checking' })
     await expect(item).toContainText('Overdrawn')
     await expect(item).toContainText('Unread')
     await expect(page.getByRole('link', { name: /^Inbox, \d+ unread$/ })).toBeVisible()
 
+    // An account alert opens where every alert needing the owner is listed: here.
     await item.getByRole('link', { name: /^Open Overdrawn: / }).click()
-    await expect(page).toHaveURL(/\/alerts$/)
-    await page
-      .getByRole('banner')
-      .getByRole('link', { name: /^Inbox/ })
-      .click()
     await expect(page).toHaveURL(/\/inbox$/)
     await expect(item).not.toContainText('Unread')
 
