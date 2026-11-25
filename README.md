@@ -268,7 +268,7 @@ it instead, set `ANTHROPIC_API_KEY` (from the
 write it** in **Settings**, then **AI assistant**. Nothing is sent until you
 turn it on. Claude then gets this period's totals, the Heads up list, bill and
 goal names, and any account alerts, which name the account the way Leeway shows
-it, like "Chase Total Checking is down to $35.00". It never gets account
+it, like "Everyday Checking is down to $35.00". It never gets account
 numbers or transactions. A summary is reused while your numbers stay the same,
 for up to four hours, and with the default model each one costs well under a
 cent on your own Anthropic account. The model and a monthly limit are set in
@@ -535,7 +535,9 @@ address (Railway gives you one).
   Screen**. Push notifications on iPhone and iPad need this.
 - **Android:** open Leeway in Chrome, open the menu and choose **Add to Home
   screen** or **Install app**.
-- **Mac, Windows or Linux:** open Leeway in Chrome or Edge and choose the
+- **Mac with Safari:** open Leeway in Safari, then choose **File**, then
+  **Add to Dock**.
+- **Mac, Windows or Linux with Chrome or Edge:** open Leeway and choose the
   install button at the right of the address bar.
 
 An installed Leeway left open loads a new version on its own at the next quiet
