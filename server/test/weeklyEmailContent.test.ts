@@ -149,7 +149,7 @@ describe('weeklyEmailContent', () => {
       { text: 'Cushion: reached', detail: '100% saved' },
       { text: 'House: its account is no longer shared', detail: '6% saved as of Nov 10' },
     ])
-    expect(section({}, 'Goals').empty).toBe('No goals yet. Add one from the Plan tab.')
+    expect(section({}, 'Goals').empty).toBe('No goals yet. Add one from the Goals tab.')
   })
 
   it('credits an AI that wrote the summary, and says how to stop the email', () => {

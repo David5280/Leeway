@@ -77,7 +77,7 @@ export function useAsk(onFailed: (question: string) => void): Asking {
     } else if (event.type === 'tool') {
       setPending((now) => now && { ...now, tool: event.title })
     } else if (event.type === 'error') {
-      fail(question, event.message)
+      fail(question, event.message, event.limit === true)
     } else if (event.type === 'cleared') {
       // Started over elsewhere while this was answered: nothing was kept.
       setPending(null)

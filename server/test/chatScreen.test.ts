@@ -152,6 +152,32 @@ describe('POST /api/chat with a screen', () => {
     ])
   })
 
+  it("hides a person named in the screen or card, as in a tool's result", async () => {
+    // The screen and card name the owner's own goal, whose name holds a person's.
+    const goal = await app.inject({
+      method: 'POST',
+      url: '/api/actions/create_goal',
+      headers: { cookie },
+      payload: { name: 'Gift for Jordan Avery', targetCents: 20_000 },
+    })
+    expect(goal.statusCode).toBe(200)
+    await ask({
+      message: 'How is this going?',
+      context: {
+        screen: 'Goal: Gift for Jordan Avery',
+        card: { label: 'Gift for Jordan Avery', figure: '$1,200' },
+      },
+    })
+    const sent = provider.conversed[0]!.messages.at(-1)
+    expect(JSON.stringify(sent)).not.toMatch(/Jordan|Avery/)
+    expect(sent).toEqual({
+      role: 'user',
+      text: expect.stringMatching(
+        /^Asked from: Goal: Gift for someone.*, card Gift for someone.* showing \$1,200\n\nHow is this going\?$/,
+      ),
+    })
+  })
+
   it('sends the same instructions, context and history from any screen', async () => {
     await ask({ message: 'Why so low?', context: { screen: 'Payday' } })
     await ask({ message: 'And this?', context: { screen: 'Goals' } })

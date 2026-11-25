@@ -47,7 +47,7 @@ export const RISE_NEWS_DAYS = 45
  * The cadences a rise is looked for on: quarterly or more often. A rise needs
  * two steady charges before the latest, so three in all, and the history the
  * recurring finder reads (about 400 days) holds only two of a yearly charge.
- * Saying so here keeps the words on the Alerts page and in list_alerts true.
+ * Saying so here keeps the words in the inbox and in list_alerts true.
  */
 export const RISE_CADENCES: readonly Cadence[] = ['week', 'biweek', 'semimonth', 'month', 'quarter']
 

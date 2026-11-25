@@ -163,7 +163,7 @@ function goalsSection({ goals }: Checkin, money: Money, locale: string): EmailSe
   return {
     title: 'Goals',
     items: goals.slice(0, MAX_LIST_ITEMS).map((goal) => goalItem(goal, money, locale)),
-    empty: 'No goals yet. Add one from the Plan tab.',
+    empty: 'No goals yet. Add one from the Goals tab.',
   }
 }
 

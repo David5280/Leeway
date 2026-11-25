@@ -327,48 +327,18 @@
   padding: calc(var(--pad) * 0.75);
 }
 
-.tile-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-/* A tile's icon: accent by default, green for money in, amber when it needs you. */
-.tile-icon,
+/* A kind's icon chip, tinted with its tone (accent by default). */
 .kind-chip {
   --t: var(--accent);
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--t) 16%, var(--surface));
-  color: color-mix(in srgb, var(--t) 70%, var(--ink));
-  box-shadow: var(--hi);
-}
-
-.tile-icon-in {
-  --t: var(--good);
-}
-
-.tile-icon-warn {
-  --t: var(--warn);
-}
-
-.kind-chip {
   width: 36px;
   height: 36px;
   border-radius: 11px;
-}
-
-.tile-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 18px;
-  font-weight: var(--weight-strong);
+  background: color-mix(in srgb, var(--t) 16%, var(--surface));
+  color: color-mix(in srgb, var(--t) 70%, var(--ink));
+  box-shadow: var(--hi);
 }
 
 /* Page heads: a screen's title with its icon, and what sits beside it -- */

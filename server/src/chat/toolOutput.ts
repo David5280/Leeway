@@ -28,6 +28,7 @@ import { agentJson } from '../mcp/agentOutput.js'
 import { withoutBankText } from '../mcp/withoutBankText.js'
 import { replacementsOf, type HiddenNames } from './hiddenNames.js'
 import { mergedByLabel } from './labelledRows.js'
+import type { ScreenContext } from './screen.js'
 import { replacedIn } from './namePatterns.js'
 
 /** What Chat hides in a tool's result. */
@@ -167,4 +168,21 @@ export function chatToolText(result: unknown, people: PaymentPeople): string {
  */
 export function chatPlainText(text: string, people: PaymentPeople): string {
   return scrubbed(text, { people, ...replacementsOf(people) })
+}
+
+/**
+ * Where a question was asked, with names hidden as in chatPlainText: a
+ * screen like "Category: Gifts for Sam" and a card like a goal's name are
+ * the owner's own labels, so they may name a person.
+ */
+export function chatScreen(
+  askedFrom: ScreenContext | undefined,
+  people: PaymentPeople,
+): ScreenContext | undefined {
+  if (!askedFrom) return undefined
+  const plain = (text: string) => chatPlainText(text, people)
+  const { screen, card } = askedFrom
+  if (!card) return { screen: plain(screen) }
+  const figure = card.figure === undefined ? {} : { figure: plain(card.figure) }
+  return { screen: plain(screen), card: { label: plain(card.label), ...figure } }
 }

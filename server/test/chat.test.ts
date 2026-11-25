@@ -412,6 +412,7 @@ describe('when a question is turned away or fails', () => {
     expect(lastOf(events)).toEqual({
       type: 'error',
       message: expect.stringMatching(/^This month's AI limit of \$0 is reached\./),
+      limit: true,
     })
     expect(provider.conversed).toHaveLength(0)
     expect(await listMessages(ctx.db)).toEqual([])

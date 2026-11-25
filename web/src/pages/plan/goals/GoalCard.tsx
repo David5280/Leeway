@@ -21,7 +21,10 @@ function Badges({ goal, word }: { goal: Goal; word: string }) {
       {goal.kind === 'purchase' && <span className="badge">Purchase</span>}
       {goal.heldBackCents > 0 && (
         <span className="badge">
-          <Money cents={goal.heldBackCents} /> held from this {word}&apos;s budget
+          {/* One inline run: a flex badge would trim the space after the amount. */}
+          <span>
+            <Money cents={goal.heldBackCents} /> held from this {word}&apos;s budget
+          </span>
         </span>
       )}
     </div>

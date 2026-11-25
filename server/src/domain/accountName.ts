@@ -1,5 +1,5 @@
-// An account's name as Leeway shows it everywhere: in alerts, the dashboard
-// summary, the Accounts page, the weekly email and to assistants. Pure.
+// An account's name as Leeway shows it everywhere: in alerts, the summary,
+// Home's account list, the weekly email and to assistants. Pure.
 //
 // The owner's own name for an account wins. Otherwise banks send names like
 // "TOTAL CHECKING" from "BOK Financial - Online Banking", which read better as
