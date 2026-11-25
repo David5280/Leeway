@@ -1,0 +1,75 @@
+/* How Ask Leeway moves (components/ask/AskFab.tsx): the box swings open out
+   of the button's corner and back into it, and the logo spins back into
+   place as it returns. Where things sit is in ask.css; this file only moves
+   them, and with less motion asked for, only fades. */
+
+/* The logo spins back into place as the box swings closed into the button,
+   starting once the box has mostly gone, held turned until then. */
+.ask-fab-logo {
+  display: grid;
+  place-items: center;
+}
+
+.ask-fab-logo[data-spin='true'] {
+  animation: ask-fab-spin 280ms var(--ease-out) 120ms backwards;
+}
+
+@keyframes ask-fab-spin {
+  from {
+    transform: rotate(-270deg) scale(0.6);
+  }
+}
+
+/* Swings back into the button; AskFab.tsx's BOX_EXIT_MS matches this. */
+.ask-box[data-state='closing'] {
+  animation: ask-box-shrink 200ms ease-in both;
+  pointer-events: none;
+}
+
+/* A turn around the corner while growing: the spin, kept short so the box
+   is readable at once. */
+@keyframes ask-box-grow {
+  from {
+    opacity: 0;
+    transform: rotate(var(--ask-turn)) scale(0.2);
+  }
+}
+
+@keyframes ask-box-shrink {
+  to {
+    opacity: 0;
+    transform: rotate(var(--ask-turn)) scale(0.2);
+  }
+}
+
+@keyframes ask-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Its own name, not the fade in reversed: a browser restarts an animation
+   only when its name changes. */
+@keyframes ask-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* When the device asks for less motion, nothing spins, swings or scales:
+   the box only fades in and out, and the logo stays still. */
+@media (prefers-reduced-motion: reduce) {
+  .ask-fab-button,
+  .ask-fab-logo[data-spin='true'] {
+    animation: none;
+    transition: none;
+  }
+
+  .ask-box {
+    animation: ask-fade-in 160ms ease-out backwards;
+  }
+
+  .ask-box[data-state='closing'] {
+    animation: ask-fade-out 160ms ease-in both;
+  }
+}

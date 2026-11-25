@@ -1,5 +1,6 @@
 /* Ask Leeway on every screen (components/ask/AskFab.tsx and AskBox.tsx): a
-   round logo button in the bottom right corner, and the box it grows into.
+   round logo button in the bottom right corner, and the box it swings open
+   into.
    Plain surface, ink, muted and line colors only: neither wears a place or
    status color, and only the question field lights with the accent when it
    has focus. */
@@ -9,7 +10,9 @@
 /* Where the button and box sit, per frame (shell/frame.ts), measured from
    the bottom right. The phone's tab bar is about 65px tall with its border. */
 .ask-fab {
-  --ask-fab-size: 52px;
+  --ask-fab-size: 60px;
+  /* How far the box turns as it opens and closes; less on a phone, below. */
+  --ask-turn: -90deg;
   --ask-fab-right: calc(16px + var(--sar));
   --ask-fab-bottom: calc(65px + 12px + var(--sab));
 }
@@ -23,25 +26,25 @@
   --ask-fab-bottom: calc(24px + var(--sab));
 }
 
-/* The page's end clears the button (its size and a gap) as well as the tab
-   bar, so the last card never rests under it. */
+/* The page's end clears the button (its 60px and a 12px gap) as well as the
+   tab bar, so the last card never rests under it. */
 .shell-tabbar.shell-ask .page {
-  padding-bottom: calc(96px + 64px + var(--sab));
+  padding-bottom: calc(96px + 72px + var(--sab));
 }
 
 .shell-short.shell-ask .page {
-  padding-bottom: calc(12px + 64px + 12px + var(--sab));
+  padding-bottom: calc(12px + 72px + 12px + var(--sab));
 }
 
 .shell-sidebar.shell-ask .page {
-  padding-bottom: calc(24px + 64px + 16px + var(--sab));
+  padding-bottom: calc(24px + 72px + 16px + var(--sab));
 }
 
 /* A sticky bar along the bottom (Compare accounts' total) keeps its right
    end clear of the button, so its How it adds up never sits under it. */
 .shell-ask .picked-bar {
-  /* The button is 52px wide, set in from the edge about as far as the bar. */
-  padding-right: calc(var(--space-4) + 52px + 12px);
+  /* The button is 60px wide, set in from the edge about as far as the bar. */
+  padding-right: calc(var(--space-4) + 60px + 12px);
 }
 
 /* The button ------------------------------------------------------------- */
@@ -100,14 +103,17 @@
   background: var(--surface);
   box-shadow: var(--elev-2), var(--hi);
   overflow: hidden;
+  /* Pivots on the button's corner, so the box swings open out of it. */
   transform-origin: bottom right;
-  /* Not held once grown, so the box is at rest (no running animation) after. */
-  animation: ask-box-grow var(--duration-quick) var(--ease-out) backwards;
+  /* Not held once open, so the box is at rest (no running animation) after. */
+  animation: ask-box-grow 240ms var(--ease-out) backwards;
 }
 
 /* A phone: nearly the full width, and most of the height above the tab bar,
-   short of the header's top row (wider tablets keep a readable width). */
+   short of the header's top row (wider tablets keep a readable width). It
+   turns less, so the tall box barely swings past the screen's edge. */
 .ask-fab[data-frame='tabbar'] .ask-box {
+  --ask-turn: -30deg;
   right: calc(8px + var(--sar));
   width: min(520px, calc(100vw - 16px - var(--sal) - var(--sar)));
   height: auto;
@@ -118,40 +124,6 @@
 .ask-fab[data-frame='short'] .ask-box {
   height: auto;
   top: calc(var(--sat) + 12px);
-}
-
-/* Shrinks back into the button; AskFab.tsx's BOX_EXIT_MS matches this. */
-.ask-box[data-state='closing'] {
-  animation: ask-box-shrink 140ms ease-in both;
-  pointer-events: none;
-}
-
-@keyframes ask-box-grow {
-  from {
-    opacity: 0;
-    transform: scale(0.2);
-  }
-}
-
-@keyframes ask-box-shrink {
-  to {
-    opacity: 0;
-    transform: scale(0.2);
-  }
-}
-
-/* No growing or shrinking when the device asks for less motion: a closing
-   box simply goes. */
-@media (prefers-reduced-motion: reduce) {
-  .ask-fab-button,
-  .ask-box {
-    animation: none;
-    transition: none;
-  }
-
-  .ask-box[data-state='closing'] {
-    visibility: hidden;
-  }
 }
 
 /* Its header: the logo and name, and the close button. */

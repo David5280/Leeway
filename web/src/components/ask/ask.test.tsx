@@ -2,7 +2,8 @@
 // screen, placed per frame; the box it opens, naming the screen; and every
 // way the box shrinks back into the button (a press outside it, Escape, its
 // close button, a link in an answer), focus returning to the button each
-// time. Without an AI key none of it is there.
+// time and its logo spinning back into place. Without an AI key none of it
+// is there.
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -224,5 +225,23 @@ describe('closing the box', () => {
     await user.keyboard('{Escape}')
     await closed()
     expect(await openBox(user)).toBeVisible()
+  })
+
+  it('spins the logo back into place each time it closes, never on first showing', async () => {
+    const user = userEvent.setup()
+    renderAsk('/payday')
+    const logo = async () => (await button()).querySelector('.ask-fab-logo')
+    expect(await logo()).toHaveAttribute('data-spin', 'false')
+    await openBox(user)
+    await user.keyboard('{Escape}')
+    await closed()
+    const firstSpin = await logo()
+    expect(firstSpin).toHaveAttribute('data-spin', 'true')
+    await openBox(user)
+    await user.keyboard('{Escape}')
+    await closed()
+    // A fresh element, so the spin plays again rather than staying finished.
+    expect(await logo()).not.toBe(firstSpin)
+    expect(await logo()).toHaveAttribute('data-spin', 'true')
   })
 })
