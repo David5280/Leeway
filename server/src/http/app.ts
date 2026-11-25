@@ -24,6 +24,7 @@ import { allowCrossOrigin, registerOAuthRoutes } from './oauth.js'
 import { proxyTrustFunction } from './proxyTrust.js'
 import { registerSecurityHeaders } from './securityHeaders.js'
 import { registerWebhookRoutes } from './webhooks.js'
+import { registerVersionRoute } from './version.js'
 import { findWidgetScript, registerWidgetRoutes } from './widget.js'
 
 export const VERSION = '0.1.0'
@@ -86,6 +87,10 @@ export async function buildApp(
 
   app.get('/api/health', async () => ({ ok: true }))
 
+  // The built web app, served last; its build id lets an app left open spot a deploy.
+  const webDir = options.webDir === undefined ? findWebDir() : options.webDir
+  registerVersionRoute(app, webDir)
+
   // index.ts passes the code it printed in the log when SETUP_CODE is unset.
   const setupCodeFrom: SetupCodeSource = ctx.config.setupCode ? 'variable' : 'log'
 
@@ -135,7 +140,6 @@ export async function buildApp(
   await registerOAuthRoutes(app, ctx, options.loadClientDocument ?? createClientDocumentLoader())
   registerMcpRoute(app, ctx, VERSION)
 
-  const webDir = options.webDir === undefined ? findWebDir() : options.webDir
   if (webDir) {
     await app.register(fastifyStatic, { root: webDir, wildcard: false })
     // The web app routes in the browser, so unknown non-API paths get index.html.

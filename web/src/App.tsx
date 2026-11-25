@@ -8,6 +8,7 @@ import { useAction } from './api/hooks'
 import { AskProvider } from './components/ask/AskProvider'
 import { Loading, LoadingOrError } from './components/ui'
 import { AppProvider, useAppearance } from './lib/app'
+import { useBuildCheck } from './lib/update/useBuildCheck'
 import { AccountDetail } from './pages/AccountDetail'
 import { BillsPage } from './pages/Bills'
 import { CategoryPage } from './pages/Category'
@@ -84,6 +85,8 @@ function Screens() {
 /** Decides what to show: first-run setup, sign-in, or the app itself. */
 export function App() {
   const client = useQueryClient()
+  // An installed app left open loads a deploy at the next quiet moment.
+  useBuildCheck()
   useEffect(() => {
     setSignedOutHandler(() => void client.invalidateQueries({ queryKey: ['me'] }))
   }, [client])
