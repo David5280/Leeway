@@ -4,72 +4,75 @@
 
 # Leeway
 
-A free budget tracker you host yourself, with bank sync and a secure link for
-your AI assistant.
+A free budget tracker you host yourself. It shows what you can safely spend
+today, syncs with your bank, and answers questions about your money from your
+own numbers.
 
 Your financial data stays on your own server. It leaves only to talk to your
-bank, and nothing in Leeway can ever move money.
+bank, and to Claude if you turn on its AI features. Nothing in Leeway can ever
+move money.
 
-**What it does**
+![Home: what you can spend today, a Heads up on two budgets, your accounts, bills due by payday and the latest activity](docs/screenshots/home.png)
 
-- **Budgets** by month, paycheck or week, with a safe amount to spend per day
-  and a warning before you go over.
-- **Bank sync** through Plaid, or **CSV import** and accounts added by hand
-  if you'd rather not connect a bank.
-- **An overview dashboard** you arrange yourself: what is left to spend, net
-  worth, account alerts, money in against money out, and your spending pace.
-- **An accounts dashboard** for one account or several: balances, money in and
-  out, spending by category and recent transactions.
-- **Account alerts** when an account is overdrawn, a card is over its limit, a
-  balance is low or an overdraft fee was charged, and for money leaking away:
-  a charge that went through twice, or a repeating charge that went up in price.
-- **Planning**: bills and subscriptions, recurring charges found for you,
-  savings goals, debt payoff plans, cash until payday (and cash in checking
-  that could earn more in savings, at a stated rate) and net worth.
-- **The weeks ahead** on Payday: the next two weeks, and six weeks a tap
-  deeper, of paydays and bills, plus events like trips and weddings if you
-  connect a calendar by its private link, with what to set aside for each
-  from what past ones cost. Only events likely to cost money are kept.
-- **Trips**: with a calendar linked, the spending around time away, from
-  your calendar or from a run of travel charges, gathered on one page by part
-  (getting there, a place to stay, food, things to do). Each purchase counts
-  for one trip or event only, as in the weeks ahead. A transaction on a trip
-  links to it.
-- **Trip budgets**: plan a coming trip by its parts and it becomes one savings
-  goal, set aside for by the day you leave; during the trip its page shows
-  what is left of each part.
-- **Savings and investments**: savings, retirement and investing accounts
-  sorted for you (or as you mark them), daily balance history, an emergency
-  fund counted in months of essential spending, and your savings rate. An AI
-  assistant can read all of it today.
-- **Credit card interest in dollars**: what carrying each card's balance past
-  the due date costs a month at its APR, and all your cards together. Add a
-  card's APR from its statement.
-- **A tax-ready export**: a year of transactions from every account, hidden
-  ones included, as a CSV grouped by category with totals. A summary at the
-  end gives pay by source, interest, dividends, benefits, tax refunds and
-  rewards, and "Possible income to categorize" for deposits still to sort.
-  Support payments and money from people are never counted as pay.
-  Transfers between your own accounts are left out, and categories that may
-  be deductible are flagged for you to check with a tax pro (Settings, then
-  Data). It is a summary, not tax advice.
-- **An AI coach.** Claude, or any assistant that speaks MCP, can check in on
-  your money with your real numbers. You choose whether it may only look or
-  also change budgets.
-- **Works on laptop and phone**, and installs to your home screen like an app.
+**Five tabs, each answering one question**
+
+- **Home: am I OK right now?** What you can spend today and a Heads up when
+  something needs you, then cards you arrange: every account, bills due by
+  payday, the latest activity and a summary of each tab.
+- **Spending: am I on budget?** This period against your budgets (by month,
+  paycheck or week), your spending pace, each category and every transaction.
+  Step back to earlier periods, or see spending over time and top merchants.
+- **Payday: will I make it to payday?** This paycheck, from pay to what is
+  left for everyday spending, cash until payday and the next two weeks of
+  paydays and bills. A tap deeper: bills and subscriptions (with repeating
+  charges found for you), your pay, and the six weeks ahead.
+- **Goals: am I on track?** What to set aside each paycheck, "Can I afford
+  it?", an emergency fund counted in months of essentials, savings goals in
+  the order they are funded, and yearly costs.
+- **Wealth: am I getting ahead?** Net worth and its trend, then debts and
+  payoff plans, retirement, your savings rate, things you own and owe, and
+  checking money that could earn more in savings.
+
+**Ask Leeway.** A round logo button on every screen opens a chat that answers
+money questions from your own numbers, like "Can I afford a PS5 Pro right
+now?". It can read everything and change nothing. It needs an Anthropic API
+key; without one the button is not there. See [Ask Leeway](#ask-leeway-optional).
+
+**Also**
+
+- **Bank sync** through Plaid, or **CSV import** and accounts added by hand.
+- **Alerts** in an inbox and as push notifications: an overdrawn account, a
+  bill coming due, a budget used up, a charge made twice or a repeating charge
+  gone up in price.
+- **An AI coach over MCP.** Claude, or any assistant that speaks MCP, can
+  check in on your money with your real numbers. You choose whether it may
+  only look or also change budgets.
+- **Installs as an app** on your phone or computer
+  ([how](#install-as-an-app)), with a home-screen widget for iPhone, iPad and
+  Mac.
+- **Never moves money.** Bank access is read-only.
+- **Self-hosted**, on Railway, with Docker or from source.
+- **Trips and events** from a calendar you link by its private link, next to
+  your bills, with what to set aside for each from what past ones cost.
+- **A tax-ready export**: a year of transactions as a CSV grouped by
+  category, with pay, interest and other income summed up and categories that
+  may be deductible flagged (**Settings**, then **Data**). Money from people
+  is never counted as pay. It is a summary, not tax advice.
+- **Three themes**, Night, Harbor and Neon, each light or dark. Color on a
+  number means status only: green is good, and red is kept for problems.
 
 ## Screenshots
 
-![The overview dashboard: what is left to spend, net worth, an account alert, money in against money out and the spending pace](docs/screenshots/overview.png)
-
-| Accounts dashboard                                                                 | Budgets                                                                          |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| ![The accounts dashboard with every account picked](docs/screenshots/accounts.png) | ![Budgets by category, with what is left per day](docs/screenshots/budgets.png)  |
-| **Plan: goals and cash until payday**                                              | **First run: the setup wizard**                                                  |
-| ![Savings goals with progress and a projected date](docs/screenshots/plan.png)     | ![The first setup screen, asking for the setup code](docs/screenshots/setup.png) |
+| Spending                                                                                                   | Payday                                                                                                |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ![Spending: spent this paycheck against the budgets, and the spending pace](docs/screenshots/spending.png) | ![Payday: this paycheck from pay to what is left, and cash until payday](docs/screenshots/payday.png) |
+| **Goals**                                                                                                  | **Wealth**                                                                                            |
+| ![Goals: an emergency fund to start, and goals in the order they are funded](docs/screenshots/goals.png)   | ![Wealth: net worth and how it grew over a year](docs/screenshots/wealth.png)                         |
+| **Ask Leeway**                                                                                             | **First run: the setup screens**                                                                      |
+| ![Ask Leeway open beside Home, with questions to start from](docs/screenshots/ask.png)                     | ![The first setup screen, asking for the setup code](docs/screenshots/setup.png)                      |
 
 <p align="center">
-  <img src="docs/screenshots/phone.png" alt="The overview on a phone" width="300">
+  <img src="docs/screenshots/phone.png" alt="Home on a phone, with the tab bar at the bottom" width="300">
 </p>
 
 The screenshots use invented demo data.
@@ -80,6 +83,7 @@ The screenshots use invented demo data.
 - [Bank sync with Plaid](#bank-sync-with-plaid)
 - [Configuration](#configuration)
 - [Connect an AI assistant](#connect-an-ai-assistant)
+- [Install as an app](#install-as-an-app)
 - [Home-screen widget](#home-screen-widget)
 - [Security](#security)
 - [Updating and backups](#updating-and-backups)
@@ -182,8 +186,8 @@ Leeway prints at startup that starts `No account yet`.
 ## Bank sync with Plaid
 
 Bank sync is optional. Without it, import CSV files from your bank
-(**Transactions**, then **Import a file**) or add accounts by hand
-(**Settings**, then **Accounts**). [Plaid](https://plaid.com) is the service
+(**Spending**, then **All activity**, then **+** and **Import a file**) or add
+accounts by hand (**Settings**, then **Accounts**). [Plaid](https://plaid.com) is the service
 many budgeting apps use to reach banks. Leeway uses it only to read balances
 and transactions.
 
@@ -243,10 +247,10 @@ with a note.
 | `PLAID_COUNTRY_CODES`   | No       | Countries to offer banks from, like `US,CA`. Default `US`.             |
 | `PLAID_REDIRECT_URI`    | No       | Needed by some banks that sign in through their own site.              |
 | `SYNC_INTERVAL_MINUTES` | No       | How often to sync banks, default 360. `0` turns it off.                |
-| `ANTHROPIC_API_KEY`     | No       | Turns on Chat, the dashboard summary by Claude and paystub reading.    |
+| `ANTHROPIC_API_KEY`     | No       | Turns on Ask Leeway, the summary by Claude and paystub reading.        |
 | `SUMMARY_MODEL`         | No       | Fixes the summary's Claude model, instead of choosing it in Settings.  |
 | `PAYSTUB_MODEL`         | No       | Fixes the paystub reader's model, instead of choosing it in Settings.  |
-| `CHAT_MODEL`            | No       | Fixes Chat's model, instead of choosing it in Settings.                |
+| `CHAT_MODEL`            | No       | Fixes Ask Leeway's model, instead of choosing it in Settings.          |
 | `RESEND_API_KEY`        | No       | Lets Leeway send the weekly email.                                     |
 | `MAIL_FROM`             | No       | The weekly email's sender, like `Leeway <leeway@example.com>`.         |
 | `DATABASE_SSL`          | No       | `true` or `false`. By default, TLS for any database not on this host.  |
@@ -257,8 +261,9 @@ On Railway, `PUBLIC_URL` is filled in from the generated domain.
 
 ### Claude-written summary (optional)
 
-Leeway writes the dashboard summary from your numbers on its own. To have
-Claude write it instead, set `ANTHROPIC_API_KEY` (from the
+Leeway writes the summary (Home's **Summary** card, which **Edit layout**
+adds, and the weekly email) from your numbers on its own. To have Claude write
+it instead, set `ANTHROPIC_API_KEY` (from the
 [Anthropic Console](https://console.anthropic.com)), then turn on **Have Claude
 write it** in **Settings**, then **AI assistant**. Nothing is sent until you
 turn it on. Claude then gets this period's totals, the Heads up list, bill and
@@ -271,14 +276,15 @@ cent on your own Anthropic account. The model and a monthly limit are set in
 
 ### Paystub import (optional)
 
-With `ANTHROPIC_API_KEY` set, **Import a paystub** appears in **Plan**, then
-**Retirement**, and on a pension's form. Upload a PDF, PNG or JPEG of a
-paystub (a PDF of up to 10 MB or a photo of up to 5 MB, a page or two long)
-and Claude reads its pay, pension, 401(k), 457, 403(b) and HSA figures, this
-period's and the year's.
-You see each figure with the line it came from and how sure Claude is, change
-any of them, and choose whether they update a pension or your monthly
-retirement saving. Nothing is saved until you choose **Save**.
+With `ANTHROPIC_API_KEY` set, **Import a paystub** appears in **Payday**, then
+**Your pay**; in **Wealth**, then **Retirement**, and on a pension's form; in
+**Settings**, then **Paystub**; and in the setup screens. Upload a PDF, PNG or
+JPEG of a paystub (a PDF of up to 10 MB or a photo of up to 5 MB, a page or
+two long) and Claude reads its pay, pension, 401(k), 457, 403(b) and HSA
+figures, this period's and the year's. You see each figure with the line it
+came from and how sure Claude is, change any of them, and choose whether they
+update a pension or your monthly retirement saving. Nothing is saved until you
+choose **Save**.
 
 - The whole file goes to Anthropic as it is, with a fixed instruction. That
   includes any Social Security number, account number or address printed on
@@ -300,20 +306,22 @@ retirement saving. Nothing is saved until you choose **Save**.
 An iPhone photo saved as HEIC is not read yet; take a screenshot of it, or set
 the camera to **Most Compatible**.
 
-### Chat (optional)
+### Ask Leeway (optional)
 
-With `ANTHROPIC_API_KEY` set, **Chat** asks Claude about your money in your
-own words, like "Can I afford a PS5 Pro right now?". **Ask Leeway**, a round
-logo button in the bottom right of every screen, opens it in a box there that
-knows which screen you are on; press and hold any card (or right click it) to
-ask about that card, or press "/". Without a key there is no Chat at all: no
-button, no page.
+With `ANTHROPIC_API_KEY` set, **Ask Leeway** answers questions about your
+money in your own words, like "Can I afford a PS5 Pro right now?". Its round
+logo button sits in the bottom right of every screen and opens a panel there
+that knows which screen you are on. Press and hold any card (or right click
+it) to ask about that card, or press "/". Without a key there is no button and
+no page.
 
-- Claude answers by reading Leeway through the same read-only tools an
-  assistant gets, so it can look at everything and change nothing. A purchase
-  question is checked against the cash you have before payday, the bills due
-  by then, your goals and your budgets, and when it doesn't fit, how many
-  budget periods of saving it takes.
+- Each question goes with a short snapshot of your finances: what you can
+  spend now, this period, bills by payday, debts, net worth, what needs
+  attention, pay, savings and goals. For more, Claude reads Leeway through the
+  same read-only tools an assistant gets, so it can look at everything and
+  change nothing. A purchase question is checked against the cash you have
+  before payday, the bills due by then, your goals and your budgets, and when
+  it doesn't fit, how many budget periods of saving it takes.
 - Tell it something that will matter later, like a trip you are saving for,
   and it remembers it. **Leeway remembers** under the conversation lists each
   thing, and **Forget** deletes it. **Start over** deletes the conversation
@@ -323,17 +331,17 @@ button, no page.
   paid by, or name in a category, goal or account, appear as "someone".
 - The conversation is kept on your server: only the words of each question
   and answer, saved once the answer is finished.
-- Chat runs on Claude Haiku 5.5 unless you pick another model in **Settings**,
-  then **AI models**. Its fixed instructions and tools are cached, which
-  makes each further step of an answer much cheaper. An answer takes up to 6
-  calls, one question runs at a time, at most 10 are asked a minute, and Chat
-  stops for the day after about 600,000 tokens (cache reads count a tenth),
-  starting again at midnight in your time zone. Every call also counts
-  against the monthly limit below.
+- It runs on Claude Haiku 5.5 unless you pick another model for its job
+  (**Chat**) in **Settings**, then **AI models**. Its fixed instructions,
+  tools and snapshot are cached, which makes each further step of an answer
+  much cheaper. An answer takes up to 6 calls, one question runs at a time, at
+  most 10 are asked a minute, and it stops for the day after about 600,000
+  tokens (cache reads count a tenth), starting again at midnight in your time
+  zone. Every call also counts against the monthly limit below.
 
 ### AI models and the monthly limit
 
-Every paid AI call, Chat, the summary and the paystub reader, goes through
+Every paid AI call, Ask Leeway, the summary and the paystub reader, goes through
 one place that picks the model, checks a monthly limit and records what the
 call cost. **Settings**, then **AI models** shows:
 
@@ -347,11 +355,11 @@ How the limit works:
 
 - The month follows the time zone in **Settings**, then **Budgeting**.
 - Before each call, Leeway works out the most it could cost: the prompt
-  (counted free by Anthropic for a paystub file, estimated from its length
-  for the summary's short text and each Chat step) as if every token were a cache write, plus
-  the most output the call may use. If that would take the month past the
-  limit, the call is not made. The summary is then Leeway's own, and the
-  paystub reader says the limit is reached and when it resets.
+  (counted free by Anthropic for a paystub file, estimated from its length for
+  the summary's short text and each Ask Leeway step) as if every token were a
+  cache write, plus the most output the call may use. If that would take the
+  month past the limit, the call is not made. The summary is then Leeway's
+  own, and the paystub reader says the limit is reached and when it resets.
 - After the call, the tokens it really used (input, output, cache reads and
   writes) are priced and recorded. Prices are Anthropic's list prices,
   checked on 2026-11-19, so your Anthropic bill is the final word.
@@ -368,21 +376,21 @@ How the limit works:
   where it was asked for. Either alert can be dismissed, and a new limit
   starts the month's alerts over.
 - Each usage record holds token counts and a cost, never what was asked or
-  answered. Chat keeps its own conversation in your database until you tap
-  Start over.
+  answered. Ask Leeway keeps its own conversation in your database until you
+  tap Start over.
 
-`SUMMARY_MODEL`, `PAYSTUB_MODEL` or `CHAT_MODEL` fixes that job's model on the server, and
-Settings then shows it locked. When Anthropic says it has no such model
-(retired or mistyped), Settings and the summary card say so and where to pick
-another, and a model with an announced retirement day shows that day. A model
-Leeway has no price for is counted at the price of the dearest model it knows,
-so the limit still holds. No assistant can see or change any of this over MCP,
-since it decides what is spent on your Anthropic account; an assistant still
-sees the chosen models and the limit in Leeway's settings.
+`SUMMARY_MODEL`, `PAYSTUB_MODEL` or `CHAT_MODEL` fixes that job's model on the
+server, and Settings then shows it locked. When Anthropic says it has no such
+model (retired or mistyped), Settings and the summary card say so and where to
+pick another, and a model with an announced retirement day shows that day. A
+model Leeway has no price for is counted at the price of the dearest model it
+knows, so the limit still holds. No assistant can see or change any of this
+over MCP, since it decides what is spent on your Anthropic account; an
+assistant still sees the chosen models and the limit in Leeway's settings.
 
 ### Weekly email (optional)
 
-Once a week, Leeway can email you any account alerts, the dashboard summary,
+Once a week, Leeway can email you any account alerts, the summary,
 what's left this period, bills before payday and your goals. It sends through
 [Resend](https://resend.com), since many hosts block outgoing SMTP.
 
@@ -398,10 +406,10 @@ change the email or its address.
 
 ### Notifications (nothing to set)
 
-The bell at the top of every screen opens the **inbox**: each alert as it
-happens, newest first. Open one to go to the screen that explains it (it is
-then read), or dismiss it. Leeway checks every few minutes and after each bank
-sync, and tells you about:
+The bell (in the phone's header, and **Inbox** at the foot of the sidebar)
+opens the **inbox**: each alert as it happens, newest first. Open one to go to
+the screen that explains it (it is then read), or dismiss it. Leeway checks
+every few minutes and after each bank sync, and tells you about:
 
 - an account overdrawn, a card over its limit, an overdraft fee, or a balance
   under its low-balance warning;
@@ -431,11 +439,11 @@ A problem you dismiss that is still there a day later, like an account still
 overdrawn, a bill still unpaid or a bank still waiting for you to sign in,
 comes back unread, with no second push. Everything else stays dismissed: a fee
 or a large charge is news, and a budget gone over can't be undone until the
-next period. Dismissing an account alert takes it off the home screen too; a
+next period. Dismissing an account alert takes it off Home too; a
 problem like an overdrawn account stays off only while its kind of
 notification is on.
-Each account alert on the home screen also has a close button, which hides it
-from home only and leaves the inbox as it was. A hidden fee stays hidden, and
+Each account alert in Home's Heads up also has a close button, which hides it
+from Home only and leaves the inbox as it was. A hidden fee stays hidden, and
 any other alert comes back after a day if it is still there. An alert that
 clears for over an hour and then returns counts as new and shows again.
 
@@ -445,9 +453,9 @@ encrypted under your `ENCRYPTION_KEY`; they are never in your variables or
 logs. In **Settings**, then **Notifications**, press **Turn on** on each device
 that should get pushes, and **Send a test notification** to see one.
 
-- **On iPhone and iPad**, push works only once Leeway is on the Home Screen:
-  open it in Safari, tap Share, then **Add to Home Screen**, and open it from
-  there. The Settings screen says so when it is needed.
+- **On iPhone and iPad**, push works only once Leeway is
+  [installed](#install-as-an-app) and opened from the Home Screen. The
+  Settings screen says so when it is needed.
 - **Quiet hours** (10 PM to 7 AM in your time zone, by default) hold pushes
   until they end; the inbox still gets each alert at once.
 - **A burst becomes one push.** Leeway sends at most one push every 15
@@ -517,6 +525,22 @@ authorization spec describes, with discovery at
 or dynamic registration. Access tokens last an hour; refresh tokens last 90
 days and change on every use.
 
+## Install as an app
+
+Leeway installs from the browser, with no app store, and then opens in its own
+window with the tab bar at the bottom on a phone. Install it from its `https`
+address (Railway gives you one).
+
+- **iPhone and iPad:** open Leeway in Safari, tap Share, then **Add to Home
+  Screen**. Push notifications on iPhone and iPad need this.
+- **Android:** open Leeway in Chrome, open the menu and choose **Add to Home
+  screen** or **Install app**.
+- **Mac, Windows or Linux:** open Leeway in Chrome or Edge and choose the
+  install button at the right of the address bar.
+
+An installed Leeway left open loads a new version on its own at the next quiet
+moment, so there is nothing to reinstall after an update.
+
 ## Home-screen widget
 
 Leeway has a widget for your iPhone or iPad home screen and, on a Mac with
@@ -524,8 +548,8 @@ Apple silicon, your desktop. It runs in [Scriptable](https://scriptable.app),
 a free app, and shows what you have safe to spend (or, before you set any
 budgets, your cash until payday), this period's budget left, your net worth
 and how it moved in 30 days, the next bills due, and how many accounts are
-overdrawn, over their limit or low. It comes in small, medium and large, follows your Leeway
-theme and dark mode, and refreshes about every 30 minutes.
+overdrawn, over their limit or low. It comes in small, medium and large,
+follows your Leeway theme and dark mode, and refreshes about every 30 minutes.
 
 ![Settings > Widget, with the widget's parameter shown once, the script to copy or download, and the setup steps](docs/screenshots/widget-settings.png)
 
@@ -546,8 +570,8 @@ nothing else; no other key or session can read the summary. The summary
 names bills by the names Leeway shows, counts account alerts without naming
 the accounts, and never holds an account number, mask or transaction text. A
 bill you made from a recurring charge starts out named as the bank wrote it,
-so rename it under Bills in **Plan** if you'd rather the widget said
-something else. The widget only sends the token over `https`, so it needs
+so rename it in **Payday**, then **Bills and subscriptions**, if you'd rather
+the widget said something else. The widget only sends the token over `https`, so it needs
 Leeway at a public address, as Railway gives you. Making a new token
 replaces the old one, and **Revoke** stops it at once.
 
