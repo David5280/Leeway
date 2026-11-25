@@ -12,7 +12,7 @@ import {
   settings,
   status,
 } from '../test/fake'
-import { Budgets } from './Budgets'
+import { Spending } from './Spending'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -98,16 +98,16 @@ describe('app shell', () => {
   })
 })
 
-describe('budgets', () => {
+describe('spending', () => {
   it('shows totals and each category with its status', async () => {
     fakeServer({
       get_budget: () => budgetFor(categories, [{ categoryId: dining.id, amountCents: 24000 }]),
       list_categories: () => categories,
     })
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     expect(await screen.findByRole('heading', { level: 1, name: 'Spending' })).toBeInTheDocument()
-    expect(screen.getByText('November 2026')).toBeInTheDocument()
+    expect(await screen.findByText('November 2026 · Day 17 of 30')).toBeInTheDocument()
     expect(screen.getByText('Over by $40')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Budgeted' })).toHaveTextContent('$800')
+    expect(screen.getByRole('region', { name: 'Spent this period' })).toHaveTextContent('$800')
   })
 })

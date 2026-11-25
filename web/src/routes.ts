@@ -14,6 +14,10 @@ export const SCREEN_ROUTES = {
   /** Every transaction, with filters in the query (see paths.activity). */
   activity: '/spending/activity',
   importTransactions: '/spending/activity/import',
+  /** Spending each period over the last year, each opening Spending on that period. */
+  spendingOverTime: '/spending/over-time',
+  /** Where the most went: a period's top merchants, the period in the query. */
+  topMerchants: '/spending/merchants',
   /** One category's own page. Static paths above win over this one. */
   category: '/spending/:id',
   /** Payday: will I make it to payday, and what's due before then? */
@@ -84,6 +88,14 @@ function withQuery(path: string, query?: Query): string {
   return search ? `${path}?${search}` : path
 }
 
+/**
+ * Which budget period a Spending page shows, as its query: none for the
+ * current one (0), so its plain address stays its everyday one.
+ */
+function periodQuery(period = 0): Record<string, string> {
+  return period === 0 ? {} : { period: String(period) }
+}
+
 /** One path segment, so an id with a slash or a space cannot change the address. */
 const segment = (value: string) => encodeURIComponent(value)
 
@@ -93,10 +105,14 @@ const segment = (value: string) => encodeURIComponent(value)
  */
 export const paths = {
   home: () => SCREEN_ROUTES.home,
-  spending: () => SCREEN_ROUTES.spending,
+  /** Spending, on an earlier budget period when given one (-1 is the last). */
+  spending: (period?: number) => withQuery(SCREEN_ROUTES.spending, periodQuery(period)),
   /** All activity, narrowed by any filters (account, category, merchant, range). */
   activity: (filters?: Query) => withQuery(SCREEN_ROUTES.activity, filters),
   importTransactions: () => SCREEN_ROUTES.importTransactions,
+  spendingOverTime: () => SCREEN_ROUTES.spendingOverTime,
+  /** The top merchants of a budget period, the current one unless given another. */
+  topMerchants: (period?: number) => withQuery(SCREEN_ROUTES.topMerchants, periodQuery(period)),
   category: (id: string) => `${SCREEN_ROUTES.spending}/${segment(id)}`,
   payday: () => SCREEN_ROUTES.payday,
   /** Bills and subscriptions, opened onto one bill's form when given its id. */

@@ -21,7 +21,7 @@ function spendingRows(budget: Budget): CategoryBudget[] {
 }
 
 /** A category as a row that opens its budget. */
-function categoryItem(row: CategoryBudget, detail?: string): DrillItem {
+export function categoryItem(row: CategoryBudget, detail?: string): DrillItem {
   return {
     key: row.categoryId,
     label: row.name,

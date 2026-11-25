@@ -11,7 +11,6 @@ import { AppProvider, useAppearance } from './lib/app'
 import { AccountDetail } from './pages/AccountDetail'
 import { Alerts } from './pages/Alerts'
 import { BillsPage } from './pages/Bills'
-import { Budgets } from './pages/Budgets'
 import { CategoryPage } from './pages/Category'
 import { ChatPage } from './pages/Chat'
 import { Connect, ConnectProblem } from './pages/Connect'
@@ -27,7 +26,10 @@ import { Payday } from './pages/Payday'
 import { RetirementPage } from './pages/Retirement'
 import { SettingsPage } from './pages/Settings'
 import { SixWeeksPage } from './pages/SixWeeks'
+import { Spending } from './pages/Spending'
+import { SpendingOverTimePage } from './pages/SpendingOverTime'
 import { Setup } from './pages/Setup'
+import { TopMerchantsPage } from './pages/TopMerchants'
 import { Transactions } from './pages/Transactions'
 import { TripPage } from './pages/Trip'
 import { Wealth } from './pages/Wealth'
@@ -46,9 +48,11 @@ function Screens() {
   return (
     <Routes>
       <Route path={SCREEN_ROUTES.home} element={<Overview />} />
-      <Route path={SCREEN_ROUTES.spending} element={<Budgets />} />
+      <Route path={SCREEN_ROUTES.spending} element={<Spending />} />
       <Route path={SCREEN_ROUTES.activity} element={<Transactions />} />
       <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
+      <Route path={SCREEN_ROUTES.spendingOverTime} element={<SpendingOverTimePage />} />
+      <Route path={SCREEN_ROUTES.topMerchants} element={<TopMerchantsPage />} />
       <Route path={SCREEN_ROUTES.category} element={<CategoryPage />} />
       <Route path={SCREEN_ROUTES.payday} element={<Payday />} />
       <Route path={SCREEN_ROUTES.bills} element={<BillsPage />} />

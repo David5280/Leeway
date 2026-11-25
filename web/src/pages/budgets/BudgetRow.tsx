@@ -1,6 +1,6 @@
-// One spending category on the Budgets screen: its name (a link to its page),
-// a bar, the amount with its budget editable in place, and a plain sentence
-// on where it stands, with what to do when it is over.
+// One spending category in Spending's budgets by category: its name (a link
+// to its page), a bar, the amount with its budget editable in place, and a
+// plain sentence on where it stands, with what to do when it is over.
 
 import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget } from '../../api/client'

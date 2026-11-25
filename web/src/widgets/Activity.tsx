@@ -3,17 +3,17 @@
 import type { Account } from '../api/client'
 import { useAction } from '../api/hooks'
 import { Card } from '../components/design/Card'
+import { MerchantRows } from '../components/MerchantRows'
 import { Money } from '../components/design/Money'
 import { SectionHead } from '../components/design/SectionHead'
 import { Sparkline } from '../components/design/Sparkline'
 import { TransactionLine } from '../components/TransactionLine'
-import { ErrorNote, Icon, Progress } from '../components/ui'
+import { ErrorNote, Icon } from '../components/ui'
 import { kindIcon } from '../lib/accountCards'
 import { accountDetail, isOwed, isShared, nameUnderBank, overdrawn } from '../lib/accounts'
 import { allAccountsDrill } from '../lib/drills/accounts'
 import { recentDrill } from '../lib/drills/activity'
 import { merchantsDrill } from '../lib/drills/plan'
-import { useApp } from '../lib/app'
 import { calendarDate } from '../lib/format'
 import type { WidgetProps } from './types'
 
@@ -122,9 +122,8 @@ function AccountBalance({ account }: { account: Account }) {
 }
 
 /** The merchants that took the most this period, each bar against the biggest. */
-export function MerchantsWidget({ offset }: WidgetProps) {
-  const { money } = useApp()
-  const merchants = useAction('top_merchants', { offset, limit: 6 })
+export function MerchantsWidget() {
+  const merchants = useAction('top_merchants', { offset: 0, limit: 6 })
   const head = <SectionHead icon="moneyOut" title="Where did the most go?" />
   if (!merchants.data || merchants.data.length === 0) {
     return (
@@ -135,22 +134,10 @@ export function MerchantsWidget({ offset }: WidgetProps) {
       </Card>
     )
   }
-  const top = merchants.data[0]!.spentCents
   return (
     <Card drill={merchantsDrill(merchants.data)} label="Top merchants" className="stack-sm">
       {head}
-      {merchants.data.map((one) => (
-        <span key={one.merchant} className="stack-sm merchant-row">
-          <span className="row-between">
-            <span className="ellipsis">{one.merchant}</span>
-            <Money cents={one.spentCents} />
-          </span>
-          <Progress
-            percent={(one.spentCents / top) * 100}
-            aria-label={`${one.merchant}: ${money(one.spentCents)}`}
-          />
-        </span>
-      ))}
+      <MerchantRows merchants={merchants.data} />
     </Card>
   )
 }

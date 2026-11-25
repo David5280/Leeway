@@ -26,6 +26,8 @@ export const LINKABLE_SCREENS = {
   Home: '/',
   Spending: '/spending',
   'All activity': APP_PATHS.activity,
+  'Spending over time': '/spending/over-time',
+  'Top merchants': '/spending/merchants',
   Payday: '/payday',
   'Bills and subscriptions': APP_PATHS.bills,
   'Your pay': '/payday/pay',
