@@ -38,7 +38,7 @@ export function tabRowBesideTabCard(widgets: readonly { type: string; visible: b
 }
 
 /** Whether a stored card names a kind this build has. */
-const knownWidget = (widget: unknown) =>
+export const knownWidget = (widget: unknown) =>
   (WIDGETS as readonly unknown[]).includes((widget as { type?: unknown } | null)?.type)
 
 /**

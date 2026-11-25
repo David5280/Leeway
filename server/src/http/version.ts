@@ -1,5 +1,5 @@
 // Which build of the web app this server is serving, so an installed app left
-// open can tell a deploy happened and load it (web/src/lib/buildCheck.ts).
+// open can tell a deploy happened and load it (web/src/lib/update/buildCheck.ts).
 
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'

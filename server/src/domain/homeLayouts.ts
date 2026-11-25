@@ -2,7 +2,7 @@
 // takes in the kinds of card added since. dashboardUpgrade.ts runs both once
 // per install. Kept free of the database so each rule is tested on its own.
 
-import { IN_TAB_ROW } from './homeCards.js'
+import { IN_TAB_ROW, knownWidget } from './homeCards.js'
 import { DEFAULT_WIDGETS, settingsSchema, type Settings } from './settings.js'
 
 /** A widget as an older Leeway stored it, possibly of a kind since removed. */
@@ -83,14 +83,18 @@ export const OLDER_DEFAULTS: readonly (readonly StoredWidget[])[] = [
  * Whether a stored list is that layout: the same cards, shown or hidden
  * alike, in the same order. Sizes are not compared: resizing a card is not
  * arranging Home, and a default with one card made smaller is still one the
- * owner never laid out.
+ * owner never laid out. Kinds since removed are left out of both lists
+ * first, because any settings save stores the layout as read back, without
+ * them, so a default saved since then has lost those cards.
  */
 function sameLayout(stored: unknown, layout: readonly StoredWidget[]): boolean {
-  if (!Array.isArray(stored) || stored.length !== layout.length) return false
-  return layout.every((widget, i) => {
-    const saved = stored[i] as Partial<StoredWidget> | null
-    return saved?.type === widget.type && saved.visible === widget.visible
-  })
+  if (!Array.isArray(stored)) return false
+  const saved = stored.filter(knownWidget) as (Partial<StoredWidget> | null)[]
+  const expected = layout.filter(knownWidget)
+  if (saved.length !== expected.length) return false
+  return expected.every(
+    (widget, i) => saved[i]?.type === widget.type && saved[i]?.visible === widget.visible,
+  )
 }
 
 /** Whether a stored list is one of the older defaults, sizes aside, so the owner never arranged it. */

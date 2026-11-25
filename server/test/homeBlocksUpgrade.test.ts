@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { addNewHomeBlocks, upgradeDefaultHome } from '../src/domain/dashboardUpgrade.js'
+import { knownWidget } from '../src/domain/homeCards.js'
 import { OLDER_DEFAULTS } from '../src/domain/homeLayouts.js'
 import { DEFAULT_WIDGETS } from '../src/domain/settings.js'
 import { actionCaller } from './actionCaller.js'
@@ -70,6 +71,32 @@ describe('addNewHomeBlocks on an older default', () => {
       await alreadyApplied('home-accounts')
       const resized = layout.map((w, i) => (i === 0 ? { ...w, size: 'half' } : w))
       await storeWidgets(resized)
+      expect(await addNewHomeBlocks(ctx.db)).toBe(true)
+      expect(await widgets()).toEqual(DEFAULT_WIDGETS)
+    },
+  )
+
+  it("gives today's default to the owner's install after a settings save dropped removed cards", async () => {
+    // Any save stores the layout as read back, so 'flows' is gone from the row.
+    await alreadyApplied('home-accounts')
+    await storeWidgets([
+      card('leeway', 'half'),
+      card('net-worth', 'half'),
+      card('alerts', 'full'),
+      card('flows', 'full'),
+      card('pace', 'full'),
+    ])
+    await call('update_settings', { savingsPlan: { emergencyFundMonths: 4 } })
+    expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'pace'])
+    expect(await addNewHomeBlocks(ctx.db)).toBe(true)
+    expect(await widgets()).toEqual(DEFAULT_WIDGETS)
+  })
+
+  it.each(OLDER_DEFAULTS.map((layout, i) => [i, layout] as const))(
+    'moves older default %i saved without its removed cards',
+    async (_, layout) => {
+      await alreadyApplied('home-accounts')
+      await storeWidgets(layout.filter((w) => knownWidget(w)))
       expect(await addNewHomeBlocks(ctx.db)).toBe(true)
       expect(await widgets()).toEqual(DEFAULT_WIDGETS)
     },
