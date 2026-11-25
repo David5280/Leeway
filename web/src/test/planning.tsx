@@ -27,7 +27,9 @@ import { DebtsPage } from '../pages/Debts'
 import { Goals } from '../pages/Goals'
 import { IdleCashPage } from '../pages/IdleCash'
 import { Payday } from '../pages/Payday'
+import { OwnedPage } from '../pages/Owned'
 import { RetirementPage } from '../pages/Retirement'
+import { SavingsPage } from '../pages/Savings'
 import { SixWeeksPage } from '../pages/SixWeeks'
 import { Wealth } from '../pages/Wealth'
 import { YourPayPage } from '../pages/YourPay'
@@ -237,8 +239,10 @@ export function renderPlanning(path: string = paths.payday(), settings?: Setting
       <Route path={SCREEN_ROUTES.sixWeeks} element={<SixWeeksPage />} />
       <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
       <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
+      <Route path={SCREEN_ROUTES.owned} element={<OwnedPage />} />
       <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />
       <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />
+      <Route path={SCREEN_ROUTES.savings} element={<SavingsPage />} />
       <Route path={SCREEN_ROUTES.idleCash} element={<IdleCashPage />} />
     </Routes>,
     { route: path, settings },

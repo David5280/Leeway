@@ -1,8 +1,9 @@
-// The Accounts dashboard's figures and words for a pick of accounts: their
-// balances added up, spending by category, and a short summary. Pure: the
-// accounts and totals come in, nothing is read here.
+// The figures and words for a pick of accounts (Compare accounts, and each
+// account's own page): their balances added up, spending by category, and a
+// short summary. Pure: the accounts and totals come in, nothing is read here.
 
 import type { IsoDate } from '../lib/dates.js'
+import type { AccountAlert } from './accountAlerts.js'
 import type { Account } from './accounts.js'
 import type { CategoryTotal } from './budget.js'
 import type { Category } from './categories.js'
@@ -129,13 +130,16 @@ export interface AccountsSummaryInput {
   /** Oldest first; the last is the current period. */
   flows: PeriodFlow[]
   spending: CategorySpending[]
+  /** The picked accounts' alerts; the urgent ones are said in words (urgentPoints). */
+  alerts: Pick<AccountAlert, 'severity' | 'message'>[]
   /** The everyday word for a budget period: "month", "week" or "paycheck". */
   periodWord: string
 }
 
 /**
- * Where the picked accounts stand, in one sentence of money. Alerts are left
- * to the alert card beside it, so an overdrawn account is not said twice.
+ * Where the picked accounts stand, in one sentence of money. How far an
+ * account is overdrawn or over its limit is said in the points under it
+ * (urgentPoints), so the headline never repeats the amount.
  */
 function headline(input: AccountsSummaryInput, money: Money): string {
   const { balances, accounts, unshared } = input
@@ -147,7 +151,7 @@ function headline(input: AccountsSummaryInput, money: Money): string {
       only ??
       plural(balances.cashAccounts, 'checking or savings account', 'checking and savings accounts')
     const preposition = only ? 'in' : 'across'
-    // Below zero, the alert card has the amount; the summary just says there is nothing to spend.
+    // Below zero, an urgent point has the amount; the headline just says there is nothing to spend.
     if (balances.availableCents <= 0) return `Nothing is available ${preposition} ${where}.`
     return `${money(balances.availableCents)} available ${preposition} ${where}.`
   }
@@ -193,7 +197,7 @@ function owedPoint({ balances }: AccountsSummaryInput, money: Money): string | n
 }
 
 function creditPoint({ balances }: AccountsSummaryInput, money: Money): string | null {
-  // A card past its limit has its own alert, so only room left is worth a line.
+  // A card past its limit is said by its urgent point, so only room left is worth a line.
   if (balances.creditLeftCents === null || balances.creditLeftCents < 0) return null
   return `${money(balances.creditLeftCents)} of ${money(balances.creditLimitCents!)} in credit is unused.`
 }
@@ -209,11 +213,21 @@ function topCategoryPoint({ spending, periodWord }: AccountsSummaryInput, money:
   return `The most spending this ${periodWord} went to ${top.name}, ${money(top.spentCents)}.`
 }
 
+/**
+ * What is going wrong now (an overdrawn account, a card over its limit), in
+ * the alert's own sentence. No alert card sits beside a pick of accounts, so
+ * the summary is where it is said; these lead, ahead of any point that is cut.
+ */
+function urgentPoints({ alerts }: AccountsSummaryInput): string[] {
+  return alerts.filter((alert) => alert.severity === 'urgent').map((alert) => alert.message)
+}
+
 /** The picked accounts in plain words: a headline and up to MAX_POINTS points. */
 export function accountsSummary(input: AccountsSummaryInput, money: Money): SummaryText {
   const current = input.flows[input.flows.length - 1]
   const previous = input.flows[input.flows.length - 2]
   const points = [
+    ...urgentPoints(input),
     unsharedPoint(input),
     owedPoint(input, money),
     creditPoint(input, money),

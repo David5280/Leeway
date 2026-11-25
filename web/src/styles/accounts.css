@@ -170,7 +170,7 @@
 }
 
 /* Rides above the tab bar while the cards scroll, and rests after them. */
-.select-bar {
+.picked-bar {
   position: sticky;
   bottom: 16px;
   z-index: 5;
@@ -188,7 +188,7 @@
 }
 
 @media (max-width: 820px) {
-  .select-bar {
+  .picked-bar {
     bottom: calc(76px + var(--sab));
   }
 }
@@ -196,12 +196,12 @@
 /* A phone turned sideways hides the tab bar (styles.css), so the bar rides
    just above the home indicator instead, off the cards it would cover. */
 @media (orientation: landscape) and (max-height: 500px) {
-  .select-bar {
+  .picked-bar {
     bottom: calc(8px + var(--sab));
   }
 }
 
-.select-bar-total {
+.picked-bar-total {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -209,7 +209,7 @@
 }
 
 /* The two buttons wrap as one, so on a narrow phone they share a line at the right. */
-.select-bar-actions {
+.picked-bar-actions {
   display: flex;
   gap: var(--space-2);
   margin-left: auto;

@@ -1,7 +1,7 @@
-// One account as a card on the Accounts screen: its kind's icon, its name as
+// One account as a card on Wealth: its kind's icon, its name as
 // the owner typed it, its balance as the hero figure, and the one or two
 // facts that matter for its kind (lib/accountCards.ts). The whole card opens
-// the account's own page; in Select mode it is a tick box instead.
+// the account's own page; on Compare accounts it is a tick box instead.
 
 import type { Account } from '../../api/client'
 import { Card } from '../../components/design/Card'
@@ -95,7 +95,7 @@ export function AccountCard({ account, facts }: { account: Account; facts: Accou
   )
 }
 
-/** An account's card in Select mode: the whole card is the tick box. */
+/** An account's card on Compare accounts: the whole card is the tick box. */
 export function PickCard({
   account,
   facts,

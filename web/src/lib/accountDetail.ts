@@ -1,12 +1,20 @@
 // What one account's page lists beside its balance: the bills and repeating
-// charges paid from it, the fees it was charged, and where its balance should
-// sit on its chart. Pure, matched against the account's own recent
+// charges paid from it, the fees it was charged, where its balance should sit
+// on its chart, and its summary less what its alert card already says. Pure, matched against the account's own recent
 // transactions with the server's own code, so the page and the server agree
 // on what a payment, a repeating charge and a fee are.
 
 import { isOverdraftFee, lowBalanceThreshold } from '../../../server/src/domain/accountAlerts'
 import { merchantKey, textKey } from '../../../server/src/domain/merchantKey'
-import type { Account, Bill, Goal, RecurringSeries, Transaction } from '../api/client'
+import type {
+  Account,
+  AccountAlert,
+  AccountsView,
+  Bill,
+  Goal,
+  RecurringSeries,
+  Transaction,
+} from '../api/client'
 import { UTILIZATION_WATCH } from './accountCards'
 
 type Charge = Pick<
@@ -89,4 +97,17 @@ export function balanceReference(
   }
   const low = lowBalanceThreshold(account)
   return low === null ? null : { cents: low, label: 'Above your low-balance warning' }
+}
+
+/**
+ * The summary as the account's page shows it: the server says urgent alerts
+ * in the summary, since Compare accounts has no alert card, but this page
+ * has one, so each alert's sentence is said once, in the card.
+ */
+export function summaryBesideAlerts(
+  summary: AccountsView['summary'],
+  alerts: readonly Pick<AccountAlert, 'message'>[],
+): AccountsView['summary'] {
+  const said = new Set(alerts.map((alert) => alert.message))
+  return { ...summary, points: summary.points.filter((point) => !said.has(point)) }
 }

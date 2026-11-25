@@ -1,16 +1,19 @@
-// The Wealth tab: am I getting ahead? Net worth and its trend lead, then the
-// accounts grouped by kind, then rows to the pages a tap deeper (debts,
-// retirement, cash that could earn more), then the activity on the accounts.
+// The Wealth tab: am I getting ahead? In the order the map gives it: net
+// worth and its trend lead, then the accounts grouped by kind (balances are
+// what is owned and owed), then four rows to the pages a tap deeper: debts,
+// retirement, how much you save and cash that could earn more. Each account's
+// page, things entered by hand and Compare accounts open from the accounts.
 
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { LinkRows, type LinkRow } from '../components/LinkRows'
 import { Shell } from '../components/Shell'
 import { IDLE_CASH_TITLE } from '../lib/drills/idleCash'
 import { paths } from '../routes'
-import { AccountsActivity, AccountsSection } from './accounts/AccountsSection'
+import { AccountsSection } from './accounts/AccountsSection'
 import { NetWorthSection } from './plan/NetWorth'
+import { SAVINGS_TITLE } from './Savings'
 
-/** The pages a tap deeper from Wealth. */
+/** The four pages a tap deeper from Wealth, in the map's order. */
 const DEEPER: LinkRow[] = [
   {
     to: paths.debts(),
@@ -23,6 +26,12 @@ const DEEPER: LinkRow[] = [
     label: 'Retirement',
     icon: 'sunrise',
     detail: 'What your savings and pensions could pay',
+  },
+  {
+    to: paths.savings(),
+    label: SAVINGS_TITLE,
+    icon: 'growth',
+    detail: 'Your savings rate, and money in and out by month',
   },
   {
     to: paths.idleCash(),
@@ -43,7 +52,6 @@ export function Wealth() {
       <NetWorthSection />
       <AccountsSection />
       <LinkRows label="More on wealth" rows={DEEPER} />
-      <AccountsActivity />
     </Shell>
   )
 }

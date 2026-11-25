@@ -1,8 +1,8 @@
-// The Accounts screen's cards, grouped by kind (checking, credit cards,
-// savings, investments, retirement, loans, other), each group under its
-// icon and title, with the group's total at the end of its heading, and
-// under the credit cards what they cost in interest a month. In Select mode
-// every card is a tick box, and the totals still count the group.
+// The account cards, grouped by kind (checking, credit cards, savings,
+// investments, retirement, loans, other), each group under its icon and
+// title, with the group's total at the end of its heading, and under the
+// credit cards what they cost in interest a month. On Compare accounts every
+// card is a tick box, and the totals still count the group.
 
 import type { Account, Goal } from '../../api/client'
 import { SectionHead } from '../../components/design/SectionHead'
@@ -18,7 +18,7 @@ import { useApp } from '../../lib/app'
 import { AccountCard, PickCard } from './AccountCard'
 import { CardsInterestLine } from './CardInterest'
 
-/** Select mode: which accounts are ticked, and how to tick or untick one. */
+/** Picking accounts to compare: which are ticked, and how to tick or untick one. */
 export interface Picking {
   picked: readonly string[]
   toggle: (id: string) => void
@@ -34,7 +34,7 @@ export function AccountGroups({
   /** Each account's daily balances for the last 30 days, oldest first. */
   balances: ReadonlyMap<string, readonly number[]>
   goals: readonly Goal[]
-  /** Set in Select mode; null when each card opens its account. */
+  /** Set while picking accounts to compare; null when each card opens its account. */
   picking: Picking | null
 }) {
   const { settings } = useApp()

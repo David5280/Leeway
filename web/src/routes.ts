@@ -35,8 +35,14 @@ export const SCREEN_ROUTES = {
   wealth: '/wealth',
   /** One account's own page. */
   account: '/wealth/accounts/:id',
+  /** Pick accounts to add up, with their money in and out together. */
+  compareAccounts: '/wealth/compare',
+  /** Things the owner enters by hand: a home, a car, a loan. */
+  owned: '/wealth/owned',
   debts: '/wealth/debts',
   retirement: '/wealth/retirement',
+  /** How much you save: the savings rate, with money in and out by month. */
+  savings: '/wealth/savings',
   /** Cash in checking that could earn more in savings. */
   idleCash: '/wealth/idle-cash',
   alerts: '/alerts',
@@ -129,8 +135,11 @@ export const paths = {
     `${SCREEN_ROUTES.goals}/trips/${segment(startsOn)}/${segment(endsOn)}`,
   wealth: () => SCREEN_ROUTES.wealth,
   account: (id: string) => `${SCREEN_ROUTES.wealth}/accounts/${segment(id)}`,
+  compareAccounts: () => SCREEN_ROUTES.compareAccounts,
+  owned: () => SCREEN_ROUTES.owned,
   debts: () => SCREEN_ROUTES.debts,
   retirement: () => SCREEN_ROUTES.retirement,
+  savings: () => SCREEN_ROUTES.savings,
   idleCash: () => SCREEN_ROUTES.idleCash,
   alerts: () => SCREEN_ROUTES.alerts,
   inbox: () => SCREEN_ROUTES.inbox,

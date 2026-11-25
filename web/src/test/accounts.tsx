@@ -1,11 +1,13 @@
 // The accounts' test setup: three accounts of different kinds, a fake server
-// that answers for any pick of them, and the Wealth tab's accounts section
-// rendered at /wealth with a stand-in for an account's own page to land on.
+// that answers for any pick of them, the Wealth tab's accounts section
+// rendered at /wealth, and Compare accounts' body at its own address, each
+// with stand-ins for the pages its links land on.
 
 import { screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import type { Account } from '../api/client'
-import { AccountsActivity, AccountsSection } from '../pages/accounts/AccountsSection'
+import { AccountsSection } from '../pages/accounts/AccountsSection'
+import { ComparePicker } from '../pages/accounts/ComparePicker'
 import { paths, SCREEN_ROUTES } from '../routes'
 import {
   account,
@@ -70,25 +72,34 @@ export function server(accounts: Account[] = everyAccount, extra: Handlers = {})
   })
 }
 
-/**
- * The accounts and their activity at /wealth, as the Wealth tab shows them,
- * with a stand-in for an account's own page to land on.
- */
+/** Stand-ins for the pages the accounts link to, so a test can land on one. */
+const landings = (
+  <>
+    <Route path={SCREEN_ROUTES.account} element={<p>One account&apos;s page</p>} />
+    <Route path={SCREEN_ROUTES.compareAccounts} element={<p>Compare accounts</p>} />
+    <Route path={SCREEN_ROUTES.owned} element={<p>Things you own and owe</p>} />
+  </>
+)
+
+/** The accounts at /wealth, as the Wealth tab shows them. */
 export function renderAccounts(options: Parameters<typeof renderSignedIn>[1] = {}) {
   return renderSignedIn(
     <Routes>
-      <Route
-        path={SCREEN_ROUTES.wealth}
-        element={
-          <>
-            <AccountsSection />
-            <AccountsActivity />
-          </>
-        }
-      />
-      <Route path={SCREEN_ROUTES.account} element={<p>One account&apos;s page</p>} />
+      <Route path={SCREEN_ROUTES.wealth} element={<AccountsSection />} />
+      {landings}
     </Routes>,
     { route: paths.wealth(), ...options },
+  )
+}
+
+/** Compare accounts' tick boxes and the activity of the pick, at their own address. */
+export function renderCompare(options: Parameters<typeof renderSignedIn>[1] = {}) {
+  return renderSignedIn(
+    <Routes>
+      <Route path={SCREEN_ROUTES.compareAccounts} element={<ComparePicker />} />
+      <Route path={SCREEN_ROUTES.wealth} element={<p>Wealth</p>} />
+    </Routes>,
+    { route: paths.compareAccounts(), ...options },
   )
 }
 

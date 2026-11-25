@@ -4,6 +4,7 @@
 import { Card } from '../../components/design/Card'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Account, DebtPlans } from '../../api/client'
 import { useAction } from '../../api/hooks'
 import { LoadingOrError, Segmented, Setting } from '../../components/ui'
@@ -16,6 +17,7 @@ import { DebtTerms } from './DebtTerms'
 import { durationText } from './text'
 import { Money } from '../../components/design/Money'
 import { CardsCostSentence } from '../accounts/CardInterest'
+import { settingsPath } from '../settings/paths'
 
 type Strategy = 'avalanche' | 'snowball' | 'minimumsOnly'
 
@@ -112,13 +114,7 @@ export function DebtsSection() {
   if (!accounts.data) return <LoadingOrError error={accounts.error} />
   // The ones the payoff plan counts: shown, still shared by the bank, and owing.
   const debts = accounts.data.filter((a) => isOwed(a) && isCounted(a) && (a.balanceCents ?? 0) > 0)
-  if (debts.length === 0) {
-    return (
-      <Card static="empty" label="Debts">
-        <p className="empty">No credit cards or loans with a balance. Nothing to pay off.</p>
-      </Card>
-    )
-  }
+  if (debts.length === 0) return <NoDebts hasAccounts={accounts.data.length > 0} />
   return (
     <>
       <Card static="list" label="Your debts" className="stack-sm">
@@ -152,5 +148,21 @@ export function DebtsSection() {
         <PayoffPlan extraCents={extraCents} />
       </Card>
     </>
+  )
+}
+
+/** Nothing owed: said plainly, or, with no accounts yet, the way to bring them in. */
+function NoDebts({ hasAccounts }: { hasAccounts: boolean }) {
+  return (
+    <Card static="empty" label="Debts">
+      {hasAccounts ? (
+        <p className="empty">No credit cards or loans with a balance, so nothing to pay off.</p>
+      ) : (
+        <p className="empty">
+          No accounts yet. <Link to={settingsPath('banks')}>Connect a bank</Link> to see what your
+          cards and loans cost.
+        </p>
+      )}
+    </Card>
   )
 }

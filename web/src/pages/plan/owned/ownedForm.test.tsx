@@ -5,6 +5,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { paths } from '../../../routes'
 import { failing } from '../../../test/fake'
 import { account, renderPlanning } from '../../../test/planning'
 import {
@@ -26,7 +27,7 @@ describe('saving never changes an amount quietly', () => {
 
   it('renames an overdrawn account without touching its balance or the day it was entered', async () => {
     const server = serve(withChecking)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Second checking/, 'Edit Second checking')
     expect(form.getByRole('textbox', { name: 'Worth about' })).toHaveValue('-142.1')
     // Cash carries no loan, so the form offers none.
@@ -44,7 +45,7 @@ describe('saving never changes an amount quietly', () => {
 
   it('keeps a new balance below zero for cash', async () => {
     const server = serve(withChecking)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Second checking/, 'Edit Second checking')
     const worth = form.getByRole('textbox', { name: 'Worth about' })
     await user.clear(worth)
@@ -59,7 +60,7 @@ describe('saving never changes an amount quietly', () => {
 
   it('refuses a loan still owed below zero, saying what to enter, and sends nothing', async () => {
     const server = serve(BOTH)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
     const owed = form.getByRole('textbox', { name: 'Still owed' })
     await user.clear(owed)
@@ -76,7 +77,7 @@ describe('saving never changes an amount quietly', () => {
 
   it('refuses a home worth less than nothing', async () => {
     const server = serve(NOTHING)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: 'Add' }))
     const form = within(screen.getByRole('form', { name: 'Add something' }))
@@ -92,7 +93,7 @@ describe('an older entry from before the rules', () => {
   it('renames a thing kept below zero, sending its name alone', async () => {
     const fund = { ...checking, id: 'acct-fund', name: 'Old fund', kind: 'other' as const }
     const server = serve({ ...NOTHING, owned: [{ ...fund, amountCents: -50_000 }] })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Old fund/, 'Edit Old fund')
     const name = form.getByRole('textbox', { name: 'Name' })
     await user.clear(name)
@@ -113,7 +114,7 @@ describe('an older entry from before the rules', () => {
       amountCents: null,
     }
     const server = serve({ ...NOTHING, owned: [brokerage] })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Brokerage/, 'Edit Brokerage')
     expect(form.getByRole('textbox', { name: 'Worth about' })).toHaveValue('')
     await user.type(form.getByRole('textbox', { name: 'Name' }), ' account')
@@ -132,7 +133,7 @@ describe('what went wrong', () => {
       '/api/actions/update_owned_or_owed': failing('That name is taken.'),
       '/api/actions/delete_account': failing('That account is in use.'),
     })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^House/, 'Edit House')
     await user.click(form.getByRole('button', { name: 'Save' }))
     expect(await form.findByRole('alert')).toHaveTextContent('That name is taken.')
@@ -144,7 +145,7 @@ describe('what went wrong', () => {
   })
   it('drops the server’s error once what was typed is refused, so only that shows', async () => {
     serve(BOTH, { '/api/actions/update_owned_or_owed': failing('That name is taken.') })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
     await user.click(form.getByRole('button', { name: 'Save' }))
     expect(await form.findByRole('alert')).toHaveTextContent('That name is taken.')
@@ -158,7 +159,7 @@ describe('what went wrong', () => {
 
   it('drops a problem with what was typed once Delete is pressed', async () => {
     serve(BOTH, { '/api/actions/delete_account': failing('That account is in use.') })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
     const owed = form.getByRole('textbox', { name: 'Still owed' })
     await user.clear(owed)
@@ -176,7 +177,7 @@ describe('what went wrong', () => {
 describe("a loan's rate", () => {
   it('reads a rate typed with a percent sign', async () => {
     const server = serve(BOTH)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
     const rate = form.getByRole('textbox', { name: 'Rate, %' })
     await user.clear(rate)
@@ -191,7 +192,7 @@ describe("a loan's rate", () => {
 
   it('refuses a rate it cannot read, rather than clearing the saved one', async () => {
     const server = serve(BOTH)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^Mortgage/, 'Edit Mortgage')
     const rate = form.getByRole('textbox', { name: 'Rate, %' })
     await user.clear(rate)
@@ -217,7 +218,7 @@ describe('the loan on a home or car', () => {
 
   it('offers loans only, never a card or cash', async () => {
     serve(BOTH, {}, { list_accounts: accounts })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { form } = await openRow(/^House/, 'Edit House')
     const select = form.getByRole('combobox', { name: 'Loan on it' })
     await waitFor(() =>
@@ -231,7 +232,7 @@ describe('the loan on a home or car', () => {
 
   it('shows a hidden loan it is tied to, and None unties it', async () => {
     const server = serve(tiedToHidden, {}, { list_accounts: accounts })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { user, form } = await openRow(/^House/, 'Edit House')
     const select = form.getByRole('combobox', { name: 'Loan on it' })
     await waitFor(() =>
@@ -252,7 +253,7 @@ describe('the loan on a home or car', () => {
     const withCabin: OwnedAndOwed = { ...BOTH, owned: [house, cabin] }
     const autoLoan = account({ id: 'acct-auto', name: 'Auto loan', type: 'loan' })
     serve(withCabin, {}, { list_accounts: () => [...accounts(), autoLoan] })
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const { form } = await openRow(/^Cabin/, 'Edit Cabin')
     const select = form.getByRole('combobox', { name: 'Loan on it' })
     await waitFor(() =>
@@ -266,7 +267,7 @@ describe('the loan on a home or car', () => {
 
   it('is not asked for anything else owned', async () => {
     serve(NOTHING)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const user = userEvent.setup()
     await user.click(within(await ownedCard()).getByRole('button', { name: 'Add' }))
     const form = within(screen.getByRole('form', { name: 'Add something' }))
@@ -279,7 +280,7 @@ describe('the form card', () => {
   it('comes into view again when another row is opened', async () => {
     const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
     serve(BOTH)
-    renderPlanning('/wealth')
+    renderPlanning(paths.owned())
     const user = userEvent.setup()
     const card = within(await ownedCard())
     // Counted from here, since the screen may bring other things into view as it loads.

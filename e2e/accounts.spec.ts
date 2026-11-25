@@ -1,21 +1,42 @@
 // Account health: an overdrawn account warns once, in Heads up, and
-// opens on its own page, Select on Wealth adds up a saved pick, and a
+// opens on its own page, Compare accounts adds up a saved pick, and a
 // low-balance warning set in Settings becomes an alert. Each test removes its
-// accounts, since later specs share this install.
+// accounts even when a check fails, since later specs share this install: a
+// leftover overdrawn account would change their balances, alerts and idle cash.
 
 import { expect, test, type Page } from '@playwright/test'
-import { addAccount } from './manual'
+import { action, addAccount } from './manual'
 
-/** Deletes accounts added by hand, from Settings. */
+/**
+ * Deletes every account by these names that was added by hand, however many
+ * a failed earlier try left. Any never added are skipped, so it is safe after
+ * a failed check; bank accounts are never touched.
+ */
 async function removeAccounts(page: Page, names: string[]): Promise<void> {
-  await page.goto('/settings/accounts')
-  for (const name of names) {
-    await page.getByRole('button', { name: `Delete ${name}` }).click()
-    await expect(page.getByRole('textbox', { name: `Name for ${name}` })).toHaveCount(0)
+  const accounts = await action<{ id: string; name: string; manual: boolean }[]>(
+    page,
+    'list_accounts',
+  )
+  for (const account of accounts) {
+    if (account.manual && names.includes(account.name)) {
+      await action(page, 'delete_account', { id: account.id })
+    }
   }
 }
 
 test('an overdrawn account warns on the dashboard and opens on its own', async ({ page }) => {
+  try {
+    await overdrawnAccountTour(page)
+  } finally {
+    await removeAccounts(page, ['Everyday', 'Rainy day'])
+  }
+  await page.goto('/')
+  await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
+  await expect(page.getByText(/Everyday is overdrawn/)).toHaveCount(0)
+})
+
+/** Adds an overdrawn account beside savings and follows its warning through the app. */
+async function overdrawnAccountTour(page: Page): Promise<void> {
   await addAccount(page, { name: 'Everyday', balance: '-42.10' })
   await addAccount(page, { name: 'Rainy day', balance: '900' })
 
@@ -37,31 +58,30 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
     'Everyday is overdrawn by $42.10.',
   )
 
-  // On Wealth, picking both sums them, and the pick is saved.
+  // Compare, from Wealth, sums the picked accounts, and the pick is saved.
   await page.goto('/wealth')
-  await page.getByRole('button', { name: 'Select' }).click()
+  await page.getByRole('link', { name: 'Compare', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Compare accounts' })).toBeVisible()
   // A tick saves the pick, so each box is read back rather than assumed.
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {
-    await page.getByRole('checkbox', { name }).click()
-    await expect(page.getByRole('checkbox', { name })).toBeChecked()
+    await page.getByRole('checkbox', { name, exact: true }).click()
+    await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked()
   }
   const bar = page.getByRole('region', { name: 'Picked accounts' })
   await expect(bar).toContainText('2 accounts together')
   await expect(bar).toContainText('$857.90')
-  await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByRole('region', { name: 'Summary' })).toContainText(
     '$857.90 available across 2 checking and savings accounts.',
   )
+  // No alert card sits beside a pick, so the summary says the overdraft in words, once.
   await expect(page.getByText('Everyday is overdrawn by $42.10.')).toHaveCount(1)
   await page.reload()
-  await page.getByRole('button', { name: 'Select' }).click()
-  await expect(page.getByRole('checkbox', { name: 'Pick Everyday' })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Pick Everyday', exact: true })).toBeChecked()
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {
-    await page.getByRole('checkbox', { name }).click()
-    await expect(page.getByRole('checkbox', { name })).not.toBeChecked()
+    await page.getByRole('checkbox', { name, exact: true }).click()
+    await expect(page.getByRole('checkbox', { name, exact: true })).not.toBeChecked()
   }
   await expect(bar).toContainText('Tick the accounts to add up')
-  await page.getByRole('button', { name: 'Done' }).click()
 
   // The Alerts page lists every alert.
   await page.goto('/alerts')
@@ -69,12 +89,7 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   await expect(page.getByRole('region', { name: 'Account alerts' })).toContainText(
     'Everyday is overdrawn by $42.10.',
   )
-
-  await removeAccounts(page, ['Everyday', 'Rainy day'])
-  await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
-  await expect(page.getByText(/Everyday is overdrawn/)).toHaveCount(0)
-})
+}
 
 test('a low-balance warning set in Settings becomes an alert', async ({ page }) => {
   await addAccount(page, { name: 'Bills', balance: '50' })

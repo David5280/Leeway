@@ -257,7 +257,7 @@ describe('every card on the redesigned screens keeps the card contract', () => {
   it('on Wealth', async () => {
     serve()
     renderSignedIn(<Wealth />, { route: paths.wealth() })
-    await screen.findByRole('region', { name: 'Summary' })
+    await screen.findByRole('link', { name: new RegExp(everyAccount.at(-1)!.name) })
     const found = await checkEveryCard()
     expect(found.drill).toBeGreaterThan(0)
     expect(found.to).toBe(everyAccount.length)

@@ -1,8 +1,7 @@
-// Net worth: the figure first, with what is owned and owed under it, which
-// opens its drill-down; then "Is your net worth growing?" over a range,
-// against where it started, a chart whose tapped day reads out what was owned
-// and owed that day; then what the owner entered by hand (a home, a car, a
-// loan), marked as theirs; then how much of each month's pay goes to savings.
+// Net worth, Wealth's lead: the figure first, with what is owned and owed
+// under it, which opens its drill-down; then "Is your net worth growing?"
+// over a range, against where it started, a chart whose tapped day reads out
+// what was owned and owed that day.
 
 import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -18,8 +17,6 @@ import { netWorthDrill } from '../../lib/drills/plan'
 import { longDate, shortDate } from '../../lib/format'
 import { isoDaysAgo } from '../../lib/dates'
 import { historyNote, rangesWithMore, startReference, worthChange } from '../../lib/worth'
-import { OwnedCard } from './owned/OwnedCard'
-import { SavingsRateCard } from './SavingsRate'
 
 const RANGES = [
   { value: '90', label: '3 months' },
@@ -101,8 +98,6 @@ export function NetWorthSection() {
         )}
         {change && note && <p className="small muted">{note}</p>}
       </Card>
-      <OwnedCard />
-      <SavingsRateCard />
     </>
   )
 }

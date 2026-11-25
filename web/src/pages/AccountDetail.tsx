@@ -18,7 +18,13 @@ import { SectionHead } from '../components/design/SectionHead'
 import { Shell } from '../components/Shell'
 import { Icon, LoadingOrError } from '../components/ui'
 import { goalsOn, kindIcon } from '../lib/accountCards'
-import { balanceReference, billsPaidFrom, feesCharged, recurringFrom } from '../lib/accountDetail'
+import {
+  balanceReference,
+  billsPaidFrom,
+  feesCharged,
+  recurringFrom,
+  summaryBesideAlerts,
+} from '../lib/accountDetail'
 import { accountDetail, isOwed, isShared, overdrawn } from '../lib/accounts'
 import { useApp } from '../lib/app'
 import { isoDaysAgo } from '../lib/dates'
@@ -103,7 +109,7 @@ function DetailBody({ account }: { account: Account }) {
       <AlertsCard alerts={view.data?.alerts ?? []} label="Alerts for this account" />
       <InterestCard account={account} />
       {view.data ? (
-        <SummaryCard summary={view.data.summary} />
+        <SummaryCard summary={summaryBesideAlerts(view.data.summary, view.data.alerts)} />
       ) : (
         <LoadingOrError error={view.error} />
       )}
