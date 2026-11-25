@@ -67,7 +67,7 @@ describe('the inbox', () => {
       kind: 'overdrawn',
       title: 'Overdrawn',
       message: 'Test Joint is overdrawn by $1.',
-      link: '/alerts',
+      link: '/inbox',
       createdAt: ctx.now(),
       readAt: null,
       resolvedAt: null,

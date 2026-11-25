@@ -1,12 +1,9 @@
 // Long names stay inside a phone screen: a long category ends in an ellipsis
 // in a transaction's sheet, and a long unbroken description ends in an
 // ellipsis on its row, and wraps in its sheet, instead of widening the page.
-// A category far over budget on the overview's Categories widget keeps a short
-// name whole beside its figures rather than squeeze it to a letter or two.
 
 import { expect, test, type Locator } from '@playwright/test'
-import { showWidgets } from './dashboard'
-import { action, addAccount, addSpending, removeAccount } from './manual'
+import { addAccount, addSpending, removeAccount } from './manual'
 import { IPHONE, NARROWEST, overflow } from './phone'
 
 /** Checks that text stays inside the page's 16px gutters rather than spilling past its card. */
@@ -51,39 +48,6 @@ test.describe('on the narrowest phone', () => {
     await page.keyboard.press('Escape')
     await removeAccount(page, 'Ellipsis checking')
   })
-
-  test('a category far over budget keeps its name whole beside its figures', async ({ page }) => {
-    // Four letters, far over a small budget: the widest figures a bar shows.
-    const kite = await action<{ id: string }>(page, 'create_category', {
-      name: 'Kite',
-      budgetCents: 1_000,
-    })
-    await addAccount(page, { name: 'Status checking', balance: '20000' })
-    await addSpending(page, {
-      account: 'Status checking',
-      description: 'Kite shop',
-      amount: '12345.67',
-      category: 'Kite',
-    })
-
-    await showWidgets(page, ['categories'])
-    await page.goto('/')
-    const row = page
-      .getByRole('region', { name: 'Categories', exact: true })
-      .locator('.cbar')
-      .filter({ has: page.locator('.cbar-name', { hasText: /^Kite$/ }) })
-    const figures = row.locator('.cbar-figures')
-    // The budget is shared out over the period, so the exact figure moves day to day.
-    await expect(figures).toHaveText(/^Over\s*\$12,\d{3} of \$\d+/)
-
-    // The name is whole, not cut to "K…", and the figures stay on the screen.
-    expect(await lineFit(row.locator('.cbar-name'))).toMatchObject({ truncated: false })
-    await expectInsideGutters(figures, NARROWEST.viewport.width)
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
-
-    await removeAccount(page, 'Status checking')
-    await action(page, 'delete_category', { id: kite.id })
-  })
 })
 
 test.describe('on an iPhone', () => {
@@ -115,14 +79,6 @@ test.describe('on an iPhone', () => {
     await expectInsideGutters(raw, IPHONE.viewport.width)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
     await page.keyboard.press('Escape')
-
-    // The overview's recent list cuts it short too.
-    await showWidgets(page, ['recent'])
-    await page.goto('/')
-    const recent = page.getByRole('region', { name: 'Recent transactions' }).getByText(description)
-    await expect(recent).toBeVisible()
-    await expectInsideGutters(recent, IPHONE.viewport.width)
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
 
     await removeAccount(page, 'Unbroken checking')
   })

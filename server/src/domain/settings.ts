@@ -5,6 +5,7 @@ import type { Db } from '../db/pool.js'
 import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
+import { WIDGETS, withoutRemovedWidgets } from './homeCards.js'
 import { aiSettingsSchema } from './ai/settings.js'
 import { paySettingsSchema } from './pay/ownPay.js'
 import type { PeriodConfig } from '../lib/periods.js'
@@ -38,24 +39,6 @@ const periodSchema = z.discriminatedUnion('kind', [
 export const THEMES = ['night', 'harbor', 'neon'] as const
 export const ACCENTS = ['blue', 'teal', 'violet', 'orange', 'pink', 'mint'] as const
 export const FONTS = ['geist', 'space-grotesk', 'ibm-plex', 'system'] as const
-const WIDGETS = [
-  'summary',
-  'leeway',
-  'glance',
-  'alerts',
-  'categories',
-  'pace',
-  'recent',
-  'accounts',
-  'merchants',
-  'bills',
-  'cash-flow',
-  'net-worth',
-  'goals',
-  'debts',
-  'trends',
-  'flows',
-] as const
 const WIDGET_SIZES = ['half', 'wide', 'full'] as const
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #4f8cff')
@@ -88,19 +71,19 @@ const widgetSchema = z.object({
 })
 
 /**
- * The Overview as it first opens: only what answers "am I OK?", from the most
- * general answer to the most detail. What is left to spend beside net worth,
- * Heads up (shown only when something needs the owner), money in against
- * money out by month, then the spending pace. Everything else is a widget the
- * owner can add, or lives on its own page. web/src/widgets/library.ts keeps
- * the same list for "Reset layout".
+ * Home as it first opens, in the map's order: what you can spend, Heads up
+ * (shown only when something needs the owner), then one summary card per
+ * tab: cash to payday, spending pace, the top goal and net worth. Everything
+ * else is a card the owner can add. web/src/widgets/library.ts keeps the same
+ * list for "Reset layout".
  */
 export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
   { type: 'leeway', size: 'wide', visible: true },
-  { type: 'net-worth', size: 'half', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'flows', size: 'full', visible: true },
-  { type: 'pace', size: 'full', visible: true },
+  { type: 'cash-flow', size: 'half', visible: true },
+  { type: 'pace', size: 'half', visible: true },
+  { type: 'goals', size: 'half', visible: true },
+  { type: 'net-worth', size: 'half', visible: true },
 ]
 
 const widgetsSchema = z
@@ -242,8 +225,9 @@ export async function getSettings(db: Db): Promise<Settings> {
   const { rows } = await db.query<{ data: unknown }>('SELECT data FROM settings')
   // A stored document that no longer validates (say, a removed option) falls
   // back to defaults field by field instead of breaking the app.
-  const parsed = settingsSchema.safeParse(rows[0]?.data ?? {})
-  return parsed.success ? parsed.data : repair(rows[0]?.data)
+  const stored = withoutRemovedWidgets(rows[0]?.data ?? {})
+  const parsed = settingsSchema.safeParse(stored)
+  return parsed.success ? parsed.data : repair(stored)
 }
 
 function repair(data: unknown): Settings {

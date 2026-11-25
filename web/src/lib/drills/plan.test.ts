@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { NetWorth } from '../../api/client'
-import { cashFlow, debtPlans } from '../../test/planning'
+import { cashFlow } from '../../test/planning'
 import { mathSentence } from '../drill'
 import { money as formatMoney } from '../money'
-import { cashFlowDrill, debtsDrill, merchantsDrill, netWorthDrill } from './plan'
+import { cashFlowDrill, merchantsDrill, netWorthDrill } from './plan'
 import { worthPoint } from '../../test/worth'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
@@ -11,7 +11,6 @@ const money = (cents: number) => formatMoney(cents, { currency: 'USD', locale: '
 const said = (drill: { math: Parameters<typeof mathSentence>[0] }) =>
   mathSentence(drill.math, money)
 const date = (iso: string) => `on ${iso}`
-const duration = (months: number | null) => (months === null ? 'Never' : `${months} months`)
 
 describe('cashFlowDrill', () => {
   it('takes the bills due before payday from checking, leaving what is safe to spend', () => {
@@ -163,38 +162,6 @@ describe('netWorthDrill', () => {
     expect(drill.figure).toEqual({ cents: -5000, tone: 'problem' })
     expect(drill.math.result.value).toEqual({ cents: -5000, tone: 'problem' })
     expect(drill.trend).toBeUndefined()
-  })
-})
-
-describe('debtsDrill', () => {
-  const card = {
-    id: 'card',
-    name: 'Rewards card',
-    balanceCents: 200000,
-    aprBps: 2499,
-    minimumCents: 6000,
-  }
-
-  it('adds the interest to what is owed, and says when each debt clears', () => {
-    const plans = debtPlans([card])
-    const drill = debtsDrill(plans, duration)
-    const interest = plans.avalanche.totalInterestCents
-    expect(drill.math.terms.map((term) => term.value)).toEqual([
-      { cents: 200000 },
-      { cents: interest },
-    ])
-    expect(drill.math.result.value).toEqual({ cents: 200000 + interest })
-    expect(drill.figure).toEqual({ text: `${plans.avalanche.months} months` })
-    expect(drill.items!.rows).toEqual([
-      {
-        key: 'card',
-        label: 'Rewards card',
-        detail: `${plans.avalanche.debts[0]!.months} months`,
-        value: { cents: plans.avalanche.debts[0]!.interestCents },
-        to: '/wealth/debts',
-      },
-    ])
-    expect(drill.more).toEqual({ to: '/wealth/debts', label: 'Plan it' })
   })
 })
 

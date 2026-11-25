@@ -51,7 +51,9 @@ body {
   box-shadow: var(--elev-1), var(--hi);
 }
 
-/* A screen's hero: one step higher, lit by the accent from its top corner. */
+/* A screen's hero: one step higher, lit by the accent from its top corner.
+   The light stays faint so every text color reads on it at 4.5:1, with any
+   accent (lib/homeContrast.test.ts reads the share from here). */
 .card.hero {
   position: relative;
   overflow: hidden;
@@ -59,7 +61,7 @@ body {
   background-image:
     radial-gradient(
       ellipse 120% 90% at 0% 0%,
-      color-mix(in srgb, var(--accent) 16%, transparent),
+      color-mix(in srgb, var(--accent) 8%, transparent),
       transparent 62%
     ),
     radial-gradient(ellipse 70% 70% at 100% 100%, var(--glow), transparent 70%),

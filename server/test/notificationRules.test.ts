@@ -57,28 +57,28 @@ describe('account alerts', () => {
         subject: 'acct-1',
         title: 'Overdrawn',
         pushBody: 'Everyday is below zero.',
-        link: '/alerts',
+        link: '/inbox',
       },
       {
         kind: 'over_limit',
         subject: 'card',
         title: 'Over credit limit',
         pushBody: 'Travel card is past its limit.',
-        link: '/alerts',
+        link: '/inbox',
       },
       {
         kind: 'low_balance',
         subject: 'acct-1',
         title: 'Low balance',
         pushBody: 'Everyday is below your warning amount.',
-        link: '/alerts',
+        link: '/inbox',
       },
       {
         kind: 'overdraft_fee',
         subject: 'acct-1:2026-11-15',
         title: 'Overdraft fee',
         pushBody: 'Everyday was charged a fee.',
-        link: '/alerts',
+        link: '/inbox',
       },
     ])
     // The app keeps the full sentence, amount and all.

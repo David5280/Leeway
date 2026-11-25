@@ -78,7 +78,7 @@ describe('settings', () => {
     // A malformed locale would make every money and date formatter in the app throw.
     const locale = await callError('update_settings', { locale: 'not a locale' })
     expect(locale.message).toContain('Use a language tag like en-US')
-    const twice = { type: 'recent', size: 'wide', visible: true }
+    const twice = { type: 'goals', size: 'wide', visible: true }
     const duplicate = await callError('update_settings', { dashboard: { widgets: [twice, twice] } })
     expect(duplicate.message).toContain('only appear once')
   })

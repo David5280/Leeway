@@ -1,6 +1,6 @@
 // Hiding an account alert from the home screen: gone from Heads up at once,
-// and still gone after a reload, while the inbox and the Alerts page keep it.
-// (The banner stands in for Heads up only when Heads up is hidden.)
+// and still gone after a reload, while the Inbox keeps it, both under Needs
+// you now and among the earlier alerts.
 
 import { expect, test, type Page } from '@playwright/test'
 import { action } from './seed'
@@ -32,8 +32,6 @@ test.describe('hiding an alert from home', () => {
 
     await page.goto('/')
     await expect(rowIn(page, 'Heads up')).toContainText('is overdrawn')
-    // Heads up says it once, so no banner says it again.
-    await expect(page.getByRole('region', { name: 'Account alerts' })).toHaveCount(0)
 
     await rowIn(page, 'Heads up')
       .getByRole('button', { name: new RegExp(`^Hide from home: .*${NAME}`) })
@@ -44,11 +42,11 @@ test.describe('hiding an alert from home', () => {
     await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
     await expect(rowIn(page, 'Heads up')).toHaveCount(0)
 
-    // The inbox still has it, unread, and so does the Alerts page.
+    // The Inbox still has it: needing the owner now, and unread among the earlier alerts.
     await page.goto('/inbox')
-    const item = page.getByRole('listitem').filter({ hasText: NAME })
-    await expect(item).toContainText('Unread')
-    await page.goto('/alerts')
-    await expect(page.getByRole('link', { name: new RegExp(NAME) })).toBeVisible()
+    const now = page.getByRole('region', { name: 'Needs you now' })
+    await expect(now.getByRole('link', { name: new RegExp(NAME) })).toBeVisible()
+    const earlier = page.getByRole('region', { name: 'Notifications' })
+    await expect(earlier.getByRole('listitem').filter({ hasText: NAME })).toContainText('Unread')
   })
 })

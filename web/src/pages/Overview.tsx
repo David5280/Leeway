@@ -1,5 +1,10 @@
-// The Overview dashboard: widgets the owner arranges, sizes and hides. Home
-// is always now: looking back at an earlier period is Spending's job.
+// Home: "Am I OK right now?" It reads top to bottom as the map has it:
+// Leeway (what you can spend), Heads up (only when something needs the
+// owner), a payday nudge in the days after one, then the cards the owner
+// arranges, by default one summary per tab. Leeway and Heads up are drawn
+// here, fixed, so nothing urgent can be hidden or moved down; the rest can be
+// added, hidden, resized and reordered. Home is always now: looking back at
+// an earlier period is Spending's job.
 
 import { useState } from 'react'
 import { useAction } from '../api/hooks'
@@ -7,37 +12,29 @@ import { useUpdateSettings } from '../api/settings'
 import { Shell } from '../components/Shell'
 import { ErrorNote, Icon, Loading } from '../components/ui'
 import { useApp } from '../lib/app'
-import { periodLabel } from '../lib/format'
-import { useUrgentHeadsUp } from '../widgets/Alerts'
+import { AlertsWidget } from '../widgets/Alerts'
 import { Board } from '../widgets/Board'
-import { AccountHealth } from './overview/AccountHealth'
-import { PaydayNotice } from './overview/PaydayNotice'
+import { LeewayWidget } from '../widgets/Leeway'
 import {
   addableTypes,
   DEFAULT_LAYOUT,
   drawable,
-  urgentFirst,
   WIDGET_LIBRARY,
   type Widget,
 } from '../widgets/library'
+import { PaydayNotice } from './overview/PaydayNotice'
 
 export function Overview() {
   const { settings } = useApp()
   const [editing, setEditing] = useState(false)
   const budget = useAction('get_budget', { offset: 0 })
   const update = useUpdateSettings()
-  // Every change is made to the full saved list, so widgets this build cannot
-  // draw (from a newer Leeway or an agent) are kept, just not shown.
+  // Every change is made to the full saved list, so the fixed Leeway and
+  // Heads up keep their place in it.
   const all = settings.dashboard.widgets
-  const widgets = drawable(all)
   const saveWidgets = (next: Widget[]) => update.mutate({ dashboard: { widgets: next } })
-  const addable = addableTypes(all)
-  // Heads up lists the account alerts; the banner stands in only when it is hidden.
-  const headsUpShown = widgets.some((widget) => widget.type === 'alerts' && widget.visible)
-  // Something urgent moves Heads up under the hero, but never while editing the saved order.
-  const urgent = useUrgentHeadsUp(budget.data)
-  const visible = widgets.filter((widget) => widget.visible || editing)
-  const shown = urgent && !editing ? urgentFirst(visible) : visible
+  // Hidden cards show, faded, only while editing.
+  const shown = drawable(all).filter((widget) => widget.visible || editing)
 
   return (
     <Shell
@@ -53,42 +50,17 @@ export function Overview() {
         </button>
       }
     >
-      {editing && (
-        <div className="card soft row-between" style={{ padding: '14px 18px' }}>
-          <p style={{ fontSize: 14 }}>Move, resize or hide widgets. Your layout saves as you go.</p>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => update.mutate({ dashboard: { widgets: DEFAULT_LAYOUT } })}
-          >
-            Reset layout
-          </button>
-        </div>
-      )}
-
-      {!headsUpShown && <AccountHealth />}
-      {!editing && <PaydayNotice />}
-
-      <section className="row-between" style={{ alignItems: 'end' }}>
-        <div>
-          <p className="eyebrow">Budget period</p>
-          <h1 style={{ marginTop: 4 }}>
-            {budget.data
-              ? periodLabel(budget.data.period.start, budget.data.period.end, settings.locale)
-              : ' '}
-          </h1>
-        </div>
-        <span className="small muted">
-          {budget.data && `Day ${budget.data.period.daysElapsed} of ${budget.data.period.days}`}
-        </span>
-      </section>
-
+      <h1 className="visually-hidden">Home</h1>
       <ErrorNote error={update.error} />
       {budget.error && <ErrorNote error={budget.error} />}
       {!budget.data ? (
         <Loading />
       ) : (
         <>
+          <LeewayWidget budget={budget.data} />
+          <AlertsWidget budget={budget.data} />
+          {!editing && <PaydayNotice />}
+          {editing && <EditingNote reset={() => saveWidgets(DEFAULT_LAYOUT)} />}
           <Board
             all={all}
             shown={shown}
@@ -96,25 +68,49 @@ export function Overview() {
             budget={budget.data}
             save={saveWidgets}
           />
-          {editing && addable.length > 0 && (
-            <div className="card stack-sm add-widget">
-              <p className="muted">Add a widget</p>
-              <div className="row wrap" style={{ gap: 8 }}>
-                {addable.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    className="chip"
-                    onClick={() => saveWidgets([...all, { type, size: 'half', visible: true }])}
-                  >
-                    + {WIDGET_LIBRARY[type]!.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {editing && <AddCards all={all} save={saveWidgets} />}
         </>
       )}
     </Shell>
+  )
+}
+
+/** While editing: what can change, and the way back to the map's order. */
+function EditingNote({ reset }: { reset: () => void }) {
+  return (
+    <div className="card soft stack-sm">
+      <p className="small">
+        Move, resize or hide the cards below. Your leeway and Heads up stay at the top. Your layout
+        saves as you go.
+      </p>
+      <span className="row">
+        <button type="button" className="btn" onClick={reset}>
+          Reset layout
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/** While editing: a button for each card not on Home yet. */
+function AddCards({ all, save }: { all: Widget[]; save: (widgets: Widget[]) => void }) {
+  const addable = addableTypes(all)
+  if (addable.length === 0) return null
+  return (
+    <div className="card stack-sm add-widget">
+      <p className="muted">Add a card</p>
+      <div className="row wrap">
+        {addable.map((type) => (
+          <button
+            key={type}
+            type="button"
+            className="chip"
+            onClick={() => save([...all, { type, size: 'half', visible: true }])}
+          >
+            + {WIDGET_LIBRARY[type]!.name}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }

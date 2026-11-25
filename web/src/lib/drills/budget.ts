@@ -1,7 +1,6 @@
-// Drill-downs for the budget's figures on Overview and Activity: what is left
-// to spend, what has gone out, what has come in, where it went, and what
-// still needs a category. Pure: each takes the budget (and its history, when
-// there is one) and returns a DrillDown for DrillSheet to draw.
+// Drill-downs for the budget's figures on Home and Activity: what is left to
+// spend and what has gone out. Pure: each takes the budget (and its history,
+// when there is one) and returns a DrillDown for DrillSheet to draw.
 
 import type { Budget, CategoryBudget, Output } from '../../api/client'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
@@ -48,18 +47,6 @@ export function spendingTrend(trends: Trends | undefined, word: string): DrillTr
     label: `Spending each ${word}`,
     description: `What went out in each of the last ${trends.length} ${word}s, this one so far last.`,
   }
-}
-
-/**
- * What a whole period usually comes to: the average spent in the finished
- * periods that had spending. Null until one finished period has any, so the
- * Spent tile says something other than the hero's comparison.
- */
-export function usualPeriodSpend(trends: Trends | undefined): number | null {
-  const finished = (trends ?? []).filter((period) => period.offset < 0 && period.spentCents > 0)
-  if (finished.length === 0) return null
-  const total = finished.reduce((sum, period) => sum + period.spentCents, 0)
-  return Math.round(total / finished.length)
 }
 
 /** Left to spend: the budgets, less what they have spent and what goals hold back. */
@@ -150,109 +137,5 @@ export function spentDrill(budget: Budget, word: string, trends?: Trends): Drill
         .map((row) => categoryItem(row)),
     },
     more: { to: paths.activity(), label: `See this ${word}'s transactions` },
-  }
-}
-
-/** Where the money went: every spending category, biggest first, the rest summed. */
-export function categoriesDrill(budget: Budget, word: string, money: Money): DrillDown {
-  const rows = spendingRows(budget)
-  const listed = rows.slice(0, LISTED)
-  const restCents = rows.slice(LISTED).reduce((sum, row) => sum + row.spentCents, 0)
-  const terms: MathTerm[] = listed.map((row, index) => ({
-    label: row.name,
-    value: { cents: row.spentCents },
-    op: index === 0 ? undefined : 'plus',
-  }))
-  if (restCents > 0)
-    terms.push({ label: 'everything else', value: { cents: restCents }, op: 'plus' })
-  const total = rows.reduce((sum, row) => sum + row.spentCents, 0)
-  return {
-    title: 'Where your money went',
-    subtitle: `This ${word}, by category`,
-    figure: { cents: total },
-    math: {
-      terms,
-      result: { label: 'Spent by category', value: { cents: total } },
-      note:
-        budget.totals.uncategorizedCents > 0
-          ? `${money(budget.totals.uncategorizedCents)} more still needs a category.`
-          : undefined,
-    },
-    items: {
-      title: 'Categories',
-      rows: rows.map((row) => categoryItem(row, budgetDetail(row, money))),
-    },
-    more: { to: paths.spending(), label: 'Open budgets' },
-  }
-}
-
-/** Money in: each income category that received something. */
-export function incomeDrill(budget: Budget, word: string): DrillDown {
-  const rows = budget.categories.filter((row) => row.kind === 'income' && row.spentCents !== 0)
-  const usualCents = budget.previous.categories
-    .filter((past) => rows.some((row) => row.categoryId === past.categoryId))
-    .reduce((sum, past) => sum + past.spentToDateCents, 0)
-  const terms: MathTerm[] =
-    rows.length > 0
-      ? rows.map((row, index) => ({
-          label: row.name,
-          value: { cents: row.spentCents },
-          op: index === 0 ? undefined : 'plus',
-        }))
-      : [{ label: 'Nothing has come in yet', value: { cents: 0 } }]
-  return {
-    title: `Money in this ${word}`,
-    figure: { cents: budget.totals.incomeCents, sign: 'change', tone: 'in' },
-    math: {
-      terms,
-      result: {
-        label: 'Money in',
-        value: { cents: budget.totals.incomeCents, sign: 'change', tone: 'in' },
-      },
-      note: 'Only categories marked as income count. Transfers from your own accounts do not.',
-    },
-    usual:
-      rows.length > 0
-        ? {
-            currentCents: budget.totals.incomeCents,
-            usualCents,
-            goodWhen: 'up',
-            basis: `this point last ${word}`,
-            subject: 'in',
-          }
-        : undefined,
-    items:
-      rows.length > 0 ? { title: 'Income', rows: rows.map((row) => categoryItem(row)) } : undefined,
-    more: { to: paths.activity(), label: `See this ${word}'s transactions` },
-  }
-}
-
-/** What still needs a category: a count and what it adds up to. */
-export function uncategorizedDrill(budget: Budget): DrillDown {
-  const { uncategorizedCount, uncategorizedCents } = budget.totals
-  const word = uncategorizedCount === 1 ? 'transaction' : 'transactions'
-  return {
-    title: 'Needs a category',
-    figure: { text: `${uncategorizedCount} ${word}` },
-    math: {
-      terms: [
-        {
-          label: `${uncategorizedCount} ${word} without a category`,
-          value: { cents: uncategorizedCents },
-        },
-      ],
-      result: { label: 'Spending not yet in a budget', value: { cents: uncategorizedCents } },
-      note:
-        uncategorizedCount > 0
-          ? 'Until each has a category, it counts as spending but in no budget.'
-          : 'Everything has a category.',
-    },
-    more:
-      uncategorizedCount > 0
-        ? {
-            to: paths.activity({ category: 'uncategorized' }),
-            label: `Sort ${uncategorizedCount} ${word}`,
-          }
-        : undefined,
   }
 }

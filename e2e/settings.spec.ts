@@ -95,26 +95,29 @@ test('an accent color applies right away', async ({ page }) => {
   await expect(html).not.toHaveCSS('--accent', '#2DD4BF')
 })
 
-test('a dashboard card can be hidden and shown again', async ({ page }) => {
+test('a Home card can be hidden and shown again', async ({ page }) => {
   // The switch flips at once, before the save lands; leaving the page too soon
   // would cancel the save, so each click waits for the server to answer.
-  const toggleFlows = async () => {
+  const togglePace = async () => {
     const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions/update_settings'))
-    await page.getByRole('switch', { name: 'Show Money in and out' }).click()
+    await page.getByRole('switch', { name: 'Show Spending pace' }).click()
     expect((await saved).ok()).toBe(true)
   }
 
   await page.goto('/settings/appearance')
-  await toggleFlows()
-  await expect(page.getByRole('switch', { name: 'Show Money in and out' })).not.toBeChecked()
+  await togglePace()
+  try {
+    await expect(page.getByRole('switch', { name: 'Show Spending pace' })).not.toBeChecked()
+    await page.goto('/')
+    await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Spending pace' })).toHaveCount(0)
+  } finally {
+    // Shown again even when a check above fails, so later specs find Home as they expect.
+    await page.goto('/settings/appearance')
+    await togglePace()
+  }
   await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Money in and out' })).toHaveCount(0)
-
-  await page.goto('/settings/appearance')
-  await toggleFlows()
-  await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Money in and out' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Spending pace' })).toBeVisible()
 })
 
 test('a key for an AI assistant is shown once, ready to copy', async ({ page }) => {

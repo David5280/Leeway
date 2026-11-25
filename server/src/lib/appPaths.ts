@@ -9,7 +9,7 @@ export const APP_PATHS = {
   bills: '/payday/bills',
   /** All activity, under Spending. */
   activity: '/spending/activity',
-  alerts: '/alerts',
+  /** The Inbox: what needs the owner now, then every alert as it happened. */
   inbox: '/inbox',
   /** One category's own page, under Spending. */
   category: (id: string) => `/spending/${encodeURIComponent(id)}`,
@@ -40,7 +40,6 @@ export const LINKABLE_SCREENS = {
   Retirement: '/wealth/retirement',
   'How much you save': '/wealth/savings',
   'Cash that could earn more': '/wealth/idle-cash',
-  Alerts: APP_PATHS.alerts,
   Inbox: APP_PATHS.inbox,
   Settings: '/settings',
 } as const satisfies Record<string, string>

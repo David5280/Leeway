@@ -10,30 +10,23 @@ import { WIDGET_LIBRARY, type Widget, type WidgetType } from './library'
 
 afterEach(() => vi.unstubAllGlobals())
 
-/** The place each widget should wear: the tab it belongs to, or none. */
-const EXPECTED: Record<WidgetType, string | null> = {
-  summary: null,
-  leeway: null,
-  glance: null,
-  alerts: null,
-  flows: null,
-  categories: 'spend',
-  pace: 'spend',
-  recent: 'spend',
-  merchants: 'spend',
-  trends: 'spend',
+/** The place each card should wear: the tab it opens, or none. Leeway and Heads up are fixed, not cards. */
+const EXPECTED: Record<string, string | null> = {
   'cash-flow': 'pay',
-  bills: 'pay',
+  pace: 'spend',
   goals: 'goal',
-  accounts: 'wealth',
-  debts: 'wealth',
   'net-worth': 'wealth',
+  summary: null,
+  trends: 'spend',
+  merchants: 'spend',
+  debts: 'wealth',
 }
 
 const types = Object.keys(WIDGET_LIBRARY) as WidgetType[]
 
 describe('the place of each Home widget', () => {
   it('names the tab each widget belongs to, Home itself never among them', () => {
+    expect(Object.keys(EXPECTED)).toEqual(types)
     for (const type of types) {
       expect(WIDGET_LIBRARY[type]!.place ?? null, type).toBe(EXPECTED[type])
     }

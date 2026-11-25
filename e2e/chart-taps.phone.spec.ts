@@ -1,15 +1,16 @@
-// On a phone a finger on an Overview chart reads the chart: the readout shows
-// under it and no sheet opens. The title and figure above the chart are what
-// open the drill-down. A finger that starts on a chart to scroll the page
-// leaves no readout behind.
+// On a phone a finger on a chart reads the chart: the readout shows under it
+// and no sheet opens. Spending pace is on Spending, money in and out on
+// Savings. The title and figure above the chart are what open the
+// drill-down. A finger that starts on a chart to scroll the page leaves no
+// readout behind.
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { showWidgets } from './dashboard'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'
 
 const CHARTS = [
   {
     region: 'Spending pace',
+    page: '/spending',
     title: /Flexible spending pace/,
     reads: async (readout: Locator) => {
       await expect(readout).toContainText(/\$[1-9][\d,]* spent/)
@@ -17,6 +18,7 @@ const CHARTS = [
   },
   {
     region: 'Money in and out',
+    page: '/wealth/savings',
     title: /Are you spending less than you earn/,
     reads: async (readout: Locator) => {
       // At least the $3,000 paycheck filed below came in (the seed's unfiled pay may add to it).
@@ -29,7 +31,7 @@ const CHARTS = [
   },
 ]
 
-test.describe('Overview charts under a finger', () => {
+test.describe('charts under a finger', () => {
   // Spending to draw, added for these tests only and taken away after.
   const seeded: Seeded = emptySeed()
   test.beforeAll(async ({ request }) => {
@@ -57,7 +59,7 @@ test.describe('Overview charts under a finger', () => {
     test(`${chart.region}: a tap on the chart reads it, and the title opens the sheet`, async ({
       page,
     }) => {
-      const { card, centre } = await openChart(page, chart.region)
+      const { card, centre } = await openChart(page, chart)
       await page.touchscreen.tap(centre.x, centre.y)
       const readout = card.locator('.chart-readout')
       await expect(readout).toBeVisible()
@@ -71,7 +73,7 @@ test.describe('Overview charts under a finger', () => {
     test(`${chart.region}: a scroll that starts on the chart leaves no readout`, async ({
       page,
     }) => {
-      const { card, plot, centre } = await openChart(page, chart.region)
+      const { card, plot, centre } = await openChart(page, chart)
       const before = await page.evaluate(() => window.scrollY)
       await swipeDown(page, centre)
       // The page really scrolled back up, so the browser took the touch over.
@@ -82,10 +84,9 @@ test.describe('Overview charts under a finger', () => {
   }
 })
 
-/** Shows the Overview with the chart's card centred, clear of the header and tab bar. */
-async function openChart(page: Page, region: string) {
-  await showWidgets(page, ['pace', 'flows'])
-  await page.goto('/')
+/** Opens the chart's page with its card centred, clear of the header and tab bar. */
+async function openChart(page: Page, { region, page: address }: { region: string; page: string }) {
+  await page.goto(address)
   const card = page.getByRole('region', { name: region, exact: true })
   const plot: Locator = card.getByTestId('chart-hit')
   await plot.evaluate((element) => element.scrollIntoView({ block: 'center' }))

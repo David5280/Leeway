@@ -1,175 +1,110 @@
-// The headline widget and the Overview's hero: how much room is left in the
-// budget, held to what is safe to spend before payday (the server's
-// spendable), what that is per day, and a ring of how much of the budget is
-// used against how far through the period today is. When checking holds less
-// than the budget has left, the cash leads and one line says why; it is red
-// only for an overdraft or a shortfall. Tapping it shows the math
-// (lib/drills/budget.ts).
+// Home's lead, "Your leeway": what you can spend today, what that is a day,
+// and how many days it has to last until payday. The figure is the server's
+// spendable, the lesser of the budget's room and what is safe to spend from
+// checking, and one line says which of the two sets it. Tapping it opens that
+// one's math (lib/drills/leeway.ts); the figure never waits on that math,
+// only the sheet does. When neither a budget nor a checking balance is
+// known, it says so in words: nothing known is never $0.
 
 import { Link } from 'react-router-dom'
-import type { Budget } from '../api/client'
+import { useAction } from '../api/hooks'
 import { Card } from '../components/design/Card'
 import { HeroFigure } from '../components/design/HeroFigure'
 import { Money } from '../components/design/Money'
-import { ProgressRing } from '../components/design/ProgressRing'
-import type { Status } from '../components/design/StatusPill'
-import { Dot } from '../components/ui'
 import { useApp } from '../lib/app'
-import { leewayDrill } from '../lib/drills/budget'
-import { dayLabel, periodWord } from '../lib/format'
-import type { WidgetProps } from './types'
+import { isoDaysAgo } from '../lib/dates'
+import { leewayDrillFor } from '../lib/drills/leeway'
+import { dayLabel } from '../lib/format'
+import { leewayLead, type LeewayLead } from '../lib/leewayLead'
+import { settingsPath } from '../pages/settings/paths'
 import { paths } from '../routes'
+import type { WidgetProps } from './types'
 
-/** Each goal's share held back this period, which the drill-down's math takes out. */
-function SetAsideList({ setAsides }: { setAsides: Budget['setAsides'] }) {
-  if (setAsides.length === 0) return null
+/** With neither a budget nor a checking balance, there is nothing to go on yet: say so. */
+function NothingKnown() {
   return (
-    <ul className="plain-list small" aria-label="Set aside for goals">
-      {setAsides.map((item) => (
-        <li key={item.goalId} className="row-between">
-          <span className="row" style={{ gap: 8 }}>
-            <Dot color={item.color} />
-            Set aside for {item.name}
-          </span>
-          <Money cents={item.amountCents} tone="muted" />
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function NoBudgets() {
-  return (
-    <Card static="empty" label="Your leeway" className="stack">
+    <Card static="words" label="Your leeway" className="hero stack">
       <p className="eyebrow">Your leeway</p>
-      <p style={{ fontSize: 17 }}>
-        Give a few categories a budget and this shows how much room you have left.
+      <p className="hero-figure-caption">
+        Not known yet. Give a few categories a budget, or link a checking account, and this shows
+        what you can spend.
       </p>
-      <Link to={paths.spending()} className="btn primary tap" style={{ alignSelf: 'flex-start' }}>
-        Set budgets
-      </Link>
+      <span className="row wrap">
+        <Link to={paths.spending()} className="btn primary tap">
+          Set budgets
+        </Link>
+        <Link to={settingsPath('banks')} className="btn tap">
+          Link a bank
+        </Link>
+      </span>
     </Card>
   )
 }
 
-/** The ring's tone: over the budget, used faster than the days, or fine. */
-function usedStatus(used: number, through: number | null): Status {
-  if (used > 100) return 'over'
-  if (through !== null && used > through + 10) return 'watch'
-  return 'ok'
-}
-
-/** Within this many points of the calendar, spending reads as right on pace. */
-const ON_PACE_POINTS = 2
-
-/** How the share used compares with the share of the period gone, in plain words. */
-export function paceWords(used: number, through: number): string {
-  if (Math.abs(used - through) <= ON_PACE_POINTS) return "You're right on pace."
-  return used < through ? "You're under pace." : "You're over pace."
-}
-
-/** The budget's room held to the cash, in this period only, while the cash is the lesser. */
-function cashLead(budget: Budget): Budget['spendable'] {
-  const { spendable, period, totals } = budget
-  if (!spendable || period.offset !== 0 || totals.leewayCents < 0) return null
-  return spendable.limitedBy === 'cash' ? spendable : null
-}
-
-/** The hero's label: over budget, the cash leading, or the budget's room. */
-function heroLabel(over: boolean, cash: Budget['spendable']): string {
-  if (over) return 'Over budget'
-  return cash ? 'Safe to spend' : 'Left to spend'
-}
-
-/** The server's one line on the cash, red only for an overdraft or a shortfall. */
-function CashNote({ budget }: { budget: Budget }) {
-  const { spendable, period } = budget
-  // It shows in this period whenever the server wrote one, over budget too.
-  if (period.offset !== 0 || !spendable?.note) return null
-  return <p className={`small ${spendable.problem ? 'over' : 'muted'}`}>{spendable.note}</p>
-}
-
-/** What the room left means, in words: per day now, or plainly over. */
-function Caption({ budget }: { budget: Budget }) {
+/**
+ * "About $29 a day, with 10 days until payday Fri.": the server's figure a
+ * day, then how long until payday, kept apart so the two never read as one
+ * sum. Without a payday the budget sets both, to the end of its period.
+ */
+function PerDay({ lead }: { lead: LeewayLead }) {
   const { settings } = useApp()
-  const { totals, period } = budget
-  const cash = cashLead(budget)
-  if (cash) {
-    return (
-      <>
-        About{' '}
-        <b>
-          <Money cents={cash.perDayCents} />
-        </b>{' '}
-        a day until {dayLabel(cash.payday, settings.locale)}
-      </>
-    )
-  }
-  const daysToSpend = period.daysLeft + 1
-  if (totals.leewayCents < 0) {
-    return (
-      <>
-        <b>Over budget</b> by <Money cents={-totals.leewayCents} /> of{' '}
-        <Money cents={totals.budgetedCents} />
-      </>
-    )
-  }
-  if (period.offset !== 0 || totals.safePerDayCents === null) {
-    return (
-      <>
-        Left of <Money cents={totals.budgetedCents} />
-      </>
-    )
-  }
+  const { days, payday } = lead
+  const dayWord = days === 1 ? 'day' : 'days'
   return (
     <>
       About{' '}
       <b>
-        <Money cents={totals.safePerDayCents} />
+        <Money cents={lead.perDayCents} />
       </b>{' '}
-      a day for the next {daysToSpend} {daysToSpend === 1 ? 'day' : 'days'}, of{' '}
-      <Money cents={totals.budgetedCents} />
+      a day
+      {payday
+        ? `, with ${days} ${dayWord} until payday ${dayLabel(payday, settings.locale)}.`
+        : ` for the next ${days} ${dayWord}.`}
     </>
   )
 }
 
+/**
+ * What sets the figure, in one line: the server's note when the cash sets it
+ * or falls short (red only for a real problem), otherwise the budget, with
+ * whether the cash was checked against it.
+ */
+function SetByLine({ lead }: { lead: LeewayLead }) {
+  if (lead.note) {
+    return <p className={`small ${lead.problem ? 'over' : 'muted'}`}>{lead.note}</p>
+  }
+  const words = lead.cashKnown ? 'Set by your budget; your cash covers it.' : 'Set by your budget.'
+  return <p className="small muted">{words}</p>
+}
+
 export function LeewayWidget({ budget }: WidgetProps) {
   const { money, settings } = useApp()
-  const { totals, period } = budget
-  if (totals.budgetedCents === 0) return <NoBudgets />
-  const isCurrent = period.offset === 0
-  const over = totals.leewayCents < 0
-  const used = Math.round((totals.budgetedSpentCents / totals.budgetedCents) * 100)
-  const through = isCurrent ? Math.round((period.daysElapsed / period.days) * 100) : null
-  const cash = cashLead(budget)
+  const lead = leewayLead(budget, isoDaysAgo(0, settings.timeZone))
+  // Read only when the cash sets the figure, for the sheet alone; it shares
+  // the cash card's read.
+  const flow = useAction('get_cash_flow', {}, { enabled: lead?.setBy === 'cash' })
+  if (!lead) return <NothingKnown />
+  const date = (iso: string) => dayLabel(iso, settings.locale)
+  const drill = leewayDrillFor(lead.setBy, budget, flow, money, date)
+  // Past the budget, the room is negative: shown as how far over, in red.
+  const over = lead.cents < 0
   return (
-    <Card drill={leewayDrill(budget, money)} label="Your leeway" className="hero stack">
+    <Card drill={drill} label="Your leeway" className="hero stack">
       <HeroFigure
-        label={heroLabel(over, cash)}
-        cents={cash ? cash.leadCents : Math.abs(totals.leewayCents)}
-        tone={over || cash?.problem ? 'problem' : undefined}
-        caption={<Caption budget={budget} />}
-        aside={
-          <ProgressRing
-            percent={used}
-            label="Budget used"
-            status={usedStatus(used, through)}
-            size={76}
-            marker={through}
-          />
+        label={over ? 'Over budget' : 'Your leeway today'}
+        cents={Math.abs(lead.cents)}
+        tone={over || lead.problem ? 'problem' : undefined}
+        caption={
+          over ? (
+            <>
+              Past your <Money cents={budget.totals.budgetedCents} /> budget
+            </>
+          ) : (
+            <PerDay lead={lead} />
+          )
         }
       />
-      <CashNote budget={budget} />
-      <SetAsideList setAsides={budget.setAsides} />
-      {through !== null && (
-        // The ring shows the share used and marks today; this says what the two mean together.
-        // Plain words, never red: the ring's color already carries any warning.
-        <p className="small muted">
-          The mark is today, {through}% of the way through the {periodWord(settings.period.kind)}.
-          {/* Over budget, the figure above already says so; pace would only say it again. */}
-          {!over && ` ${paceWords(used, through)}`}
-        </p>
-      )}
+      <SetByLine lead={lead} />
     </Card>
   )
 }

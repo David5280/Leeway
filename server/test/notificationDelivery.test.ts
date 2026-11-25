@@ -78,14 +78,14 @@ describe('composePush', () => {
     kind: 'overdrawn',
     title,
     pushBody: `${title} body`,
-    link: '/alerts',
+    link: '/inbox',
   })
 
   it('sends one notification as itself', () => {
     expect(composePush([item('Overdrawn')])).toEqual({
       title: 'Overdrawn',
       body: 'Overdrawn body',
-      url: '/alerts',
+      url: '/inbox',
       tag: 'leeway-overdrawn',
     })
   })
@@ -119,7 +119,7 @@ describe('delivering', () => {
         message: {
           title: 'Overdrawn',
           body: 'Test Everyday is below zero.',
-          url: '/alerts',
+          url: '/inbox',
           tag: 'leeway-overdrawn',
         },
       },

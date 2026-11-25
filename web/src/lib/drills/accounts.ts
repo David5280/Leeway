@@ -1,14 +1,12 @@
 // Drill-downs for accounts: one account's balance (its detail page and its
-// card), every account together (the Overview's accounts card), and a
-// picked few (the Accounts screen's Select mode). Pure, from data Leeway
+// card) and a picked few (the Accounts screen's Select mode). Pure, from data Leeway
 // already has: balances, recent daily balances, transactions and alerts.
 
-import type { Account, NetWorth, Transaction } from '../../api/client'
+import type { Account, Transaction } from '../../api/client'
 import { combine, utilization, UTILIZATION_WATCH } from '../accountCards'
-import { accountDetailPath, isCounted } from '../accounts'
+import { accountDetailPath } from '../accounts'
 import { addDays } from '../dates'
 import type { DrillDown, DrillItem, DrillTrend, DrillUsual, MathTerm } from '../drill'
-import { startReference, worthChange } from '../worth'
 import { paths } from '../../routes'
 
 /**
@@ -186,31 +184,6 @@ function combinedMath(accounts: readonly Account[]): DrillDown['math'] {
       label: 'Together',
       value: { cents: netCents, tone: netCents < 0 ? 'problem' : undefined },
     },
-  }
-}
-
-/** Every counted account together, with net worth's history as the trend. */
-export function allAccountsDrill(accounts: readonly Account[], netWorth?: NetWorth): DrillDown {
-  const counted = accounts.filter(isCounted)
-  const history = netWorth?.history ?? []
-  return {
-    title: 'Your accounts',
-    figure: { cents: combine(counted).netCents },
-    math: {
-      ...combinedMath(counted),
-      note: 'Accounts you ignore for budgets, and any your bank no longer shares, are left out, as they are from net worth.',
-    },
-    trend:
-      history.length > 1
-        ? {
-            points: history.map((point) => ({ date: point.date, cents: point.netWorthCents })),
-            label: 'Net worth over time',
-            description: 'What you own less what you owe, each day a balance changed.',
-            reference: netWorth ? startReference(worthChange(netWorth)) : undefined,
-          }
-        : undefined,
-    items: { title: 'Accounts', rows: accountItems(counted) },
-    more: { to: paths.wealth(), label: 'Open accounts' },
   }
 }
 

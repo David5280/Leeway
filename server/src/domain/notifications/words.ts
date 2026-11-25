@@ -96,7 +96,7 @@ export function accountCandidates(alerts: AccountAlert[]): Candidate[] {
     title: ALERT_WORDS[alert.kind].title,
     message: alert.message,
     pushBody: ALERT_WORDS[alert.kind].push(alert),
-    link: alert.kind === 'bill_change' ? APP_PATHS.bills : APP_PATHS.alerts,
+    link: alert.kind === 'bill_change' ? APP_PATHS.bills : APP_PATHS.inbox,
   }))
 }
 

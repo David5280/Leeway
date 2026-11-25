@@ -30,7 +30,6 @@ const SCREEN_NAMES: Record<ScreenName, string> = {
   retirement: 'Retirement',
   savings: 'How much you save',
   idleCash: 'Cash that could earn more',
-  alerts: 'Alerts',
   inbox: 'Inbox',
   chat: 'Chat',
   settings: 'Settings',

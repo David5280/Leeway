@@ -1,7 +1,7 @@
-// Drill-downs for the spending pace card and the bank sync tile. Pure: each
-// takes what the card shows and returns a DrillDown for DrillSheet to draw.
+// The drill-down for the spending pace card. Pure: it takes what the card
+// shows and returns a DrillDown for DrillSheet to draw.
 
-import type { Budget, Connection, SpendingPace } from '../../api/client'
+import type { Budget, SpendingPace } from '../../api/client'
 import type { DrillDown } from '../drill'
 import { paths } from '../../routes'
 
@@ -48,45 +48,5 @@ export function paceDrill(pace: SpendingPace, budget: Budget, isCurrent: boolean
       })),
     },
     more: { to: paths.spending(budget.period.offset), label: 'Open budgets' },
-  }
-}
-
-/** The banks that sync, which need the owner, and how many accounts each brings. */
-export function syncDrill(
-  connections: Connection[],
-  ago: (at: string | null) => string,
-): DrillDown {
-  const needYou = connections.filter((connection) => connection.status !== 'active')
-  const accounts = connections.reduce((sum, connection) => sum + connection.accountCount, 0)
-  const banks = (count: number) => `${count} ${count === 1 ? 'bank' : 'banks'}`
-  return {
-    title: 'Bank sync',
-    figure: {
-      text: needYou.length > 0 ? 'Needs you' : 'Up to date',
-      tone: needYou.length > 0 ? 'warn' : undefined,
-    },
-    math: {
-      terms: [
-        { label: 'Banks connected', value: { text: banks(connections.length) } },
-        { label: 'need you to sign in again', value: { text: banks(needYou.length) }, op: 'minus' },
-      ],
-      result: {
-        label: 'Syncing on their own',
-        value: { text: banks(connections.length - needYou.length) },
-      },
-      note: `${accounts} ${accounts === 1 ? 'account comes' : 'accounts come'} in from your banks. Leeway only reads them; nothing ever moves money.`,
-    },
-    items: {
-      title: 'Banks',
-      rows: connections.map((connection) => ({
-        key: connection.id,
-        label: connection.institutionName ?? 'Bank',
-        detail:
-          connection.status === 'active'
-            ? `Synced ${ago(connection.lastSyncedAt)}`
-            : 'Needs you to sign in again',
-      })),
-    },
-    more: { to: '/settings/banks', label: 'Manage banks' },
   }
 }

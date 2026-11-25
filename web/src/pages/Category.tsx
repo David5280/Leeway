@@ -13,7 +13,7 @@ import { Icon, LoadingOrError } from '../components/ui'
 import { useApp } from '../lib/app'
 import { periodLabel, periodWord } from '../lib/format'
 import { groupNames } from '../lib/groups'
-import { categoryStatus } from '../widgets/Categories'
+import { categoryStatus } from '../lib/categoryStatus'
 import { History, InThisCategory } from './category/History'
 import {
   CategoryRollover,

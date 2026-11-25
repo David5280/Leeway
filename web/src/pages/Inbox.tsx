@@ -1,7 +1,9 @@
-// The inbox: every alert as it happened, newest first. Opening one marks it
-// read and goes to the screen that explains it; dismissing takes it away.
-// Unread means not yet opened or marked read, cleared or not: the bell counts
-// the same, and Mark all read shows while any is.
+// The Inbox, from the header's bell: what needs the owner now at the top
+// (NeedsYouNow), then every alert as it happened, newest first, then what
+// Leeway watches for. Opening an earlier alert marks it read and goes to the
+// screen that explains it; dismissing takes it away. Unread means not yet
+// opened or marked read, cleared or not: the bell counts the same, and Mark
+// all read shows while any is.
 
 import { Link } from 'react-router-dom'
 import type { Output } from '../api/client'
@@ -11,6 +13,8 @@ import { Shell } from '../components/Shell'
 import { Card } from '../components/design/Card'
 import { ErrorNote, LoadingOrError } from '../components/ui'
 import { timeAgo } from '../lib/format'
+import { NeedsYouNow } from './inbox/NeedsYouNow'
+import { WhatLeewayWatches } from './inbox/WhatLeewayWatches'
 import { settingsPath } from './settings/paths'
 
 export type InboxItem = Output<'list_notifications'>['items'][number]
@@ -22,8 +26,11 @@ export function Inbox() {
   useBellCount(inbox.data?.unread)
   return (
     <Shell>
+      <h1>Inbox</h1>
+      <h2>Needs you now</h2>
+      <NeedsYouNow />
       <div className="inbox-head">
-        <h1>Inbox</h1>
+        <h2>Earlier</h2>
         {unread > 0 && (
           <button
             type="button"
@@ -39,7 +46,7 @@ export function Inbox() {
         {inbox.data ? (
           <InboxList items={inbox.data.items} />
         ) : (
-          <div style={{ padding: 14 }}>
+          <div className="empty">
             <LoadingOrError error={inbox.error} label="Loading the inbox" />
           </div>
         )}
@@ -49,13 +56,14 @@ export function Inbox() {
         Choose what comes here, and what reaches your phone, in{' '}
         <Link to={settingsPath('notifications')}>Settings, then Notifications</Link>.
       </p>
+      <WhatLeewayWatches />
     </Shell>
   )
 }
 
 function InboxList({ items }: { items: InboxItem[] }) {
   if (items.length === 0) {
-    return <p className="empty">Nothing new. Alerts show here as they happen.</p>
+    return <p className="empty">Nothing earlier. Alerts show here as they happen.</p>
   }
   return (
     <ul className="inbox-list">

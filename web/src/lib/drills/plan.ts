@@ -1,8 +1,8 @@
-// Drill-downs for the planning widgets an owner can add to the Overview: cash
-// until payday, net worth, debt payoff, and the top merchants. Pure: each
-// takes what its widget already read and returns a DrillDown for DrillSheet.
+// Drill-downs for planning figures: cash until payday, net worth and the top
+// merchants. Pure: each takes what its card already read and returns a
+// DrillDown for DrillSheet.
 
-import type { CashFlow, DebtPlans, NetWorth, Output } from '../../api/client'
+import type { CashFlow, NetWorth, Output } from '../../api/client'
 import { shortTone } from '../cashPath'
 import type { DrillDown } from '../drill'
 import { startReference, worthChange } from '../worth'
@@ -117,42 +117,6 @@ export function netWorthDrill(worth: NetWorth): DrillDown {
           }
         : undefined,
     more: { to: paths.wealth(), label: 'Open net worth' },
-  }
-}
-
-/**
- * The cheapest way out of debt (highest rate first) at the minimums: what is
- * owed, what goes to it each month, and when each debt clears.
- */
-export function debtsDrill(
-  plans: DebtPlans,
-  duration: (months: number | null) => string,
-): DrillDown {
-  const plan = plans.avalanche
-  const owedCents = plans.debts.reduce((sum, debt) => sum + debt.balanceCents, 0)
-  return {
-    title: 'Debt payoff',
-    subtitle: 'Highest rate first, paying the minimums',
-    figure: { text: duration(plan.months) },
-    math: {
-      terms: [
-        { label: 'Owed now', value: { cents: owedCents } },
-        { label: 'interest along the way', value: { cents: plan.totalInterestCents }, op: 'plus' },
-      ],
-      result: { label: 'Paid in all', value: { cents: owedCents + plan.totalInterestCents } },
-      note: 'Paying more than the minimums each month clears it sooner and costs less.',
-    },
-    items: {
-      title: 'When each clears',
-      rows: plan.debts.map((debt) => ({
-        key: debt.id,
-        label: debt.name,
-        detail: duration(debt.months),
-        value: { cents: debt.interestCents },
-        to: paths.debts(),
-      })),
-    },
-    more: { to: paths.debts(), label: 'Plan it' },
   }
 }
 

@@ -23,6 +23,7 @@ export const NEW_HOMES: Record<keyof typeof OLD_ROUTES, NewHome> = {
   trip: ({ start = '', end = '' }) => paths.trip(start, end),
   // Settings keeps its own address; only the old Customize name moves.
   customize: ({ group }) => (group ? `/settings/${encodeURIComponent(group)}` : '/settings'),
+  alerts: () => paths.inbox(),
 }
 
 /** Replaces an old address with its new one, so Back never returns to the old one. */

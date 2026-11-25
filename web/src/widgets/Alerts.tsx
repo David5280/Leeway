@@ -1,11 +1,10 @@
-// "Heads up": everything that needs the owner, worst first, in one compact
-// card under the hero, and nothing at all when nothing does: account alerts, banks that stopped syncing, budgets,
-// transactions to sort, then this month's AI spending alert. It keeps to a
-// few rows and leads to the Alerts page for the rest. Account alerts can be
-// hidden from home here.
+// "Heads up": the top few of what needs the owner now, worst first, in one
+// compact card fixed under Leeway on Home, and nothing at all when nothing
+// does: account alerts, banks that stopped syncing, budgets, transactions to
+// sort, then this month's AI spending alert. The Inbox holds the rest, with
+// everything earlier under it. Account alerts can be hidden from Home here.
 
 import { Link } from 'react-router-dom'
-import type { Budget } from '../api/client'
 import { useHomeAlerts } from '../api/homeAlerts'
 import { useAction } from '../api/hooks'
 import { HideableRow } from '../components/AccountAlerts'
@@ -32,20 +31,6 @@ function useHeadsUpItems(budget: HeadsUpBudget): HeadsUpItem[] {
   })
 }
 
-const NO_BUDGET: HeadsUpBudget = {
-  alerts: [],
-  totals: { uncategorizedCount: 0, uncategorizedCents: 0 },
-}
-
-/**
- * Whether Heads up holds something urgent: an item in the problem tone, like
- * an overdrawn account or a budget gone over. The Overview then moves it up
- * under the hero (urgentFirst).
- */
-export function useUrgentHeadsUp(budget: Budget | undefined): boolean {
-  return useHeadsUpItems(budget ?? NO_BUDGET).some((item) => item.tone === 'over')
-}
-
 export function AlertsWidget({ budget }: WidgetProps) {
   const aiAlert = useAction('get_ai_usage').data?.alert
   const items = useHeadsUpItems(budget)
@@ -62,8 +47,8 @@ export function AlertsWidget({ budget }: WidgetProps) {
         <div className="row-between" style={{ padding: '4px 14px 8px' }}>
           <span className="small muted">{moreAlerts(more)}</span>
           {/* A real 44px box, so its tap never reaches up into the last row. */}
-          <Link to={paths.alerts()} className="linkbtn small tap">
-            See all alerts
+          <Link to={paths.inbox()} className="linkbtn small tap">
+            See all in Inbox
           </Link>
         </div>
       )}
