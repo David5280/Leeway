@@ -1,4 +1,4 @@
-// Compare accounts' bar: how many accounts are ticked and what they come to
+// Compare accounts' total bar: how many accounts are ticked and what they come to
 // together, and a button that opens the math behind that total. It rides
 // above the tab bar while the cards scroll under it, and comes to rest after
 // the last card, clear of the tab bar.
@@ -10,12 +10,12 @@ import { Money } from '../../components/design/Money'
 import { combine } from '../../lib/accountCards'
 import { selectionDrill } from '../../lib/drills/accounts'
 
-export function SelectBar({ picked }: { picked: readonly Account[] }) {
+export function PickedTotalBar({ picked }: { picked: readonly Account[] }) {
   const [open, setOpen] = useState(false)
   const count = picked.length
   return (
-    <div className="select-bar" role="region" aria-label="Picked accounts">
-      <span className="select-bar-total" aria-live="polite">
+    <div className="picked-bar" role="region" aria-label="Picked accounts">
+      <span className="picked-bar-total" aria-live="polite">
         {count === 0 ? (
           'Tick the accounts to add up'
         ) : (
@@ -28,7 +28,7 @@ export function SelectBar({ picked }: { picked: readonly Account[] }) {
         )}
       </span>
       {count > 0 && (
-        <span className="select-bar-actions">
+        <span className="picked-bar-actions">
           <button type="button" className="btn" onClick={() => setOpen(true)}>
             How it adds up
           </button>

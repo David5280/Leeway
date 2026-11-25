@@ -96,6 +96,9 @@ describe('spendingByCategory', () => {
   })
 })
 
+/** An urgent alert as the summary reads it: its severity and its sentence. */
+const urgent = (message: string) => ({ severity: 'urgent' as const, message })
+
 function input(fields: Partial<AccountsSummaryInput> = {}): AccountsSummaryInput {
   const accounts = [account()]
   return {
@@ -104,17 +107,37 @@ function input(fields: Partial<AccountsSummaryInput> = {}): AccountsSummaryInput
     balances: combineBalances(accounts),
     flows: [flow(0, 0), flow(0, 0)],
     spending: [],
+    alerts: [],
     periodWord: 'month',
     ...fields,
   }
 }
 
 describe('accountsSummary', () => {
-  it('leaves an overdrawn account to its alert, saying only that nothing is available', () => {
+  it('says an overdrawn account in words, leading the points, with the amount said once', () => {
     const accounts = [account({ balanceCents: -4210, availableCents: -4210 })]
+    const alerts = [urgent('Everyday is overdrawn by $42.10.')]
     expect(
-      accountsSummary(input({ accounts, balances: combineBalances(accounts) }), money).headline,
-    ).toBe('Nothing is available in Everyday.')
+      accountsSummary(input({ accounts, balances: combineBalances(accounts), alerts }), money),
+    ).toEqual({
+      headline: 'Nothing is available in Everyday.',
+      points: ['Everyday is overdrawn by $42.10.'],
+    })
+  })
+
+  it('says only the urgent alerts, ahead of every other point', () => {
+    const alerts = [
+      { severity: 'warning' as const, message: 'Everyday is down to $50.' },
+      urgent('Card is $200.00 over its $1000.00 limit.'),
+    ]
+    const summary = accountsSummary(
+      input({ alerts, flows: [flow(0, 0), flow(250000, 120000)] }),
+      money,
+    )
+    expect(summary.points).toEqual([
+      'Card is $200.00 over its $1000.00 limit.',
+      'So far this month, $2500.00 came in and $1200.00 went out.',
+    ])
   })
 
   it('says what one cash account has available', () => {
@@ -204,7 +227,7 @@ describe('accountsSummary', () => {
     expect(summary.points).toEqual(['The most spending this month went to Food, $400.00.'])
   })
 
-  it('says nothing of credit for a card past its limit, which has its own alert', () => {
+  it('says nothing of unused credit for a card past its limit', () => {
     const card = [account({ type: 'credit', balanceCents: 120000, creditLimitCents: 100000 })]
     expect(
       accountsSummary(input({ accounts: card, balances: combineBalances(card) }), money).points,

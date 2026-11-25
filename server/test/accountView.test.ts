@@ -110,6 +110,9 @@ describe('summarize_accounts', () => {
     ])
     expect(view.alerts.map((a) => a.kind)).toEqual(['overdrawn'])
     expect(view.summary.headline).toBe('Nothing is available in Test Everyday.')
+    // No alert card sits beside a pick, so the summary says the overdraft in words.
+    expect(view.summary.points[0]).toBe(view.alerts[0]!.message)
+    expect(view.summary.points[0]).toMatch(/^Test Everyday is overdrawn by /)
 
     const both = await call('summarize_accounts', { accountIds: [everyday, card] })
     expect(both.allAccounts).toBe(true)

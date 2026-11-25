@@ -8,6 +8,7 @@ import {
   billsPaidFrom,
   feesCharged,
   recurringFrom,
+  summaryBesideAlerts,
 } from './accountDetail'
 
 const rent = bill({
@@ -120,5 +121,18 @@ describe('balanceReference', () => {
     expect(balanceReference(savings, [])).toBeNull()
     const loan = account({ id: 'l', name: 'Loan', type: 'loan' })
     expect(balanceReference(loan, [fund])).toBeNull()
+  })
+})
+
+describe('summaryBesideAlerts', () => {
+  it("leaves each alert's sentence to the alert card, keeping every other point", () => {
+    const summary = {
+      headline: 'Nothing is available in Everyday.',
+      points: ['Everyday is overdrawn by $42.10.', 'So far this month, $25 came in.'],
+    }
+    expect(summaryBesideAlerts(summary, [{ message: 'Everyday is overdrawn by $42.10.' }])).toEqual(
+      { headline: summary.headline, points: ['So far this month, $25 came in.'] },
+    )
+    expect(summaryBesideAlerts(summary, [])).toEqual(summary)
   })
 })

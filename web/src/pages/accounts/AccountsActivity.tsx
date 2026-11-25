@@ -6,7 +6,7 @@
 import { useAction } from '../../api/hooks'
 import { SectionHead } from '../../components/design/SectionHead'
 import { LoadingOrError } from '../../components/ui'
-import { activePick } from '../../lib/accounts'
+import { activePick, isShared } from '../../lib/accounts'
 import { useApp } from '../../lib/app'
 import { SummaryCard, ViewParts } from './ViewParts'
 
@@ -21,7 +21,8 @@ export function AccountsActivity() {
   const { settings } = useApp()
   const accounts = useAction('list_accounts')
   const all = accounts.data ?? []
-  const picked = activePick(settings.accountSelection, all)
+  // The same pick the tick boxes show: only accounts the bank still shares.
+  const picked = activePick(settings.accountSelection, all.filter(isShared))
   const view = useAction(
     'summarize_accounts',
     { accountIds: picked },

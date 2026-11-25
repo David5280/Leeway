@@ -215,7 +215,7 @@ export function alertsFor(accounts: Account[], charges: FeeCandidate[] = []): Ac
 }
 
 /**
- * The Accounts dashboard for these accounts as summarize_accounts answers,
+ * A pick of accounts as summarize_accounts answers,
  * built with the server's own code: November 2026, with the flows, spending
  * and transactions given.
  */
@@ -249,7 +249,7 @@ export function accountsViewFor(
     recent: fields.recent ?? [],
     alerts,
     summary: accountsSummary(
-      { accounts: shared, unshared, balances, flows, spending, periodWord: 'month' },
+      { accounts: shared, unshared, balances, flows, spending, alerts, periodWord: 'month' },
       dollars,
     ),
   }

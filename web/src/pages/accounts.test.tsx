@@ -130,6 +130,8 @@ describe('the accounts on Wealth', () => {
     )
     renderAccounts()
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is down')
+    // Things entered by hand need no account, so the way there stays.
+    expect(screen.getByRole('link', { name: /Things you own and owe/ })).toBeInTheDocument()
   })
 })
 

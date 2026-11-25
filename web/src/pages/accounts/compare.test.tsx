@@ -96,6 +96,29 @@ describe('Compare accounts', () => {
     await waitFor(() => expect(fake.actions('summarize_accounts')).toEqual([{ accountIds: [] }]))
   })
 
+  it('drops a saved pick of an account the bank no longer shares, counting only what is shown', async () => {
+    const old = account({
+      id: 'dddddddd-0000-4000-8000-000000000004',
+      name: 'Old savings',
+      subtype: 'savings',
+      unsharedAt: '2026-11-04T15:00:00Z',
+    })
+    const fake = server([...everyAccount, old])
+    renderCompare({ settings: settingsWith({ accountSelection: [old.id] }) })
+    const view = await screen.findByRole('region', { name: 'Activity on these accounts' })
+    // Nothing shown is ticked, so the activity is every account's, as the bar says.
+    expect(within(view).getByRole('heading', { name: 'All accounts' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Picked accounts' })).toHaveTextContent(
+      'Tick the accounts to add up',
+    )
+    expect(fake.actions('summarize_accounts')).toEqual([{ accountIds: [] }])
+    // The next tick saves only what is shown.
+    await userEvent.click(pickBox('Everyday'))
+    await waitFor(() =>
+      expect(fake.actions('update_settings')).toEqual([{ accountSelection: [A] }]),
+    )
+  })
+
   it('keeps an account the bank no longer shares out of picking', async () => {
     const old = account({
       id: 'dddddddd-0000-4000-8000-000000000004',

@@ -13,7 +13,7 @@ import { useApp } from '../../lib/app'
 import { settingsPath } from '../settings/paths'
 import { AccountGroups } from './AccountGroups'
 import { AccountsActivity } from './AccountsActivity'
-import { SelectBar } from './SelectBar'
+import { PickedTotalBar } from './PickedTotalBar'
 
 export function ComparePicker() {
   const { settings } = useApp()
@@ -28,8 +28,9 @@ export function ComparePicker() {
   const shared = accounts.data.filter(isShared)
   if (shared.length < 2) return <NothingToCompare />
 
-  // Only accounts that still exist; none of them means every account.
-  const picked = activePick(settings.accountSelection, accounts.data)
+  // Only accounts shown here, so a saved pick of one the bank stopped sharing
+  // can neither count unseen nor be stuck unticked; none means every account.
+  const picked = activePick(settings.accountSelection, shared)
   const toggle = (id: string) =>
     update.mutate({
       accountSelection: picked.includes(id) ? picked.filter((one) => one !== id) : [...picked, id],
@@ -49,7 +50,7 @@ export function ComparePicker() {
           goals={goals.data ?? []}
           picking={{ picked, toggle }}
         />
-        <SelectBar picked={shared.filter((account) => picked.includes(account.id))} />
+        <PickedTotalBar picked={shared.filter((account) => picked.includes(account.id))} />
       </section>
       <AccountsActivity />
     </>

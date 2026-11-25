@@ -49,7 +49,8 @@ export function AccountsSection() {
       {accounts.data && all.length === 0 && <NoAccounts />}
       <AccountGroups accounts={shared} balances={lines} goals={goals.data ?? []} picking={null} />
       <NoLongerShared accounts={unshared} />
-      {accounts.data && <LinkRows label="Entered by hand" rows={[OWNED_ROW]} />}
+      {/* Things entered by hand need no account, so the row shows whatever the accounts do. */}
+      <LinkRows label="Entered by hand" rows={[OWNED_ROW]} />
     </section>
   )
 }
