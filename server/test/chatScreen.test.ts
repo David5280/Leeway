@@ -168,11 +168,14 @@ describe('POST /api/chat with a screen', () => {
         card: { label: 'Gift for Jordan Avery', figure: '$1,200' },
       },
     })
-    const sent = provider.conversed[0]!.messages.at(-1)!.text
-    expect(sent).not.toMatch(/Jordan|Avery/)
-    expect(sent).toMatch(
-      /^Asked from: Goal: Gift for someone.*, card Gift for someone.* showing \$1,200\n\nHow is this going\?$/,
-    )
+    const sent = provider.conversed[0]!.messages.at(-1)
+    expect(JSON.stringify(sent)).not.toMatch(/Jordan|Avery/)
+    expect(sent).toEqual({
+      role: 'user',
+      text: expect.stringMatching(
+        /^Asked from: Goal: Gift for someone.*, card Gift for someone.* showing \$1,200\n\nHow is this going\?$/,
+      ),
+    })
   })
 
   it('sends the same instructions, context and history from any screen', async () => {
