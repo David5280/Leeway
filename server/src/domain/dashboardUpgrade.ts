@@ -1,10 +1,13 @@
 // One-time changes to saved dashboards, run once per install at startup:
-// the summary widget added to dashboards saved before it existed, and
-// today's default Home given to a dashboard still in any default it
-// replaced. A dashboard the owner arranged is left alone.
+// the summary widget added to dashboards saved before it existed, today's
+// default Home given to a dashboard still in any default it replaced, and
+// each new kind of card added once to a dashboard the owner arranged. A new
+// kind of card reaches every Home this way; the owner's order, sizes and
+// hidden cards are kept.
 
 import type pg from 'pg'
 import { withTransaction } from '../db/pool.js'
+import { isOlderDefault, withNewBlocks } from './homeLayouts.js'
 import { DEFAULT_WIDGETS, getSettings, saveSettings } from './settings.js'
 
 /** The name this upgrade is recorded under in applied_upgrades. */
@@ -49,77 +52,6 @@ export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {
  */
 const DEFAULT_HOME_UPGRADE = 'home-accounts'
 
-/** A widget as an older Leeway stored it, possibly of a kind since removed. */
-interface StoredWidget {
-  type: string
-  size: string
-  visible: boolean
-}
-
-/** Every widget in a default layout of the time is shown. */
-const shown = (type: string, size: string): StoredWidget => ({ type, size, visible: true })
-
-/**
- * Every default Home an install may still have stored, oldest first. Most
- * name cards since removed, which reading the settings drops, so the stored
- * list itself is compared rather than the settings read back. An install
- * that skipped versions never ran the upgrades between, so each one moves
- * straight to today's default.
- */
-const OLDER_DEFAULTS: readonly (readonly StoredWidget[])[] = [
-  // Summary first, as dashboards were before the Overview led with Leeway.
-  [
-    shown('summary', 'full'),
-    shown('leeway', 'wide'),
-    shown('glance', 'half'),
-    shown('alerts', 'full'),
-    shown('categories', 'wide'),
-    shown('pace', 'half'),
-    shown('recent', 'wide'),
-    shown('accounts', 'half'),
-  ],
-  // Leeway first, before the income and spending card existed.
-  [
-    shown('leeway', 'wide'),
-    shown('alerts', 'full'),
-    shown('summary', 'full'),
-    shown('pace', 'full'),
-    shown('glance', 'full'),
-    shown('categories', 'wide'),
-    shown('accounts', 'half'),
-    shown('recent', 'wide'),
-  ],
-  // The same, once the income and spending card was added before the pace.
-  [
-    shown('leeway', 'wide'),
-    shown('alerts', 'full'),
-    shown('summary', 'full'),
-    shown('flows', 'full'),
-    shown('pace', 'full'),
-    shown('glance', 'full'),
-    shown('categories', 'wide'),
-    shown('accounts', 'half'),
-    shown('recent', 'wide'),
-  ],
-  // The default just before Home followed the map.
-  [
-    shown('leeway', 'wide'),
-    shown('net-worth', 'half'),
-    shown('alerts', 'full'),
-    shown('flows', 'full'),
-    shown('pace', 'full'),
-  ],
-  // The map order: Leeway, Heads up, then one card per tab, each on its own.
-  [
-    shown('leeway', 'wide'),
-    shown('alerts', 'full'),
-    shown('cash-flow', 'half'),
-    shown('pace', 'half'),
-    shown('goals', 'half'),
-    shown('net-worth', 'half'),
-  ],
-]
-
 /** The dashboard's widgets exactly as stored, or null when none was ever saved. */
 async function storedWidgets(db: pg.PoolClient): Promise<unknown> {
   const { rows } = await db.query<{ widgets: unknown }>(
@@ -127,21 +59,6 @@ async function storedWidgets(db: pg.PoolClient): Promise<unknown> {
   )
   return rows[0]?.widgets ?? null
 }
-
-/** Whether a stored list is that layout: the same widgets, sizes and visibility, in order. */
-function sameLayout(stored: unknown, layout: readonly StoredWidget[]): boolean {
-  if (!Array.isArray(stored) || stored.length !== layout.length) return false
-  return layout.every((widget, i) => {
-    const saved = stored[i] as Partial<StoredWidget> | null
-    return (
-      saved?.type === widget.type && saved.size === widget.size && saved.visible === widget.visible
-    )
-  })
-}
-
-/** Whether a stored list is exactly one of the older defaults, so the owner never arranged it. */
-const isOlderDefault = (stored: unknown) =>
-  OLDER_DEFAULTS.some((layout) => sameLayout(stored, layout))
 
 /**
  * Gives a dashboard still in any older default today's default Home: Leeway,
@@ -151,10 +68,40 @@ const isOlderDefault = (stored: unknown) =>
 export async function upgradeDefaultHome(pool: pg.Pool): Promise<boolean> {
   return withTransaction(pool, async (db) => {
     if (!(await firstRun(db, DEFAULT_HOME_UPGRADE))) return false
-    // An order the owner chose is theirs to keep: nothing is added to it.
+    // A layout the owner arranged is left to addNewHomeBlocks, which keeps it.
     if (!isOlderDefault(await storedWidgets(db))) return false
     const settings = await getSettings(db)
     await saveSettings(db, { ...settings, dashboard: { widgets: DEFAULT_WIDGETS } })
+    return true
+  })
+}
+
+/**
+ * The name the new Home blocks are recorded under in applied_upgrades. It is
+ * new because "home-accounts" first matched older defaults size for size, so
+ * an install with one card resized ran it and kept its old Home.
+ */
+const HOME_BLOCKS_UPGRADE = 'home-blocks'
+
+/**
+ * Brings the new kinds of card to a saved Home that does not have them yet.
+ * A dashboard still in an older default, with any sizes, moves to today's
+ * default; one the owner arranged keeps its order, sizes and hidden cards and
+ * gains each missing card once (homeLayouts.ts). Runs after
+ * upgradeDefaultHome. Returns true when it changed a saved dashboard.
+ */
+export async function addNewHomeBlocks(pool: pg.Pool): Promise<boolean> {
+  return withTransaction(pool, async (db) => {
+    if (!(await firstRun(db, HOME_BLOCKS_UPGRADE))) return false
+    // A dashboard never saved opens with today's default, which needs no upgrade.
+    const stored = await storedWidgets(db)
+    if (stored === null) return false
+    const settings = await getSettings(db)
+    const widgets = isOlderDefault(stored)
+      ? DEFAULT_WIDGETS
+      : withNewBlocks(settings.dashboard.widgets)
+    if (!widgets) return false
+    await saveSettings(db, { ...settings, dashboard: { widgets } })
     return true
   })
 }

@@ -26,7 +26,7 @@ export const WIDGETS = [
 ] as const
 
 /** The tab cards the tab row also shows; each is a card of its own too. */
-const IN_TAB_ROW: readonly string[] = ['cash-flow', 'pace', 'goals', 'net-worth']
+export const IN_TAB_ROW: readonly string[] = ['cash-flow', 'pace', 'goals', 'net-worth']
 
 /**
  * Whether a layout shows the tab row beside a tab card on its own, which

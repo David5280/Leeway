@@ -9,7 +9,11 @@ import { migrate } from './db/migrate.js'
 import { createPool, waitForDatabase } from './db/pool.js'
 import { alertLogLine, changedLinesOnly } from './domain/alerts.js'
 import { CALENDAR_CHECK_MINUTES, refreshIfStale } from './domain/calendar/store.js'
-import { addSummaryWidget, upgradeDefaultHome } from './domain/dashboardUpgrade.js'
+import {
+  addNewHomeBlocks,
+  addSummaryWidget,
+  upgradeDefaultHome,
+} from './domain/dashboardUpgrade.js'
 import {
   NOTIFIER_MINUTES,
   NOTIFY_AFTER_SYNC_MS,
@@ -53,6 +57,8 @@ await migrate(db)
 await upgradeStarterSet(db)
 await addSummaryWidget(db)
 await upgradeDefaultHome(db)
+// After the default Home, so a default it just gave needs nothing added.
+const homeBlocksAdded = await addNewHomeBlocks(db)
 
 const now = () => new Date()
 const ctx: AppContext = {
@@ -79,6 +85,8 @@ const setup: SetupCode = config.setupCode
   ? { code: config.setupCode, from: 'variable' }
   : { code: generateSetupCode(), from: 'log' }
 const app = await buildApp(ctx, { logger: true, setupCode: setup.code })
+// Said once the logger exists; names no card's figures or accounts.
+if (homeBlocksAdded) app.log.info('Added the new Home cards to the saved Home layout')
 // The push key pair is made on first start and kept encrypted; nothing to configure.
 await loadVapidKeys(db, config.encryptionKey, (removed) => app.log.warn(keysReplacedLine(removed)))
 
