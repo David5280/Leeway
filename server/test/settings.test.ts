@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
 import { getSettings, settingsSchema } from '../src/domain/settings.js'
+import { actionCaller } from './actionCaller.js'
 import { createTestContext, resetData } from './helpers.js'
 
 let ctx: AppContext
+const { call, callError } = actionCaller(() => ctx)
 
 beforeAll(async () => {
   ctx = await createTestContext()
@@ -40,5 +42,37 @@ describe('reading stored settings', () => {
 
     expect(settings.appearance).toEqual(settingsSchema.parse({}).appearance)
     expect(settings.includePending).toBe(false)
+  })
+})
+
+describe("saving Home's cards", () => {
+  /** A layout of cards by type, each shown unless named in `hidden`. */
+  const widgets = (types: string[], hidden: string[] = []) =>
+    types.map((type) => ({ type, size: 'half', visible: !hidden.includes(type) }))
+
+  it.each(['cash-flow', 'pace', 'goals', 'net-worth'])(
+    'refuses the tab row shown beside the %s card on its own, the same figure twice',
+    async (tabCard) => {
+      const failure = await callError('update_settings', {
+        dashboard: { widgets: widgets(['leeway', 'tab-row', tabCard]) },
+      })
+      expect(failure.code).toBe('invalid_input')
+      expect(failure.message).toContain(
+        'Show the tab summaries row or the tab cards on their own, not both',
+      )
+      expect((await getSettings(ctx.db)).dashboard.widgets.map((w) => w.type)).not.toContain(
+        tabCard,
+      )
+    },
+  )
+
+  it('saves either one shown beside the other hidden', async () => {
+    const rowShown = widgets(['tab-row', 'pace', 'goals'], ['pace', 'goals'])
+    await call('update_settings', { dashboard: { widgets: rowShown } })
+    expect((await getSettings(ctx.db)).dashboard.widgets).toEqual(rowShown)
+
+    const cardsShown = widgets(['tab-row', 'pace', 'goals'], ['tab-row'])
+    await call('update_settings', { dashboard: { widgets: cardsShown } })
+    expect((await getSettings(ctx.db)).dashboard.widgets).toEqual(cardsShown)
   })
 })

@@ -1,7 +1,7 @@
 // Home: "Am I OK right now?" It reads top to bottom as the map has it:
 // Leeway (what you can spend), Heads up (only when something needs the
 // owner), a payday nudge in the days after one, then the cards the owner
-// arranges, by default every account, the bills coming up before payday,
+// arranges, by default every account, the bills due by payday,
 // the latest activity and a row with each tab's summary. Leeway and Heads up
 // are drawn here, fixed, so nothing urgent can be hidden or moved down; the
 // rest can be added, hidden, resized and reordered. Home is always now:
@@ -19,6 +19,7 @@ import { Board } from '../widgets/Board'
 import { LeewayWidget } from '../widgets/Leeway'
 import {
   addableTypes,
+  addWidget,
   DEFAULT_LAYOUT,
   drawable,
   WIDGET_LIBRARY,
@@ -115,7 +116,7 @@ function AddCards({ all, save }: { all: Widget[]; save: (widgets: Widget[]) => v
             key={type}
             type="button"
             className="chip"
-            onClick={() => save([...all, { type, size: 'half', visible: true }])}
+            onClick={() => save(addWidget(all, type))}
           >
             + {WIDGET_LIBRARY[type]!.name}
           </button>

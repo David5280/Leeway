@@ -62,10 +62,14 @@ async function overdrawnAccountTour(page: Page): Promise<void> {
   await page.locator('.back-link').click()
   await expect(page).toHaveURL(/\/$/)
   const accounts = page.getByRole('region', { name: 'Accounts', exact: true })
-  const everyday = accounts.getByRole('link', { name: /^Everyday/ })
+  // The row's name is the account's, then where it is held, so another
+  // account whose name starts the same (say "Everyday checking") never matches.
+  const everyday = accounts.getByRole('link', { name: /^Everyday Added by hand/ })
   await expect(everyday).toContainText('$42.10')
   await expect(everyday.locator('.money-problem')).toHaveCount(1)
-  await expect(accounts.getByRole('link', { name: /^Rainy day/ })).toContainText('$900.00')
+  await expect(accounts.getByRole('link', { name: /^Rainy day Added by hand/ })).toContainText(
+    '$900.00',
+  )
 
   // Compare, from Home's accounts, sums the picked accounts, and the pick is saved.
   await accounts.getByRole('link', { name: 'Compare', exact: true }).click()

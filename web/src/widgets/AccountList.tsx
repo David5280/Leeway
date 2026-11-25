@@ -44,9 +44,10 @@ export function AccountListWidget() {
   )
 }
 
+/** A small link in the heading that still takes a finger's 44px tap (.tap, styles.css). */
 function CompareLink() {
   return (
-    <Link to={paths.compareAccounts()} className="small">
+    <Link to={paths.compareAccounts()} className="linkbtn small tap">
       Compare
     </Link>
   )

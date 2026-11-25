@@ -2,7 +2,7 @@
 //
 // Home reads top to bottom as the map has it: Leeway (what you can spend),
 // Heads up (only when something needs the owner), every account, the bills
-// coming up before payday, the latest activity, then a row with each tab's
+// due by payday, the latest activity, then a row with each tab's
 // summary. Leeway and Heads up are fixed: Home draws them itself, first, so
 // nothing urgent can be hidden or moved down. They stay in the saved list
 // (the server's default names them) but are not in the library, so the
@@ -45,7 +45,7 @@ export interface WidgetEntry {
  */
 export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
   'account-list': { name: 'Accounts', component: AccountListWidget },
-  'coming-up': { name: 'Coming up before payday', component: ComingUpWidget, place: 'pay' },
+  'coming-up': { name: 'Due by payday', component: ComingUpWidget, place: 'pay' },
   'latest-activity': { name: 'Latest activity', component: LatestActivityWidget, place: 'spend' },
   // The four tab cards below, as one row; each card in it wears its own tab's color.
   'tab-row': { name: 'Tab summaries', component: TabRowWidget },
@@ -61,7 +61,7 @@ export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
 
 /**
  * Home as it first opens, and what "Reset layout" puts back: Leeway, Heads
- * up, the accounts (beside the bills coming up and the latest activity on a
+ * up, the accounts (beside the bills due by payday and the latest activity on a
  * wide screen), then the row of tab cards. The same list as the server's
  * DEFAULT_WIDGETS (server/src/domain/settings.ts).
  */
@@ -74,8 +74,18 @@ export const DEFAULT_LAYOUT: Widget[] = [
   { type: 'tab-row', size: 'full', visible: true },
 ]
 
-/** The tab cards the row shows, so the two are never on Home together (see addableTypes). */
+/** The tab cards the row shows, so the two are never on Home together (see rivals). */
 const IN_TAB_ROW: readonly WidgetType[] = ['cash-flow', 'pace', 'goals', 'net-worth']
+
+/**
+ * The cards that show the same figures as this one in another version: the
+ * row for a single tab card, and every single tab card for the row. Only one
+ * version is ever shown, so the same figure never shows twice.
+ */
+function rivals(type: WidgetType): readonly WidgetType[] {
+  if (type === 'tab-row') return IN_TAB_ROW
+  return IN_TAB_ROW.includes(type) ? ['tab-row'] : []
+}
 
 export const SIZES = [
   { value: 'half', label: 'Half' },
@@ -89,18 +99,36 @@ const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
 export const drawable = (widgets: Widget[]) => widgets.filter(canDraw)
 
 /**
- * Library cards not on Home yet. A tab card is not offered while the row
- * already shows it, nor the row while any tab card is on Home on its own,
- * so the same figure never shows twice.
+ * Library cards not on Home yet. A card in the list but hidden is not offered
+ * (its Show switch brings it back), nor one whose other version is showing.
+ * A hidden other version blocks nothing: adding drops it (see addWidget).
  */
 export function addableTypes(widgets: Widget[]): WidgetType[] {
-  const has = (type: WidgetType) => widgets.some((w) => w.type === type)
-  const hasTabCard = IN_TAB_ROW.some(has)
-  return (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter((type) => {
-    if (has(type)) return false
-    if (type === 'tab-row') return !hasTabCard
-    return !(IN_TAB_ROW.includes(type) && has('tab-row'))
-  })
+  const listed = (type: WidgetType) => widgets.some((w) => w.type === type)
+  const showing = (type: WidgetType) => widgets.some((w) => w.type === type && w.visible)
+  return (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter(
+    (type) => !listed(type) && !rivals(type).some(showing),
+  )
+}
+
+/**
+ * The list with a card added at the end, shown. Its other versions, all
+ * hidden (addableTypes offers it only then), leave the list, so a hidden
+ * version can never come back beside it.
+ */
+export function addWidget(widgets: Widget[], type: WidgetType): Widget[] {
+  const kept = widgets.filter((w) => !rivals(type).includes(w.type))
+  return [...kept, { type, size: 'half', visible: true }]
+}
+
+/**
+ * The list with a card shown or hidden. Showing one version hides the other
+ * (the row, or every single tab card), which stays in the list to show again.
+ */
+export function showWidget(widgets: Widget[], type: WidgetType, visible: boolean): Widget[] {
+  const changed = changeWidget(widgets, type, { visible })
+  if (!visible) return changed
+  return changed.map((w) => (rivals(type).includes(w.type) ? { ...w, visible: false } : w))
 }
 
 /**

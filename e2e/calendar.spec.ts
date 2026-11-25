@@ -24,10 +24,8 @@ test('with no calendar linked, it is one quiet entry in Settings and nowhere els
   await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
   await expect(page.getByRole('status')).toHaveCount(0)
   await expect(page.getByText(/calendar/i)).toHaveCount(0)
-  // Home's own Coming up before payday lists bills; nothing else is coming up.
-  await expect(
-    page.getByText(/coming up/i).filter({ hasNotText: /^Coming up before payday$/ }),
-  ).toHaveCount(0)
+  // Home's bills are Due by payday; nothing on Home says something is coming up.
+  await expect(page.getByText(/coming up/i)).toHaveCount(0)
   await expect(page.getByRole('link', { name: /calendar/i })).toHaveCount(0)
   // Payday's next two weeks list paydays and bills, and say nothing of a calendar.
   const forecast = page.waitForResponse('**/api/actions/get_forecast')

@@ -23,7 +23,7 @@ const CARD_NAMES = [
   'Your leeway',
   'Heads up',
   'Accounts',
-  'Coming up before payday',
+  'Due by payday',
   'Latest activity',
   'Cash to payday',
   'Spending pace',

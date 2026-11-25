@@ -1,4 +1,4 @@
-// Home opens with Leeway, Heads up, the accounts, the bills coming up, the
+// Home opens with Leeway, Heads up, the accounts, the bills due by payday, the
 // latest activity and a row of the tab cards (DEFAULT_WIDGETS in
 // server/src/domain/settings.ts). Tests that read a card the owner adds
 // themselves, like the summary or top merchants, show it on this page only,

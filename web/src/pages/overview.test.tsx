@@ -1,5 +1,5 @@
 // Home as the map draws it: Leeway, then Heads up only when something needs
-// the owner, then every account, the bills coming up before payday, the
+// the owner, then every account, the bills due by payday, the
 // latest activity and a row of the four tab cards in the map's order, each
 // opening its tab. Leeway and Heads up stay first whatever the saved layout
 // says. Editing the cards is in overviewEditing.test.tsx; what each block
@@ -19,7 +19,7 @@ afterEach(() => vi.unstubAllGlobals())
 /** The tab cards, in the map's order. */
 const TAB_CARDS = ['Cash to payday', 'Spending pace', 'Your top goal', 'Net worth']
 /** Home's cards by default, under Leeway and Heads up. */
-const DEFAULT_CARDS = ['Accounts', 'Coming up before payday', 'Latest activity', ...TAB_CARDS]
+const DEFAULT_CARDS = ['Accounts', 'Due by payday', 'Latest activity', ...TAB_CARDS]
 
 const alerts = alertsFor([account({ id: 'a', name: 'Everyday', balanceCents: -4210 })])
 /** An overdrawn account, so Heads up has something to say. */

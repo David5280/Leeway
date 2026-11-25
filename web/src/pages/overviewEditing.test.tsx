@@ -20,6 +20,13 @@ afterEach(() => vi.unstubAllGlobals())
 
 const types = (widgets: { type: string }[]) => widgets.map((widget) => widget.type)
 
+/** The four tab cards the tab row also shows, each a card of its own too. */
+const TAB_CARD_TYPES = new Set<WidgetType>(['cash-flow', 'pace', 'goals', 'net-worth'])
+
+/** Each saved card's type and whether it shows. */
+const visibility = (widgets: { type: string; visible: boolean }[]) =>
+  widgets.map((widget) => [widget.type, widget.visible])
+
 /** Refuses a change, as the server does with a bad layout. */
 const refuse = () =>
   Response.json({ error: 'invalid_input', message: 'Layout could not be saved' }, { status: 400 })
@@ -68,11 +75,7 @@ describe('editing Home', () => {
       'tab-row',
     ])
     await waitFor(() =>
-      expect(shownCards().slice(1, 4)).toEqual([
-        'Accounts',
-        'Latest activity',
-        'Coming up before payday',
-      ]),
+      expect(shownCards().slice(1, 4)).toEqual(['Accounts', 'Latest activity', 'Due by payday']),
     )
   })
 
@@ -90,7 +93,7 @@ describe('editing Home', () => {
     const server = serveHome()
     renderHome()
     const user = await startEditing()
-    const name = 'Coming up before payday'
+    const name = 'Due by payday'
     const size = toolsFor(name).getByRole('group', { name: `${name} size` })
     await user.click(within(size).getByRole('button', { name: 'Full' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
@@ -139,7 +142,8 @@ describe('editing Home', () => {
 
   it('offers nothing to add once every card is on Home', async () => {
     const library = Object.keys(WIDGET_LIBRARY) as WidgetType[]
-    const everything = layout(library.map((type) => ({ type })))
+    // The tab cards on their own sit hidden, as they never show beside the tab row.
+    const everything = layout(library.map((type) => ({ type, visible: !TAB_CARD_TYPES.has(type) })))
     serveHome(everything)
     renderHome(everything)
     await startEditing()
@@ -176,5 +180,71 @@ describe('editing Home', () => {
     await user.click(toolsFor('Tab summaries').getByRole('button', { name: 'Hide' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Layout could not be saved')
     expect(toolsFor('Tab summaries').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
+  })
+})
+
+describe('the tab row and the tab cards on their own', () => {
+  it('offers a tab card while the row is hidden, and adding it drops the hidden row', async () => {
+    const rowHidden = layout([{ type: 'leeway' }, { type: 'tab-row', visible: false }])
+    const server = serveHome(rowHidden)
+    renderHome(rowHidden)
+    const user = await startEditing()
+    expect(screen.queryByRole('button', { name: '+ Tab summaries' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '+ Spending pace' }))
+    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    expect(visibility(sentLayouts(server)[0]!)).toEqual([
+      ['leeway', true],
+      ['pace', true],
+    ])
+  })
+
+  it('offers the row while the tab cards are hidden, and adding it drops them', async () => {
+    const cardsHidden = layout([
+      { type: 'leeway' },
+      { type: 'pace', visible: false },
+      { type: 'goals', visible: false },
+    ])
+    const server = serveHome(cardsHidden)
+    renderHome(cardsHidden)
+    const user = await startEditing()
+    await user.click(screen.getByRole('button', { name: '+ Tab summaries' }))
+    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    expect(types(sentLayouts(server)[0]!)).toEqual(['leeway', 'tab-row'])
+  })
+
+  it('hides the row when a tab card on its own is shown', async () => {
+    const saved = layout([
+      { type: 'leeway' },
+      { type: 'tab-row' },
+      { type: 'pace', visible: false },
+    ])
+    const server = serveHome(saved)
+    renderHome(saved)
+    const user = await startEditing()
+    await user.click(toolsFor('Spending pace').getByRole('button', { name: 'Show' }))
+    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    expect(visibility(sentLayouts(server)[0]!)).toEqual([
+      ['leeway', true],
+      ['tab-row', false],
+      ['pace', true],
+    ])
+  })
+
+  it('hides the tab cards on their own when the row is shown', async () => {
+    const saved = layout([
+      { type: 'leeway' },
+      { type: 'tab-row', visible: false },
+      { type: 'pace' },
+    ])
+    const server = serveHome(saved)
+    renderHome(saved)
+    const user = await startEditing()
+    await user.click(toolsFor('Tab summaries').getByRole('button', { name: 'Show' }))
+    await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
+    expect(visibility(sentLayouts(server)[0]!)).toEqual([
+      ['leeway', true],
+      ['tab-row', true],
+      ['pace', false],
+    ])
   })
 })

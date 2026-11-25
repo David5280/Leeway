@@ -5,7 +5,7 @@ import type { Db } from '../db/pool.js'
 import { isValidTimeZone } from '../lib/dates.js'
 import { isValidLocale } from '../lib/locale.js'
 import { isoDateSchema } from '../lib/schemas.js'
-import { WIDGETS, withoutRemovedWidgets } from './homeCards.js'
+import { tabRowBesideTabCard, WIDGETS, withoutRemovedWidgets } from './homeCards.js'
 import { aiSettingsSchema } from './ai/settings.js'
 import { paySettingsSchema } from './pay/ownPay.js'
 import type { PeriodConfig } from '../lib/periods.js'
@@ -73,7 +73,7 @@ const widgetSchema = z.object({
 /**
  * Home as it first opens, in the map's order: what you can spend, Heads up
  * (shown only when something needs the owner), every account with its
- * balance, the bills coming up before payday, the latest activity, then one
+ * balance, the bills due by payday, the latest activity, then one
  * row with each tab's summary. On a wide screen the accounts take the main
  * column with the bills and activity beside them. Everything else is a card
  * the owner can add. web/src/widgets/library.ts keeps the same list for
@@ -94,6 +94,10 @@ const widgetsSchema = z
   .refine(
     (widgets) => new Set(widgets.map((w) => w.type)).size === widgets.length,
     'Each widget can only appear once',
+  )
+  .refine(
+    (widgets) => !tabRowBesideTabCard(widgets),
+    'Show the tab summaries row or the tab cards on their own, not both',
   )
 
 /** Account ids picked on the Accounts dashboard; empty picks every account. */

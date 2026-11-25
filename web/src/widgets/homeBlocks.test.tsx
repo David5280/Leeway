@@ -1,4 +1,4 @@
-// Home's blocks under the accounts: the bills coming up before payday, the
+// Home's blocks under the accounts: the bills due by payday, the
 // latest activity and the row of tab cards. Each opens the page a tap deeper
 // where its figures are explained and acted on, never acting on Home itself.
 
@@ -29,7 +29,7 @@ function loaded(name: string) {
   })
 }
 
-/** A bill due before payday, as get_cash_flow lists it. */
+/** A bill due by payday, as get_cash_flow lists it. */
 const due = (name: string, dueDate: string, amountCents: number, overdue = false) => ({
   billId: `bill-${name.toLowerCase()}`,
   name,
@@ -38,10 +38,10 @@ const due = (name: string, dueDate: string, amountCents: number, overdue = false
   overdue,
 })
 
-describe('Coming up before payday', () => {
-  const NAME = 'Coming up before payday'
+describe('Due by payday', () => {
+  const NAME = 'Due by payday'
 
-  it('lists the bills due before payday, soonest first, and opens the bills', async () => {
+  it('lists the bills due by payday, soonest first, and opens the bills', async () => {
     const billsDue = [due('Phone', '2026-11-20', 6000), due('Rent', '2026-11-25', 180000)]
     fakeServer({ get_cash_flow: () => cashFlow({ billsDue }) })
     renderSignedIn(<ComingUpWidget />)
@@ -55,13 +55,13 @@ describe('Coming up before payday', () => {
     expect(within(card).getByRole('link')).toHaveAttribute('href', '/payday/bills')
   })
 
-  it('shows three at most, and says how many more come before payday', async () => {
+  it('shows three at most, and says how many more are due by payday', async () => {
     const billsDue = ['A', 'B', 'C', 'D', 'E'].map((name, i) => due(name, `2026-11-2${i}`, 1000))
     fakeServer({ get_cash_flow: () => cashFlow({ billsDue }) })
     renderSignedIn(<ComingUpWidget />)
     const card = await loaded(NAME)
     expect(card.querySelectorAll('.coming-up-row')).toHaveLength(3)
-    expect(card).toHaveTextContent('2 more before payday, Fri, Nov 27')
+    expect(card).toHaveTextContent('2 more by payday, Fri, Nov 27')
   })
 
   it('marks a bill past its date with no payment found, the one red', async () => {
@@ -78,7 +78,7 @@ describe('Coming up before payday', () => {
     fakeServer({ get_cash_flow: () => cashFlow({ billsDue: [], billsDueCents: 0 }) })
     renderSignedIn(<ComingUpWidget />)
     const line = await screen.findByRole('link', { name: /No bills due/ })
-    expect(line).toHaveTextContent('No bills due before payday, Fri, Nov 27')
+    expect(line).toHaveTextContent('No bills due by payday, Fri, Nov 27')
     expect(line).toHaveAttribute('href', '/payday/bills')
     expect(screen.queryByRole('region', { name: NAME })).not.toBeInTheDocument()
   })
@@ -130,6 +130,22 @@ describe('Latest activity', () => {
     expect(within(card).getByRole('link')).toHaveAttribute('href', '/spending/activity')
   })
 
+  it('marks a transaction the bank has not settled yet as pending, with its amount', async () => {
+    const pending = transaction({
+      id: 't1',
+      date: '2026-11-17',
+      name: 'Corner Cafe',
+      amountCents: 640,
+      categoryId: groceries.id,
+      pending: true,
+    })
+    fakeServer({ list_transactions: () => ({ transactions: [pending], total: 1 }) })
+    renderSignedIn(<LatestActivityWidget budget={budget} />)
+    const line = (await loaded(NAME)).querySelector('.tx-line')!
+    expect(line).toHaveTextContent('Groceries, pending')
+    expect(line).toHaveTextContent('$6.40')
+  })
+
   it('says so when there are no transactions yet', async () => {
     fakeServer({ list_transactions: () => ({ transactions: [], total: 0 }) })
     renderSignedIn(<LatestActivityWidget budget={budget} />)
@@ -165,7 +181,7 @@ describe('the tab row', () => {
     })
     renderSignedIn(<TabRowWidget />)
     await waitFor(() => expect(screen.getAllByRole('link')).toHaveLength(4))
-    const slots = [...document.querySelectorAll<HTMLElement>('.tab-row > .tab-row-slot')]
+    const slots = [...document.querySelectorAll<HTMLElement>('.tab-row-grid > .tab-row-slot')]
     expect(slots.map((slot) => slot.dataset.place)).toEqual(['pay', 'spend', 'goal', 'wealth'])
     expect(
       slots.map((slot) => [

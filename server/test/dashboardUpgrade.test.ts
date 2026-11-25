@@ -149,6 +149,19 @@ describe('upgradeDefaultHome', () => {
     expect(await types()).toEqual(mapOrder)
   })
 
+  it('moves an install the replaced map upgrade already ran on to the default Home, once', async () => {
+    // "home-map" gave this install the map order; today's upgrade has its own name.
+    await ctx.db.query("INSERT INTO applied_upgrades (name) VALUES ('home-map')")
+    await storeWidgets(mapDefault)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(true)
+    expect(await types()).toEqual(defaultHome)
+
+    // A later start runs nothing again, even with the map order put back.
+    await storeWidgets(mapDefault)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect(await types()).toEqual(mapOrder)
+  })
+
   it.each([
     ['before the map order', beforeMap],
     ['summary first', summaryFirst],

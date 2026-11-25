@@ -1,4 +1,5 @@
-// Home's Coming up card: the next few bills due before payday, soonest
+// Home's Due by payday card: the next few bills due by payday (those due on
+// payday itself included), soonest
 // first, each with its date and amount, and the whole card opens Payday's
 // bills. The bills are the server's own list behind cash to payday
 // (get_cash_flow's billsDue), so a bill already paid is never here and the
@@ -16,7 +17,7 @@ import { useApp } from '../lib/app'
 import { dayLabel, shortDate } from '../lib/format'
 import { paths } from '../routes'
 
-const NAME = 'Coming up before payday'
+const NAME = 'Due by payday'
 
 /** Bills shown at most: the rest are a tap away on Payday's bills. */
 export const COMING_UP_LIMIT = 3
@@ -39,7 +40,7 @@ export function ComingUpWidget() {
   if (bills.length === 0) {
     return (
       <Link to={paths.bills()} className="home-calm-line small muted">
-        No bills due before payday, {payday}
+        No bills due by payday, {payday}
       </Link>
     )
   }
@@ -51,7 +52,7 @@ export function ComingUpWidget() {
         <BillLine key={`${bill.billId}-${bill.dueDate}`} bill={bill} />
       ))}
       <span className="small muted">
-        {more > 0 ? `${more} more before payday, ${payday}` : `Payday ${payday}`}
+        {more > 0 ? `${more} more by payday, ${payday}` : `Payday ${payday}`}
       </span>
     </Card>
   )

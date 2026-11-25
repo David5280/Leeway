@@ -145,7 +145,7 @@ const isOlderDefault = (stored: unknown) =>
 
 /**
  * Gives a dashboard still in any older default today's default Home: Leeway,
- * Heads up, the accounts, the bills coming up, the latest activity and a row
+ * Heads up, the accounts, the bills due by payday, the latest activity and a row
  * of each tab's summary. Returns true when it changed a saved dashboard.
  */
 export async function upgradeDefaultHome(pool: pg.Pool): Promise<boolean> {

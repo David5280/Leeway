@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_WIDGETS } from '../../../server/src/domain/settings'
 import {
   addableTypes,
+  addWidget,
   canMove,
   changeWidget,
   DEFAULT_LAYOUT,
   drawable,
   moveWidget,
+  showWidget,
   WIDGET_LIBRARY,
   type Widget,
   type WidgetType,
@@ -136,5 +138,75 @@ describe('addableTypes', () => {
 
   it('offers every library card for an empty Home', () => {
     expect(addableTypes([])).toEqual(Object.keys(WIDGET_LIBRARY))
+  })
+
+  it('offers each tab card on its own while the tab row is hidden', () => {
+    const offered = addableTypes(changeWidget(DEFAULT_LAYOUT, 'tab-row', { visible: false }))
+    expect(offered).toEqual(expect.arrayContaining(['cash-flow', 'pace', 'goals', 'net-worth']))
+    // The row itself is in the list, so its Show switch brings it back instead.
+    expect(offered).not.toContain('tab-row')
+  })
+
+  it('offers the tab row while every tab card on its own is hidden', () => {
+    const hiddenPace = [w('leeway', 'wide'), { ...w('pace', 'half'), visible: false }]
+    expect(addableTypes(hiddenPace)).toContain('tab-row')
+    expect(addableTypes(hiddenPace)).not.toContain('pace')
+  })
+})
+
+describe('addWidget', () => {
+  it('adds a card at the end, shown at half size', () => {
+    const next = addWidget(DEFAULT_LAYOUT, 'trends')
+    expect(next).toEqual([...DEFAULT_LAYOUT, w('trends', 'half')])
+  })
+
+  it('drops the hidden tab row when a tab card is added on its own', () => {
+    const rowHidden = changeWidget(DEFAULT_LAYOUT, 'tab-row', { visible: false })
+    const next = addWidget(rowHidden, 'pace')
+    expect(types(next)).not.toContain('tab-row')
+    expect(next.at(-1)).toEqual(w('pace', 'half'))
+    // With the card hidden again, the row can be added back.
+    expect(addableTypes(showWidget(next, 'pace', false))).toContain('tab-row')
+  })
+
+  it('drops every hidden tab card when the tab row is added', () => {
+    const hidden = (type: WidgetType): Widget => ({ ...w(type, 'half'), visible: false })
+    const saved = [w('leeway', 'wide'), hidden('pace'), w('trends', 'half'), hidden('goals')]
+    expect(types(addWidget(saved, 'tab-row'))).toEqual(['leeway', 'trends', 'tab-row'])
+  })
+})
+
+describe('showWidget', () => {
+  const shown = (widgets: Widget[]) => widgets.filter((widget) => widget.visible).map((x) => x.type)
+
+  it('hides or shows only that card when it has no other version', () => {
+    const next = showWidget(DEFAULT_LAYOUT, 'coming-up', false)
+    expect(next).toEqual(changeWidget(DEFAULT_LAYOUT, 'coming-up', { visible: false }))
+    expect(showWidget(next, 'coming-up', true)).toEqual(DEFAULT_LAYOUT)
+  })
+
+  it('hides the tab row when a tab card on its own is shown', () => {
+    const saved = [w('tab-row', 'full'), { ...w('pace', 'half'), visible: false }]
+    const next = showWidget(saved, 'pace', true)
+    expect(shown(next)).toEqual(['pace'])
+    // The row stays in the list, hidden, to show again.
+    expect(types(next)).toEqual(['tab-row', 'pace'])
+  })
+
+  it('hides every tab card on its own when the tab row is shown', () => {
+    const saved = [
+      w('pace', 'half'),
+      w('goals', 'half'),
+      { ...w('tab-row', 'full'), visible: false },
+      w('trends', 'half'),
+    ]
+    expect(shown(showWidget(saved, 'tab-row', true))).toEqual(['tab-row', 'trends'])
+  })
+
+  it('leaves the other version alone when a card is hidden', () => {
+    const saved = [w('tab-row', 'full'), { ...w('pace', 'half'), visible: false }]
+    expect(showWidget(saved, 'tab-row', false)).toEqual(
+      changeWidget(saved, 'tab-row', { visible: false }),
+    )
   })
 })

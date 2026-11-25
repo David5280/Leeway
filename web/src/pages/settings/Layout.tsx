@@ -5,10 +5,12 @@ import { Icon, Segmented, Switch } from '../../components/ui'
 import { useApp } from '../../lib/app'
 import {
   addableTypes,
+  addWidget,
   canMove,
   changeWidget,
   drawable,
   moveWidget,
+  showWidget,
   SIZES,
   WIDGET_LIBRARY,
   type Widget,
@@ -41,7 +43,7 @@ export function LayoutSection() {
                 <Switch
                   label={`Show ${name}`}
                   checked={widget.visible}
-                  onChange={(visible) => saveWidgets(changeWidget(all, widget.type, { visible }))}
+                  onChange={(visible) => saveWidgets(showWidget(all, widget.type, visible))}
                 />
                 <span className={widget.visible ? 'ellipsis' : 'ellipsis muted'}>{name}</span>
               </div>
@@ -85,7 +87,7 @@ export function LayoutSection() {
               key={type}
               type="button"
               className="chip"
-              onClick={() => saveWidgets([...all, { type, size: 'half', visible: true }])}
+              onClick={() => saveWidgets(addWidget(all, type))}
             >
               + {WIDGET_LIBRARY[type]!.name}
             </button>

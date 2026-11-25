@@ -65,17 +65,30 @@
 
 /* The tab row ------------------------------------------------------------- */
 
-/* Two by two until the row itself has room for four across, so the row
-   resized to half a wide screen stays two by two. */
+/* The row measures itself, so a row resized to half a wide screen lays out
+   as a phone's would. A container query sizes only what is inside the box it
+   measures, so the grid is the row's child. One card across on the narrowest
+   phones (the first iPhone SE leaves the row 288px), where two would cut a
+   card's label and status short; two by two from 320px, as on every phone
+   still sold; four across once the row has room for them. */
 .tab-row {
   container: tab-row / inline-size;
+}
+
+.tab-row-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap);
 }
 
-@container tab-row (min-width: 640px) {
-  .tab-row {
+@container tab-row (min-width: 320px) {
+  .tab-row-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container tab-row (min-width: 720px) {
+  .tab-row-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

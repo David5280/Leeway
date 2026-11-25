@@ -3,7 +3,7 @@
 // pure functions, so the shell's pieces and their tests read the same list.
 
 import { TAB_PLACES, type PlaceId } from '../../lib/places'
-import { paths } from '../../routes'
+import { paths, SCREEN_ROUTES } from '../../routes'
 import type { IconName } from '../ui'
 
 export interface Tab {
@@ -23,8 +23,12 @@ export const TABS: readonly Tab[] = [
   { to: paths.wealth(), label: 'Wealth', icon: 'growth', place: TAB_PLACES.wealth },
 ]
 
-/** The pages a tap deeper from Home: the accounts it lists live under /accounts. */
-const HOME_DEEPER = '/accounts/'
+/**
+ * The pages a tap deeper from Home: the accounts it lists live under
+ * /accounts. Taken from the account page's route, up to its id, so the two
+ * never drift apart.
+ */
+const HOME_DEEPER = SCREEN_ROUTES.account.replace(':id', '')
 
 /**
  * The tab a path belongs to: the tab whose address it is, or starts with

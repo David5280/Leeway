@@ -72,11 +72,14 @@ const debt = {
   minimumCents: 6000,
 }
 
-/** Every widget the Overview can draw, all shown. */
+/** Every widget the Overview can draw, shown but for the tab cards the tab row draws. */
 const everyWidget: Settings = settingsSchema.parse({
   ...settings,
   dashboard: {
-    widgets: (Object.keys(WIDGET_LIBRARY) as WidgetType[]).map((type) => ({ type })),
+    widgets: (Object.keys(WIDGET_LIBRARY) as WidgetType[]).map((type) => ({
+      type,
+      visible: !['cash-flow', 'pace', 'goals', 'net-worth'].includes(type),
+    })),
   },
 })
 
@@ -252,10 +255,9 @@ describe('every card on the redesigned screens keeps the card contract', () => {
     await waitFor(() =>
       within(screen.getByRole('region', { name: 'Top merchants' })).getByRole('link'),
     )
-    // Leeway opens its math. The bills, the activity, the four cards in the tab row, the
-    // same four on their own and the three shortcuts open their pages. The accounts are
-    // a list whose rows each open their own page, and the summary is words.
-    expect(await checkEveryCard()).toEqual({ drill: 1, to: 13, static: 2 })
+    // Leeway opens its math; the bills, the activity, the row's four tab cards and the three
+    // shortcuts open their pages. The accounts' rows each open a page; the summary is words.
+    expect(await checkEveryCard()).toEqual({ drill: 1, to: 9, static: 2 })
   })
 
   it('on Wealth', async () => {
