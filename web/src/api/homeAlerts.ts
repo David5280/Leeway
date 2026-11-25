@@ -1,7 +1,7 @@
-// The account alerts on the home screen, and hiding one there. Hiding takes
+// The account alerts in Home's Heads up, and hiding one there. Hiding takes
 // the row away at once, before the server answers, and puts it back if the
-// server refuses. Only the home list changes: the inbox and the Alerts page
-// still show every alert.
+// server refuses. Only Home's list changes: the inbox still shows every
+// alert.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { call, type AccountAlert, type Input, type Output } from './client'

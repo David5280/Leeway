@@ -29,19 +29,6 @@
   animation: ring-fill var(--duration-count) var(--ease-out) both;
 }
 
-/* Bars grow from their start. */
-@keyframes bar-grow {
-  from {
-    transform: scaleX(0);
-  }
-}
-
-.bar-grow {
-  transform-origin: left center;
-  animation: bar-grow var(--duration-count) var(--ease-out) both;
-  animation-delay: calc(min(var(--i, 0), 8) * var(--stagger));
-}
-
 /* A list row sinks a little while pressed. */
 .act-row,
 .drill-item-link,
@@ -59,8 +46,7 @@
 /* Less motion: everything arrives in place at once. */
 @media (prefers-reduced-motion: reduce) {
   .rise-in,
-  .ring-fill,
-  .bar-grow {
+  .ring-fill {
     animation: none;
   }
 

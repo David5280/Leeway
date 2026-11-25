@@ -318,7 +318,8 @@ describe('Saving for a purchase', () => {
     renderPlanning('/goals')
     const card = within(await screen.findByRole('region', { name: 'Road bike' }))
     expect(card.getByText('Purchase')).toBeInTheDocument()
-    expect(card.getByText(sentence("$160 held from this month's budget"))).toBeInTheDocument()
+    // Inside the badge, not the badge itself: its flex box would drop the space after "$160".
+    expect(card.getByText(sentence("$160 held from this month's budget"))).not.toHaveClass('badge')
     expect(
       card.getByText(sentence('$900 to go: set aside $160 each month to buy it by Apr 30, 2027.')),
     ).toBeInTheDocument()

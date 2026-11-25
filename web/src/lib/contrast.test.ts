@@ -33,7 +33,7 @@ const STYLES = {
  * How much of its tone a rule mixes into a property, read from the stylesheet
  * itself so this checks what is drawn: 0.14 for ".pill" "background", from
  * color-mix(in srgb, var(--t) 14%, var(--surface)). The rule may be the first
- * of several selectors sharing it (".tile-icon," before ".kind-chip").
+ * of several selectors sharing it (".rise-in," before ".ring-fill").
  */
 function toneShare(selector: string, property: string, sheet: keyof typeof STYLES = 'design') {
   const rule =
@@ -54,7 +54,7 @@ const PILL_TEXT = toneShare('.pill', 'color')
 const TINTED = [
   ['.usual-chip', 'usual chip'],
   ['.drill-usual', "drill-down's usual line"],
-  ['.tile-icon', 'tile icon'],
+  ['.kind-chip', 'kind chip'],
 ].map(([selector, name]) => ({
   name: name!,
   tint: toneShare(selector!, 'background', 'figures'),
