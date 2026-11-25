@@ -126,6 +126,8 @@ describe('bills, debts and the trend', () => {
     expect(trendLine(down, format)).toBe('Net worth: $50,400, down $320 over 30 days.')
     const up = checkin({ netWorth: { netWorthCents: 5_040_000, changeCents: 12_000 } })
     expect(trendLine(up, format)).toBe('Net worth: $50,400, up $120 over 30 days.')
+    const still = checkin({ netWorth: { netWorthCents: 5_040_000, changeCents: 0 } })
+    expect(trendLine(still, format)).toBe('Net worth: $50,400, unchanged over 30 days.')
   })
 })
 
@@ -143,6 +145,13 @@ describe('what needs attention', () => {
       'Needs attention, most urgent first: cash before payday, now (get_cash_flow); an account alert, now (list_alerts); a bill, soon (list_bills); and 2 more (get_checkin).',
     )
     expect(line).not.toMatch(/Everyday|4417/)
+  })
+
+  it('points an item at the check-in when its tool is not one Chat has', () => {
+    const attention = [item('goal', 'soon', 'update_goal')]
+    expect(attentionLine(checkin({ attention }))).toBe(
+      'Needs attention, most urgent first: a goal, soon (get_checkin).',
+    )
   })
 
   it('says when nothing needs attention', () => {

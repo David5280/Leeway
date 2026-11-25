@@ -167,4 +167,21 @@ describe('the data fingerprint', () => {
     await caller.call('create_category', { name: 'Gifts' })
     expect(await dataFingerprint(ctx.db)).not.toBe(deleted)
   })
+
+  it('moves when an older writer commits after a newer one, as a long sync can', async () => {
+    const { rows } = await ctx.db.query<{ id: string }>('SELECT id FROM transactions LIMIT 2')
+    const [older, newer] = rows.map((row) => row.id)
+    const sync = await ctx.db.connect()
+    try {
+      // The sync takes its id first, then a quick edit with a newer id commits before it.
+      await sync.query('BEGIN')
+      await sync.query(`UPDATE transactions SET note = 'synced' WHERE id = $1`, [older])
+      await ctx.db.query(`UPDATE transactions SET note = 'edited' WHERE id = $1`, [newer])
+      const beforeSync = await dataFingerprint(ctx.db)
+      await sync.query('COMMIT')
+      expect(await dataFingerprint(ctx.db)).not.toBe(beforeSync)
+    } finally {
+      sync.release()
+    }
+  })
 })

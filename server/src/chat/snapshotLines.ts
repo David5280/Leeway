@@ -8,6 +8,7 @@ import type { AttentionItem } from '../domain/coach.js'
 import { untilWords } from '../domain/spendable.js'
 import { monthYear } from '../domain/profile/insights.js'
 import { shortDate } from '../lib/words.js'
+import { isChatTool } from './tools.js'
 
 type Money = (cents: number) => string
 
@@ -61,7 +62,9 @@ export function debtsLine({ debts }: Checkin, { money, locale }: LineFormat): st
 /** Net worth and how it moved over the check-in's window. */
 export function trendLine({ netWorth }: Checkin, { money }: LineFormat): string {
   const way = netWorth.changeCents < 0 ? 'down' : 'up'
-  const change = `${way} ${money(Math.abs(netWorth.changeCents))} over ${netWorth.sinceDays} days`
+  const moved =
+    netWorth.changeCents === 0 ? 'unchanged' : `${way} ${money(Math.abs(netWorth.changeCents))}`
+  const change = `${moved} over ${netWorth.sinceDays} days`
   return `Net worth: ${money(netWorth.netWorthCents)}, ${change}.`
 }
 
@@ -77,12 +80,16 @@ const TOPIC_WORDS: Record<AttentionItem['topic'], string> = {
   cleanup: 'tidying up',
 }
 
+/** The tool Chat calls to learn more about an attention item. */
+const moreFrom = (tool: string) => (isChatTool(tool) ? tool : 'get_checkin')
+
 /** The most urgent attention items, each with its priority and the tool that tells more. */
 export function attentionLine({ attention }: Checkin): string {
   if (attention.length === 0) return 'Needs attention: nothing right now.'
   const shown = attention
     .slice(0, ATTENTION_SHOWN)
-    .map((item) => `${TOPIC_WORDS[item.topic]}, ${item.priority} (${item.tool})`)
+    // An item may point at a tool Chat lacks (like update_goal); the check-in tells more instead.
+    .map((item) => `${TOPIC_WORDS[item.topic]}, ${item.priority} (${moreFrom(item.tool)})`)
   const more = attention.length - shown.length
   const rest = more > 0 ? `; and ${more} more (get_checkin)` : ''
   return `Needs attention, most urgent first: ${shown.join('; ')}${rest}.`

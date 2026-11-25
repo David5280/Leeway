@@ -31,6 +31,9 @@ export const CHAT_TOOLS: readonly AnyAction[] = [
 
 const BY_NAME = new Map(CHAT_TOOLS.map((tool) => [tool.name, tool]))
 
+/** Whether Chat has a tool by this name. */
+export const isChatTool = (name: string): boolean => BY_NAME.has(name)
+
 /** Every action Chat lacks, like track_recurring, which some read-only tools point at. */
 const ABSENT = actionList.map((action) => action.name).filter((name) => !BY_NAME.has(name))
 

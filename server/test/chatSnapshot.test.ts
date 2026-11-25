@@ -52,7 +52,7 @@ describe('a household with a few months of history', () => {
       'This budget period (Nov 1 to Nov 30, 13 days left): $2,180 spent; budgeted spending heading for $4,112 of $2,900; $2,330 by this day last period.',
       'Bills due by payday: $60.',
       'Debts: $1,850 owed on cards and loans, $45 a month in minimums; debt-free around September 2033 paying minimums ($1,824 interest).',
-      'Net worth: $50,400, up $0 over 30 days.',
+      'Net worth: $50,400, unchanged over 30 days.',
       'Needs attention, most urgent first: a bill, soon (list_bills); a budget, soon (get_budget); tidying up, fyi (list_transactions); and 1 more (get_checkin).',
     ])
   })
@@ -111,7 +111,7 @@ describe('a fresh install', () => {
       'This budget period (Nov 1 to Nov 30, 13 days left): no budgets set; $0 spent, $0 by this day last period.',
       'Bills due by payday: not known, no bills are tracked.',
       'Debts: no card or loan has a balance.',
-      'Net worth: $0, up $0 over 30 days.',
+      'Net worth: $0, unchanged over 30 days.',
       'Needs attention: nothing right now.',
       'Not known yet: pay schedule, a typical month of spending, take-home pay (no paychecks from a current employer), savings rate.',
     ])

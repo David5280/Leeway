@@ -4,12 +4,14 @@
 // picture until this changes (chat/snapshotCache.ts).
 //
 // How it works: every row Postgres writes carries `xmin`, the id of the
-// transaction that wrote it. An insert or update gives the row a newer xmin,
-// so a table's highest xmin moves; a delete lowers its row count. The pair
-// per table therefore moves on any committed write, without reading a single
-// column or keeping a timestamp on every table. Tables Chat writes on every
-// question (its messages, AI usage) are left out, so asking alone never
-// changes it.
+// transaction that wrote it. Per table, the row count and the sum of every
+// row's xmin are taken: an insert or delete changes the count, and an update
+// gives its rows a new xmin, which changes the sum. A sum, not the newest
+// xmin, because writers can commit out of id order (a long sync with an
+// older id committing after a quick edit) and ids wrap around, so the
+// newest would miss them. Tables Chat writes on every question (its
+// messages, AI usage) are left out, so asking alone never changes it. Each
+// question scans these tables once, which is cheap at one person's scale.
 
 import type { Db } from '../db/pool.js'
 
@@ -38,11 +40,11 @@ export const FINANCIAL_TABLES = [
   'trip_budgets',
 ] as const
 
-// One row per table: its count and newest writer. The names are the fixed
+// One row per table: its count and the sum of its writers' ids. The names are the fixed
 // list above, never input, so building the SQL from them is safe.
 const FINGERPRINT_SQL = FINANCIAL_TABLES.map(
   (table) =>
-    `SELECT '${table}' AS t, count(*) AS n, coalesce(max(xmin::text::bigint), 0) AS x FROM ${table}`,
+    `SELECT '${table}' AS t, count(*) AS n, coalesce(sum(xmin::text::bigint), 0) AS x FROM ${table}`,
 ).join(' UNION ALL ')
 
 /** A short string that is the same while the financial data is, and differs once it changes. */
