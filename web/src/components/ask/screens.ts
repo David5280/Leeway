@@ -13,6 +13,8 @@ const SCREEN_NAMES: Record<ScreenName, string> = {
   spending: 'Spending',
   activity: 'All activity',
   importTransactions: 'Import transactions',
+  spendingOverTime: 'Spending over time',
+  topMerchants: 'Top merchants',
   category: 'Category',
   payday: 'Payday',
   bills: 'Bills and subscriptions',

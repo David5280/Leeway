@@ -1,6 +1,9 @@
-// One spending category on the Budgets screen: its name (a link to its page),
-// a bar, the amount with its budget editable in place, and a plain sentence
-// on where it stands, with what to do when it is over.
+// One spending category in Spending's budgets by category: its name (a link
+// to its page), a bar, the amount with its budget editable in place, and a
+// plain sentence on where it stands, with what to do when it is over. A past
+// period shows the budget read-only: Leeway keeps no budget history, so a
+// past period is measured against today's budget, and changing it there
+// would change today's.
 
 import { Link } from 'react-router-dom'
 import type { Budget, Category, CategoryBudget } from '../../api/client'
@@ -29,7 +32,7 @@ export function BudgetRow({
     isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
   return (
     <div className="cat-row budget-row" aria-label={row.name} role="group">
-      <Link to={paths.category(row.categoryId)} className="cat-name">
+      <Link to={paths.category(row.categoryId, budget.period.offset)} className="cat-name">
         <Dot color={row.color} />
         <span className="cat-label">{row.name}</span>
       </Link>
@@ -46,7 +49,11 @@ export function BudgetRow({
       <span className="cat-figures">
         <Money cents={row.spentCents} />
         <span className="muted">{row.budgetCents === null ? ' spent · ' : ' of '}</span>
-        <InlineBudget category={category} shown={row.budgetCents} />
+        {isCurrent ? (
+          <InlineBudget category={category} shown={row.budgetCents} />
+        ) : (
+          <PastBudget cents={row.budgetCents} />
+        )}
       </span>
       <span className="cat-note">
         <span className={status.tone ? `${status.tone} strong` : 'muted'}>{status.text}</span>
@@ -55,4 +62,10 @@ export function BudgetRow({
       </span>
     </div>
   )
+}
+
+/** A past period's budget, read-only: today's amount, or that it has none. */
+function PastBudget({ cents }: { cents: number | null }) {
+  if (cents === null) return <span className="muted">no budget</span>
+  return <Money cents={cents} className="num" />
 }

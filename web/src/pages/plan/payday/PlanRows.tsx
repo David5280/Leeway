@@ -1,49 +1,19 @@
 // The rows under the new paycheck's figure. With pay known they read as a
 // sum that ends on its own total: pay, minus this pay period's bills (paid
 // or not), minus what is set aside, is what is left for everyday spending.
-// Safe to spend now, the figure Home and Spending lead with (spendable),
+// Safe to spend now, the figure Home leads with (spendable),
 // sits apart under the sum with its own label, so it never reads as the
 // total. Totals only; the card's drill-down lists every line, and the Goals
 // tab explains what is set aside.
 
-import type { ReactNode } from 'react'
 import type { PaycheckPlan } from '../../../api/client'
-import { Money } from '../../../components/design/Money'
-import type { MoneyTone } from '../../../lib/money'
+import { SumRow } from '../../../components/design/SumRow'
 import { billNames, setAsideWords } from './playbookText'
-
-interface RowProps {
-  name: string
-  detail?: ReactNode
-  cents: number
-  /** In the sum, pay reads "+" and what comes out of it "−"; otherwise a plain figure. */
-  sum?: 'plus' | 'minus'
-  tone?: MoneyTone
-  className?: string
-}
-
-function Row({ name, detail, cents, sum, tone, className = '' }: RowProps) {
-  return (
-    <span className={`list-row ${className}`}>
-      <span className="grow playbook-row-words">
-        <span className="playbook-row-name">{name}</span>
-        {detail && <span className="small muted">{detail}</span>}
-      </span>
-      <b className="num">
-        <Money
-          cents={sum === 'minus' ? -cents : cents}
-          sign={sum ? 'change' : 'plain'}
-          tone={tone}
-        />
-      </b>
-    </span>
-  )
-}
 
 /** Safe to spend now, labelled as its own figure rather than a line of the sum. */
 function SafeToSpend({ cents }: { cents: number }) {
   return (
-    <Row
+    <SumRow
       name="Safe to spend now"
       detail="What you can spend today, as Home shows it"
       cents={cents}
@@ -57,7 +27,7 @@ function Sum({ plan, estimate }: { plan: PaycheckPlan; estimate: boolean }) {
   const held = plan.lines.filter((line) => line.kind !== 'bill')
   return (
     <span className="playbook-sum" role="group" aria-label="How this paycheck adds up">
-      <Row
+      <SumRow
         name="Pay"
         detail={estimate ? 'An estimate until more paychecks show' : undefined}
         cents={plan.paycheckCents!}
@@ -65,7 +35,7 @@ function Sum({ plan, estimate }: { plan: PaycheckPlan; estimate: boolean }) {
         tone="in"
       />
       {plan.billsCents > 0 && (
-        <Row
+        <SumRow
           name="Bills this pay period"
           detail={billNames(plan.lines)}
           cents={plan.billsCents}
@@ -73,9 +43,14 @@ function Sum({ plan, estimate }: { plan: PaycheckPlan; estimate: boolean }) {
         />
       )}
       {plan.setAsideCents > 0 && (
-        <Row name="Set aside" detail={setAsideWords(held)} cents={plan.setAsideCents} sum="minus" />
+        <SumRow
+          name="Set aside"
+          detail={setAsideWords(held)}
+          cents={plan.setAsideCents}
+          sum="minus"
+        />
       )}
-      <Row
+      <SumRow
         name="Left for everyday spending"
         cents={plan.everydayCents!}
         tone={plan.everydayCents! < 0 ? 'warn' : undefined}
@@ -95,14 +70,14 @@ export function PlanRows({ plan, estimate }: { plan: PaycheckPlan; estimate: boo
     return (
       <span className="playbook-rows">
         {plan.billsCents > 0 && (
-          <Row
+          <SumRow
             name="Bills this pay period"
             detail={billNames(plan.lines)}
             cents={plan.billsCents}
           />
         )}
         {plan.setAsideCents > 0 && (
-          <Row name="Set aside" detail={setAsideWords(held)} cents={plan.setAsideCents} />
+          <SumRow name="Set aside" detail={setAsideWords(held)} cents={plan.setAsideCents} />
         )}
       </span>
     )

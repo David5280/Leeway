@@ -45,14 +45,7 @@ describe('the place of each Home widget', () => {
     const widgets: Widget[] = types.map((type) => ({ type, size: 'full', visible: false }))
     fakeServer({})
     renderSignedIn(
-      <Board
-        all={widgets}
-        shown={widgets}
-        editing
-        budget={budgetFor([], [])}
-        offset={0}
-        save={() => {}}
-      />,
+      <Board all={widgets} shown={widgets} editing budget={budgetFor([], [])} save={() => {}} />,
     )
     for (const type of types) {
       const name = WIDGET_LIBRARY[type]!.name

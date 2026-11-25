@@ -17,10 +17,13 @@ import { paths } from '../../routes'
 export function CategorySettings({
   category,
   groups,
+  budgetLocked = false,
 }: {
   category: Category
   /** Group names already in use, offered in the form. */
   groups: string[]
+  /** On a past period the budget is shown, not changed: budgets are today's. */
+  budgetLocked?: boolean
 }) {
   const update = useActionMutation('update_category')
   return (
@@ -30,6 +33,7 @@ export function CategorySettings({
         category={category}
         groups={groups}
         submitLabel="Save changes"
+        budgetLocked={budgetLocked}
         busy={update.isPending}
         error={update.error}
         onSubmit={(fields) => update.mutate({ id: category.id, ...fields })}

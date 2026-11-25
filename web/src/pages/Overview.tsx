@@ -1,4 +1,5 @@
-// The Overview dashboard: widgets the owner arranges, sizes and hides.
+// The Overview dashboard: widgets the owner arranges, sizes and hides. Home
+// is always now: looking back at an earlier period is Spending's job.
 
 import { useState } from 'react'
 import { useAction } from '../api/hooks'
@@ -22,9 +23,8 @@ import {
 
 export function Overview() {
   const { settings } = useApp()
-  const [offset, setOffset] = useState(0)
   const [editing, setEditing] = useState(false)
-  const budget = useAction('get_budget', { offset })
+  const budget = useAction('get_budget', { offset: 0 })
   const update = useUpdateSettings()
   // Every change is made to the full saved list, so widgets this build cannot
   // draw (from a newer Leeway or an agent) are kept, just not shown.
@@ -78,31 +78,9 @@ export function Overview() {
               : ' '}
           </h1>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <button
-            type="button"
-            className="iconbtn"
-            aria-label="Previous period"
-            onClick={() => setOffset(offset - 1)}
-          >
-            <Icon name="back" />
-          </button>
-          <span className="small muted">
-            {budget.data &&
-              (offset === 0
-                ? `Day ${budget.data.period.daysElapsed} of ${budget.data.period.days}`
-                : `${-offset} ${-offset === 1 ? 'period' : 'periods'} ago`)}
-          </span>
-          <button
-            type="button"
-            className="iconbtn"
-            aria-label="Next period"
-            disabled={offset >= 0}
-            onClick={() => setOffset(offset + 1)}
-          >
-            <Icon name="forward" />
-          </button>
-        </div>
+        <span className="small muted">
+          {budget.data && `Day ${budget.data.period.daysElapsed} of ${budget.data.period.days}`}
+        </span>
       </section>
 
       <ErrorNote error={update.error} />
@@ -116,7 +94,6 @@ export function Overview() {
             shown={shown}
             editing={editing}
             budget={budget.data}
-            offset={offset}
             save={saveWidgets}
           />
           {editing && addable.length > 0 && (

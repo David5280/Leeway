@@ -10,6 +10,7 @@ import { ColorPicker } from './ColorPicker'
 import { PercentInput } from './PercentInput'
 import { ErrorNote, Segmented, Setting, Switch } from './ui'
 import { AmountNote, useAmountField } from './AmountNote'
+import { Money } from './design/Money'
 
 export type CategoryFields = Required<Omit<Input<'create_category'>, 'icon'>>
 
@@ -67,6 +68,7 @@ export function CategoryForm({
   error,
   onSubmit,
   onCancel,
+  budgetLocked,
 }: {
   category?: Category
   /** Group names already in use, offered while typing one. */
@@ -76,6 +78,12 @@ export function CategoryForm({
   error: unknown
   onSubmit: (fields: CategoryFields) => void
   onCancel?: () => void
+  /**
+   * Shows the budget without a way to change it, as on a past period's page:
+   * budgets are today's, so a change there would change today's. Saving
+   * keeps the budget as it is.
+   */
+  budgetLocked?: boolean
 }) {
   const { settings } = useApp()
   const [fields, setFields] = useState(() => fieldsOf(category))
@@ -145,38 +153,41 @@ export function CategoryForm({
           onChange={(kind) => set({ kind })}
         />
       </Setting>
-      {fields.kind !== 'transfer' && (
-        <Setting label={expense ? 'Budget' : 'Expected'} hint="Leave blank to just track it">
-          <div className="row wrap">
-            <input
-              className="input num"
-              style={{ width: 110 }}
-              inputMode="decimal"
-              placeholder="None"
-              aria-label="Budget amount"
-              {...amountField.inputProps}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-            <select
-              className="input"
-              style={{ width: 'auto' }}
-              aria-label="Budget cadence"
-              value={fields.budgetCadence}
-              onChange={(e) =>
-                set({ budgetCadence: e.target.value as CategoryFields['budgetCadence'] })
-              }
-            >
-              {Object.entries(CADENCE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <AmountNote id={amountField.id} text={amountField.shown} />
-          </div>
-        </Setting>
-      )}
+      {fields.kind !== 'transfer' &&
+        (budgetLocked ? (
+          <LockedBudget fields={fields} />
+        ) : (
+          <Setting label={expense ? 'Budget' : 'Expected'} hint="Leave blank to just track it">
+            <div className="row wrap">
+              <input
+                className="input num"
+                style={{ width: 110 }}
+                inputMode="decimal"
+                placeholder="None"
+                aria-label="Budget amount"
+                {...amountField.inputProps}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <select
+                className="input"
+                style={{ width: 'auto' }}
+                aria-label="Budget cadence"
+                value={fields.budgetCadence}
+                onChange={(e) =>
+                  set({ budgetCadence: e.target.value as CategoryFields['budgetCadence'] })
+                }
+              >
+                {Object.entries(CADENCE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <AmountNote id={amountField.id} text={amountField.shown} />
+            </div>
+          </Setting>
+        ))}
       {expense && (
         <>
           <Setting
@@ -264,5 +275,25 @@ export function CategoryForm({
         </button>
       </div>
     </form>
+  )
+}
+
+/** The budget as it stands, with no way to change it here (a past period's page). */
+function LockedBudget({ fields }: { fields: CategoryFields }) {
+  return (
+    <Setting
+      label={fields.kind === 'expense' ? 'Budget' : 'Expected'}
+      hint="Budgets are today's, so they change on the current period"
+    >
+      <span className="num">
+        {fields.budgetCents === null ? (
+          'None'
+        ) : (
+          <>
+            <Money cents={fields.budgetCents} /> {CADENCE_LABELS[fields.budgetCadence]}
+          </>
+        )}
+      </span>
+    </Setting>
   )
 }

@@ -31,22 +31,11 @@ type Widget = Settings['dashboard']['widgets'][number]
 const groceries = category('Groceries', { budgetCents: 60000 })
 const categories = [groceries]
 
-/** Each period the tests step back to, as get_budget describes it. */
+/** The periods Spending over time draws, as get_trends describes them. */
 const PERIODS: Record<number, { start: string; end: string; days: number }> = {
   0: { start: '2026-11-01', end: '2026-11-30', days: 30 },
   [-1]: { start: '2026-10-01', end: '2026-10-31', days: 31 },
   [-2]: { start: '2026-09-01', end: '2026-09-30', days: 30 },
-}
-
-function budgetAt(offset: number) {
-  const current = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 24000 }])
-  if (offset === 0) return current
-  const { start, end, days } = PERIODS[offset]!
-  return {
-    ...current,
-    period: { start, end, days, daysElapsed: days, daysLeft: 0, offset },
-    totals: { ...current.totals, safePerDayCents: null },
-  }
 }
 
 /** The region names the widgets render, by type. */
@@ -100,7 +89,7 @@ function serve(initial: Settings = settings, handlers: Handlers = {}, routes = {
         current = mergeSettings(settingsSchema.parse(current), settingsPatchSchema.parse(patch))
         return current
       },
-      get_budget: (input) => budgetAt(Number(input.offset ?? 0)),
+      get_budget: () => budgetFor(categories, [{ categoryId: groceries.id, amountCents: 24000 }]),
       list_connections: () => [],
       get_summary: () => ({
         headline: "You're on track.",
@@ -432,51 +421,18 @@ describe('Overview widgets', () => {
 })
 
 describe('Overview period', () => {
-  it('starts on the current period with how far through it is', async () => {
-    const server = serve()
-    renderOverview()
-    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
-    expect(screen.getByText('Day 17 of 30')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next period' })).toBeDisabled()
-    expect(server.actions('get_budget')).toContainEqual({ offset: 0 })
-  })
-
-  it('steps back through past periods and forward again', async () => {
-    const server = serve()
-    renderOverview()
-    const user = userEvent.setup()
-    await screen.findByRole('heading', { name: 'November 2026' })
-
-    await user.click(screen.getByRole('button', { name: 'Previous period' }))
-    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
-    expect(screen.getByText('1 period ago')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next period' })).toBeEnabled()
-
-    await user.click(screen.getByRole('button', { name: 'Previous period' }))
-    expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
-    expect(screen.getByText('2 periods ago')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Next period' }))
-    await user.click(screen.getByRole('button', { name: 'Next period' }))
-    expect(await screen.findByText('Day 17 of 30')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next period' })).toBeDisabled()
-    expect(server.actions('get_budget')).toEqual(
-      expect.arrayContaining([{ offset: 0 }, { offset: -1 }, { offset: -2 }]),
-    )
-  })
-
-  it('hands the period on screen to the widgets', async () => {
+  it('is always the current period, with how far through it is and no arrows', async () => {
     const withMerchants = layout([{ type: 'pace' }, { type: 'merchants' }])
     const server = serve(withMerchants)
     renderOverview(withMerchants)
-    const user = userEvent.setup()
-    await screen.findByRole('heading', { name: 'November 2026' })
-    await user.click(screen.getByRole('button', { name: 'Previous period' }))
-    await screen.findByRole('heading', { name: 'October 2026' })
-    await waitFor(() =>
-      expect(server.actions('top_merchants')).toContainEqual({ offset: -1, limit: 6 }),
-    )
-    expect(server.actions('get_spending_pace')).toContainEqual({ offset: -1 })
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    expect(screen.getByText('Day 17 of 30')).toBeInTheDocument()
+    // Looking back is Spending's job, so Home has no way to step to another period.
+    expect(screen.queryByRole('button', { name: 'Previous period' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next period' })).not.toBeInTheDocument()
+    await waitFor(() => expect(server.actions('top_merchants')).toEqual([{ offset: 0, limit: 6 }]))
+    expect(server.actions('get_budget')).toEqual([{ offset: 0 }])
+    expect(server.actions('get_spending_pace')).toEqual([{ offset: 0 }])
   })
 })
 

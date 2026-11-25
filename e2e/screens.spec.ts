@@ -10,6 +10,8 @@ const SCREENS = [
   { path: '/spending', heading: 'Spending' },
   { path: '/spending/activity', heading: 'Activity' },
   { path: '/spending/activity/import', heading: 'Import transactions' },
+  { path: '/spending/over-time', heading: 'Spending over time' },
+  { path: '/spending/merchants', heading: 'Top merchants' },
   { path: '/payday', heading: 'Payday' },
   { path: '/payday/bills', heading: 'Bills' },
   { path: '/payday/pay', heading: 'Your pay' },

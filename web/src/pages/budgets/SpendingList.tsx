@@ -1,6 +1,6 @@
-// The spending categories on the Budgets screen, in the order that reads
-// best: under their group headings when any have one, otherwise budgeted
-// categories first and the ones only tracked after.
+// The spending categories in Spending's budgets by category, in the order
+// that reads best: under their group headings when any have one, otherwise
+// budgeted categories first and the ones only tracked after.
 
 import { Fragment } from 'react'
 import type { Budget, Category, CategoryBudget } from '../../api/client'

@@ -1,10 +1,11 @@
 // Flexible spending so far against an even pace, with where it is heading.
 // The chart is drawn as it always has been, with its readout under a finger;
 // the title and sentence above it open the math behind where spending lands
-// (lib/drills/pace.ts).
+// (lib/drills/pace.ts). Home shows it for now; Spending for whichever period
+// its arrows are on.
 
 import { Card } from '../components/design/Card'
-import type { SpendingPace } from '../api/client'
+import type { Budget, SpendingPace } from '../api/client'
 import { useAction } from '../api/hooks'
 import { PaceChart } from '../components/charts/PaceChart'
 import { Money } from '../components/design/Money'
@@ -13,7 +14,13 @@ import { paceDrill } from '../lib/drills/pace'
 import { ErrorNote, Loading } from '../components/ui'
 import type { WidgetProps } from './types'
 
-export function PaceWidget({ budget, offset }: WidgetProps) {
+/** Home's card: always the current period. */
+export function PaceWidget({ budget }: WidgetProps) {
+  return <PaceCard budget={budget} offset={0} />
+}
+
+/** The pace of the period `offset` periods back (0 is now), with that period's budget. */
+export function PaceCard({ budget, offset }: { budget: Budget; offset: number }) {
   const pace = useAction('get_spending_pace', { offset })
   const names = budget.categories
     .filter((c) => pace.data?.categoryIds.includes(c.categoryId))

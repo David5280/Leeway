@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Output } from '../api/client'
 import { budgetFor, category, failing, fakeServer, holdRequest, renderSignedIn } from '../test/fake'
-import { Budgets } from './Budgets'
+import { Spending } from './Spending'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -73,7 +73,7 @@ describe('suggested budgets', () => {
   it('loads suggestions and says which months they come from', async () => {
     serve()
     const release = holdRequest('/api/actions/suggest_budgets')
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     expect(within(card).getByRole('status')).toHaveTextContent('Loading')
     release()
@@ -82,7 +82,7 @@ describe('suggested budgets', () => {
 
   it('shows each average, the current budget and the suggested amount', async () => {
     serve()
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     const groceriesRow = await waitFor(() => rowFor(card, 'Groceries'))
     expect(groceriesRow).toHaveTextContent('you average $612, budget now $600')
@@ -99,7 +99,7 @@ describe('suggested budgets', () => {
       currentCadence: 'week',
     })
     serve([keepDining, weekly])
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     await within(card).findByText('Weekly')
     expect(within(rowFor(card, 'Dining out')).getByRole('button')).toHaveTextContent('In use')
@@ -109,7 +109,7 @@ describe('suggested budgets', () => {
 
   it('applies one suggestion as a monthly budget', async () => {
     const server = serve()
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const user = userEvent.setup()
     const card = await openSuggestions(user)
     await within(card).findByText('Groceries')
@@ -124,7 +124,7 @@ describe('suggested budgets', () => {
   it('applies every suggestion that differs, one after another, and waits while it does', async () => {
     const server = serve()
     const release = holdRequest('/api/actions/update_category')
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const user = userEvent.setup()
     const card = await openSuggestions(user)
     await user.click(await within(card).findByRole('button', { name: 'Use all 2' }))
@@ -144,7 +144,7 @@ describe('suggested budgets', () => {
 
   it('says why a suggestion could not be applied, and lets the owner try again', async () => {
     serve(undefined, { '/api/actions/update_category': failing('Budget is too large') })
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const user = userEvent.setup()
     const card = await openSuggestions(user)
     await within(card).findByText('Groceries')
@@ -155,7 +155,7 @@ describe('suggested budgets', () => {
 
   it('offers no use all button when only one suggestion differs', async () => {
     serve([raiseGroceries, keepDining])
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     await within(card).findByText('Groceries')
     expect(within(card).queryByRole('button', { name: /Use all/ })).not.toBeInTheDocument()
@@ -163,14 +163,14 @@ describe('suggested budgets', () => {
 
   it('says there is not enough history yet when nothing can be suggested', async () => {
     serve([])
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     expect(await within(card).findByText(/Not enough history yet/)).toBeInTheDocument()
   })
 
   it('says why suggestions could not load', async () => {
     serve([], { '/api/actions/suggest_budgets': failing('No bank connected', 409) })
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const card = await openSuggestions(userEvent.setup())
     expect(await within(card).findByRole('alert')).toHaveTextContent('No bank connected')
     expect(within(card).queryByText(/Not enough history yet/)).not.toBeInTheDocument()
@@ -178,7 +178,7 @@ describe('suggested budgets', () => {
 
   it('closes from its own button or the button that opened it', async () => {
     serve()
-    renderSignedIn(<Budgets />)
+    renderSignedIn(<Spending />)
     const user = userEvent.setup()
     const card = await openSuggestions(user)
     await user.click(within(card).getByRole('button', { name: 'Close' }))

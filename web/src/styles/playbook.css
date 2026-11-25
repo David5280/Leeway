@@ -1,5 +1,6 @@
-/* The payday playbook (pages/plan/payday/Playbook.tsx): quiet rows under a
-   card's figure, a name over a short reason, the amount lined up at the end. */
+/* Quiet rows under a card's figure (components/design/SumRow.tsx), a name
+   over a short reason, the amount lined up at the end: the payday playbook's
+   paycheck (pages/plan/payday/Playbook.tsx) and Spending's lead. */
 
 .playbook-rows,
 .playbook-note {
@@ -21,7 +22,7 @@
   font-weight: 500;
 }
 
-/* The new paycheck's sum ends on its own total, set off by a heavier rule. */
+/* A sum ends on its own total, set off by a heavier rule. */
 .playbook-sum {
   display: block;
 }

@@ -42,11 +42,12 @@ export function paceDrill(pace: SpendingPace, budget: Budget, isCurrent: boolean
         key: row.categoryId,
         label: row.name,
         value: { cents: row.spentCents },
-        to: paths.category(row.categoryId),
+        // The category's page on the same period, so looking back stays looking back.
+        to: paths.category(row.categoryId, budget.period.offset),
         icon: { category: { name: row.name, color: row.color, icon: row.icon, kind: row.kind } },
       })),
     },
-    more: { to: paths.spending(), label: 'Open budgets' },
+    more: { to: paths.spending(budget.period.offset), label: 'Open budgets' },
   }
 }
 

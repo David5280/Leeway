@@ -2,8 +2,7 @@
 
 import type { Budget } from '../api/client'
 
-/** The budget for the period on screen, and which period that is (0 is the current one). */
+/** The budget for the current period: Home is always now (Spending looks back). */
 export interface WidgetProps {
   budget: Budget
-  offset: number
 }

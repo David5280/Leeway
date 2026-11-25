@@ -118,6 +118,9 @@ export const SCREENS: Screen[] = [
     name: '/spending adding a category',
     then: open('New category', (page) => page.getByRole('region', { name: 'New category' })),
   }),
+  at('spending', '/spending?period=-1', { name: '/spending on the last period' }),
+  at('spendingOverTime', '/spending/over-time'),
+  at('topMerchants', '/spending/merchants'),
   { name: 'a category page', route: 'category', path: categoryPage },
   {
     name: 'a category page making a rule',

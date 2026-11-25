@@ -27,6 +27,8 @@ describe('screenName', () => {
 
   it('prefers a fixed address over one with an id', () => {
     expect(screenName('/spending/activity')).toBe('All activity')
+    expect(screenName('/spending/over-time')).toBe('Spending over time')
+    expect(screenName('/spending/merchants')).toBe('Top merchants')
     expect(screenName('/spending/c1')).toBe('Category')
     expect(screenName('/settings')).toBe('Settings')
     expect(screenName('/nowhere')).toBe('Leeway')

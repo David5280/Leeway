@@ -41,6 +41,8 @@ describe('the route list', () => {
     const deeper = [
       'activity',
       'importTransactions',
+      'spendingOverTime',
+      'topMerchants',
       'category',
       'bills',
       'trip',
@@ -61,6 +63,10 @@ describe('the link builders', () => {
     [paths.spending(), 'spending'],
     [paths.activity(), 'activity'],
     [paths.importTransactions(), 'importTransactions'],
+    [paths.spendingOverTime(), 'spendingOverTime'],
+    [paths.topMerchants(), 'topMerchants'],
+    [paths.topMerchants(-2), 'topMerchants'],
+    [paths.spending(-1), 'spending'],
     [paths.category('cat-1'), 'category'],
     [paths.payday(), 'payday'],
     [paths.bills(), 'bills'],
@@ -97,6 +103,18 @@ describe('the link builders', () => {
     expect(paths.bills()).toBe('/payday/bills')
     expect(paths.bills('bill-1')).toBe('/payday/bills?bill=bill-1')
     expect(paths.goals({ new: 'purchase', name: 'Gift' })).toBe('/goals?new=purchase&name=Gift')
+  })
+
+  it('puts an earlier period in the query, and leaves the current one out', () => {
+    expect(paths.spending()).toBe('/spending')
+    expect(paths.spending(0)).toBe('/spending')
+    expect(paths.spending(-1)).toBe('/spending?period=-1')
+    expect(paths.topMerchants()).toBe('/spending/merchants')
+    expect(paths.topMerchants(-3)).toBe('/spending/merchants?period=-3')
+    expect(paths.spendingOverTime()).toBe('/spending/over-time')
+    expect(paths.spendingOverTime(-2)).toBe('/spending/over-time?period=-2')
+    expect(paths.category('cat-1', 0)).toBe('/spending/cat-1')
+    expect(paths.category('cat-1', -1)).toBe('/spending/cat-1?period=-1')
   })
 
   it('keeps an id with a slash or a space inside its own part of the address', () => {
@@ -144,6 +162,8 @@ describe("the server's links into the app", () => {
       Home: paths.home(),
       Spending: paths.spending(),
       'All activity': paths.activity(),
+      'Spending over time': paths.spendingOverTime(),
+      'Top merchants': paths.topMerchants(),
       Payday: paths.payday(),
       'Bills and subscriptions': paths.bills(),
       'Your pay': paths.pay(),

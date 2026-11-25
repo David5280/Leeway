@@ -252,20 +252,6 @@ h2 {
   grid-column: span 12;
 }
 
-/* A row of summary cards (Budgeted, Spent, Left): each card as tall as the
-   tallest, so the row lines up with no dead space under a short one. */
-.grid.summary-row {
-  align-items: stretch;
-}
-
-/* A figure with its ring beside it, the ring no taller than the figure. */
-.figure-ring {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .span-4 {
   grid-column: span 4;
 }
@@ -1920,7 +1906,8 @@ details.more[open] summary {
   text-align: right;
 }
 
-/* A Budgets screen row: the same grid, plus a line of plain words under it. */
+/* A row of Spending's budgets by category: the same grid, plus a line of
+   plain words under it. */
 .cat-row.budget-row {
   grid-template-areas:
     'name figures'

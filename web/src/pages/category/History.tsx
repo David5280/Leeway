@@ -102,9 +102,12 @@ export function History({
 export function InThisCategory({
   category,
   period,
+  when,
 }: {
   category: Category
   period: Budget['period']
+  /** The period in words: "this month", or "in October 2026" for a past one. */
+  when: string
 }) {
   const { settings } = useApp()
   const list = useAction('list_transactions', {
@@ -115,14 +118,23 @@ export function InThisCategory({
   })
   const transactions = list.data
   const total = transactions?.total ?? 0
+  // A past period is named; the one still running keeps its "yet".
+  const current = period.offset === 0
+  const span = current ? 'this period' : when
   return (
     <Card static="list" label="In this category" className="span-half stack-sm">
       <div className="row-between">
         <h2>In this category</h2>
-        {transactions && <span className="small muted">{total} this period</span>}
+        {transactions && (
+          <span className="small muted">
+            {total} {span}
+          </span>
+        )}
       </div>
       <ErrorNote error={list.error} />
-      {transactions?.transactions.length === 0 && <p className="empty">Nothing yet this period.</p>}
+      {transactions?.transactions.length === 0 && (
+        <p className="empty">{current ? 'Nothing yet this period.' : `Nothing ${when}.`}</p>
+      )}
       {transactions?.transactions.slice(0, SHOWN).map((tx) => (
         <div key={tx.id} className="list-row">
           <span className="num small muted" style={{ width: 56 }}>

@@ -1,6 +1,6 @@
-// A category's numbers for the current period: what went out (or came in)
-// against its budget and the last period, how much of the budget is used,
-// and what can still go each day.
+// A category's numbers for a period: what went out (or came in) against its
+// budget and the last period, how much of the budget is used, and, while the
+// period runs, what can still go each day.
 
 import { Card } from '../../components/design/Card'
 import type { ReactNode } from 'react'
@@ -29,42 +29,34 @@ export function ThisPeriod({
   row,
   period,
   previousCents,
+  when,
 }: {
   row: CategoryBudget
   period: Period
   /** The same number of days into the last period, read as `row.spentCents` is. */
   previousCents: number
+  /** The period in words: "this month", or "in October 2026" for a past one. */
+  when: string
 }) {
-  const { settings } = useApp()
-  const word = periodWord(settings.period.kind)
-  const perDay = perDayLeft(row.leftCents, period.daysLeft)
-  const isExpense = row.kind === 'expense'
-  const isIncome = row.kind === 'income'
-  // A caption only when there is a budget to measure against or a last period to compare.
-  const hasCaption = row.leftCents !== null || trendPercent(row.spentCents, previousCents) !== null
-  // The tick on the ring shows how far through the period today is.
-  const todayMarker = row.pace !== null ? (period.daysElapsed / period.days) * 100 : null
+  const current = period.offset === 0
+  // The comparison with "this point last period" only reads true for the period still running.
+  const trend = current && trendPercent(row.spentCents, previousCents) !== null
+  // The tick on the ring shows how far through the period today is; a finished one has none.
+  const todayMarker = current && row.pace !== null ? (period.daysElapsed / period.days) * 100 : null
   return (
-    <Card static="pending" label="This period" className="stack">
+    <Card static="pending" label={current ? 'This period' : when} className="stack">
       <div className="row-between">
         <KeyFigure
-          label={`${isIncome ? 'Received' : 'Spent'} this ${word}`}
+          label={`${row.kind === 'income' ? 'Received' : 'Spent'} ${when}`}
           cents={row.spentCents}
+          // A caption only when there is a budget to measure against or a last period to compare.
           caption={
-            hasCaption && (
-              <>
-                <LeftOfBudget row={row} />{' '}
-                <Trend
-                  current={row.spentCents}
-                  previous={previousCents}
-                  goodWhen={isIncome ? 'up' : 'down'}
-                  label={`${isIncome ? 'Income' : 'Spending'} compared with this point last ${word}`}
-                />
-              </>
+            (row.leftCents !== null || trend) && (
+              <Caption row={row} previousCents={previousCents} trend={trend} />
             )
           }
         />
-        {row.budgetCents !== null && isExpense && (
+        {row.budgetCents !== null && row.kind === 'expense' && (
           <ProgressRing
             size={64}
             label={`${row.name} budget used`}
@@ -78,20 +70,60 @@ export function ThisPeriod({
         <Stat label="Budget">
           {row.budgetCents === null ? 'None' : <Money cents={row.budgetCents} />}
         </Stat>
-        {isExpense && perDay !== null && (
-          <Stat label="Per day left">
-            <Money cents={perDay} />
-          </Stat>
-        )}
+        {current && <PerDayLeft row={row} daysLeft={period.daysLeft} />}
       </div>
       <CarriedNote carriedCents={row.carriedCents} />
-      {row.expectedByNowCents !== null && row.pace !== null && (
-        <span className="small muted">
-          Steady spending would be at <Money cents={row.expectedByNowCents} /> by today. You warn at{' '}
-          {row.warnAtPercent}%.
-        </span>
-      )}
+      {current && <PaceNote row={row} />}
     </Card>
+  )
+}
+
+/** Where the amount stands against the budget, then the trend when there is one. */
+function Caption({
+  row,
+  previousCents,
+  trend,
+}: {
+  row: CategoryBudget
+  previousCents: number
+  trend: boolean
+}) {
+  const { settings } = useApp()
+  const isIncome = row.kind === 'income'
+  return (
+    <>
+      <LeftOfBudget row={row} />{' '}
+      {trend && (
+        <Trend
+          current={row.spentCents}
+          previous={previousCents}
+          goodWhen={isIncome ? 'up' : 'down'}
+          label={`${isIncome ? 'Income' : 'Spending'} compared with this point last ${periodWord(settings.period.kind)}`}
+        />
+      )}
+    </>
+  )
+}
+
+/** What can still go each day of the period still running, for spending with a budget. */
+function PerDayLeft({ row, daysLeft }: { row: CategoryBudget; daysLeft: number }) {
+  const perDay = perDayLeft(row.leftCents, daysLeft)
+  if (row.kind !== 'expense' || perDay === null) return null
+  return (
+    <Stat label="Per day left">
+      <Money cents={perDay} />
+    </Stat>
+  )
+}
+
+/** Where steady spending would be by today, when the category tracks its pace. */
+function PaceNote({ row }: { row: CategoryBudget }) {
+  if (row.expectedByNowCents === null || row.pace === null) return null
+  return (
+    <span className="small muted">
+      Steady spending would be at <Money cents={row.expectedByNowCents} /> by today. You warn at{' '}
+      {row.warnAtPercent}%.
+    </span>
   )
 }
 

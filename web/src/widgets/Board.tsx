@@ -13,7 +13,6 @@ interface BoardProps {
   shown: Widget[]
   editing: boolean
   budget: Budget
-  offset: number
   save: (widgets: Widget[]) => void
 }
 
@@ -66,7 +65,6 @@ function WidgetSlot({
   all,
   editing,
   budget,
-  offset,
   save,
 }: BoardProps & { widget: Widget; order?: number }) {
   const entry = WIDGET_LIBRARY[widget.type]!
@@ -85,7 +83,7 @@ function WidgetSlot({
       }}
     >
       {editing && <Tools widget={widget} name={entry.name} all={all} save={save} />}
-      {widget.visible && <Component budget={budget} offset={offset} />}
+      {widget.visible && <Component budget={budget} />}
     </div>
   )
 }
