@@ -22,6 +22,7 @@ import { todayIn } from '../lib/dates.js'
 import { chatEnding, forKeeping, historyFor, joinSteps, TOO_MANY_STEPS } from './answer.js'
 import { CHAT_SYSTEM, chatContext } from './prompt.js'
 import { withAskedFrom, type ScreenContext } from './screen.js'
+import { chatSnapshot } from './snapshotCache.js'
 import { chatToolList, runChatTool, toolTitle } from './tools.js'
 
 /** The most calls one question makes: a few looks at the data, then the answer. */
@@ -130,7 +131,9 @@ async function answer(turn: Turn, question: string, emit: Emit): Promise<void> {
     paymentPeople(ctx.db),
   ])
   const today = todayIn(settings.timeZone, ctx.now())
-  const context = chatContext(today, settings.currency, facts)
+  // The whole picture, read before every answer; null (never a refusal) when it can't be built.
+  const snapshot = await chatSnapshot(ctx, settings, today, people, turn.onError)
+  const context = chatContext(today, settings.currency, facts, snapshot)
   // The screen opens this question's message only; the question alone is kept (saveExchange).
   const asked: AiMessage = { role: 'user', text: withAskedFrom(question, askedFrom) }
   const messages: AiMessage[] = [...historyFor(past), asked]
