@@ -17,6 +17,7 @@
 import { useState, type ReactNode } from 'react'
 import { call, type Connection } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
+import { useReloadHold } from '../../lib/update/useReloadHold'
 import { ErrorNote } from '../ui'
 import { AlreadyConnected } from './AlreadyConnected'
 import { duplicateOf, pickedLink, type DuplicateBankDetails, type PickedLink } from './linking'
@@ -35,6 +36,9 @@ type Step =
   | { at: 'found'; link: PickedLink; duplicate: DuplicateBankDetails }
   /** Asking for a deliberate yes to a second login at that bank. */
   | { at: 'confirming'; link: PickedLink; duplicate: DuplicateBankDetails }
+
+/** Whether a bank is being linked, so a new build waits: a reload would lose Plaid's login. */
+const midLink = (step: Step, busy: boolean) => busy || step.at !== 'idle'
 
 export function AddBank({
   connections,
@@ -103,6 +107,7 @@ export function AddBank({
   }
 
   const busy = starting || link.isPending || step.at === 'window'
+  useReloadHold(midLink(step, busy))
   const startLabel = hasBanks ? 'Connect another bank' : 'Connect a bank'
   return (
     <div className="stack-sm">

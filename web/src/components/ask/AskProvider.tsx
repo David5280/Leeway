@@ -27,6 +27,7 @@ import {
 import { useLocation } from 'react-router-dom'
 import { useChatAvailable, type ScreenContext } from '../../api/chat'
 import { useAsk, type Asking } from '../../pages/chat/useAsk'
+import { useReloadHold } from '../../lib/update/useReloadHold'
 import { paths } from '../../routes'
 import { screenName } from './screens'
 
@@ -136,6 +137,9 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const [about, setAbout] = useState<CardAbout | null>(null)
   const [wantsFocus, setWantsFocus] = useState(false)
   const { ask: send, ...asking } = useAsk(setDraft)
+
+  // A new build waits while a question is drafted or answered (lib/update/pageBusy.ts).
+  useReloadHold(draft.trim() !== '' || asking.pending !== null)
 
   // Opening twice in a moment (a hold, then its context menu) only refocuses the field.
   const open = useCallback(

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { call } from '../../api/client'
 import { useActionMutation } from '../../api/hooks'
+import { useReloadHold } from '../../lib/update/useReloadHold'
 import { ErrorNote } from '../ui'
 import { PlaidWindow } from './PlaidWindow'
 
@@ -30,6 +31,8 @@ export function ReconnectButton({
   const [starting, setStarting] = useState(false)
   const repaired = useActionMutation('bank_reconnected')
   const busy = starting || token !== null || repaired.isPending
+  // A new build waits while Plaid's window is open or the repair is saved.
+  useReloadHold(busy)
 
   async function start() {
     setError(null)

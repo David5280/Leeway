@@ -173,7 +173,7 @@ describe('upgradeDefaultHome', () => {
     expect(await types()).toEqual(defaultHome)
   })
 
-  it('adds nothing to a map order the owner rearranged', async () => {
+  it('leaves a map order the owner rearranged as it was', async () => {
     // Net worth moved up, just under the alerts.
     const [top, tabs] = [mapDefault.slice(0, 2), mapDefault.slice(2)]
     await storeWidgets([...top, ...tabs.slice(-1), ...tabs.slice(0, -1)])
@@ -181,10 +181,10 @@ describe('upgradeDefaultHome', () => {
     expect(await types()).toEqual(['leeway', 'alerts', 'net-worth', 'cash-flow', 'pace', 'goals'])
   })
 
-  it('leaves a map order alone that differs only in one size', async () => {
+  it('moves a map order that differs only in a size, as resizing is not arranging', async () => {
     await storeWidgets(mapDefault.map((w) => (w.type === 'goals' ? { ...w, size: 'wide' } : w)))
-    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
-    expect(await types()).toEqual(mapOrder)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(true)
+    expect(await types()).toEqual(defaultHome)
   })
 
   it('leaves a map order alone with one card hidden', async () => {
