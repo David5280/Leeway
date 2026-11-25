@@ -1,7 +1,8 @@
 // The drill-down behind Spending's lead: what the budgets hold this period,
 // less what has gone out in them, is what is left of them (or how far over).
 // What is left is the budgets' room, not money to spend: cash and what goals
-// hold back belong to Home's Leeway, so neither is part of this math. Pure.
+// hold back belong to Home's Leeway, so neither is part of this math. Leeway
+// keeps no budget history, so a past period's math uses today's budgets. Pure.
 
 import type { Budget } from '../../api/client'
 import { paths } from '../../routes'
@@ -15,17 +16,20 @@ export function budgetsDrill(budget: Budget, subtitle: string, money: Money): Dr
   const { budgetedCents, budgetedSpentCents, leftCents } = budget.totals
   const over = leftCents < 0
   const tone = over ? ('problem' as const) : undefined
+  const past = budget.period.offset !== 0
   return {
     title: 'Spent in your budgets',
     subtitle,
     figure: { cents: budgetedSpentCents },
     math: {
       terms: [
-        { label: 'Budgeted', value: { cents: budgetedCents } },
+        { label: past ? "Today's budgets" : 'Budgeted', value: { cents: budgetedCents } },
         { label: 'spent in your budgets', value: { cents: budgetedSpentCents }, op: 'minus' },
       ],
       result: { label: over ? 'Over by' : 'Left', value: { cents: Math.abs(leftCents), tone } },
-      note: 'Only categories with a budget count here. All activity lists everything else.',
+      note: past
+        ? "Leeway keeps no budget history, so a past period is measured against today's budgets."
+        : 'Only categories with a budget count here. All activity lists everything else.',
     },
     items: {
       title: 'Budgets',

@@ -1,6 +1,8 @@
 // Spending over time: what went out in each of the last twelve budget periods
 // as bars against today's budgets, then each period as a row, newest first,
-// that opens Spending on that period.
+// that opens Spending on that period. These figures are all spending, in a
+// budget or not, while Spending leads with spent in your budgets, so each is
+// labeled to keep the two from reading as a mismatch.
 
 import { Link } from 'react-router-dom'
 import { useAction } from '../../../api/hooks'
@@ -13,6 +15,9 @@ import { useApp } from '../../../lib/app'
 import { periodLabel, periodWord } from '../../../lib/format'
 import { paths } from '../../../routes'
 import { periodDistance } from '../period'
+
+/** What the figures here count, unlike the spent in budgets Spending leads with. */
+const ALL_SPENDING_NOTE = 'All spending, in a budget or not.'
 
 /** How many budget periods the page reaches back, the current one included. */
 export const OVER_TIME_PERIODS = 12
@@ -33,6 +38,7 @@ export function OverTime() {
           trends={trends.data}
           budgetCents={budget.data?.totals.budgetedCents || null}
         />
+        <p className="small muted">{ALL_SPENDING_NOTE}</p>
       </Card>
       <PeriodRows trends={trends.data} />
     </>
@@ -58,7 +64,10 @@ function PeriodRows({ trends }: { trends: Trends }) {
             </span>
             <span className="small muted">{periodDistance(period.offset, word)}</span>
           </span>
-          <Money cents={period.spentCents} />
+          <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
+            <Money cents={period.spentCents} />
+            <span className="small muted">all spending</span>
+          </span>
           <Icon name="forward" size={18} />
         </Link>
       ))}

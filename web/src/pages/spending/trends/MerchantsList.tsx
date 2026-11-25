@@ -14,12 +14,12 @@ export const MERCHANTS_LISTED = 20
 
 export function MerchantsList({ period, when }: { period: number; when: string }) {
   const merchants = useAction('top_merchants', { offset: period, limit: MERCHANTS_LISTED })
+  // The period on its own line, not beside the title, so a narrow phone has room for both.
   const head = (
-    <SectionHead
-      icon="moneyOut"
-      title="Where the most went"
-      aside={<span className="small muted">{when}</span>}
-    />
+    <>
+      <SectionHead icon="moneyOut" title="Where the most went" />
+      <p className="small muted">{when}</p>
+    </>
   )
   if (!merchants.data || merchants.data.length === 0) {
     return (

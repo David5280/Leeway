@@ -46,4 +46,14 @@ describe('budgetsDrill', () => {
     const sentence = mathSentence(budgetsDrill(budget, 'Day 17 of 30', money).math, money)
     expect(sentence).toBe('Left $600 = Budgeted $800 minus spent in your budgets $200')
   })
+
+  it("names a past period's budgets as today's, since no budget history is kept", () => {
+    const now = budgetFor(categories, [{ categoryId: groceries.id, amountCents: 20000 }])
+    const past = { ...now, period: { ...now.period, offset: -1 } }
+    const { math } = budgetsDrill(past, 'October 2026', money)
+    expect(mathSentence(math, money)).toBe(
+      "Left $600 = Today's budgets $800 minus spent in your budgets $200",
+    )
+    expect(math.note).toMatch(/no budget history/)
+  })
 })

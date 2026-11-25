@@ -79,10 +79,26 @@ describe('Spending over time', () => {
     expect(server.actions('get_trends')).toEqual([{ periods: OVER_TIME_PERIODS }])
     const rows = within(screen.getByRole('region', { name: 'Periods' })).getAllByRole('link')
     expect(rows.map((row) => [row.textContent, row.getAttribute('href')])).toEqual([
-      ['November 2026This month$240', '/spending'],
-      ['October 2026Last month$630', '/spending?period=-1'],
-      ['September 20262 months ago$510', '/spending?period=-2'],
+      ['November 2026This month$240all spending', '/spending'],
+      ['October 2026Last month$630all spending', '/spending?period=-1'],
+      ['September 20262 months ago$510all spending', '/spending?period=-2'],
     ])
+    // All spending, unlike the spent in budgets Spending leads with, and said so.
+    expect(screen.getByText('All spending, in a budget or not.')).toBeInTheDocument()
+  })
+
+  it('leads back to the period Spending was on', async () => {
+    serve({
+      get_budget: (input: { offset?: number }) =>
+        input.offset ? october : budgetFor([groceries], []),
+    })
+    renderPages('/spending?period=-1')
+    const user = userEvent.setup()
+    const trends = within(await screen.findByRole('region', { name: 'Trends' }))
+    await user.click(trends.getByRole('link', { name: /^Spending over time/ }))
+    expect(backLink()).toHaveAttribute('href', '/spending?period=-1')
+    await user.click(backLink())
+    expect(await screen.findByText('October 2026 · Last month')).toBeInTheDocument()
   })
 
   it('says why spending over time could not load', async () => {

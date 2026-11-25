@@ -30,7 +30,7 @@ function budgetAt(offset: number) {
 
 /** Every section card's name, top to bottom. */
 const SECTIONS = [
-  'Spent this period',
+  'Spent this month',
   'Spending pace',
   'Spending categories',
   'Latest transactions',
@@ -38,13 +38,13 @@ const SECTIONS = [
 ]
 
 const region = (name: string) => screen.getByRole('region', { name })
-const lead = () => within(region('Spent this period'))
+const lead = () => within(region('Spent this month'))
 
 describe('the Spending tab', () => {
   it('reads top to bottom as the map gives it', async () => {
     serveSpending()
     renderSpending()
-    await screen.findByRole('region', { name: 'Spent this period' })
+    await screen.findByRole('region', { name: 'Spent this month' })
     const names = screen
       .getAllByRole('region')
       .map((one) => one.getAttribute('aria-label'))
@@ -60,7 +60,7 @@ describe('the Spending tab', () => {
     expect(screen.getByRole('button', { name: 'Previous period' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')
     release()
-    expect(await screen.findByRole('region', { name: 'Spent this period' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Spent this month' })).toBeInTheDocument()
   })
 
   it('says why the budget could not load', async () => {
@@ -78,7 +78,7 @@ describe("Spending's lead", () => {
   it('leads with what was spent, adding up to what is left on screen', async () => {
     serveSpending()
     renderSpending()
-    await screen.findByRole('region', { name: 'Spent this period' })
+    await screen.findByRole('region', { name: 'Spent this month' })
     expect(lead().getByText('Spent in your budgets')).toBeInTheDocument()
     expect(lead().getByText('40% of your budgets used, 57% of the way through the month.'))
     const sum = within(lead().getByRole('group', { name: 'How your budgets add up' }))
@@ -98,7 +98,7 @@ describe("Spending's lead", () => {
       get_budget: () => budgetFor([groceries], [{ categoryId: groceries.id, amountCents: 70000 }]),
     })
     renderSpending()
-    await screen.findByRole('region', { name: 'Spent this period' })
+    await screen.findByRole('region', { name: 'Spent this month' })
     const total = lead().getByText('Over by').closest('.list-row') as HTMLElement
     expect(within(total).getByText('$100')).toHaveClass('money-problem')
     expect(total).not.toHaveTextContent('−')
@@ -115,7 +115,7 @@ describe("Spending's lead", () => {
     )
     serveSpending([groceries], { get_budget: () => held })
     renderSpending()
-    await screen.findByRole('region', { name: 'Spent this period' })
+    await screen.findByRole('region', { name: 'Spent this month' })
     const page = document.querySelector('.page')!
     expect(page).not.toHaveTextContent(/safe to spend|safely spend|left to spend|set aside/i)
   })
@@ -127,13 +127,32 @@ describe("Spending's lead", () => {
       suggest_budgets: () => ({ from: '2026-08-01', to: '2026-10-31', suggestions: [] }),
     })
     renderSpending()
-    await screen.findByRole('region', { name: 'Spent this period' })
+    await screen.findByRole('region', { name: 'Spent this month' })
     expect(lead().getByText(/with no budgets to measure it against yet/)).toHaveTextContent(
       "You've spent $45 this month, with no budgets to measure it against yet.",
     )
     expect(lead().queryByRole('group', { name: 'How your budgets add up' })).not.toBeInTheDocument()
     await userEvent.setup().click(lead().getByRole('button', { name: 'Suggest budgets' }))
-    expect(await screen.findByRole('region', { name: 'Suggested budgets' })).toBeInTheDocument()
+    // They open right under the button, ahead of the pace chart, so they are in view on a phone.
+    const suggestions = await screen.findByRole('region', { name: 'Suggested budgets' })
+    expect(region('Spent this month').nextElementSibling).toBe(suggestions)
+  })
+
+  it('keeps the sum when rollover carries the budgets to zero or below', async () => {
+    const rolling = { ...groceries, rollover: true, rolloverSince: '2026-09-01' }
+    serveSpending([rolling], {
+      get_budget: () =>
+        budgetFor([rolling], [{ categoryId: groceries.id, amountCents: 24000 }], {
+          carries: new Map([[groceries.id, -70000]]),
+        }),
+    })
+    renderSpending()
+    await screen.findByRole('region', { name: 'Spent this month' })
+    // $600 less $700 overspent before is -$100 budgeted: a budget all the same.
+    expect(lead().queryByText(/no budgets/)).not.toBeInTheDocument()
+    const sum = within(lead().getByRole('group', { name: 'How your budgets add up' }))
+    expect(sum.getByText('Over by')).toBeInTheDocument()
+    expect(sum.getByText('$340')).toHaveClass('money-problem')
   })
 })
 
@@ -149,7 +168,8 @@ describe('the period arrows', () => {
 
     await user.click(screen.getByRole('button', { name: 'Previous period' }))
     expect(await screen.findByText('October 2026 · Last month')).toBeInTheDocument()
-    expect(await lead().findByText('40% of your budgets used.')).toBeInTheDocument()
+    const october = within(await screen.findByRole('region', { name: 'Spent in October 2026' }))
+    expect(october.getByText('40% of your budgets used.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Previous period' }))
     expect(await screen.findByText('September 2026 · 2 months ago')).toBeInTheDocument()
     expect(server.actions('get_spending_pace')).toContainEqual({ offset: -2 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { budgetFor, category } from '../../test/fake'
-import { periodLine, usedCaption, usedPercent } from './leadText'
+import { hasBudgets, leadTitle, periodLine, usedCaption, usedPercent } from './leadText'
 
 const groceries = category('Groceries', { budgetCents: 60000 })
 
@@ -36,5 +36,22 @@ describe('periodLine', () => {
   it('counts the days of the running period, and says how long ago a finished one was', () => {
     expect(periodLine(now, 'This month', 'en-US')).toBe('November 2026 · Day 17 of 30')
     expect(periodLine(lastMonth, 'Last month', 'en-US')).toBe('October 2026 · Last month')
+  })
+})
+
+describe('hasBudgets', () => {
+  it('asks the categories, so a total rollover took to zero or below still counts', () => {
+    const rolling = { ...groceries, rollover: true, rolloverSince: '2026-09-01' }
+    const carried = budgetFor([rolling], [], { carries: new Map([[groceries.id, -60000]]) })
+    expect(carried.totals.budgetedCents).toBe(0)
+    expect(hasBudgets(carried)).toBe(true)
+    expect(hasBudgets(budgetFor([category('Coffee')], []))).toBe(false)
+  })
+})
+
+describe('leadTitle', () => {
+  it('names the period: this one in a word, a finished one by its dates', () => {
+    expect(leadTitle(now, 'month', 'en-US')).toBe('Spent this month')
+    expect(leadTitle(lastMonth, 'month', 'en-US')).toBe('Spent in October 2026')
   })
 })

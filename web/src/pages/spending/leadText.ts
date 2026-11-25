@@ -1,7 +1,21 @@
-// The words under Spending's lead figure. Pure, so each case is tested alone.
+// The words on Spending's lead card. Pure, so each case is tested alone.
 
 import type { Budget } from '../../api/client'
 import { periodLabel } from '../../lib/format'
+
+/**
+ * Whether any spending category has a budget. Asked of the categories, not
+ * the total, since rollover can carry a budget's total to zero or below.
+ */
+export function hasBudgets(budget: Budget): boolean {
+  return budget.categories.some((row) => row.kind === 'expense' && row.budgetCents !== null)
+}
+
+/** The lead's title, naming its period: "Spent this month", "Spent in October 2026". */
+export function leadTitle(budget: Budget, word: string, locale: string): string {
+  const { start, end, offset } = budget.period
+  return offset === 0 ? `Spent this ${word}` : `Spent in ${periodLabel(start, end, locale)}`
+}
 
 /** The whole percent of the budgets spent so far; 0 with nothing budgeted. */
 export function usedPercent(totals: Budget['totals']): number {

@@ -1,5 +1,6 @@
 // The Trends row: both answer "where did it go?", each on its own page a tap
-// deeper. Top merchants opens on the period Spending is showing.
+// deeper. Each carries the period Spending is showing: Top merchants opens on
+// it, and both lead back to it.
 
 import { LinkRows } from '../../components/LinkRows'
 import { useApp } from '../../lib/app'
@@ -16,7 +17,7 @@ export function TrendsRow({ period }: { period: number }) {
       label="Trends"
       rows={[
         {
-          to: paths.spendingOverTime(),
+          to: paths.spendingOverTime(period),
           label: 'Spending over time',
           icon: 'growth',
           detail: `Each of the last ${OVER_TIME_PERIODS} ${word}s`,

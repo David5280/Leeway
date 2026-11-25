@@ -14,7 +14,7 @@ export const SCREEN_ROUTES = {
   /** Every transaction, with filters in the query (see paths.activity). */
   activity: '/spending/activity',
   importTransactions: '/spending/activity/import',
-  /** Spending each period over the last year, each opening Spending on that period. */
+  /** Spending each period, each opening Spending on it; Back returns to the query's period. */
   spendingOverTime: '/spending/over-time',
   /** Where the most went: a period's top merchants, the period in the query. */
   topMerchants: '/spending/merchants',
@@ -110,7 +110,9 @@ export const paths = {
   /** All activity, narrowed by any filters (account, category, merchant, range). */
   activity: (filters?: Query) => withQuery(SCREEN_ROUTES.activity, filters),
   importTransactions: () => SCREEN_ROUTES.importTransactions,
-  spendingOverTime: () => SCREEN_ROUTES.spendingOverTime,
+  /** Spending over time, opened from the period Spending was on, which its way back keeps. */
+  spendingOverTime: (period?: number) =>
+    withQuery(SCREEN_ROUTES.spendingOverTime, periodQuery(period)),
   /** The top merchants of a budget period, the current one unless given another. */
   topMerchants: (period?: number) => withQuery(SCREEN_ROUTES.topMerchants, periodQuery(period)),
   category: (id: string) => `${SCREEN_ROUTES.spending}/${segment(id)}`,

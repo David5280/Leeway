@@ -1,7 +1,9 @@
 // Budgets by category, Spending's middle: every spending category with its
 // budget, which a tap on the amount changes in place, then income and
 // transfers. A new category and budgets suggested from your spending start
-// here too; each category opens its own page a tap deeper.
+// here too; each category opens its own page a tap deeper. On a past period
+// all of that is read-only: Leeway keeps no budget history, so a change made
+// while looking back would change today's budgets.
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -20,7 +22,7 @@ import { IncomeAndTransfers } from './IncomeAndTransfers'
 interface SectionProps {
   budget: Budget
   categories: Category[]
-  /** Whether the suggestions are open: the lead opens them too while nothing is budgeted. */
+  /** Whether this section's suggestions are open (the lead opens its own). */
   suggesting: boolean
   onSuggesting: (open: boolean) => void
 }
@@ -28,29 +30,34 @@ interface SectionProps {
 export function BudgetsByCategory({ budget, categories, suggesting, onSuggesting }: SectionProps) {
   const [adding, setAdding] = useState(false)
   const expenses = budget.categories.filter((row) => row.kind === 'expense')
+  const editable = budget.period.offset === 0
   return (
     <>
-      {adding && <NewCategory categories={categories} onClose={() => setAdding(false)} />}
-      {suggesting && <Suggestions onClose={() => onSuggesting(false)} />}
+      {editable && adding && (
+        <NewCategory categories={categories} onClose={() => setAdding(false)} />
+      )}
+      {editable && suggesting && <Suggestions onClose={() => onSuggesting(false)} />}
       <Card static="list" label="Spending categories" className="stack-sm cat-list">
-        <SectionHead
-          icon="budgets"
-          title="Budgets by category"
-          aside={<span className="small muted">Tap an amount to change it</span>}
-        />
+        <SectionHead icon="budgets" title="Budgets by category" />
+        {/* Its own line, not beside the title, so a narrow phone has room for both. */}
+        <p className="small muted">
+          {editable ? 'Tap an amount to change it' : "Measured against today's budgets"}
+        </p>
         <SpendingList
           rows={expenses}
           budget={budget}
           categories={new Map(categories.map((category) => [category.id, category]))}
         />
-        <div className="row wrap">
-          <button type="button" className="btn" onClick={() => setAdding(true)}>
-            New category
-          </button>
-          <button type="button" className="btn" onClick={() => onSuggesting(!suggesting)}>
-            Suggest from my spending
-          </button>
-        </div>
+        {editable && (
+          <div className="row wrap">
+            <button type="button" className="btn" onClick={() => setAdding(true)}>
+              New category
+            </button>
+            <button type="button" className="btn" onClick={() => onSuggesting(!suggesting)}>
+              Suggest from my spending
+            </button>
+          </div>
+        )}
       </Card>
       <IncomeAndTransfers budget={budget} categories={categories} />
     </>

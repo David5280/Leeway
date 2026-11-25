@@ -108,6 +108,6 @@ describe('spending', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Spending' })).toBeInTheDocument()
     expect(await screen.findByText('November 2026 · Day 17 of 30')).toBeInTheDocument()
     expect(screen.getByText('Over by $40')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Spent this period' })).toHaveTextContent('$800')
+    expect(screen.getByRole('region', { name: 'Spent this month' })).toHaveTextContent('$800')
   })
 })
