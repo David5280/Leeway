@@ -27,14 +27,20 @@ export function usedPercent(totals: Budget['totals']): number {
  * How much of the budgets is spent, and for the period still running how far
  * through it is, so the two read together: "40% of your budgets used, 57% of
  * the way through the month." A finished period has only the first half.
+ * When rollover has taken the budgets to zero or below there is no share to
+ * give (it would read 0% beside "Over by"), so only how far through is said,
+ * or nothing for a finished period.
  */
-export function usedCaption(budget: Budget, word: string): string {
-  const used = `${usedPercent(budget.totals)}% of your budgets used`
+export function usedCaption(budget: Budget, word: string): string | null {
   const { offset, daysElapsed, days } = budget.period
-  if (offset !== 0) return `${used}.`
-  const through = Math.round((daysElapsed / days) * 100)
-  return `${used}, ${through}% of the way through the ${word}.`
+  const through = `${Math.round((daysElapsed / days) * 100)}% of the way through the ${word}`
+  if (budget.totals.budgetedCents <= 0) return offset === 0 ? `${capitalize(through)}.` : null
+  const used = `${usedPercent(budget.totals)}% of your budgets used`
+  return offset === 0 ? `${used}, ${through}.` : `${used}.`
 }
+
+/** The sentence's first letter in capitals. */
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * The period under the page title: its dates, then how far through it is or

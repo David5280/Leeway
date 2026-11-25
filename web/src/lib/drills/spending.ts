@@ -35,7 +35,7 @@ export function budgetsDrill(budget: Budget, subtitle: string, money: Money): Dr
       title: 'Budgets',
       rows: budget.categories
         .filter((row) => row.kind === 'expense' && row.budgetCents !== null)
-        .map((row) => categoryItem(row, budgetDetail(row, money))),
+        .map((row) => categoryItem(row, budgetDetail(row, money), budget.period.offset)),
     },
     more: { to: paths.activity(), label: 'Open all activity' },
   }

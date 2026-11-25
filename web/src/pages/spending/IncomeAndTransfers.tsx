@@ -29,7 +29,7 @@ export function IncomeAndTransfers({
       {income.map((row) => (
         <Link
           key={row.categoryId}
-          to={paths.category(row.categoryId)}
+          to={paths.category(row.categoryId, budget.period.offset)}
           className="list-row"
           style={ROW_STYLE}
         >
@@ -43,7 +43,7 @@ export function IncomeAndTransfers({
       {transfers.map((category) => (
         <Link
           key={category.id}
-          to={paths.category(category.id)}
+          to={paths.category(category.id, budget.period.offset)}
           className="list-row"
           style={ROW_STYLE}
         >

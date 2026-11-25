@@ -115,7 +115,9 @@ export const paths = {
     withQuery(SCREEN_ROUTES.spendingOverTime, periodQuery(period)),
   /** The top merchants of a budget period, the current one unless given another. */
   topMerchants: (period?: number) => withQuery(SCREEN_ROUTES.topMerchants, periodQuery(period)),
-  category: (id: string) => `${SCREEN_ROUTES.spending}/${segment(id)}`,
+  /** One category's page, on an earlier budget period when given one, as Spending is. */
+  category: (id: string, period?: number) =>
+    withQuery(`${SCREEN_ROUTES.spending}/${segment(id)}`, periodQuery(period)),
   payday: () => SCREEN_ROUTES.payday,
   /** Bills and subscriptions, opened onto one bill's form when given its id. */
   bills: (billId?: string) => withQuery(SCREEN_ROUTES.bills, billId ? { bill: billId } : {}),

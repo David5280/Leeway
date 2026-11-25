@@ -64,7 +64,7 @@ function PeriodRows({ trends }: { trends: Trends }) {
             </span>
             <span className="small muted">{periodDistance(period.offset, word)}</span>
           </span>
-          <span className="stack-sm" style={{ gap: 0, alignItems: 'flex-end' }}>
+          <span className="link-row-figure">
             <Money cents={period.spentCents} />
             <span className="small muted">all spending</span>
           </span>

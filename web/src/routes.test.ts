@@ -113,6 +113,8 @@ describe('the link builders', () => {
     expect(paths.topMerchants(-3)).toBe('/spending/merchants?period=-3')
     expect(paths.spendingOverTime()).toBe('/spending/over-time')
     expect(paths.spendingOverTime(-2)).toBe('/spending/over-time?period=-2')
+    expect(paths.category('cat-1', 0)).toBe('/spending/cat-1')
+    expect(paths.category('cat-1', -1)).toBe('/spending/cat-1?period=-1')
   })
 
   it('keeps an id with a slash or a space inside its own part of the address', () => {

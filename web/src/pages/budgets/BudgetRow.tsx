@@ -32,7 +32,7 @@ export function BudgetRow({
     isCurrent && row.pace !== null ? (budget.period.daysElapsed / budget.period.days) * 100 : null
   return (
     <div className="cat-row budget-row" aria-label={row.name} role="group">
-      <Link to={paths.category(row.categoryId)} className="cat-name">
+      <Link to={paths.category(row.categoryId, budget.period.offset)} className="cat-name">
         <Dot color={row.color} />
         <span className="cat-label">{row.name}</span>
       </Link>

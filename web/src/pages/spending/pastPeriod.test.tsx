@@ -52,6 +52,11 @@ describe('a past period on Spending', () => {
     expect(list.getByText("Measured against today's budgets")).toBeInTheDocument()
     expect(within(list.getByRole('group', { name: 'Groceries' })).getByText('$600')).toBeVisible()
     expect(within(list.getByRole('group', { name: 'Coffee' })).getByText('no budget')).toBeVisible()
+    // A category opened from here stays on this period.
+    expect(list.getByRole('link', { name: 'Groceries' })).toHaveAttribute(
+      'href',
+      `/spending/${groceries.id}?period=-1`,
+    )
     const sum = within(lead.getByRole('group', { name: 'How your budgets add up' }))
     expect(sum.getByText("Today's budgets")).toBeInTheDocument()
     expect(sum.getByText('Leeway keeps no budget history')).toBeInTheDocument()

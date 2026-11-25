@@ -153,6 +153,9 @@ describe("Spending's lead", () => {
     const sum = within(lead().getByRole('group', { name: 'How your budgets add up' }))
     expect(sum.getByText('Over by')).toBeInTheDocument()
     expect(sum.getByText('$340')).toHaveClass('money-problem')
+    // No "0% of your budgets used" beside it: only how far through the month is said.
+    expect(lead().getByText('57% of the way through the month.')).toBeInTheDocument()
+    expect(lead().queryByText(/of your budgets used/)).not.toBeInTheDocument()
   })
 })
 

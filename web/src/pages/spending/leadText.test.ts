@@ -30,6 +30,17 @@ describe('usedCaption', () => {
   it('gives a finished period the share used alone', () => {
     expect(usedCaption(lastMonth, 'month')).toBe('40% of your budgets used.')
   })
+
+  it('gives no share once rollover takes the budgets to zero or below', () => {
+    const rolling = { ...groceries, rollover: true, rolloverSince: '2026-09-01' }
+    const carried = budgetFor([rolling], [{ categoryId: groceries.id, amountCents: 24000 }], {
+      carries: new Map([[groceries.id, -70000]]),
+    })
+    expect(carried.totals.budgetedCents).toBe(-10000)
+    expect(usedCaption(carried, 'month')).toBe('57% of the way through the month.')
+    const finished = { ...carried, period: { ...carried.period, offset: -1 } }
+    expect(usedCaption(finished, 'month')).toBeNull()
+  })
 })
 
 describe('periodLine', () => {

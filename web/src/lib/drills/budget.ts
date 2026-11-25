@@ -20,14 +20,14 @@ function spendingRows(budget: Budget): CategoryBudget[] {
     .sort((a, b) => b.spentCents - a.spentCents)
 }
 
-/** A category as a row that opens its budget. */
-export function categoryItem(row: CategoryBudget, detail?: string): DrillItem {
+/** A category as a row that opens its page, on the period `period` back (0 is now). */
+export function categoryItem(row: CategoryBudget, detail?: string, period = 0): DrillItem {
   return {
     key: row.categoryId,
     label: row.name,
     detail,
     value: { cents: row.spentCents },
-    to: paths.category(row.categoryId),
+    to: paths.category(row.categoryId, period),
     icon: { category: { name: row.name, color: row.color, icon: row.icon, kind: row.kind } },
   }
 }

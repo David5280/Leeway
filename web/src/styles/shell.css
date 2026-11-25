@@ -222,3 +222,12 @@
 .link-row-label {
   font-weight: 500;
 }
+
+/* A figure at a row's end with a word of what it counts under it, both
+   lined up on the right (Spending over time's periods). */
+.link-row-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
