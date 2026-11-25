@@ -6,6 +6,8 @@
 //   - `to`: the whole card is one link to the figure's own full page, which
 //     carries the same drill-down sections (an account's detail page);
 //   - `static`: no figure of its own, with the reason why (StaticReason).
+// A drill-down whose data is still being read (DrillPending) still makes
+// the card tappable: the figure shows at once and only the sheet waits.
 // TypeScript refuses a card with none of these, and card.contract.test.tsx
 // checks every card on Overview, Accounts and Activity, so no figure ships
 // without its explanation. A tappable card holds no buttons or links of its
@@ -16,7 +18,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import type { DrillDown } from '../../lib/drill'
+import type { CardDrill } from '../../lib/drill'
 import { useCardHold, type HoldHandlers } from '../ask/useCardHold'
 import { DrillSheet } from './DrillSheet'
 
@@ -48,7 +50,7 @@ interface Base {
 export type CardProps = Base &
   (
     | {
-        drill: DrillDown
+        drill: CardDrill
         /**
          * What follows the button inside the card: a chart whose readout
          * answers a finger or pointer, so a tap there reads the chart
@@ -111,7 +113,7 @@ function DrillCard({
   className,
   label,
   style,
-}: Base & { hold: HoldHandlers; drill: DrillDown; below?: ReactNode; className: string }) {
+}: Base & { hold: HoldHandlers; drill: CardDrill; below?: ReactNode; className: string }) {
   const [open, setOpen] = useState(false)
   const split = below !== undefined
   return (

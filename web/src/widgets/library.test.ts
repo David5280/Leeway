@@ -12,8 +12,6 @@ import {
   type WidgetType,
 } from './library'
 
-// A card this build does not draw, as a newer Leeway or an agent might save.
-const future = { type: 'forecast', size: 'half', visible: true } as unknown as Widget
 const types = (widgets: Widget[]) => widgets.map((w) => w.type as string)
 const w = (type: WidgetType, size: Widget['size']): Widget => ({ type, size, visible: true })
 
@@ -56,10 +54,9 @@ describe('Leeway and Heads up', () => {
 })
 
 describe('drawable', () => {
-  it('keeps the saved order and skips unknown and fixed cards', () => {
-    expect(
-      types(drawable([w('goals', 'half'), future, w('leeway', 'wide'), w('pace', 'full')])),
-    ).toEqual(['goals', 'pace'])
+  it('keeps the saved order and skips the fixed cards', () => {
+    const saved = [w('goals', 'half'), w('alerts', 'full'), w('leeway', 'wide'), w('pace', 'full')]
+    expect(types(drawable(saved))).toEqual(['goals', 'pace'])
   })
 })
 
@@ -73,11 +70,6 @@ describe('moveWidget', () => {
   it('returns the same list at either end', () => {
     expect(moveWidget(DEFAULT_LAYOUT, 2, -1)).toBe(DEFAULT_LAYOUT)
     expect(moveWidget(DEFAULT_LAYOUT, DEFAULT_LAYOUT.length - 1, 1)).toBe(DEFAULT_LAYOUT)
-  })
-
-  it('steps over cards it cannot draw, keeping them in the list', () => {
-    const saved = [w('pace', 'wide'), future, w('goals', 'wide')]
-    expect(types(moveWidget(saved, 0, 1))).toEqual(['goals', 'forecast', 'pace'])
   })
 
   it('steps over cards in the other column, since swapping with them changes nothing on screen', () => {

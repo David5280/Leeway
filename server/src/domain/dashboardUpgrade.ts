@@ -1,7 +1,7 @@
 // One-time changes to saved dashboards, run once per install at startup:
 // the summary widget added to dashboards saved before it existed, and Home's
-// map order given to a dashboard still in the default it replaced. A
-// dashboard the owner arranges afterwards is left alone.
+// map order given to a dashboard still in any default it replaced. A
+// dashboard the owner arranged is left alone.
 
 import type pg from 'pg'
 import { withTransaction } from '../db/pool.js'
@@ -45,17 +45,66 @@ export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {
 /** The name Home's map order is recorded under in applied_upgrades. */
 const HOME_MAP_UPGRADE = 'home-map'
 
+/** A widget as an older Leeway stored it, possibly of a kind since removed. */
+interface StoredWidget {
+  type: string
+  size: string
+  visible: boolean
+}
+
+/** Every widget in a default layout of the time is shown. */
+const shown = (type: string, size: string): StoredWidget => ({ type, size, visible: true })
+
 /**
- * The default Home before it followed the map, as stored. It names a card
- * since removed (flows), which reading the settings drops, so the stored
- * list itself is compared rather than the settings read back.
+ * Every default Home an install may still have stored, oldest first. Each
+ * names cards since removed, which reading the settings drops, so the stored
+ * list itself is compared rather than the settings read back. An install
+ * that skipped versions never ran the upgrades between, so each one moves
+ * straight to the map order.
  */
-const BEFORE_HOME_MAP = [
-  { type: 'leeway', size: 'wide', visible: true },
-  { type: 'net-worth', size: 'half', visible: true },
-  { type: 'alerts', size: 'full', visible: true },
-  { type: 'flows', size: 'full', visible: true },
-  { type: 'pace', size: 'full', visible: true },
+const OLDER_DEFAULTS: readonly (readonly StoredWidget[])[] = [
+  // Summary first, as dashboards were before the Overview led with Leeway.
+  [
+    shown('summary', 'full'),
+    shown('leeway', 'wide'),
+    shown('glance', 'half'),
+    shown('alerts', 'full'),
+    shown('categories', 'wide'),
+    shown('pace', 'half'),
+    shown('recent', 'wide'),
+    shown('accounts', 'half'),
+  ],
+  // Leeway first, before the income and spending card existed.
+  [
+    shown('leeway', 'wide'),
+    shown('alerts', 'full'),
+    shown('summary', 'full'),
+    shown('pace', 'full'),
+    shown('glance', 'full'),
+    shown('categories', 'wide'),
+    shown('accounts', 'half'),
+    shown('recent', 'wide'),
+  ],
+  // The same, once the income and spending card was added before the pace.
+  [
+    shown('leeway', 'wide'),
+    shown('alerts', 'full'),
+    shown('summary', 'full'),
+    shown('flows', 'full'),
+    shown('pace', 'full'),
+    shown('glance', 'full'),
+    shown('categories', 'wide'),
+    shown('accounts', 'half'),
+    shown('recent', 'wide'),
+  ],
+  // The default just before Home followed the map.
+  [
+    shown('leeway', 'wide'),
+    shown('net-worth', 'half'),
+    shown('alerts', 'full'),
+    shown('flows', 'full'),
+    shown('pace', 'full'),
+  ],
 ]
 
 /** The dashboard's widgets exactly as stored, or null when none was ever saved. */
@@ -67,26 +116,30 @@ async function storedWidgets(db: pg.PoolClient): Promise<unknown> {
 }
 
 /** Whether a stored list is that layout: the same widgets, sizes and visibility, in order. */
-function sameLayout(stored: unknown, layout: typeof BEFORE_HOME_MAP): boolean {
+function sameLayout(stored: unknown, layout: readonly StoredWidget[]): boolean {
   if (!Array.isArray(stored) || stored.length !== layout.length) return false
   return layout.every((widget, i) => {
-    const saved = stored[i] as Partial<typeof widget> | null
+    const saved = stored[i] as Partial<StoredWidget> | null
     return (
       saved?.type === widget.type && saved.size === widget.size && saved.visible === widget.visible
     )
   })
 }
 
+/** Whether a stored list is exactly one of the older defaults, so the owner never arranged it. */
+const isOlderDefault = (stored: unknown) =>
+  OLDER_DEFAULTS.some((layout) => sameLayout(stored, layout))
+
 /**
- * Gives a dashboard still in the default it replaced Home's map order:
- * Leeway, Heads up, then one card per tab. Returns true when it changed a
- * saved dashboard.
+ * Gives a dashboard still in any older default Home's map order: Leeway,
+ * Heads up, then one card per tab. Returns true when it changed a saved
+ * dashboard.
  */
 export async function followHomeMap(pool: pg.Pool): Promise<boolean> {
   return withTransaction(pool, async (db) => {
     if (!(await firstRun(db, HOME_MAP_UPGRADE))) return false
     // An order the owner chose is theirs to keep.
-    if (!sameLayout(await storedWidgets(db), BEFORE_HOME_MAP)) return false
+    if (!isOlderDefault(await storedWidgets(db))) return false
     const settings = await getSettings(db)
     await saveSettings(db, { ...settings, dashboard: { widgets: DEFAULT_WIDGETS } })
     return true

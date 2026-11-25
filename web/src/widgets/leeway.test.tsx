@@ -119,6 +119,34 @@ describe("Your leeway's tap-through", () => {
       '/payday',
     )
   })
+
+  it('shows the figure at once while the cash flow is still being read', async () => {
+    // A cash flow that never answers, as a slow server would.
+    fakeServer({ get_cash_flow: () => new Promise(() => {}) })
+    renderSignedIn(<LeewayWidget budget={heldToCash(roomy(), 17_800)} />)
+    expect(region()).toHaveTextContent('Your leeway today$178')
+    expect(within(region()).queryByRole('status')).not.toBeInTheDocument()
+    await userEvent.click(within(region()).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Your leeway' })
+    expect(within(sheet).getByRole('status')).toHaveTextContent('Loading your cash flow')
+  })
+
+  it('keeps the figure, and says why inside the sheet, when the cash flow fails', async () => {
+    fakeServer(
+      {},
+      {
+        '/api/actions/get_cash_flow': () =>
+          Response.json({ error: 'server_error', message: 'Cash flow is down' }, { status: 500 }),
+      },
+    )
+    renderSignedIn(<LeewayWidget budget={heldToCash(roomy(), 17_800)} />)
+    expect(region()).toHaveTextContent('Your leeway today$178')
+    await userEvent.click(within(region()).getByRole('button'))
+    const sheet = screen.getByRole('dialog', { name: 'Your leeway' })
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent('Cash flow is down')
+    expect(within(sheet).queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Loading your leeway/)).not.toBeInTheDocument()
+  })
 })
 
 describe('leewayLead', () => {

@@ -107,6 +107,28 @@ export interface DrillDown {
   more?: { to: string; label: string }
 }
 
+/**
+ * A drill-down whose data is still being read, or could not be read. The
+ * card draws its figure from what it already has; only the sheet waits, and
+ * says it is loading, or why the read failed.
+ */
+export interface DrillPending {
+  title: string
+  subtitle?: string
+  /** What the sheet says while it waits: "Loading your cash flow". */
+  loading: string
+  /** Why the read failed; absent while it is still in flight. */
+  error?: unknown
+}
+
+/** What a tappable card opens: its drill-down, or one still on its way. */
+export type CardDrill = DrillDown | DrillPending
+
+/** Whether a card's drill-down is still waiting on its data. */
+export function isPendingDrill(drill: CardDrill): drill is DrillPending {
+  return 'loading' in drill
+}
+
 /** A value as text, money through the app's formatter so it matches every other amount. */
 export function valueText(value: DrillValue, money: (cents: number) => string): string {
   return 'text' in value ? value.text : money(value.cents)

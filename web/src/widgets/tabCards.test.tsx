@@ -48,12 +48,21 @@ describe('Cash to payday', () => {
     expect(opens(region)).toBe('/payday')
   })
 
-  it('says how short the cash falls, in red words', async () => {
+  it('says how short the cash falls, in red, before a known payday', async () => {
     fakeServer({ get_cash_flow: () => cashFlow({ shortfallCents: 12_200 }) })
     renderSignedIn(<CashToPaydayCard />)
     const region = await card('Cash to payday')
     expect(region).toHaveTextContent('Shortby $122 before payday Fri, Nov 27')
     expect(within(region).getByText('Short')).toHaveClass('pill-over')
+  })
+
+  it('marks a shortfall to watch, not red, when payday is only an estimate', async () => {
+    fakeServer({ get_cash_flow: () => cashFlow({ shortfallCents: 12_200, paydayEstimate: true }) })
+    renderSignedIn(<CashToPaydayCard />)
+    const region = await card('Cash to payday')
+    expect(region).toHaveTextContent('Shortby $122 before payday Fri, Nov 27')
+    expect(within(region).getByText('Short')).toHaveClass('pill-watch')
+    expect(region.querySelector('.pill-over')).not.toBeInTheDocument()
   })
 
   it('claims neither covered nor short while the balance is unknown', async () => {

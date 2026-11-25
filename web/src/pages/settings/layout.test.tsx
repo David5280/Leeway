@@ -5,13 +5,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Settings } from '../../api/client'
-import {
-  fakeServer,
-  forgetWidgets,
-  renderSignedIn,
-  settingsHandlers,
-  settingsWith,
-} from '../../test/fake'
+import { fakeServer, renderSignedIn, settingsHandlers, settingsWith } from '../../test/fake'
 import { WIDGET_LIBRARY } from '../../widgets/library'
 import { LayoutSection } from './Layout'
 
@@ -114,27 +108,25 @@ describe('Home cards in Settings', () => {
     expect(screen.queryByText('Add:')).not.toBeInTheDocument()
   })
 
-  it('leaves out cards this app cannot draw yet', () => {
-    forgetWidgets('debts')
-    const future = settingsWith({
-      dashboard: { widgets: [{ type: 'debts' }, { type: 'pace' }] },
+  it('lists only the cards the owner arranges, leaving out Leeway and Heads up', () => {
+    const saved = settingsWith({
+      dashboard: { widgets: [{ type: 'leeway' }, { type: 'alerts' }, { type: 'pace' }] },
     })
-    fakeServer(settingsHandlers(future))
-    renderSignedIn(<LayoutSection />, { settings: future })
+    fakeServer(settingsHandlers(saved))
+    renderSignedIn(<LayoutSection />, { settings: saved })
     expect(screen.getAllByRole('switch').map((s) => s.getAttribute('aria-label'))).toEqual([
       'Show Spending pace',
     ])
   })
 
-  it('keeps cards this app cannot draw when saving a change', async () => {
-    forgetWidgets('debts')
-    const future = settingsWith({
-      dashboard: { widgets: [{ type: 'debts' }, { type: 'pace' }] },
+  it('keeps Leeway and Heads up in the saved list when saving a change', async () => {
+    const saved = settingsWith({
+      dashboard: { widgets: [{ type: 'leeway' }, { type: 'alerts' }, { type: 'pace' }] },
     })
-    const server = fakeServer(settingsHandlers(future))
-    renderSignedIn(<LayoutSection />, { settings: future })
+    const server = fakeServer(settingsHandlers(saved))
+    renderSignedIn(<LayoutSection />, { settings: saved })
     await userEvent.setup().click(screen.getByRole('switch', { name: 'Show Spending pace' }))
     await waitFor(() => expect(sentWidgets(server)).toHaveLength(1))
-    expect(sentWidgets(server)[0]!.map((w) => w.type)).toContain('debts')
+    expect(sentWidgets(server)[0]!.map((w) => w.type)).toEqual(['leeway', 'alerts', 'pace'])
   })
 })

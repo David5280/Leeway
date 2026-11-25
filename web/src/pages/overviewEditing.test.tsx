@@ -3,7 +3,7 @@
 
 import { screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { forgetWidgets, settings } from '../test/fake'
+import { settings } from '../test/fake'
 import { debtPlans } from '../test/planning'
 import {
   layout,
@@ -143,17 +143,16 @@ describe('editing Home', () => {
     await waitFor(() => expect(sentLayouts(server)).toEqual([DEFAULT_LAYOUT]))
   })
 
-  it('keeps cards this app cannot draw yet when saving a change', async () => {
-    forgetWidgets('debts')
-    const future = layout([{ type: 'leeway' }, { type: 'debts' }, { type: 'pace' }])
-    const server = serveHome(future)
-    renderHome(future)
+  it('keeps Leeway and Heads up in the saved list when saving a change', async () => {
+    const saved = layout([{ type: 'leeway' }, { type: 'alerts' }, { type: 'pace' }])
+    const server = serveHome(saved)
+    renderHome(saved)
     const user = await startEditing()
     await user.click(toolsFor('Spending pace').getByRole('button', { name: 'Hide' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
     expect(sentLayouts(server)[0]!.map((w) => [w.type, w.visible])).toEqual([
       ['leeway', true],
-      ['debts', true],
+      ['alerts', true],
       ['pace', false],
     ])
   })

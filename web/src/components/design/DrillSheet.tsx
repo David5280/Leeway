@@ -1,15 +1,19 @@
 // Draws a drill-down (lib/drill.ts) in a sheet: a bottom sheet on a phone, a
 // side panel on a wider screen. The sections always come in the same order
 // and a missing one is left out, so every figure explains itself the same way.
+// A drill-down still waiting on its data shows that it is loading, or why it
+// could not load, under the same title.
 
 import { Link } from 'react-router-dom'
 import { useApp } from '../../lib/app'
 import {
   compareToUsual,
+  isPendingDrill,
   MATH_OPS,
   mathSentence,
   trendDescription,
   usualSentence,
+  type CardDrill,
   type DrillDown,
   type DrillItem,
   type DrillMath,
@@ -19,12 +23,24 @@ import {
   type MathOp,
 } from '../../lib/drill'
 import { LineChart } from '../charts/LineChart'
-import { Icon } from '../ui'
+import { Icon, LoadingOrError } from '../ui'
 import { CategoryIcon } from './CategoryIcon'
 import { Money } from './Money'
 import { Sheet } from './Sheet'
 
-export function DrillSheet({ drill, onClose }: { drill: DrillDown; onClose: () => void }) {
+export function DrillSheet({ drill, onClose }: { drill: CardDrill; onClose: () => void }) {
+  if (isPendingDrill(drill)) {
+    return (
+      <Sheet title={drill.title} subtitle={drill.subtitle} onClose={onClose}>
+        <LoadingOrError error={drill.error} label={drill.loading} />
+      </Sheet>
+    )
+  }
+  return <DrillBody drill={drill} onClose={onClose} />
+}
+
+/** A drill-down with its data in: the figure, then each section it has. */
+function DrillBody({ drill, onClose }: { drill: DrillDown; onClose: () => void }) {
   return (
     <Sheet title={drill.title} subtitle={drill.subtitle} onClose={onClose}>
       <div className="drill">

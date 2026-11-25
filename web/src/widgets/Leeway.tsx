@@ -2,15 +2,15 @@
 // and how many days it has to last until payday. The figure is the server's
 // spendable, the lesser of the budget's room and what is safe to spend from
 // checking, and one line says which of the two sets it. Tapping it opens that
-// one's math (lib/drills/leeway.ts). When neither a budget nor a checking
-// balance is known, it says so in words: nothing known is never $0.
+// one's math (lib/drills/leeway.ts); the figure never waits on that math,
+// only the sheet does. When neither a budget nor a checking balance is
+// known, it says so in words: nothing known is never $0.
 
 import { Link } from 'react-router-dom'
 import { useAction } from '../api/hooks'
 import { Card } from '../components/design/Card'
 import { HeroFigure } from '../components/design/HeroFigure'
 import { Money } from '../components/design/Money'
-import { Loading } from '../components/ui'
 import { useApp } from '../lib/app'
 import { isoDaysAgo } from '../lib/dates'
 import { leewayDrillFor } from '../lib/drills/leeway'
@@ -80,12 +80,12 @@ function SetByLine({ lead }: { lead: LeewayLead }) {
 export function LeewayWidget({ budget }: WidgetProps) {
   const { money, settings } = useApp()
   const lead = leewayLead(budget, isoDaysAgo(0, settings.timeZone))
-  // Read only when the cash sets the figure; it shares the cash card's read.
+  // Read only when the cash sets the figure, for the sheet alone; it shares
+  // the cash card's read.
   const flow = useAction('get_cash_flow', {}, { enabled: lead?.setBy === 'cash' })
   if (!lead) return <NothingKnown />
   const date = (iso: string) => dayLabel(iso, settings.locale)
-  const drill = leewayDrillFor(lead.setBy, budget, flow.data, money, date)
-  if (!drill) return <Loading label="Loading your leeway" />
+  const drill = leewayDrillFor(lead.setBy, budget, flow, money, date)
   // Past the budget, the room is negative: shown as how far over, in red.
   const over = lead.cents < 0
   return (

@@ -1,7 +1,8 @@
 // On a phone a finger on a chart reads the chart: the readout shows under it
-// and no sheet opens. Spending pace is on Spending, money in and out on Savings. The title and figure above the chart are what
-// open the drill-down. A finger that starts on a chart to scroll the page
-// leaves no readout behind.
+// and no sheet opens. Spending pace is on Spending, money in and out on
+// Savings. The title and figure above the chart are what open the
+// drill-down. A finger that starts on a chart to scroll the page leaves no
+// readout behind.
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { action, emptySeed, removeSeed, seedEveryScreen, type Seeded } from './seed'

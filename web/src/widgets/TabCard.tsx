@@ -20,10 +20,10 @@ interface TabCardProps {
 
 export function TabCard({ name, to, figure, children }: TabCardProps) {
   return (
-    <Card to={to} label={name} className="tab-card stack-xs">
+    <Card to={to} label={name} className="stack-xs">
       <TabCardLabel name={name} />
       <span className="mid-number">{figure}</span>
-      {children && <span className="row wrap tab-card-status small">{children}</span>}
+      {children && <span className="row wrap small">{children}</span>}
     </Card>
   )
 }
@@ -31,7 +31,7 @@ export function TabCard({ name, to, figure, children }: TabCardProps) {
 /** The card's small label, with an arrow that says the card opens somewhere. */
 function TabCardLabel({ name }: { name: string }) {
   return (
-    <span className="eyebrow row tab-card-label">
+    <span className="eyebrow row">
       {name}
       <Icon name="forward" size={14} />
     </span>
@@ -41,7 +41,7 @@ function TabCardLabel({ name }: { name: string }) {
 /** A card still waiting for its figure: its label, and loading or why it could not load. */
 export function TabCardWaiting({ name, error }: { name: string; error: Error | null }) {
   return (
-    <Card static="empty" label={name} className="tab-card stack-xs">
+    <Card static="empty" label={name} className="stack-xs">
       <TabCardLabel name={name} />
       <LoadingOrError error={error} />
     </Card>

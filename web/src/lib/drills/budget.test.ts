@@ -4,14 +4,7 @@ import { budgetFor, category, transaction } from '../../test/fake'
 import { mathSentence } from '../drill'
 import { money as formatMoney } from '../money'
 import { inAndOut, recentDrill } from './activity'
-import {
-  budgetDetail,
-  leewayDrill,
-  spendingTrend,
-  spendingUsual,
-  spentDrill,
-  usualPeriodSpend,
-} from './budget'
+import { budgetDetail, leewayDrill, spendingTrend, spendingUsual, spentDrill } from './budget'
 import { paceDrill } from './pace'
 
 /** Whole dollars, as the app shows amounts in drill-downs. */
@@ -182,34 +175,5 @@ describe('recentDrill', () => {
 
   it('counts one transaction in the singular', () => {
     expect(recentDrill(txs.slice(0, 1), known).figure).toEqual({ text: '1 transaction' })
-  })
-})
-
-describe('usualPeriodSpend', () => {
-  const period = (offset: number, spentCents: number) => ({
-    offset,
-    start: '2026-10-01',
-    end: '2026-10-31',
-    days: 31,
-    spentCents,
-    incomeCents: 0,
-    categories: [],
-  })
-
-  it('has nothing to say before the trends arrive or a period has finished', () => {
-    expect(usualPeriodSpend(undefined)).toBeNull()
-    expect(usualPeriodSpend([])).toBeNull()
-    expect(usualPeriodSpend([period(0, 50000)])).toBeNull()
-    expect(usualPeriodSpend([period(-1, 0), period(0, 50000)])).toBeNull()
-  })
-
-  it('averages the finished periods that had spending, to the cent', () => {
-    expect(usualPeriodSpend([period(-1, 10001)])).toBe(10001)
-    expect(usualPeriodSpend([period(-3, 0), period(-2, 10000), period(-1, 10001)])).toBe(10001)
-  })
-
-  it('keeps huge amounts exact', () => {
-    const huge = 900_000_000_000
-    expect(usualPeriodSpend([period(-2, huge), period(-1, huge)])).toBe(huge)
   })
 })

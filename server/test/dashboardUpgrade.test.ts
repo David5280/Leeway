@@ -78,17 +78,43 @@ describe('a saved dashboard naming a removed card', () => {
 })
 
 describe('followHomeMap', () => {
-  /** Home's default before it followed the map, as it was stored. */
+  /** A widget shown, as every default layout stored them. */
+  const shown = (type: string, size: string) => ({ type, size, visible: true })
+
+  /** Home's default just before it followed the map, as it was stored. */
   const before = [
-    { type: 'leeway', size: 'wide', visible: true },
-    { type: 'net-worth', size: 'half', visible: true },
-    { type: 'alerts', size: 'full', visible: true },
-    { type: 'flows', size: 'full', visible: true },
-    { type: 'pace', size: 'full', visible: true },
+    shown('leeway', 'wide'),
+    shown('net-worth', 'half'),
+    shown('alerts', 'full'),
+    shown('flows', 'full'),
+    shown('pace', 'full'),
   ]
+  /** Older defaults an install that skipped versions may still have stored. */
+  const summaryFirst = [
+    shown('summary', 'full'),
+    shown('leeway', 'wide'),
+    shown('glance', 'half'),
+    shown('alerts', 'full'),
+    shown('categories', 'wide'),
+    shown('pace', 'half'),
+    shown('recent', 'wide'),
+    shown('accounts', 'half'),
+  ]
+  const beforeFlows = [
+    shown('leeway', 'wide'),
+    shown('alerts', 'full'),
+    shown('summary', 'full'),
+    shown('pace', 'full'),
+    shown('glance', 'full'),
+    shown('categories', 'wide'),
+    shown('accounts', 'half'),
+    shown('recent', 'wide'),
+  ]
+  /** beforeFlows once the income and spending card was added ahead of the pace. */
+  const flowsAdded = [...beforeFlows.slice(0, 3), shown('flows', 'full'), ...beforeFlows.slice(3)]
   const mapOrder = ['leeway', 'alerts', 'cash-flow', 'pace', 'goals', 'net-worth']
 
-  it('gives a dashboard still in the old default the map order, once', async () => {
+  it('gives a dashboard still in the last default the map order, once', async () => {
     await storeWidgets(before)
     expect(await followHomeMap(ctx.db)).toBe(true)
     expect(await types()).toEqual(mapOrder)
@@ -99,10 +125,33 @@ describe('followHomeMap', () => {
     expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'pace'])
   })
 
+  it.each([
+    ['summary first', summaryFirst],
+    ['before the income and spending card', beforeFlows],
+    ['with the income and spending card added', flowsAdded],
+  ])('gives an install that skipped versions, still %s, the map order', async (_, layout) => {
+    await storeWidgets(layout)
+    expect(await followHomeMap(ctx.db)).toBe(true)
+    expect(await types()).toEqual(mapOrder)
+  })
+
   it('leaves a dashboard the owner arranged alone, even one that differs only in size', async () => {
     await storeWidgets(before.map((w) => (w.type === 'pace' ? { ...w, size: 'half' } : w)))
     expect(await followHomeMap(ctx.db)).toBe(false)
     expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'pace'])
+  })
+
+  it('leaves an older default the owner changed alone, even by one hidden card', async () => {
+    const hidden = summaryFirst.map((w) => (w.type === 'pace' ? { ...w, visible: false } : w))
+    await storeWidgets(hidden)
+    expect(await followHomeMap(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['summary', 'leeway', 'alerts', 'pace'])
+  })
+
+  it('leaves an older default with a card taken out alone', async () => {
+    await storeWidgets(beforeFlows.filter((w) => w.type !== 'recent'))
+    expect(await followHomeMap(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['leeway', 'alerts', 'summary', 'pace'])
   })
 
   it("leaves a new install's default alone, as it never saved a dashboard", async () => {

@@ -35,9 +35,12 @@ function CashStatus({ flow }: { flow: CashFlow }) {
   // No checking balance yet: unknown, never "covered" and never short.
   if (!flow.cashKnown) return <span className="muted">Bills before {payday}</span>
   if (flow.shortfallCents > 0) {
+    // Red only before a known payday, as the server's spendable decides; an
+    // estimated payday may move, so the shortfall is one to watch.
+    const status = flow.paydayEstimate ? 'watch' : 'over'
     return (
       <>
-        <StatusPill status="over" label="Short" />
+        <StatusPill status={status} label="Short" />
         <span className="muted">
           by <Money cents={flow.shortfallCents} /> before {payday}
         </span>

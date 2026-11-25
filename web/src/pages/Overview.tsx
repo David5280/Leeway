@@ -29,8 +29,8 @@ export function Overview() {
   const [editing, setEditing] = useState(false)
   const budget = useAction('get_budget', { offset: 0 })
   const update = useUpdateSettings()
-  // Every change is made to the full saved list, so cards this build cannot
-  // draw (from a newer Leeway or an agent) and the fixed ones are kept.
+  // Every change is made to the full saved list, so the fixed Leeway and
+  // Heads up keep their place in it.
   const all = settings.dashboard.widgets
   const saveWidgets = (next: Widget[]) => update.mutate({ dashboard: { widgets: next } })
   // Hidden cards show, faded, only while editing.

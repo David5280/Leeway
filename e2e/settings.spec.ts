@@ -106,13 +106,16 @@ test('a Home card can be hidden and shown again', async ({ page }) => {
 
   await page.goto('/settings/appearance')
   await togglePace()
-  await expect(page.getByRole('switch', { name: 'Show Spending pace' })).not.toBeChecked()
-  await page.goto('/')
-  await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Spending pace' })).toHaveCount(0)
-
-  await page.goto('/settings/appearance')
-  await togglePace()
+  try {
+    await expect(page.getByRole('switch', { name: 'Show Spending pace' })).not.toBeChecked()
+    await page.goto('/')
+    await expect(page.getByRole('region', { name: 'Your leeway' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Spending pace' })).toHaveCount(0)
+  } finally {
+    // Shown again even when a check above fails, so later specs find Home as they expect.
+    await page.goto('/settings/appearance')
+    await togglePace()
+  }
   await page.goto('/')
   await expect(page.getByRole('region', { name: 'Spending pace' })).toBeVisible()
 })

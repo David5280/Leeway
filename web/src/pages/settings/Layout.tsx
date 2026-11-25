@@ -18,7 +18,7 @@ import { Section, useSave } from './Section'
 export function LayoutSection() {
   const { settings } = useApp()
   const save = useSave()
-  // Changes go to the full saved list, keeping cards this build cannot draw.
+  // Changes go to the full saved list, keeping the fixed Leeway and Heads up.
   const all = settings.dashboard.widgets
   const widgets = drawable(all)
   const missing = addableTypes(all)

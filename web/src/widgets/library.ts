@@ -33,8 +33,10 @@ export interface WidgetEntry {
 
 /**
  * The cards the owner can arrange, in the order the library lists them: the
- * four tab cards, then optional ones. Settings may also name cards a newer
- * Leeway (or an agent) added; those are kept in the saved list but not drawn.
+ * four tab cards, then optional ones. Leeway and Heads up are not listed:
+ * they keep their place in the saved list but are drawn fixed at the top.
+ * The server drops a card kind it no longer knows on read and refuses one on
+ * save, so the saved list holds nothing else.
  */
 export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
   'cash-flow': { name: 'Cash to payday', component: CashToPaydayCard, place: 'pay' },
@@ -69,7 +71,7 @@ export const SIZES = [
 
 const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
 
-/** The cards the owner arranges, in their saved order: not fixed, and known to this build. */
+/** The cards the owner arranges, in their saved order: all but the fixed Leeway and Heads up. */
 export const drawable = (widgets: Widget[]) => widgets.filter(canDraw)
 
 /** Library cards not on Home yet. */
@@ -98,8 +100,8 @@ export function canMove(widgets: Widget[], index: number, by: -1 | 1): boolean {
 
 /**
  * Swaps a widget with its nearest drawable neighbor in the same lane, stepping
- * over widgets this app cannot draw or that sit in another column, so every
- * move visibly does something. At either end the list comes back unchanged.
+ * over the fixed cards and any that sit in another column, so every move
+ * visibly does something. At either end the list comes back unchanged.
  */
 export function moveWidget(widgets: Widget[], index: number, by: -1 | 1): Widget[] {
   const target = moveTarget(widgets, index, by)
