@@ -13,6 +13,7 @@ import { Alerts } from './pages/Alerts'
 import { BillsPage } from './pages/Bills'
 import { CategoryPage } from './pages/Category'
 import { ChatPage } from './pages/Chat'
+import { CompareAccountsPage } from './pages/CompareAccounts'
 import { Connect, ConnectProblem } from './pages/Connect'
 import { DebtsPage } from './pages/Debts'
 import { Goals } from './pages/Goals'
@@ -22,8 +23,10 @@ import { Inbox } from './pages/Inbox'
 import { Login } from './pages/Login'
 import { Moved, NEW_HOMES } from './pages/OldAddresses'
 import { Overview } from './pages/Overview'
+import { OwnedPage } from './pages/Owned'
 import { Payday } from './pages/Payday'
 import { RetirementPage } from './pages/Retirement'
+import { SavingsPage } from './pages/Savings'
 import { SettingsPage } from './pages/Settings'
 import { SixWeeksPage } from './pages/SixWeeks'
 import { Spending } from './pages/Spending'
@@ -62,8 +65,11 @@ function Screens() {
       <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
       <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
       <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
+      <Route path={SCREEN_ROUTES.compareAccounts} element={<CompareAccountsPage />} />
+      <Route path={SCREEN_ROUTES.owned} element={<OwnedPage />} />
       <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />
       <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />
+      <Route path={SCREEN_ROUTES.savings} element={<SavingsPage />} />
       <Route path={SCREEN_ROUTES.idleCash} element={<IdleCashPage />} />
       <Route path={SCREEN_ROUTES.alerts} element={<Alerts />} />
       <Route path={SCREEN_ROUTES.inbox} element={<Inbox />} />

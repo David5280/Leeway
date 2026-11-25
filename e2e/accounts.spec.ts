@@ -1,5 +1,5 @@
 // Account health: an overdrawn account warns once, in Heads up, and
-// opens on its own page, Select on Wealth adds up a saved pick, and a
+// opens on its own page, Compare accounts adds up a saved pick, and a
 // low-balance warning set in Settings becomes an alert. Each test removes its
 // accounts, since later specs share this install.
 
@@ -37,9 +37,10 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
     'Everyday is overdrawn by $42.10.',
   )
 
-  // On Wealth, picking both sums them, and the pick is saved.
+  // Compare, from Wealth, sums the picked accounts, and the pick is saved.
   await page.goto('/wealth')
-  await page.getByRole('button', { name: 'Select' }).click()
+  await page.getByRole('link', { name: 'Compare', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Compare accounts' })).toBeVisible()
   // A tick saves the pick, so each box is read back rather than assumed.
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {
     await page.getByRole('checkbox', { name }).click()
@@ -48,20 +49,17 @@ test('an overdrawn account warns on the dashboard and opens on its own', async (
   const bar = page.getByRole('region', { name: 'Picked accounts' })
   await expect(bar).toContainText('2 accounts together')
   await expect(bar).toContainText('$857.90')
-  await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByRole('region', { name: 'Summary' })).toContainText(
     '$857.90 available across 2 checking and savings accounts.',
   )
   await expect(page.getByText('Everyday is overdrawn by $42.10.')).toHaveCount(1)
   await page.reload()
-  await page.getByRole('button', { name: 'Select' }).click()
   await expect(page.getByRole('checkbox', { name: 'Pick Everyday' })).toBeChecked()
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {
     await page.getByRole('checkbox', { name }).click()
     await expect(page.getByRole('checkbox', { name })).not.toBeChecked()
   }
   await expect(bar).toContainText('Tick the accounts to add up')
-  await page.getByRole('button', { name: 'Done' }).click()
 
   // The Alerts page lists every alert.
   await page.goto('/alerts')

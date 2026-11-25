@@ -1,5 +1,5 @@
 // Everything owned and owed beyond the bank link: a loan and the home it is
-// against, entered by hand on the Net worth section, changed, and removed,
+// against, entered by hand on Things you own and owe, changed, and removed,
 // each marked as the owner's own figures.
 
 import { expect, test } from '@playwright/test'
@@ -8,7 +8,7 @@ import { CABIN, CABIN_LOAN, removeCabin } from './owned'
 test.afterEach(async ({ page }) => removeCabin(page))
 
 test('a home and its loan are added, changed and removed by hand', async ({ page }) => {
-  await page.goto('/wealth')
+  await page.goto('/wealth/owned')
   const card = page.getByRole('region', { name: 'Entered by you' })
 
   // The loan first, with its rate and payment.

@@ -85,10 +85,9 @@ export const SCREENS: Screen[] = [
     then: ai.seeSummaryModelGone,
   }),
   at('wealth', '/wealth'),
-  at('wealth', '/wealth', {
-    name: '/wealth picking accounts to add up',
-    then: open('Select', (page) => page.getByRole('region', { name: 'Picked accounts' })),
-  }),
+  at('compareAccounts', '/wealth/compare'),
+  at('owned', '/wealth/owned'),
+  at('savings', '/wealth/savings'),
   // Each account's own page, named for its kind.
   ...SEEDED_ACCOUNTS.map((kind, index) => ({
     ...at('account', `the ${kind} account page`),
@@ -181,12 +180,12 @@ export const SCREENS: Screen[] = [
     // the answer is stood in for (idle-cash.spec.ts reads the server's own).
     before: fakeIdleCash,
   }),
-  at('wealth', '/wealth', {
-    name: '/wealth adding something owned or owed',
+  at('owned', '/wealth/owned', {
+    name: '/wealth/owned adding something owned or owed',
     then: open(/^Add$/, (page) => page.getByRole('form', { name: 'Add something' })),
   }),
-  at('wealth', '/wealth', {
-    name: '/wealth changing a loan entered by hand',
+  at('owned', '/wealth/owned', {
+    name: '/wealth/owned changing a loan entered by hand',
     then: open(/^Car loan/, (page) => page.getByRole('form', { name: 'Edit Car loan' })),
   }),
   ...CALENDAR_SCREENS,

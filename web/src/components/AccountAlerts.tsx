@@ -2,8 +2,8 @@
 // or a low balance, each opening its account, a bill that cost more or
 // less than usual, opening Bills, and a leak (a charge made twice, a price
 // gone up), opening that merchant's charges. Shared by the dashboard banner,
-// the Alerts page, the Accounts screen and each account's page. On the home
-// screen each row also has a button that hides it there.
+// the Alerts page and each account's page. On the home screen each row also
+// has a button that hides it there.
 
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'

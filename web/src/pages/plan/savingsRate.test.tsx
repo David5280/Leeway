@@ -1,4 +1,4 @@
-// "How much of your pay do you save?" under net worth on Plan.
+// "How much of your pay do you save?", which leads How much you save under Wealth.
 
 import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

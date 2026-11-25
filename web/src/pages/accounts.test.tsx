@@ -1,17 +1,12 @@
+// The accounts on the Wealth tab: cards grouped by kind, each opening its own
+// page, the ways on to Compare accounts and to things entered by hand, and
+// the accounts the bank no longer shares, kept apart. Alerts live on each
+// account's own page, never here.
+
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  A,
-  B,
-  card,
-  checking,
-  group,
-  pickBox,
-  renderAccounts,
-  savings,
-  server,
-} from '../test/accounts'
+import { A, B, card, checking, group, renderAccounts, savings, server } from '../test/accounts'
 import { account, accountsViewFor, failing, fakeServer, settingsHandlers } from '../test/fake'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -41,7 +36,7 @@ describe('the accounts on Wealth', () => {
     )
   })
 
-  it("puts each group's total in its heading, a card group's as owed, kept whole in Select mode", async () => {
+  it("puts each group's total in its heading, a card group's as owed", async () => {
     const overdrawn = account({
       id: 'od',
       name: 'Joint',
@@ -64,10 +59,6 @@ describe('the accounts on Wealth', () => {
     expect(
       within(group('Credit cards').querySelector('.section-head')!).queryByRole('button'),
     ).toBeNull()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Select' }))
-    await userEvent.click(pickBox('Everyday'))
-    expect(total('Checking')).toHaveTextContent('−$1,500.00')
   })
 
   it("draws an investment's month as a line beside how far it moved", async () => {
@@ -88,45 +79,35 @@ describe('the accounts on Wealth', () => {
     expect(within(card).getByRole('img', { name: 'Balance over 30 days' })).toBeInTheDocument()
   })
 
-  it('puts the alerts above the cards, red when one is urgent, each opening its account', async () => {
+  it("leaves alerts to each account's own page", async () => {
     const short = account({ id: 'a', name: 'Everyday', balanceCents: -4210, subtype: 'checking' })
-    server([short], {
-      list_alerts: () => accountsViewFor([short]).alerts,
-    })
+    const fake = server([short], { list_alerts: () => accountsViewFor([short]).alerts })
     renderAccounts()
-    const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
-    expect(alerts).toHaveClass('over-card')
-    expect(
-      within(alerts).getByRole('link', { name: /Everyday is overdrawn by \$42\.10/ }),
-    ).toHaveAttribute('href', '/wealth/accounts/a')
-    const cards = screen.getByRole('region', { name: 'Checking' })
-    expect(alerts.compareDocumentPosition(cards)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    // Said once: the summary leaves the overdrawn account to the alert.
-    await screen.findByRole('region', { name: 'Summary' })
-    expect(screen.getAllByText(/overdrawn by \$42\.10/)).toHaveLength(1)
+    await screen.findByRole('region', { name: 'Checking' })
+    expect(screen.queryByRole('region', { name: /Alerts/ })).not.toBeInTheDocument()
+    expect(fake.actions('list_alerts')).toHaveLength(0)
   })
 
-  it('keeps to three alerts and leads to the rest', async () => {
-    const low = ['b', 'c', 'd', 'e', 'f'].map((id) =>
-      account({ id, name: `Low ${id}`, balanceCents: 2000, subtype: 'checking' }),
-    )
-    server(low, { list_alerts: () => accountsViewFor(low).alerts })
+  it('opens Compare accounts from the heading, and things entered by hand from under the cards', async () => {
+    server()
     renderAccounts()
-    const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
-    expect(within(alerts).getAllByRole('link')).toHaveLength(4)
-    expect(alerts).toHaveTextContent('2 more alerts')
-    expect(within(alerts).getByRole('link', { name: 'See all alerts' })).toHaveAttribute(
+    const accounts = await screen.findByRole('region', { name: 'Accounts' })
+    const compare = await within(accounts).findByRole('link', { name: 'Compare' })
+    expect(compare).toHaveAttribute('href', '/wealth/compare')
+    const byHand = within(accounts).getByRole('region', { name: 'Entered by hand' })
+    expect(within(byHand).getByRole('link', { name: /Things you own and owe/ })).toHaveAttribute(
       'href',
-      '/alerts',
+      '/wealth/owned',
     )
+    await userEvent.click(compare)
+    expect(await screen.findByText('Compare accounts')).toBeInTheDocument()
   })
 
-  it('shows a low balance alert in amber', async () => {
-    const low = account({ id: 'a', name: 'Everyday', balanceCents: 5000, subtype: 'checking' })
-    server([low], { list_alerts: () => accountsViewFor([low]).alerts })
+  it('offers no Compare for a single account', async () => {
+    server([checking])
     renderAccounts()
-    const alerts = await screen.findByRole('region', { name: 'Alerts for these accounts' })
-    expect(alerts).toHaveClass('warn-card')
+    await screen.findByRole('region', { name: 'Checking' })
+    expect(screen.queryByRole('link', { name: 'Compare' })).not.toBeInTheDocument()
   })
 
   it('says how to start when there are no accounts', async () => {
@@ -137,7 +118,9 @@ describe('the accounts on Wealth', () => {
       'href',
       '/settings/banks',
     )
-    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Compare' })).not.toBeInTheDocument()
+    // Something owned by hand counts even without a bank, so the way there stays.
+    expect(screen.getByRole('link', { name: /Things you own and owe/ })).toBeInTheDocument()
   })
 
   it('says why the accounts could not be read', async () => {
@@ -161,7 +144,7 @@ describe('accounts the bank no longer shares', () => {
     unsharedAt: '2026-11-04T15:00:00Z',
   })
 
-  it('shows them apart, out of the cards, with a word in the summary', async () => {
+  it('shows them apart, out of the cards', async () => {
     server([checking, old])
     renderAccounts()
     await screen.findByRole('region', { name: 'Checking' })
@@ -170,28 +153,19 @@ describe('accounts the bank no longer shares', () => {
     expect(within(apart).getByRole('group', { name: 'Old savings' })).toHaveTextContent(
       'No longer shared from Chase',
     )
-    expect(
-      await screen.findByText(
-        'Old savings is no longer shared from Chase and is left out of these figures.',
-      ),
-    ).toBeInTheDocument()
   })
 
-  it('offers no select for one shared account, and keeps the unshared out of picking', async () => {
+  it('offers no Compare when only one account is still shared', async () => {
     server([checking, old])
     renderAccounts()
     await screen.findByRole('region', { name: 'No longer shared' })
-    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Compare' })).not.toBeInTheDocument()
   })
 
-  it('says there is no current balance when every account is no longer shared', async () => {
+  it('shows only the apart card when every account is no longer shared', async () => {
     server([old])
     renderAccounts()
-    expect(
-      await screen.findByText(
-        'Old savings is no longer shared from Chase, so it has no current balance.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'No longer shared' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'No longer shared' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Savings' })).not.toBeInTheDocument()
   })
 })

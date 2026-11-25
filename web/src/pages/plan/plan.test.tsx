@@ -444,10 +444,8 @@ describe('Net worth', () => {
     fireEvent.pointerMove(within(chart).getByTestId('chart-hit'), { clientX: 630 })
     expect(chart.querySelector('.chart-readout')).toHaveTextContent('$7,000 owned$0 owed')
     vi.restoreAllMocks()
-    // A house or a car counts once it is added by hand, right here.
-    expect(await screen.findByRole('region', { name: 'Entered by you' })).toHaveTextContent(
-      'Add a home, a car or a loan your bank link does not cover',
-    )
+    // What is entered by hand has its own page a tap deeper, out of the lead.
+    expect(screen.queryByRole('region', { name: 'Entered by you' })).not.toBeInTheDocument()
 
     await userEvent.setup().click(screen.getByRole('button', { name: '5 years' }))
     await waitFor(() => expect(server.actions('get_net_worth')).toContainEqual({ days: 1825 }))

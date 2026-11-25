@@ -1,25 +1,28 @@
+// What the accounts picked on Compare accounts did together: the summary in
+// words, money in and out, spending by category and recent transactions.
+
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccountsView } from '../../api/client'
-import { everyAccount, groceries, renderAccounts, server } from '../../test/accounts'
-import { accountsViewFor, transaction } from '../../test/fake'
+import { everyAccount, groceries, renderCompare, server } from '../../test/accounts'
+import { account, accountsViewFor, transaction } from '../../test/fake'
 
 type CategorySpending = AccountsView['spending'][number]
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('the activity under the cards', () => {
+describe('the activity of the picked accounts', () => {
   it('sums up the accounts in words', async () => {
     server()
-    renderAccounts()
+    renderCompare()
     const summary = await screen.findByRole('region', { name: 'Summary' })
     expect(summary).toHaveTextContent('$11,400 available across 2 checking and savings accounts.')
   })
 
   it('answers whether more came in than went out, period by period', async () => {
     server()
-    renderAccounts()
+    renderCompare()
     const flows = await screen.findByRole('region', { name: 'Money in and out' })
     // November so far: $2,500 in, $1,200 out.
     expect(flows).toHaveTextContent('Yes so far: +$1,300 left over this period.')
@@ -39,7 +42,7 @@ describe('the activity under the cards', () => {
   it('says plainly when more went out than came in', async () => {
     const flows = [{ start: '2026-11-01', end: '2026-11-30', inCents: 100000, outCents: 140000 }]
     server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { flows }) })
-    renderAccounts()
+    renderCompare()
     expect(await screen.findByRole('region', { name: 'Money in and out' })).toHaveTextContent(
       'Not so far: $400 more went out than came in this period.',
     )
@@ -54,7 +57,7 @@ describe('the activity under the cards', () => {
     }))
     spending.push({ categoryId: null, name: 'Needs a category', color: null, spentCents: 500 })
     server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { spending }) })
-    renderAccounts()
+    renderCompare()
     const card = await screen.findByRole('region', { name: 'Spending by category' })
     expect(within(card).getByText('Where did the money go?')).toBeInTheDocument()
     expect(within(card).getByText('Category 0')).toBeInTheDocument()
@@ -74,14 +77,14 @@ describe('the activity under the cards', () => {
     server(everyAccount, {
       summarize_accounts: () => accountsViewFor(everyAccount, { flows: [] }),
     })
-    renderAccounts()
+    renderCompare()
     await screen.findByRole('region', { name: 'Spending by category' })
     expect(screen.queryByRole('region', { name: 'Money in and out' })).not.toBeInTheDocument()
   })
 
   it('says when nothing has been spent yet', async () => {
     server()
-    renderAccounts()
+    renderCompare()
     expect(await screen.findByRole('region', { name: 'Spending by category' })).toHaveTextContent(
       'No spending yet this period.',
     )
@@ -94,7 +97,7 @@ describe('the activity under the cards', () => {
       transaction({ id: 't3', date: '2026-11-09', name: 'MYSTERY', categoryId: null }),
     ]
     server(everyAccount, { summarize_accounts: () => accountsViewFor(everyAccount, { recent }) })
-    renderAccounts()
+    renderCompare()
     const card = await screen.findByRole('region', { name: 'Recent transactions' })
     expect(await within(card).findByText('Nov 12 · Groceries')).toBeInTheDocument()
     // A category the list does not know is a transfer.
@@ -104,9 +107,26 @@ describe('the activity under the cards', () => {
 
   it('says when there are no transactions yet', async () => {
     server()
-    renderAccounts()
+    renderCompare()
     expect(await screen.findByRole('region', { name: 'Recent transactions' })).toHaveTextContent(
       'No transactions yet.',
     )
+  })
+
+  it('says in the summary when an account the bank no longer shares is left out', async () => {
+    const old = account({
+      id: 'dddddddd-0000-4000-8000-000000000004',
+      name: 'Old savings',
+      institutionName: 'Chase',
+      subtype: 'savings',
+      unsharedAt: '2026-11-04T15:00:00Z',
+    })
+    server([...everyAccount, old])
+    renderCompare()
+    expect(
+      await screen.findByText(
+        'Old savings is no longer shared from Chase and is left out of these figures.',
+      ),
+    ).toBeInTheDocument()
   })
 })

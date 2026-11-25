@@ -27,8 +27,9 @@ test('a tapped alert row stays inside its card and paints nothing once let go', 
       })
     }
 
-    await page.goto('/wealth')
-    const card = page.getByRole('region', { name: 'Alerts for these accounts' })
+    // Alerts show on the account's own page only.
+    await page.goto(`/wealth/accounts/${id}`)
+    const card = page.getByRole('region', { name: 'Alerts for this account' })
     const rows = card.getByRole('link')
     await expect(rows).toHaveCount(2)
     await expect(rows.nth(0)).toContainText('is overdrawn by $142.10')

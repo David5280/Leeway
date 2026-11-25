@@ -1,7 +1,7 @@
-// Select mode's bar: how many accounts are ticked and what they come to
-// together, a button that opens the math behind that total, and Done. It
-// rides above the tab bar while the cards scroll under it, and comes to rest
-// after the last card, clear of the tab bar.
+// Compare accounts' bar: how many accounts are ticked and what they come to
+// together, and a button that opens the math behind that total. It rides
+// above the tab bar while the cards scroll under it, and comes to rest after
+// the last card, clear of the tab bar.
 
 import { useState } from 'react'
 import type { Account } from '../../api/client'
@@ -10,7 +10,7 @@ import { Money } from '../../components/design/Money'
 import { combine } from '../../lib/accountCards'
 import { selectionDrill } from '../../lib/drills/accounts'
 
-export function SelectBar({ picked, onDone }: { picked: readonly Account[]; onDone: () => void }) {
+export function SelectBar({ picked }: { picked: readonly Account[] }) {
   const [open, setOpen] = useState(false)
   const count = picked.length
   return (
@@ -27,16 +27,13 @@ export function SelectBar({ picked, onDone }: { picked: readonly Account[]; onDo
           </>
         )}
       </span>
-      <span className="select-bar-actions">
-        {count > 0 && (
+      {count > 0 && (
+        <span className="select-bar-actions">
           <button type="button" className="btn" onClick={() => setOpen(true)}>
             How it adds up
           </button>
-        )}
-        <button type="button" className="btn primary" onClick={onDone}>
-          Done
-        </button>
-      </span>
+        </span>
+      )}
       {open && <DrillSheet drill={selectionDrill(picked)} onClose={() => setOpen(false)} />}
     </div>
   )
