@@ -41,6 +41,55 @@ describe('Until payday widget', () => {
     )
   })
 
+  it('says how short the bills and an overdraft leave you, with the sum behind it', async () => {
+    const rent = { billId: 'r', name: 'Rent', dueDate: '2026-11-20', amountCents: 9000 }
+    fakeServer({
+      get_cash_flow: () =>
+        cashFlow({
+          cashCents: 0,
+          overdraftCents: 500,
+          billsDue: [
+            { ...rent, overdue: false },
+            { ...rent, billId: 'p', name: 'Power', overdue: false },
+          ],
+          billsDueCents: 18_000,
+          safeCents: 0,
+          shortfallCents: 18_500,
+        }),
+    })
+    renderSignedIn(<CashFlowWidget />)
+    // The card is drawn anew once the numbers arrive, so it is found after them.
+    await screen.findByText(/in checking/)
+    const widget = screen.getByRole('region', { name: 'Until payday' })
+    expect(widget).toHaveTextContent('$185 short of the bills and overdraft due before payday.')
+    expect(widget).toHaveTextContent(
+      '$0 in checking, minus $180 in bills and $5 to bring an overdraft back to zero.',
+    )
+  })
+
+  it('says a shortfall before a guessed payday as a maybe, not in red', async () => {
+    fakeServer({
+      get_cash_flow: () =>
+        cashFlow({
+          paydaySource: 'detected_income',
+          paydayEstimate: true,
+          expectedPayCents: 250_000,
+          cashCents: 1000,
+          billsDueCents: 6000,
+          safeCents: 0,
+          shortfallCents: 5000,
+        }),
+    })
+    renderSignedIn(<CashFlowWidget />)
+    // The card is drawn anew once the numbers arrive, so it is found after them.
+    await screen.findByText(/in checking/)
+    const widget = screen.getByRole('region', { name: 'Until payday' })
+    expect(widget).toHaveTextContent('Maybe $50 short of the bills due before payday.')
+    expect(within(widget).getByText('$50', { selector: '.mid-number' })).not.toHaveClass(
+      'money-problem',
+    )
+  })
+
   it('shows why the cash could not be read', async () => {
     fakeServer({}, { '/api/actions/get_cash_flow': failing('Database is down', 500) })
     renderSignedIn(<CashFlowWidget />)

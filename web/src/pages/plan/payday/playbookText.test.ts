@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { closeOutOf, IDEAS, LINES, planOf, SHORT } from '../../../test/playbook'
-import {
-  billNames,
-  hasCloseOut,
-  ideaReason,
-  leftoverTone,
-  setAsideWords,
-  shortClass,
-} from './playbookText'
+import { closeOutOf, IDEAS, LINES } from '../../../test/playbook'
+import { billNames, hasCloseOut, ideaReason, leftoverTone, setAsideWords } from './playbookText'
 
 describe('playbook words', () => {
   it('draws money left green, money over amber and nothing left plain', () => {
@@ -39,13 +32,5 @@ describe('playbook words', () => {
     const only = (kind: string) => LINES.filter((line) => line.kind === kind)
     expect(setAsideWords(only('sinking_fund'))).toBe('Yearly costs')
     expect(setAsideWords(only('set_aside'))).toBe('Goals and trips')
-  })
-
-  it('turns the short-cash note red unless payday is an estimate and checking is still above zero', () => {
-    const plan = planOf(undefined, undefined, { short: SHORT })
-    const below = { ...plan, short: { ...SHORT, now: true } }
-    expect(shortClass({ plan, paydayEstimate: true })).toBe('warn')
-    expect(shortClass({ plan, paydayEstimate: false })).toBe('over')
-    expect(shortClass({ plan: below, paydayEstimate: true })).toBe('over')
   })
 })

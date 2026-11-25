@@ -1,11 +1,11 @@
-// Coming up: the next six weeks with a calendar linked, week by week, with
-// paydays, bills due and the events likely to cost money, each with what to
-// set aside where past ones show it. A bill opens its own form; a trip opens
+// The six weeks ahead, week by week: paydays and bills due, and with a
+// calendar linked the events likely to cost money, each with what to set
+// aside where past ones show it. A bill opens its own form; a trip opens
 // its page, where its budget is planned; any other event opens a purchase
 // goal to save for it, unless nothing is left to set aside.
 // Weeks with nothing in them fold into one quiet line. Recent and coming
-// trips follow, each opening its own page. Shown in Plan only while a
-// calendar is linked.
+// trips follow, each opening its own page. Its own page a tap deeper from
+// Payday (SixWeeks.tsx); Payday's next two weeks share its rows.
 
 import { Link } from 'react-router-dom'
 import type { Forecast, ForecastItem } from '../../api/client'
@@ -104,7 +104,8 @@ function BillRow({ bill, today }: { bill: Bill; today: string }) {
   )
 }
 
-function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
+/** One payday, bill or event, as both the six weeks and Payday's next two weeks list it. */
+export function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
   const { settings } = useApp()
   if (item.type === 'event') return <EventRow event={item} today={today} />
   if (item.type === 'bill') return <BillRow bill={item} today={today} />
@@ -121,7 +122,7 @@ function ItemRow({ item, today }: { item: ForecastItem; today: string }) {
  * an event by the server's own id for it, since two of one kind can share a
  * day (two friends' birthdays).
  */
-function itemKey(item: ForecastItem): string {
+export function itemKey(item: ForecastItem): string {
   if (item.type === 'payday') return `payday ${item.date}`
   if (item.type === 'bill') return `bill ${item.billId} ${item.date}`
   return `event ${item.id}`
@@ -180,10 +181,15 @@ function runsOf(weeks: Week[]): [number, Week[]][] {
   return runs
 }
 
-/** Recent and coming trips, each opening its page; loaded on its own, so the weeks never wait on it. */
-function Trips() {
+/**
+ * Recent and coming trips, each opening its page; loaded on its own, so the
+ * weeks never wait on it. Without a calendar no trip can be found, so the
+ * card stays out of sight unless one is listed.
+ */
+function Trips({ connected }: { connected: boolean }) {
   const { settings } = useApp()
   const trips = useAction('list_trips')
+  if (!connected && !trips.data?.length) return null
   return (
     <Card static="list" label="Trips" className="stack-sm">
       <h2>Trips</h2>
@@ -205,7 +211,7 @@ function Trips() {
 export function AheadSection() {
   const forecast = useAction('get_forecast')
   if (!forecast.data) return <LoadingOrError error={forecast.error} />
-  const { today, weeks, note } = forecast.data
+  const { today, weeks, note, connected } = forecast.data
   return (
     <>
       {/* Some events may be missing from the weeks below, so they say so, quietly. */}
@@ -221,7 +227,7 @@ export function AheadSection() {
           <WeekCard key={run[0]!.start} week={run[0]!} index={first} today={today} />
         ),
       )}
-      <Trips />
+      <Trips connected={connected} />
     </>
   )
 }

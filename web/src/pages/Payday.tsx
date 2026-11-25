@@ -1,51 +1,61 @@
-// The Payday tab: will I make it to payday, and what's due before then? What
-// the new paycheck covers and what pay brings in come first (the payday
-// section), then whether the cash lasts until payday, then the ways on: to
-// Bills and subscriptions, and to Goals with the total set aside each
-// paycheck (goals and yearly costs live there), and, with a calendar linked,
-// the weeks coming up.
+// The Payday tab: will I make it to payday? In the order the map gives it:
+// this paycheck leads (pay, minus bills before payday, minus what is set
+// aside, is the everyday budget), or on payday how the last period closed
+// and what to do with what is left. Then cash until payday as a line, then
+// the next two weeks of paydays, bills and calendar events. A tap deeper:
+// Bills and subscriptions, Your pay, the six weeks ahead, and Goals, where
+// what is set aside each paycheck lives.
 
-import { useAction } from '../api/hooks'
 import { usePaydayPlaybook } from '../api/playbook'
-import { LinkRows } from '../components/LinkRows'
+import { LinkRows, type LinkRow } from '../components/LinkRows'
 import { Shell } from '../components/Shell'
 import { useApp } from '../lib/app'
 import { periodWord } from '../lib/format'
 import { paths } from '../routes'
-import { AheadSection } from './plan/Ahead'
 import { CashFlowCard } from './plan/CashFlow'
-import { PaydaySection } from './plan/payday/PaydaySection'
+import { NextTwoWeeks } from './plan/payday/NextTwoWeeks'
+import { Playbook } from './plan/payday/Playbook'
 import { setAsideRow } from './plan/payday/setAside'
 
+/** The pages a tap deeper that belong to Payday itself. */
+const DEEPER: LinkRow[] = [
+  {
+    to: paths.bills(),
+    label: 'Bills and subscriptions',
+    icon: 'receipt',
+    detail: "What's due, and repeating charges found in your history",
+  },
+  {
+    to: paths.pay(),
+    label: 'Your pay',
+    icon: 'moneyIn',
+    detail: 'The pay Leeway found, confirm or change it, and your paystub',
+  },
+  {
+    to: paths.sixWeeks(),
+    label: 'Six weeks ahead',
+    icon: 'plan',
+    detail: "What's ahead, week by week",
+  },
+]
+
 export function Payday() {
-  const calendar = useAction('calendar_status')
-  // The same cached read the playbook's cards make, so the total agrees with them.
+  // The same cached read the lead makes, so the set aside total agrees with it.
   const playbook = usePaydayPlaybook()
   const { money, settings } = useApp()
   return (
     <Shell>
       <h1>Payday</h1>
-      <PaydaySection />
+      <Playbook />
       <CashFlowCard />
+      <NextTwoWeeks />
       <LinkRows
         label="More on payday"
         rows={[
-          {
-            to: paths.bills(),
-            label: 'Bills and subscriptions',
-            icon: 'receipt',
-            detail: "What's due, and repeating charges found in your history",
-          },
+          ...DEEPER,
           setAsideRow(playbook.data?.plan, money, periodWord(settings.period.kind)),
         ]}
       />
-      {/* Coming up needs a calendar's events, so without one it stays out of sight. */}
-      {calendar.data?.connected && (
-        <section className="stack" aria-label="Coming up">
-          <h2>Coming up</h2>
-          <AheadSection />
-        </section>
-      )}
     </Shell>
   )
 }

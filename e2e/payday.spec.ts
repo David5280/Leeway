@@ -1,5 +1,5 @@
-// The Payday tab's payday section: the pay Leeway finds in the paychecks, confirmed
-// in one tap, and the owner's own pay in its place. Every name and amount is
+// Your pay, a tap deeper from Payday: the pay Leeway finds in the paychecks,
+// confirmed in one tap, and the owner's own pay in its place. Every name and amount is
 // made up.
 
 import { expect, test, type Page } from '@playwright/test'
@@ -42,8 +42,8 @@ test('pay found in the paychecks is confirmed in one tap, then replaced by the o
   const accountId = await payrollAccount(page)
   // One paycheck so far: how often it comes is only a guess, whatever today is.
   await addPaychecks(page, accountId, [0])
-  await page.goto('/payday')
-  const pay = page.getByRole('region', { name: 'Your pay' })
+  await page.goto('/payday/pay')
+  const pay = page.getByRole('region', { name: 'Your pay', exact: true })
   await expect(pay.getByText('Estimate')).toBeVisible()
 
   // Three more, two weeks apart.

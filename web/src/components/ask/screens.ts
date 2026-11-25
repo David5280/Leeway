@@ -16,6 +16,8 @@ const SCREEN_NAMES: Record<ScreenName, string> = {
   category: 'Category',
   payday: 'Payday',
   bills: 'Bills and subscriptions',
+  pay: 'Your pay',
+  sixWeeks: 'Six weeks ahead',
   goals: 'Goals',
   trip: 'Trip',
   wealth: 'Wealth',

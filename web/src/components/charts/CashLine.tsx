@@ -69,6 +69,8 @@ export function CashLine({
     width,
   )
   const hovered = points[pointer.active]
+  // The first day below $0, marked so the dip reads at a glance; -1 when it stays above.
+  const dip = points.findIndex((point) => point.cents < 0)
   const floor = y(Math.max(axis.low, Math.min(0, axis.high)))
 
   return (
@@ -129,6 +131,16 @@ export function CashLine({
             className="chart-line problem"
           />
         </g>
+      )}
+      {dip >= 0 && (
+        <circle
+          cx={placed[dip]!.x}
+          cy={placed[dip]!.y}
+          r="4"
+          className="chart-dot problem"
+          aria-hidden="true"
+          data-testid="cash-dip"
+        />
       )}
       <EndPoint at={placed.at(-1)!} cents={last.cents} labelX={right + 10} />
       {hovered && (

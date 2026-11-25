@@ -64,7 +64,7 @@ describe('an old address', () => {
     ['/plan/debts', '/wealth/debts'],
     ['/plan/net-worth', '/wealth'],
     ['/plan/retirement', '/wealth/retirement'],
-    ['/plan/ahead', '/payday'],
+    ['/plan/ahead', '/payday/six-weeks'],
     ['/plan/somewhere', '/payday'],
     ['/plan/toString', '/payday'],
     ['/trips/2026-12-10/2026-12-14', '/goals/trips/2026-12-10/2026-12-14'],

@@ -29,17 +29,22 @@ describe('Until payday', () => {
     return screen.getByRole('region', { name: 'Until payday' })
   }
 
-  it('leads with what is safe to spend, then checking, the bills and when payday is', async () => {
+  it('starts from checking today and names the lowest point calmly, with no warning', async () => {
     const card = await show(cashFlow())
-    expect(card).toHaveTextContent('$1,440 safe to spend until payday, after bills.')
-    expect(card).toHaveTextContent('$1,500 in checking, minus $60 in bills.')
+    expect(card).toHaveTextContent('From $1,500 in checking today, at its lowest $1,440 on Nov 20.')
     expect(card).toHaveTextContent('Next payday Fri, Nov 27.')
+    // No dip: nothing scary, no red, no warning, no dip marker, no second spend figure.
+    expect(card).not.toHaveTextContent('below')
+    expect(card).not.toHaveTextContent('safe to spend')
+    expect(within(card).queryByRole('note')).not.toBeInTheDocument()
+    expect(card.querySelector('.money-problem, .over')).not.toBeInTheDocument()
+    expect(within(card).queryByTestId('cash-dip')).not.toBeInTheDocument()
     expect(within(card).getByText('Phone').parentElement).toHaveTextContent('Nov 20Phone$60.00')
   })
 
   it('opens the math from its answer, with the line and the bills outside the button', async () => {
     const card = await show(cashFlow())
-    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    const open = within(card).getByRole('button', { name: /Cash until payday/ })
     expect(open).not.toContainElement(within(card).getByRole('img'))
     expect(open).not.toContainElement(within(card).getByText('Phone'))
     await userEvent.setup().click(open)
@@ -48,9 +53,7 @@ describe('Until payday', () => {
 
   it('draws checking dropping with each bill to payday, close up, and names the bills', async () => {
     const card = await show(cashFlow())
-    expect(
-      within(card).getByRole('heading', { name: 'Will the cash last until payday?' }),
-    ).toBeVisible()
+    expect(within(card).getByRole('heading', { name: 'Cash until payday' })).toBeVisible()
     expect(
       within(card).getByRole('img', { name: 'Checking until payday' }),
     ).toHaveAccessibleDescription(
@@ -84,18 +87,21 @@ describe('Until payday', () => {
     expect(card).toHaveTextContent("Checking's balance isn't known yet.")
     expect(card).toHaveTextContent('$60 in bills due before payday. Next payday Fri, Nov 27.')
     expect(card).not.toHaveTextContent('safe to spend')
+    expect(card).not.toHaveTextContent('in checking today')
+    expect(card).not.toHaveTextContent('$0')
     expect(card).not.toHaveTextContent('goes below')
     expect(within(card).queryByRole('img')).not.toBeInTheDocument()
     // The bill is still listed, and the math says what is not known.
     expect(within(card).getByText('Phone')).toBeVisible()
-    const open = within(card).getByRole('button', { name: /Will the cash last until payday/ })
+    const open = within(card).getByRole('button', { name: /Cash until payday/ })
     await userEvent.setup().click(open)
     expect(screen.getByRole('dialog', { name: 'Until payday' })).toHaveTextContent('Not known yet')
   })
 
-  it('leaves the line out when no bill comes before payday, or payday is today', async () => {
+  it('leaves the line out when no bill comes before payday, and says so', async () => {
     const quiet = await show(cashFlow({ billsDue: [], billsDueCents: 0 }))
     expect(within(quiet).queryByRole('img')).not.toBeInTheDocument()
+    expect(quiet).toHaveTextContent('From $1,500 in checking today, with no bills before payday.')
   })
 
   it('leaves the line out when payday is today', async () => {
@@ -105,7 +111,7 @@ describe('Until payday', () => {
     expect(within(card).queryByRole('img')).not.toBeInTheDocument()
   })
 
-  it('says how short the bills leave you, and flags a missed one', async () => {
+  it('marks the day checking dips below $0, in words and on the line, and flags a missed one', async () => {
     const card = await show(
       cashFlow({
         cashCents: 1000,
@@ -119,30 +125,16 @@ describe('Until payday', () => {
         daysUntilPayday: 1,
       }),
     )
-    expect(card).toHaveTextContent('$80 short of the bills due before payday.')
+    expect(card).toHaveTextContent('From $10 in checking today.')
     expect(within(card).getByText('No payment found')).toBeInTheDocument()
     expect(card).toHaveTextContent('Stay above: $0')
     expect(card).toHaveTextContent('Checking goes below $0 today, when Water comes out.')
     // The line starts at the balance now, before the overdue bill comes out.
     expect(within(card).getByRole('img')).toHaveAccessibleDescription(/^Checking from \$10 today/)
     expect(card.querySelector('.chart-line.problem')).toBeInTheDocument()
-  })
-
-  it('says a shortfall before a guessed payday as a maybe, not in red', async () => {
-    const card = await show(
-      cashFlow({
-        paydaySource: 'detected_income',
-        paydayEstimate: true,
-        expectedPayCents: 250_000,
-        cashCents: 1000,
-        billsDueCents: 6000,
-        safeCents: 0,
-        shortfallCents: 5000,
-      }),
-    )
-    expect(card).toHaveTextContent('Maybe $50 short of the bills due before payday.')
-    expect(within(card).getByText('$50', { selector: '.mid-number' })).not.toHaveClass(
-      'money-problem',
+    expect(within(card).getByTestId('cash-dip')).toHaveClass('problem')
+    expect(within(card).getByRole('img')).toHaveAccessibleDescription(
+      /It goes below \$0 on Nov 17\.$/,
     )
   })
 
@@ -168,11 +160,8 @@ describe('Until payday', () => {
         shortfallCents: 18_500,
       }),
     )
+    expect(card).toHaveTextContent('From $0 in checking today.')
     expect(card).toHaveTextContent('Checking is already below $0.')
-    expect(card).toHaveTextContent('$185 short of the bills and overdraft due before payday.')
-    expect(card).toHaveTextContent(
-      '$0 in checking, minus $180 in bills and $5 to bring an overdraft back to zero.',
-    )
   })
 
   it('names the bills that take checking below $0 together', async () => {

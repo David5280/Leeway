@@ -130,8 +130,8 @@ export function PaystubInUse({ use }: { use: PaystubUse }) {
       : 'Leeway does not use its figures yet'
     return (
       <p className="notice">
-        Your latest paystub, paid {paid}, was saved for your pension only, so {uses}. Import it here
-        to use all of it.
+        Your latest paystub, paid {paid}, was saved for your pension only, so {uses}. Import it
+        again to use all of it.
       </p>
     )
   }

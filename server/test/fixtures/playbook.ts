@@ -1,6 +1,6 @@
 // Builders for the payday playbook's tests. Every name and amount is made up.
 
-import type { BillDue } from '../../src/domain/cashFlow.js'
+import { billInputSchema, scheduleOf, type Bill } from '../../src/domain/bills.js'
 import type { Category } from '../../src/domain/categories.js'
 import type { Payday } from '../../src/domain/pay/payday.js'
 import type { PaycheckPeriod } from '../../src/domain/pay/period.js'
@@ -49,14 +49,30 @@ export function payday(fields: Partial<Payday> = {}): Payday {
   }
 }
 
-/** A bill due before payday: rent of $1,500 on Nov 25, 2026, unless told otherwise. */
-export function billDue(fields: Partial<BillDue> = {}): BillDue {
-  return {
-    billId: 'bill-rent',
-    name: 'Rent',
-    dueDate: '2026-11-25',
-    amountCents: 150_000,
-    overdue: false,
-    ...fields,
-  }
+/**
+ * A bill as listBills gives it on `today` (Nov 17, 2026 by default), from
+ * the server's own schedule: rent of $1,500 due the 25th of each month,
+ * unless told otherwise.
+ */
+export function billOf(
+  fields: Partial<Parameters<typeof scheduleOf>[0]> = {},
+  today = '2026-11-17',
+): Bill {
+  return scheduleOf(
+    {
+      ...billInputSchema.parse({
+        name: 'Rent',
+        amountCents: 150_000,
+        cadence: 'month',
+        anchorDate: '2026-10-25',
+      }),
+      id: 'bill-rent',
+      reads: 'bank_text',
+      accountId: null,
+      lastPaidDate: null,
+      lastPaidCents: null,
+      ...fields,
+    },
+    today,
+  )
 }

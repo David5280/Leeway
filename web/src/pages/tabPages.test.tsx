@@ -1,6 +1,6 @@
-// What each tab and the pages a tap deeper hold, and in what order: Payday,
-// Bills, Goals and Wealth compose the sections the old Plan and Accounts
-// screens had, each shown once.
+// What each tab and the pages a tap deeper hold, and in what order: Bills,
+// Goals and Wealth compose the sections the old Plan and Accounts screens
+// had, each shown once. Payday's own order is in plan/payday/paydayTab.test.tsx.
 
 import { screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
@@ -22,25 +22,6 @@ const quietBills = {
 /** Whether `first` comes before `second` on the page. */
 const before = (first: HTMLElement, second: HTMLElement) =>
   first.compareDocumentPosition(second) === Node.DOCUMENT_POSITION_FOLLOWING
-
-describe('Payday', () => {
-  it('leads with pay, then whether the cash lasts, then the way to Bills', async () => {
-    planServer(quietBills)
-    renderPlanning(paths.payday())
-    expect(screen.getByRole('heading', { level: 1, name: 'Payday' })).toBeInTheDocument()
-    const pay = await screen.findByRole('region', { name: 'Your pay' })
-    const untilPayday = await screen.findByRole('region', { name: 'Until payday' })
-    const more = screen.getByRole('region', { name: 'More on payday' })
-    expect(before(pay, untilPayday)).toBe(true)
-    expect(before(untilPayday, more)).toBe(true)
-    expect(within(more).getByRole('link', { name: /Bills and subscriptions/ })).toHaveAttribute(
-      'href',
-      '/payday/bills',
-    )
-    // Bills live a tap deeper, not here.
-    expect(screen.queryByRole('region', { name: 'Bills and subscriptions' })).toBeNull()
-  })
-})
 
 describe('Bills', () => {
   it('lists the bills under a way back to Payday, without the cash until payday', async () => {

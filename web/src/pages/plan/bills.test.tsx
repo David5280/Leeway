@@ -164,7 +164,7 @@ describe('Bills', () => {
     })
   })
 
-  it('opens straight onto a bill from its address, as Coming up links to it', async () => {
+  it('opens straight onto a bill from its address, as the weeks ahead link to it', async () => {
     serve()
     renderPlanning(`/payday/bills?bill=${netflix.id}`)
     expect(await screen.findByRole('form', { name: 'Edit Netflix' })).toBeInTheDocument()

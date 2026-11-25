@@ -1,9 +1,8 @@
 // Plain words for the payday playbook, kept apart from the cards so they can
 // be tested alone: how the last paycheck's leftover reads, why each idea is
-// offered, what each line of the new paycheck's plan is called, and the tone
-// of the short-cash note.
+// offered, and what each line of the new paycheck's plan is called.
 
-import type { CloseOut, LeftoverSuggestion, PlanLine, Playbook } from '../../../api/client'
+import type { CloseOut, LeftoverSuggestion, PlanLine } from '../../../api/client'
 import type { MoneyTone } from '../../../lib/money'
 
 /** What the leftover is called: money left, or how far spending ran over. */
@@ -56,15 +55,6 @@ export function billNames(lines: PlanLine[]): string {
   return names.length <= 2
     ? listWords(names)
     : listWords([...names.slice(0, 2), `${names.length - 2} more`])
-}
-
-/**
- * The short-cash note's class, by the same rule as the Bills section's
- * warning (shortTone in lib/cashPath): red when checking is already below
- * zero or payday is known, amber while payday is only an estimate.
- */
-export function shortClass(playbook: Pick<Playbook, 'paydayEstimate' | 'plan'>): 'over' | 'warn' {
-  return playbook.plan.short?.now || !playbook.paydayEstimate ? 'over' : 'warn'
 }
 
 /** Ideas for the leftover are suggestions only, and every card that offers them says so. */

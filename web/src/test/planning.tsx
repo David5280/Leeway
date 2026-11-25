@@ -28,11 +28,14 @@ import { Goals } from '../pages/Goals'
 import { IdleCashPage } from '../pages/IdleCash'
 import { Payday } from '../pages/Payday'
 import { RetirementPage } from '../pages/Retirement'
+import { SixWeeksPage } from '../pages/SixWeeks'
 import { Wealth } from '../pages/Wealth'
+import { YourPayPage } from '../pages/YourPay'
 import { paths, SCREEN_ROUTES } from '../routes'
 import { account as baseAccount, fakeServer, renderSignedIn, type Handlers } from './fake'
 import { fundsView } from './funds'
 import { noPay } from './pay'
+import { NO_PAYSTUB_IN_USE } from './paystub'
 import { playbookOf } from './playbook'
 import { retirementProfile } from './profile'
 
@@ -210,6 +213,8 @@ export function planServer(handlers: Handlers, routes: Record<string, () => Resp
       list_sinking_funds: () => fundsView(),
       get_payday_playbook: () => playbookOf(),
       calendar_status: () => ({ connected: false }),
+      get_forecast: () => ({ connected: false, today: TODAY, weeks: [], note: null }),
+      get_paystub_use: () => NO_PAYSTUB_IN_USE,
       list_recent_balances: () => [],
       list_alerts: () => [],
       ...handlers,
@@ -220,7 +225,7 @@ export function planServer(handlers: Handlers, routes: Record<string, () => Resp
 
 /**
  * The planning screens at an address, with their routes as the app has them,
- * and the settings given: Payday and Bills, Goals, and Wealth with Debts,
+ * and the settings given: Payday with Bills, Your pay and the six weeks, Goals, and Wealth with Debts,
  * Retirement and cash that could earn more.
  */
 export function renderPlanning(path: string = paths.payday(), settings?: Settings) {
@@ -228,6 +233,8 @@ export function renderPlanning(path: string = paths.payday(), settings?: Setting
     <Routes>
       <Route path={SCREEN_ROUTES.payday} element={<Payday />} />
       <Route path={SCREEN_ROUTES.bills} element={<BillsPage />} />
+      <Route path={SCREEN_ROUTES.pay} element={<YourPayPage />} />
+      <Route path={SCREEN_ROUTES.sixWeeks} element={<SixWeeksPage />} />
       <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
       <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
       <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />

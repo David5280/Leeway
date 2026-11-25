@@ -1,14 +1,16 @@
-// Cash until payday: what checking holds, less the bills due first and any
-// overdraft, is what is safe to spend (server/src/domain/cashFlow.ts).
-// Savings is left out, as money set aside rather than what the bills come
-// out of. On the Payday tab, the question and answer open
-// the math (lib/drills/plan.ts), and under them a line shows checking
-// stepping down with each bill to payday. If checking would go below $0, the
-// answer says when and what would cover it (BelowZeroWarning), on Payday
-// and the Home widget alike.
+// Cash until payday, on the Payday tab after this paycheck: checking as a
+// line, from what it holds today down through each bill to payday
+// (lib/cashPath.ts), with the day it would go below $0 if it would. That dip
+// is a status, said in words with what would cover it (BelowZeroWarning), on
+// Payday and the Home widget alike; without one the card stays calm and
+// names the lowest point. Savings is left out, as money set aside rather
+// than what the bills come out of. The card opens the math behind safe to
+// spend (lib/drills/plan.ts, server/src/domain/cashFlow.ts).
 // With no checking balance known yet, there is no cash to judge: the card
 // says so, with no figure, line or warning that would read as $0.
+// Home's cash widget leads instead with what is safe to spend (CashFacts).
 
+import type { ReactNode } from 'react'
 import { Card } from '../../components/design/Card'
 import type { CashFlow } from '../../api/client'
 import { useAction } from '../../api/hooks'
@@ -37,11 +39,35 @@ function paydayText(flow: CashFlow, money: (cents: number) => string, locale: st
 }
 
 /**
+ * Where the line starts and how low it gets. A dip below $0 is left to the
+ * warning under it; otherwise the lowest point is named calmly, or that no
+ * bill comes out before payday.
+ */
+function LineHeadline({ flow }: { flow: CashFlow }) {
+  const { settings } = useApp()
+  const low = lowestPoint(cashPath(flow))
+  let rest: ReactNode = ', with no bills before payday.'
+  if (flow.belowZero) rest = '.'
+  else if (flow.billsDue.length > 0) {
+    rest = (
+      <>
+        , at its lowest <Money cents={low.cents} /> on {shortDate(low.date, settings.locale)}.
+      </>
+    )
+  }
+  return (
+    <p style={{ fontSize: 17 }}>
+      From <Money cents={flow.cashCents} className="mid-number" /> in checking today{rest}
+    </p>
+  )
+}
+
+/**
  * The headline: what is safe to spend until payday, or how far short the
  * bills leave you. Against a payday that is only a guess the shortfall may
  * be less, so it is said plainly, not in red.
  */
-function Headline({ flow }: { flow: CashFlow }) {
+function SafeHeadline({ flow }: { flow: CashFlow }) {
   if (flow.shortfallCents > 0) {
     const owed = flow.overdraftCents > 0 ? 'the bills and overdraft' : 'the bills'
     return (
@@ -60,18 +86,21 @@ function Headline({ flow }: { flow: CashFlow }) {
   )
 }
 
-/** "Will the cash last until payday?": checking after each bill, day by day. */
+/** Checking after each bill, day by day, to payday. */
 function CashPathChart({ flow }: { flow: CashFlow }) {
   const { money, settings } = useApp()
   const points = cashPath(flow)
   // With no bill before payday the line is flat, so the sentence above says it all.
   if (points.every((point) => point.bills.length === 0)) return null
   const low = lowestPoint(points)
+  const dip = flow.belowZero
+    ? ` It goes below ${money(0)} on ${shortDate(flow.belowZero.date, settings.locale)}.`
+    : ''
   return (
     <CashLine
       points={points}
       label="Checking until payday"
-      description={`Checking from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.`}
+      description={`Checking from ${money(points[0]!.cents)} today to ${money(points.at(-1)!.cents)} on payday, ${dayLabel(flow.nextPayday, settings.locale)}, at its lowest ${money(low.cents)} on ${shortDate(low.date, settings.locale)}.${dip}`}
     />
   )
 }
@@ -94,13 +123,16 @@ function UnknownCash({ flow }: { flow: CashFlow }) {
   )
 }
 
-/** The answer and the sum behind it: what checking holds, less the bills, and when payday is. */
+/**
+ * Home's widget: what is safe to spend until payday and the sum behind it,
+ * what checking holds less the bills, and when payday is.
+ */
 export function CashFacts({ flow }: { flow: CashFlow }) {
   const { money, settings } = useApp()
   if (!flow.cashKnown) return <UnknownCash flow={flow} />
   return (
     <>
-      <Headline flow={flow} />
+      <SafeHeadline flow={flow} />
       <span className="small muted">
         <Money cents={flow.cashCents} /> in checking, minus <Money cents={flow.billsDueCents} /> in
         bills
@@ -113,6 +145,19 @@ export function CashFacts({ flow }: { flow: CashFlow }) {
         . {paydayText(flow, money, settings.locale)}
       </span>
       <BelowZeroWarning flow={flow} />
+    </>
+  )
+}
+
+/** Payday's card: where checking starts and how low it goes, any dip in words, and when payday is. */
+function LineFacts({ flow }: { flow: CashFlow }) {
+  const { money, settings } = useApp()
+  if (!flow.cashKnown) return <UnknownCash flow={flow} />
+  return (
+    <>
+      <LineHeadline flow={flow} />
+      <BelowZeroWarning flow={flow} />
+      <span className="small muted">{paydayText(flow, money, settings.locale)}</span>
     </>
   )
 }
@@ -139,9 +184,9 @@ function CashDetails({ flow }: { flow: CashFlow }) {
   )
 }
 
-const TITLE = 'Will the cash last until payday?'
+const TITLE = 'Cash until payday'
 
-/** The Until payday card on the Payday tab: the answer opens the math, the line reads under a finger. */
+/** The Until payday card on the Payday tab: the words open the math, the line reads under a finger. */
 export function CashFlowCard() {
   const { settings } = useApp()
   const cash = useAction('get_cash_flow')
@@ -162,7 +207,7 @@ export function CashFlowCard() {
       className="stack-sm"
     >
       <h2>{TITLE}</h2>
-      <CashFacts flow={flow} />
+      <LineFacts flow={flow} />
     </Card>
   )
 }

@@ -25,12 +25,13 @@ test('with no calendar linked, it is one quiet entry in Settings and nowhere els
   await expect(page.getByRole('status')).toHaveCount(0)
   await expect(page.getByText(/calendar|coming up/i)).toHaveCount(0)
   await expect(page.getByRole('link', { name: /calendar/i })).toHaveCount(0)
-  // Payday adds Coming up only once the calendar's status is in, so wait for it.
-  const status = page.waitForResponse('**/api/actions/calendar_status')
+  // Payday's next two weeks list paydays and bills, and say nothing of a calendar.
+  const forecast = page.waitForResponse('**/api/actions/get_forecast')
   await page.goto('/payday')
-  await status
-  await expect(page.getByRole('region', { name: 'Until payday' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Coming up' })).toHaveCount(0)
+  await forecast
+  const twoWeeks = page.getByRole('region', { name: 'Next two weeks' })
+  await expect(twoWeeks).toBeVisible()
+  await expect(twoWeeks.getByText(/calendar/i)).toHaveCount(0)
   await page.goto('/settings/calendar')
   await expect(page.getByRole('button', { name: 'Connect a calendar', exact: true })).toBeDisabled()
 })
@@ -52,8 +53,8 @@ test('a calendar link is checked before anything is saved', async ({ page }) => 
 
 test('the weeks ahead show paydays, bills and events, and open a trip', async ({ page }) => {
   await pretendCalendar(page)
-  await page.goto('/payday')
-  await expect(page.getByRole('heading', { level: 2, name: 'Coming up' })).toBeVisible()
+  await page.goto('/payday/six-weeks')
+  await expect(page.getByRole('heading', { level: 1, name: 'Six weeks ahead' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'This week' })).toContainText('Payday')
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText(LONG_TRIP)
   await expect(page.getByRole('region', { name: 'Next week' })).toContainText('to set aside')

@@ -36,13 +36,33 @@ beforeEach(async () => {
 })
 
 describe('the forecast', () => {
-  it('stays out of the way with no calendar linked', async () => {
-    expect(await call('get_forecast')).toEqual({
-      connected: false,
-      today: '2026-11-17',
-      weeks: [],
-      note: null,
+  it('still lays out paydays and bills with no calendar linked, with no events', async () => {
+    await call('update_settings', {
+      period: { kind: 'paycheck', frequency: 'biweekly', anchorDate: '2026-11-06' },
     })
+    await call('create_bill', {
+      name: 'Rent',
+      amountCents: 150000,
+      cadence: 'month',
+      anchorDate: '2026-11-25',
+    })
+    const forecast = await call('get_forecast')
+    expect(forecast).toMatchObject({ connected: false, today: '2026-11-17', note: null })
+    expect(forecast.weeks).toHaveLength(6)
+    const firstTwo = forecast.weeks.slice(0, 2).map((week) => week.items)
+    expect(firstTwo).toEqual([
+      [{ type: 'payday', date: '2026-11-20', amountCents: null }],
+      [
+        {
+          type: 'bill',
+          date: '2026-11-25',
+          billId: expect.any(String),
+          name: 'Rent',
+          amountCents: 150000,
+        },
+      ],
+    ])
+    expect(forecast.weeks.every((week) => week.setAsideCents === 0)).toBe(true)
   })
 
   it('lays out paydays, bills and events by week, suggesting what to set aside from past ones', async () => {

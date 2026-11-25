@@ -168,7 +168,7 @@ describe('linking a calendar', () => {
       '2025-01-04',
     ])
     serving(ics([...past, LISBON]))
-    // Settings and coming up both say some were left out, those furthest from today.
+    // Settings and the weeks ahead both say some were left out, those furthest from today.
     expect(await call('connect_calendar', { url: SECRET })).toMatchObject({
       eventCount: MAX_EVENTS,
       note: CAPPED,
@@ -234,7 +234,7 @@ describe('linking a calendar', () => {
     const deps = { key: ctx.config.encryptionKey, timeZone: 'UTC', now: () => NOW, fetcher }
     const status = await connectCalendar(ctx.db, SECRET, { ...deps, unitsPerRead: 100 })
     expect(status).toMatchObject({ eventCount: 1, lastError: null, note: INCOMPLETE })
-    // Coming up says so too, since what it lists may be missing those events.
+    // The weeks ahead say so too, since what they list may be missing those events.
     expect(await call('get_forecast')).toMatchObject({ connected: true, note: INCOMPLETE })
     // A failed read keeps the events and the note on them, and says why it failed.
     ctx.fetchCalendar = async () => new Response('', { status: 503 })

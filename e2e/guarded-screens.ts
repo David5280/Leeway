@@ -127,10 +127,12 @@ export const SCREENS: Screen[] = [
   },
   ...CHAT_SCREENS,
   at('payday', '/payday'),
-  at('payday', '/payday', {
-    name: '/payday changing the pay',
+  at('pay', '/payday/pay'),
+  at('pay', '/payday/pay', {
+    name: '/payday/pay changing the pay',
     then: open('Not quite', (page) => page.getByRole('form', { name: 'Enter your pay' })),
   }),
+  at('sixWeeks', '/payday/six-weeks'),
   at('payday', '/payday', {
     // The new paycheck's card always shows, with or without a pay schedule.
     name: '/payday what this paycheck covers',
