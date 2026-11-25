@@ -1,7 +1,7 @@
 // One-time changes to saved dashboards, run once per install at startup:
-// the summary widget added to dashboards saved before it existed, and Home's
-// map order given to a dashboard still in any default it replaced. A
-// dashboard the owner arranged is left alone.
+// the summary widget added to dashboards saved before it existed, and
+// today's default Home given to a dashboard still in any default it
+// replaced. A dashboard the owner arranged is left alone.
 
 import type pg from 'pg'
 import { withTransaction } from '../db/pool.js'
@@ -42,8 +42,12 @@ export async function addSummaryWidget(pool: pg.Pool): Promise<boolean> {
   })
 }
 
-/** The name Home's map order is recorded under in applied_upgrades. */
-const HOME_MAP_UPGRADE = 'home-map'
+/**
+ * The name today's default Home is recorded under in applied_upgrades. It is
+ * new with the accounts on Home: the upgrade before it ("home-map") already
+ * ran on installs that had the map order, so a new name lets those move on.
+ */
+const DEFAULT_HOME_UPGRADE = 'home-accounts'
 
 /** A widget as an older Leeway stored it, possibly of a kind since removed. */
 interface StoredWidget {
@@ -56,11 +60,11 @@ interface StoredWidget {
 const shown = (type: string, size: string): StoredWidget => ({ type, size, visible: true })
 
 /**
- * Every default Home an install may still have stored, oldest first. Each
- * names cards since removed, which reading the settings drops, so the stored
+ * Every default Home an install may still have stored, oldest first. Most
+ * name cards since removed, which reading the settings drops, so the stored
  * list itself is compared rather than the settings read back. An install
  * that skipped versions never ran the upgrades between, so each one moves
- * straight to the map order.
+ * straight to today's default.
  */
 const OLDER_DEFAULTS: readonly (readonly StoredWidget[])[] = [
   // Summary first, as dashboards were before the Overview led with Leeway.
@@ -105,6 +109,15 @@ const OLDER_DEFAULTS: readonly (readonly StoredWidget[])[] = [
     shown('flows', 'full'),
     shown('pace', 'full'),
   ],
+  // The map order: Leeway, Heads up, then one card per tab, each on its own.
+  [
+    shown('leeway', 'wide'),
+    shown('alerts', 'full'),
+    shown('cash-flow', 'half'),
+    shown('pace', 'half'),
+    shown('goals', 'half'),
+    shown('net-worth', 'half'),
+  ],
 ]
 
 /** The dashboard's widgets exactly as stored, or null when none was ever saved. */
@@ -131,14 +144,14 @@ const isOlderDefault = (stored: unknown) =>
   OLDER_DEFAULTS.some((layout) => sameLayout(stored, layout))
 
 /**
- * Gives a dashboard still in any older default Home's map order: Leeway,
- * Heads up, then one card per tab. Returns true when it changed a saved
- * dashboard.
+ * Gives a dashboard still in any older default today's default Home: Leeway,
+ * Heads up, the accounts, the bills coming up, the latest activity and a row
+ * of each tab's summary. Returns true when it changed a saved dashboard.
  */
-export async function followHomeMap(pool: pg.Pool): Promise<boolean> {
+export async function upgradeDefaultHome(pool: pg.Pool): Promise<boolean> {
   return withTransaction(pool, async (db) => {
-    if (!(await firstRun(db, HOME_MAP_UPGRADE))) return false
-    // An order the owner chose is theirs to keep.
+    if (!(await firstRun(db, DEFAULT_HOME_UPGRADE))) return false
+    // An order the owner chose is theirs to keep: nothing is added to it.
     if (!isOlderDefault(await storedWidgets(db))) return false
     const settings = await getSettings(db)
     await saveSettings(db, { ...settings, dashboard: { widgets: DEFAULT_WIDGETS } })

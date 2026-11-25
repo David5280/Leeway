@@ -7,8 +7,12 @@
 
 /** The screens of an app that is set up, in the router's order. */
 export const SCREEN_ROUTES = {
-  /** Home: am I OK right now? */
+  /** Home: am I OK right now? Every account is listed there. */
   home: '/',
+  /** One account's own page, opened from Home's accounts. */
+  account: '/accounts/:id',
+  /** Pick accounts to add up, with their money in and out together. Static, so it wins over :id. */
+  compareAccounts: '/accounts/compare',
   /** Spending: am I on budget, and where did it go? */
   spending: '/spending',
   /** Every transaction, with filters in the query (see paths.activity). */
@@ -33,10 +37,6 @@ export const SCREEN_ROUTES = {
   trip: '/goals/trips/:start/:end',
   /** Wealth: what I'm worth, owe and will retire with. */
   wealth: '/wealth',
-  /** One account's own page. */
-  account: '/wealth/accounts/:id',
-  /** Pick accounts to add up, with their money in and out together. */
-  compareAccounts: '/wealth/compare',
   /** Things the owner enters by hand: a home, a car, a loan. */
   owned: '/wealth/owned',
   debts: '/wealth/debts',
@@ -67,8 +67,11 @@ export const CONNECT_ROUTES = {
  * working for good. They are not screens, so the layout guard skips them.
  */
 export const OLD_ROUTES = {
+  /** The accounts had a screen of their own before Home listed them. */
   accounts: '/accounts',
-  account: '/accounts/:id',
+  /** An account's page and Compare accounts, while the accounts were under Wealth. */
+  wealthAccount: '/wealth/accounts/:id',
+  wealthCompare: '/wealth/compare',
   transactions: '/transactions',
   importTransactions: '/transactions/import',
   budgets: '/budgets',
@@ -112,6 +115,8 @@ const segment = (value: string) => encodeURIComponent(value)
  */
 export const paths = {
   home: () => SCREEN_ROUTES.home,
+  account: (id: string) => `/accounts/${segment(id)}`,
+  compareAccounts: () => SCREEN_ROUTES.compareAccounts,
   /** Spending, on an earlier budget period when given one (-1 is the last). */
   spending: (period?: number) => withQuery(SCREEN_ROUTES.spending, periodQuery(period)),
   /** All activity, narrowed by any filters (account, category, merchant, range). */
@@ -135,8 +140,6 @@ export const paths = {
   trip: (startsOn: string, endsOn: string) =>
     `${SCREEN_ROUTES.goals}/trips/${segment(startsOn)}/${segment(endsOn)}`,
   wealth: () => SCREEN_ROUTES.wealth,
-  account: (id: string) => `${SCREEN_ROUTES.wealth}/accounts/${segment(id)}`,
-  compareAccounts: () => SCREEN_ROUTES.compareAccounts,
   owned: () => SCREEN_ROUTES.owned,
   debts: () => SCREEN_ROUTES.debts,
   retirement: () => SCREEN_ROUTES.retirement,

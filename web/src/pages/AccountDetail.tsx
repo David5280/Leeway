@@ -46,7 +46,7 @@ export function AccountDetail() {
   const account = accounts.data?.find((one) => one.id === id)
   return (
     <Shell>
-      <BackLink to={paths.wealth()} label="Wealth" />
+      <BackLink to={paths.home()} label="Home" />
       {account && <DetailBody account={account} />}
       {accounts.data && !account && (
         <>

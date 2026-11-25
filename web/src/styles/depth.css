@@ -94,7 +94,8 @@ body {
   min-width: 0;
 }
 
-.section-head h2 {
+.section-head h2,
+.section-head h3 {
   flex: 1;
   min-width: 0;
 }

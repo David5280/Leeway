@@ -252,17 +252,17 @@ describe('every card on the redesigned screens keeps the card contract', () => {
     await waitFor(() =>
       within(screen.getByRole('region', { name: 'Top merchants' })).getByRole('link'),
     )
-    // Leeway opens its math, the seven cards under it their pages, and the summary is words.
-    expect(await checkEveryCard()).toEqual({ drill: 1, to: 7, static: 1 })
+    // Leeway opens its math. The bills, the activity, the four cards in the tab row, the
+    // same four on their own and the three shortcuts open their pages. The accounts are
+    // a list whose rows each open their own page, and the summary is words.
+    expect(await checkEveryCard()).toEqual({ drill: 1, to: 13, static: 2 })
   })
 
   it('on Wealth', async () => {
     serve()
     renderSignedIn(<Wealth />, { route: paths.wealth() })
-    await screen.findByRole('link', { name: new RegExp(everyAccount.at(-1)!.name) })
-    const found = await checkEveryCard()
-    expect(found.drill).toBeGreaterThan(0)
-    expect(found.to).toBe(everyAccount.length)
+    await screen.findByRole('region', { name: 'Net worth over time' })
+    expect((await checkEveryCard()).drill).toBeGreaterThan(0)
   })
 
   it("on an account's own page", async () => {

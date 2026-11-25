@@ -63,7 +63,7 @@ describe('Needs you now', () => {
     await within(card()).findByText('Chase needs you to log in again to keep syncing.')
     const links = within(card()).getAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/wealth/accounts/a',
+      '/accounts/a',
       '/settings/banks',
       '/spending/cat-dining-out',
       '/spending/activity?category=uncategorized',

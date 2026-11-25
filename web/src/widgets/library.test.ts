@@ -20,20 +20,29 @@ describe('the default layout', () => {
     expect(DEFAULT_LAYOUT).toEqual(DEFAULT_WIDGETS)
   })
 
-  it("follows the map: Leeway, Heads up, then one card per tab in the map's order", () => {
+  it('follows the map: Leeway, Heads up, the accounts, bills, activity, then the tab row', () => {
     expect(types(DEFAULT_LAYOUT)).toEqual([
       'leeway',
       'alerts',
-      'cash-flow',
-      'pace',
-      'goals',
-      'net-worth',
+      'account-list',
+      'coming-up',
+      'latest-activity',
+      'tab-row',
     ])
   })
 
-  it('gives each of the four tab cards its own tab', () => {
+  it('puts the accounts beside the bills and activity on a wide screen, the tab row under them', () => {
+    expect(drawable(DEFAULT_LAYOUT).map((widget) => [widget.type, widget.size])).toEqual([
+      ['account-list', 'wide'],
+      ['coming-up', 'half'],
+      ['latest-activity', 'half'],
+      ['tab-row', 'full'],
+    ])
+  })
+
+  it('colors the bills as Payday and the activity as Spending; the accounts and the row stay plain', () => {
     const places = drawable(DEFAULT_LAYOUT).map((widget) => WIDGET_LIBRARY[widget.type]!.place)
-    expect(places).toEqual(['pay', 'spend', 'goal', 'wealth'])
+    expect(places).toEqual([undefined, 'pay', 'spend', undefined])
   })
 })
 
@@ -86,21 +95,43 @@ describe('moveWidget', () => {
 
 describe('changeWidget', () => {
   it('changes only the card of that type', () => {
-    const next = changeWidget(DEFAULT_LAYOUT, 'pace', { visible: false, size: 'full' })
-    expect(next.find((widget) => widget.type === 'pace')).toEqual({
-      type: 'pace',
+    const next = changeWidget(DEFAULT_LAYOUT, 'coming-up', { visible: false, size: 'full' })
+    expect(next.find((widget) => widget.type === 'coming-up')).toEqual({
+      type: 'coming-up',
       size: 'full',
       visible: false,
     })
-    expect(next.filter((widget) => widget.type !== 'pace')).toEqual(
-      DEFAULT_LAYOUT.filter((widget) => widget.type !== 'pace'),
+    expect(next.filter((widget) => widget.type !== 'coming-up')).toEqual(
+      DEFAULT_LAYOUT.filter((widget) => widget.type !== 'coming-up'),
     )
   })
 })
 
 describe('addableTypes', () => {
-  it('lists library cards not on Home, in library order', () => {
+  it('lists library cards not on Home, in library order, leaving out what the tab row shows', () => {
     expect(addableTypes(DEFAULT_LAYOUT)).toEqual(['summary', 'trends', 'merchants', 'debts'])
+  })
+
+  it('offers each tab card on its own once the tab row is gone', () => {
+    const withoutRow = DEFAULT_LAYOUT.filter((widget) => widget.type !== 'tab-row')
+    expect(addableTypes(withoutRow)).toEqual([
+      'tab-row',
+      'cash-flow',
+      'pace',
+      'goals',
+      'net-worth',
+      'summary',
+      'trends',
+      'merchants',
+      'debts',
+    ])
+  })
+
+  it('offers no tab row while a tab card is on Home on its own, so no figure shows twice', () => {
+    const mapOrder = [w('leeway', 'wide'), w('alerts', 'full'), w('pace', 'half')]
+    const offered = addableTypes(mapOrder)
+    expect(offered).not.toContain('tab-row')
+    expect(offered).toEqual(expect.arrayContaining(['account-list', 'cash-flow', 'goals']))
   })
 
   it('offers every library card for an empty Home', () => {

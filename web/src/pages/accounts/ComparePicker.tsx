@@ -46,9 +46,7 @@ export function ComparePicker() {
         <ErrorNote error={update.error} />
         <AccountGroups
           accounts={shared}
-          balances={lines}
-          goals={goals.data ?? []}
-          picking={{ picked, toggle }}
+          picking={{ picked, toggle, balances: lines, goals: goals.data ?? [] }}
         />
         <PickedTotalBar picked={shared.filter((account) => picked.includes(account.id))} />
       </section>

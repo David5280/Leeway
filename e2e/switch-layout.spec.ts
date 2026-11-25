@@ -17,7 +17,7 @@ interface SwitchPage {
  * that data is in, and the sweep never measures a page that is still loading.
  */
 const PAGES: SwitchPage[] = [
-  { path: '/settings/appearance', loaded: (page) => named(page, 'Show Spending pace') },
+  { path: '/settings/appearance', loaded: (page) => named(page, 'Show Latest activity') },
   { path: '/settings/notifications', loaded: (page) => named(page, 'Notify me: Overdrawn') },
   { path: '/settings/budgeting', loaded: (page) => named(page, 'Count pending transactions') },
   { path: '/settings/email', loaded: (page) => named(page, 'Send me a weekly email') },
@@ -117,7 +117,7 @@ test('a switch keeps its knob inside its track, off and on, centred on its row',
   page,
 }) => {
   await page.goto('/settings/appearance')
-  const control = page.getByRole('switch', { name: 'Show Spending pace' })
+  const control = page.getByRole('switch', { name: 'Show Latest activity' })
   const before = await control.getAttribute('aria-checked')
   await expectWellPlaced(control)
   await flip(page, control)
@@ -156,7 +156,7 @@ test('every switch in Settings is drawn the same way', async ({ page }) => {
 
 test('a focused switch rings its round track, not the square box around it', async ({ page }) => {
   await page.goto('/settings/appearance')
-  const control = page.getByRole('switch', { name: 'Show Spending pace' })
+  const control = page.getByRole('switch', { name: 'Show Latest activity' })
   await control.focus()
   await page.keyboard.press('Shift+Tab')
   await page.keyboard.press('Tab')

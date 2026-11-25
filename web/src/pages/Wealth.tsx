@@ -1,20 +1,26 @@
 // The Wealth tab: am I getting ahead? In the order the map gives it: net
-// worth and its trend lead, then the accounts grouped by kind (balances are
-// what is owned and owed), then four rows to the pages a tap deeper: debts,
-// retirement, how much you save and cash that could earn more. Each account's
-// page, things entered by hand and Compare accounts open from the accounts.
+// worth and its trend lead, then the rows to the pages a tap deeper: things
+// entered by hand, debts, retirement, how much you save and cash that could
+// earn more. Every account, with its own page and Compare accounts, is on
+// Home, the first place the owner looks.
 
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { LinkRows, type LinkRow } from '../components/LinkRows'
 import { Shell } from '../components/Shell'
 import { IDLE_CASH_TITLE } from '../lib/drills/idleCash'
 import { paths } from '../routes'
-import { AccountsSection } from './accounts/AccountsSection'
+import { useSelectedAccount } from './OldAddresses'
 import { NetWorthSection } from './plan/NetWorth'
 import { SAVINGS_TITLE } from './Savings'
 
-/** The four pages a tap deeper from Wealth, in the map's order. */
+/** The pages a tap deeper from Wealth, in the map's order. */
 const DEEPER: LinkRow[] = [
+  {
+    to: paths.owned(),
+    label: 'Things you own and owe',
+    icon: 'wallet',
+    detail: "A home, a car or a loan your bank doesn't show",
+  },
   {
     to: paths.debts(),
     label: 'Debts and payoff',
@@ -42,15 +48,12 @@ const DEEPER: LinkRow[] = [
 ]
 
 export function Wealth() {
-  // Old links picked one account here (?select=id); that account has its own page now.
-  const [params] = useSearchParams()
-  const linked = params.get('select')
-  if (linked) return <Navigate to={paths.account(linked)} replace />
+  const selected = useSelectedAccount()
+  if (selected) return <Navigate to={selected} replace />
   return (
     <Shell>
       <h1>Wealth</h1>
       <NetWorthSection />
-      <AccountsSection />
       <LinkRows label="More on wealth" rows={DEEPER} />
     </Shell>
   )

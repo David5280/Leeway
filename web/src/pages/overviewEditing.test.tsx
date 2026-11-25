@@ -48,34 +48,41 @@ describe('editing Home', () => {
     expect(screen.queryByText('Heads up', { selector: '.widget-tools strong' })).toBeNull()
     expect(screen.queryByRole('button', { name: '+ Your leeway' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '+ Heads up' })).not.toBeInTheDocument()
-    expect(toolsFor('Net worth').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
+    expect(toolsFor('Tab summaries').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
   })
 
   it('moves a card within its column and saves the new order', async () => {
     const server = serveHome()
     renderHome()
     const user = await startEditing()
-    await user.click(toolsFor('Net worth').getByRole('button', { name: 'Move Net worth up' }))
+    await user.click(
+      toolsFor('Latest activity').getByRole('button', { name: 'Move Latest activity up' }),
+    )
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
     expect(types(sentLayouts(server)[0]!)).toEqual([
       'leeway',
       'alerts',
-      'cash-flow',
-      'pace',
-      'net-worth',
-      'goals',
+      'account-list',
+      'latest-activity',
+      'coming-up',
+      'tab-row',
     ])
-    await waitFor(() => expect(shownCards().slice(3)).toEqual(['Net worth', 'Your top goal']))
+    await waitFor(() =>
+      expect(shownCards().slice(1, 4)).toEqual([
+        'Accounts',
+        'Latest activity',
+        'Coming up before payday',
+      ]),
+    )
   })
 
   it('cannot move the first card up or the last one down', async () => {
     serveHome()
     renderHome()
     await startEditing()
-    const first = toolsFor('Cash to payday')
-    expect(first.getByRole('button', { name: 'Move Cash to payday up' })).toBeDisabled()
+    expect(toolsFor('Accounts').getByRole('button', { name: 'Move Accounts up' })).toBeDisabled()
     expect(
-      toolsFor('Net worth').getByRole('button', { name: 'Move Net worth down' }),
+      toolsFor('Tab summaries').getByRole('button', { name: 'Move Tab summaries down' }),
     ).toBeDisabled()
   })
 
@@ -83,22 +90,27 @@ describe('editing Home', () => {
     const server = serveHome()
     renderHome()
     const user = await startEditing()
-    const size = toolsFor('Spending pace').getByRole('group', { name: 'Spending pace size' })
+    const name = 'Coming up before payday'
+    const size = toolsFor(name).getByRole('group', { name: `${name} size` })
     await user.click(within(size).getByRole('button', { name: 'Full' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![3]).toEqual({ type: 'pace', size: 'full', visible: true })
+    expect(sentLayouts(server)[0]![3]).toEqual({ type: 'coming-up', size: 'full', visible: true })
   })
 
   it('hides a card, keeping it in edit mode to show again', async () => {
     const server = serveHome()
     renderHome()
     const user = await startEditing()
-    await user.click(toolsFor('Your top goal').getByRole('button', { name: 'Hide' }))
+    await user.click(toolsFor('Latest activity').getByRole('button', { name: 'Hide' }))
     await waitFor(() => expect(sentLayouts(server)).toHaveLength(1))
-    expect(sentLayouts(server)[0]![4]).toEqual({ type: 'goals', size: 'half', visible: false })
-    expect(toolsFor('Your top goal').getByRole('button', { name: 'Show' })).toBeInTheDocument()
+    expect(sentLayouts(server)[0]![4]).toEqual({
+      type: 'latest-activity',
+      size: 'half',
+      visible: false,
+    })
+    expect(toolsFor('Latest activity').getByRole('button', { name: 'Show' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))
-    expect(screen.queryByRole('region', { name: 'Your top goal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Latest activity' })).not.toBeInTheDocument()
   })
 
   it('shows a hidden card again', async () => {
@@ -161,8 +173,8 @@ describe('editing Home', () => {
     serveHome(settings, {}, { '/api/actions/update_settings': refuse })
     renderHome()
     const user = await startEditing()
-    await user.click(toolsFor('Net worth').getByRole('button', { name: 'Hide' }))
+    await user.click(toolsFor('Tab summaries').getByRole('button', { name: 'Hide' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Layout could not be saved')
-    expect(toolsFor('Net worth').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
+    expect(toolsFor('Tab summaries').getByRole('button', { name: 'Hide' })).toBeInTheDocument()
   })
 })

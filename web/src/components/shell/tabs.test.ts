@@ -33,6 +33,8 @@ describe('the tabs', () => {
 describe('which tab a page lights', () => {
   it.each([
     ['/', 'Home'],
+    ['/accounts/acct-1', 'Home'],
+    ['/accounts/compare', 'Home'],
     ['/spending', 'Spending'],
     ['/spending/activity', 'Spending'],
     ['/spending/activity/import', 'Spending'],
@@ -42,7 +44,6 @@ describe('which tab a page lights', () => {
     ['/goals', 'Goals'],
     ['/goals/trips/2026-12-01/2026-12-05', 'Goals'],
     ['/wealth', 'Wealth'],
-    ['/wealth/accounts/acct-1', 'Wealth'],
     ['/wealth/debts', 'Wealth'],
     ['/wealth/retirement', 'Wealth'],
     ['/wealth/idle-cash', 'Wealth'],
@@ -60,6 +61,7 @@ describe('which tab a page lights', () => {
   it('lights no tab for an address that only starts like one', () => {
     expect(tabFor('/spendingmore')).toBeUndefined()
     expect(tabFor('/goalsetting')).toBeUndefined()
+    expect(tabFor('/accountsmore')).toBeUndefined()
   })
 })
 

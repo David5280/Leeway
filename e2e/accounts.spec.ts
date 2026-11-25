@@ -1,5 +1,6 @@
 // Account health: an overdrawn account warns once, in Heads up, and
-// opens on its own page, Compare accounts adds up a saved pick, and a
+// opens on its own page, Home lists every account, Compare accounts adds up
+// a saved pick, and a
 // low-balance warning set in Settings becomes an alert. Each test removes its
 // accounts even when a check fails, since later specs share this install: a
 // leftover overdrawn account would change their balances, alerts and idle cash.
@@ -48,7 +49,7 @@ async function overdrawnAccountTour(page: Page): Promise<void> {
   await headsUp.getByRole('link', { name: /Everyday is overdrawn/ }).click()
 
   // The alert opens the account's own page, which leads with the overdraft.
-  await expect(page).toHaveURL(/\/wealth\/accounts\/[\w-]+$/)
+  await expect(page).toHaveURL(/\/accounts\/[\w-]+$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Everyday' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Everyday balance' })).toContainText(
     /Overdrawn by\s*\$42\.10/,
@@ -57,9 +58,17 @@ async function overdrawnAccountTour(page: Page): Promise<void> {
     'Everyday is overdrawn by $42.10.',
   )
 
-  // Compare, from Wealth, sums the picked accounts, and the pick is saved.
-  await page.goto('/wealth')
-  await page.getByRole('link', { name: 'Compare', exact: true }).click()
+  // The way back is Home, which lists every account, the overdraft in red.
+  await page.locator('.back-link').click()
+  await expect(page).toHaveURL(/\/$/)
+  const accounts = page.getByRole('region', { name: 'Accounts', exact: true })
+  const everyday = accounts.getByRole('link', { name: /^Everyday/ })
+  await expect(everyday).toContainText('$42.10')
+  await expect(everyday.locator('.money-problem')).toHaveCount(1)
+  await expect(accounts.getByRole('link', { name: /^Rainy day/ })).toContainText('$900.00')
+
+  // Compare, from Home's accounts, sums the picked accounts, and the pick is saved.
+  await accounts.getByRole('link', { name: 'Compare', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Compare accounts' })).toBeVisible()
   // A tick saves the pick, so each box is read back rather than assumed.
   for (const name of ['Pick Everyday', 'Pick Rainy day']) {

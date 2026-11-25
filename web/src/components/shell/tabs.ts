@@ -23,14 +23,19 @@ export const TABS: readonly Tab[] = [
   { to: paths.wealth(), label: 'Wealth', icon: 'growth', place: TAB_PLACES.wealth },
 ]
 
+/** The pages a tap deeper from Home: the accounts it lists live under /accounts. */
+const HOME_DEEPER = '/accounts/'
+
 /**
  * The tab a path belongs to: the tab whose address it is, or starts with
- * followed by a slash, so /spending/activity lights Spending. Home owns only
- * "/" itself, so the Inbox, Alerts, Settings and Chat light no tab.
+ * followed by a slash, so /spending/activity lights Spending. Home owns "/"
+ * and its accounts' pages, so the Inbox, Settings and Chat light no tab.
  */
 export function tabFor(pathname: string): Tab | undefined {
   return TABS.find((tab) =>
-    tab.to === '/' ? pathname === '/' : pathname === tab.to || pathname.startsWith(`${tab.to}/`),
+    tab.to === '/'
+      ? pathname === '/' || pathname.startsWith(HOME_DEEPER)
+      : pathname === tab.to || pathname.startsWith(`${tab.to}/`),
   )
 }
 

@@ -22,6 +22,9 @@ const groceries = category('Groceries', { budgetCents: 60000 })
 const CARD_NAMES = [
   'Your leeway',
   'Heads up',
+  'Accounts',
+  'Coming up before payday',
+  'Latest activity',
   'Cash to payday',
   'Spending pace',
   'Your top goal',
@@ -49,6 +52,8 @@ export function serveHome(initial: Settings = settings, handlers: Handlers = {},
       },
       get_budget: () => budgetFor([groceries], [{ categoryId: groceries.id, amountCents: 24000 }]),
       get_cash_flow: () => cashFlow(),
+      list_accounts: () => [],
+      list_transactions: () => ({ transactions: [], total: 0 }),
       list_connections: () => [],
       list_alerts: () => [],
       list_goals: () => [],
@@ -83,19 +88,25 @@ export function renderHome(initial: Settings = settings) {
 
 /**
  * Home's cards on screen, by name, in the order a phone stacks them: Leeway
- * and Heads up first, then each arranged card by its saved place (Board sets
- * it as the slot's CSS order, since columns on a wide screen are filled in turn).
+ * and Heads up first, then each arranged card band by band and, within a band
+ * of columns, by its saved place (Board sets it as the slot's CSS order,
+ * since columns on a wide screen are filled in turn).
  */
 export function shownCards(): string[] {
-  const place = (region: Element) => {
-    const order = (region.closest('.widget') as HTMLElement | null)?.style.order
-    return order ? Number(order) : -1
+  const board = document.querySelector('.board')
+  /** [which band of the board, then the place within it]; -1 before the board. */
+  const place = (region: Element): [number, number] => {
+    const widget = region.closest('.widget') as HTMLElement | null
+    if (!board || !widget) return [-1, 0]
+    const band = [...board.children].findIndex((child) => child.contains(widget))
+    return [band, Number(widget.style.order || 0)]
   }
   return screen
     .queryAllByRole('region')
     .filter((region) => CARD_NAMES.includes(region.getAttribute('aria-label') ?? ''))
-    .sort((a, b) => place(a) - place(b))
-    .map((region) => region.getAttribute('aria-label')!)
+    .map((region) => ({ name: region.getAttribute('aria-label')!, at: place(region) }))
+    .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1])
+    .map((card) => card.name)
 }
 
 /** The edit tools of one card, found by the name in its tool bar. */

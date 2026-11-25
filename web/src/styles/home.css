@@ -1,0 +1,98 @@
+/* Home's cards under Leeway and Heads up (widgets/): the accounts as rows,
+   the bills coming up, the latest activity and the row of tab cards. */
+
+/* Accounts ---------------------------------------------------------------- */
+
+/* A group's title inside the Accounts card: a step below the card's own. */
+.home-accounts .acct-group h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Rows sit closer than a full list's, so a long list still reads at a glance;
+   each keeps a finger's height. Where a long balance leaves the name too
+   little room, the balance drops to a line of its own, still at the end. */
+.acct-rows .account-row {
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  padding-block: 10px;
+}
+
+.acct-rows .account-row-names {
+  display: flex;
+  flex: 1 1 9em;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The balance and "owed" stay together at the row's end, never wrapped. */
+.account-row-balance {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* The quiet line about accounts left out of the totals: a full finger's height. */
+.home-accounts-unshared {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* Coming up before payday ------------------------------------------------- */
+
+.coming-up-date {
+  flex: none;
+  width: 52px;
+}
+
+.coming-up-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Nothing due: one line that still opens the bills, with a finger's height. */
+.home-calm-line {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-1);
+}
+
+/* The tab row ------------------------------------------------------------- */
+
+/* Two by two until the row itself has room for four across, so the row
+   resized to half a wide screen stays two by two. */
+.tab-row {
+  container: tab-row / inline-size;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+}
+
+@container tab-row (min-width: 640px) {
+  .tab-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Each card fills its cell, so a row's cards end on one line. */
+.tab-row-slot {
+  display: flex;
+  min-width: 0;
+}
+
+.tab-row-slot > .card {
+  flex: 1;
+  padding: calc(var(--pad) * 0.75);
+  container-type: inline-size;
+}
+
+/* A figure shrinks with its card instead of spilling out at 320px. */
+.tab-row .mid-number {
+  font-size: clamp(18px, 13cqi, 26px);
+}

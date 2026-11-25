@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { AppContext } from '../src/context.js'
-import { addSummaryWidget, followHomeMap } from '../src/domain/dashboardUpgrade.js'
+import { addSummaryWidget, upgradeDefaultHome } from '../src/domain/dashboardUpgrade.js'
 import { actionCaller } from './actionCaller.js'
 import { createTestContext, resetData } from './helpers.js'
 
@@ -77,12 +77,21 @@ describe('a saved dashboard naming a removed card', () => {
   })
 })
 
-describe('followHomeMap', () => {
+describe('upgradeDefaultHome', () => {
   /** A widget shown, as every default layout stored them. */
   const shown = (type: string, size: string) => ({ type, size, visible: true })
 
-  /** Home's default just before it followed the map, as it was stored. */
-  const before = [
+  /** Home's map order, the default just before the accounts came to Home, as it was stored. */
+  const mapDefault = [
+    shown('leeway', 'wide'),
+    shown('alerts', 'full'),
+    shown('cash-flow', 'half'),
+    shown('pace', 'half'),
+    shown('goals', 'half'),
+    shown('net-worth', 'half'),
+  ]
+  /** The default before the map order. */
+  const beforeMap = [
     shown('leeway', 'wide'),
     shown('net-worth', 'half'),
     shown('alerts', 'full'),
@@ -112,50 +121,89 @@ describe('followHomeMap', () => {
   ]
   /** beforeFlows once the income and spending card was added ahead of the pace. */
   const flowsAdded = [...beforeFlows.slice(0, 3), shown('flows', 'full'), ...beforeFlows.slice(3)]
-  const mapOrder = ['leeway', 'alerts', 'cash-flow', 'pace', 'goals', 'net-worth']
+  const defaultHome = [
+    'leeway',
+    'alerts',
+    'account-list',
+    'coming-up',
+    'latest-activity',
+    'tab-row',
+  ]
+  const mapOrder = mapDefault.map((w) => w.type)
 
-  it('gives a dashboard still in the last default the map order, once', async () => {
-    await storeWidgets(before)
-    expect(await followHomeMap(ctx.db)).toBe(true)
+  it('gives a dashboard still in the map order the default Home, once', async () => {
+    await storeWidgets(mapDefault)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(true)
+    expect((await call('get_settings')).dashboard.widgets).toEqual([
+      { type: 'leeway', size: 'wide', visible: true },
+      { type: 'alerts', size: 'full', visible: true },
+      { type: 'account-list', size: 'wide', visible: true },
+      { type: 'coming-up', size: 'half', visible: true },
+      { type: 'latest-activity', size: 'half', visible: true },
+      { type: 'tab-row', size: 'full', visible: true },
+    ])
+
+    // Put back by the owner afterwards, it stays as it was put.
+    await storeWidgets(mapDefault)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
     expect(await types()).toEqual(mapOrder)
-
-    // Put back by an older Leeway afterwards, it stays as it was put.
-    await storeWidgets(before)
-    expect(await followHomeMap(ctx.db)).toBe(false)
-    expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'pace'])
   })
 
   it.each([
+    ['before the map order', beforeMap],
     ['summary first', summaryFirst],
     ['before the income and spending card', beforeFlows],
     ['with the income and spending card added', flowsAdded],
-  ])('gives an install that skipped versions, still %s, the map order', async (_, layout) => {
+  ])('gives an install that skipped versions, still %s, the default Home', async (_, layout) => {
     await storeWidgets(layout)
-    expect(await followHomeMap(ctx.db)).toBe(true)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(true)
+    expect(await types()).toEqual(defaultHome)
+  })
+
+  it('adds nothing to a map order the owner rearranged', async () => {
+    // Net worth moved up, just under the alerts.
+    const [top, tabs] = [mapDefault.slice(0, 2), mapDefault.slice(2)]
+    await storeWidgets([...top, ...tabs.slice(-1), ...tabs.slice(0, -1)])
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect(await types()).toEqual(['leeway', 'alerts', 'net-worth', 'cash-flow', 'pace', 'goals'])
+  })
+
+  it('leaves a map order alone that differs only in one size', async () => {
+    await storeWidgets(mapDefault.map((w) => (w.type === 'goals' ? { ...w, size: 'wide' } : w)))
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
     expect(await types()).toEqual(mapOrder)
   })
 
-  it('leaves a dashboard the owner arranged alone, even one that differs only in size', async () => {
-    await storeWidgets(before.map((w) => (w.type === 'pace' ? { ...w, size: 'half' } : w)))
-    expect(await followHomeMap(ctx.db)).toBe(false)
-    expect(await types()).toEqual(['leeway', 'net-worth', 'alerts', 'pace'])
+  it('leaves a map order alone with one card hidden', async () => {
+    await storeWidgets(mapDefault.map((w) => (w.type === 'pace' ? { ...w, visible: false } : w)))
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect((await call('get_settings')).dashboard.widgets[3]).toEqual({
+      type: 'pace',
+      size: 'half',
+      visible: false,
+    })
+  })
+
+  it('leaves a map order alone with a card added or taken out', async () => {
+    await storeWidgets([...mapDefault, shown('trends', 'half')])
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect(await types()).toEqual([...mapOrder, 'trends'])
+
+    await resetData(ctx.db)
+    await storeWidgets(mapDefault.filter((w) => w.type !== 'goals'))
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect(await types()).toEqual(mapOrder.filter((type) => type !== 'goals'))
   })
 
   it('leaves an older default the owner changed alone, even by one hidden card', async () => {
     const hidden = summaryFirst.map((w) => (w.type === 'pace' ? { ...w, visible: false } : w))
     await storeWidgets(hidden)
-    expect(await followHomeMap(ctx.db)).toBe(false)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
     expect(await types()).toEqual(['summary', 'leeway', 'alerts', 'pace'])
   })
 
-  it('leaves an older default with a card taken out alone', async () => {
-    await storeWidgets(beforeFlows.filter((w) => w.type !== 'recent'))
-    expect(await followHomeMap(ctx.db)).toBe(false)
-    expect(await types()).toEqual(['leeway', 'alerts', 'summary', 'pace'])
-  })
-
   it("leaves a new install's default alone, as it never saved a dashboard", async () => {
-    expect(await followHomeMap(ctx.db)).toBe(false)
-    expect(await types()).toEqual(mapOrder)
+    expect(await upgradeDefaultHome(ctx.db)).toBe(false)
+    expect(await types()).toEqual(defaultHome)
   })
 })

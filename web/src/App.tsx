@@ -50,6 +50,8 @@ function Screens() {
   return (
     <Routes>
       <Route path={SCREEN_ROUTES.home} element={<Overview />} />
+      <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
+      <Route path={SCREEN_ROUTES.compareAccounts} element={<CompareAccountsPage />} />
       <Route path={SCREEN_ROUTES.spending} element={<Spending />} />
       <Route path={SCREEN_ROUTES.activity} element={<Transactions />} />
       <Route path={SCREEN_ROUTES.importTransactions} element={<ImportTransactions />} />
@@ -63,8 +65,6 @@ function Screens() {
       <Route path={SCREEN_ROUTES.goals} element={<Goals />} />
       <Route path={SCREEN_ROUTES.trip} element={<TripPage />} />
       <Route path={SCREEN_ROUTES.wealth} element={<Wealth />} />
-      <Route path={SCREEN_ROUTES.account} element={<AccountDetail />} />
-      <Route path={SCREEN_ROUTES.compareAccounts} element={<CompareAccountsPage />} />
       <Route path={SCREEN_ROUTES.owned} element={<OwnedPage />} />
       <Route path={SCREEN_ROUTES.debts} element={<DebtsPage />} />
       <Route path={SCREEN_ROUTES.retirement} element={<RetirementPage />} />

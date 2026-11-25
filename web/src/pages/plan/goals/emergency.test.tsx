@@ -125,7 +125,7 @@ describe('the emergency fund goal', () => {
     expect(sheet.getByText('0.2 months')).toBeVisible()
     expect(sheet.getByRole('link', { name: /Rainy Day/ })).toHaveAttribute(
       'href',
-      '/wealth/accounts/acct-rainy',
+      '/accounts/acct-rainy',
     )
   })
 

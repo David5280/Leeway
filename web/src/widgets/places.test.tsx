@@ -12,6 +12,11 @@ afterEach(() => vi.unstubAllGlobals())
 
 /** The place each card should wear: the tab it opens, or none. Leeway and Heads up are fixed, not cards. */
 const EXPECTED: Record<string, string | null> = {
+  // Home's own accounts belong to no tab; the row's cards each carry their own (TabRow.tsx).
+  'account-list': null,
+  'coming-up': 'pay',
+  'latest-activity': 'spend',
+  'tab-row': null,
   'cash-flow': 'pay',
   pace: 'spend',
   goals: 'goal',

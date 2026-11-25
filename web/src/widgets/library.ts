@@ -1,19 +1,24 @@
 // The cards Home can draw, and changes to Home's card list.
 //
 // Home reads top to bottom as the map has it: Leeway (what you can spend),
-// Heads up (only when something needs the owner), then one summary card per
-// tab. Leeway and Heads up are fixed: Home draws them itself, first, so
+// Heads up (only when something needs the owner), every account, the bills
+// coming up before payday, the latest activity, then a row with each tab's
+// summary. Leeway and Heads up are fixed: Home draws them itself, first, so
 // nothing urgent can be hidden or moved down. They stay in the saved list
 // (the server's default names them) but are not in the library, so the
-// layout tools never offer them. Every library card is a summary that opens
-// its tab or a page a tap deeper, never a second place to act.
+// layout tools never offer them. Every library card opens its tab or a page
+// a tap deeper, never a second place to act.
 
 import type { ComponentType } from 'react'
 import type { Settings } from '../api/client'
 import type { PlaceId } from '../lib/places'
+import { AccountListWidget } from './AccountList'
+import { ComingUpWidget } from './ComingUp'
+import { LatestActivityWidget } from './LatestActivity'
 import { DebtsWidget, MerchantsWidget, TrendsWidget } from './Shortcuts'
 import { SummaryWidget } from './Summary'
 import { CashToPaydayCard, NetWorthCard, SpendingPaceCard, TopGoalCard } from './TabCards'
+import { TabRowWidget } from './TabRow'
 import { sharesLane } from './arrange'
 import type { WidgetProps } from './types'
 
@@ -32,13 +37,18 @@ export interface WidgetEntry {
 }
 
 /**
- * The cards the owner can arrange, in the order the library lists them: the
- * four tab cards, then optional ones. Leeway and Heads up are not listed:
+ * The cards the owner can arrange, in the order the library lists them:
+ * Home's four default blocks, each tab card on its own, then optional ones. Leeway and Heads up are not listed:
  * they keep their place in the saved list but are drawn fixed at the top.
  * The server drops a card kind it no longer knows on read and refuses one on
  * save, so the saved list holds nothing else.
  */
 export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
+  'account-list': { name: 'Accounts', component: AccountListWidget },
+  'coming-up': { name: 'Coming up before payday', component: ComingUpWidget, place: 'pay' },
+  'latest-activity': { name: 'Latest activity', component: LatestActivityWidget, place: 'spend' },
+  // The four tab cards below, as one row; each card in it wears its own tab's color.
+  'tab-row': { name: 'Tab summaries', component: TabRowWidget },
   'cash-flow': { name: 'Cash to payday', component: CashToPaydayCard, place: 'pay' },
   pace: { name: 'Spending pace', component: SpendingPaceCard, place: 'spend' },
   goals: { name: 'Your top goal', component: TopGoalCard, place: 'goal' },
@@ -51,17 +61,21 @@ export const WIDGET_LIBRARY: Partial<Record<WidgetType, WidgetEntry>> = {
 
 /**
  * Home as it first opens, and what "Reset layout" puts back: Leeway, Heads
- * up, then the four tab cards in the map's order. The same list as the
- * server's DEFAULT_WIDGETS (server/src/domain/settings.ts).
+ * up, the accounts (beside the bills coming up and the latest activity on a
+ * wide screen), then the row of tab cards. The same list as the server's
+ * DEFAULT_WIDGETS (server/src/domain/settings.ts).
  */
 export const DEFAULT_LAYOUT: Widget[] = [
   { type: 'leeway', size: 'wide', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'cash-flow', size: 'half', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'goals', size: 'half', visible: true },
-  { type: 'net-worth', size: 'half', visible: true },
+  { type: 'account-list', size: 'wide', visible: true },
+  { type: 'coming-up', size: 'half', visible: true },
+  { type: 'latest-activity', size: 'half', visible: true },
+  { type: 'tab-row', size: 'full', visible: true },
 ]
+
+/** The tab cards the row shows, so the two are never on Home together (see addableTypes). */
+const IN_TAB_ROW: readonly WidgetType[] = ['cash-flow', 'pace', 'goals', 'net-worth']
 
 export const SIZES = [
   { value: 'half', label: 'Half' },
@@ -74,11 +88,19 @@ const canDraw = (widget: Widget) => WIDGET_LIBRARY[widget.type] !== undefined
 /** The cards the owner arranges, in their saved order: all but the fixed Leeway and Heads up. */
 export const drawable = (widgets: Widget[]) => widgets.filter(canDraw)
 
-/** Library cards not on Home yet. */
+/**
+ * Library cards not on Home yet. A tab card is not offered while the row
+ * already shows it, nor the row while any tab card is on Home on its own,
+ * so the same figure never shows twice.
+ */
 export function addableTypes(widgets: Widget[]): WidgetType[] {
-  return (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter(
-    (type) => !widgets.some((w) => w.type === type),
-  )
+  const has = (type: WidgetType) => widgets.some((w) => w.type === type)
+  const hasTabCard = IN_TAB_ROW.some(has)
+  return (Object.keys(WIDGET_LIBRARY) as WidgetType[]).filter((type) => {
+    if (has(type)) return false
+    if (type === 'tab-row') return !hasTabCard
+    return !(IN_TAB_ROW.includes(type) && has('tab-row'))
+  })
 }
 
 /**

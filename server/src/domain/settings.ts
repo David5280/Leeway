@@ -72,18 +72,20 @@ const widgetSchema = z.object({
 
 /**
  * Home as it first opens, in the map's order: what you can spend, Heads up
- * (shown only when something needs the owner), then one summary card per
- * tab: cash to payday, spending pace, the top goal and net worth. Everything
- * else is a card the owner can add. web/src/widgets/library.ts keeps the same
- * list for "Reset layout".
+ * (shown only when something needs the owner), every account with its
+ * balance, the bills coming up before payday, the latest activity, then one
+ * row with each tab's summary. On a wide screen the accounts take the main
+ * column with the bills and activity beside them. Everything else is a card
+ * the owner can add. web/src/widgets/library.ts keeps the same list for
+ * "Reset layout".
  */
 export const DEFAULT_WIDGETS: z.infer<typeof widgetSchema>[] = [
   { type: 'leeway', size: 'wide', visible: true },
   { type: 'alerts', size: 'full', visible: true },
-  { type: 'cash-flow', size: 'half', visible: true },
-  { type: 'pace', size: 'half', visible: true },
-  { type: 'goals', size: 'half', visible: true },
-  { type: 'net-worth', size: 'half', visible: true },
+  { type: 'account-list', size: 'wide', visible: true },
+  { type: 'coming-up', size: 'half', visible: true },
+  { type: 'latest-activity', size: 'half', visible: true },
+  { type: 'tab-row', size: 'full', visible: true },
 ]
 
 const widgetsSchema = z

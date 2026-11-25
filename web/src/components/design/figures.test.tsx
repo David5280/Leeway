@@ -137,13 +137,13 @@ describe('Card', () => {
   it('as a link, is one link to its page, named by what it shows', () => {
     render(
       <MemoryRouter>
-        <Card to="/wealth/accounts/a" label="Everyday checking">
+        <Card to="/accounts/a" label="Everyday checking">
           <span>Everyday checking</span>
         </Card>
       </MemoryRouter>,
     )
     const card = screen.getByRole('region', { name: 'Everyday checking' })
-    expect(within(card).getByRole('link')).toHaveAttribute('href', '/wealth/accounts/a')
+    expect(within(card).getByRole('link')).toHaveAttribute('href', '/accounts/a')
     expect(within(card).getByRole('link')).toHaveTextContent('Everyday checking, open details')
   })
 
