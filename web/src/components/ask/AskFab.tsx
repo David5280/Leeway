@@ -3,23 +3,25 @@
 //   - a phone: just above the tab bar;
 //   - a phone turned sideways: at the foot, clear of the home indicator;
 //   - a computer: at the foot of the page.
-// Pressed, it grows into the box (AskBox.tsx), which covers it while open
-// and shrinks back into it when closed, handing focus back to it.
+// Pressed, it swings open into the box (AskBox.tsx), which covers it while
+// open and swings back into it when closed, the logo spinning back into
+// place as it returns and focus handed back to it.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Frame } from '../shell/frame'
 import { Logo } from '../ui'
 import { AskBox } from './AskBox'
 import { useAskControls, type AskControls } from './AskProvider'
 import { usePresence } from './usePresence'
 
-/** How long the box takes to shrink back into the button, in milliseconds; styles/ask.css matches it. */
-export const BOX_EXIT_MS = 140
+/** How long the box takes to swing back into the button, in milliseconds; styles/ask.css matches it. */
+export const BOX_EXIT_MS = 200
 
 export function AskFab({ ask, frame }: { ask: AskControls; frame: Frame }) {
   const button = useRef<HTMLButtonElement>(null)
   const { boxOpen, claimRefocus } = ask
   const box = usePresence(boxOpen, BOX_EXIT_MS)
+  const returns = useReturns(boxOpen)
 
   // Focus comes back once the box closes; also on a new page's button, after a link in an answer.
   useEffect(() => {
@@ -39,11 +41,26 @@ export function AskFab({ ask, frame }: { ask: AskControls; frame: Frame }) {
         inert={boxOpen}
         onClick={() => ask.open()}
       >
-        <Logo size={30} />
+        {/* A new key each time the box closes restarts the logo's spin back into place. */}
+        <span className="ask-fab-logo" key={returns} data-spin={returns > 0}>
+          <Logo size={36} />
+        </span>
       </button>
       {box.mounted && <AskBox ask={ask} leaving={box.leaving} />}
     </div>
   )
+}
+
+/** How many times the box has closed since this button appeared; the first open never counts. */
+function useReturns(boxOpen: boolean): number {
+  const [returns, setReturns] = useState(0)
+  const [wasOpen, setWasOpen] = useState(boxOpen)
+  // Counted while rendering, as React suggests for state that follows a prop.
+  if (wasOpen !== boxOpen) {
+    setWasOpen(boxOpen)
+    if (!boxOpen) setReturns(returns + 1)
+  }
+  return returns
 }
 
 /**
