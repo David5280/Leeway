@@ -159,3 +159,12 @@ export function chatToolText(result: unknown, people: PaymentPeople): string {
   const hidden: Hidden = { people, ...replacementsOf(people) }
   return agentJson(withoutBankText(walked(result, hidden)), { compact: true })
 }
+
+/**
+ * Leeway's own text for the chat model, like the snapshot (snapshot.ts),
+ * with every name that could be a person's and every account mask replaced,
+ * as in a tool's result.
+ */
+export function chatPlainText(text: string, people: PaymentPeople): string {
+  return scrubbed(text, { people, ...replacementsOf(people) })
+}
