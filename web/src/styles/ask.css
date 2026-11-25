@@ -11,6 +11,8 @@
    the bottom right. The phone's tab bar is about 65px tall with its border. */
 .ask-fab {
   --ask-fab-size: 60px;
+  /* How far the box turns as it opens and closes; less on a phone, below. */
+  --ask-turn: -90deg;
   --ask-fab-right: calc(16px + var(--sar));
   --ask-fab-bottom: calc(65px + 12px + var(--sab));
 }
@@ -75,22 +77,6 @@
   transform: scale(0.96);
 }
 
-/* The logo spins back into place as the box swings closed into the button. */
-.ask-fab-logo {
-  display: grid;
-  place-items: center;
-}
-
-.ask-fab-logo[data-spin='true'] {
-  animation: ask-fab-spin 280ms var(--ease-out);
-}
-
-@keyframes ask-fab-spin {
-  from {
-    transform: rotate(-270deg) scale(0.6);
-  }
-}
-
 /* Covered by the open box: it hides at once, so it never peeks out as the
    box grows. */
 .ask-fab-button[aria-expanded='true'] {
@@ -124,8 +110,10 @@
 }
 
 /* A phone: nearly the full width, and most of the height above the tab bar,
-   short of the header's top row (wider tablets keep a readable width). */
+   short of the header's top row (wider tablets keep a readable width). It
+   turns less, so the tall box barely swings past the screen's edge. */
 .ask-fab[data-frame='tabbar'] .ask-box {
+  --ask-turn: -30deg;
   right: calc(8px + var(--sar));
   width: min(520px, calc(100vw - 16px - var(--sal) - var(--sar)));
   height: auto;
@@ -136,52 +124,6 @@
 .ask-fab[data-frame='short'] .ask-box {
   height: auto;
   top: calc(var(--sat) + 12px);
-}
-
-/* Swings back into the button; AskFab.tsx's BOX_EXIT_MS matches this. */
-.ask-box[data-state='closing'] {
-  animation: ask-box-shrink 200ms ease-in both;
-  pointer-events: none;
-}
-
-/* A quarter turn around the corner while growing: the spin, kept short so
-   the box is readable at once. */
-@keyframes ask-box-grow {
-  from {
-    opacity: 0;
-    transform: rotate(-90deg) scale(0.2);
-  }
-}
-
-@keyframes ask-box-shrink {
-  to {
-    opacity: 0;
-    transform: rotate(-90deg) scale(0.2);
-  }
-}
-
-@keyframes ask-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-/* When the device asks for less motion, nothing spins, swings or scales:
-   the box only fades in and out, and the logo stays still. */
-@media (prefers-reduced-motion: reduce) {
-  .ask-fab-button,
-  .ask-fab-logo[data-spin='true'] {
-    animation: none;
-    transition: none;
-  }
-
-  .ask-box {
-    animation: ask-fade-in 160ms ease-out backwards;
-  }
-
-  .ask-box[data-state='closing'] {
-    animation: ask-fade-in 160ms ease-in reverse both;
-  }
 }
 
 /* Its header: the logo and name, and the close button. */

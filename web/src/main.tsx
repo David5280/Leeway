@@ -22,6 +22,7 @@ import './styles/trips.css'
 import './styles/playbook.css'
 import './styles/shell.css'
 import './styles/ask.css'
+import './styles/askMotion.css'
 // Last: each tab's colors layer over the cards and labels drawn above.
 import './styles/places.css'
 

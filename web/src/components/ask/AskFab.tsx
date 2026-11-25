@@ -14,7 +14,7 @@ import { AskBox } from './AskBox'
 import { useAskControls, type AskControls } from './AskProvider'
 import { usePresence } from './usePresence'
 
-/** How long the box takes to swing back into the button, in milliseconds; styles/ask.css matches it. */
+/** How long the box takes to swing back into the button, in milliseconds; styles/askMotion.css matches it. */
 export const BOX_EXIT_MS = 200
 
 export function AskFab({ ask, frame }: { ask: AskControls; frame: Frame }) {
