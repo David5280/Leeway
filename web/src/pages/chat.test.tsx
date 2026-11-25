@@ -200,6 +200,16 @@ describe('Chat with an AI key', () => {
     expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Hello?')
   })
 
+  it('says plainly, not as a problem, when the month runs out partway through an answer', async () => {
+    const stream = liveStream()
+    renderChat(chatHandlers(), { '/api/chat': stream.response })
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: 'Your question' }), 'Hello?{Enter}')
+    stream.send({ type: 'error', message: "This month's AI limit is reached.", limit: true })
+    expect(await screen.findByText("This month's AI limit is reached.")).toHaveClass('notice')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('says plainly, not as a problem, when the day is used up', async () => {
     renderChat(chatHandlers(), {
       '/api/chat': () =>
